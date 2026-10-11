@@ -18,6 +18,7 @@
 // renders now. An initiative is still a first-class board block with its own inspector.
 import type { InitiativeStatus } from '~/types/domain'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
+import Spinner from '~/components/common/Spinner.vue'
 import {
   INITIATIVE_ATTENTION_ICONS,
   INITIATIVE_ATTENTION_LABEL_KEYS,
@@ -105,7 +106,6 @@ function select() {
           data-testid="initiative-card-review"
           :data-attention="attention.kind"
           size="xs"
-          variant="solid"
           color="warning"
           :icon="INITIATIVE_ATTENTION_ICONS[attention.kind]"
           @click.stop="attention.open()"
@@ -116,24 +116,24 @@ function select() {
           v-else-if="awaitingAnswers"
           data-testid="initiative-card-answer-planning"
           size="xs"
-          variant="solid"
-          color="primary"
           icon="i-lucide-messages-square"
           @click.stop="openPlanning"
         >
           {{ t('initiative.inspector.answerPlanning') }}
         </UButton>
-        <!-- Mid-pass: nothing to answer, but keep the route into the window (it shows the wait). -->
+        <!-- Mid-pass: nothing to answer, but keep the route into the window (it shows the wait).
+             A spinner in the leading slot, not `:loading`, which would disable the button. -->
         <UButton
           v-else-if="interviewing"
           data-testid="initiative-card-planning-in-progress"
           size="xs"
           variant="soft"
           color="neutral"
-          icon="i-lucide-loader-circle"
-          :ui="{ leadingIcon: 'animate-spin' }"
           @click.stop="openPlanning"
         >
+          <template #leading>
+            <Spinner class="size-4 shrink-0" />
+          </template>
           {{ t('initiative.inspector.planningInProgress') }}
         </UButton>
         <UButton
@@ -141,7 +141,6 @@ function select() {
           data-testid="initiative-card-run-planning"
           size="xs"
           variant="soft"
-          color="primary"
           icon="i-lucide-play"
           :loading="starting || running"
           :disabled="!planningPipeline || running || starting"

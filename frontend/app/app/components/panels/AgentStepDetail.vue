@@ -31,6 +31,8 @@ import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 import RunDetailLoadState from '~/components/panels/RunDetailLoadState.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
@@ -393,7 +395,8 @@ async function copyOutput() {
     v-if="open && step && agent"
     data-testid="step-detail"
     :data-agent-kind="step?.agentKind"
-    class="fixed inset-0 z-50 flex max-h-[100dvh] bg-app-950/96 backdrop-blur-sm"
+    class="z-50 bg-app-950/96 backdrop-blur-sm"
+    :class="FULL_BLEED_TAKEOVER_CLASS"
     role="dialog"
     aria-modal="true"
   >
@@ -614,7 +617,6 @@ async function copyOutput() {
             </p>
             <UButton
               class="mt-3"
-              color="primary"
               size="sm"
               :icon="parkPresentation.icon"
               data-testid="dedicated-park-open"
@@ -658,6 +660,7 @@ async function copyOutput() {
                provider error, behind a toggle (most useful on a failed-to-start run) -->
           <div v-if="executionId">
             <UButton
+              color="neutral"
               :icon="showProvisioning ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
               variant="ghost"
               size="xs"
@@ -686,6 +689,7 @@ async function copyOutput() {
                superseded and the FAILED attempts, scoped to the step being looked at -->
           <div v-if="hasStepHistory">
             <UButton
+              color="neutral"
               :icon="showHistory ? 'i-lucide-chevron-up' : 'i-lucide-history'"
               variant="ghost"
               size="xs"
@@ -819,12 +823,11 @@ async function copyOutput() {
             </section>
           </template>
 
-          <p
+          <EmptyState
             v-else
-            class="rounded-lg border border-dashed border-default py-6 text-center text-sm text-dimmed"
-          >
-            {{ t('panels.stepDetail.noProseOutput') }}
-          </p>
+            icon="i-lucide-file-text"
+            :title="t('panels.stepDetail.noProseOutput')"
+          />
         </div>
       </div>
     </div>
@@ -899,7 +902,6 @@ async function copyOutput() {
                 {{ t('common.cancel') }}
               </UButton>
               <UButton
-                color="primary"
                 size="xs"
                 data-testid="step-review-comment-add"
                 :disabled="!draftBody.trim()"
@@ -959,10 +961,9 @@ async function copyOutput() {
       <!-- edit-then-approve actions -->
       <div
         v-if="editing"
-        class="space-y-2 border-t border-default px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+        class="space-y-2 border-t border-default px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:pb-3"
       >
         <UButton
-          color="primary"
           size="sm"
           icon="i-lucide-check"
           block
@@ -985,10 +986,9 @@ async function copyOutput() {
 
       <div
         v-else
-        class="space-y-2 border-t border-default px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+        class="space-y-2 border-t border-default px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:pb-3"
       >
         <UButton
-          color="primary"
           data-testid="step-approve"
           size="sm"
           icon="i-lucide-check"
@@ -1001,7 +1001,6 @@ async function copyOutput() {
         </UButton>
         <UButton
           v-if="proposalEditableNow"
-          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-pencil"

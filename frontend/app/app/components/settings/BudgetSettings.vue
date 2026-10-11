@@ -8,7 +8,7 @@ import { computed, reactive, ref, watch, type Ref } from 'vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t, n } = useI18n()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 const settingsStore = useWorkspaceSettingsStore()
@@ -32,7 +32,7 @@ async function runSave(saving: Ref<boolean>, save: () => Promise<unknown>) {
   saving.value = true
   try {
     await save()
-    toast.add({ title: t('settings.workspaceSettings.toast.budgetSaved'), color: 'success' })
+    actionToast.success('settings.workspaceSettings.toast.budgetSaved')
     try {
       await useWorkspaceStore().refresh()
     } catch {
@@ -167,13 +167,7 @@ function saveUser() {
         }}
       </div>
       <div class="flex justify-end">
-        <UButton
-          color="primary"
-          icon="i-lucide-save"
-          size="sm"
-          :loading="savingWorkspace"
-          @click="saveWorkspace"
-        >
+        <UButton icon="i-lucide-save" size="sm" :loading="savingWorkspace" @click="saveWorkspace">
           {{ t('settings.workspaceSettings.budget.saveTier') }}
         </UButton>
       </div>
@@ -222,7 +216,6 @@ function saveUser() {
       </p>
       <div v-if="canEditAccount" class="flex justify-end">
         <UButton
-          color="primary"
           icon="i-lucide-save"
           size="sm"
           :loading="savingAccount"
@@ -273,7 +266,6 @@ function saveUser() {
       </div>
       <div class="flex justify-end">
         <UButton
-          color="primary"
           icon="i-lucide-save"
           size="sm"
           :loading="savingUser"

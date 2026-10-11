@@ -3,6 +3,7 @@
 // chips the window turns into new threads.
 import type { GuidedReviewSession } from '~/types/domain'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
+import Spinner from '~/components/common/Spinner.vue'
 import GuidedReviewFailure from '~/components/guidedReview/GuidedReviewFailure.vue'
 import { citationLabel } from '~/components/guidedReview/GuidedReview.logic'
 
@@ -36,6 +37,7 @@ const SEVERITY_COLOR = { high: 'error', medium: 'warning', low: 'neutral' } as c
       </UBadge>
       <span class="flex-1" />
       <UButton
+        color="neutral"
         size="xs"
         variant="ghost"
         icon="i-lucide-refresh-cw"
@@ -52,7 +54,7 @@ const SEVERITY_COLOR = { high: 'error', medium: 'warning', low: 'neutral' } as c
       class="flex items-center gap-2 text-sm text-muted"
       data-testid="guided-review-overview-working"
     >
-      <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+      <Spinner class="h-4 w-4" />
       {{ t('guidedReview.overview.working') }}
     </p>
 

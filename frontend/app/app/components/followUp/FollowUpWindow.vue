@@ -13,6 +13,7 @@ import { useFollowUpsStore } from '~/stores/followUps'
 import type { FollowUpItem, FollowUpResolution } from '~/types/execution'
 import { FOLLOW_UP_COMPANION_META } from '~/utils/catalog'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -156,16 +157,13 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
 
     <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
       <!-- Empty -->
-      <div
+      <EmptyState
         v-if="items.length === 0"
-        class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-muted"
-      >
-        <UIcon :name="FOLLOW_UP_COMPANION_META.icon" class="h-8 w-8 opacity-40" />
-        <p class="text-sm">{{ t('followUp.empty.title') }}</p>
-        <p class="max-w-sm text-2xs text-dimmed">
-          {{ t('followUp.empty.hint') }}
-        </p>
-      </div>
+        class="h-full"
+        :icon="FOLLOW_UP_COMPANION_META.icon"
+        :title="t('followUp.empty.title')"
+        :description="t('followUp.empty.hint')"
+      />
 
       <div v-else class="space-y-3">
         <p
@@ -246,7 +244,6 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
                   <div class="flex flex-wrap items-center gap-2">
                     <UButton
                       size="xs"
-                      color="primary"
                       :loading="followUps.isActing(item.id)"
                       :disabled="!(drafts[item.id] ?? '').trim() || !access.canExecuteRuns.value"
                       :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
@@ -287,7 +284,6 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
                 <div v-else class="flex flex-wrap items-center gap-2">
                   <UButton
                     size="xs"
-                    color="primary"
                     icon="i-lucide-ticket"
                     :loading="followUps.isActing(item.id)"
                     :disabled="!access.canExecuteRuns.value"

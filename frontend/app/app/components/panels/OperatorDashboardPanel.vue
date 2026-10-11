@@ -7,6 +7,8 @@ import { formatMs } from '~/utils/observability'
 import { FAILURE_KIND_KEYS, isAgentFailureKind } from '~/utils/failureKinds'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
 
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
 // active account's runs — outcome totals + success rate, a time-bucketed outcome trend, the
@@ -122,24 +124,29 @@ watch(
     <Transition name="obs-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
+        class="z-[60] flex-col bg-app-950/96 backdrop-blur-sm"
+        :class="FULL_BLEED_TAKEOVER_CLASS"
         role="dialog"
         aria-modal="true"
         data-testid="operator-dashboard"
       >
-        <header class="flex items-center gap-3 border-b border-default px-6 py-4">
+        <header class="flex flex-wrap items-center gap-3 border-b border-default px-6 py-4">
           <div
             class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-app-info-500/15"
           >
             <UIcon name="i-lucide-gauge" class="h-5 w-5 text-app-info-400" />
           </div>
-          <div class="min-w-0">
+          <div class="min-w-0 flex-1">
             <h1 class="truncate text-base font-semibold text-highlighted">
               {{ t('platformObservability.title') }}
             </h1>
             <p v-if="accountName" class="truncate text-xs text-dimmed">{{ accountName }}</p>
           </div>
-          <div class="ms-auto flex items-center gap-1.5">
+          <!-- Below lg the window tabs take their own row, so refresh and close stay on screen.
+               The row scrolls sideways when the tabs are wider than the phone. -->
+          <div
+            class="order-last flex w-full min-w-0 items-center gap-1.5 overflow-x-auto lg:order-none lg:w-auto"
+          >
             <UTabs
               :model-value="platform.window"
               :items="WINDOWS"
@@ -154,31 +161,34 @@ watch(
                 <span :data-testid="`operator-window-${item.value}`">{{ item.label }}</span>
               </template>
             </UTabs>
-            <IconButton
-              color="neutral"
-              variant="ghost"
-              icon="i-lucide-refresh-cw"
-              :label="t('platformObservability.refresh')"
-              :ui="{
-                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
-                leadingIcon: loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4',
-              }"
-              data-testid="operator-refresh"
-              @click="refresh"
-            />
-            <IconButton
-              color="neutral"
-              variant="ghost"
-              icon="i-lucide-x"
-              :label="t('platformObservability.close')"
-              :ui="{
-                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
-                leadingIcon: 'h-4 w-4',
-              }"
-              data-testid="operator-close"
-              @click="close"
-            />
           </div>
+          <IconButton
+            class="lg:-ms-1.5"
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-refresh-cw"
+            :loading="loading"
+            :label="t('platformObservability.refresh')"
+            :ui="{
+              base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+              leadingIcon: 'h-4 w-4',
+            }"
+            data-testid="operator-refresh"
+            @click="refresh"
+          />
+          <IconButton
+            class="-ms-1.5"
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-x"
+            :label="t('platformObservability.close')"
+            :ui="{
+              base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+              leadingIcon: 'h-4 w-4',
+            }"
+            data-testid="operator-close"
+            @click="close"
+          />
         </header>
 
         <div class="flex-1 overflow-y-auto px-6 py-5">
@@ -197,8 +207,9 @@ watch(
             </UButton>
           </div>
 
-          <div v-else-if="loading && !view" class="py-16 text-center text-sm text-muted">
-            {{ t('platformObservability.loading') }}
+          <div v-else-if="loading && !view" class="mx-auto flex max-w-5xl flex-col gap-6">
+            <USkeleton class="h-20 w-full rounded-lg" />
+            <USkeleton v-for="n in 2" :key="n" class="h-36 w-full rounded-lg" />
           </div>
 
           <div v-else-if="view" class="mx-auto flex max-w-5xl flex-col gap-6">
@@ -291,9 +302,12 @@ watch(
                 {{ t('platformObservability.trend.title') }}
               </SectionLabel>
               <div class="rounded-lg border border-default bg-default/40 p-4">
-                <div v-if="view.outcomes.total === 0" class="py-6 text-center text-xs text-dimmed">
-                  {{ t('platformObservability.trend.empty') }}
-                </div>
+                <EmptyState
+                  v-if="view.outcomes.total === 0"
+                  compact
+                  icon="i-lucide-chart-column"
+                  :title="t('platformObservability.trend.empty')"
+                />
                 <div v-else class="flex h-28 items-end gap-0.5" data-testid="operator-trend">
                   <div
                     v-for="p in view.trend.points"
@@ -341,9 +355,12 @@ watch(
                 {{ t('platformObservability.gates.title') }}
               </SectionLabel>
               <div class="overflow-x-auto rounded-lg border border-default bg-default/40 p-4">
-                <p v-if="!view.gates.length" class="py-4 text-center text-xs text-dimmed">
-                  {{ t('platformObservability.gates.empty') }}
-                </p>
+                <EmptyState
+                  v-if="!view.gates.length"
+                  compact
+                  icon="i-lucide-shield-check"
+                  :title="t('platformObservability.gates.empty')"
+                />
                 <UTable
                   v-else
                   :data="view.gates"
@@ -404,9 +421,12 @@ watch(
                   {{ t('platformObservability.failures.title') }}
                 </SectionLabel>
                 <div class="rounded-lg border border-default bg-default/40 p-4">
-                  <div v-if="!view.failures.length" class="py-4 text-center text-xs text-dimmed">
-                    {{ t('platformObservability.failures.empty') }}
-                  </div>
+                  <EmptyState
+                    v-if="!view.failures.length"
+                    compact
+                    icon="i-lucide-circle-x"
+                    :title="t('platformObservability.failures.empty')"
+                  />
                   <ul v-else class="flex flex-col gap-2" data-testid="operator-failures">
                     <li v-for="f in view.failures" :key="f.kind" class="text-xs">
                       <div class="mb-0.5 flex items-center justify-between">
@@ -467,12 +487,12 @@ watch(
                     {{ t('platformObservability.durations.title') }}
                   </SectionLabel>
                   <div class="rounded-lg border border-default bg-default/40 p-3 text-sm">
-                    <div
+                    <EmptyState
                       v-if="view.durations.count === 0"
-                      class="py-2 text-center text-xs text-dimmed"
-                    >
-                      {{ t('platformObservability.durations.empty') }}
-                    </div>
+                      compact
+                      icon="i-lucide-timer"
+                      :title="t('platformObservability.durations.empty')"
+                    />
                     <dl
                       v-else
                       class="grid grid-cols-3 gap-y-3 text-center"

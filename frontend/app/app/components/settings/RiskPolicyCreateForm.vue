@@ -176,7 +176,6 @@ function submit() {
         :label="t('settings.riskPolicy.forkDecision.label')"
       />
       <UButton
-        color="primary"
         size="sm"
         icon="i-lucide-plus"
         :loading="busy"

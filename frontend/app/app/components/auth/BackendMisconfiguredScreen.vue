@@ -56,7 +56,7 @@ function reload() {
       </ul>
 
       <div class="mt-6 flex items-center justify-center gap-3">
-        <UButton color="primary" icon="i-lucide-rotate-ccw" @click="reload">
+        <UButton icon="i-lucide-rotate-ccw" @click="reload">
           {{ t('app.misconfigured.reload') }}
         </UButton>
       </div>

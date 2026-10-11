@@ -44,7 +44,7 @@
 // Usage:  node scripts/check-frontend-palette.mjs
 // Exit 0 = clean; exit 1 = an offender was found.
 
-import { isCliEntry, readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
+import { isCliEntry, isWaived, readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
 
 /** Every Tailwind hue: a status hue rides an alias, a category hue rides `app-hue-<h>`, so no raw
  * numbered hue utility has a place left. */
@@ -146,7 +146,7 @@ export function findColourLiterals({ raw, code }) {
  * The `fixed-colour-ok:` waiver is read from the raw line OR the raw line before it (the
  * `eslint-disable-next-line` shape), so a waiver never forces the class off its own line. */
 export function findFixedBlackWhite({ raw, code, prev }) {
-  if (raw.includes(FIXED_BW_OK) || prev.includes(FIXED_BW_OK)) return []
+  if (isWaived(raw, prev, FIXED_BW_OK)) return []
   return [...new Set(code.match(FIXED_BW) ?? [])]
 }
 

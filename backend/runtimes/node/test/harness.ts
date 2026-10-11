@@ -20,6 +20,7 @@ import {
   makeOnboardingProbe,
   makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
+  mintMachineToken,
   mintSession,
   seedFrameRepoLink,
   type FrameRepoLinkRepositories,
@@ -531,6 +532,7 @@ export function makeConformanceApp(
     createOrgWorkspace,
     authEnabled: Boolean(TEST_ENV.AUTH_SESSION_SECRET),
     session: (user) => mintSession(TEST_ENV.AUTH_SESSION_SECRET!, user),
+    machineToken: () => mintMachineToken(TEST_ENV.AUTH_SESSION_SECRET!),
     createWorkspaceInAccount: (accountId, ownerUserId, options) =>
       container.workspaceService.create(
         { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },

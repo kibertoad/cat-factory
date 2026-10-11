@@ -9,6 +9,7 @@ import { computed } from 'vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
+const { canManageSecrets } = useWorkspaceAccess()
 
 const open = computed({
   get: () => ui.aiProviderSetupOpen,
@@ -49,7 +50,12 @@ const routes = computed<Route[]>(() => [
     title: t('providers.onboarding.routes.keys.title'),
     body: t('providers.onboarding.routes.keys.body'),
     cta: t('providers.onboarding.routes.keys.cta'),
-    onSelect: () => go(ui.openVendorCredentials),
+    // The default tab is the workspace's pooled subscriptions, a `secrets.manage` write. Anyone else
+    // lands on the direct keys, which open on their own "My keys" scope (see ApiKeysSection).
+    onSelect: () =>
+      go(() =>
+        canManageSecrets.value ? ui.openVendorCredentials() : ui.openVendorCredentials('direct'),
+      ),
   },
   {
     icon: 'i-lucide-route',
@@ -100,19 +106,13 @@ const routes = computed<Route[]>(() => [
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
                 <p class="text-sm font-semibold text-app-100">{{ r.title }}</p>
-                <UBadge v-if="r.badge" color="primary" variant="subtle" size="sm">
+                <UBadge v-if="r.badge" variant="subtle" size="sm">
                   {{ r.badge }}
                 </UBadge>
               </div>
               <p class="mt-0.5 text-sm leading-relaxed text-muted">{{ r.body }}</p>
             </div>
-            <UButton
-              size="sm"
-              color="primary"
-              variant="subtle"
-              class="shrink-0"
-              @click="r.onSelect()"
-            >
+            <UButton size="sm" variant="subtle" class="shrink-0" @click="r.onSelect()">
               {{ r.cta }}
             </UButton>
           </div>

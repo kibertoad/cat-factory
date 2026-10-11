@@ -151,7 +151,6 @@ const reseedableCount = computed(
               </div>
               <UButton
                 size="xs"
-                color="primary"
                 variant="subtle"
                 icon="i-lucide-plus"
                 :loading="isBusy(p.id)"
@@ -207,7 +206,6 @@ const reseedableCount = computed(
                 <UButton
                   v-if="h.pipeline.builtin"
                   size="xs"
-                  color="primary"
                   variant="subtle"
                   icon="i-lucide-rotate-ccw"
                   :loading="isBusy(h.pipeline.id)"
@@ -220,7 +218,7 @@ const reseedableCount = computed(
                   v-else
                   size="xs"
                   color="error"
-                  variant="subtle"
+                  variant="soft"
                   icon="i-lucide-trash-2"
                   :loading="isBusy(h.pipeline.id)"
                   :disabled="locked"
@@ -261,7 +259,7 @@ const reseedableCount = computed(
               <UButton
                 size="xs"
                 color="error"
-                variant="subtle"
+                variant="soft"
                 icon="i-lucide-trash-2"
                 :loading="isBusy(r.pipeline.id)"
                 :disabled="locked"
@@ -296,7 +294,6 @@ const reseedableCount = computed(
               </div>
               <UButton
                 size="xs"
-                color="primary"
                 variant="subtle"
                 icon="i-lucide-rotate-ccw"
                 :loading="isBusy(h.pipeline.id)"
@@ -315,7 +312,6 @@ const reseedableCount = computed(
       <div class="flex w-full items-center justify-between gap-2">
         <UButton
           v-if="reseedableCount > 1"
-          color="primary"
           variant="ghost"
           icon="i-lucide-rotate-ccw"
           :loading="anyBusy"

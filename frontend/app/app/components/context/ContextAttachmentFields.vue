@@ -259,7 +259,7 @@ function removePending(item: PendingContext) {
             })
           }}
         </span>
-        <UButton color="primary" variant="soft" size="xs" @click="acceptOffer">
+        <UButton variant="soft" size="xs" @click="acceptOffer">
           {{ t('contextAttachments.pastedLink.attach') }}
         </UButton>
       </div>

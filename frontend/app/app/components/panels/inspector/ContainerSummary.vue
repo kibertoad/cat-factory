@@ -3,6 +3,7 @@ import type { Block } from '~/types/domain'
 import { STATUS_META } from '~/utils/catalog'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import ReviewDebtBadge from '~/components/board/ReviewDebtBadge.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -60,7 +61,7 @@ function addTask() {
   >
     <template #actions>
       <ReviewDebtBadge />
-      <UButton size="xs" variant="soft" color="primary" icon="i-lucide-plus" @click="addTask">
+      <UButton size="xs" variant="soft" icon="i-lucide-plus" @click="addTask">
         {{ t('inspector.container.addTask') }}
       </UButton>
     </template>
@@ -79,7 +80,12 @@ function addTask() {
         <span class="ms-auto text-3xs text-dimmed">{{ STATUS_META[task.status].label }}</span>
       </li>
     </ul>
-    <div v-else class="text-2xs text-dimmed">{{ t('inspector.container.noTasks') }}</div>
+    <EmptyState
+      v-else
+      compact
+      icon="i-lucide-list-todo"
+      :title="t('inspector.container.noTasks')"
+    />
     <p v-if="isFrame" class="text-2xs text-dimmed">
       {{ t('inspector.container.servicesHint') }}
     </p>

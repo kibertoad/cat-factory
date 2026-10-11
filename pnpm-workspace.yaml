@@ -16,7 +16,7 @@
 # satisfying the modular-vue adoption (backend/docs/adr/0049-modular-vue-adoption.md).
 # vue-router is likewise pinned to one version, for the same singleton reason: two copies
 # mean two route-matcher instances and a `useRoute()` that resolves against the wrong one.
-# Today Nuxt 4.6.0 wants `vue-router@^5.3.1`, `@nuxtjs/i18n` wants `^5.2.0`, and the
+# Today Nuxt 4.6.1 wants `vue-router@^5.4.0`, `@nuxtjs/i18n` wants `^5.2.0`, and the
 # `@modular-vue/*` packages peer-require `^5.0.0`, so 5.4.0 satisfies every consumer. Keep
 # it in lockstep with whatever `vue-router` Nuxt pulls on the next Nuxt bump.
 overrides:
