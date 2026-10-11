@@ -35,7 +35,8 @@ test.describe('describe new work', () => {
     void seededBoard
     await page.getByTestId('nav-describe-work').click()
     const dialog = page.getByTestId('describe-work-modal')
-    await dialog.getByTestId('describe-work-text').fill('Spike: compare two rate-limit libraries.')
+    const text = 'Spike: compare two rate-limit libraries. Measure p99 latency under load.'
+    await dialog.getByTestId('describe-work-text').fill(text)
     await dialog.getByTestId('describe-work-service').click()
     await page.getByRole('option', { name: 'Auth Service' }).click()
     await dialog.getByTestId('describe-work-more-kinds').click()
@@ -46,5 +47,24 @@ test.describe('describe new work', () => {
     await expect(full.getByTestId('add-task-title')).toHaveValue(
       'Spike: compare two rate-limit libraries',
     )
+    // Nothing the person wrote is dropped: the whole text is the description.
+    await expect(full.getByTestId('add-task-description')).toHaveValue(text)
+  })
+
+  test('closing with typed text asks first, and keeping it keeps the text', async ({
+    page,
+    seededBoard,
+  }) => {
+    void seededBoard
+    await page.getByTestId('nav-describe-work').click()
+    const dialog = page.getByTestId('describe-work-modal')
+    const box = dialog.getByTestId('describe-work-text')
+    await box.fill('Add a resend link to the sign-in page.')
+    await page.keyboard.press('Escape')
+
+    await expect(page.getByTestId('confirm-dialog')).toBeVisible()
+    await page.getByTestId('confirm-cancel').click()
+    await expect(dialog).toBeVisible()
+    await expect(box).toHaveValue('Add a resend link to the sign-in page.')
   })
 })

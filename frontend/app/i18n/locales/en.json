@@ -9162,8 +9162,8 @@
     "moreKinds": "More kinds…",
     "changeHowItRuns": "Change how this runs",
     "workspaceDefault": "Workspace default",
+    "defaultPipelineHint": "The workspace default: {name}. A pipeline pinned here replaces it for this task.",
     "attachContext": "Attach context (opens the full form)",
-    "footerHint": "The task is added as not started. It starts when you press Start.",
     "add": "Add to queue",
     "addAndStart": "Add and start",
     "addedToast": "Added “{title}” to the queue"

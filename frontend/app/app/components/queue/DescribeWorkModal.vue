@@ -13,9 +13,9 @@ import { showOverrideField } from '~/utils/uiMode'
  *
  * Every override the full "Add a task" form offers up front (pipeline, merge policy, model
  * preset) has a workspace default, so here they sit behind ONE "Change how this runs" disclosure
- * that names the defaults it would use. The disclosure opens by itself when a value is set, by the
- * same rule the inspector uses (`showOverrideField`), so nothing runs on a setting the reader
- * cannot see.
+ * that names the defaults it would use. Inside it, the merge policy and model preset follow the
+ * full form's tier rule (`showOverrideField`): the basic tier and the designer role, whose tier is
+ * capped at basic, see the pipeline only.
  *
  * The other task kinds and context attachments are not rebuilt here: "More kinds" and "Attach
  * context" hand the text over to the full form, prefilled, which is the one place those rules
@@ -29,14 +29,10 @@ const pipelines = usePipelinesStore()
 const riskPolicies = useRiskPoliciesStore()
 const modelPresets = useModelPresetsStore()
 const access = useWorkspaceAccess()
+const uiMode = useUiModeStore()
 const toast = useToast()
 const { present } = usePipelineErrorToast()
 const pipelineFor = useStartPipelineResolver()
-
-const open = computed({
-  get: () => ui.describeWorkOpen,
-  set: (v: boolean) => (v ? null : ui.closeDescribeWork()),
-})
 
 const text = ref('')
 const serviceId = ref<string | undefined>(undefined)
@@ -66,6 +62,36 @@ onModalOpen(
   },
 )
 
+// The ONE choice of a service frame, kept legal while the dialog is open: a frame deleted under
+// it clears the selection rather than leaving a dead id that a submit would fail on. Nothing is
+// picked in its place, by the rule above.
+watch(services, (next) => {
+  if (serviceId.value && !next.some((s) => s.id === serviceId.value)) serviceId.value = undefined
+})
+
+// UX-18, as the full form: prompt before discarding typed input on Escape, backdrop or Cancel.
+// Registered after the reset above, so the baseline is the freshly opened dialog.
+const { requestClose } = useUnsavedGuard({
+  open: computed(() => ui.describeWorkOpen),
+  close: () => ui.closeDescribeWork(),
+  saving: () => saving.value,
+  snapshot: () => ({
+    text: text.value.trim(),
+    serviceId: serviceId.value ?? null,
+    kind: kind.value,
+    pipelineId: pipelineId.value,
+    riskPolicyId: riskPolicyId.value,
+    modelPresetId: modelPresetId.value,
+  }),
+})
+// Declared after the guard so the setter's `requestClose` reference is never in its TDZ.
+const open = computed({
+  get: () => ui.describeWorkOpen,
+  set: (v: boolean) => {
+    if (!v) void requestClose()
+  },
+})
+
 const split = computed(() => splitDescribedWork(text.value))
 const canSubmit = computed(
   () => !!split.value.title && !!service.value && !saving.value && access.canWriteBoard.value,
@@ -76,25 +102,37 @@ const selectablePipelines = computed(() =>
     pipelineAllowedForManualStart(p, service.value, board.blocks, kind.value, 'task'),
   ),
 )
+// A pipeline picked for one kind or service may not be allowed for the next one. The picker then
+// no longer lists it, so the task must not be created pinned to it either.
+watch(selectablePipelines, (next) => {
+  if (pipelineId.value && !next.some((p) => p.id === pipelineId.value)) pipelineId.value = ''
+})
+
+/** The full form's tier rule for the two overrides basic mode hides (`showOverrideField`). */
+const showRiskPolicy = computed(() => showOverrideField(uiMode.isAdvanced, riskPolicyId.value))
+const showModelPreset = computed(() => showOverrideField(uiMode.isAdvanced, modelPresetId.value))
+
+/** What "Workspace default" starts, so the picker does not say there is no default. */
+const defaultPipelineName = computed(() => pipelineFor({ pipelineId: undefined })?.name)
 
 /** What each override resolves to when left empty, for the disclosure's one-line summary. */
 const summary = computed(() => {
   const pipeline = pipelineId.value
     ? pipelines.getPipeline(pipelineId.value)?.name
-    : pipelineFor({ pipelineId: undefined })?.name
-  const policy = riskPolicyId.value
-    ? riskPolicies.presets.find((p) => p.id === riskPolicyId.value)?.name
-    : riskPolicies.defaultPreset?.name
-  const preset = modelPresetId.value
-    ? modelPresets.presets.find((p) => p.id === modelPresetId.value)?.name
-    : modelPresets.defaultPreset?.name
+    : defaultPipelineName.value
+  const policy = !showRiskPolicy.value
+    ? undefined
+    : riskPolicyId.value
+      ? riskPolicies.presets.find((p) => p.id === riskPolicyId.value)?.name
+      : riskPolicies.defaultPreset?.name
+  const preset = !showModelPreset.value
+    ? undefined
+    : modelPresetId.value
+      ? modelPresets.presets.find((p) => p.id === modelPresetId.value)?.name
+      : modelPresets.defaultPreset?.name
   return [pipeline, policy, preset].filter(Boolean).join(' · ')
 })
-const anyOverride = computed(() =>
-  showOverrideField(false, pipelineId.value, riskPolicyId.value, modelPresetId.value),
-)
 const overridesOpen = ref(false)
-watch(anyOverride, (set) => set && (overridesOpen.value = true), { immediate: true })
 
 const KIND_LABEL_KEYS: Record<'feature' | 'bug', string> = {
   feature: 'describeWork.kind.feature',
@@ -117,6 +155,7 @@ const modelPresetValue = computed({
 function openFullForm() {
   if (!service.value) return
   const { title, description } = split.value
+  // Nothing is discarded: the text moves to the full form, so this closes without the guard.
   ui.closeDescribeWork()
   ui.openAddTask(service.value.id, { title, description })
 }
@@ -133,15 +172,17 @@ async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
       ...(modelPresetId.value ? { modelPresetId: modelPresetId.value } : {}),
       ...(acknowledgeReviewDebt ? { acknowledgeReviewDebt: true } : {}),
     })
+    // No block means the add did not land (the store has said why); the dialog stays open with
+    // the text in it.
+    if (!block) return
     ui.closeReviewFriction()
     ui.closeDescribeWork()
-    if (!block) return
-    if (startNow) {
-      const pipeline = pipelineFor(block)
-      // `execution.start` reports its own refusals; a task that did not start stays in the queue
-      // under "Not started", which is exactly where the reader will look for it.
-      if (pipeline) await execution.start(block.id, pipeline)
-    } else {
+    const pipeline = startNow ? pipelineFor(block) : undefined
+    // `execution.start` reports a refused start itself. A start that did not happen for any other
+    // reason (no pipeline to run, a cancelled credential prompt) still added the task, so the
+    // reader is told it is in the queue under "Not started".
+    const started = pipeline ? await execution.start(block.id, pipeline) : false
+    if (!started) {
       toast.add({
         title: t('describeWork.addedToast', { title: block.title }),
         icon: 'i-lucide-list-plus',
@@ -237,17 +278,25 @@ async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
             <span class="text-dimmed">({{ summary || t('describeWork.workspaceDefault') }})</span>
           </UButton>
           <template #content>
-            <div class="mt-3 grid gap-3 sm:grid-cols-3">
+            <div
+              class="mt-3 grid gap-3"
+              :class="showRiskPolicy ? 'sm:grid-cols-3' : 'sm:grid-cols-1'"
+            >
               <UFormField :label="t('board.addTask.pipeline')">
                 <PipelinePicker
                   :model-value="pipelineId"
                   :options="selectablePipelines"
                   :none-label="t('describeWork.workspaceDefault')"
+                  :none-hint="
+                    defaultPipelineName
+                      ? t('describeWork.defaultPipelineHint', { name: defaultPipelineName })
+                      : undefined
+                  "
                   trigger-class="w-full justify-between"
                   @update:model-value="pipelineId = $event"
                 />
               </UFormField>
-              <UFormField :label="t('board.addTask.mergePolicy')">
+              <UFormField v-if="showRiskPolicy" :label="t('board.addTask.mergePolicy')">
                 <RiskPolicyPicker
                   :model-value="riskPolicyId"
                   :options="riskPolicies.presets"
@@ -257,7 +306,7 @@ async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
                   @update:model-value="riskPolicyId = $event"
                 />
               </UFormField>
-              <UFormField :label="t('board.addTask.modelPreset')">
+              <UFormField v-if="showModelPreset" :label="t('board.addTask.modelPreset')">
                 <USelect v-model="modelPresetValue" :items="modelPresetItems" class="w-full" />
               </UFormField>
             </div>
@@ -279,8 +328,7 @@ async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
 
     <template #footer>
       <div class="flex w-full flex-wrap items-center justify-end gap-2">
-        <p class="w-full text-2xs text-dimmed">{{ t('describeWork.footerHint') }}</p>
-        <UButton color="neutral" variant="ghost" @click="open = false">
+        <UButton color="neutral" variant="ghost" @click="requestClose()">
           {{ t('common.cancel') }}
         </UButton>
         <UButton

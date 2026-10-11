@@ -1424,8 +1424,9 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
   the board.
 - **Describe new work** (`components/queue/DescribeWorkModal.vue`, `utils/describeWork.ts`): the
   one-sentence intake, from Create, the palette and the queue header. It files a feature or a bug
-  from a sentence and a service, titled by the first sentence; pipeline, merge policy and model
-  preset sit behind one disclosure that opens by itself when a value is set (`showOverrideField`).
+  from a sentence and a service, titled by the first sentence; the overrides sit behind one
+  disclosure, and the merge policy and model preset follow the full form's tier rule
+  (`showOverrideField`), so basic mode and the designer role see the pipeline only.
   It rebuilds no other kind: "More kinds" and "Attach context" hand the text to `AddTaskModal`,
   which stays the one home of those rules. Both share `utils/reviewFriction.ts` for the review-debt 409.
 - **Inspector** (`components/panels` + `panels/inspector`): per-block tabs:

@@ -8831,8 +8831,8 @@
     "moreKinds": "Weitere Arten…",
     "changeHowItRuns": "Ablauf ändern",
     "workspaceDefault": "Workspace-Standard",
+    "defaultPipelineHint": "Der Workspace-Standard: {name}. Eine hier gewählte Pipeline ersetzt ihn für diese Aufgabe.",
     "attachContext": "Kontext anhängen (öffnet das vollständige Formular)",
-    "footerHint": "Die Aufgabe wird als nicht begonnen hinzugefügt. Sie startet, wenn du auf Start drückst.",
     "add": "Zur Warteschlange hinzufügen",
     "addAndStart": "Hinzufügen und starten",
     "addedToast": "„{title}“ zur Warteschlange hinzugefügt"

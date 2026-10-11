@@ -8831,8 +8831,8 @@
     "moreKinds": "Plus de types…",
     "changeHowItRuns": "Modifier le déroulement",
     "workspaceDefault": "Défaut du workspace",
+    "defaultPipelineHint": "Le défaut du workspace : {name}. Un pipeline choisi ici le remplace pour cette tâche.",
     "attachContext": "Joindre du contexte (ouvre le formulaire complet)",
-    "footerHint": "La tâche est ajoutée comme non commencée. Elle démarre quand vous appuyez sur Démarrer.",
     "add": "Ajouter à la file",
     "addAndStart": "Ajouter et démarrer",
     "addedToast": "« {title} » a été ajoutée à la file"

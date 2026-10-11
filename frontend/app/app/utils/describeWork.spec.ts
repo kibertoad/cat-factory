@@ -32,6 +32,37 @@ describe('splitDescribedWork', () => {
     )
   })
 
+  it('does not end a sentence at a common abbreviation', () => {
+    const text = 'Fix e.g. the login redirect loop. It happens on Safari.'
+    expect(splitDescribedWork(text)).toEqual({
+      title: 'Fix e.g. the login redirect loop',
+      description: text,
+    })
+    expect(splitDescribedWork('Ask Dr. Smith about the export. She owns it.').title).toBe(
+      'Ask Dr. Smith about the export',
+    )
+  })
+
+  it('ends a sentence at a full-width mark, with or without a space after it', () => {
+    const text = '修复登录重定向。记录每次登录。'
+    expect(splitDescribedWork(text)).toEqual({ title: '修复登录重定向', description: text })
+  })
+
+  it('keeps a question or an exclamation mark, and drops a period', () => {
+    expect(splitDescribedWork('Why does login fail?')).toEqual({ title: 'Why does login fail?' })
+    // A final period says nothing the title does not, so it adds no description.
+    expect(splitDescribedWork('Fix the login redirect.')).toEqual({
+      title: 'Fix the login redirect',
+    })
+  })
+
+  it('never cuts an emoji in half when it shortens', () => {
+    const text = `${'a'.repeat(DERIVED_TITLE_MAX - 2)}😀😀😀 more words after it`
+    const { title } = splitDescribedWork(text)
+    expect(title).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/)
+    expect(Array.from(title).length).toBeLessThanOrEqual(DERIVED_TITLE_MAX)
+  })
+
   it('returns an empty title for blank input, so the dialog cannot submit it', () => {
     expect(splitDescribedWork('   \n ')).toEqual({ title: '' })
   })

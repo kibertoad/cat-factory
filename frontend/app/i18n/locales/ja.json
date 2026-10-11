@@ -8831,8 +8831,8 @@
     "moreKinds": "その他の種類…",
     "changeHowItRuns": "実行方法を変更",
     "workspaceDefault": "ワークスペースの既定",
+    "defaultPipelineHint": "ワークスペースの既定: {name}。ここで選んだパイプラインは、このタスクで既定の代わりに使われます。",
     "attachContext": "コンテキストを添付（完全なフォームを開きます）",
-    "footerHint": "タスクは未着手として追加されます。開始を押すと始まります。",
     "add": "キューに追加",
     "addAndStart": "追加して開始",
     "addedToast": "「{title}」をキューに追加しました"

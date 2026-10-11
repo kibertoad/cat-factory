@@ -8831,8 +8831,8 @@
     "moreKinds": "Altri tipi…",
     "changeHowItRuns": "Cambia come viene eseguita",
     "workspaceDefault": "Predefinito del workspace",
+    "defaultPipelineHint": "Il predefinito del workspace: {name}. Una pipeline scelta qui lo sostituisce per questa attività.",
     "attachContext": "Allega contesto (apre il modulo completo)",
-    "footerHint": "L’attività viene aggiunta come non iniziata. Parte quando premi Avvia.",
     "add": "Aggiungi alla coda",
     "addAndStart": "Aggiungi e avvia",
     "addedToast": "«{title}» aggiunta alla coda"

@@ -8831,8 +8831,8 @@
     "moreKinds": "Daha fazla tür…",
     "changeHowItRuns": "Nasıl çalışacağını değiştir",
     "workspaceDefault": "Çalışma alanı varsayılanı",
+    "defaultPipelineHint": "Çalışma alanı varsayılanı: {name}. Burada seçilen pipeline bu görev için onun yerine geçer.",
     "attachContext": "Bağlam ekle (tam formu açar)",
-    "footerHint": "Görev başlamadı olarak eklenir. Başlat'a bastığında başlar.",
     "add": "Kuyruğa ekle",
     "addAndStart": "Ekle ve başlat",
     "addedToast": "“{title}” kuyruğa eklendi"

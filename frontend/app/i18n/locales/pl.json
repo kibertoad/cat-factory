@@ -8831,8 +8831,8 @@
     "moreKinds": "Więcej rodzajów…",
     "changeHowItRuns": "Zmień sposób uruchomienia",
     "workspaceDefault": "Domyślne dla workspace'u",
+    "defaultPipelineHint": "Domyślny dla workspace'u: {name}. Pipeline wybrany tutaj zastępuje go w tym zadaniu.",
     "attachContext": "Dołącz kontekst (otwiera pełny formularz)",
-    "footerHint": "Zadanie zostanie dodane jako nierozpoczęte. Ruszy, gdy naciśniesz Start.",
     "add": "Dodaj do kolejki",
     "addAndStart": "Dodaj i uruchom",
     "addedToast": "Dodano „{title}” do kolejki"

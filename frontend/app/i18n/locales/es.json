@@ -8831,8 +8831,8 @@
     "moreKinds": "Más tipos…",
     "changeHowItRuns": "Cambiar cómo se ejecuta",
     "workspaceDefault": "Predeterminado del workspace",
+    "defaultPipelineHint": "El predeterminado del workspace: {name}. Un pipeline elegido aquí lo sustituye para esta tarea.",
     "attachContext": "Adjuntar contexto (abre el formulario completo)",
-    "footerHint": "La tarea se añade sin empezar. Empieza cuando pulses Iniciar.",
     "add": "Añadir a la cola",
     "addAndStart": "Añadir e iniciar",
     "addedToast": "Se añadió «{title}» a la cola"
