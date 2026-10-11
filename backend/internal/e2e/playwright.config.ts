@@ -92,8 +92,11 @@ export default defineConfig({
       // time. The dev server pre-bundles deps from a startup scan, and any dep the scan
       // misses is discovered at runtime and forces a full page reload, which aborts an
       // in-flight `page.goto` (`net::ERR_ABORTED`) and hangs a spec to its timeout.
-      // deploy/frontend's `optimizeDeps.entries` makes that scan cover every layer file,
-      // async-import panels included, but a spec should not depend on it staying complete.
+      // deploy/frontend's scan entries make that scan cover every layer file, async-import
+      // panels included. A dep reached only by a lazy import inside a module's runtime dir in
+      // `node_modules` is still found at runtime, because Nuxt scans only that dir's
+      // registered components, plugins, middleware and layouts. So a spec should not depend
+      // on the dev scan being complete.
       // `--filter` makes the command cwd-independent; Nuxt's preview server binds `PORT`.
       command:
         'pnpm --filter @cat-factory/deploy-frontend run build && pnpm --filter @cat-factory/deploy-frontend run preview',
