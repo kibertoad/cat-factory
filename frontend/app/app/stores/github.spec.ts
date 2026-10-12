@@ -393,3 +393,51 @@ describe('github store — GitHub PAT credential check', () => {
     await vi.waitFor(() => expect(getGitHubPatCheck).toHaveBeenCalledTimes(2))
   })
 })
+
+// Two inspector panels call `ensureLoaded()` on the same frame selection. The probe is
+// single-flighted, so both callers share it, but the projection read behind it must be shared too.
+describe('github store: ensureLoaded', () => {
+  const repo: GitHubRepo = {
+    githubId: 1,
+    installationId: 42,
+    owner: 'acme',
+    name: 'api',
+    defaultBranch: 'main',
+    private: false,
+    syncedAt: 0,
+  }
+
+  it('loads the projection once when two callers ask at the same time', async () => {
+    // One linked repo, so the second caller cannot load again only because the list is empty.
+    const api = stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      listGitHubRepos: vi.fn().mockResolvedValue([repo]),
+    })
+    const github = storeWithWorkspace()
+
+    await Promise.all([github.ensureLoaded(), github.ensureLoaded()])
+
+    expect(api.listGitHubRepos).toHaveBeenCalledTimes(1)
+    expect(api.listGitHubPullRequests).toHaveBeenCalledTimes(1)
+    expect(api.listGitHubIssues).toHaveBeenCalledTimes(1)
+  })
+
+  // A connected workspace with no linked repos is loaded, not unloaded. An empty list is the
+  // answer, so a later call must not read it again.
+  it('does not load again for a connected workspace with no repos', async () => {
+    const api = stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      listGitHubRepos: vi.fn().mockResolvedValue([]),
+    })
+    const github = storeWithWorkspace()
+
+    await github.ensureLoaded()
+    await github.ensureLoaded()
+
+    expect(api.listGitHubRepos).toHaveBeenCalledTimes(1)
+    expect(api.listGitHubPullRequests).toHaveBeenCalledTimes(1)
+    expect(api.listGitHubIssues).toHaveBeenCalledTimes(1)
+  })
+})
