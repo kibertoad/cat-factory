@@ -33,12 +33,12 @@ export function createGitHubProjectionLoad(deps: ProjectionLoadDeps): {
   // Reads can overlap: `load()` after a write starts a new one while an `ensureLoaded()` read is
   // still running. The reads do not finish in the order they started, so each one is numbered and
   // a result lands only if no newer read has already written. A read for a board the user has
-  // left lands nowhere.
+  // left lands nowhere, and neither does a read that started before the projection was cleared in
+  // the same workspace (a disconnect).
   let lastStartedRead = 0
-  let lastWrittenRead = 0
+  let oldestReadThatMayLand = 0
 
   async function runLoad() {
-    if (!connected.value) return
     const askedFor = workspace.requireId()
     const read = ++lastStartedRead
     loading.value = true
@@ -48,8 +48,8 @@ export function createGitHubProjectionLoad(deps: ProjectionLoadDeps): {
         api.listGitHubPullRequests(askedFor),
         api.listGitHubIssues(askedFor),
       ])
-      if (read < lastWrittenRead || workspace.workspaceId !== askedFor) return
-      lastWrittenRead = read
+      if (read < oldestReadThatMayLand || workspace.workspaceId !== askedFor) return
+      oldestReadThatMayLand = read
       repos.value = r
       pulls.value = p
       issues.value = i
@@ -62,9 +62,14 @@ export function createGitHubProjectionLoad(deps: ProjectionLoadDeps): {
 
   const guard = useSingleFlightProbe(runLoad, () => workspace.workspaceId)
 
+  // Not connected means nothing to read. Both doors skip the guard then, because a run that reads
+  // nothing would still record the projection as loaded, and a later connection would not load.
   return {
-    load: guard.refresh,
+    load: () => (connected.value ? guard.refresh() : Promise.resolve()),
     ensureLoaded: () => (connected.value ? guard.ensureProbed() : Promise.resolve()),
-    forgetLoaded: guard.invalidate,
+    forgetLoaded: () => {
+      guard.invalidate()
+      oldestReadThatMayLand = lastStartedRead + 1
+    },
   }
 }

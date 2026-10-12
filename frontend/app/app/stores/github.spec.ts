@@ -598,4 +598,51 @@ describe('github store: ensureLoaded', () => {
     expect(github.repos).toEqual([newer])
     expect(github.loading).toBe(false)
   })
+
+  // A disconnect clears the projection in the same workspace, so the board id cannot tell the
+  // read apart. A read that started before the disconnect must not put the old rows back.
+  it('drops a read that finishes after a disconnect', async () => {
+    let finishRead: (repos: GitHubRepo[]) => void = () => {}
+    stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      listGitHubRepos: vi.fn().mockReturnValueOnce(
+        new Promise<GitHubRepo[]>((resolve) => {
+          finishRead = resolve
+        }),
+      ),
+      disconnectGitHub: vi.fn().mockResolvedValue(undefined),
+    })
+    const github = storeWithWorkspace()
+    await github.probe()
+
+    const ensured = github.ensureLoaded()
+    await github.disconnect()
+    finishRead([repo])
+    await ensured
+
+    expect(github.repos).toEqual([])
+  })
+
+  // `load()` reads nothing while the workspace is not connected, so it must not record the
+  // projection as loaded. A later probe that finds a connection must lead to a read.
+  it('loads after a connection appears when load() ran while not connected', async () => {
+    const api = stubApi({
+      getGitHubConnection: vi
+        .fn()
+        .mockResolvedValueOnce({ connection: null })
+        .mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      listGitHubRepos: vi.fn().mockResolvedValue([repo]),
+    })
+    const github = storeWithWorkspace()
+    await github.probe()
+
+    await github.load()
+    await github.probe()
+    await github.ensureLoaded()
+
+    expect(api.listGitHubRepos).toHaveBeenCalledTimes(1)
+    expect(github.repos).toEqual([repo])
+  })
 })
