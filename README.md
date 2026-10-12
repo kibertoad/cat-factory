@@ -44,7 +44,8 @@ the model providers you choose.
    automatically or after a person approves.
 
 Along the way you choose which model runs each step, which steps need a human sign-off, and how
-much the organisation may spend per month. When a run needs you, the board says so.
+much the organisation may spend per month. When a run needs you, the queue lists it under **Needs
+you**, with the one action that unblocks it.
 
 ## Try it locally
 
@@ -98,6 +99,9 @@ A short tour. Every capability is described in full in
 - **A board that is the plan.** Services, modules and tasks on a zoomable canvas, with dependency
   edges and tasks sorted into status lanes. Point cat-factory at an existing repository and it maps
   the codebase onto the board for you.
+- **A queue of what needs you.** The board's second view lists every task across every service in
+  the column that says what it needs (Needs you, In flight, Ready to merge), each with the one
+  action its state implies.
 - **Agent pipelines you can shape.** Reusable chains of steps (architect, coder, reviewer, tester
   and more), a ladder of ready-made presets, per-step model choice, editable agent prompts, and
   expensive steps that skip themselves on small tasks.

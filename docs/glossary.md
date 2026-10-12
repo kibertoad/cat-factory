@@ -19,7 +19,7 @@ depending on the layer: there is one entity, not three:
 | --------- | ------------------------------------------------------------------ | ------------------------------------------------------------ |
 | **block** | the domain + persistence + most of the API                         | `backend/packages/contracts/src/entities.ts` (`blockSchema`) |
 | **task**  | at the **tracker/issue** boundary (linked GitHub/Jira/etc. issues) | `backend/packages/contracts/src/tasks.ts`                    |
-| **card**  | the **UI/board** rendering of a block                              | `entities.ts` / `events.ts` (render metadata on the block)   |
+| **card**  | the **UI** rendering of a block, on the canvas or in the queue     | `entities.ts` / `events.ts` (render metadata on the block)   |
 
 ### "task" means two different things
 
@@ -36,6 +36,14 @@ Both are in `backend/packages/contracts/src/primitives.ts`:
 
 So `level: 'task'` (a leaf in the hierarchy) is unrelated to the block **type** axis. Don't
 conflate them.
+
+### "board" names the workspace and one of its two views
+
+A workspace's **board** is the whole surface. It has two **views** (`stores/workView.ts`, `?view=`):
+`'queue'`, which lists every task by what it needs, and `'board'`, the canvas. The code comments
+call the second one "canvas", and so should new prose, so "board" stays free for the whole
+surface. The queue view is not the gates' approval queue or the review task's skill queue: those
+hold approvals and skills, not tasks. Design: [`frontend/app/README.md` → Queue view](../frontend/app/README.md#queue-view).
 
 ## Runtime facades: directory ↔ package name
 

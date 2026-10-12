@@ -32,6 +32,10 @@ A pannable/zoomable canvas of frames (services) with dependency edges, drag-drop
 
 Inside each service, tasks sit in status lanes the board DERIVES rather than places: not started, in progress, needs you, plus a collapsed Done lane capped per workspace by count and by age. Each lane orders itself by what is actionable for it (what can start now / what has gone quiet / what has waited longest), overridable per person along with grouping by module, task type, initiative, epic or what the task needs.
 
+### Queue view
+
+The board's second view: every task across every service, in the column that says what it needs (**Needs you**, **In flight**, **Ready to merge**, and the Done lane's window), each card carrying the one action its state implies (Answer, Start, Merge). It reads the same verdict as the swimlanes, so a task never shows one state in the queue and another on the canvas. The app opens on the view a person used last in that browser; someone who has not chosen lands on the queue. The canvas's decision counter opens it.
+
 ### In-repo service spec
 
 A `spec-writer` agent maintains the service's PRESCRIPTIVE specification **in the repo** (`spec/`: sharded requirements with Given/When/Then acceptance criteria, rendered to Gherkin `.feature` files), reviewed as an ordinary PR diff. Each requirement carries an **implementation state**: `aspirational` (agreed, not yet built) or `established` (a tester actually observed it hold). Only `established` requirements read as standing behaviour in a build prompt, so an agreed-but-unbuilt requirement is never implemented by accident nor reported as a regression, and a tester's first observed pass PROMOTES it automatically, with no human bookkeeping. The board's Requirements window shows that state per requirement, with a per-group rollup and a state filter, and a tester step renders its per-requirement verdicts in-app. Because the state is recorded, the PR verification report can tell a **regression** (an `established` requirement now failing) from work simply not finished yet. See [`docs/initiatives/service-acceptance-criteria.md`](./initiatives/service-acceptance-criteria.md).
