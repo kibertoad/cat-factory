@@ -1,5 +1,13 @@
 # @cat-factory/local-server
 
+## 0.155.6
+
+### Patch Changes
+
+- @cat-factory/server@0.334.1
+  - @cat-factory/executor-harness@1.163.4
+  - @cat-factory/node-server@0.239.1
+
 ## 0.155.5
 
 ### Patch Changes
