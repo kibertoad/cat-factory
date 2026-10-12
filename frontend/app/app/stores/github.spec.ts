@@ -440,4 +440,74 @@ describe('github store: ensureLoaded', () => {
     expect(api.listGitHubPullRequests).toHaveBeenCalledTimes(1)
     expect(api.listGitHubIssues).toHaveBeenCalledTimes(1)
   })
+
+  // A board switch resets the store, and a switch back lands on the same workspace id. The
+  // cleared projection must be read again, even though that id was loaded before.
+  it('loads again after a reset clears the projection', async () => {
+    const api = stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      listGitHubRepos: vi.fn().mockResolvedValue([repo]),
+    })
+    const github = storeWithWorkspace()
+
+    await github.ensureLoaded()
+    github.reset()
+    await github.ensureLoaded()
+
+    expect(api.listGitHubRepos).toHaveBeenCalledTimes(2)
+    expect(github.repos).toEqual([repo])
+  })
+
+  it('loads again after a load that failed', async () => {
+    const api = stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      listGitHubRepos: vi.fn().mockRejectedValueOnce(new Error('500')).mockResolvedValue([repo]),
+    })
+    const github = storeWithWorkspace()
+
+    await expect(github.ensureLoaded()).rejects.toThrow('500')
+    await github.ensureLoaded()
+
+    expect(api.listGitHubRepos).toHaveBeenCalledTimes(2)
+    expect(github.repos).toEqual([repo])
+  })
+
+  // `load()` is how every write refreshes the projection. A write that lands while an
+  // `ensureLoaded()` read is in flight must not get that older read back.
+  it('reads again on load() while an ensureLoaded() read is in flight', async () => {
+    const api = stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+    })
+    const github = storeWithWorkspace()
+    await github.probe()
+
+    const ensured = github.ensureLoaded()
+    const reloaded = github.load()
+    await Promise.all([ensured, reloaded])
+
+    expect(api.listGitHubRepos).toHaveBeenCalledTimes(2)
+  })
+
+  // A disconnect clears the projection outside a load. A probe that finds the workspace connected
+  // again (an App installed from another tab) must load it, not trust the earlier load.
+  it('loads again after a disconnect and a later probe that finds a connection', async () => {
+    const api = stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      listGitHubRepos: vi.fn().mockResolvedValue([repo]),
+      disconnectGitHub: vi.fn().mockResolvedValue(undefined),
+    })
+    const github = storeWithWorkspace()
+
+    await github.ensureLoaded()
+    await github.disconnect()
+    await github.probe()
+    await github.ensureLoaded()
+
+    expect(api.listGitHubRepos).toHaveBeenCalledTimes(2)
+    expect(github.repos).toEqual([repo])
+  })
 })

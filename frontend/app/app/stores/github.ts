@@ -15,6 +15,7 @@ import type {
 } from '~/types/domain'
 import { branchWebUrl, issueWebUrl, pullWebUrl, repoWebUrl } from '~/utils/vcs'
 import { useUpsertList } from '~/composables/useUpsertList'
+import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useServicesStore } from '~/stores/services'
 import { pullKey, type GitHubStoreContext } from '~/stores/github/context'
@@ -138,8 +139,8 @@ export const useGitHubStore = defineStore('github', () => {
     return branchWebUrl(providerOfRepo(repoGithubId), repoUrl(repoGithubId), branch)
   }
 
-  /** Load the cached repos, pull requests and issues for the workspace. */
-  async function load() {
+  /** Read the cached repos, pull requests and issues for the workspace. */
+  async function runLoad() {
     if (!connected.value) return
     loading.value = true
     try {
@@ -155,6 +156,14 @@ export const useGitHubStore = defineStore('github', () => {
       loading.value = false
     }
   }
+
+  // Whether the projection is loaded is tracked per workspace by the single-flight guard, never
+  // read off `repos`: a connected workspace with no linked repos is loaded, and an empty list is
+  // its answer. `load()` is the refresh door, so a reload after a write never rides a read that
+  // started before it; `ensureLoaded()` shares whatever read is in flight.
+  const projection = useSingleFlightProbe(runLoad, () => workspace.workspaceId)
+  /** Load the cached repos, pull requests and issues for the workspace. */
+  const load = projection.refresh
 
   /** Full file listing per repo (recursive tree), cached by GitHub numeric id. */
   const repoFiles = ref<Record<number, RepoTreeEntry[]>>({})
@@ -184,6 +193,7 @@ export const useGitHubStore = defineStore('github', () => {
     syncing,
     connected,
     load,
+    forgetLoaded: projection.invalidate,
   }
   // The board-load probe (integration availability + the bound connection + the connect options +
   // the credential check). Built from the context rather than inline, so this setup stays within
@@ -193,11 +203,11 @@ export const useGitHubStore = defineStore('github', () => {
   /**
    * Ensure the projection (repos/PRs/issues) is loaded at least once — for views
    * that need it without opening the GitHub panel (e.g. the inspector's repo link).
-   * Probes the integration first if it hasn't been yet.
+   * Probes the integration first if it hasn't been yet. Concurrent callers share one read.
    */
   async function ensureLoaded() {
     if (available.value === null) await probe()
-    if (connected.value && repos.value.length === 0) await load()
+    if (connected.value) await projection.ensureProbed()
   }
 
   const connectionActions = createGitHubConnectionActions(context)
@@ -213,6 +223,7 @@ export const useGitHubStore = defineStore('github', () => {
    * land. `available` returns to `null` (unknown) so the onboarding gate re-resolves.
    */
   function reset() {
+    projection.invalidate()
     available.value = null
     unavailableCause.value = null
     connection.value = null
