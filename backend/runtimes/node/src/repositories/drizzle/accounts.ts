@@ -334,33 +334,41 @@ export class DrizzleUserRepository implements UserRepository {
   }
 
   async linkIdentity(identity: UserIdentityRecord): Promise<void> {
+    if (!isDirectoryAccountProvider(identity.provider)) {
+      await this.upsertIdentity(this.db, identity)
+      return
+    }
     // A host identity is one of the user's directory accounts, so linking it changes the `user`
     // entity of the new owner and, when it moves, of the user it is taken from.
-    const published = isDirectoryAccountProvider(identity.provider)
     const previousOwner = identityOwnerSource(identity.provider, identity.subject, identity.userId)
     const owner = userSource(identity.userId)
     await this.db.transaction(async (tx) => {
       const now = Date.now()
-      if (published) {
-        await lockDirectoryFeed(tx, sql`${previousOwner} UNION ALL ${owner}`)
-        await appendDirectoryChanges(tx, previousOwner, now)
-      }
-      await tx
-        .insert(userIdentities)
-        .values({
-          user_id: identity.userId,
-          provider: identity.provider,
-          subject: identity.subject,
-          secret: identity.secret,
-          metadata: identity.metadata,
-          created_at: identity.createdAt,
-        })
-        .onConflictDoUpdate({
-          target: [userIdentities.provider, userIdentities.subject],
-          set: { user_id: identity.userId, secret: identity.secret, metadata: identity.metadata },
-        })
-      if (published) await appendDirectoryChanges(tx, owner, now)
+      await lockDirectoryFeed(tx, sql`${previousOwner} UNION ALL ${owner}`)
+      await appendDirectoryChanges(tx, previousOwner, now)
+      await this.upsertIdentity(tx, identity)
+      await appendDirectoryChanges(tx, owner, now)
     })
+  }
+
+  private async upsertIdentity(
+    db: Pick<DrizzleDb, 'insert'>,
+    identity: UserIdentityRecord,
+  ): Promise<void> {
+    await db
+      .insert(userIdentities)
+      .values({
+        user_id: identity.userId,
+        provider: identity.provider,
+        subject: identity.subject,
+        secret: identity.secret,
+        metadata: identity.metadata,
+        created_at: identity.createdAt,
+      })
+      .onConflictDoUpdate({
+        target: [userIdentities.provider, userIdentities.subject],
+        set: { user_id: identity.userId, secret: identity.secret, metadata: identity.metadata },
+      })
   }
 
   async listIdentities(userId: string): Promise<UserIdentityRecord[]> {

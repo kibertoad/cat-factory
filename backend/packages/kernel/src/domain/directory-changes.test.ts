@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { directoryChangeFromRow, type StoredDirectoryChange } from './directory-changes.js'
+import {
+  directoryChangeFromRow,
+  type StoredDirectoryChange,
+  withDirectoryAccounts,
+} from './directory-changes.js'
 
 const row = (overrides: Partial<StoredDirectoryChange> = {}): StoredDirectoryChange => ({
   account_id: 'acc',
@@ -27,5 +31,26 @@ describe('directoryChangeFromRow', () => {
     expect(() => directoryChangeFromRow(row({ entity_type: 'team' }))).toThrow(
       "Unknown directory entity type 'team' at seq 7",
     )
+  })
+})
+
+describe('withDirectoryAccounts', () => {
+  const user = { id: 'usr', name: null, email: null, avatarUrl: null }
+  const identity = (provider: string, subject: string, metadata: string | null) => ({
+    user_id: 'usr',
+    provider,
+    subject,
+    metadata,
+  })
+
+  it('reads a host login that has no readable metadata as no login', () => {
+    const [read] = withDirectoryAccounts(
+      [user],
+      [identity('github', '1', 'not json'), identity('gitlab', '2', '"ada"')],
+    )
+    expect(read?.accounts).toEqual([
+      { provider: 'github', id: '1', login: null },
+      { provider: 'gitlab', id: '2', login: null },
+    ])
   })
 })

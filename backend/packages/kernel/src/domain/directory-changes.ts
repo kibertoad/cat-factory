@@ -3,6 +3,7 @@ import {
   type DirectoryUser,
   type DirectoryUserAccount,
   isDirectoryEntityType,
+  vcsProviderSchema,
 } from '@cat-factory/contracts'
 import type { DirectoryChangeRecord } from '../ports/directory-changes.js'
 
@@ -57,10 +58,8 @@ export interface StoredUserIdentity {
  * The login providers a user's directory accounts come from: the source-control hosts. A password,
  * Google or OIDC identity names nobody on a host, so it is not an account a mirror can match on.
  */
-export const DIRECTORY_ACCOUNT_PROVIDERS: readonly DirectoryUserAccount['provider'][] = [
-  'github',
-  'gitlab',
-]
+export const DIRECTORY_ACCOUNT_PROVIDERS: readonly DirectoryUserAccount['provider'][] =
+  vcsProviderSchema.options
 
 /** Whether identities of `provider` are published as accounts, so linking one is a directory change. */
 export function isDirectoryAccountProvider(
@@ -69,10 +68,18 @@ export function isDirectoryAccountProvider(
   return (DIRECTORY_ACCOUNT_PROVIDERS as readonly string[]).includes(provider)
 }
 
-/** The login a host identity recorded at sign-in. Its metadata is written as `{ login }`. */
+/**
+ * The login a host identity recorded at sign-in. Its metadata is written as `{ login }`; anything
+ * else reads as no login, so one unreadable row cannot fail a whole directory page.
+ */
 function loginOf(metadata: string | null): string | null {
   if (metadata === null) return null
-  const parsed: unknown = JSON.parse(metadata)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(metadata)
+  } catch {
+    return null
+  }
   if (typeof parsed !== 'object' || parsed === null || !('login' in parsed)) return null
   return typeof parsed.login === 'string' ? parsed.login : null
 }
