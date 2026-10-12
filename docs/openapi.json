@@ -643,34 +643,7 @@
         "properties": {
           "accounts": {
             "items": {
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "login": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "provider": {
-                  "enum": [
-                    "github",
-                    "gitlab"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "provider",
-                "id",
-                "login"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/DirectoryUserAccount"
             },
             "type": "array"
           },
@@ -714,6 +687,36 @@
           "email",
           "avatarUrl",
           "accounts"
+        ],
+        "type": "object"
+      },
+      "DirectoryUserAccount": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "gitlab"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "id",
+          "login"
         ],
         "type": "object"
       },

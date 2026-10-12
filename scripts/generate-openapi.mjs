@@ -75,6 +75,7 @@ const COMPONENT_SCHEMAS = {
   ErrorResponse: 'errorResponseSchema',
   DirectoryWorkspace: 'directoryWorkspaceSchema',
   DirectoryUser: 'directoryUserSchema',
+  DirectoryUserAccount: 'directoryUserAccountSchema',
   DirectoryAccountMembership: 'directoryAccountMembershipSchema',
   DirectoryWorkspaceMembership: 'directoryWorkspaceMembershipSchema',
   DirectoryRepo: 'directoryRepoSchema',
