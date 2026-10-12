@@ -124,12 +124,12 @@ describe('useSingleFlightProbe', () => {
     expect(run).toHaveBeenCalledTimes(2)
   })
 
-  it('refresh() starts a new run even with one in flight, and ensureProbed() rides the newest', async () => {
+  it('probe({ afterWrite }) starts a new run even with one in flight, and ensureProbed() rides the newest', async () => {
     const { run, calls, resolve } = deferredRun()
     const guard = useSingleFlightProbe(run, () => 'ws1')
 
     void guard.ensureProbed() // never settles: `deferredRun` resolves only the newest run
-    const refreshed = guard.refresh() // a reload after a write must not ride the older run
+    const refreshed = guard.probe({ afterWrite: true }) // a reload after a write must not ride the older run
     expect(calls.count).toBe(2)
     const ensured = guard.ensureProbed()
     expect(calls.count).toBe(2)

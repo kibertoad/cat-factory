@@ -47,6 +47,6 @@ export interface GitHubStoreContext {
   connected: Readonly<Ref<boolean>>
   /** Reload the cached repos/PRs/issues projection (the store's `load`). */
   load: () => Promise<void>
-  /** Mark the projection unloaded after clearing it outside a load, so `ensureLoaded` reads it again. */
-  forgetLoaded: () => void
+  /** Empty the repos/PRs/issues projection and mark it unloaded, so `ensureLoaded` reads it again. */
+  clearProjection: () => void
 }

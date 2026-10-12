@@ -58,10 +58,10 @@ const adding = ref(false)
 async function loadRepos() {
   try {
     await github.probe()
-    // Load only the linked-repo projection (to flag repos already on the board). The
+    // Load the linked-repo projection once per board (to flag repos already on the board). The
     // available-repos list is NOT prefetched — it's searched server-side on demand once
     // the user types (see the repoQueryRaw watcher), so a wide install isn't shipped whole.
-    if (github.connected) await github.load()
+    await github.ensureLoaded()
   } catch {
     // Integration off / unreachable → the picker stays empty, GitHubConnect shows.
   }

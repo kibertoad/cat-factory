@@ -21,12 +21,13 @@ interface ProjectionLoadDeps {
  * Whether the projection is loaded is tracked per workspace by the single-flight guard, never read
  * off `repos`: a connected workspace with no linked repos is loaded, and an empty list is its
  * answer. `load()` is the refresh door, so a reload after a write never rides a read that started
- * before it. `ensureLoaded()` shares whatever read is in flight.
+ * before it. `ensureLoaded()` shares whatever read is in flight. `clearProjection()` empties the
+ * lists and forgets the load in one step, so no caller can do one without the other.
  */
 export function createGitHubProjectionLoad(deps: ProjectionLoadDeps): {
   load: () => Promise<void>
   ensureLoaded: () => Promise<void>
-  forgetLoaded: () => void
+  clearProjection: () => void
 } {
   const { api, workspace, connected, repos, pulls, issues, loading } = deps
 
@@ -65,11 +66,14 @@ export function createGitHubProjectionLoad(deps: ProjectionLoadDeps): {
   // Not connected means nothing to read. Both doors skip the guard then, because a run that reads
   // nothing would still record the projection as loaded, and a later connection would not load.
   return {
-    load: () => (connected.value ? guard.refresh() : Promise.resolve()),
+    load: () => (connected.value ? guard.probe({ afterWrite: true }) : Promise.resolve()),
     ensureLoaded: () => (connected.value ? guard.ensureProbed() : Promise.resolve()),
-    forgetLoaded: () => {
+    clearProjection: () => {
       guard.invalidate()
       oldestReadThatMayLand = lastStartedRead + 1
+      repos.value = []
+      pulls.value = []
+      issues.value = []
     },
   }
 }

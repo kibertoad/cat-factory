@@ -14,7 +14,7 @@ import type { GitHubStoreContext } from './context'
  */
 export function createGitHubConnectionActions(ctx: GitHubStoreContext) {
   const { api, workspace, available, connection, installations, loadingInstallations } = ctx
-  const { repos, availableRepos, pulls, issues, branches, syncing, load, forgetLoaded } = ctx
+  const { availableRepos, branches, syncing, load, clearProjection } = ctx
 
   /** The URL a workspace owner visits to install the App against this workspace. */
   function getInstallUrl(): Promise<string> {
@@ -48,11 +48,8 @@ export function createGitHubConnectionActions(ctx: GitHubStoreContext) {
     // Backends predating the discriminator omit `provider`; those connections are GitHub App ones.
     await DISCONNECT_BY_PROVIDER[connection.value?.provider ?? 'github'](workspace.requireId())
     connection.value = null
-    forgetLoaded()
-    repos.value = []
+    clearProjection()
     availableRepos.value = []
-    pulls.value = []
-    issues.value = []
     branches.value = {}
   }
 

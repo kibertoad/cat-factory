@@ -180,7 +180,7 @@ export const useGitHubStore = defineStore('github', () => {
     syncing,
     connected,
     load,
-    forgetLoaded: projection.forgetLoaded,
+    clearProjection: projection.clearProjection,
   }
   // The board-load probe (integration availability + the bound connection + the connect options +
   // the credential check). Built from the context rather than inline, so this setup stays within
@@ -210,17 +210,14 @@ export const useGitHubStore = defineStore('github', () => {
    * land. `available` returns to `null` (unknown) so the onboarding gate re-resolves.
    */
   function reset() {
-    projection.forgetLoaded()
+    projection.clearProjection()
     available.value = null
     unavailableCause.value = null
     connection.value = null
     connectOptions.value = []
     patCheck.value = null
     installations.value = []
-    repos.value = []
     availableRepos.value = []
-    pulls.value = []
-    issues.value = []
     branches.value = {}
     repoFiles.value = {}
   }
