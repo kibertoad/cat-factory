@@ -139,21 +139,34 @@ export const useGitHubStore = defineStore('github', () => {
     return branchWebUrl(providerOfRepo(repoGithubId), repoUrl(repoGithubId), branch)
   }
 
+  // Reads can overlap: `load()` after a write starts a new one while an `ensureLoaded()` read is
+  // still running. The reads do not finish in the order they started, so each one is numbered and
+  // a result lands only if no newer read has already written. A read for a board the user has
+  // left lands nowhere.
+  let lastStartedRead = 0
+  let lastWrittenRead = 0
+
   /** Read the cached repos, pull requests and issues for the workspace. */
   async function runLoad() {
     if (!connected.value) return
+    const askedFor = workspace.requireId()
+    const read = ++lastStartedRead
     loading.value = true
     try {
       const [r, p, i] = await Promise.all([
-        api.listGitHubRepos(workspace.requireId()),
-        api.listGitHubPullRequests(workspace.requireId()),
-        api.listGitHubIssues(workspace.requireId()),
+        api.listGitHubRepos(askedFor),
+        api.listGitHubPullRequests(askedFor),
+        api.listGitHubIssues(askedFor),
       ])
+      if (read < lastWrittenRead || workspace.workspaceId !== askedFor) return
+      lastWrittenRead = read
       repos.value = r
       pulls.value = p
       issues.value = i
     } finally {
-      loading.value = false
+      // Only the newest read clears the flag, so an older one finishing first does not report the
+      // projection as settled while the newer read is still running.
+      if (read === lastStartedRead) loading.value = false
     }
   }
 

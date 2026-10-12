@@ -510,4 +510,92 @@ describe('github store: ensureLoaded', () => {
     expect(api.listGitHubRepos).toHaveBeenCalledTimes(2)
     expect(github.repos).toEqual([repo])
   })
+
+  // The reads behind `ensureLoaded()` and a later `load()` overlap, and the older one can finish
+  // last. Its result is older than what is already shown, so it must not replace it.
+  it('keeps the newer read when an older one finishes after it', async () => {
+    let finishOlderRead: (repos: GitHubRepo[]) => void = () => {}
+    const newer: GitHubRepo = { ...repo, githubId: 2, name: 'web' }
+    stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      listGitHubRepos: vi
+        .fn()
+        .mockReturnValueOnce(
+          new Promise<GitHubRepo[]>((resolve) => {
+            finishOlderRead = resolve
+          }),
+        )
+        .mockResolvedValueOnce([newer]),
+    })
+    const github = storeWithWorkspace()
+    await github.probe()
+
+    const ensured = github.ensureLoaded()
+    await github.load()
+    expect(github.repos).toEqual([newer])
+    // The older read is still running, but the newer one owns the flag and has finished.
+    expect(github.loading).toBe(false)
+
+    finishOlderRead([repo])
+    await ensured
+
+    expect(github.repos).toEqual([newer])
+  })
+
+  it('drops a read that finishes after a switch to another board', async () => {
+    let finishRead: (repos: GitHubRepo[]) => void = () => {}
+    stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      listGitHubRepos: vi.fn().mockReturnValueOnce(
+        new Promise<GitHubRepo[]>((resolve) => {
+          finishRead = resolve
+        }),
+      ),
+    })
+    const github = storeWithWorkspace()
+    await github.probe()
+
+    const ensured = github.ensureLoaded()
+    useWorkspaceStore().workspaceId = 'ws-2'
+    github.reset()
+    finishRead([repo])
+    await ensured
+
+    expect(github.repos).toEqual([])
+  })
+
+  // In the usual order the older read finishes first. It still lands (nothing newer has written
+  // yet), but the projection is not settled until the newer read finishes too.
+  it('stays loading until the newest read finishes', async () => {
+    const finish: Array<(repos: GitHubRepo[]) => void> = []
+    const newer: GitHubRepo = { ...repo, githubId: 2, name: 'web' }
+    stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      listGitHubRepos: vi.fn(
+        () =>
+          new Promise<GitHubRepo[]>((resolve) => {
+            finish.push(resolve)
+          }),
+      ),
+    })
+    const github = storeWithWorkspace()
+    await github.probe()
+
+    const ensured = github.ensureLoaded()
+    const reloaded = github.load()
+    finish[0]?.([repo])
+    await ensured
+
+    expect(github.repos).toEqual([repo])
+    expect(github.loading).toBe(true)
+
+    finish[1]?.([newer])
+    await reloaded
+
+    expect(github.repos).toEqual([newer])
+    expect(github.loading).toBe(false)
+  })
 })
