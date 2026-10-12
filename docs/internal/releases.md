@@ -91,6 +91,9 @@ A folder is not wired up by existing (two packages once published as empty shell
 - **Register it in `backend/tsconfig.build.json`** `references`. A package reachable only
   transitively drops out the moment that reference goes away.
 - **Add a changeset** and **a row in README.md's repository-layout tables** (CI guards both).
+- **Under `sdk/`, name a sibling by range**: `workspace:^` for a dependency, and a hand-written
+  peer range (`workspace:>=0.57.0 <1.0.0`) when the package works on a client the integrator
+  builds. `scripts/check-sdk-dependency-ranges.mjs` fails on `workspace:*`, which publishes exact.
 - **Check knip knows about a dynamically-imported dependency** (`ignoreDependencies` in
   `knip.jsonc`).
 

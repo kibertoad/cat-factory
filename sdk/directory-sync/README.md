@@ -4,6 +4,9 @@ Keep a copy of a cat-factory account's directory in your own system: its workspa
 account memberships, workspace memberships and linked repositories. You implement storage; the
 syncer drives the snapshots, the change feed, webhook pushes and reconciliation.
 
+`@cat-factory/sdk` is a peer dependency (`>=0.57.0 <1.0.0`): install it beside this package. The
+syncer drives the client you construct, so it uses your copy of the SDK rather than its own.
+
 ```ts
 import { CatFactoryClient } from '@cat-factory/sdk'
 import { DirectorySyncer } from '@cat-factory/directory-sync'

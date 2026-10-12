@@ -1611,13 +1611,13 @@ importers:
 
   sdk/directory-sync:
     dependencies:
+      '@cat-factory/webhooks':
+        specifier: workspace:^
+        version: link:../webhooks
+    devDependencies:
       '@cat-factory/sdk':
         specifier: workspace:*
         version: link:../typescript
-      '@cat-factory/webhooks':
-        specifier: workspace:*
-        version: link:../webhooks
-    devDependencies:
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.4
@@ -1631,7 +1631,7 @@ importers:
   sdk/gatekeeper:
     dependencies:
       '@cat-factory/sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../typescript
     devDependencies:
       '@types/node':
@@ -1647,13 +1647,13 @@ importers:
   sdk/gatekeeper-worker:
     dependencies:
       '@cat-factory/gatekeeper-bindings':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../gatekeeper
       '@cat-factory/sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../typescript
       '@cat-factory/webhooks':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../webhooks
       capnweb:
         specifier: ^0.12.0
@@ -1675,7 +1675,7 @@ importers:
   sdk/mcp:
     dependencies:
       '@cat-factory/sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../typescript
       '@modelcontextprotocol/sdk':
         specifier: ^1.32.1

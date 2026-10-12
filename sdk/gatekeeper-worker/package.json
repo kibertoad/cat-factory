@@ -45,9 +45,9 @@
     "test:os": "vitest run --config vitest.os.config.ts"
   },
   "dependencies": {
-    "@cat-factory/gatekeeper-bindings": "workspace:*",
-    "@cat-factory/sdk": "workspace:*",
-    "@cat-factory/webhooks": "workspace:*",
+    "@cat-factory/gatekeeper-bindings": "workspace:^",
+    "@cat-factory/sdk": "workspace:^",
+    "@cat-factory/webhooks": "workspace:^",
     "capnweb": "^0.12.0"
   },
   "devDependencies": {
