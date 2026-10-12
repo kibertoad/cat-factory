@@ -2611,7 +2611,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "altre {count} non mostrate",
-      "failingRunGone": "Questa esecuzione non è più caricata e non ha alcuna attività da aprire."
+      "failingRunGone": "Questa esecuzione non è più caricata e non ha alcuna attività da aprire.",
+      "goTo": {
+        "review": "Rivedi",
+        "answer": "Rispondi",
+        "test": "Testa",
+        "confirm": "Conferma",
+        "triage": "Smista",
+        "choose": "Scegli",
+        "open": "Apri"
+      }
     },
     "aiProvidersBanner": {
       "setup": {

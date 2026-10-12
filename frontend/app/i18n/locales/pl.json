@@ -2478,7 +2478,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} więcej niepokazanych",
-      "failingRunGone": "To uruchomienie nie jest już wczytane i nie ma zadania do otwarcia."
+      "failingRunGone": "To uruchomienie nie jest już wczytane i nie ma zadania do otwarcia.",
+      "goTo": {
+        "review": "Przejrzyj",
+        "answer": "Odpowiedz",
+        "test": "Przetestuj",
+        "confirm": "Potwierdź",
+        "triage": "Posortuj",
+        "choose": "Wybierz",
+        "open": "Otwórz"
+      }
     },
     "aiProvidersBanner": {
       "setup": {

@@ -2615,7 +2615,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} more not shown",
-      "failingRunGone": "This run is no longer loaded and has no task to open."
+      "failingRunGone": "This run is no longer loaded and has no task to open.",
+      "goTo": {
+        "review": "Review",
+        "answer": "Answer",
+        "test": "Test",
+        "confirm": "Confirm",
+        "triage": "Triage",
+        "choose": "Choose",
+        "open": "Open"
+      }
     },
     "aiProvidersBanner": {
       "setup": {
