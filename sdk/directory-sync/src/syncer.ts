@@ -1,12 +1,12 @@
-import {
-  type CatFactoryClient,
-  type DirectoryAccountMembership,
-  type DirectoryChange,
-  type DirectoryRepo,
-  type DirectoryUser,
-  type DirectoryWebhookDelivery,
-  type DirectoryWorkspace,
-  type DirectoryWorkspaceMembership,
+import type {
+  CatFactoryClient,
+  DirectoryAccountMembership,
+  DirectoryChange,
+  DirectoryRepo,
+  DirectoryUser,
+  DirectoryWebhookDelivery,
+  DirectoryWorkspace,
+  DirectoryWorkspaceMembership,
 } from '@cat-factory/sdk'
 import { verifyDelivery } from '@cat-factory/webhooks'
 import {
@@ -328,9 +328,8 @@ function tombstone(entityType: DirectoryEntityType, key: string, seq: number): D
 
 /**
  * Whether an API refusal carries this `details.reason`. Read structurally rather than through
- * `instanceof CatFactoryApiError`: the client is built by the integrator from THEIR copy of
- * `@cat-factory/sdk`, which is a different class whenever their version differs from the one this
- * package was published against.
+ * `instanceof CatFactoryApiError`: this package takes only types from `@cat-factory/sdk`, so it
+ * never loads the integrator's peer copy at runtime.
  */
 function isReason(error: unknown, reason: string): boolean {
   if (typeof error !== 'object' || error === null || !('details' in error)) return false
