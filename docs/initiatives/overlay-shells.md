@@ -1,6 +1,6 @@
 # Initiative: one overlay shell per job (the SPA macro layer)
 
-**Status:** item 1 in review · **Owner:** frontend · **Started:** 2026-10-12
+**Status:** items 1 and 2 in review · **Owner:** frontend · **Started:** 2026-10-12
 
 > Tracker for a multi-PR initiative. Read it before you start an item, and update the checklist at
 > the end of each PR. This is the "Later phase" of
@@ -67,13 +67,15 @@ by its mount in `pages/index.vue`, which a portal inside `UModal` would break.
 
 ### 2. Named overlay widths
 
-- [ ] Every `UModal` opens at a named width from one table, with a guard against a raw `max-w-*` on a
-      modal's content. A parked local branch `overlay-widths` (commit `592a8c0ea`) has the code with the
-      first grouping, by the old width (prompt 512px, form 672px). Review found that grouping too wide
-      for the content. The content-based grouping preferred later: prompt 448px (11 dialogs), form 576px
-      (31), wide 672px (vendor credentials, AI provider onboarding). Evidence: `captures/size-sorted/` in
-      the main checkout (untracked). The value is maintenance (one name per size and a guard), not a
-      visible change.
+- [ ] `common/AppModal.vue` and three named widths in `utils/overlaySize.ts`, grouped by content:
+      prompt 448px (11 modals), form 576px (31), wide 672px (4). The ten workbench surfaces keep their
+      widths behind a `workbench-width-ok:` comment until item 4. Guard
+      `scripts/check-frontend-geometry.mjs`.
+      [#2361](https://github.com/kibertoad/cat-factory/pull/2361).
+
+Decision: group by content, not by the old width. The first grouping (prompt 512px, form 672px) kept
+each modal near its old width and was too wide for the content. The value is maintenance (one name
+per size and a guard), not a visible change.
 
 ### 3. One sub-navigation pattern
 
