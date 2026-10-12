@@ -177,6 +177,8 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     findByEmail: 'preauth',
     getIdentity: 'preauth',
     linkIdentity: 'onboarding',
+    // The private upsert `linkIdentity` runs, inside its feed transaction for a host identity.
+    upsertIdentity: 'helper',
     listIdentities: 'preauth',
     // The session-revocation WRITE. `sessionGeneration` (the read) is allow-listed so a node stops
     // honouring a revoked bearer, but the bump is the revocation itself: a role-blind token that
