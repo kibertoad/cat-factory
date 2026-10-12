@@ -137,10 +137,10 @@ async function resync(full = false) {
 // ---- browse ----------------------------------------------------------------
 type Tab = 'repos' | 'pulls' | 'issues'
 const tab = ref<Tab>('repos')
-const tabs = computed<{ id: Tab; label: string; icon: string }[]>(() => [
-  { id: 'repos', label: t('github.panel.tabs.repos'), icon: 'i-lucide-folder-git-2' },
-  { id: 'pulls', label: t(pullTerms.value.tab), icon: 'i-lucide-git-pull-request' },
-  { id: 'issues', label: t('github.panel.tabs.issues'), icon: 'i-lucide-circle-dot' },
+const tabs = computed<{ value: Tab; label: string; icon: string }[]>(() => [
+  { value: 'repos', label: t('github.panel.tabs.repos'), icon: 'i-lucide-folder-git-2' },
+  { value: 'pulls', label: t(pullTerms.value.tab), icon: 'i-lucide-git-pull-request' },
+  { value: 'issues', label: t('github.panel.tabs.issues'), icon: 'i-lucide-circle-dot' },
 ])
 
 // Manage which repos this board links (the installation is shared across the
@@ -343,24 +343,8 @@ async function merge(pr: GitHubPullRequest) {
             </div>
           </div>
 
-          <!-- tabs -->
-          <div class="flex gap-1">
-            <UButton
-              v-for="tabItem in tabs"
-              :key="tabItem.id"
-              size="sm"
-              :color="tab === tabItem.id ? 'primary' : 'neutral'"
-              :variant="tab === tabItem.id ? 'soft' : 'ghost'"
-              :icon="tabItem.icon"
-              @click="
-                () => {
-                  tab = tabItem.id
-                }
-              "
-            >
-              {{ tabItem.label }}
-            </UButton>
-          </div>
+          <!-- The panels are the `v-if` chain below, so the tabs render no content of their own. -->
+          <UTabs v-model="tab" :items="tabs" :content="false" />
 
           <div v-if="firstLoad" class="space-y-2">
             <USkeleton v-for="i in 3" :key="i" class="h-12 w-full" />

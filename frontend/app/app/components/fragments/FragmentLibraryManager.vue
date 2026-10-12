@@ -76,10 +76,11 @@ watch(
 const githubReady = computed(() => github.available === true && github.connected)
 
 type Tab = 'catalog' | 'authored' | 'documents' | 'sources'
-const tabs = computed<Tab[]>(() =>
-  props.showCatalog
-    ? ['catalog', 'authored', 'documents', 'sources']
-    : ['authored', 'documents', 'sources'],
+const tabs = computed(() =>
+  (props.showCatalog
+    ? (['catalog', 'authored', 'documents', 'sources'] as const)
+    : (['authored', 'documents', 'sources'] as const)
+  ).map((value) => ({ value, label: tabLabel(value) })),
 )
 const tab = ref<Tab>(props.showCatalog ? 'catalog' : 'authored')
 
@@ -601,22 +602,8 @@ async function unlinkSource(id: string) {
         </template>
       </p>
 
-      <div class="flex gap-2">
-        <UButton
-          v-for="t in tabs"
-          :key="t"
-          :color="tab === t ? 'primary' : 'neutral'"
-          :variant="tab === t ? 'solid' : 'ghost'"
-          size="sm"
-          @click="
-            () => {
-              tab = t
-            }
-          "
-        >
-          {{ tabLabel(t) }}
-        </UButton>
-      </div>
+      <!-- The panels are the `v-if` chain below, so the tabs render no content of their own. -->
+      <UTabs v-model="tab" :items="tabs" :content="false" />
 
       <!-- Resolved (merged) catalog — workspace scope only -->
       <div v-if="tab === 'catalog'" class="flex flex-col gap-2">

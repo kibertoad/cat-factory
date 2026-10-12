@@ -1,7 +1,8 @@
 // The tree walk, the comment rule, the template reader and the waiver rules shared by the SPA
 // guards (`check-frontend-palette.mjs`, `check-frontend-radius.mjs`, `check-frontend-type-scale.mjs`,
-// `check-frontend-primitives.mjs`, `check-frontend-variants.mjs`). They must scan the same files
-// with the same idea of what a comment, an opening tag and a waiver are, so each lives here once.
+// `check-frontend-primitives.mjs`, `check-frontend-variants.mjs`, `check-frontend-tabs.mjs`). They
+// must scan the same files with the same idea of what a comment, an opening tag and a waiver are,
+// so each lives here once.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'

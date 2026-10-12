@@ -38,7 +38,9 @@ const draftOpen = ref(true)
 
 const view = computed(() => (sessionId.value ? store.sessions[sessionId.value] : undefined))
 const session = computed(() => view.value?.session)
-const tabs = computed(() => threadTabs(view.value, draftOpen.value))
+const tabs = computed(() =>
+  threadTabs(view.value, draftOpen.value).map((id) => ({ value: id, label: threadTitle(id) })),
+)
 const outOfDate = computed(
   () => !!sessionId.value && store.refetchFailures[sessionId.value] !== undefined,
 )
@@ -208,25 +210,23 @@ const title = computed(() =>
         </div>
 
         <div class="flex min-h-[24rem] flex-1 flex-col gap-3 lg:min-h-0">
-          <div class="flex flex-wrap items-center gap-1" role="tablist">
-            <UButton
-              v-for="tab in tabs"
-              :key="tab"
-              role="tab"
-              size="sm"
-              :aria-selected="tab === activeTab"
-              :variant="tab === activeTab ? 'soft' : 'ghost'"
-              :color="tab === activeTab ? 'primary' : 'neutral'"
-              :data-testid="`guided-review-tab-${tab}`"
-              @click="activeTab = tab"
-            >
-              <!-- Not `:loading`: that disables the tab, and a reader switches back to a thread
-                   precisely while its reply is pending. -->
-              <template v-if="threadBusy(tab)" #leading>
-                <Spinner class="size-4 shrink-0" />
+          <div class="flex flex-wrap items-center gap-1">
+            <!-- The thread below is keyed on the active tab, so the tabs render no content. -->
+            <UTabs v-model="activeTab" :items="tabs" :content="false" class="min-w-0">
+              <!-- A spinner, not a disabled tab: a reader switches back to a thread precisely
+                   while its reply is pending. -->
+              <template #leading="{ item }">
+                <Spinner v-if="threadBusy(item.value)" class="size-4 shrink-0" />
               </template>
-              <span class="max-w-48 truncate">{{ threadTitle(tab) }}</span>
-            </UButton>
+              <template #default="{ item }">
+                <span
+                  class="block max-w-48 truncate"
+                  :data-testid="`guided-review-tab-${item.value}`"
+                >
+                  {{ item.label }}
+                </span>
+              </template>
+            </UTabs>
             <UButton
               color="neutral"
               v-if="!draftOpen"
