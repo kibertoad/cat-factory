@@ -166,6 +166,8 @@ watch(open, (isOpen) => {
 </script>
 
 <template>
+  <!-- workbench-width-ok: a review that puts the evidence files beside every suggestion (768px).
+       Its shell waits on #2359. -->
   <UModal
     v-model:open="open"
     :title="t('bootstrap.adoption.title')"

@@ -21,6 +21,7 @@ import InspectorSection from '~/components/panels/inspector/InspectorSection.vue
 import ServiceSelfTests from '~/components/panels/inspector/ServiceSelfTests.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
+import AppModal from '~/components/common/AppModal.vue'
 
 // Service-level (frame) configuration: the service-owned PROVISIONING — the provision
 // TYPE this service produces (`infraless` / `docker-compose` / `kubernetes` / `custom`)
@@ -840,7 +841,8 @@ function setSize(value: InstanceSize) {
       </div>
     </div>
 
-    <UModal
+    <AppModal
+      size="form"
       v-model:open="browseOpen"
       :title="
         browseTarget === 'compose'
@@ -880,7 +882,7 @@ function setSize(value: InstanceSize) {
           </div>
         </div>
       </template>
-    </UModal>
+    </AppModal>
 
     <!-- Provisioning hints: advisory inputs to the ephemeral-environment provisioner.
          Collapsed by default — most services never tune them. -->

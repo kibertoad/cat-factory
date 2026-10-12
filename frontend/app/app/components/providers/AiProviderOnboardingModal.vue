@@ -6,6 +6,7 @@
 // duplicating them). It auto-opens once per session (driven from pages/index.vue) and, like
 // the banner, disappears automatically the moment a usable source exists.
 import { computed } from 'vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -75,11 +76,7 @@ const routes = computed<Route[]>(() => [
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('providers.onboarding.title')"
-    :ui="{ content: 'max-w-2xl' }"
-  >
+  <AppModal size="wide" v-model:open="open" :title="t('providers.onboarding.title')">
     <template #body>
       <div class="space-y-5">
         <div
@@ -123,5 +120,5 @@ const routes = computed<Route[]>(() => [
         </p>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

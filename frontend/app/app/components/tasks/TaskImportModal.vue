@@ -19,6 +19,7 @@ import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -120,7 +121,7 @@ async function doSpawnEpic() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="title">
+  <AppModal size="form" v-model:open="open" :title="title">
     <template #title>
       <IntegrationBackTitle :title="title" @back="back" />
     </template>
@@ -215,5 +216,5 @@ async function doSpawnEpic() {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

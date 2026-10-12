@@ -554,6 +554,13 @@ jobs:
       - name: Guard SPA safe-area overlays
         run: node scripts/check-frontend-safe-area.mjs
 
+      # Holds every SPA modal to a named width: `<AppModal size="prompt|form|wide">`, never a raw
+      # `UModal` / `USlideover` or a `max-w-*` on the call site (#2251). A workbench surface waiting
+      # on #2359 says why in a `workbench-width-ok:` comment above its tag. Its fixtures run in the
+      # `node --test` step below. Pure node; no install.
+      - name: Guard SPA modal widths
+        run: node scripts/check-frontend-geometry.mjs
+
       # The bundled Nuxt UI skill (`backend/packages/agents/.../nuxt-ui/skill.generated.ts`) is
       # inlined from the vendored `.claude/skills/nuxt-ui/` tree so the platform's own coder agents
       # apply the same text a local Claude Code session does. This fails if the two have drifted, so

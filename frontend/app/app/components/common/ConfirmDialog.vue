@@ -6,6 +6,7 @@
 // crucially, resolves `false` whenever the modal closes without an explicit choice.
 import { computed, onUnmounted, watch } from 'vue'
 import { sharedOverlayStack, type OverlayStackTicket } from '@modular-vue/core'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const { open, current, accept, cancel, dismissed } = useConfirm()
@@ -50,10 +51,11 @@ const isDestructive = computed(() => current.value?.variant === 'destructive')
        the app's full-screen z-50 windows (Model Configuration, Human Test) whose
        dropdowns sit at z-[60] — the dialog must stack above both or it opens invisibly
        behind the window. -->
-  <UModal
+  <AppModal
+    size="prompt"
     v-model:open="model"
     :title="current?.title ?? t('common.confirm.defaultTitle')"
-    :ui="{ overlay: 'z-[70]', content: 'z-[70] max-w-md' }"
+    :ui="{ overlay: 'z-[70]', content: 'z-[70]' }"
   >
     <template #body>
       <div class="flex items-start gap-3" data-testid="confirm-dialog">
@@ -87,5 +89,5 @@ const isDestructive = computed(() => current.value?.variant === 'destructive')
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

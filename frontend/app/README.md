@@ -389,6 +389,18 @@ A phone's notch and home indicator cover whatever sits at the screen edge, and o
 
 `scripts/check-frontend-safe-area.mjs` (CI) refuses any other `fixed` surface that spans a whole side of the viewport, in `.vue`, `.ts` and `.css`. A surface with no edge content (a scrim, a drawing layer) or one that pads its own edges (the sidebar drawer, the inspector's bottom sheet) says why with a `safe-area-ok:` comment, on the line or the one above it, or above the element's opening tag.
 
+### Modals open at a named width
+
+A modal states what KIND of content it holds, and the width follows from that in one place. Before this, each modal picked its own `max-w-*`: five widths for three kinds of content, and no rule for which one a new modal takes.
+
+- **`<AppModal size="prompt">`** (448px): a confirmation, a decision, a short read such as the keyboard help, or a dialog with one or two fields.
+- **`<AppModal size="form">`** (576px): a form, a list or a hub to work through.
+- **`<AppModal size="wide">`** (672px): cards that each carry a paragraph and an action beside it, a row of tabs over a form, or three pickers side by side (the AI provider onboarding, the vendor credentials, the setup checklist, describe new work).
+- [`common/AppModal.vue`](./app/components/common/AppModal.vue) is `UModal` with the width applied through `ui.content`; every other prop, listener and slot passes through, and a call site still passes other `ui` slots and non-width content classes (a stacked dialog's `z-[70]`). The widths live in [`utils/overlaySize.ts`](./app/utils/overlaySize.ts). It is a wrapper rather than an `app.config.ts` variant because `UModal` has no `size` prop and passes only `transition`, `fullscreen`, `overlay` and `scrollable` into its variant function, so a `size` variant would never be selected.
+- **A `fullscreen` modal has no width** and stays a plain `UModal`.
+- **A workbench surface keeps its own width for now**: the libraries, settings panels, bug hunt, adoption review and environment wizard at 768px, the sandbox, the agent prompt editor and the pipeline builder's slideover above that. Their shell is the open decision in [#2359](https://github.com/kibertoad/cat-factory/issues/2359), so a named width for them now would be dead work. Each says why in a `<!-- workbench-width-ok: … -->` comment directly above its tag.
+- `scripts/check-frontend-geometry.mjs` (CI) refuses a raw `UModal` or `USlideover` outside the wrapper, an `AppModal` that names its own `max-w-*`, a waiver with no reason, and a waiver with no raw overlay directly below it.
+
 ### A control is its Nuxt UI component
 
 Every CONTROL in the SPA is the Nuxt UI component for it, never the raw HTML element. A raw `<button>` beside a `UButton` is the same control rendered twice, and only one of the two follows the theme, the focus ring, the disabled state and the size scale; the SPA carried 152 of them, 24 raw `<input>`, five hand-built tables and six hand-rolled `<details>`, each with its own border, background and hover recipe.

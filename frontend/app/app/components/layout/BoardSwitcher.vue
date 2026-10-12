@@ -2,6 +2,7 @@
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { CloudProvider } from '~/types/domain'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 // Account + board switching. Picks the active account (personal / org) and the
 // active board within it, and manages boards (new / rename / delete). The account
@@ -322,7 +323,11 @@ async function submitPrompt() {
     </UDropdownMenu>
 
     <!-- create / rename prompt -->
-    <UModal v-model:open="promptOpen" :title="prompt ? promptMeta[prompt].title : ''">
+    <AppModal
+      size="prompt"
+      v-model:open="promptOpen"
+      :title="prompt ? promptMeta[prompt].title : ''"
+    >
       <template #body>
         <UForm class="space-y-3" @submit="submitPrompt">
           <UFormField :label="t('layout.boardSwitcher.prompt.nameLabel')">
@@ -364,6 +369,6 @@ async function submitPrompt() {
           </div>
         </UForm>
       </template>
-    </UModal>
+    </AppModal>
   </div>
 </template>
