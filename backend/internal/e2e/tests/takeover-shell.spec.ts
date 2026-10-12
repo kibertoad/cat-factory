@@ -89,7 +89,7 @@ test.describe('takeover shell', () => {
     await expect(reader).toBeHidden()
   })
 
-  test('Escape on the confirm dialog over the model configuration closes only the dialog', async ({
+  test('Escape on a dropdown or the confirm dialog over the model configuration closes only that layer', async ({
     page,
     seededBoard,
   }) => {
@@ -99,13 +99,32 @@ test.describe('takeover shell', () => {
     await expect(panel).toBeVisible({ timeout: LIVE_TIMEOUT })
     await expect(panel).toBeFocused()
 
+    // A Nuxt UI dropdown opened inside the takeover holds a ticket on the shared stack
+    // (`utils/foreignLayers.ts`), so Escape closes the dropdown and not the editor under it.
+    // Before, the shell took this key press and the draft was lost.
+    await panel.getByTestId('model-preset-new').click()
+    const name = panel.getByTestId('model-preset-name')
+    await name.fill('Escape draft')
+    const baseModel = panel.getByTestId('model-preset-base-model')
+    await baseModel.click()
+    const menu = page.getByRole('menu')
+    await expect(menu).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(menu).toBeHidden()
+    await expect(name).toHaveValue('Escape draft')
+    await expect(baseModel).toBeFocused()
+
+    // With no layer over it, the next Escape is the panel's again: back out of the editor.
+    await page.keyboard.press('Escape')
+    await expect(name).toBeHidden()
+
     // The default preset cannot be deleted, so pick the first one that can.
     await panel.locator('[data-testid="model-preset-delete"]:not([disabled])').first().click()
     const confirm = page.getByTestId('confirm-dialog')
     await expect(confirm).toBeVisible()
 
-    // The confirm is a Nuxt UI modal on the shared stack (`ConfirmDialog` pushes a ticket), so the
-    // panel under it is not the top overlay and must leave this Escape to the dialog.
+    // The confirm is a Nuxt UI modal, so it holds a ticket on the shared stack like the dropdown
+    // above: the panel under it is not the top overlay and must leave this Escape to the dialog.
     await page.keyboard.press('Escape')
     await expect(confirm).toBeHidden()
     await expect(panel).toBeVisible()

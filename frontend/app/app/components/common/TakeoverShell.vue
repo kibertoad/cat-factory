@@ -16,8 +16,9 @@
 // pointer or focus outside its content). The windows opened ON TOP of a takeover
 // (`ResultWindowShell`, the lightbox, a modular overlay) are not Reka layers, so they would open
 // unclickable and lose focus to the takeover under them. The shared stack is what both sides
-// already agree on, and `ConfirmDialog` registers on it, so a Nuxt UI dialog over a takeover stays
-// on top for Escape too.
+// agree on: every open Nuxt UI menu, select, popover and modal holds a ticket on it
+// (`utils/foreignLayers.ts`), so one opened inside a takeover is the top overlay and keeps its own
+// Escape.
 //
 // The takeover is OPEN while this shell is mounted: each site gates it with its own `v-if` inside
 // its own `Teleport` and `Transition`, so a fade owned by a parent mount (`pages/index.vue` for the

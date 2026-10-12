@@ -375,7 +375,13 @@ async function save() {
                     </template>
                   </i18n-t>
                 </p>
-                <UButton icon="i-lucide-plus" size="sm" class="shrink-0" @click="startCreate">
+                <UButton
+                  icon="i-lucide-plus"
+                  size="sm"
+                  class="shrink-0"
+                  data-testid="model-preset-new"
+                  @click="startCreate"
+                >
                   {{ t('settings.modelConfiguration.list.newPreset') }}
                 </UButton>
               </div>
@@ -490,6 +496,7 @@ async function save() {
                   </SectionLabel>
                   <UInput
                     v-model="editor.name"
+                    data-testid="model-preset-name"
                     :placeholder="t('settings.modelConfiguration.editor.namePlaceholder')"
                     size="sm"
                     class="w-full"
@@ -509,6 +516,7 @@ async function save() {
                       variant="subtle"
                       trailing-icon="i-lucide-chevron-down"
                       class="w-full justify-between"
+                      data-testid="model-preset-base-model"
                     >
                       <span class="truncate">{{ modelLabel(editor.baseModelId) }}</span>
                     </UButton>

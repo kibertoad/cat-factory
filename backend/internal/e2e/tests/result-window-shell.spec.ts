@@ -73,11 +73,17 @@ test.describe('result-window shell (merger)', () => {
     await expect(dialog).toBeHidden()
 
     // 3) Escape — now owned by the shell's `useModalBehavior` (the shared overlay stack), not
-    //    the window's old per-window listener. This is the behaviour slice 5 centralised. Done
-    //    LAST: the focus view underneath also closes on Escape, so this can't strand a reopen.
+    //    the window's old per-window listener. This is the behaviour slice 5 centralised. The
+    //    focus view underneath is not on the stack and keeps its own Escape listener, which must
+    //    leave this key press to the window: one Escape closes only the top layer.
     await openWindow()
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
+    // A closing focus view stays in the DOM, visible, for its whole fade, so `toBeVisible` would
+    // pass while it leaves. Read its class once instead: a leaving view carries the transition's
+    // leave class, and a view already gone fails the read.
+    const focusView = page.getByTestId('block-focus-view')
+    expect(await focusView.getAttribute('class')).not.toContain('focus-fade-leave')
   })
 })
 

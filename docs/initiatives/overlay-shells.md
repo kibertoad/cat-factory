@@ -36,8 +36,9 @@ Inventory on `origin/main`, 2026-10-12, under `frontend/app/app/components/`:
 - **One shell per job, and the shell owns the behaviour.** A surface renders inside its shell and
   keeps only its own layout. It never adds a key listener for Escape, a focus trap or a body lock.
 - **One overlay stack.** Every overlay that is not a Reka layer registers on `sharedOverlayStack`
-  through `useModalBehavior`. A Nuxt UI dialog that can open over one of them pushes a ticket for as
-  long as it is open, as `common/ConfirmDialog.vue` does.
+  through `useModalBehavior`. A Reka layer (every Nuxt UI menu, select, popover and modal) holds a
+  ticket for as long as it is open, through `utils/foreignLayers.ts`, so one opened inside a shell
+  is the top overlay and keeps its own Escape. No site pushes a ticket by hand.
 - **A guard per shell.** `scripts/check-frontend-safe-area.mjs` refuses a hand-written full-screen
   `fixed` surface, and refuses a root class list named outside its owning shell
   (`FULL_BLEED_TAKEOVER_CLASS` belongs to `common/TakeoverShell.vue`, `WINDOWED_OVERLAY_CLASS` to
@@ -109,17 +110,24 @@ until item 4 decides what a detail surface is.
   drives `active` from an `onMounted` flag. `ResultWindowShell` activates from its `open` prop in
   setup, so an async window can have the same gap on its first open: check it when you touch that
   shell.
-- **Reka popovers inside a takeover are not on the stack.** `UDropdownMenu`, `USelect` and
-  `UPopover` are Reka layers that listen for Escape on the window, after the shell's capture-phase
-  listener. With a dropdown open inside a takeover, one Escape closes the dropdown AND acts on the
-  takeover (in the model configuration editor, it backs out to the preset list). Main behaves the
-  same, so item 1 does not change it. A fix belongs in one place (the shell, or an upstream option on
-  `useModalBehavior`), not in each panel.
+- **Reka keeps its own layer stack, and a prevented Escape is not its key.** Every Nuxt UI menu,
+  select, popover and modal is a Reka layer. Reka listens for Escape on the window, after the
+  shell's capture-phase listener, and dismisses only an Escape that is not `defaultPrevented`. So
+  with a dropdown open inside a takeover, the shell took Escape and prevented it: in the model
+  configuration editor, Escape backed out to the preset list and dropped the draft. Making the
+  shell listen later does not help, because Reka never prevents the key. The fix is one stack:
+  `utils/foreignLayers.ts` gives each open, focus-taking Reka layer a ticket in open order, and a
+  tooltip (a layer with no role) none, so the Tab trap under it stays on. An upstream doc change and
+  helper for this interop are proposed for `kibertoad/modular-react`.
+- **A listener that is not on the stack must check before it acts.** `BlockFocusView` is part of the
+  board, not a modal, and keeps its own Escape listener. A step reader opened from it closed on the
+  same key press as the focus view, because by the time the bubble-phase listener runs, the
+  reader's unmount can already have released its ticket. It now skips an Escape that is
+  `defaultPrevented` or that arrives while anything is on the stack, and
+  `result-window-shell.spec.ts` asserts it stays open under a window's Escape. Whether it should be
+  a shell surface at all belongs with item 4.
 - **The focus trap counts hidden controls.** `trapTabFocus` (`@modular-frontend/core`) builds its
   list from a selector and does not skip `display: none` controls, such as the step reader's outline
   below `md` (`hidden md:flex`). When the first or last control in that list is hidden, the wrap calls
   `focus()` on an element that cannot take it. Focus does not leave the dialog, but the wrap does
   not move it either. This is from reading the code; no test covers it yet.
-- **`BlockFocusView` hand-rolls Escape too.** It is not full-bleed (`absolute inset-0` inside the
-  canvas), so it is not in item 1, but a result window opened over it also closes it on Escape
-  (`result-window-shell.spec.ts` works around this). It belongs with item 4.

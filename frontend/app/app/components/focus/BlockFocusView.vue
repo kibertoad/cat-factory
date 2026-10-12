@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onKeyStroke } from '@vueuse/core'
+import { sharedOverlayStack } from '@modular-vue/core'
 import type { Block } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
@@ -79,7 +80,13 @@ function close() {
   ui.focus(null)
 }
 
-onKeyStroke('Escape', () => {
+// The focus view is not on the shared overlay stack, so it takes Escape only when nothing on the
+// stack is up. A takeover or window opened from here handles Escape first, in the capture phase,
+// and calls `preventDefault()`. By this listener's turn its unmount may already have released its
+// ticket, so the flag is the reliable signal. The stack size covers a Nuxt UI menu or modal: Reka
+// never prevents the key, but the layer holds a ticket while it is open (`utils/foreignLayers.ts`).
+onKeyStroke('Escape', (e) => {
+  if (e.defaultPrevented || sharedOverlayStack.size > 0) return
   if (ui.focusBlockId) close()
 })
 
