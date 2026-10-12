@@ -38,13 +38,16 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@cat-factory/sdk": "workspace:*",
-    "@cat-factory/webhooks": "workspace:*"
+    "@cat-factory/webhooks": "workspace:^"
   },
   "devDependencies": {
+    "@cat-factory/sdk": "workspace:*",
     "@types/node": "^26.6.4",
     "typescript": "7.0.2",
     "vitest": "^4.1.11"
+  },
+  "peerDependencies": {
+    "@cat-factory/sdk": "workspace:>=0.57.0 <1.0.0"
   },
   "engines": {
     "node": ">=20"

@@ -18,5 +18,8 @@
     "@cat-factory/deploy-local",
     "@cat-factory/deploy-gatekeeper",
     "@cat-factory/sdk-smoketest"
-  ]
+  ],
+  "___experimentalUnsafeOptions_WILL_CHANGE_IN_PATCH": {
+    "onlyUpdatePeerDependentsWhenOutOfRange": true
+  }
 }

@@ -38,7 +38,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@cat-factory/sdk": "workspace:*"
+    "@cat-factory/sdk": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
