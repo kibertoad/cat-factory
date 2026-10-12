@@ -15,12 +15,12 @@ import type {
 } from '~/types/domain'
 import { branchWebUrl, issueWebUrl, pullWebUrl, repoWebUrl } from '~/utils/vcs'
 import { useUpsertList } from '~/composables/useUpsertList'
-import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useServicesStore } from '~/stores/services'
 import { pullKey, type GitHubStoreContext } from '~/stores/github/context'
 import { createGitHubConnectionActions } from '~/stores/github/connection'
 import { createGitHubProbe } from '~/stores/github/probe'
+import { createGitHubProjectionLoad } from '~/stores/github/projectionLoad'
 import { createGitHubRepoActions } from '~/stores/github/repoActions'
 import { createVcsConnectActions, createVcsProviderViews } from '~/stores/github/vcsConnect'
 
@@ -139,44 +139,18 @@ export const useGitHubStore = defineStore('github', () => {
     return branchWebUrl(providerOfRepo(repoGithubId), repoUrl(repoGithubId), branch)
   }
 
-  // Reads can overlap: `load()` after a write starts a new one while an `ensureLoaded()` read is
-  // still running. The reads do not finish in the order they started, so each one is numbered and
-  // a result lands only if no newer read has already written. A read for a board the user has
-  // left lands nowhere.
-  let lastStartedRead = 0
-  let lastWrittenRead = 0
-
-  /** Read the cached repos, pull requests and issues for the workspace. */
-  async function runLoad() {
-    if (!connected.value) return
-    const askedFor = workspace.requireId()
-    const read = ++lastStartedRead
-    loading.value = true
-    try {
-      const [r, p, i] = await Promise.all([
-        api.listGitHubRepos(askedFor),
-        api.listGitHubPullRequests(askedFor),
-        api.listGitHubIssues(askedFor),
-      ])
-      if (read < lastWrittenRead || workspace.workspaceId !== askedFor) return
-      lastWrittenRead = read
-      repos.value = r
-      pulls.value = p
-      issues.value = i
-    } finally {
-      // Only the newest read clears the flag, so an older one finishing first does not report the
-      // projection as settled while the newer read is still running.
-      if (read === lastStartedRead) loading.value = false
-    }
-  }
-
-  // Whether the projection is loaded is tracked per workspace by the single-flight guard, never
-  // read off `repos`: a connected workspace with no linked repos is loaded, and an empty list is
-  // its answer. `load()` is the refresh door, so a reload after a write never rides a read that
-  // started before it; `ensureLoaded()` shares whatever read is in flight.
-  const projection = useSingleFlightProbe(runLoad, () => workspace.workspaceId)
+  // The projection read and the record of whether it is loaded for this workspace.
+  const projection = createGitHubProjectionLoad({
+    api,
+    workspace,
+    connected,
+    repos,
+    pulls,
+    issues,
+    loading,
+  })
   /** Load the cached repos, pull requests and issues for the workspace. */
-  const load = projection.refresh
+  const load = projection.load
 
   /** Full file listing per repo (recursive tree), cached by GitHub numeric id. */
   const repoFiles = ref<Record<number, RepoTreeEntry[]>>({})
@@ -206,7 +180,7 @@ export const useGitHubStore = defineStore('github', () => {
     syncing,
     connected,
     load,
-    forgetLoaded: projection.invalidate,
+    forgetLoaded: projection.forgetLoaded,
   }
   // The board-load probe (integration availability + the bound connection + the connect options +
   // the credential check). Built from the context rather than inline, so this setup stays within
@@ -220,7 +194,7 @@ export const useGitHubStore = defineStore('github', () => {
    */
   async function ensureLoaded() {
     if (available.value === null) await probe()
-    if (connected.value) await projection.ensureProbed()
+    await projection.ensureLoaded()
   }
 
   const connectionActions = createGitHubConnectionActions(context)
@@ -236,7 +210,7 @@ export const useGitHubStore = defineStore('github', () => {
    * land. `available` returns to `null` (unknown) so the onboarding gate re-resolves.
    */
   function reset() {
-    projection.invalidate()
+    projection.forgetLoaded()
     available.value = null
     unavailableCause.value = null
     connection.value = null
