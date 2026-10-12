@@ -44,14 +44,41 @@ describe('findOverlayOffenders', () => {
     assert.deepEqual(found('  <AppModal size="prompt" class="max-w-sm" />'), [
       '6 <AppModal> with max-w-sm',
     ])
+    assert.deepEqual(found('  <AppModal size="form" class="sm:w-[900px]" />'), [
+      '6 <AppModal> with w-[900px]',
+    ])
+    assert.deepEqual(found('  <AppModal size="form" :ui="{ content: \'min-w-3xl\' }" />'), [
+      '6 <AppModal> with min-w-3xl',
+    ])
     // Another content class (a z-index above a stacked modal) is not a width.
     assert.deepEqual(found('  <AppModal size="prompt" :ui="{ content: \'z-[70]\' }" />'), [])
   })
 
-  it('exempts a fullscreen modal, bare or bound, and nothing that merely mentions the word', () => {
+  it('refuses an AppModal whose classes the guard cannot read', () => {
+    assert.deepEqual(found('  <AppModal size="form" :ui="wideUi" />'), ['6 <AppModal> binds '])
+    assert.deepEqual(found('  <AppModal size="form" v-bind="modalProps" />'), [
+      '6 <AppModal> spreads v-bind',
+    ])
+    // A `v-model:` or `v-bind:` on another prop is not a spread.
+    assert.deepEqual(found('  <AppModal size="form" v-model:open="open" v-bind:title="t" />'), [])
+  })
+
+  it('exempts an always-fullscreen modal and nothing that merely mentions the word', () => {
     assert.deepEqual(found('  <UModal v-model:open="open" fullscreen title="T" />'), [])
-    assert.deepEqual(found('  <UModal :fullscreen="isPhone" title="T" />'), [])
+    assert.deepEqual(found('  <UModal :fullscreen="true" title="T" />'), [])
     assert.deepEqual(found('  <UModal title="Not fullscreen" />'), ['6 raw <UModal>'])
+  })
+
+  it('does not exempt a modal that is fullscreen only sometimes', () => {
+    // Centered at every size where `isPhone` is false, so it needs a named width.
+    assert.deepEqual(found('  <UModal :fullscreen="isPhone" title="T" />'), ['6 raw <UModal>'])
+    assert.deepEqual(found('  <UModal :fullscreen="false" title="T" />'), ['6 raw <UModal>'])
+  })
+
+  it('names a waiver above a fullscreen modal as needless, not as stale', () => {
+    assert.deepEqual(found('  <!-- workbench-width-ok: a grid. -->\n  <UModal fullscreen />'), [
+      '7 workbench-width-ok',
+    ])
   })
 
   it('exempts the wrapper', () => {

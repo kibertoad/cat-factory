@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import AppModal from '~/components/common/AppModal.vue'
-// The keyboard-shortcuts cheatsheet, opened with "?" (or from the command bar). A plain
-// UModal listing every global shortcut with its keys rendered as UKbd chips. Driven by the
+// The keyboard-shortcuts cheatsheet, opened with "?" (or from the command bar). A prompt-sized
+// AppModal listing every global shortcut with its keys rendered as UKbd chips. Driven by the
 // ui store so "?" anywhere toggles it.
+import AppModal from '~/components/common/AppModal.vue'
+
 const { t } = useI18n()
 const ui = useUiStore()
 

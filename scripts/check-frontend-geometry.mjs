@@ -3,17 +3,21 @@
 //
 // A dialog states what kind of content it holds (`<AppModal size="prompt|form|wide">`,
 // `components/common/AppModal.vue`) and the width follows from that in one place
-// (`utils/overlaySize.ts`). Before this, the modals picked their own `max-w-*`, eight distinct
-// widths for three kinds of dialog. Two shapes opt out of the names:
+// (`utils/overlaySize.ts`). Before this, the modals picked their own `max-w-*`, five widths for
+// three kinds of dialog. Three shapes opt out of the names:
 //
 //   1. A raw `<UModal>` or `<USlideover>`. It opens at Nuxt UI's default width, or at whatever its
 //      `:ui` content slot says. `AppModal.vue` itself wraps one and is the only file that may.
-//   2. An `<AppModal>` that ALSO carries a `max-w-*` (in `:ui` or `class`), which overrides its
-//      own `size`.
+//   2. An `<AppModal>` that ALSO carries a width utility (`max-w-*`, `min-w-*` or `w-*`, in `:ui`
+//      or `class`). tailwind-merge keeps the caller's class, so it overrides the `size`.
+//   3. An `<AppModal>` whose `:ui` is not an object literal, or that spreads `v-bind="…"`. The
+//      guard cannot read a width out of a variable, so it refuses the variable.
 //
 // Exempt:
 //
-//   - A `fullscreen` modal, which has no width to name.
+//   - A modal that is ALWAYS `fullscreen` (the bare attribute, or `:fullscreen="true"`), which has
+//     no width to name. A BOUND `:fullscreen="isPhone"` is a centered modal at every other size,
+//     so it is not exempt.
 //   - A workbench surface: the sandbox, the agent prompt editor, the pipeline builder, the
 //     libraries and settings panels. They are wider than `wide` on purpose, and their shell is the
 //     open decision in #2359, so a named width for them now would be dead work. Each says so with
@@ -25,29 +29,39 @@
 // Exit 0 = clean; exit 1 = an offender or a stale waiver was found.
 
 import { readFileSync } from 'node:fs'
-import { isCliEntry, spaSourceFiles, templateHalf, walkTemplate } from './lib/frontend-scan.mjs'
+import {
+  commentAbove,
+  isCliEntry,
+  spaSourceFiles,
+  templateHalf,
+  walkTemplate,
+} from './lib/frontend-scan.mjs'
 
 /** The one file that may hold a raw `UModal`: the wrapper that names its width. */
 export const WRAPPER = 'frontend/app/app/components/common/AppModal.vue'
 export const MARKER = 'workbench-width-ok:'
 
 const RAW_OVERLAYS = new Set(['UModal', 'USlideover'])
-// `fullscreen` as a bare or bound attribute, never inside another word or a value.
-const FULLSCREEN = /\s:?fullscreen(?=[\s=/>])/
-const WIDTH = /(?<![\w-])max-w-[\w[\]().%-]+/
+// `fullscreen` as a bare attribute or bound to `true`, never inside another word or a value.
+const FULLSCREEN = /\s(?::?fullscreen="true"|fullscreen(?=[\s/>]))/
+// The attributes that can carry a class onto the modal content, and the width utilities in them.
+const CLASS_ATTRS = /(?<=\s)(:|v-bind:)?(class|ui)\s*=\s*(["'])([\s\S]*?)\3/g
+const WIDTH = /(?<![\w-])(?:max-|min-)?w-[\w[\]().%/-]+/
+const SPREAD = /(?<=\s)v-bind\s*=/
 // The marker, then at least one word before the comment closes.
 const REASONED = new RegExp(`${MARKER}\\s*[^\\s-]`)
 
-/**
- * The lines (1-based) of the HTML comment that ends on the line directly above `tagLine`, or an
- * empty list when that line is not the end of one. `lines` are the raw source lines.
- */
-function commentAbove(lines, tagLine) {
-  let i = tagLine - 2
-  if (!(lines[i] ?? '').trim().endsWith('-->')) return []
-  const block = [i + 1]
-  while (!lines[i].includes('<!--') && i > 0) block.unshift(--i + 1)
-  return lines[i].includes('<!--') ? block : []
+/** Why an `<AppModal>` opening tag picks its own width, or null when it does not. */
+function appModalWidth(tag) {
+  if (SPREAD.test(tag)) return 'spreads v-bind: list its props so the guard can read them'
+  for (const [, bound, name, , value] of tag.matchAll(CLASS_ATTRS)) {
+    if (bound && name === 'ui' && !value.trim().startsWith('{')) {
+      return 'binds :ui to a variable: write it as an object literal so the guard can read it'
+    }
+    const width = value.match(WIDTH)
+    if (width) return `with ${width[0]}: the size prop sets the width`
+  }
+  return null
 }
 
 /**
@@ -68,11 +82,21 @@ export function findOverlayOffenders(source, rel) {
   walkTemplate(source, {
     open(node) {
       if (RAW_OVERLAYS.has(node.name)) {
-        if (FULLSCREEN.test(node.tag) || rel === WRAPPER) return
+        if (rel === WRAPPER) return
         const comment = commentAbove(lines, node.line)
         const text = comment.map((n) => lines[n - 1]).join(' ')
-        if (text.includes(MARKER)) {
-          for (const n of comment) unused.delete(n)
+        const waived = text.includes(MARKER)
+        if (waived) for (const n of comment) unused.delete(n)
+        if (FULLSCREEN.test(node.tag)) {
+          if (waived) {
+            offenders.push({
+              line: node.line,
+              message: `${MARKER} waiver on a fullscreen overlay: it has no width to waive`,
+            })
+          }
+          return
+        }
+        if (waived) {
           if (REASONED.test(text)) return
           offenders.push({ line: node.line, message: `${MARKER} waiver without a reason` })
           return
@@ -82,13 +106,8 @@ export function findOverlayOffenders(source, rel) {
           message: `raw <${node.name}>: use <AppModal size="prompt|form|wide">`,
         })
       } else if (node.name === 'AppModal') {
-        const width = node.tag.match(WIDTH)
-        if (width) {
-          offenders.push({
-            line: node.line,
-            message: `<AppModal> with ${width[0]}: the size prop sets the width`,
-          })
-        }
+        const reason = appModalWidth(node.tag)
+        if (reason) offenders.push({ line: node.line, message: `<AppModal> ${reason}` })
       }
     },
   })

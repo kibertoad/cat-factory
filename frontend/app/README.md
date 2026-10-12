@@ -397,9 +397,9 @@ A modal states what KIND of content it holds, and the width follows from that in
 - **`<AppModal size="form">`** (576px): a form, a list or a hub to work through.
 - **`<AppModal size="wide">`** (672px): cards that each carry a paragraph and an action beside it, a row of tabs over a form, or three pickers side by side (the AI provider onboarding, the vendor credentials, the setup checklist, describe new work).
 - [`common/AppModal.vue`](./app/components/common/AppModal.vue) is `UModal` with the width applied through `ui.content`; every other prop, listener and slot passes through, and a call site still passes other `ui` slots and non-width content classes (a stacked dialog's `z-[70]`). The widths live in [`utils/overlaySize.ts`](./app/utils/overlaySize.ts). It is a wrapper rather than an `app.config.ts` variant because `UModal` has no `size` prop and passes only `transition`, `fullscreen`, `overlay` and `scrollable` into its variant function, so a `size` variant would never be selected.
-- **A `fullscreen` modal has no width** and stays a plain `UModal`.
+- **An always-`fullscreen` modal has no width** and stays a plain `UModal`. A modal bound fullscreen only sometimes (`:fullscreen="isPhone"`) is centered everywhere else, so it takes an `AppModal` size.
 - **A workbench surface keeps its own width for now**: the libraries, settings panels, bug hunt, adoption review and environment wizard at 768px, the sandbox, the agent prompt editor and the pipeline builder's slideover above that. Their shell is the open decision in [#2359](https://github.com/kibertoad/cat-factory/issues/2359), so a named width for them now would be dead work. Each says why in a `<!-- workbench-width-ok: … -->` comment directly above its tag.
-- `scripts/check-frontend-geometry.mjs` (CI) refuses a raw `UModal` or `USlideover` outside the wrapper, an `AppModal` that names its own `max-w-*`, a waiver with no reason, and a waiver with no raw overlay directly below it.
+- `scripts/check-frontend-geometry.mjs` (CI) refuses a raw `UModal` or `USlideover` outside the wrapper, an `AppModal` that names its own width utility (`max-w-*`, `min-w-*`, `w-*`) or binds `:ui` to a variable it cannot read, a waiver with no reason, and a waiver with no raw overlay directly below it.
 
 ### A control is its Nuxt UI component
 
