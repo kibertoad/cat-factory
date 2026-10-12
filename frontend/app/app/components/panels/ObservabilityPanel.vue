@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { onKeyStroke } from '@vueuse/core'
 import type { TableColumn } from '@nuxt/ui'
 import { isLlmWarningFinishReason } from '@cat-factory/contracts'
 import type {
@@ -33,7 +32,7 @@ import ToolCallList from '~/components/observability/ToolCallList.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
-import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 /** No run selected: the same empty, NOT-truncated trajectory the store answers with. */
 const EMPTY_TRAJECTORY: RunToolCallTrajectory = Object.freeze({
@@ -526,9 +525,6 @@ function headroomOf(m: LlmCallMetric): number | null {
 function close() {
   ui.closeObservability()
 }
-onKeyStroke('Escape', () => {
-  if (open.value) close()
-})
 function exportJson() {
   if (executionId.value) void observability.downloadExport(executionId.value)
 }
@@ -537,12 +533,12 @@ function exportJson() {
 <template>
   <Teleport to="body">
     <Transition name="obs-fade">
-      <div
+      <TakeoverShell
         v-if="open"
+        :label="t('observability.modelActivity')"
         class="z-[60] flex-col bg-app-950/96 backdrop-blur-sm"
-        :class="FULL_BLEED_TAKEOVER_CLASS"
-        role="dialog"
-        aria-modal="true"
+        data-testid="observability-panel"
+        @close="close"
       >
         <header class="flex flex-wrap items-center gap-3 border-b border-default px-6 py-4">
           <div
@@ -1287,7 +1283,7 @@ function exportJson() {
             </div>
           </div>
         </div>
-      </div>
+      </TakeoverShell>
     </Transition>
   </Teleport>
 </template>

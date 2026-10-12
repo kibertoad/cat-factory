@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onKeyStroke } from '@vueuse/core'
 import { lastCompleteRollupDay } from '@cat-factory/contracts'
 import type {
   ReportActivityDimension,
@@ -22,7 +21,7 @@ import ReportsSpendBreakdown from '~/components/panels/ReportsSpendBreakdown.vue
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
-import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 // Reports: cross-cutting usage analytics for the active account — where the spend and the
 // work actually go. Spend per model and agent kind, spend + run activity per workspace /
@@ -179,9 +178,6 @@ function refresh() {
 function close() {
   ui.closeReports()
 }
-onKeyStroke('Escape', () => {
-  if (open.value) close()
-})
 
 // Load (and refresh) whenever the panel opens.
 watch(
@@ -196,13 +192,12 @@ watch(
 <template>
   <Teleport to="body">
     <Transition name="reports-fade">
-      <div
+      <TakeoverShell
         v-if="open"
+        :label="t('reports.title')"
         class="z-[60] flex-col bg-app-950/96 backdrop-blur-sm"
-        :class="FULL_BLEED_TAKEOVER_CLASS"
-        role="dialog"
-        aria-modal="true"
         data-testid="reports-panel"
+        @close="close"
       >
         <header class="flex flex-wrap items-center gap-3 border-b border-default px-6 py-4">
           <div
@@ -575,7 +570,7 @@ watch(
             </section>
           </div>
         </div>
-      </div>
+      </TakeoverShell>
     </Transition>
   </Teleport>
 </template>

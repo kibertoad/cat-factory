@@ -7,11 +7,10 @@
 // Zoom is pure CSS `transform` (GPU, no canvas), so even large PNGs stay smooth. Keyboard:
 // Esc close · ←/→ prev/next · +/- zoom · 0 reset · double-click toggle fit↔2×.
 import { computed, ref, watch } from 'vue'
-import { useModalBehavior } from '@modular-vue/core'
 import type { ArtifactBlobs } from '~/composables/useArtifactBlobs'
 import IconButton from '~/components/common/IconButton.vue'
 import Spinner from '~/components/common/Spinner.vue'
-import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 interface LightboxItem {
   artifactId: string
@@ -39,19 +38,15 @@ const scale = ref(1)
 const tx = ref(0)
 const ty = ref(0)
 
-// Modal behaviour via the shared overlay stack (`@modular-vue/core`, the slice-5 release):
-// focus-trap + return, body-scroll lock, and — because it pushes onto the shared stack while
-// open — it becomes the TOP overlay over an owning review window (`ResultWindowShell`), so
-// Escape closes the lightbox first and the owner's trap goes inert until it closes. This is
-// the reconciliation that replaces the old `active: open && !lightboxOpen` guard the windows
-// used to fight over Tab.
+// Modal behaviour comes from `TakeoverShell` (the shared overlay stack): focus-trap + return,
+// body-scroll lock, and, because it pushes onto the shared stack while open, it becomes the TOP
+// overlay over an owning review window (`ResultWindowShell`), so Escape closes the lightbox first
+// and the owner's trap goes inert until it closes.
 function close() {
   emit('update:open', false)
 }
-const { dialogRef, isTop } = useModalBehavior({
-  active: () => props.open,
-  onClose: close,
-})
+const shell = ref<InstanceType<typeof TakeoverShell> | null>(null)
+const isTop = computed(() => shell.value?.isTop ?? false)
 
 const current = computed(() => props.items[props.index] ?? null)
 const total = computed(() => props.items.length)
@@ -159,20 +154,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
 
 <template>
   <Teleport to="body">
-    <div
+    <TakeoverShell
       v-if="open"
-      ref="dialogRef"
-      tabindex="-1"
-      class="z-[60] flex-col bg-app-950/95 backdrop-blur-sm focus:outline-none"
-      :class="FULL_BLEED_TAKEOVER_CLASS"
-      role="dialog"
-      aria-modal="true"
+      ref="shell"
+      class="z-[60] flex-col bg-app-950/95 backdrop-blur-sm"
       data-testid="artifact-lightbox"
-      :aria-label="
+      :label="
         current
           ? t('media.lightbox.ariaLabel', { label: current.label })
           : t('media.lightbox.ariaLabelFallback')
       "
+      @close="close"
     >
       <!-- Toolbar -->
       <div class="flex items-center gap-3 border-b border-default/60 px-4 py-2.5">
@@ -307,6 +299,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           @click="go(1)"
         />
       </div>
-    </div>
+    </TakeoverShell>
   </Teleport>
 </template>
