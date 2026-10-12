@@ -77,6 +77,18 @@ export function userSource(userId: string): SQL {
                FROM memberships WHERE user_id = ${text(userId)}`
 }
 
+/**
+ * The user a login identity belongs to now, once per account, unless that is `exceptUserId`.
+ * Appended before a re-link so the user losing the account is recorded while the row still names them.
+ */
+export function identityOwnerSource(provider: string, subject: string, exceptUserId: string): SQL {
+  return sql`SELECT m.account_id, CAST('user' AS TEXT) AS entity_type, CAST(NULL AS TEXT) AS workspace_id,
+                    m.user_id AS entity_id
+               FROM memberships m JOIN user_identities i ON i.user_id = m.user_id
+              WHERE i.provider = ${text(provider)} AND i.subject = ${text(subject)}
+                AND i.user_id <> ${text(exceptUserId)}`
+}
+
 /** An account membership, plus the member's `user` entity whose visibility it decides. */
 export function accountMembershipSource(accountId: string, userId: string): SQL {
   return sql`SELECT ${text(accountId)} AS account_id, CAST('account_membership' AS TEXT) AS entity_type,

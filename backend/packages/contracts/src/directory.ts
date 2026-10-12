@@ -44,11 +44,26 @@ export const directoryWorkspaceSchema = v.object({
 })
 export type DirectoryWorkspace = v.InferOutput<typeof directoryWorkspaceSchema>
 
+/**
+ * A source-control account the user signed in with. A mirror matches people across systems on
+ * `(provider, id)`, because the host's numeric id survives a rename and a login does not.
+ */
+export const directoryUserAccountSchema = v.object({
+  provider: vcsProviderSchema,
+  /** The host's numeric user id, as a decimal string. */
+  id: v.string(),
+  /** The handle recorded when the account was linked. Display only: a rename on the host is not followed. */
+  login: v.nullable(v.string()),
+})
+export type DirectoryUserAccount = v.InferOutput<typeof directoryUserAccountSchema>
+
 export const directoryUserSchema = v.object({
   id: v.string(),
   name: v.nullable(v.string()),
   email: v.nullable(v.string()),
   avatarUrl: v.nullable(v.string()),
+  /** Ordered by provider, then id. Empty for a user who never signed in through a host. */
+  accounts: v.array(directoryUserAccountSchema),
 })
 export type DirectoryUser = v.InferOutput<typeof directoryUserSchema>
 

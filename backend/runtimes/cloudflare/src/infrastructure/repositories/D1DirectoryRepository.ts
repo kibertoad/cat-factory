@@ -1,10 +1,13 @@
 import {
+  DIRECTORY_ACCOUNT_PROVIDERS,
   type DirectoryChangeRecord,
   type DirectoryRepoKey,
   type DirectoryRepository,
   directoryChangeFromRow,
   type StoredDirectoryChange,
+  type StoredUserIdentity,
   WORKSPACE_DIRECTORY_ENTITY_TYPES,
+  withDirectoryAccounts,
   type WorkspaceMembershipKey,
 } from '@cat-factory/kernel'
 import {
@@ -68,7 +71,7 @@ const toWorkspace = (row: WorkspaceRow): DirectoryWorkspace => ({
   accessMode: row.access_mode === 'restricted' ? 'restricted' : 'account',
 })
 
-const toUser = (row: UserRow): DirectoryUser => ({
+const toUser = (row: UserRow): Omit<DirectoryUser, 'accounts'> => ({
   id: row.id,
   name: row.name,
   email: row.email,
@@ -233,7 +236,24 @@ export class D1DirectoryRepository implements DirectoryRepository {
       )
       .bind(accountId, after ?? '', limit)
       .all<UserRow>()
-    return results.map(toUser)
+    return this.withAccounts(results.map(toUser))
+  }
+
+  /** The host accounts of a page of users, chunked like every other `IN` read here. */
+  private async withAccounts(rows: Omit<DirectoryUser, 'accounts'>[]): Promise<DirectoryUser[]> {
+    const identities: StoredUserIdentity[] = []
+    const providers = DIRECTORY_ACCOUNT_PROVIDERS.map(() => '?').join(', ')
+    for (const chunk of chunkForIn(rows.map((row) => row.id))) {
+      const { results } = await this.db
+        .prepare(
+          `SELECT user_id, provider, subject, metadata FROM user_identities
+            WHERE user_id IN (${chunk.map(() => '?').join(', ')}) AND provider IN (${providers})`,
+        )
+        .bind(...chunk, ...DIRECTORY_ACCOUNT_PROVIDERS)
+        .all<StoredUserIdentity>()
+      identities.push(...results)
+    }
+    return withDirectoryAccounts(rows, identities)
   }
 
   async listAccountMemberships(
@@ -323,7 +343,7 @@ export class D1DirectoryRepository implements DirectoryRepository {
   }
 
   async getUsers(accountId: string, ids: string[]): Promise<DirectoryUser[]> {
-    const out: DirectoryUser[] = []
+    const out: Omit<DirectoryUser, 'accounts'>[] = []
     for (const chunk of chunkForIn(ids)) {
       const { results } = await this.db
         .prepare(
@@ -335,7 +355,7 @@ export class D1DirectoryRepository implements DirectoryRepository {
         .all<UserRow>()
       out.push(...results.map(toUser))
     }
-    return out
+    return this.withAccounts(out)
   }
 
   async getAccountMemberships(

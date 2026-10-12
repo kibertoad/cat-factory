@@ -1,4 +1,9 @@
-import { type DirectoryEntityType, isDirectoryEntityType } from '@cat-factory/contracts'
+import {
+  type DirectoryEntityType,
+  type DirectoryUser,
+  type DirectoryUserAccount,
+  isDirectoryEntityType,
+} from '@cat-factory/contracts'
 import type { DirectoryChangeRecord } from '../ports/directory-changes.js'
 
 // The rules both facades' directory repositories apply to stored change-feed rows
@@ -38,4 +43,68 @@ export function directoryChangeFromRow(row: StoredDirectoryChange): DirectoryCha
     entityId: row.entity_id,
     at: row.at,
   }
+}
+
+/** The `user_identities` columns the directory reads to publish a user's accounts. */
+export interface StoredUserIdentity {
+  user_id: string
+  provider: string
+  subject: string
+  metadata: string | null
+}
+
+/**
+ * The login providers a user's directory accounts come from: the source-control hosts. A password,
+ * Google or OIDC identity names nobody on a host, so it is not an account a mirror can match on.
+ */
+export const DIRECTORY_ACCOUNT_PROVIDERS: readonly DirectoryUserAccount['provider'][] = [
+  'github',
+  'gitlab',
+]
+
+/** Whether identities of `provider` are published as accounts, so linking one is a directory change. */
+export function isDirectoryAccountProvider(
+  provider: string,
+): provider is DirectoryUserAccount['provider'] {
+  return (DIRECTORY_ACCOUNT_PROVIDERS as readonly string[]).includes(provider)
+}
+
+/** The login a host identity recorded at sign-in. Its metadata is written as `{ login }`. */
+function loginOf(metadata: string | null): string | null {
+  if (metadata === null) return null
+  const parsed: unknown = JSON.parse(metadata)
+  if (typeof parsed !== 'object' || parsed === null || !('login' in parsed)) return null
+  return typeof parsed.login === 'string' ? parsed.login : null
+}
+
+function compare(a: string, b: string): number {
+  if (a === b) return 0
+  return a < b ? -1 : 1
+}
+
+/**
+ * Give each user the host accounts among `identities`, ordered by provider then id, so a snapshot
+ * page and a feed read of the same user serve identical entities.
+ */
+export function withDirectoryAccounts(
+  users: Omit<DirectoryUser, 'accounts'>[],
+  identities: StoredUserIdentity[],
+): DirectoryUser[] {
+  const byUser = new Map<string, DirectoryUserAccount[]>()
+  for (const identity of identities) {
+    if (!isDirectoryAccountProvider(identity.provider)) continue
+    const accounts = byUser.get(identity.user_id) ?? []
+    accounts.push({
+      provider: identity.provider,
+      id: identity.subject,
+      login: loginOf(identity.metadata),
+    })
+    byUser.set(identity.user_id, accounts)
+  }
+  return users.map((user) => ({
+    ...user,
+    accounts: (byUser.get(user.id) ?? []).sort(
+      (a, b) => compare(a.provider, b.provider) || compare(a.id, b.id),
+    ),
+  }))
 }

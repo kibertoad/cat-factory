@@ -493,3 +493,12 @@ generated types in every client.
 Additive. The management operations need an `admin` key that reaches every workspace. Pushes are
 at-least-once; a receiver dedupes on `deliveryId`, and the change feed stays the guarantee of
 completeness.
+
+## 1.83.0
+
+A directory `DirectoryUser` gains `accounts`: the GitHub and GitLab accounts the user signed in
+with, each as `{ provider, id, login }`, where `id` is the host's numeric user id. A mirror matches
+people across systems on `(provider, id)`, which survives a rename on the host. Linking such an
+account to a user, or moving it to another user, records a `user` change for each user involved.
+
+Additive. A client built against an older document reads users as before.
