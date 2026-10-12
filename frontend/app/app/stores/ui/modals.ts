@@ -183,6 +183,46 @@ function createHealthAdvisoryModals() {
 }
 
 /**
+ * The model configuration opened from the pipeline builder REPLACES the builder, and the builder
+ * comes back when the model configuration closes.
+ *
+ * The builder is a `USlideover`, a modal Reka layer: while it is open, Reka sets
+ * `pointer-events: none` on `<body>`. The model configuration is the app's own takeover, teleported
+ * to `<body>` and not a Reka layer, so over the builder it showed but every click landed on the
+ * builder behind it. The fix lives here, not at the builder's "Configure models" button, because
+ * the button is not the only caller: the "choose a model" action on a run-admission failure toast
+ * (`preset_unsatisfiable`, `model_policy_blocked`) also opens the model configuration, and does not
+ * know what is open under it.
+ *
+ * The draft pipeline is in the pipelines store, so closing the builder loses nothing.
+ */
+function createBuilderModelConfigHandoff(
+  misc: Pick<ReturnType<typeof createMiscModals>, 'builderOpen' | 'openBuilder'>,
+  panels: Pick<
+    ReturnType<typeof createIntegrationPanelModals>,
+    'openModelConfig' | 'closeModelConfig'
+  >,
+) {
+  const returnToBuilder = ref(false)
+
+  function openModelConfig() {
+    if (misc.builderOpen.value) {
+      misc.builderOpen.value = false
+      returnToBuilder.value = true
+    }
+    panels.openModelConfig()
+  }
+  function closeModelConfig() {
+    panels.closeModelConfig()
+    if (!returnToBuilder.value) return
+    returnToBuilder.value = false
+    misc.openBuilder()
+  }
+
+  return { openModelConfig, closeModelConfig }
+}
+
+/**
  * Small standalone surfaces with no hub relationship: the pipeline builder and the
  * decision-wait window.
  */
@@ -1223,6 +1263,7 @@ export function createUiModals() {
   const settings = createSettingsModals(resetHubReturn)
   const infra = createInfraModals(resetHubReturn)
   const ai = createAiOnboardingModals()
+  const builderHandoff = createBuilderModelConfigHandoff(misc, panels)
 
   return {
     integrationsOpen,
@@ -1249,5 +1290,7 @@ export function createUiModals() {
     ...settings,
     ...infra,
     ...ai,
+    // Last, so its two openers replace the plain ones the `panels` slice spread above.
+    ...builderHandoff,
   }
 }

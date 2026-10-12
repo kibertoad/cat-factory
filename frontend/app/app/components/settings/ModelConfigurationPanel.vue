@@ -491,6 +491,7 @@ async function save() {
                   </SectionLabel>
                   <UInput
                     v-model="editor.name"
+                    data-testid="model-preset-name"
                     :placeholder="t('settings.modelConfiguration.editor.namePlaceholder')"
                     size="sm"
                     class="w-full"

@@ -442,6 +442,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               size="xs"
               icon="i-lucide-cpu"
               :title="t('pipeline.builder.configureModelsTooltip')"
+              data-testid="pipeline-builder-configure-models"
               @click="ui.openModelConfig()"
             >
               {{ t('pipeline.builder.configureModels') }}

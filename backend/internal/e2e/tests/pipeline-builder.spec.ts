@@ -133,6 +133,42 @@ test.describe('pipeline builder (author a pipeline by hand, then run it)', () =>
   // The purpose dial narrows the catalog live, and its reduction is unit-tested, but only the
   // assembled product shows that moving the dial reaches the rendered list at all, which is the
   // regression this pins: a control whose every setting looked the same.
+  test('configure models from the builder: the panel takes clicks, and closing it returns to the draft', async ({
+    page,
+    seededBoard,
+  }) => {
+    void seededBoard
+    // The builder is a modal Reka slideover, which sets `pointer-events: none` on <body>. The model
+    // configuration is the app's own takeover, so opened OVER the builder it showed but every click
+    // landed on the builder behind it. It now replaces the builder and hands back on close.
+    await page.getByTestId('nav-build-pipeline').click()
+    const palette = page.getByTestId('pipeline-builder-palette')
+    await expect(palette).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await palette.getByTestId('palette-agent-architect').click()
+    const steps = page.getByTestId('pipeline-builder-draft').getByTestId('pipeline-draft-step')
+    await expect(steps).toHaveCount(1)
+
+    await page.getByTestId('pipeline-builder-configure-models').click()
+    const modelConfig = page.getByRole('heading', { name: 'Model Configuration', level: 1 })
+    await expect(modelConfig).toBeVisible()
+    await expect(palette).toBeHidden()
+
+    // A real pointer click, which Playwright refuses when another element would receive it, so this
+    // is the assertion that failed while the builder was still open under the panel.
+    await page.getByRole('button', { name: 'New preset' }).click()
+    await expect(page.getByTestId('model-preset-name')).toBeVisible()
+
+    // Escape backs out of the editor, then closes the panel, and the builder comes back with the
+    // draft it held: the draft lives in the pipelines store, not in the slideover.
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('model-preset-name')).toBeHidden()
+    await page.keyboard.press('Escape')
+    await expect(modelConfig).toBeHidden()
+    await expect(palette).toBeVisible()
+    await expect(steps).toHaveCount(1)
+    await expect(steps.nth(0)).toHaveAttribute('data-agent-kind', 'architect')
+  })
+
   test('picking a purpose narrows the palette to the kinds that purpose has a use for', async ({
     page,
     seededBoard: _seededBoard,
