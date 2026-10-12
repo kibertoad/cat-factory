@@ -85,10 +85,14 @@ by its mount in `pages/index.vue`, which a portal inside `UModal` would break.
 
 ### 4. Settings and detail panels as slideovers, and the workbench surfaces
 
-- [ ] Waiting on a decision. Nuxt UI's selection matrix puts settings and detail in a slideover and a
-      workbench in a routed `UDashboardPanel` page. The SPA is single-route, so which surfaces move and
-      to what is kibertoad's call. A `needs-decision` issue will be filed for it later; it is not part of
-      the first PR.
+- [ ] Waiting on a decision:
+      [#2359](https://github.com/kibertoad/cat-factory/issues/2359). Nuxt UI's overlay matrix puts
+      settings and detail in a `USlideover`; the SPA is single-route, so routed pages are out. The
+      issue lists the options (keep the shells, settings in a right slideover, one workbench shell on
+      `TakeoverShell`, detail as a slideover, routed workbench pages) and suggests settings in a
+      slideover plus one workbench shell. It also records a bug that needs a fix whatever the
+      answer: the model configuration opened from the pipeline builder (a Reka slideover) cannot be
+      clicked, because the slideover sets `pointer-events: none` on `<body>`.
 
 ### Not in scope: `ResultWindowShell` stays as it is
 
