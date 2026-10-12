@@ -198,10 +198,7 @@ function createHealthAdvisoryModals() {
  */
 function createBuilderModelConfigHandoff(
   misc: Pick<ReturnType<typeof createMiscModals>, 'builderOpen' | 'openBuilder'>,
-  panels: Pick<
-    ReturnType<typeof createIntegrationPanelModals>,
-    'openModelConfig' | 'closeModelConfig'
-  >,
+  panels: Pick<ReturnType<typeof createIntegrationPanelModals>, 'modelConfigOpen'>,
 ) {
   const returnToBuilder = ref(false)
 
@@ -210,10 +207,10 @@ function createBuilderModelConfigHandoff(
       misc.builderOpen.value = false
       returnToBuilder.value = true
     }
-    panels.openModelConfig()
+    panels.modelConfigOpen.value = true
   }
   function closeModelConfig() {
-    panels.closeModelConfig()
+    panels.modelConfigOpen.value = false
     if (!returnToBuilder.value) return
     returnToBuilder.value = false
     misc.openBuilder()
@@ -630,6 +627,7 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   // API access tokens: the workspace's inbound public-API keys external systems present to
   // the `/api/v1` surface. Opened from the Integrations hub.
   const apiTokensOpen = ref(false)
+  // Opened and closed by `createBuilderModelConfigHandoff`, which hands the pipeline builder over.
   const modelConfigOpen = ref(false)
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
   // / Codex harnesses). `vendorCredentialsTab` lets a caller deep-link to one tab —
@@ -690,12 +688,6 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   }
   function closeApiTokens() {
     apiTokensOpen.value = false
-  }
-  function openModelConfig() {
-    modelConfigOpen.value = true
-  }
-  function closeModelConfig() {
-    modelConfigOpen.value = false
   }
   function openVendorCredentials(tab = 'pool') {
     resetHubReturn()
@@ -758,8 +750,6 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
     closeOperatorDashboard,
     openApiTokens,
     closeApiTokens,
-    openModelConfig,
-    closeModelConfig,
     openVendorCredentials,
     setVendorCredentialsTab,
     closeVendorCredentials,
@@ -1290,7 +1280,6 @@ export function createUiModals() {
     ...settings,
     ...infra,
     ...ai,
-    // Last, so its two openers replace the plain ones the `panels` slice spread above.
     ...builderHandoff,
   }
 }
