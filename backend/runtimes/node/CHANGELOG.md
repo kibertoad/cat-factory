@@ -1,5 +1,11 @@
 # @cat-factory/node-server
 
+## 0.239.1
+
+### Patch Changes
+
+- @cat-factory/server@0.334.1
+
 ## 0.239.0
 
 ### Minor Changes
