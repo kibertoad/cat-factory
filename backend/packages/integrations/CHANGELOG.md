@@ -1,5 +1,41 @@
 # @cat-factory/integrations
 
+## 0.176.0
+
+### Minor Changes
+
+- 04c1587: Public-API keys belong to an account and reach every workspace in it or a chosen list. A
+  workspace-scoped `/api/v1` call names its workspace in the `x-cat-factory-workspace` header, which a
+  key reaching one workspace may omit, so every existing key keeps working unchanged. `PublicApiKey`
+  and `GET /api/v1/me` gain `workspaceIds`; both mint bodies accept it. Widening a key past the board
+  it is minted from takes an account admin, and a key can never mint or revoke one reaching further
+  than itself. The header is on the CORS allow-list, so a browser client can send it. The four SDK
+  clients take a workspace option. OpenAPI 1.80.0.
+  
+  Storage break (internal): `public_api_keys.workspace_id` is replaced by `all_workspaces` plus the
+  `public_api_key_workspaces` grant table (D1 `0108`, Drizzle `20261009143721` and `20261009143724`),
+  backfilled from the old column. The account cap is 200 live keys, where it was 50 per workspace,
+  and a key left with no workspace after its boards were deleted holds no slot.
+- 20d4f01: Directory webhooks: `/api/v1/directory/webhooks` registers account-level endpoints that the
+  directory change feed is pushed to every couple of minutes, signed like the notification webhooks.
+  Each push is a `directory.changed` page of hydrated changes, or `directory.resync_required` for an
+  endpoint that fell behind the feed's retention. Delivery is a sweep on both facades (the Worker's
+  frequent cron, a Node timer) that takes a per-endpoint lease before a push and moves the endpoint's
+  position only after the push succeeds, so pushes are at-least-once, arrive in feed order, and are
+  never doubled by concurrent sweepers; a lease whose sweeper died expires and the page is sent again. The spec gains an OpenAPI 3.1 `webhooks` section naming every push body, so
+  `DirectoryWebhookDelivery`, `NotificationWebhookDelivery`, `RunWebhookDelivery` and
+  `PlatformAlertWebhookDelivery` become generated types in every client.
+  OpenAPI 1.82.0. New migrations: D1 `0109_directory_webhooks.sql`, Drizzle
+  `20261010113115_directory_webhooks`.
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+  - @cat-factory/kernel@0.359.0
+
 ## 0.175.3
 
 ### Patch Changes

@@ -1,5 +1,45 @@
 # @cat-factory/orchestration
 
+## 0.321.0
+
+### Minor Changes
+
+- f1b6c9a: `/api/v1/directory/*`: an account's workspaces, users, account memberships, workspace memberships
+  and linked repositories as keyset-paged snapshots, plus an ordered change feed whose changes carry
+  each entity's current state (or `null` once it is gone), for an integration keeping its own copy in
+  sync. A feed cursor older than the new `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30) is refused
+  with the new `cursor_expired` conflict reason. OpenAPI 1.81.0.
+  
+  Internal: the change-row mapping both facades share moves to kernel's `directoryChangeFromRow`.
+  The slice 1 `DirectoryChangeRepository` port becomes `DirectoryRepository` and joins
+  `CoreDependencies` as a required member, with its reads on the mothership allow-list.
+- 20d4f01: Directory webhooks: `/api/v1/directory/webhooks` registers account-level endpoints that the
+  directory change feed is pushed to every couple of minutes, signed like the notification webhooks.
+  Each push is a `directory.changed` page of hydrated changes, or `directory.resync_required` for an
+  endpoint that fell behind the feed's retention. Delivery is a sweep on both facades (the Worker's
+  frequent cron, a Node timer) that takes a per-endpoint lease before a push and moves the endpoint's
+  position only after the push succeeds, so pushes are at-least-once, arrive in feed order, and are
+  never doubled by concurrent sweepers; a lease whose sweeper died expires and the page is sent again. The spec gains an OpenAPI 3.1 `webhooks` section naming every push body, so
+  `DirectoryWebhookDelivery`, `NotificationWebhookDelivery`, `RunWebhookDelivery` and
+  `PlatformAlertWebhookDelivery` become generated types in every client.
+  OpenAPI 1.82.0. New migrations: D1 `0109_directory_webhooks.sql`, Drizzle
+  `20261010113115_directory_webhooks`.
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+  - @cat-factory/kernel@0.359.0
+  - @cat-factory/integrations@0.176.0
+  - @cat-factory/workspaces@0.30.0
+  - @cat-factory/agents@0.171.7
+  - @cat-factory/prompt-fragments@1.1.64
+  - @cat-factory/sandbox@0.12.78
+  - @cat-factory/spend@0.23.13
+  - @cat-factory/caching@0.20.102
+
 ## 0.320.4
 
 ### Patch Changes

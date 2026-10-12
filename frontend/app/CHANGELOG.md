@@ -1,5 +1,38 @@
 # @cat-factory/app
 
+## 0.315.0
+
+### Minor Changes
+
+- 04c1587: Public-API keys belong to an account and reach every workspace in it or a chosen list. A
+  workspace-scoped `/api/v1` call names its workspace in the `x-cat-factory-workspace` header, which a
+  key reaching one workspace may omit, so every existing key keeps working unchanged. `PublicApiKey`
+  and `GET /api/v1/me` gain `workspaceIds`; both mint bodies accept it. Widening a key past the board
+  it is minted from takes an account admin, and a key can never mint or revoke one reaching further
+  than itself. The header is on the CORS allow-list, so a browser client can send it. The four SDK
+  clients take a workspace option. OpenAPI 1.80.0.
+  
+  Storage break (internal): `public_api_keys.workspace_id` is replaced by `all_workspaces` plus the
+  `public_api_key_workspaces` grant table (D1 `0108`, Drizzle `20261009143721` and `20261009143724`),
+  backfilled from the old column. The account cap is 200 live keys, where it was 50 per workspace,
+  and a key left with no workspace after its boards were deleted holds no slot.
+
+### Patch Changes
+
+- f1b6c9a: `/api/v1/directory/*`: an account's workspaces, users, account memberships, workspace memberships
+  and linked repositories as keyset-paged snapshots, plus an ordered change feed whose changes carry
+  each entity's current state (or `null` once it is gone), for an integration keeping its own copy in
+  sync. A feed cursor older than the new `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30) is refused
+  with the new `cursor_expired` conflict reason. OpenAPI 1.81.0.
+  
+  Internal: the change-row mapping both facades share moves to kernel's `directoryChangeFromRow`.
+  The slice 1 `DirectoryChangeRepository` port becomes `DirectoryRepository` and joins
+  `CoreDependencies` as a required member, with its reads on the mothership allow-list.
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+
 ## 0.314.0
 
 ### Minor Changes
