@@ -1508,6 +1508,11 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
   setup. It adds no probe of its own: each row reads what its banner or startup dialog already
   reads (`useSetupChecklist`) and opens the same surface. "Checking" and "missing" are separate
   states, because an unanswered probe and an absent capability are opposite facts.
+- **Notifications inbox** (`components/layout/NotificationsInbox.vue`, `utils/notificationRoutes.ts`):
+  a card that asks for a person carries its verb ("Answer", "Review", ...) as the primary button,
+  and "Mark read" is secondary. `NOTIFICATION_ROUTES` is exhaustive over the notification types and
+  holds each one's verb and destination, so the title link and the button cannot open different
+  places. A route that can only select the task is named "Open".
 - **Inspector** (`components/panels` + `panels/inspector`): per-block tabs:
   structure, dependencies, model + fragment picker, live execution, and linked
   docs/issues/scenarios. Decisions resolve via `DecisionModal`. A `review` task

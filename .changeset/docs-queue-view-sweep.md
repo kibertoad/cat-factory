@@ -1,4 +1,4 @@
 ---
 ---
 
-Docs: describe the queue view in the root README, capabilities, glossary and SPA guides.
+Docs: describe the queue view, the inbox verbs and the setup checklist in the repo docs.
