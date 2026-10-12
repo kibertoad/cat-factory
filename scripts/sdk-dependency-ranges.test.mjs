@@ -34,9 +34,18 @@ describe('findPinnedSiblings', () => {
     }
   })
 
+  it('flags a peer range that admits a single minor of a 0.x sibling', () => {
+    for (const spec of ['workspace:^0.57.0', 'workspace:~0.57.0', 'workspace:~1.2.0']) {
+      assert.deepEqual(specs([pkg({ peerDependencies: { '@cat-factory/sdk': spec } })]), [
+        ['peerDependencies', spec],
+      ])
+    }
+  })
+
   it('accepts a hand-written peer range', () => {
-    const peers = { '@cat-factory/sdk': 'workspace:>=0.57.0 <1.0.0' }
-    assert.deepEqual(specs([pkg({ peerDependencies: peers })]), [])
+    for (const spec of ['workspace:>=0.57.0 <1.0.0', 'workspace:^1.2.0']) {
+      assert.deepEqual(specs([pkg({ peerDependencies: { '@cat-factory/sdk': spec } })]), [])
+    }
   })
 
   it('ignores devDependencies, registry ranges and private packages', () => {

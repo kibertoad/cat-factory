@@ -93,7 +93,10 @@ A folder is not wired up by existing (two packages once published as empty shell
 - **Add a changeset** and **a row in README.md's repository-layout tables** (CI guards both).
 - **Under `sdk/`, name a sibling by range**: `workspace:^` for a dependency, and a hand-written
   peer range (`workspace:>=0.57.0 <1.0.0`) when the package works on a client the integrator
-  builds. `scripts/check-sdk-dependency-ranges.mjs` fails on `workspace:*`, which publishes exact.
+  builds. `scripts/check-sdk-dependency-ranges.mjs` fails on `workspace:*`, which publishes exact,
+  and on a peer range that admits one minor. `.changeset/config.json` sets
+  `onlyUpdatePeerDependentsWhenOutOfRange`, so `changeset version` leaves a peer range alone while
+  the new version satisfies it; without it every SDK release would raise the peer's floor to itself.
 - **Check knip knows about a dynamically-imported dependency** (`ignoreDependencies` in
   `knip.jsonc`).
 
