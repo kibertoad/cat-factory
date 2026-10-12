@@ -43,7 +43,8 @@ Inventory on `origin/main`, 2026-10-12, under `frontend/app/app/components/`:
   (`FULL_BLEED_TAKEOVER_CLASS` belongs to `common/TakeoverShell.vue`, `WINDOWED_OVERLAY_CLASS` to
   `panels/ResultWindowShell.vue`).
 
-Pilot: item 1, `common/TakeoverShell.vue`.
+Pilot: item 1, `common/TakeoverShell.vue`
+([#2354](https://github.com/kibertoad/cat-factory/pull/2354)).
 
 ## Checklist
 
@@ -51,8 +52,8 @@ Pilot: item 1, `common/TakeoverShell.vue`.
 
 - [ ] `common/TakeoverShell.vue` on `useModalBehavior`, and all seven takeovers inside it: the step
       reader, the model configuration takeover, the observability, reports, operator dashboard and
-      Kaizen panels, and the artifact lightbox. Guard extended. E2e `takeover-shell.spec.ts`. PR: this
-      initiative's first PR (link added on merge).
+      Kaizen panels, and the artifact lightbox. Guard extended. E2e `takeover-shell.spec.ts`.
+      [#2354](https://github.com/kibertoad/cat-factory/pull/2354).
 
 Decision: a shell on `useModalBehavior`, not `UModal fullscreen`. `UModal` is the Nuxt UI answer
 and gives a focus trap for free, but a Reka modal makes the rest of the page inert while it is open:
