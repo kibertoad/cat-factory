@@ -62,7 +62,10 @@ export const directoryUserSchema = v.object({
   name: v.nullable(v.string()),
   email: v.nullable(v.string()),
   avatarUrl: v.nullable(v.string()),
-  /** Ordered by provider, then id. Empty for a user who never signed in through a host. */
+  /**
+   * Ordered by provider, then by id compared as a string. Empty for a user who never signed in
+   * through a host.
+   */
   accounts: v.array(directoryUserAccountSchema),
 })
 export type DirectoryUser = v.InferOutput<typeof directoryUserSchema>

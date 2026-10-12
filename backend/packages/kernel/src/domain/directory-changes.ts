@@ -69,17 +69,13 @@ export function isDirectoryAccountProvider(
 }
 
 /**
- * The login a host identity recorded at sign-in. Its metadata is written as `{ login }`; anything
- * else reads as no login, so one unreadable row cannot fail a whole directory page.
+ * The login a host identity recorded at sign-in. Its metadata is written as
+ * `JSON.stringify({ login })`, so a value that is not JSON is a corrupt row and throws rather than
+ * being served as no login.
  */
 function loginOf(metadata: string | null): string | null {
   if (metadata === null) return null
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(metadata)
-  } catch {
-    return null
-  }
+  const parsed: unknown = JSON.parse(metadata)
   if (typeof parsed !== 'object' || parsed === null || !('login' in parsed)) return null
   return typeof parsed.login === 'string' ? parsed.login : null
 }

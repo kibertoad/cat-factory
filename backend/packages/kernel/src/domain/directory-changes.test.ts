@@ -43,10 +43,10 @@ describe('withDirectoryAccounts', () => {
     metadata,
   })
 
-  it('reads a host login that has no readable metadata as no login', () => {
+  it('reads host metadata that carries no string login as no login', () => {
     const [read] = withDirectoryAccounts(
       [user],
-      [identity('github', '1', 'not json'), identity('gitlab', '2', '"ada"')],
+      [identity('github', '1', '{"login":7}'), identity('gitlab', '2', '"ada"')],
     )
     expect(read?.accounts).toEqual([
       { provider: 'github', id: '1', login: null },
