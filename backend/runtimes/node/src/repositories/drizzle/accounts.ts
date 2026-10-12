@@ -39,6 +39,7 @@ import {
   appendDirectoryChanges,
   identityOwnerSource,
   lockDirectoryFeed,
+  lockIdentityLink,
   userSource,
 } from '../directoryFeed.js'
 import {
@@ -344,6 +345,7 @@ export class DrizzleUserRepository implements UserRepository {
     const owner = userSource(identity.userId)
     await this.db.transaction(async (tx) => {
       const now = Date.now()
+      await lockIdentityLink(tx, identity.provider, identity.subject)
       await lockDirectoryFeed(tx, sql`${previousOwner} UNION ALL ${owner}`)
       await appendDirectoryChanges(tx, previousOwner, now)
       await this.upsertIdentity(tx, identity)

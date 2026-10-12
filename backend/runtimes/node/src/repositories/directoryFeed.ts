@@ -13,7 +13,25 @@ import type { DrizzleDb } from '../db/client.js'
 /** Advisory-lock class for the feed; the second key is the account. Distinct from every other class. */
 const DIRECTORY_FEED_LOCK_CLASS = 0x6469_7263
 
+/** Advisory-lock class for re-linking one login identity; the second key is `provider:subject`. */
+const IDENTITY_LINK_LOCK_CLASS = 0x6964_6c6b
+
 type Executor = Pick<DrizzleDb, 'execute'>
+
+/**
+ * Serialize the links of one login identity. Taken before the feed lock, it keeps the owner that
+ * `identityOwnerSource` reads at lock time the owner it reads again when appending, so two re-links
+ * of the same subject cannot lock one set of accounts and then append to another.
+ */
+export async function lockIdentityLink(
+  tx: Executor,
+  provider: string,
+  subject: string,
+): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(${IDENTITY_LINK_LOCK_CLASS}, hashtext(${`${provider}:${subject}`}))`,
+  )
+}
 
 /**
  * Take the feed's per-account advisory lock for every account the source names. It is held until
