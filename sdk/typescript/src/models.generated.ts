@@ -3332,10 +3332,10 @@ export type PublicPrAssessmentVerdictOutcome = 'within_policy' | 'requires_revie
 /** Every `PublicPrAssessmentVerdictOutcome` value, for exhaustive handling and runtime validation. */
 export const PUBLIC_PR_ASSESSMENT_VERDICT_OUTCOME_VALUES = ['within_policy', 'requires_review'] as const
 
-export type PublicPrAssessmentVerdictReason = 'within_thresholds' | 'exceeded_thresholds' | 'auto_merge_disabled' | 'no_rationale' | 'class_auto_merge' | 'class_requires_review'
+export type PublicPrAssessmentVerdictReason = 'within_thresholds' | 'exceeded_thresholds' | 'auto_merge_disabled' | 'no_rationale' | 'class_auto_merge' | 'class_requires_review' | 'role_requires_review' | 'submission_not_allowed' | 'dry_run'
 
 /** Every `PublicPrAssessmentVerdictReason` value, for exhaustive handling and runtime validation. */
-export const PUBLIC_PR_ASSESSMENT_VERDICT_REASON_VALUES = ['within_thresholds', 'exceeded_thresholds', 'auto_merge_disabled', 'no_rationale', 'class_auto_merge', 'class_requires_review'] as const
+export const PUBLIC_PR_ASSESSMENT_VERDICT_REASON_VALUES = ['within_thresholds', 'exceeded_thresholds', 'auto_merge_disabled', 'no_rationale', 'class_auto_merge', 'class_requires_review', 'role_requires_review', 'submission_not_allowed', 'dry_run'] as const
 
 export interface PublicPromptFragment {
   appliesTo?: PublicPromptFragmentAppliesTo

@@ -1,5 +1,5 @@
 import { generateText } from 'ai'
-import type { MergeAssessment, PublicPrAssessment } from '@cat-factory/contracts'
+import type { MergeAssessment, PublicPrAssessment, WorkspaceRole } from '@cat-factory/contracts'
 import {
   catFactoryObservability,
   PR_ASSESSMENT_SYSTEM_PROMPT,
@@ -54,6 +54,8 @@ export interface PrAssessmentServiceDeps extends InlinePrModelDeps {
   isOverBudget?: (workspaceId: string) => Promise<boolean>
   clock: Clock
   logger?: Logger
+  /** The deadline on the model call; defaults to {@link PR_ASSESSMENT_TIMEOUT_MS}. */
+  timeoutMs?: number
 }
 
 export interface AssessPullRequestInput {
@@ -62,6 +64,15 @@ export interface AssessPullRequestInput {
   prNumber: number
   provider?: VcsProvider
   riskPolicyId?: string
+}
+
+/**
+ * Who the assessment runs as: the person a key acts for (null for a key bound to nobody) and the
+ * workspace role a run started by the same key would pin, which the verdict's role rungs read.
+ */
+export interface PrAssessmentInitiator {
+  userId: string | null
+  role: WorkspaceRole | null
 }
 
 /** A pull request as read for one assessment: everything the prompt and the verdict need. */
@@ -86,12 +97,12 @@ export class PrAssessmentService {
     this.logger = deps.logger ?? noopLogger
   }
 
-  /** `userId` is the person a key acts for, or null for a key bound to nobody. */
   async assess(
     workspaceId: string,
-    userId: string | null,
+    initiator: PrAssessmentInitiator,
     input: AssessPullRequestInput,
   ): Promise<PublicPrAssessment> {
+    const { userId } = initiator
     const policy = selectAssessmentPolicy(
       await this.deps.listRiskPolicies(workspaceId),
       input.riskPolicyId,
@@ -126,7 +137,7 @@ export class PrAssessmentService {
       assessment,
       model,
       policy: { policyId: policy.id, name: policy.name },
-      verdict: evaluatePrAssessmentVerdict(policy, assessment, changeClass),
+      verdict: evaluatePrAssessmentVerdict(policy, assessment, changeClass, initiator.role),
       assessedAt: this.deps.clock.now(),
     }
   }
@@ -138,6 +149,8 @@ export class PrAssessmentService {
   ): Promise<{ assessment: MergeAssessment; model: string }> {
     const { modelProvider, ref } = await this.resolveModel(workspaceId, userId)
     const model = `${ref.provider}:${ref.model}`
+    const timeoutMs = this.deps.timeoutMs ?? PR_ASSESSMENT_TIMEOUT_MS
+    const deadline = AbortSignal.timeout(timeoutMs)
     let text: string
     try {
       const result = await generateText({
@@ -146,7 +159,7 @@ export class PrAssessmentService {
         prompt,
         temperature: 0,
         maxOutputTokens: 4_000,
-        abortSignal: AbortSignal.timeout(PR_ASSESSMENT_TIMEOUT_MS),
+        abortSignal: deadline,
         providerOptions: catFactoryObservability({
           agentKind: PR_ASSESSOR_AGENT_KIND,
           workspaceId,
@@ -156,9 +169,15 @@ export class PrAssessmentService {
     } catch (error) {
       // The one model failure a caller can act on: a personal credential that has to be unlocked.
       if (error instanceof CredentialRequiredError) throw error
-      const message = `The assessment model call failed: ${getErrorMessage(error)}`
+      // A timeout is its own reason: the caller's move (retry later) differs from a failed call's.
+      const timedOut = deadline.aborted
+      const message = timedOut
+        ? `The assessment model did not answer within ${timeoutMs}ms`
+        : `The assessment model call failed: ${getErrorMessage(error)}`
       this.logger.warn(message, { workspaceId, model, ...describeError(error) })
-      throw new UnavailableError(message, 'generation_failed', { model })
+      throw new UnavailableError(message, timedOut ? 'generation_timeout' : 'generation_failed', {
+        model,
+      })
     }
     const assessment = coercePrAssessment(extractJson(text))
     if (!assessment) {

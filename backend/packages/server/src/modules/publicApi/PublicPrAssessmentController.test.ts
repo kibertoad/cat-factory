@@ -6,8 +6,8 @@ import { publicPrAssessmentController } from './PublicPrAssessmentController.js'
 import { handleError } from '../../http/errorHandler.js'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
 
-// What the controller alone decides: the scope, who the call runs as, and the 503 when no
-// risk-policy library is wired. The assessment rules are the service's spec.
+// What the controller alone decides: the scope, who the call runs as and under which role, and
+// the 503 when no risk-policy library is wired. The assessment rules are the service's spec.
 
 const RESULT = {
   provider: 'github',
@@ -24,7 +24,9 @@ const RESULT = {
   assessedAt: 1,
 }
 
-function harness(opts: { scope?: PublicApiScope; wired?: boolean; actsAsUserId?: string } = {}) {
+function harness(
+  opts: { scope?: PublicApiScope; wired?: boolean; actsAsUserId?: string; allowed?: boolean } = {},
+) {
   const calls: unknown[][] = []
   const service = {
     assess: async (...args: unknown[]) => {
@@ -34,6 +36,12 @@ function harness(opts: { scope?: PublicApiScope; wired?: boolean; actsAsUserId?:
   }
   const container = {
     ...(opts.wired === false ? {} : { prAssessment: { service } as unknown as PrAssessmentModule }),
+    // The bound person's access, as the shared workspace-access cache answers it.
+    caches: {
+      workspaceAccess: {
+        get: async () => ({ access: { allowed: opts.allowed ?? true, role: 'member' } }),
+      },
+    },
     publicApiKeys: {
       authenticate: async () => ({
         workspaceIds: ['ws_1'],
@@ -64,18 +72,26 @@ function harness(opts: { scope?: PublicApiScope; wired?: boolean; actsAsUserId?:
 const BODY = { owner: ' acme ', repo: 'shop', prNumber: 7, riskPolicyId: 'rp_1' }
 
 describe('publicPrAssessmentController', () => {
-  it('assesses as the person a bound key acts for, with the trimmed body', async () => {
+  it('assesses as the person a bound key acts for, under their role, with the trimmed body', async () => {
     const { post, calls } = harness({ actsAsUserId: 'usr_9' })
     const res = await post(BODY)
     expect(res.status).toBe(200)
     expect(res.body).toEqual(RESULT)
-    expect(calls).toEqual([['ws_1', 'usr_9', { ...BODY, owner: 'acme' }]])
+    expect(calls).toEqual([
+      ['ws_1', { userId: 'usr_9', role: 'member' }, { ...BODY, owner: 'acme' }],
+    ])
   })
 
-  it('assesses on the workspace credentials for a key bound to nobody', async () => {
+  it('pins no role for a bound person whose access no longer resolves', async () => {
+    const { post, calls } = harness({ actsAsUserId: 'usr_9', allowed: false })
+    await post(BODY)
+    expect(calls[0]?.[1]).toEqual({ userId: 'usr_9', role: null })
+  })
+
+  it('assesses on the workspace credentials, with no role, for a key bound to nobody', async () => {
     const { post, calls } = harness()
     await post(BODY)
-    expect(calls[0]?.[1]).toBeNull()
+    expect(calls[0]?.[1]).toEqual({ userId: null, role: null })
   })
 
   it('refuses a read key, because an assessment spends model budget', async () => {

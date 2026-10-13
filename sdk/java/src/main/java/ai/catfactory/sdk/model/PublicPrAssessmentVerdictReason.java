@@ -20,6 +20,9 @@ public enum PublicPrAssessmentVerdictReason {
     NO_RATIONALE("no_rationale"),
     CLASS_AUTO_MERGE("class_auto_merge"),
     CLASS_REQUIRES_REVIEW("class_requires_review"),
+    ROLE_REQUIRES_REVIEW("role_requires_review"),
+    SUBMISSION_NOT_ALLOWED("submission_not_allowed"),
+    DRY_RUN("dry_run"),
 
     /**
      * A value this SDK release does not know.

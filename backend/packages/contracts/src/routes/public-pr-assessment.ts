@@ -7,8 +7,9 @@ import { errorResponses, withMinScope } from './_shared.js'
  * with no person. `write`, because it spends model budget. Synchronous: one inline model call, no
  * run, nothing persisted.
  *
- * Role-scoped policy rules (`classRulesByRole`, `dryRunRoles`, `submissionClassesByRole`) do not
- * apply: an API key carries no workspace role, exactly as for a task it creates.
+ * Role-scoped policy rules (`classRulesByRole`, `dryRunRoles`, `submissionClassesByRole`) apply
+ * to a key bound to a person, under that person's workspace role, exactly as for a task it creates.
+ * A key bound to nobody has no role, so they do not apply to it.
  */
 export const assessPublicPullRequestContract = withMinScope(
   'write',

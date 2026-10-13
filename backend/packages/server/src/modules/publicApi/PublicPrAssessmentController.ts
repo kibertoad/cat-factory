@@ -3,6 +3,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
+import { keyInitiatorRole } from '../../http/runAdmission.js'
 import { authorize, refuse } from './publicApiAuth.js'
 
 // The public PR assessment (`POST /api/v1/pr-assessments`): one synchronous model call that scores
@@ -20,11 +21,13 @@ export function publicPrAssessmentController(): Hono<AppEnv> {
       'Risk policies are not configured',
       'risk_policies_unwired',
     )
-    // A key bound to a person reads the PR and calls the model as them; an unbound key runs on
-    // the workspace's credentials.
+    // A key bound to a person reads the PR and calls the model as them, and is judged under their
+    // role as a run it starts would be; an unbound key runs on the workspace's credentials.
+    const { workspaceId, actsAsUserId } = gate.auth
+    const role = await keyInitiatorRole(c.get('container'), workspaceId, actsAsUserId)
     const assessment = await service.assess(
-      gate.auth.workspaceId,
-      gate.auth.actsAsUserId,
+      workspaceId,
+      { userId: actsAsUserId, role },
       c.req.valid('json'),
     )
     return c.json(assessment, 200)

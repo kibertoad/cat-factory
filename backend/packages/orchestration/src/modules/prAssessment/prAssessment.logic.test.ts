@@ -15,13 +15,16 @@ const POLICY: PrAssessmentPolicy = {
   maxImpact: 0.6,
   autoMergeEnabled: true,
   classRules: {},
+  classRulesByRole: {},
+  dryRunRoles: [],
+  submissionClassesByRole: {},
 }
 
 const LOW = { complexity: 0.1, risk: 0.1, impact: 0.1, rationale: 'A one-line docs fix.' }
 
 describe('evaluatePrAssessmentVerdict', () => {
   it('lands a credible assessment within every ceiling', () => {
-    expect(evaluatePrAssessmentVerdict(POLICY, LOW, 'source')).toEqual({
+    expect(evaluatePrAssessmentVerdict(POLICY, LOW, 'source', null)).toEqual({
       outcome: 'within_policy',
       reason: 'within_thresholds',
       exceededAxes: [],
@@ -30,7 +33,7 @@ describe('evaluatePrAssessmentVerdict', () => {
 
   it('names every axis over its ceiling', () => {
     const high = { ...LOW, complexity: 0.9, impact: 0.61 }
-    expect(evaluatePrAssessmentVerdict(POLICY, high, 'source')).toEqual({
+    expect(evaluatePrAssessmentVerdict(POLICY, high, 'source', null)).toEqual({
       outcome: 'requires_review',
       reason: 'exceeded_thresholds',
       exceededAxes: ['complexity', 'impact'],
@@ -39,11 +42,15 @@ describe('evaluatePrAssessmentVerdict', () => {
 
   it('treats a score equal to its ceiling as within it', () => {
     const atCeiling = { ...LOW, complexity: 0.5, risk: 0.4, impact: 0.6 }
-    expect(evaluatePrAssessmentVerdict(POLICY, atCeiling, 'source').outcome).toBe('within_policy')
+    expect(evaluatePrAssessmentVerdict(POLICY, atCeiling, 'source', null).outcome).toBe(
+      'within_policy',
+    )
   })
 
   it('does not trust scores the model did not explain', () => {
-    expect(evaluatePrAssessmentVerdict(POLICY, { ...LOW, rationale: '  ' }, 'source')).toEqual({
+    expect(
+      evaluatePrAssessmentVerdict(POLICY, { ...LOW, rationale: '  ' }, 'source', null),
+    ).toEqual({
       outcome: 'requires_review',
       reason: 'no_rationale',
       exceededAxes: [],
@@ -52,7 +59,7 @@ describe('evaluatePrAssessmentVerdict', () => {
 
   it('holds everything for a person when the master switch is off, class rules included', () => {
     const manual = { ...POLICY, autoMergeEnabled: false, classRules: { docs: 'always' as const } }
-    expect(evaluatePrAssessmentVerdict(manual, LOW, 'docs')).toMatchObject({
+    expect(evaluatePrAssessmentVerdict(manual, LOW, 'docs', null)).toMatchObject({
       outcome: 'requires_review',
       reason: 'auto_merge_disabled',
     })
@@ -61,7 +68,7 @@ describe('evaluatePrAssessmentVerdict', () => {
   it('lets an `always` class rule land a PR whatever its scores', () => {
     const policy = { ...POLICY, classRules: { dependency: 'always' as const } }
     const high = { complexity: 1, risk: 1, impact: 1, rationale: '' }
-    expect(evaluatePrAssessmentVerdict(policy, high, 'dependency')).toEqual({
+    expect(evaluatePrAssessmentVerdict(policy, high, 'dependency', null)).toEqual({
       outcome: 'within_policy',
       reason: 'class_auto_merge',
       exceededAxes: [],
@@ -70,7 +77,7 @@ describe('evaluatePrAssessmentVerdict', () => {
 
   it('holds a `never` class for a person however low its scores', () => {
     const policy = { ...POLICY, classRules: { schema: 'never' as const } }
-    expect(evaluatePrAssessmentVerdict(policy, LOW, 'schema')).toMatchObject({
+    expect(evaluatePrAssessmentVerdict(policy, LOW, 'schema', null)).toMatchObject({
       outcome: 'requires_review',
       reason: 'class_requires_review',
     })
@@ -78,7 +85,35 @@ describe('evaluatePrAssessmentVerdict', () => {
 
   it('falls back to the ceilings for an unclassifiable diff', () => {
     const policy = { ...POLICY, classRules: { source: 'never' as const } }
-    expect(evaluatePrAssessmentVerdict(policy, LOW, 'unknown').reason).toBe('within_thresholds')
+    expect(evaluatePrAssessmentVerdict(policy, LOW, 'unknown', null).reason).toBe(
+      'within_thresholds',
+    )
+  })
+
+  it('sandboxes a role the policy runs dry, whatever the scores', () => {
+    const policy = { ...POLICY, dryRunRoles: ['member' as const] }
+    expect(evaluatePrAssessmentVerdict(policy, LOW, 'docs', 'member')).toEqual({
+      outcome: 'requires_review',
+      reason: 'dry_run',
+      exceededAxes: [],
+    })
+    expect(evaluatePrAssessmentVerdict(policy, LOW, 'docs', null).outcome).toBe('within_policy')
+  })
+
+  it('refuses a class outside the submission allowlist of the role', () => {
+    const policy = { ...POLICY, submissionClassesByRole: { member: ['docs' as const] } }
+    expect(evaluatePrAssessmentVerdict(policy, LOW, 'source', 'member').reason).toBe(
+      'submission_not_allowed',
+    )
+    expect(evaluatePrAssessmentVerdict(policy, LOW, 'docs', 'member').outcome).toBe('within_policy')
+  })
+
+  it('names the role when its class rule is what holds the PR', () => {
+    const policy = { ...POLICY, classRulesByRole: { member: { docs: 'never' as const } } }
+    expect(evaluatePrAssessmentVerdict(policy, LOW, 'docs', 'member').reason).toBe(
+      'role_requires_review',
+    )
+    expect(evaluatePrAssessmentVerdict(policy, LOW, 'docs', 'admin').outcome).toBe('within_policy')
   })
 })
 

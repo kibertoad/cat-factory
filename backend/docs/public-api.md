@@ -2798,16 +2798,19 @@ only by running a pipeline to its `merger` step.
   `GET /risk-policies`. cat-factory judges the scores itself with the decision the merge step
   makes, and answers `verdict.outcome` (`within_policy` or `requires_review`), `verdict.reason`
   (`within_thresholds`, `exceeded_thresholds`, `auto_merge_disabled`, `no_rationale`,
-  `class_auto_merge`, `class_requires_review`) and `verdict.exceededAxes`.
-- **No role.** A key carries no workspace role, so `classRulesByRole`, `dryRunRoles` and
-  `submissionClassesByRole` do not apply, exactly as for a task the key creates.
+  `class_auto_merge`, `class_requires_review`, `role_requires_review`, `submission_not_allowed`,
+  `dry_run`) and `verdict.exceededAxes`.
+- **The bound person's role.** A key bound to a person is judged under that person's workspace
+  role, as a task the key creates is admitted, so `classRulesByRole`, `dryRunRoles` and
+  `submissionClassesByRole` apply. A key bound to nobody has no role and none of them apply.
 - **Synchronous and stateless.** One inline model call inside the request; nothing is persisted
   and no run starts. `headSha` names the commit assessed; a push between the reads is refused
   rather than mixed into one answer.
 - **Refusals**: `422 risk_policy_not_found`, `503 risk_policy_default_missing` (no `riskPolicyId`
   and no unattended default), `404 repo_not_linked`, `404 pr_not_found`,
   `503 pr_head_moved` (retry), `429 budget_exhausted`, `503 model_unavailable`,
-  `503 generation_failed`, `503 unreadable_reply`, and `503 risk_policies_unwired` /
+  `503 generation_failed`, `503 generation_timeout` (the model did not answer within 120s),
+  `503 unreadable_reply`, and `503 risk_policies_unwired` /
   `503 vcs_not_configured` on a deployment that wired neither.
 
 ### Service specification

@@ -68,6 +68,8 @@ interface Options {
   /** Heads the PR reports on successive reads. */
   heads?: (string | null)[]
   files?: GitHubChangedFile[]
+  policies?: RiskPolicyLibraryEntry[]
+  timeoutMs?: number
 }
 
 function harness(opts: Options = {}) {
@@ -80,6 +82,12 @@ function harness(opts: Options = {}) {
       return new MockLanguageModelV3({
         doGenerate: async (call) => {
           prompts.push(JSON.stringify(call.prompt))
+          if (opts.timeoutMs !== undefined) {
+            // A vendor that never answers: settle only when the deadline aborts the call.
+            await new Promise((_resolve, reject) =>
+              call.abortSignal?.addEventListener('abort', () => reject(call.abortSignal?.reason)),
+            )
+          }
           if (opts.reply instanceof Error) throw opts.reply
           return {
             content: [{ type: 'text' as const, text: opts.reply ?? REPLY }],
@@ -113,7 +121,7 @@ function harness(opts: Options = {}) {
     return fn()
   }) as RunInitiatorScope
   const service = new PrAssessmentService({
-    listRiskPolicies: async () => POLICIES,
+    listRiskPolicies: async () => opts.policies ?? POLICIES,
     resolveRepoFilesForCoords: async (_ws, coords) =>
       coords.repo === 'unlinked'
         ? null
@@ -130,16 +138,18 @@ function harness(opts: Options = {}) {
     modelRef: { provider: 'fake', model: 'fake-1' } as ModelRef,
     isOverBudget: async () => opts.overBudget ?? false,
     clock: { now: () => 1234 },
+    ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
   })
   return { service, prompts, scopes, vcsReads }
 }
 
 const INPUT = { owner: 'acme', repo: 'shop', prNumber: 7 }
+const NOBODY = { userId: null, role: null }
 
 describe('PrAssessmentService', () => {
   it('assesses the PR and judges it against the unattended default policy', async () => {
     const { service, prompts } = harness()
-    const result = await service.assess(WS, null, INPUT)
+    const result = await service.assess(WS, NOBODY, INPUT)
     expect(result).toEqual({
       provider: 'github',
       owner: 'acme',
@@ -169,27 +179,42 @@ describe('PrAssessmentService', () => {
       patch: null,
     }
     const { service, prompts } = harness({ files: [...FILES, withheld] })
-    await service.assess(WS, null, INPUT)
+    await service.assess(WS, NOBODY, INPUT)
     expect(prompts[0]).toContain('you have not seen them')
     expect(prompts[0]).toContain('- db/migrations/0042_big.sql')
   })
 
   it('judges against the named policy', async () => {
     const { service } = harness()
-    const result = await service.assess(WS, null, { ...INPUT, riskPolicyId: 'rp_interactive' })
+    const result = await service.assess(WS, NOBODY, { ...INPUT, riskPolicyId: 'rp_interactive' })
     expect(result.policy).toEqual({ policyId: 'rp_interactive', name: 'Interactive' })
   })
 
   it('reads the PR as the person a key acts for', async () => {
     const { service, scopes } = harness()
-    await service.assess(WS, 'usr_9', INPUT)
+    await service.assess(WS, { userId: 'usr_9', role: 'member' }, INPUT)
     expect(scopes).toEqual(['usr_9'])
+  })
+
+  it('judges a bound key under the role its person holds, as a run it starts would be', async () => {
+    const policies = POLICIES.map((policy) =>
+      policy.isUnattendedDefault ? { ...policy, dryRunRoles: ['member' as const] } : policy,
+    )
+    const { service } = harness({ policies })
+    const member = await service.assess(WS, { userId: 'usr_9', role: 'member' }, INPUT)
+    expect(member.verdict).toEqual({
+      outcome: 'requires_review',
+      reason: 'dry_run',
+      exceededAxes: [],
+    })
+    const unbound = await service.assess(WS, NOBODY, INPUT)
+    expect(unbound.verdict.outcome).toBe('within_policy')
   })
 
   it('refuses an unknown policy before reading the PR or calling the model', async () => {
     const { service, vcsReads, prompts } = harness()
     await expect(
-      service.assess(WS, null, { ...INPUT, riskPolicyId: 'nope' }),
+      service.assess(WS, NOBODY, { ...INPUT, riskPolicyId: 'nope' }),
     ).rejects.toMatchObject({ details: { reason: 'risk_policy_not_found' } })
     expect(vcsReads).toEqual([])
     expect(prompts).toEqual([])
@@ -197,7 +222,7 @@ describe('PrAssessmentService', () => {
 
   it('answers 404 for a repository the workspace has not linked', async () => {
     const { service } = harness()
-    await expect(service.assess(WS, null, { ...INPUT, repo: 'unlinked' })).rejects.toMatchObject({
+    await expect(service.assess(WS, NOBODY, { ...INPUT, repo: 'unlinked' })).rejects.toMatchObject({
       code: 'not_found',
       details: { reason: 'repo_not_linked' },
     })
@@ -205,7 +230,7 @@ describe('PrAssessmentService', () => {
 
   it('answers 404 for a pull request the host does not have', async () => {
     const { service } = harness({ heads: [null] })
-    await expect(service.assess(WS, null, INPUT)).rejects.toMatchObject({
+    await expect(service.assess(WS, NOBODY, INPUT)).rejects.toMatchObject({
       code: 'not_found',
       details: { reason: 'pr_not_found' },
     })
@@ -213,7 +238,7 @@ describe('PrAssessmentService', () => {
 
   it('refuses to assess files that may belong to a commit pushed during the read', async () => {
     const { service, prompts } = harness({ heads: [HEAD, 'newer'] })
-    await expect(service.assess(WS, null, INPUT)).rejects.toMatchObject({
+    await expect(service.assess(WS, NOBODY, INPUT)).rejects.toMatchObject({
       details: { reason: 'pr_head_moved' },
     })
     expect(prompts).toEqual([])
@@ -221,7 +246,7 @@ describe('PrAssessmentService', () => {
 
   it('refuses an exhausted budget before the model is called', async () => {
     const { service, prompts } = harness({ overBudget: true })
-    await expect(service.assess(WS, null, INPUT)).rejects.toMatchObject({
+    await expect(service.assess(WS, NOBODY, INPUT)).rejects.toMatchObject({
       code: 'rate_limited',
       details: { reason: 'budget_exhausted' },
     })
@@ -230,7 +255,7 @@ describe('PrAssessmentService', () => {
 
   it('reports a reply that is not an assessment rather than inventing scores', async () => {
     const { service } = harness({ reply: 'Looks fine to me.' })
-    await expect(service.assess(WS, null, INPUT)).rejects.toMatchObject({
+    await expect(service.assess(WS, NOBODY, INPUT)).rejects.toMatchObject({
       code: 'unavailable',
       details: { reason: 'unreadable_reply' },
     })
@@ -238,9 +263,17 @@ describe('PrAssessmentService', () => {
 
   it('reports a failed model call as a generation failure', async () => {
     const { service } = harness({ reply: new Error('upstream 500') })
-    await expect(service.assess(WS, null, INPUT)).rejects.toMatchObject({
+    await expect(service.assess(WS, NOBODY, INPUT)).rejects.toMatchObject({
       code: 'unavailable',
       details: { reason: 'generation_failed' },
+    })
+  })
+
+  it('reports a call that ran out of time as a timeout, not a failure', async () => {
+    const { service } = harness({ timeoutMs: 5 })
+    await expect(service.assess(WS, NOBODY, INPUT)).rejects.toMatchObject({
+      code: 'unavailable',
+      details: { reason: 'generation_timeout' },
     })
   })
 })

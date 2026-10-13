@@ -5776,16 +5776,19 @@ var PublicPrAssessmentVerdictOutcomeValues = []PublicPrAssessmentVerdictOutcome{
 type PublicPrAssessmentVerdictReason string
 
 const (
-	PublicPrAssessmentVerdictReasonWithinThresholds    PublicPrAssessmentVerdictReason = "within_thresholds"
-	PublicPrAssessmentVerdictReasonExceededThresholds  PublicPrAssessmentVerdictReason = "exceeded_thresholds"
-	PublicPrAssessmentVerdictReasonAutoMergeDisabled   PublicPrAssessmentVerdictReason = "auto_merge_disabled"
-	PublicPrAssessmentVerdictReasonNoRationale         PublicPrAssessmentVerdictReason = "no_rationale"
-	PublicPrAssessmentVerdictReasonClassAutoMerge      PublicPrAssessmentVerdictReason = "class_auto_merge"
-	PublicPrAssessmentVerdictReasonClassRequiresReview PublicPrAssessmentVerdictReason = "class_requires_review"
+	PublicPrAssessmentVerdictReasonWithinThresholds     PublicPrAssessmentVerdictReason = "within_thresholds"
+	PublicPrAssessmentVerdictReasonExceededThresholds   PublicPrAssessmentVerdictReason = "exceeded_thresholds"
+	PublicPrAssessmentVerdictReasonAutoMergeDisabled    PublicPrAssessmentVerdictReason = "auto_merge_disabled"
+	PublicPrAssessmentVerdictReasonNoRationale          PublicPrAssessmentVerdictReason = "no_rationale"
+	PublicPrAssessmentVerdictReasonClassAutoMerge       PublicPrAssessmentVerdictReason = "class_auto_merge"
+	PublicPrAssessmentVerdictReasonClassRequiresReview  PublicPrAssessmentVerdictReason = "class_requires_review"
+	PublicPrAssessmentVerdictReasonRoleRequiresReview   PublicPrAssessmentVerdictReason = "role_requires_review"
+	PublicPrAssessmentVerdictReasonSubmissionNotAllowed PublicPrAssessmentVerdictReason = "submission_not_allowed"
+	PublicPrAssessmentVerdictReasonDryRun               PublicPrAssessmentVerdictReason = "dry_run"
 )
 
 // PublicPrAssessmentVerdictReasonValues lists every PublicPrAssessmentVerdictReason this SDK release knows.
-var PublicPrAssessmentVerdictReasonValues = []PublicPrAssessmentVerdictReason{PublicPrAssessmentVerdictReasonWithinThresholds, PublicPrAssessmentVerdictReasonExceededThresholds, PublicPrAssessmentVerdictReasonAutoMergeDisabled, PublicPrAssessmentVerdictReasonNoRationale, PublicPrAssessmentVerdictReasonClassAutoMerge, PublicPrAssessmentVerdictReasonClassRequiresReview}
+var PublicPrAssessmentVerdictReasonValues = []PublicPrAssessmentVerdictReason{PublicPrAssessmentVerdictReasonWithinThresholds, PublicPrAssessmentVerdictReasonExceededThresholds, PublicPrAssessmentVerdictReasonAutoMergeDisabled, PublicPrAssessmentVerdictReasonNoRationale, PublicPrAssessmentVerdictReasonClassAutoMerge, PublicPrAssessmentVerdictReasonClassRequiresReview, PublicPrAssessmentVerdictReasonRoleRequiresReview, PublicPrAssessmentVerdictReasonSubmissionNotAllowed, PublicPrAssessmentVerdictReasonDryRun}
 
 // PublicPromptFragment is the `PublicPromptFragment` wire model.
 type PublicPromptFragment struct {

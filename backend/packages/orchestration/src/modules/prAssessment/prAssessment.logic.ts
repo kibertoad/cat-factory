@@ -1,8 +1,11 @@
 import {
+  dryRunForcedForRole,
   isPrAssessmentVerdictReason,
   parseMergeAssessment,
-  resolveMergeClassRule,
+  resolveRoleScopedMergeClassRule,
+  submissionAllowedForRole,
   type PublicPrAssessmentVerdict,
+  type WorkspaceRole,
 } from '@cat-factory/contracts'
 import type { ChangeClass, MergeAssessment, RiskPolicy } from '@cat-factory/kernel'
 import { UnavailableError, ValidationError } from '@cat-factory/kernel'
@@ -18,10 +21,22 @@ export const PR_ASSESSMENT_INLINE_PATCH_CHARS = 60_000
 /** The deadline on the model call, so a stalled vendor cannot hold the request open. */
 export const PR_ASSESSMENT_TIMEOUT_MS = 120_000
 
-/** What the verdict reads off a policy: its ceilings, its master switch and its class rules. */
+/**
+ * What the verdict reads off a policy: its ceilings, its master switch, its class rules and the
+ * role layer that narrows them for the person a key acts for.
+ */
 export type PrAssessmentPolicy = Pick<
   RiskPolicy,
-  'id' | 'name' | 'maxComplexity' | 'maxRisk' | 'maxImpact' | 'autoMergeEnabled' | 'classRules'
+  | 'id'
+  | 'name'
+  | 'maxComplexity'
+  | 'maxRisk'
+  | 'maxImpact'
+  | 'autoMergeEnabled'
+  | 'classRules'
+  | 'classRulesByRole'
+  | 'dryRunRoles'
+  | 'submissionClassesByRole'
 >
 
 /**
@@ -64,33 +79,42 @@ export function coercePrAssessment(raw: unknown): MergeAssessment | null {
 
 /**
  * Whether `policy` would land a PR with this assessment and change class, by the same ladder the
- * merger step's resolver applies.
+ * merger step's resolver applies, for a run started by `role`.
  *
- * The ladder's run-scoped rungs are fixed: nothing assessed here is a dry run, and an API key has
- * no workspace role, so no role allowlist or role narrowing can apply. A resolved policy always
- * has an id, and the reply was parsed before this is reached.
+ * `role` is what a run started by the same key would pin: the bound person's workspace role, or
+ * null for a key bound to nobody (and for a bound person whose access no longer resolves), which
+ * no role entry matches. The role is read through the same contracts helpers run admission and
+ * the resolver use, so a policy that sandboxes, scopes or narrows that role here does so there.
+ * Only the request-scoped rung is fixed: an assessment is never a requested dry run. A resolved
+ * policy always has an id, and the reply was parsed before this is reached.
  */
 export function evaluatePrAssessmentVerdict(
   policy: PrAssessmentPolicy,
   assessment: MergeAssessment,
   changeClass: ChangeClass,
+  role: WorkspaceRole | null,
 ): PublicPrAssessmentVerdict {
-  const effectiveRule = resolveMergeClassRule(policy.classRules, changeClass)
+  const { effective: effectiveRule, narrowedByRole } = resolveRoleScopedMergeClassRule({
+    rules: policy.classRules,
+    byRole: policy.classRulesByRole,
+    role,
+    changeClass,
+  })
   const exceededAxes = exceededAxesOf(assessment, policy)
   const { merge, mergeReason, reviewReason } = resolveMergePrecedence({
-    dryRun: false,
-    submissionAllowed: true,
+    dryRun: dryRunForcedForRole(policy.dryRunRoles, role),
+    submissionAllowed: submissionAllowedForRole(policy.submissionClassesByRole, role, changeClass),
     autoMergeEnabled: policy.autoMergeEnabled,
     policyConfigured: true,
     effectiveRule,
-    narrowedByRole: false,
+    narrowedByRole,
     hasAssessment: true,
     credible: isCredibleAssessment(assessment),
     withinThresholds: exceededAxes.length === 0,
   })
   const reason = merge ? mergeReason : reviewReason
   if (!isPrAssessmentVerdictReason(reason)) {
-    throw new Error(`A PR assessment reached the run-scoped merge reason '${reason}'`)
+    throw new Error(`A PR assessment reached the merge reason '${reason}', which it cannot carry`)
   }
   return merge
     ? { outcome: 'within_policy', reason, exceededAxes: [] }

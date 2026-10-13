@@ -18,9 +18,12 @@ export const assessPublicPullRequestSchema = v.object({
 export type AssessPublicPullRequestInput = v.InferOutput<typeof assessPublicPullRequestSchema>
 
 /**
- * The merge-decision reasons a verdict can carry. Only the ones that apply with no run behind
- * them: an API key carries no role and a PR assessed here is never a dry run, so the role-scoped
- * and run-scoped reasons cannot arise.
+ * The merge-decision reasons a verdict can carry: every reason the merge step can reach for a run
+ * that has a parsed assessment and has not tried to merge yet. `no_assessment` cannot arise (an
+ * unreadable reply is refused as `unreadable_reply`), `merge_failed`/`merge_partial` describe a
+ * merge attempt, and `no_policy_configured` needs a deployment with no risk-policy library, which
+ * this endpoint refuses as `risk_policies_unwired`. The role-scoped reasons apply to a key bound
+ * to a person, whose runs are admitted under that person's workspace role.
  */
 export const PR_ASSESSMENT_VERDICT_REASONS = [
   'within_thresholds',
@@ -29,6 +32,9 @@ export const PR_ASSESSMENT_VERDICT_REASONS = [
   'no_rationale',
   'class_auto_merge',
   'class_requires_review',
+  'role_requires_review',
+  'submission_not_allowed',
+  'dry_run',
 ] as const satisfies readonly MergeDecision['reason'][]
 export type PrAssessmentVerdictReason = (typeof PR_ASSESSMENT_VERDICT_REASONS)[number]
 
