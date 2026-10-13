@@ -2777,6 +2777,38 @@ Design record: [`backend/docs/adr/0066-guided-pr-review.md`](../../backend/docs/
   is refused with `session_stale` once the PR has commits past `reviewedHeadSha`. The summary
   posts only alongside a draft the call claimed, so an identical retry publishes nothing.
 
+### PR assessment (`/api/v1/pr-assessments`)
+
+`POST /api/v1/pr-assessments`, at `write` scope (it spends model budget). SDK:
+`client.prAssessments.assess(body)`.
+
+Scores one pull request in a linked repository on the `merger`'s three axes (complexity, risk,
+impact, each 0..1, plus a rationale), classifies it by its changed paths, and says whether a risk
+policy would let it land with no person. It is the question an integrator could otherwise answer
+only by running a pipeline to its `merger` step.
+
+| Body field     | Behaviour                                                                                       |
+| -------------- | ----------------------------------------------------------------------------------------------- |
+| `owner`/`repo` | Resolved to a repository linked to the workspace, as for guided review.                         |
+| `prNumber`     | Read with the workspace's VCS credential, or the bound person's initiator token.                |
+| `provider`     | Optional; the linked repository's own provider wins.                                            |
+| `riskPolicyId` | From `GET /risk-policies`. Omitted: the workspace's unattended default, which API runs resolve. |
+
+- **A verdict, never the ceilings.** The policy's ceilings stay off this surface, as on
+  `GET /risk-policies`. cat-factory judges the scores itself with the decision the merge step
+  makes, and answers `verdict.outcome` (`within_policy` or `requires_review`), `verdict.reason`
+  (`within_thresholds`, `exceeded_thresholds`, `auto_merge_disabled`, `no_rationale`,
+  `class_auto_merge`, `class_requires_review`) and `verdict.exceededAxes`.
+- **No role.** A key carries no workspace role, so `classRulesByRole`, `dryRunRoles` and
+  `submissionClassesByRole` do not apply, exactly as for a task the key creates.
+- **Synchronous and stateless.** One inline model call inside the request; nothing is persisted
+  and no run starts. `headSha` names the commit assessed; a push between the reads is refused
+  rather than mixed into one answer.
+- **Refusals**: `422 risk_policy_not_found`, `404 repo_not_linked`, `404 pr_not_found`,
+  `503 pr_head_moved` (retry), `429 budget_exhausted`, `503 model_unavailable`,
+  `503 generation_failed`, `503 unreadable_reply`, and `503 risk_policies_unwired` /
+  `503 vcs_not_configured` on a deployment that wired neither.
+
 ### Service specification
 
 `GET /api/v1/services/:serviceId/spec`, at `read` scope.

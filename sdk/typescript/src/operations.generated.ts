@@ -15,6 +15,7 @@ import type {
   AddPublicTaskDependencyRequest,
   AddressPublicRunBugFishingFindingsRequest,
   AskGuidedReview,
+  AssessPublicPullRequest,
   AttachPublicTaskDocumentRequest,
   ConnectPublicEnvironmentRequest,
   ConnectPublicEnvironmentResponse,
@@ -105,6 +106,7 @@ import type {
   PublicNotificationWebhook,
   PublicNotificationWebhookList,
   PublicPipelineList,
+  PublicPrAssessment,
   PublicPromptFragmentList,
   PublicRejectStep,
   PublicReplyFinding,
@@ -2796,6 +2798,29 @@ export class GuidedReviewsResource {
   }
 }
 
+/** Assess a pull request in a linked repository: the merger's complexity, risk and impact scores with a rationale, the change class its paths fall in, and whether a risk policy would let it land with no person. The verdict is given without publishing the policy's ceilings. Takes a `write` key: each assessment is one model call. Nothing is persisted and no run starts. */
+export class PrAssessmentsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Assess a pull request against a risk policy
+   * Score one pull request in a repository linked to the workspace on the merger’s three axes (complexity, risk, impact, each 0..1, with a rationale), classify it by its changed paths, and say whether a risk policy would let it land with no person. The policy is the one named by `riskPolicyId` from `GET /api/v1/risk-policies`, else the workspace’s unattended default (the one a run started through this API resolves); an unknown id is `422` with `details.reason: "risk_policy_not_found"`. The verdict comes from the same decision the merge step makes, so the policy’s ceilings are never published: `verdict.reason` and `verdict.exceededAxes` say why. Role-scoped policy rules (`classRulesByRole`, `dryRunRoles`, `submissionClassesByRole`) do not apply, because a key carries no workspace role. Synchronous: one inline model call, nothing persisted, no run. An unlinked repository is `404` `repo_not_linked`, a PR the host cannot find is `404` `pr_not_found`, a PR that received commits while it was read is `503` `pr_head_moved` (retry), an exhausted budget is `429` `budget_exhausted`, no configured model is `503` `model_unavailable`, a failed model call is `503` `generation_failed`, and a reply that is not an assessment is `503` `unreadable_reply`. A key bound to a person reads the PR and calls the model as that person. Requires a `write` key.
+   * `POST /api/v1/pr-assessments` — operation `assessPublicPullRequest`.
+   */
+  assess(body: AssessPublicPullRequest, options: RequestOptions = {}): Promise<PublicPrAssessment> {
+    return this.#transport.request<PublicPrAssessment>({
+      method: 'POST',
+      path: `/api/v1/pr-assessments`,
+      body,
+      options,
+    })
+  }
+}
+
 /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */
 export class KeysResource {
   readonly #transport: Transport
@@ -2906,6 +2931,8 @@ export abstract class CatFactoryResources {
   readonly kaizen: KaizenResource
   /** Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking, drafting and posting drafts take a `write` key. Posting publishes plain comments on the pull request and never approves or requests changes. */
   readonly guidedReviews: GuidedReviewsResource
+  /** Assess a pull request in a linked repository: the merger's complexity, risk and impact scores with a rationale, the change class its paths fall in, and whether a risk policy would let it land with no person. The verdict is given without publishing the policy's ceilings. Takes a `write` key: each assessment is one model call. Nothing is persisted and no run starts. */
+  readonly prAssessments: PrAssessmentsResource
   /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */
   readonly keys: KeysResource
 
@@ -2936,6 +2963,7 @@ export abstract class CatFactoryResources {
     this.directory = new DirectoryResource(transport)
     this.kaizen = new KaizenResource(transport)
     this.guidedReviews = new GuidedReviewsResource(transport)
+    this.prAssessments = new PrAssessmentsResource(transport)
     this.keys = new KeysResource(transport)
   }
 }
