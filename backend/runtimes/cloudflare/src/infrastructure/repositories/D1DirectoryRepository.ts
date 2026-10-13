@@ -236,24 +236,25 @@ export class D1DirectoryRepository implements DirectoryRepository {
       )
       .bind(accountId, after ?? '', limit)
       .all<UserRow>()
-    return this.withAccounts(results.map(toUser))
+    const users = results.map(toUser)
+    return withDirectoryAccounts(users, await this.hostIdentitiesOf(users.map((user) => user.id)))
   }
 
-  /** The host accounts of a page of users, chunked like every other `IN` read here. */
-  private async withAccounts(rows: Omit<DirectoryUser, 'accounts'>[]): Promise<DirectoryUser[]> {
-    const identities: StoredUserIdentity[] = []
+  /** The host-account identities of these users, every `IN` chunk in one round trip. */
+  private async hostIdentitiesOf(userIds: string[]): Promise<StoredUserIdentity[]> {
+    if (userIds.length === 0) return []
     const providers = DIRECTORY_ACCOUNT_PROVIDERS.map(() => '?').join(', ')
-    for (const chunk of chunkForIn(rows.map((row) => row.id))) {
-      const { results } = await this.db
-        .prepare(
-          `SELECT user_id, provider, subject, metadata FROM user_identities
-            WHERE user_id IN (${chunk.map(() => '?').join(', ')}) AND provider IN (${providers})`,
-        )
-        .bind(...chunk, ...DIRECTORY_ACCOUNT_PROVIDERS)
-        .all<StoredUserIdentity>()
-      identities.push(...results)
-    }
-    return withDirectoryAccounts(rows, identities)
+    const reads = await this.db.batch<StoredUserIdentity>(
+      chunkForIn(userIds).map((chunk) =>
+        this.db
+          .prepare(
+            `SELECT user_id, provider, subject, metadata FROM user_identities
+              WHERE user_id IN (${chunk.map(() => '?').join(', ')}) AND provider IN (${providers})`,
+          )
+          .bind(...chunk, ...DIRECTORY_ACCOUNT_PROVIDERS),
+      ),
+    )
+    return reads.flatMap(({ results }) => results)
   }
 
   async listAccountMemberships(
@@ -343,19 +344,26 @@ export class D1DirectoryRepository implements DirectoryRepository {
   }
 
   async getUsers(accountId: string, ids: string[]): Promise<DirectoryUser[]> {
-    const out: Omit<DirectoryUser, 'accounts'>[] = []
-    for (const chunk of chunkForIn(ids)) {
-      const { results } = await this.db
-        .prepare(
-          `SELECT u.id, u.name, u.email, u.avatar_url FROM users u
-             JOIN memberships m ON m.user_id = u.id
-            WHERE m.account_id = ? AND u.id IN (${chunk.map(() => '?').join(', ')})`,
-        )
-        .bind(accountId, ...chunk)
-        .all<UserRow>()
-      out.push(...results.map(toUser))
-    }
-    return this.withAccounts(out)
+    if (ids.length === 0) return []
+    // The ids are known up front, so the identities are read beside the users rather than after.
+    const [reads, identities] = await Promise.all([
+      this.db.batch<UserRow>(
+        chunkForIn(ids).map((chunk) =>
+          this.db
+            .prepare(
+              `SELECT u.id, u.name, u.email, u.avatar_url FROM users u
+                 JOIN memberships m ON m.user_id = u.id
+                WHERE m.account_id = ? AND u.id IN (${chunk.map(() => '?').join(', ')})`,
+            )
+            .bind(accountId, ...chunk),
+        ),
+      ),
+      this.hostIdentitiesOf(ids),
+    ])
+    return withDirectoryAccounts(
+      reads.flatMap(({ results }) => results.map(toUser)),
+      identities,
+    )
   }
 
   async getAccountMemberships(

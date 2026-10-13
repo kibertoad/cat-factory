@@ -50,7 +50,10 @@ export type DirectoryWorkspace = v.InferOutput<typeof directoryWorkspaceSchema>
  */
 export const directoryUserAccountSchema = v.object({
   provider: vcsProviderSchema,
-  /** The host's numeric user id, as a decimal string. */
+  /**
+   * The host's numeric user id, as a decimal string. A `gitlab` id is the one on the GitLab
+   * instance this deployment signs in through, which may be self-managed rather than gitlab.com.
+   */
   id: v.string(),
   /** The handle recorded when the account was linked. Display only: a rename on the host is not followed. */
   login: v.nullable(v.string()),

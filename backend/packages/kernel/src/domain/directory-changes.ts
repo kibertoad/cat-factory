@@ -3,9 +3,9 @@ import {
   type DirectoryUser,
   type DirectoryUserAccount,
   isDirectoryEntityType,
-  vcsProviderSchema,
 } from '@cat-factory/contracts'
 import type { DirectoryChangeRecord } from '../ports/directory-changes.js'
+import { isVcsProvider, VCS_PROVIDERS } from './vcs-types.js'
 
 // The rules both facades' directory repositories apply to stored change-feed rows
 // (backend/docs/adr/0067-directory-sync.md), kept here so the D1 and Postgres readers cannot drift.
@@ -59,14 +59,12 @@ export interface StoredUserIdentity {
  * Google or OIDC identity names nobody on a host, so it is not an account a mirror can match on.
  */
 export const DIRECTORY_ACCOUNT_PROVIDERS: readonly DirectoryUserAccount['provider'][] =
-  vcsProviderSchema.options
+  VCS_PROVIDERS
 
 /** Whether identities of `provider` are published as accounts, so linking one is a directory change. */
-export function isDirectoryAccountProvider(
+export const isDirectoryAccountProvider: (
   provider: string,
-): provider is DirectoryUserAccount['provider'] {
-  return (DIRECTORY_ACCOUNT_PROVIDERS as readonly string[]).includes(provider)
-}
+) => provider is DirectoryUserAccount['provider'] = isVcsProvider
 
 /**
  * The login a host identity recorded at sign-in. Its metadata is written as

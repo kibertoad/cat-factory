@@ -241,9 +241,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   auditEventRepository: { append: 'admin', listByAccount: 'admin', deleteOlderThan: 'sweeper' },
   // The directory change feed's prune is the mothership's retention sweep; every read is on the
   // allow-list, account-bound, so a node can serve `/api/v1/directory/*`. `headSeqs` spans
-  // accounts and only the mothership's webhook delivery sweep reads it. `withAccounts` is the private
-  // helper that attaches a page of users' host accounts inside the remote user reads.
-  directoryRepository: { pruneChanges: 'sweeper', headSeqs: 'sweeper', withAccounts: 'helper' },
+  // accounts and only the mothership's webhook delivery sweep reads it. `hostIdentitiesOf` is the
+  // private helper that reads a page of users' host accounts inside the remote user reads.
+  directoryRepository: { pruneChanges: 'sweeper', headSeqs: 'sweeper', hostIdentitiesOf: 'helper' },
   // Directory webhook endpoints are account-admin configuration (an endpoint receives every change
   // in the account), and the machine token scopes ACCOUNTS not ROLES, so management stays on the
   // mothership: an integration registers its endpoint against the deployment, never a node. The
