@@ -496,6 +496,18 @@ completeness.
 
 ## 1.83.0
 
+`POST /api/v1/pr-assessments` is new (`client.prAssessments.assess`): a pull request in a linked
+repository scored on the merger's complexity, risk and impact axes, its path-derived change class,
+and whether a risk policy would let it land with no person. The answer is a verdict
+(`within_policy` or `requires_review`, with the merge-decision reason and the exceeded axes), so
+the policy's ceilings stay unpublished, as `PublicRiskPolicy` already keeps them.
+
+Additive: one `write` operation and the shapes it carries (`AssessPublicPullRequest`,
+`PublicPrAssessment`, `PublicPrAssessmentPolicy`, `PublicPrAssessmentVerdict`). The call is
+synchronous and persists nothing.
+
+## 1.84.0
+
 A directory `DirectoryUser` gains `accounts`: the GitHub and GitLab accounts the user signed in
 with, each as `{ provider, id, login }`, where `id` is the host's numeric user id. A mirror matches
 people across systems on `(provider, id)`, which survives a rename on the host. Linking such an
