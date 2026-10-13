@@ -2804,7 +2804,8 @@ only by running a pipeline to its `merger` step.
 - **Synchronous and stateless.** One inline model call inside the request; nothing is persisted
   and no run starts. `headSha` names the commit assessed; a push between the reads is refused
   rather than mixed into one answer.
-- **Refusals**: `422 risk_policy_not_found`, `404 repo_not_linked`, `404 pr_not_found`,
+- **Refusals**: `422 risk_policy_not_found`, `503 risk_policy_default_missing` (no `riskPolicyId`
+  and no unattended default), `404 repo_not_linked`, `404 pr_not_found`,
   `503 pr_head_moved` (retry), `429 budget_exhausted`, `503 model_unavailable`,
   `503 generation_failed`, `503 unreadable_reply`, and `503 risk_policies_unwired` /
   `503 vcs_not_configured` on a deployment that wired neither.

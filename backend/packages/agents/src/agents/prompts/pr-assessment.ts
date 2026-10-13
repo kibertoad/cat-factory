@@ -33,7 +33,7 @@ export interface PrAssessmentPromptInput {
   files: GuidedReviewChangedFileSummary[]
   /** Patches inlined in full, within the prompt budget. */
   inlinePatches: { path: string; patch: string }[]
-  /** Changed files whose patch was left out of the prompt. */
+  /** Changed files whose patch is not in the prompt: cut for the budget, or never sent. */
   omittedPatchPaths: string[]
 }
 
@@ -42,8 +42,8 @@ export function renderPrAssessmentPrompt(input: PrAssessmentPromptInput): string
   const patches = input.inlinePatches.map((p) => `### ${p.path}\n${fenceVerbatim(p.patch)}`)
   const omitted =
     input.omittedPatchPaths.length > 0
-      ? `The patches of these ${input.omittedPatchPaths.length} files were left out to keep this ` +
-        `message bounded, so you have not seen them:\n` +
+      ? `The patches of these ${input.omittedPatchPaths.length} files are not in this message ` +
+        `(left out to keep it bounded, or not provided by the host), so you have not seen them:\n` +
         input.omittedPatchPaths.map((p) => `- ${p}`).join('\n')
       : ''
   return [

@@ -4345,10 +4345,11 @@ type PrAssessmentsService struct {
 // say whether a risk policy would let it land with no person. The policy is the one named by
 // `riskPolicyId` from `GET /api/v1/risk-policies`, else the workspace’s unattended default (the
 // one a run started through this API resolves); an unknown id is `422` with `details.reason:
-// "risk_policy_not_found"`. The verdict comes from the same decision the merge step makes, so the
-// policy’s ceilings are never published: `verdict.reason` and `verdict.exceededAxes` say why.
-// Role-scoped policy rules (`classRulesByRole`, `dryRunRoles`, `submissionClassesByRole`) do not
-// apply, because a key carries no workspace role. Synchronous: one inline model call, nothing
+// "risk_policy_not_found"`, and a workspace with no unattended default is `503`
+// `risk_policy_default_missing`. The verdict comes from the same decision the merge step makes,
+// so the policy’s ceilings are never published: `verdict.reason` and `verdict.exceededAxes` say
+// why. Role-scoped policy rules (`classRulesByRole`, `dryRunRoles`, `submissionClassesByRole`) do
+// not apply, because a key carries no workspace role. Synchronous: one inline model call, nothing
 // persisted, no run. An unlinked repository is `404` `repo_not_linked`, a PR the host cannot find
 // is `404` `pr_not_found`, a PR that received commits while it was read is `503` `pr_head_moved`
 // (retry), an exhausted budget is `429` `budget_exhausted`, no configured model is `503`

@@ -61,14 +61,11 @@ import {
   NotFoundError,
   noopLogger,
   redactSecrets,
-  resolveInlineScope,
-  resolveScopedModelProvider,
   runBestEffort,
-  UnavailableError,
   ValidationError,
   VcsCapabilityUnsupportedError,
 } from '@cat-factory/kernel'
-import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
+import type { InlineBlockModelDeps } from '../../inlineBlockModel.js'
 import {
   anchorDrafts,
   coerceAnswer,
@@ -86,6 +83,7 @@ import {
 import { GuidedReviewDrafts } from './GuidedReviewDrafts.js'
 import { GuidedReviewInvestigations } from './GuidedReviewInvestigations.js'
 import { PrExplorer } from './PrExplorer.js'
+import { resolveInlinePrModel, resolveLinkedRepo, runAsInitiator } from './linkedPullRequest.js'
 
 export interface GuidedReviewServiceDeps extends InlineBlockModelDeps {
   repository: GuidedReviewRepository
@@ -712,20 +710,14 @@ export class GuidedReviewService {
     workspaceId: string,
     userId: string | null,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const scope = await resolveInlineScope(
-      userId === null ? { kind: 'workspace', workspaceId } : { kind: 'user', workspaceId, userId },
-    )
-    const modelProvider = await resolveScopedModelProvider(scope, this.deps)
-    const ref = await resolveInlineBlockModelRef(
+    const model = await resolveInlinePrModel(
       this.deps,
       workspaceId,
+      userId,
       GUIDED_REVIEW_AGENT_KIND,
-      {},
     )
-    if (!modelProvider || !ref) {
-      throw new JobFailure({ reason: 'model_unavailable', detail: null }, null)
-    }
-    return { modelProvider, ref }
+    if (!model) throw new JobFailure({ reason: 'model_unavailable', detail: null }, null)
+    return model
   }
 
   /** The PR as reviewed: its changed files at the session's head, bound for reading. */
@@ -780,28 +772,11 @@ export class GuidedReviewService {
     }
   }
 
-  private async repoFor(
+  private repoFor(
     workspaceId: string,
     coords: { owner: string; repo: string; provider?: VcsProvider },
   ) {
-    const resolve = this.deps.resolveRepoFilesForCoords
-    if (!resolve) {
-      throw new UnavailableError(
-        'No source control integration is configured',
-        'vcs_not_configured',
-      )
-    }
-    const context = await resolve(workspaceId, {
-      owner: coords.owner,
-      repo: coords.repo,
-      ...(coords.provider ? { provider: coords.provider } : {}),
-    })
-    if (!context) {
-      throw new NotFoundError('Repository', `${coords.owner}/${coords.repo}`, {
-        reason: 'repo_not_linked',
-      })
-    }
-    return context
+    return resolveLinkedRepo(this.deps.resolveRepoFilesForCoords, workspaceId, coords)
   }
 
   private async readPr(
@@ -827,8 +802,7 @@ export class GuidedReviewService {
    * attributed to nobody when the session has no person behind it.
    */
   private asUser<T>(workspaceId: string, userId: string | null, fn: () => T): T {
-    const scope = this.deps.runInitiatorScope
-    return scope ? scope({ workspaceId, initiatedBy: userId }, fn) : fn()
+    return runAsInitiator(this.deps.runInitiatorScope, workspaceId, userId, fn)
   }
 
   /** The thread before `message`, as the deep investigator is asked it. */

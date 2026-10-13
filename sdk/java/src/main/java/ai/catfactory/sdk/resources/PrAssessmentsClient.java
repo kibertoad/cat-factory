@@ -33,8 +33,9 @@ public final class PrAssessmentsClient {
      * and say whether a risk policy would let it land with no person. The policy is the one named
      * by `riskPolicyId` from `GET /api/v1/risk-policies`, else the workspace’s unattended default
      * (the one a run started through this API resolves); an unknown id is `422` with
-     * `details.reason: "risk_policy_not_found"`. The verdict comes from the same decision the
-     * merge step makes, so the policy’s ceilings are never published: `verdict.reason` and
+     * `details.reason: "risk_policy_not_found"`, and a workspace with no unattended default is
+     * `503` `risk_policy_default_missing`. The verdict comes from the same decision the merge step
+     * makes, so the policy’s ceilings are never published: `verdict.reason` and
      * `verdict.exceededAxes` say why. Role-scoped policy rules (`classRulesByRole`, `dryRunRoles`,
      * `submissionClassesByRole`) do not apply, because a key carries no workspace role.
      * Synchronous: one inline model call, nothing persisted, no run. An unlinked repository is

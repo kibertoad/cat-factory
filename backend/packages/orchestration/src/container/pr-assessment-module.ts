@@ -31,6 +31,7 @@ export function createPrAssessmentModule(
       ...inlineModelResolutionDeps(dependencies),
       isOverBudget: (workspaceId) => spend.isOverBudget(workspaceId),
       clock: dependencies.clock,
+      logger: dependencies.logger,
     }),
   }
 }

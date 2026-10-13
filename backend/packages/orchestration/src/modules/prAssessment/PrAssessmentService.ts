@@ -9,8 +9,8 @@ import {
 import type {
   Clock,
   GitHubChangedFile,
+  Logger,
   ModelProvider,
-  ModelProviderResolver,
   ModelRef,
   RepoFiles,
   ResolveRepoFilesForCoords,
@@ -21,17 +21,22 @@ import type {
 import {
   classifyChangedFiles,
   CredentialRequiredError,
+  describeError,
   extractJson,
   getErrorMessage,
   NotFoundError,
+  noopLogger,
   RateLimitedError,
-  resolveInlineScope,
-  resolveScopedModelProvider,
   UnavailableError,
   VcsCapabilityUnsupportedError,
 } from '@cat-factory/kernel'
-import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 import { partitionPatches } from '../guidedReview/guidedReview.logic.js'
+import {
+  type InlinePrModelDeps,
+  resolveInlinePrModel,
+  resolveLinkedRepo,
+  runAsInitiator,
+} from '../guidedReview/linkedPullRequest.js'
 import {
   coercePrAssessment,
   evaluatePrAssessmentVerdict,
@@ -40,16 +45,15 @@ import {
   selectAssessmentPolicy,
 } from './prAssessment.logic.js'
 
-export interface PrAssessmentServiceDeps extends InlineBlockModelDeps {
+export interface PrAssessmentServiceDeps extends InlinePrModelDeps {
   /** The board's merged risk-policy library, the one a task pin resolves against. */
   listRiskPolicies: (workspaceId: string) => Promise<RiskPolicyLibraryEntry[]>
   resolveRepoFilesForCoords?: ResolveRepoFilesForCoords
   /** Runs the VCS reads under the caller's credential scope (initiator PAT policy). */
   runInitiatorScope?: RunInitiatorScope
-  modelProviderResolver?: ModelProviderResolver
-  modelProvider?: ModelProvider
   isOverBudget?: (workspaceId: string) => Promise<boolean>
   clock: Clock
+  logger?: Logger
 }
 
 export interface AssessPullRequestInput {
@@ -76,7 +80,11 @@ interface ReadPr {
  * vendor sees a token.
  */
 export class PrAssessmentService {
-  constructor(private readonly deps: PrAssessmentServiceDeps) {}
+  private readonly logger: Logger
+
+  constructor(private readonly deps: PrAssessmentServiceDeps) {
+    this.logger = deps.logger ?? noopLogger
+  }
 
   /** `userId` is the person a key acts for, or null for a key bound to nobody. */
   async assess(
@@ -88,9 +96,9 @@ export class PrAssessmentService {
       await this.deps.listRiskPolicies(workspaceId),
       input.riskPolicyId,
     )
-    const context = await this.repoFor(workspaceId, input)
+    const context = await resolveLinkedRepo(this.deps.resolveRepoFilesForCoords, workspaceId, input)
     const provider = context.provider ?? input.provider ?? 'github'
-    const pr = await this.asUser(workspaceId, userId, () =>
+    const pr = await runAsInitiator(this.deps.runInitiatorScope, workspaceId, userId, () =>
       readPr(context.repo, provider, input.prNumber),
     )
     if (await this.deps.isOverBudget?.(workspaceId)) {
@@ -101,11 +109,11 @@ export class PrAssessmentService {
     }
     const owner = context.owner ?? input.owner
     const repo = context.name ?? input.repo
-    const { assessment, model } = await this.generate(workspaceId, userId, {
-      pr: { owner, repo, prNumber: input.prNumber, ...pr },
-      body: pr.body,
-      files: pr.files,
-    })
+    const { assessment, model } = await this.generate(
+      workspaceId,
+      userId,
+      assessmentPrompt({ owner, repo, prNumber: input.prNumber, ...pr }),
+    )
     const { changeClass, fileCount } = classifyChangedFiles(pr.files.map((f) => f.path))
     return {
       provider,
@@ -126,34 +134,16 @@ export class PrAssessmentService {
   private async generate(
     workspaceId: string,
     userId: string | null,
-    subject: {
-      pr: {
-        owner: string
-        repo: string
-        prNumber: number
-        title: string
-        headSha: string
-        baseRef: string
-      }
-      body: string | null
-      files: GitHubChangedFile[]
-    },
+    prompt: string,
   ): Promise<{ assessment: MergeAssessment; model: string }> {
     const { modelProvider, ref } = await this.resolveModel(workspaceId, userId)
     const model = `${ref.provider}:${ref.model}`
-    const { inline, omitted } = partitionPatches(subject.files, PR_ASSESSMENT_INLINE_PATCH_CHARS)
     let text: string
     try {
       const result = await generateText({
         model: modelProvider.resolve(ref),
         system: PR_ASSESSMENT_SYSTEM_PROMPT,
-        prompt: renderPrAssessmentPrompt({
-          pr: subject.pr,
-          body: subject.body?.trim() ? subject.body : null,
-          files: subject.files,
-          inlinePatches: inline,
-          omittedPatchPaths: omitted,
-        }),
+        prompt,
         temperature: 0,
         maxOutputTokens: 4_000,
         abortSignal: AbortSignal.timeout(PR_ASSESSMENT_TIMEOUT_MS),
@@ -166,11 +156,9 @@ export class PrAssessmentService {
     } catch (error) {
       // The one model failure a caller can act on: a personal credential that has to be unlocked.
       if (error instanceof CredentialRequiredError) throw error
-      throw new UnavailableError(
-        `The assessment model call failed: ${getErrorMessage(error)}`,
-        'generation_failed',
-        { model },
-      )
+      const message = `The assessment model call failed: ${getErrorMessage(error)}`
+      this.logger.warn(message, { workspaceId, model, ...describeError(error) })
+      throw new UnavailableError(message, 'generation_failed', { model })
     }
     const assessment = coercePrAssessment(extractJson(text))
     if (!assessment) {
@@ -188,48 +176,29 @@ export class PrAssessmentService {
     workspaceId: string,
     userId: string | null,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const scope = await resolveInlineScope(
-      userId === null ? { kind: 'workspace', workspaceId } : { kind: 'user', workspaceId, userId },
-    )
-    const modelProvider = await resolveScopedModelProvider(scope, this.deps)
-    const ref = await resolveInlineBlockModelRef(this.deps, workspaceId, PR_ASSESSOR_AGENT_KIND, {})
-    if (!modelProvider || !ref) {
+    const model = await resolveInlinePrModel(this.deps, workspaceId, userId, PR_ASSESSOR_AGENT_KIND)
+    if (!model) {
       throw new UnavailableError(
         'No model is configured for pull request assessment',
         'model_unavailable',
       )
     }
-    return { modelProvider, ref }
+    return model
   }
+}
 
-  private async repoFor(
-    workspaceId: string,
-    coords: { owner: string; repo: string; provider?: VcsProvider },
-  ) {
-    const resolve = this.deps.resolveRepoFilesForCoords
-    if (!resolve) {
-      throw new UnavailableError(
-        'No source control integration is configured',
-        'vcs_not_configured',
-      )
-    }
-    const context = await resolve(workspaceId, {
-      owner: coords.owner,
-      repo: coords.repo,
-      ...(coords.provider ? { provider: coords.provider } : {}),
-    })
-    if (!context) {
-      throw new NotFoundError('Repository', `${coords.owner}/${coords.repo}`, {
-        reason: 'repo_not_linked',
-      })
-    }
-    return context
-  }
-
-  private asUser<T>(workspaceId: string, userId: string | null, fn: () => T): T {
-    const scope = this.deps.runInitiatorScope
-    return scope ? scope({ workspaceId, initiatedBy: userId }, fn) : fn()
-  }
+/** The assessment call's user prompt over a PR as read. */
+function assessmentPrompt(pr: ReadPr & { owner: string; repo: string; prNumber: number }): string {
+  const { inline, omitted } = partitionPatches(pr.files, PR_ASSESSMENT_INLINE_PATCH_CHARS)
+  // A file the host sent no patch for is as unseen as one cut for the budget.
+  const withheld = pr.files.filter((file) => file.patch === null).map((file) => file.path)
+  return renderPrAssessmentPrompt({
+    pr,
+    body: pr.body?.trim() ? pr.body : null,
+    files: pr.files,
+    inlinePatches: inline,
+    omittedPatchPaths: [...omitted, ...withheld],
+  })
 }
 
 /**
@@ -246,7 +215,10 @@ async function readPr(repo: RepoFiles, provider: VcsProvider, prNumber: number):
   if (!before?.headSha || !before.baseRef) {
     throw new NotFoundError('Pull request', String(prNumber), { reason: 'pr_not_found' })
   }
-  const files = await listChangedFiles(prNumber)
+  const [files, body] = await Promise.all([
+    listChangedFiles(prNumber),
+    repo.getPullRequestBody ? repo.getPullRequestBody(prNumber) : null,
+  ])
   const after = await getPullRequest(prNumber)
   if (after?.headSha !== before.headSha) {
     throw new UnavailableError(
@@ -254,6 +226,5 @@ async function readPr(repo: RepoFiles, provider: VcsProvider, prNumber: number):
       'pr_head_moved',
     )
   }
-  const body = repo.getPullRequestBody ? await repo.getPullRequestBody(prNumber) : null
   return { title: before.title, headSha: before.headSha, baseRef: before.baseRef, body, files }
 }
