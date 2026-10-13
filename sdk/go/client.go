@@ -145,6 +145,8 @@ type Client struct {
 	Kaizen *KaizenService
 	// Guided pull request review: a PR explained, question threads about it, and comment drafts.
 	GuidedReviews *GuidedReviewsService
+	// A pull request scored on the merger's axes, and whether a risk policy would land it.
+	PrAssessments *PrAssessmentsService
 	// The account's directory (workspaces, users, memberships, linked repositories) as snapshots
 	// and a change feed, for keeping an external copy in sync.
 	Directory *DirectoryService
@@ -219,6 +221,7 @@ func New(options Options) (*Client, error) {
 	client.MergeRecords = &MergeRecordsService{client: client}
 	client.Kaizen = &KaizenService{client: client}
 	client.GuidedReviews = &GuidedReviewsService{client: client}
+	client.PrAssessments = &PrAssessmentsService{client: client}
 	client.Directory = &DirectoryService{client: client}
 	client.Keys = &KeysService{client: client}
 	if options.PersonalPassword != "" {

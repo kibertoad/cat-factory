@@ -66,6 +66,7 @@ import { PipelineService } from './modules/pipelines/PipelineService.js'
 import { WorkspaceService } from '@cat-factory/workspaces'
 import type { AssistantModule } from './container/assistant-module.js'
 import type { GuidedReviewModule } from './container/guided-review-module.js'
+import type { PrAssessmentModule } from './container/pr-assessment-module.js'
 import { WorkspaceMemberService } from '@cat-factory/workspaces'
 import { AccountService } from '@cat-factory/workspaces'
 import { DirectoryService } from '@cat-factory/workspaces'
@@ -341,6 +342,7 @@ export type { FoundationalServiceModule, FragmentLibraryModule, SkillLibraryModu
 // other optional module.
 export type { AssistantModule } from './container/assistant-module.js'
 export type { GuidedReviewModule } from './container/guided-review-module.js'
+export type { PrAssessmentModule } from './container/pr-assessment-module.js'
 
 /**
  * The always-present core services every facade wires — the composition root's SPINE. These
@@ -608,6 +610,8 @@ export interface OptionalCoreModules {
   assistant?: AssistantModule
   /** Guided PR review; present when a `guidedReviewRepository` is wired. */
   guidedReview?: GuidedReviewModule
+  /** Public PR assessment; present when the risk-policy library is wired. */
+  prAssessment?: PrAssessmentModule
   /** Present only when the environment integration is configured (see CoreDependencies). */
   environments?: EnvironmentsModule
   /**
