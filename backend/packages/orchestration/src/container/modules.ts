@@ -813,6 +813,11 @@ export function createKaizenModule(deps: CoreDependencies): KaizenModule | undef
     // The routing default, the block-model resolver, the local-mode inline predicate, and the
     // preset's per-kind default model + route order, wired as ONE slice (see the factory).
     ...inlineModelResolutionDeps(deps),
+    // Lets the grader skip a run (rather than fail on the degraded routing default) when the
+    // workspace's Kaizen model can't drive the inline grading call.
+    resolveProviderCapabilities: deps.resolveProviderCapabilities,
+    logger: deps.logger,
+    metrics: deps.operationalMetrics,
   })
   return { service }
 }
