@@ -5,10 +5,12 @@ package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code DirectoryUser} wire model.
+ * @param accounts the {@code accounts} field.
  * @param avatarUrl Always present; {@code null} when the server has no value for it.
  * @param email Always present; {@code null} when the server has no value for it.
  * @param id the {@code id} field.
@@ -16,6 +18,8 @@ import org.jspecify.annotations.Nullable;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record DirectoryUser(
+    @JsonProperty("accounts") List<DirectoryUserAccount> accounts,
+
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("avatarUrl") @Nullable String avatarUrl,
 
@@ -40,10 +44,17 @@ public record DirectoryUser(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable List<DirectoryUserAccount> accounts;
         private @Nullable String avatarUrl;
         private @Nullable String email;
         private @Nullable String id;
         private @Nullable String name;
+
+        /** Set {@code accounts}. */
+        public Builder accounts(@Nullable List<DirectoryUserAccount> accounts) {
+            this.accounts = accounts;
+            return this;
+        }
 
         /** Set {@code avatarUrl}. */
         public Builder avatarUrl(@Nullable String avatarUrl) {
@@ -71,7 +82,7 @@ public record DirectoryUser(
 
         /** Build the {@link DirectoryUser}. */
         public DirectoryUser build() {
-            return new DirectoryUser(avatarUrl, email, id, name);
+            return new DirectoryUser(accounts, avatarUrl, email, id, name);
         }
     }
 }

@@ -581,6 +581,10 @@ expectMutuallyAssignable<
 >()
 expectMutuallyAssignable<sdk.DirectoryUser, v.InferOutput<typeof contracts.directoryUserSchema>>()
 expectMutuallyAssignable<
+  sdk.DirectoryUserAccount,
+  v.InferOutput<typeof contracts.directoryUserAccountSchema>
+>()
+expectMutuallyAssignable<
   sdk.DirectoryAccountMembership,
   v.InferOutput<typeof contracts.directoryAccountMembershipSchema>
 >()
@@ -678,6 +682,7 @@ const ASSERTED_COMPONENTS = [
   'DirectoryWebhookDelivery',
   'DirectoryWorkspace',
   'DirectoryUser',
+  'DirectoryUserAccount',
   'DirectoryAccountMembership',
   'DirectoryWorkspaceMembership',
   'DirectoryRepo',

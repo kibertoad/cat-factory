@@ -505,3 +505,12 @@ the policy's ceilings stay unpublished, as `PublicRiskPolicy` already keeps them
 Additive: one `write` operation and the shapes it carries (`AssessPublicPullRequest`,
 `PublicPrAssessment`, `PublicPrAssessmentPolicy`, `PublicPrAssessmentVerdict`). The call is
 synchronous and persists nothing.
+
+## 1.84.0
+
+A directory `DirectoryUser` gains `accounts`: the GitHub and GitLab accounts the user signed in
+with, each as `{ provider, id, login }`, where `id` is the host's numeric user id. A mirror matches
+people across systems on `(provider, id)`, which survives a rename on the host. Linking such an
+account to a user, or moving it to another user, records a `user` change for each user involved.
+
+Additive. A client built against an older document reads users as before.

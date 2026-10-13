@@ -13,7 +13,25 @@ import type { DrizzleDb } from '../db/client.js'
 /** Advisory-lock class for the feed; the second key is the account. Distinct from every other class. */
 const DIRECTORY_FEED_LOCK_CLASS = 0x6469_7263
 
+/** Advisory-lock class for re-linking one login identity; the second key is `provider:subject`. */
+const IDENTITY_LINK_LOCK_CLASS = 0x6964_6c6b
+
 type Executor = Pick<DrizzleDb, 'execute'>
+
+/**
+ * Serialize the links of one login identity. Taken before the feed lock, it keeps the owner that
+ * `identityOwnerSource` reads at lock time the owner it reads again when appending, so two re-links
+ * of the same subject cannot lock one set of accounts and then append to another.
+ */
+export async function lockIdentityLink(
+  tx: Executor,
+  provider: string,
+  subject: string,
+): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(${IDENTITY_LINK_LOCK_CLASS}, hashtext(${`${provider}:${subject}`}))`,
+  )
+}
 
 /**
  * Take the feed's per-account advisory lock for every account the source names. It is held until
@@ -75,6 +93,18 @@ export function userSource(userId: string): SQL {
   return sql`SELECT account_id, CAST('user' AS TEXT) AS entity_type, CAST(NULL AS TEXT) AS workspace_id,
                     user_id AS entity_id
                FROM memberships WHERE user_id = ${text(userId)}`
+}
+
+/**
+ * The user a login identity belongs to now, once per account, unless that is `exceptUserId`.
+ * Appended before a re-link so the user losing the account is recorded while the row still names them.
+ */
+export function identityOwnerSource(provider: string, subject: string, exceptUserId: string): SQL {
+  return sql`SELECT m.account_id, CAST('user' AS TEXT) AS entity_type, CAST(NULL AS TEXT) AS workspace_id,
+                    m.user_id AS entity_id
+               FROM memberships m JOIN user_identities i ON i.user_id = m.user_id
+              WHERE i.provider = ${text(provider)} AND i.subject = ${text(subject)}
+                AND i.user_id <> ${text(exceptUserId)}`
 }
 
 /** An account membership, plus the member's `user` entity whose visibility it decides. */

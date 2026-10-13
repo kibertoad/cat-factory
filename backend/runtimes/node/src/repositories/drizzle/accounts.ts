@@ -37,7 +37,9 @@ import type {
 import {
   accountMembershipSource,
   appendDirectoryChanges,
+  identityOwnerSource,
   lockDirectoryFeed,
+  lockIdentityLink,
   userSource,
 } from '../directoryFeed.js'
 import {
@@ -45,6 +47,7 @@ import {
   auditPageLimit,
   decodeAuditCursor,
   encodeAuditCursor,
+  isDirectoryAccountProvider,
   rowToAuditEventView,
 } from '@cat-factory/kernel'
 import { and, count, desc, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
@@ -332,7 +335,29 @@ export class DrizzleUserRepository implements UserRepository {
   }
 
   async linkIdentity(identity: UserIdentityRecord): Promise<void> {
-    await this.db
+    if (!isDirectoryAccountProvider(identity.provider)) {
+      await this.upsertIdentity(this.db, identity)
+      return
+    }
+    // A host identity is one of the user's directory accounts, so linking it changes the `user`
+    // entity of the new owner and, when it moves, of the user it is taken from.
+    const previousOwner = identityOwnerSource(identity.provider, identity.subject, identity.userId)
+    const owner = userSource(identity.userId)
+    await this.db.transaction(async (tx) => {
+      const now = Date.now()
+      await lockIdentityLink(tx, identity.provider, identity.subject)
+      await lockDirectoryFeed(tx, sql`${previousOwner} UNION ALL ${owner}`)
+      await appendDirectoryChanges(tx, previousOwner, now)
+      await this.upsertIdentity(tx, identity)
+      await appendDirectoryChanges(tx, owner, now)
+    })
+  }
+
+  private async upsertIdentity(
+    db: Pick<DrizzleDb, 'insert'>,
+    identity: UserIdentityRecord,
+  ): Promise<void> {
+    await db
       .insert(userIdentities)
       .values({
         user_id: identity.userId,
