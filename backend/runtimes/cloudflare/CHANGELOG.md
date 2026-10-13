@@ -1,5 +1,36 @@
 # @cat-factory/worker
 
+## 0.226.0
+
+### Minor Changes
+
+- 58b57cc: A directory `DirectoryUser` carries `accounts`: the GitHub and GitLab accounts the user signed in
+  with, as `{ provider, id, login }` where `id` is the host's numeric user id, so a system mirroring
+  the directory can match people on their host account instead of an email. Linking such an account
+  to a user, or moving it to another user, records a `user` change on the feed for each user
+  involved. Password, Google and OIDC logins are not published. OpenAPI 1.84.0.
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/contracts@0.368.0
+  - @cat-factory/kernel@0.360.0
+  - @cat-factory/server@0.336.0
+  - @cat-factory/agents@0.172.1
+  - @cat-factory/binary-generators@0.3.70
+  - @cat-factory/consensus@0.19.18
+  - @cat-factory/eks@0.1.409
+  - @cat-factory/gates@0.12.6
+  - @cat-factory/gitlab@0.24.6
+  - @cat-factory/integrations@0.176.2
+  - @cat-factory/observability-otel@0.23.63
+  - @cat-factory/orchestration@0.322.1
+  - @cat-factory/prompt-fragments@1.1.66
+  - @cat-factory/spend@0.23.15
+  - @cat-factory/caching@0.20.104
+  - @cat-factory/observability-langfuse@0.11.70
+  - @cat-factory/provider-cloudflare@0.7.564
+
 ## 0.225.2
 
 ### Patch Changes
