@@ -1,5 +1,12 @@
 # @cat-factory/server
 
+## 0.334.1
+
+### Patch Changes
+
+- Updated dependencies [5d586fc]
+  - @cat-factory/mcp-server@0.55.1
+
 ## 0.334.0
 
 ### Minor Changes

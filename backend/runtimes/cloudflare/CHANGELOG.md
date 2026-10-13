@@ -1,5 +1,11 @@
 # @cat-factory/worker
 
+## 0.225.1
+
+### Patch Changes
+
+- @cat-factory/server@0.334.1
+
 ## 0.225.0
 
 ### Minor Changes

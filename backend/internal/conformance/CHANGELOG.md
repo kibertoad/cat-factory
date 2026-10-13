@@ -1,5 +1,11 @@
 # @cat-factory/conformance
 
+## 0.64.6
+
+### Patch Changes
+
+- @cat-factory/server@0.334.1
+
 ## 0.64.5
 
 ### Patch Changes

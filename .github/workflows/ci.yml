@@ -467,6 +467,12 @@ jobs:
       - name: Guard workspace bin scripts
         run: node scripts/check-workspace-bin-scripts.mjs
 
+      # Guard the published SDK packages against pinning each other: a `workspace:*` sibling
+      # publishes as an exact version, and a consumer one release ahead then installs two SDKs.
+      # Its fixtures run in the `node --test` step below. Pure node; no install.
+      - name: Guard SDK dependency ranges
+        run: node scripts/check-sdk-dependency-ranges.mjs
+
       # Guard the version numbers a branch introduces against the npm registry. In practice this
       # gates the RELEASE PR, the only branch that moves a version field. `changeset publish`
       # reports "already published on npm" as a warn and exits 0, and it says that about every
