@@ -834,6 +834,12 @@ export interface Env {
    * the log elsewhere and wants nothing dropped locally.
    */
   AUDIT_EVENT_RETENTION_DAYS?: string
+  /**
+   * Retention, in days, for the directory change feed (`directory_changes`). A directory mirror
+   * offline longer than this reconciles from a snapshot instead of replaying. Default 30; 0
+   * disables pruning. Each account's newest row is kept whatever its age.
+   */
+  DIRECTORY_CHANGE_RETENTION_DAYS?: string
 }
 
 /**

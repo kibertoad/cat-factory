@@ -30,6 +30,7 @@ import {
 import type { ConsensusStrategy } from '~/types/consensus'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 type DraftUnit = { index: number; kind: AgentKind; companionIndex: number | null }
 
@@ -280,7 +281,7 @@ function toggleSaved(id: string) {
   expandedSaved.value = next
 }
 
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 // ---- "Add agent" mini-form -------------------------------------------------
@@ -299,20 +300,12 @@ function createAgent() {
     label: newAgentName.value,
     description: newAgentDesc.value,
   })
-  toast.add({
-    title: t('pipeline.builder.toast.added', { name: agent.label }),
-    color: 'success',
-    icon: 'i-lucide-check',
-  })
+  actionToast.success('pipeline.builder.toast.added', { params: { name: agent.label } })
   addAgentOpen.value = false
 }
 
 function placeholder(what: string) {
-  toast.add({
-    title: t('pipeline.builder.toast.placeholderTitle'),
-    description: what,
-    icon: 'i-lucide-construction',
-  })
+  actionToast.info('pipeline.builder.toast.placeholderTitle', { description: what })
 }
 
 async function save() {
@@ -320,16 +313,13 @@ async function save() {
   try {
     const saved = await pipelines.saveDraft()
     if (saved) {
-      toast.add({
-        title: wasEditing
-          ? t('pipeline.builder.toast.updated', { name: saved.name })
-          : t('pipeline.builder.toast.saved', { name: saved.name }),
-        color: 'success',
-        icon: 'i-lucide-check',
-      })
+      actionToast.success(
+        wasEditing ? 'pipeline.builder.toast.updated' : 'pipeline.builder.toast.saved',
+        { params: { name: saved.name } },
+      )
       ui.builderOpen = false
     } else {
-      toast.add({ title: t('pipeline.builder.toast.addOneFirst'), color: 'warning' })
+      actionToast.error('pipeline.builder.toast.addOneFirst')
     }
   } catch (e) {
     // Through the funnel, so the backend reason (e.g. post-release-health rejected without an
@@ -428,13 +418,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
             <SectionLabel as="h3">
               {{ t('pipeline.builder.agentPalette') }}
             </SectionLabel>
-            <UButton
-              color="primary"
-              variant="soft"
-              size="xs"
-              icon="i-lucide-plus"
-              @click="openAddAgent"
-            >
+            <UButton variant="soft" size="xs" icon="i-lucide-plus" @click="openAddAgent">
               {{ t('pipeline.builder.addAgent') }}
             </UButton>
           </div>
@@ -527,12 +511,12 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
             {{ t(warning.key) }}
           </p>
 
-          <div
+          <EmptyState
             v-if="pipelines.draft.length === 0"
-            class="flex flex-1 items-center justify-center rounded-lg border border-dashed border-muted p-4 text-center text-xs text-dimmed"
-          >
-            {{ t('pipeline.builder.emptyDraft') }}
-          </div>
+            icon="i-lucide-workflow"
+            :title="t('pipeline.builder.emptyDraft')"
+            class="flex-1"
+          />
 
           <ol v-else class="flex-1 space-y-2 pe-1 lg:min-h-0 lg:overflow-y-auto">
             <li
@@ -1243,7 +1227,6 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                        concealed-setting failure. -->
                   <UBadge
                     v-if="p.isDefault"
-                    color="primary"
                     variant="subtle"
                     size="xs"
                     class="shrink-0"
@@ -1347,7 +1330,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   <IconButton
                     v-if="!p.builtin"
                     icon="i-lucide-trash-2"
-                    color="neutral"
+                    color="error"
                     variant="ghost"
                     size="xs"
                     :label="t('pipeline.builder.delete')"
@@ -1396,7 +1379,6 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
           {{ pipelines.editingId ? t('pipeline.builder.cancelEdit') : t('pipeline.builder.clear') }}
         </UButton>
         <UButton
-          color="primary"
           icon="i-lucide-save"
           size="sm"
           :disabled="pipelines.draft.length === 0 || stepsDisallowedByPurpose.length > 0"
@@ -1465,7 +1447,6 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
           {{ t('common.cancel') }}
         </UButton>
         <UButton
-          color="primary"
           icon="i-lucide-plus"
           size="sm"
           :disabled="!newAgentName.trim()"

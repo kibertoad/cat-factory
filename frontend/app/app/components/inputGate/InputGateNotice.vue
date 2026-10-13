@@ -170,7 +170,6 @@ async function resolve(choice: 'recheck' | 'proceed') {
 
         <div v-if="blocking" class="mt-3 flex flex-wrap items-center gap-2">
           <UButton
-            color="primary"
             size="xs"
             icon="i-lucide-refresh-cw"
             :loading="inputGate.resolving"

@@ -450,3 +450,58 @@ Additive: a new enum value and a new set of `details.reason` codes on the existi
 (`attached_pr_unresolvable`, `attached_pr_not_found`, `attached_pr_repo_mismatch`,
 `attached_pr_not_open`, `attached_pr_from_fork`, `attached_pr_base_mismatch`). The pipeline parks
 nowhere, so a plain `write` key can start it with an empty body.
+
+## 1.80.0
+
+Public-API keys belong to an account and may reach every workspace in it or a listed subset.
+`PublicApiKey` and `GET /api/v1/me` gain `workspaceIds` (`null` meaning every workspace), and both
+key-minting bodies accept an optional `workspaceIds`. A workspace-scoped call names its workspace
+in the new `x-cat-factory-workspace` request header.
+
+Additive. Every key that existed before reaches exactly the one workspace it was minted for, so it
+keeps working with no header, and an omitted `workspaceIds` on a mint still produces a key for the
+workspace the request acts on. `workspaceId` stays on both shapes and means the workspace the
+listing, mint or request acted on. What a consumer notices only once it holds a wider key: a call
+that names no workspace is refused with 422 `details.reason: workspace_required`, and a workspace
+outside the key's reach answers 404 `workspace_not_found`. A key can never mint or revoke a key
+reaching further than itself (403 `workspace_reach_exceeded`).
+
+## 1.81.0
+
+`/api/v1/directory/*` is new: an account's workspaces, users, account memberships, workspace
+memberships and linked repositories, as keyset-paged snapshots plus an ordered change feed
+(`GET /api/v1/directory/changes?after=<seq>`), for an integration keeping its own copy in sync.
+
+Additive: six `read` operations and the shapes they carry. The routes are account-scoped and read no
+`x-cat-factory-workspace` header; a key limited to some workspaces sees those workspaces' entities
+and is refused users and account memberships (`403 account_scope_required`). Its feed also
+carries the `workspace` deletion of every board that no longer exists, since deleting a board drops
+the key's grant on it. `ConflictError` reasons gain `cursor_expired`, for a feed cursor older than
+the feed's retention.
+
+The number is 1.81.0 because 1.80.0 went to account-level keys while this branch was in flight.
+
+## 1.82.0
+
+Directory webhooks: `GET /api/v1/directory/webhooks`, `PUT` and `DELETE
+/api/v1/directory/webhooks/{webhookId}` register account-level endpoints the directory change feed
+is pushed to, every couple of minutes, signed like the notification webhooks. The document gains an
+OpenAPI 3.1 `webhooks` section naming every push body: `DirectoryWebhookDelivery`, and the existing
+`NotificationWebhookDelivery`, `RunWebhookDelivery` and `PlatformAlertWebhookDelivery`, which become
+generated types in every client.
+
+Additive. The management operations need an `admin` key that reaches every workspace. Pushes are
+at-least-once; a receiver dedupes on `deliveryId`, and the change feed stays the guarantee of
+completeness.
+
+## 1.83.0
+
+`POST /api/v1/pr-assessments` is new (`client.prAssessments.assess`): a pull request in a linked
+repository scored on the merger's complexity, risk and impact axes, its path-derived change class,
+and whether a risk policy would let it land with no person. The answer is a verdict
+(`within_policy` or `requires_review`, with the merge-decision reason and the exceeded axes), so
+the policy's ceilings stay unpublished, as `PublicRiskPolicy` already keeps them.
+
+Additive: one `write` operation and the shapes it carries (`AssessPublicPullRequest`,
+`PublicPrAssessment`, `PublicPrAssessmentPolicy`, `PublicPrAssessmentVerdict`). The call is
+synchronous and persists nothing.

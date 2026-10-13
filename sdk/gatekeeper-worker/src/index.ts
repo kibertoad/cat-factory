@@ -53,11 +53,8 @@ export {
   type CardDisposition,
   type Delivery,
 } from './webhook/delivery.js'
-export {
-  DEFAULT_MAX_SKEW_MS,
-  verifyDelivery,
-  type VerificationResult,
-} from './webhook/signature.js'
+// Re-exported from the shared verifier so this package's public surface is unchanged.
+export { DEFAULT_MAX_SKEW_MS, verifyDelivery, type VerificationResult } from '@cat-factory/webhooks'
 
 // The Cloudflare OS object model: a second door onto the rooms above, never a fork of them. The
 // workspace discovers a `GatekeeperVendor` entrypoint over a service binding, mints an account,

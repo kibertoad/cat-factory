@@ -16,6 +16,7 @@ type HumanTestRoundOutcome = NonNullable<HumanTestRound['outcome']>
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -223,9 +224,9 @@ const canDestroy = computed(
               {{ t('humanTest.actions.recreate') }}
             </UButton>
             <UButton
-              size="xs"
+              color="error"
               variant="soft"
-              color="neutral"
+              size="xs"
               icon="i-lucide-trash-2"
               :disabled="busy || !canDestroy || !access.canExecuteRuns.value"
               :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
@@ -253,7 +254,7 @@ const canDestroy = computed(
           v-if="working"
           class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-xs text-toned"
         >
-          <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-app-warning-300" />
+          <Spinner class="h-3.5 w-3.5 text-app-warning-300" />
           {{ phase ? t(PHASE_LABEL[phase]) : '' }}
         </p>
 
@@ -281,6 +282,7 @@ const canDestroy = computed(
               class="w-full"
             />
             <UButton
+              variant="soft"
               size="sm"
               color="warning"
               icon="i-lucide-wrench"
@@ -353,7 +355,6 @@ const canDestroy = computed(
         :failure-at="instance?.failure?.occurredAt"
       />
       <UButton
-        color="primary"
         icon="i-lucide-circle-check"
         :loading="busy"
         :disabled="busy || !awaitingHuman || !access.canExecuteRuns.value"

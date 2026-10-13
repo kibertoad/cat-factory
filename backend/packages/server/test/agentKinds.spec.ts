@@ -1,4 +1,11 @@
-import { defaultAgentKindRegistry, mergeKindCapabilities } from '@cat-factory/agents'
+import {
+  defaultAgentKindRegistry,
+  mergeKindCapabilities,
+  NUXT_UI_CAPABILITY_KINDS,
+  nuxtUiSkill,
+  nuxtUiToolServer,
+  registerNuxtUiCapability,
+} from '@cat-factory/agents'
 import type { AgentKindCapabilityView } from '@cat-factory/agents'
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
@@ -6,6 +13,7 @@ import { TOKEN_AUDIENCE, signerFor } from '../src/auth/signing.js'
 import type { AppEnv } from '../src/http/env.js'
 import { agentKindsController } from '../src/modules/agentKinds/AgentKindsController.js'
 import { HttpAgentKindSource } from '../src/persistence/agentKinds.js'
+import { AGENT_KINDS_WIRE_VERSION } from '../src/persistence/agentKindsWire.js'
 
 /**
  * The mothership-mode agent-kind CAPABILITY read, end to end: the real client driving the real
@@ -84,6 +92,15 @@ function sourceOver(payload: unknown) {
   })
 }
 
+/** The one index at which `value` appears in `table`, failing when it appears zero or several times. */
+function onlyIndexOf(table: readonly unknown[], value: unknown): number {
+  const at = table.flatMap((entry, index) =>
+    JSON.stringify(entry) === JSON.stringify(value) ? [index] : [],
+  )
+  expect(at).toHaveLength(1)
+  return at[0]!
+}
+
 describe('mothership-mode agent-kind capability layer', () => {
   it('serves what a deployment ASSIGNED to a built-in kind, which `all()` would not list', async () => {
     // The commonest shape by far, and the one an enumeration over registered kinds misses: nobody
@@ -116,6 +133,122 @@ describe('mothership-mode agent-kind capability layer', () => {
     const [view] = await source.capabilities()
     expect(view!.skills.bundled[0]!.instructions).toBe(PLAYBOOK.instructions)
     expect(view!.toolServers.servers[0]!.transport).toEqual(TRACKER_SERVER.transport)
+  })
+
+  it('serves a definition on several kinds ONCE, and hands every kind the whole body', async () => {
+    // Relations, not totals: the default registry's built-in kinds contribute their own
+    // declarations, which this test does not own.
+    const app = mothership((registry) => {
+      registry.registerSkill(PLAYBOOK)
+      registry.assignSkills('coder', [PLAYBOOK.id])
+      registry.assignSkills('fixer', [PLAYBOOK.id])
+      registry.assignSkills('ci-fixer', [PLAYBOOK.id])
+      registry.registerToolServer(TRACKER_SERVER)
+      registry.assignToolServers('coder', [TRACKER_SERVER.id])
+      registry.assignToolServers('fixer', [TRACKER_SERVER.id])
+    })
+    const wire = (await (
+      await app.request('/internal/agent-kinds', {
+        headers: { authorization: `Bearer ${await machineToken()}` },
+      })
+    ).json()) as {
+      version: number
+      bundledSkills: unknown[]
+      toolServers: unknown[]
+      kinds: {
+        kind: string
+        skills: { bundledRefs: number[] }
+        toolServers: { serverRefs: number[] }
+      }[]
+    }
+    expect(wire.version).toBe(AGENT_KINDS_WIRE_VERSION)
+    const playbookAt = onlyIndexOf(wire.bundledSkills, PLAYBOOK)
+    const trackerAt = onlyIndexOf(wire.toolServers, TRACKER_SERVER)
+    const byKind = new Map(wire.kinds.map((view) => [view.kind, view]))
+    for (const kind of ['coder', 'fixer', 'ci-fixer']) {
+      expect(byKind.get(kind)!.skills.bundledRefs).toContain(playbookAt)
+      // The pre-reference field is GONE, so a node one build behind refuses this reply instead of
+      // reading the indexes as skill definitions.
+      expect(byKind.get(kind)!.skills).not.toHaveProperty('bundled')
+    }
+    expect(byKind.get('coder')!.toolServers.serverRefs).toContain(trackerAt)
+    expect(byKind.get('ci-fixer')!.toolServers.serverRefs).not.toContain(trackerAt)
+
+    const views = new Map((await (await node(app)).capabilities()).map((v) => [v.kind, v]))
+    for (const kind of ['coder', 'fixer', 'ci-fixer']) {
+      expect(views.get(kind)!.skills.bundled).toContainEqual(PLAYBOOK)
+    }
+    expect(views.get('fixer')!.toolServers.servers).toContainEqual(TRACKER_SERVER)
+  })
+
+  it('carries an http server with every optional field, byte for byte', async () => {
+    // Every other server here is stdio. The fields an http server adds (headers, OAuth, secret refs
+    // that become headers) are exactly what a too-strict check would refuse, and a refusal fails
+    // every dispatch on the node.
+    const remote = {
+      id: 'org.remote',
+      label: 'Remote tracker',
+      guidance: 'Search issues before you file one.',
+      transport: {
+        kind: 'http' as const,
+        url: 'https://mcp.example.test',
+        headers: { 'X-Org': 'acme' },
+      },
+      allowedTools: ['search_issues'],
+      harnesses: ['claude-code' as const],
+      secretKeys: [
+        {
+          key: 'ORG_TENANT',
+          header: 'X-Tenant',
+          headerTemplate: '{value}',
+          required: true,
+          usage: 'Tenant id.',
+        },
+      ],
+      oauth: {
+        grant: 'authorization_code' as const,
+        clientId: 'client',
+        authorizationUrl: 'https://auth.example.test/authorize',
+        tokenUrl: 'https://auth.example.test/token',
+        scopes: ['read'],
+      },
+    }
+    const source = await node(
+      mothership((registry) => {
+        registry.registerToolServer(remote)
+        registry.assignToolServers('coder', [remote.id])
+      }),
+    )
+    const coder = (await source.capabilities()).find((view) => view.kind === 'coder')
+    expect(coder!.toolServers.servers).toContainEqual(remote)
+  })
+
+  it('carries the shipped Nuxt UI capability, the case #2269 was opened for', async () => {
+    // Derived from the capability's own kind list, so a wire that drops a kind fails here rather
+    // than leaving that kind to dispatch without its playbook.
+    const source = await node(mothership(registerNuxtUiCapability))
+    const byKind = new Map((await source.capabilities()).map((view) => [view.kind, view]))
+    for (const kind of NUXT_UI_CAPABILITY_KINDS) {
+      expect(byKind.get(kind)?.skills.bundled).toContainEqual(nuxtUiSkill)
+      expect(byKind.get(kind)?.toolServers.servers).toContainEqual(nuxtUiToolServer)
+    }
+  })
+
+  it('keeps two INLINE definitions sharing an id apart, rather than swapping one in', async () => {
+    // Nothing refuses two kinds declaring different inline bodies under one id, so the dedup is by
+    // content: keyed by id, one kind would silently receive the other's playbook.
+    const other = { ...PLAYBOOK, instructions: 'A different playbook.' }
+    const source = await node(
+      mothership((registry) => {
+        registry.assignSkills('coder', [PLAYBOOK])
+        registry.assignSkills('fixer', [other])
+      }),
+    )
+    const byKind = new Map((await source.capabilities()).map((v) => [v.kind, v.skills.bundled]))
+    expect(byKind.get('coder')).toContainEqual(PLAYBOOK)
+    expect(byKind.get('coder')).not.toContainEqual(other)
+    expect(byKind.get('fixer')).toContainEqual(other)
+    expect(byKind.get('fixer')).not.toContainEqual(PLAYBOOK)
   })
 
   it('reports a deployment that assigns NONE as empty, which is the stock product', async () => {
@@ -159,18 +292,133 @@ describe('mothership-mode agent-kind capability layer', () => {
   })
 
   it('THROWS on a well-formed 200 whose payload it cannot read', async () => {
+    const tools = (serverRefs: unknown[] = []) => ({ serverRefs, unknown: [] })
+    const skills = (bundledRefs: unknown[] = []) => ({ bundledRefs, catalog: [], unknown: [] })
+    const coder = (over: object = {}) => ({
+      kind: 'coder',
+      skills: skills(),
+      toolServers: tools(),
+      ...over,
+    })
+    const reply = (over: object) => ({
+      version: AGENT_KINDS_WIRE_VERSION,
+      kinds: [coder()],
+      bundledSkills: [],
+      toolServers: [],
+      ...over,
+    })
     for (const payload of [
       {},
-      { kinds: 'nope' },
-      { kinds: [{ skills: { bundled: [], catalog: [], unknown: [] } }] },
-      { kinds: [{ kind: 'coder', skills: {}, toolServers: { servers: [], unknown: [] } }] },
-      { kinds: [{ kind: 'coder', skills: { bundled: [], catalog: [], unknown: [] } }] },
+      reply({ kinds: 'nope' }),
+      reply({ bundledSkills: undefined }),
+      reply({ toolServers: undefined }),
+      reply({ kinds: [{ skills: skills(), toolServers: tools() }] }),
+      reply({ kinds: [coder({ skills: {} })] }),
+      reply({ kinds: [coder({ toolServers: undefined })] }),
+      // A non-index reference, or one with nothing behind it: either would reach the harness as a
+      // definition with no body.
+      reply({ kinds: [coder({ skills: skills([PLAYBOOK]) })] }),
+      reply({ kinds: [coder({ skills: skills([0]) })] }),
+      reply({ kinds: [coder({ toolServers: tools([0]) })] }),
+      // A definition missing a field the harness writes to disk.
+      reply({ bundledSkills: [{ ...PLAYBOOK, name: undefined }] }),
+      reply({ bundledSkills: [{ ...PLAYBOOK, resources: [{ relPath: 'a.md' }] }] }),
+      reply({ toolServers: [{ id: TRACKER_SERVER.id }] }),
+      reply({ toolServers: [{ ...TRACKER_SERVER, transport: { kind: 'stdio' } }] }),
+      reply({ toolServers: [{ ...TRACKER_SERVER, transport: { kind: 'http' } }] }),
+      reply({ toolServers: [{ ...TRACKER_SERVER, allowedTools: [1] }] }),
+      reply({ toolServers: [{ ...TRACKER_SERVER, secretKeys: [{}] }] }),
+      reply({ toolServers: [{ ...TRACKER_SERVER, secretKeys: [{ key: 'K', header: 5 }] }] }),
+      reply({
+        toolServers: [
+          { ...TRACKER_SERVER, transport: { ...TRACKER_SERVER.transport, env: { A: 1 } } },
+        ],
+      }),
+      reply({
+        toolServers: [
+          { ...TRACKER_SERVER, transport: { kind: 'http', url: 'https://x', headers: [] } },
+        ],
+      }),
+      reply({ toolServers: [{ ...TRACKER_SERVER, oauth: { grant: 'implicit', clientId: 'c' } }] }),
+      reply({ toolServers: [{ ...TRACKER_SERVER, guidance: 7 }] }),
+      // No version, and a kind in NEITHER shape: unreadable, not a version mismatch.
+      { kinds: [{ kind: 'coder' }] },
+      // One kind referencing two definitions with one id, or one definition twice: the harness
+      // would write one skill directory or register one MCP server name twice.
+      reply({
+        bundledSkills: [PLAYBOOK, { ...PLAYBOOK, instructions: 'other' }],
+        kinds: [coder({ skills: skills([0, 1]) })],
+      }),
+      reply({ toolServers: [TRACKER_SERVER], kinds: [coder({ toolServers: tools([0, 0]) })] }),
+      reply({ kinds: [coder({ skills: skills([-1]) })] }),
+      // A catalog ref with no id would reach the resolver as skill `undefined`.
+      reply({ kinds: [coder({ skills: { bundledRefs: [], catalog: [{}], unknown: [] } })] }),
+      reply({ kinds: [coder({ skills: { bundledRefs: [], catalog: [], unknown: [1] } })] }),
     ]) {
       await expect(sourceOver(payload).capabilities()).rejects.toMatchObject({
         code: 'unavailable',
         details: { reason: 'agent_kinds_unreachable' },
       })
     }
+  })
+
+  it('names a reply of another version as a version mismatch, not as damage', async () => {
+    // The unversioned reply before this one, with a kind in its inline shape, and a reply from a
+    // later build. Refused like any unreadable reply, but the cause says what to fix.
+    const inline = {
+      kinds: [
+        {
+          kind: 'coder',
+          skills: { bundled: [PLAYBOOK], catalog: [], unknown: [] },
+          toolServers: { servers: [TRACKER_SERVER], unknown: [] },
+        },
+      ],
+    }
+    const later = {
+      version: AGENT_KINDS_WIRE_VERSION + 1,
+      kinds: [],
+      bundledSkills: [],
+      toolServers: [],
+    }
+    for (const [payload, received] of [
+      [inline, null],
+      [later, AGENT_KINDS_WIRE_VERSION + 1],
+    ] as const) {
+      await expect(sourceOver(payload).capabilities()).rejects.toMatchObject({
+        code: 'unavailable',
+        details: {
+          reason: 'agent_kinds_unreachable',
+          cause: 'mothership_version_mismatch',
+          expected: AGENT_KINDS_WIRE_VERSION,
+          received,
+        },
+      })
+    }
+  })
+
+  it("reads an older mothership's EMPTY layer as empty, since it carries nothing to misread", async () => {
+    // The stock product's reply, so a node updated before its mothership keeps dispatching there.
+    await expect(sourceOver({ kinds: [] }).capabilities()).resolves.toEqual([])
+  })
+
+  it('names the field and the definition when one definition is malformed', async () => {
+    // One malformed definition refuses the whole layer, so the refusal must say which one.
+    const payload = {
+      version: AGENT_KINDS_WIRE_VERSION,
+      kinds: [],
+      bundledSkills: [],
+      toolServers: [
+        { ...TRACKER_SERVER, id: 'org.fine' },
+        { ...TRACKER_SERVER, transport: { ...TRACKER_SERVER.transport, env: { PORT: 3000 } } },
+      ],
+    }
+    await expect(sourceOver(payload).capabilities()).rejects.toMatchObject({
+      details: {
+        reason: 'agent_kinds_unreachable',
+        field: 'toolServers.1.transport.env.PORT',
+        definitionId: TRACKER_SERVER.id,
+      },
+    })
   })
 
   it('THROWS on a transport failure, with the cause scrubbed onto the details', async () => {

@@ -114,6 +114,10 @@ export async function seedTeamScenario(
     principals?: TeamPrincipalSpec[]
     /** Also seed a second, empty board in the account (see the backend seam's own note). */
     spareBoard?: boolean
+    /** Leave the primary board without a repository-host connection (see the backend seam). */
+    githubConnected?: boolean
+    /** Load the sample architecture onto the primary board (default: true; see the backend seam). */
+    seed?: boolean
   },
 ): Promise<TeamScenario> {
   const res = await request.post(`${CONTROL_URL}/team-seed`, { data: spec })
@@ -387,15 +391,22 @@ async function json<T>(res: {
 /**
  * Create a workspace seeded with the sample architecture (frames + the runnable `task_login`).
  *
- * Also connects the (faked) GitHub App for the new workspace. The e2e backend runs with the
- * GitHub App faked ON (see `src/fakeGitHub.ts`), and the SPA HARD-GATES the board behind a
- * `GitHubOnboarding` screen whenever the App is enabled backend-side but the workspace has no
- * installation (`pages/index.vue` — `needsGitHubInstall`). So a GitHub-connected workspace is
- * now the e2e baseline: without this seed EVERY board-opening spec would sit on the onboarding
- * gate and `openBoard` would time out. Seeding it here (the single workspace factory every spec
- * and the `seededBoard` fixture route through) keeps the board reachable; it adds NO board block
- * (only the installation + repo/branch projection rows), so the seeded architecture is unchanged.
- * Idempotent, so a spec that also calls `seedGitHub` explicitly (e.g. `github.spec.ts`) is safe.
+ * The recipe lives in ONE place, the control channel's `/seeded-workspace` (`src/testServer.ts`), so
+ * this factory and a developer seeding a board from a shell (README, "Running the SPA against the
+ * e2e backend") cannot drift apart. Besides the board it:
+ *
+ * - connects the (faked) GitHub App. The e2e backend runs with the App faked ON (see
+ *   `src/fakeGitHub.ts`), and the SPA HARD-GATES the board behind a `GitHubOnboarding` screen
+ *   whenever the App is enabled backend-side but the workspace has no installation
+ *   (`pages/index.vue`, `needsGitHubInstall`). Without it EVERY board-opening spec would sit on the
+ *   onboarding gate and `openBoard` would time out. It adds NO board block (only the installation +
+ *   repo/branch projection rows), and it is idempotent, so a spec that also calls `seedGitHub`
+ *   explicitly (e.g. `github.spec.ts`) is safe.
+ * - records `infraless` as the default test-environment provisioning mechanism, so
+ *   `DefaultTestEnvBanner` (an advisory top overlay that would intercept clicks on the board
+ *   chrome the specs drive) legitimately doesn't fire. `infraless` is what this backend really
+ *   does: e2e fakes the agent executor and wires no environment provider. A spec that wants to
+ *   drive the banner creates its workspace directly and records no choice.
  */
 export async function createSeededWorkspace(
   request: APIRequestContext,
@@ -406,22 +417,11 @@ export async function createSeededWorkspace(
    */
   name?: string,
 ): Promise<WorkspaceSnapshot> {
-  const snapshot = await json<WorkspaceSnapshot>(
-    await request.post(`${BACKEND_URL}/workspaces`, {
-      data: { seed: true, ...(name ? { name } : {}) },
-    }),
-  )
-  await seedGitHub(request, snapshot.workspace.id)
-  // Record a default test-environment provisioning mechanism, so `DefaultTestEnvBanner` — an
-  // advisory top overlay that would otherwise render on every seeded board and intercept clicks
-  // on the board chrome the specs drive — legitimately doesn't fire. `infraless` is the ACCURATE
-  // answer for this backend, not a mute button: e2e fakes the agent executor and wires no
-  // environment provider, so its services genuinely stand up no environment. A future spec that
-  // wants to drive the banner creates its workspace directly and records no choice.
-  await request.put(`${BACKEND_URL}/workspaces/${snapshot.workspace.id}/settings`, {
-    data: { defaultProvisionType: 'infraless' },
-  })
-  return snapshot
+  const res = await request.post(`${CONTROL_URL}/seeded-workspace`, { data: name ? { name } : {} })
+  // The control route's status names the failing layer (502: the app, 500: the GitHub seed), so
+  // report it as the control channel's answer rather than through `json()`'s "backend" prefix.
+  if (!res.ok()) throw new Error(`seeded-workspace control ${res.status()}: ${await res.text()}`)
+  return (await res.json()) as WorkspaceSnapshot
 }
 
 /**
@@ -780,6 +780,10 @@ export async function startBootstrap(
  * always a first-ever launch. `role` defaults to `engineer`, the full surface, so a spec asserting
  * anything else drives the product every other spec drives; `'unanswered'` opts back into the
  * first-run behaviour for the specs whose subject IS one of those questions.
+ *
+ * `view` is which of the board's two views the SPA opens on. A person who has not chosen lands on
+ * the QUEUE, but almost every spec drives the canvas, so the default here is `board`; a spec about
+ * the queue passes `'queue'` (or drives the switch itself).
  */
 export async function pinWorkspace(
   page: Page,
@@ -787,10 +791,12 @@ export async function pinWorkspace(
   opts: {
     tutorial?: 'accepted' | 'declined' | 'unanswered'
     role?: 'engineer' | 'product-manager' | 'designer' | 'unanswered'
+    view?: 'queue' | 'board'
   } = {},
 ): Promise<void> {
   await answerTutorialPrompt(page, tutorialAnswer(opts.tutorial))
   await answerRolePrompt(page, opts.role === 'unanswered' ? null : (opts.role ?? 'engineer'))
+  await openOnView(page, opts.view ?? 'board')
   await page.addInitScript(
     ({ id, dismissKey, areas }) => {
       window.localStorage.setItem('workspace', JSON.stringify({ workspaceId: id }))
@@ -876,6 +882,20 @@ export async function answerRolePrompt(
 }
 
 /**
+ * Open the SPA on one of the board's two views: the queue or the canvas. The choice is the
+ * person's own and persisted (store `workView`), and COOKIE-backed like the other first-run state.
+ */
+export async function openOnView(page: Page, view: 'queue' | 'board'): Promise<void> {
+  await page.context().addCookies([
+    {
+      name: 'workView',
+      value: encodeURIComponent(JSON.stringify({ storedView: view })),
+      url: `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`,
+    },
+  ])
+}
+
+/**
  * Like {@link pinWorkspace}, but ALSO seed a signed session so the SPA boots authenticated as a
  * specific user, pinned to a specific board (the workspace-RBAC spec).
  *
@@ -918,6 +938,7 @@ export async function pinBoardForUser(
 ): Promise<void> {
   await answerTutorialPrompt(page, 'declined')
   await answerRolePrompt(page, 'engineer')
+  await openOnView(page, 'board')
   const frontendUrl = `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`
   const cookie = (name: string, value: unknown) => ({
     name,

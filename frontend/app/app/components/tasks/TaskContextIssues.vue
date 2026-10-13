@@ -18,13 +18,14 @@ import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Block } from '~/types/domain'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ block: Block }>()
 
 const { t } = useI18n()
 const tasks = useTasksStore()
 const ui = useUiStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { linkPending, presentLinkFailures } = useContextLinking()
 
 onMounted(() => {
@@ -78,7 +79,7 @@ async function attach(item: PendingContext) {
   try {
     const failures = await linkPending(props.block.id, [item])
     if (failures.length) presentLinkFailures(failures, props.block.id)
-    else toast.add({ title: t('tasks.contextIssues.attached'), icon: 'i-lucide-link' })
+    else actionToast.success('tasks.contextIssues.attached')
   } finally {
     linking.value = false
   }
@@ -151,8 +152,6 @@ async function attach(item: PendingContext) {
         </UBadge>
       </ULink>
     </div>
-    <p v-else class="text-2xs text-dimmed">
-      {{ emptyHint }}
-    </p>
+    <EmptyState v-else compact icon="i-lucide-ticket" :title="emptyHint" />
   </InspectorSection>
 </template>

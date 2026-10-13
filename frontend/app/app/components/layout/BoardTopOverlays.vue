@@ -33,10 +33,15 @@ import DefaultTestEnvBanner from '~/components/layout/DefaultTestEnvBanner.vue'
 
 // The live-stream state the connection strip renders. Passed down rather than resolved here:
 // the page owns the single stream instance, and creating another would open a second socket.
+//
+// `inFlow` is the queue view's placement: the same region, laid out in the page flow above the
+// queue's columns instead of floating over a canvas, and without the toolbar, which is the
+// canvas's own chrome (zoom, fit, lane view).
 defineProps<{
   connected: boolean
   everConnected: boolean
   connectionFailed: boolean
+  inFlow?: boolean
 }>()
 
 const ui = useUiStore()
@@ -44,7 +49,8 @@ const ui = useUiStore()
 
 <template>
   <div
-    class="pointer-events-none absolute inset-x-0 top-0 z-40 flex flex-col items-center gap-2 px-4 pt-3"
+    class="pointer-events-none z-40 flex flex-col items-center gap-2 px-4"
+    :class="inFlow ? 'relative pt-3' : 'absolute inset-x-0 top-0 pt-3'"
   >
     <!-- Compact-viewport nav trigger: the SideBar is an off-canvas drawer below lg, so surface
          a hamburger to open it. Out of the column's flow (it is a corner control, not a
@@ -62,7 +68,7 @@ const ui = useUiStore()
 
     <!-- FIRST, and deliberately so: the toolbar is standing board chrome, and a tour step
          anchors it. Below the advisories it would move every time one appears or clears. -->
-    <BoardToolbar />
+    <BoardToolbar v-if="!inFlow" />
 
     <!-- Then the advisories, most urgent first. Ordering is by what the user loses by not
          reading it now, not by how loud the card is.

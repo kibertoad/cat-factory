@@ -1,5 +1,173 @@
 # @cat-factory/node-server
 
+## 0.239.1
+
+### Patch Changes
+
+- @cat-factory/server@0.334.1
+
+## 0.239.0
+
+### Minor Changes
+
+- 04c1587: Public-API keys belong to an account and reach every workspace in it or a chosen list. A
+  workspace-scoped `/api/v1` call names its workspace in the `x-cat-factory-workspace` header, which a
+  key reaching one workspace may omit, so every existing key keeps working unchanged. `PublicApiKey`
+  and `GET /api/v1/me` gain `workspaceIds`; both mint bodies accept it. Widening a key past the board
+  it is minted from takes an account admin, and a key can never mint or revoke one reaching further
+  than itself. The header is on the CORS allow-list, so a browser client can send it. The four SDK
+  clients take a workspace option. OpenAPI 1.80.0.
+  
+  Storage break (internal): `public_api_keys.workspace_id` is replaced by `all_workspaces` plus the
+  `public_api_key_workspaces` grant table (D1 `0108`, Drizzle `20261009143721` and `20261009143724`),
+  backfilled from the old column. The account cap is 200 live keys, where it was 50 per workspace,
+  and a key left with no workspace after its boards were deleted holds no slot.
+- f1b6c9a: `/api/v1/directory/*`: an account's workspaces, users, account memberships, workspace memberships
+  and linked repositories as keyset-paged snapshots, plus an ordered change feed whose changes carry
+  each entity's current state (or `null` once it is gone), for an integration keeping its own copy in
+  sync. A feed cursor older than the new `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30) is refused
+  with the new `cursor_expired` conflict reason. OpenAPI 1.81.0.
+  
+  Internal: the change-row mapping both facades share moves to kernel's `directoryChangeFromRow`.
+  The slice 1 `DirectoryChangeRepository` port becomes `DirectoryRepository` and joins
+  `CoreDependencies` as a required member, with its reads on the mothership allow-list.
+- 20d4f01: Directory webhooks: `/api/v1/directory/webhooks` registers account-level endpoints that the
+  directory change feed is pushed to every couple of minutes, signed like the notification webhooks.
+  Each push is a `directory.changed` page of hydrated changes, or `directory.resync_required` for an
+  endpoint that fell behind the feed's retention. Delivery is a sweep on both facades (the Worker's
+  frequent cron, a Node timer) that takes a per-endpoint lease before a push and moves the endpoint's
+  position only after the push succeeds, so pushes are at-least-once, arrive in feed order, and are
+  never doubled by concurrent sweepers; a lease whose sweeper died expires and the page is sent again. The spec gains an OpenAPI 3.1 `webhooks` section naming every push body, so
+  `DirectoryWebhookDelivery`, `NotificationWebhookDelivery`, `RunWebhookDelivery` and
+  `PlatformAlertWebhookDelivery` become generated types in every client.
+  OpenAPI 1.82.0. New migrations: D1 `0109_directory_webhooks.sql`, Drizzle
+  `20261010113115_directory_webhooks`.
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+  - @cat-factory/kernel@0.359.0
+  - @cat-factory/integrations@0.176.0
+  - @cat-factory/server@0.334.0
+  - @cat-factory/orchestration@0.321.0
+  - @cat-factory/agents@0.171.7
+  - @cat-factory/binary-generators@0.3.68
+  - @cat-factory/consensus@0.19.16
+  - @cat-factory/eks@0.1.407
+  - @cat-factory/gates@0.12.4
+  - @cat-factory/gitlab@0.24.4
+  - @cat-factory/observability-otel@0.23.61
+  - @cat-factory/prompt-fragments@1.1.64
+  - @cat-factory/spend@0.23.13
+  - @cat-factory/caching@0.20.102
+  - @cat-factory/observability-langfuse@0.11.68
+  - @cat-factory/provider-bedrock@0.7.561
+  - @cat-factory/provider-cloudflare@0.7.562
+  - @cat-factory/provider-s3@0.2.475
+
+## 0.238.2
+
+### Patch Changes
+
+- Updated dependencies [91dedb6]
+  - @cat-factory/contracts@0.365.0
+  - @cat-factory/server@0.333.0
+  - @cat-factory/integrations@0.175.3
+  - @cat-factory/agents@0.171.6
+  - @cat-factory/binary-generators@0.3.67
+  - @cat-factory/consensus@0.19.15
+  - @cat-factory/eks@0.1.406
+  - @cat-factory/gates@0.12.3
+  - @cat-factory/gitlab@0.24.3
+  - @cat-factory/kernel@0.358.1
+  - @cat-factory/observability-otel@0.23.60
+  - @cat-factory/orchestration@0.320.4
+  - @cat-factory/prompt-fragments@1.1.63
+  - @cat-factory/spend@0.23.12
+  - @cat-factory/provider-bedrock@0.7.560
+  - @cat-factory/provider-cloudflare@0.7.561
+  - @cat-factory/caching@0.20.101
+  - @cat-factory/observability-langfuse@0.11.67
+  - @cat-factory/provider-s3@0.2.474
+
+## 0.238.1
+
+### Patch Changes
+
+- Updated dependencies [22b6812]
+  - @cat-factory/server@0.332.3
+  - @cat-factory/agents@0.171.5
+  - @cat-factory/orchestration@0.320.3
+  - @cat-factory/binary-generators@0.3.66
+  - @cat-factory/consensus@0.19.14
+  - @cat-factory/provider-bedrock@0.7.559
+  - @cat-factory/provider-cloudflare@0.7.560
+
+## 0.238.0
+
+### Minor Changes
+
+- 5ec1794: Record a per-account directory change feed. Every write to a user, account membership, workspace,
+  workspace membership or repo projection row now appends a `directory_changes` row naming the entity,
+  in the same transaction (Postgres) or batch (D1), with a per-account `seq` whose commit order equals
+  its numeric order. New migrations: D1 `0107_directory_changes.sql` and Drizzle
+  `20261009141534_directory_changes`. Nothing reads the feed yet; the public directory API and
+  webhooks follow (docs/initiatives/directory-sync.md).
+  
+  The local `linkRepo` helper now writes the repo through `DrizzleRepoProjectionRepository`, so
+  re-linking a repo keeps its monorepo flag instead of resetting it.
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/contracts@0.364.0
+  - @cat-factory/kernel@0.358.0
+  - @cat-factory/agents@0.171.4
+  - @cat-factory/binary-generators@0.3.66
+  - @cat-factory/consensus@0.19.13
+  - @cat-factory/eks@0.1.405
+  - @cat-factory/gates@0.12.2
+  - @cat-factory/gitlab@0.24.2
+  - @cat-factory/integrations@0.175.2
+  - @cat-factory/observability-otel@0.23.59
+  - @cat-factory/orchestration@0.320.2
+  - @cat-factory/prompt-fragments@1.1.62
+  - @cat-factory/server@0.332.2
+  - @cat-factory/spend@0.23.11
+  - @cat-factory/caching@0.20.100
+  - @cat-factory/observability-langfuse@0.11.66
+  - @cat-factory/provider-bedrock@0.7.558
+  - @cat-factory/provider-cloudflare@0.7.559
+  - @cat-factory/provider-s3@0.2.473
+
+## 0.237.1
+
+### Patch Changes
+
+- Updated dependencies [1a42f34]
+- Updated dependencies [3c04dfa]
+  - @cat-factory/kernel@0.357.1
+  - @cat-factory/server@0.332.1
+  - @cat-factory/agents@0.171.3
+  - @cat-factory/binary-generators@0.3.65
+  - @cat-factory/caching@0.20.99
+  - @cat-factory/consensus@0.19.12
+  - @cat-factory/eks@0.1.404
+  - @cat-factory/gates@0.12.1
+  - @cat-factory/gitlab@0.24.1
+  - @cat-factory/integrations@0.175.1
+  - @cat-factory/observability-langfuse@0.11.65
+  - @cat-factory/observability-otel@0.23.58
+  - @cat-factory/orchestration@0.320.1
+  - @cat-factory/prompt-fragments@1.1.61
+  - @cat-factory/provider-bedrock@0.7.557
+  - @cat-factory/provider-cloudflare@0.7.558
+  - @cat-factory/provider-s3@0.2.472
+  - @cat-factory/spend@0.23.10
+
 ## 0.237.0
 
 ### Minor Changes

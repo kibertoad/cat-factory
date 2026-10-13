@@ -107,7 +107,7 @@ export async function requireScopedRun<E extends AppEnv>(
 /** The error a gate rejected with, kept as DATA so each handler emits its own typed `c.json`. */
 export type GateFailure = {
   fail: {
-    status: 401 | 403 | 404 | 428 | 503
+    status: 401 | 403 | 404 | 422 | 428 | 503
     code: string
     message: string
     /**

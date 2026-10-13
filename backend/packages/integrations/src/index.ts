@@ -505,9 +505,12 @@ export {
 } from './modules/providers/ApiKeyService.js'
 export {
   PublicApiKeyService,
+  keyReaches,
+  reachCovers,
   scopeSatisfies,
   type PublicApiKeyServiceDependencies,
   type PublicApiKeyAuth,
+  type PublicApiKeyIdentity,
   type IssuedPublicApiKey,
 } from './modules/publicApi/PublicApiKeyService.js'
 export {
@@ -760,3 +763,9 @@ export {
   toBase64,
   toBase64Url,
 } from './modules/shared/base64.js'
+export {
+  DIRECTORY_WEBHOOK_CIPHER_INFO,
+  DirectoryWebhookService,
+  type DirectoryWebhookServiceDependencies,
+  type DirectoryWebhookSweepResult,
+} from './modules/directoryWebhook/DirectoryWebhookService.js'

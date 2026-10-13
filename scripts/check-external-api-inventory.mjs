@@ -402,6 +402,12 @@ const CLASSIFICATION = [
     reason: 'a deployment-supplied environment provider speaking OUR contract',
   },
   {
+    path: 'backend/packages/integrations/src/modules/directoryWebhook/',
+    kind: 'internal',
+    reason:
+      'outbound directory pushes to a subscriber endpoint, on the webhook contract we publish',
+  },
+  {
     path: 'backend/packages/integrations/src/modules/notificationWebhook/',
     kind: 'internal',
     reason: 'outbound delivery to a subscriber endpoint, on the webhook contract we publish',

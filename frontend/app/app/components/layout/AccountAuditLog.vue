@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { AuditEventWire } from '@cat-factory/contracts'
 import { actorLabel, describeEvent } from './AccountAuditLog.logic'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // The account audit log: who did what, when, for the privileged actions an account admin is
 // answerable for. Read-only by construction — the store exposes no mutation and the backend has
@@ -109,9 +110,16 @@ function timestamp(at: number): string {
       <span class="text-muted">{{ loadError }}</span>
     </p>
 
-    <p v-else-if="events.length === 0 && !loading" class="text-muted">
-      {{ t('layout.auditLog.empty') }}
-    </p>
+    <div v-else-if="events.length === 0 && loading" class="space-y-2">
+      <USkeleton v-for="i in 3" :key="i" class="h-14 w-full" />
+    </div>
+
+    <EmptyState
+      v-else-if="events.length === 0"
+      compact
+      icon="i-lucide-scroll-text"
+      :title="t('layout.auditLog.empty')"
+    />
 
     <ol v-else class="space-y-2" data-testid="audit-log-list">
       <li

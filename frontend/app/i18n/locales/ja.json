@@ -52,7 +52,6 @@
     }
   },
   "common": {
-    "loading": "読み込み中…",
     "save": "保存",
     "cancel": "キャンセル",
     "retry": "再試行",
@@ -151,7 +150,8 @@
     "reports": "レポート",
     "foundationalServices": "基盤サービス",
     "tutorials": "チュートリアル",
-    "help": "ヘルプ"
+    "help": "ヘルプ",
+    "setupChecklist": "セットアップ チェックリスト"
   },
   "board": {
     "toast": {
@@ -732,7 +732,8 @@
         "delegated_claim_missing": "このステップには確認できる外部の処理がありません",
         "thread_busy": "このスレッドはまだ回答中です",
         "draft_conflict": "この下書きは変更されています",
-        "session_stale": "プルリクエストが更新されています"
+        "session_stale": "プルリクエストが更新されています",
+        "cursor_expired": "変更フィードがこのカーソルを過ぎました"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -792,7 +793,8 @@
         "delegated_claim_missing": "外部エグゼキューターに何を送ったかという実行の記録が失われているため、ポーリングする対象がありません。エグゼキューター自体に問題はありません。実行を再読み込みし、まだ止まったままならステップを再実行してください。",
         "thread_busy": "このスレッドの前の質問にまだ回答がありません。回答を待つか、別のスレッドで質問してください。",
         "draft_conflict": "読み込んだ後に、このコメントの下書きが編集、投稿、または破棄されました。下書きを再読み込みして、もう一度変更してください。",
-        "session_stale": "このレビューの準備後に新しいコミットが追加されたため、下書きが誤った行を指している可能性があります。レビューを更新し、下書きを確認してから投稿してください。"
+        "session_stale": "このレビューの準備後に新しいコミットが追加されたため、下書きが誤った行を指している可能性があります。レビューを更新し、下書きを確認してから投稿してください。",
+        "cursor_expired": "このカーソル以降の変更はもう保持されていません。ディレクトリの新しいスナップショットを取得し、その位置からフィードを追ってください。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",
@@ -831,6 +833,9 @@
       "title": "このビューを読み込めませんでした",
       "body": "コードの読み込みに失敗しました。多くの場合、このタブを開いたままアプリが更新され、このページが要求しているファイルがサーバー上に存在しなくなったことが原因です。再読み込みして最新版を取得してください。",
       "reload": "再読み込み"
+    },
+    "reported": {
+      "description": "処理は実行され、失敗を報告しました。詳細を表示すると内容を確認できます。"
     }
   },
   "personalSubscriptions": {
@@ -1848,8 +1853,6 @@
     "exportJson": "JSON をエクスポート",
     "exportHint": "この実行の LLM 向け JSON エクスポートをダウンロード",
     "closeEsc": "閉じる (Esc)",
-    "loadingActivity": "モデルアクティビティを読み込み中…",
-    "loadingContext": "提供されたコンテキストを読み込み中…",
     "noCalls": "この実行で記録されたモデル呼び出しはありません。",
     "noContext": "この実行で保存されたエージェントコンテキストはありません。ワークスペースで「エージェントコンテキストを完全保存」が有効な場合、ディスパッチごとに記録されます。",
     "contextError": "提供されたコンテキストを読み込めませんでした。",
@@ -1941,7 +1944,6 @@
       "details": "詳細"
     },
     "webSearch": "ウェブ検索",
-    "loadingSearch": "ウェブ検索を読み込み中…",
     "noSearch": "この実行のウェブ検索は記録されていません。クエリはウェブ検索の実行時、かつワークスペースで「エージェントコンテキスト全体を保存」が有効な場合に記録されます。",
     "search": {
       "available": "利用可能",
@@ -1980,7 +1982,6 @@
     "toolCalls": {
       "title": "ツール呼び出し",
       "subtitle": "エージェントが行ったことを、行った順に",
-      "loading": "ツール呼び出しを読み込んでいます…",
       "error": "ツール呼び出しを読み込めませんでした。",
       "none": "この実行で記録されたツール呼び出しはありません。",
       "noneMatching": "このフィルターに一致するツール呼び出しはありません。",
@@ -2001,7 +2002,6 @@
     "title": "プラットフォームの可観測性",
     "refresh": "更新",
     "close": "閉じる",
-    "loading": "プラットフォームの状態を読み込み中…",
     "retry": "再試行",
     "window": {
       "oneHour": "過去1時間",
@@ -2082,7 +2082,6 @@
   "reports": {
     "title": "レポート",
     "refresh": "更新",
-    "loading": "レポートを読み込んでいます…",
     "retry": "再試行",
     "error": "レポートを読み込めませんでした。",
     "period": "{from} 〜 {to}",
@@ -2479,7 +2478,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "他に {count} 件（非表示）",
-      "failingRunGone": "この実行はすでに読み込まれておらず、開けるタスクもありません。"
+      "failingRunGone": "この実行はすでに読み込まれておらず、開けるタスクもありません。",
+      "goTo": {
+        "review": "レビュー",
+        "answer": "回答",
+        "test": "テスト",
+        "confirm": "確認",
+        "triage": "仕分け",
+        "choose": "選択",
+        "open": "開く"
+      }
     },
     "aiProvidersBanner": {
       "setup": {
@@ -2560,6 +2568,18 @@
         "action": "接続を確認"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "このボードではまだエージェントを実行できません。ランナープールが接続されていません。",
+        "outage": "現在エージェントを実行できません。このボードのランナープールに接続できません。"
+      },
+      "owner": {
+        "workspace_admin": "ボードの管理者が解決できます。",
+        "account_admin": "アカウントの管理者が解決できます。",
+        "operator": "解決できるのはデプロイの運用者だけです。"
+      },
+      "fullSurface": "ご自身で解決できます。サイドバー上部でロールを切り替えてください。"
+    },
     "spendWarningBanner": {
       "title": "支出上限に達したため、エージェントの実行を一時停止しました",
       "body": "今月のトークン支出が設定された予算に達したため、これ以上のコストを避けるために実行中のパイプラインを一時停止しました。来月に予算がリセットされると、または上限を引き上げると、実行は自動的に再開されます。",
@@ -2637,7 +2657,10 @@
         "toggleUiMode": "インターフェースモードを切り替え",
         "chooseRole": "役割を変更",
         "foundationalServices": "基盤サービス",
-        "notificationSettings": "通知ルーティングを管理"
+        "notificationSettings": "通知ルーティングを管理",
+        "setupChecklist": "セットアップ チェックリスト",
+        "queueView": "キュー ビューを開く",
+        "boardView": "ボード ビューを開く"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
@@ -2665,7 +2688,11 @@
         "chooseRole": "役割 ロール エンジニア プロダクトマネージャー デザイナー 簡易表示",
         "tutorial": "チュートリアル ツアー ガイド ヘルプ 使い方 オンボーディング",
         "foundationalServices": "共通機能 プラットフォーム サービス api コントラクト openapi カタログ",
-        "notificationSettings": "通知 メール ルーティング チャネル 受信箱"
+        "notificationSettings": "通知 メール ルーティング チャネル 受信箱",
+        "setupChecklist": "セットアップ チェックリスト setup ランナー モデル github ストレージ 環境",
+        "queueView": "キュー ビュー 対応待ち 一覧",
+        "boardView": "ボード キャンバス マップ ビュー 計画",
+        "describeWork": "新しい作業 説明 タスク 追加 作成 機能 バグ"
       }
     },
     "integrationsHub": {
@@ -2923,7 +2950,6 @@
         "intro": "各プリセットは全エージェントに {baseModel} を設定し、エージェントごとの個別上書きも可能です。個々のタスクにピン留めしたモデルはプリセットを上書きします。",
         "introBaseModel": "ベースモデル",
         "newPreset": "新規プリセット",
-        "loadingCatalog": "モデルカタログを読み込み中…",
         "default": "デフォルト",
         "setDefaultTitle": "ワークスペースのデフォルトに設定",
         "editTitle": "プリセットを編集",
@@ -2932,7 +2958,8 @@
         "basePrefix": "ベース:",
         "overrideCount": "{count} 件の上書き | {count} 件の上書き",
         "empty": "プリセットはまだありません。1 つ作成してモデルをエージェントに割り当てましょう。",
-        "customRouteOrder": "ルート順をカスタム設定"
+        "customRouteOrder": "ルート順をカスタム設定",
+        "catalogFailed": "モデルカタログが読み込まれませんでした。再試行するとプリセットが表示されます。"
       },
       "editor": {
         "useBaseModel": "ベースモデルを使用",
@@ -2952,7 +2979,8 @@
         "deleteFailed": "プリセットを削除できませんでした",
         "nameRequiredTitle": "名前が必要です",
         "nameRequiredBody": "プリセットに名前を付けてください。",
-        "saveFailed": "プリセットを保存できませんでした"
+        "saveFailed": "プリセットを保存できませんでした",
+        "catalogFailed": "モデルカタログを読み込めませんでした"
       },
       "confirmDelete": {
         "title": "このモデルプリセットを削除しますか？",
@@ -3111,7 +3139,6 @@
         "overrideActive": "有効",
         "personalOverrideHint": "このプロビジョニングタイプのワークスペースハンドラーを自分のマシンで上書きします。ユーザーごとに保存されます。",
         "removeOverride": "オーバーライドを削除",
-        "loading": "インフラ設定を読み込んでいます…",
         "kubeNoun": "Kubernetes ハンドラー",
         "kubeOverrideNoun": "Kubernetes のオーバーライド",
         "customNoun": "このハンドラー",
@@ -3290,7 +3317,6 @@
     },
     "taskTypeSuppressions": {
       "intro": "このデプロイメントの再利用可能オペレーションのうち、このボードで提供するものを選びます。非表示にするとここのタスク作成ピッカーから消え、そのタイプでの作成は拒否されます。他のボードには影響しません。",
-      "loading": "オペレーションを読み込んでいます…",
       "empty": "このデプロイメントには再利用可能オペレーションが登録されていません。",
       "offer": "このボードで提供する",
       "saveFailed": "このボードで提供するオペレーションを変更できませんでした"
@@ -3717,7 +3743,9 @@
         "createdByKey": "APIキー {id}",
         "revoke": "トークンを取り消す",
         "boundToYou": "あなたのサブスクリプション",
-        "boundToOther": "{user} のサブスクリプション"
+        "boundToOther": "{user} のサブスクリプション",
+        "reachAll": "すべてのワークスペース",
+        "reachCount": "{count} 個のワークスペース"
       },
       "add": {
         "heading": "トークンを作成",
@@ -3731,7 +3759,13 @@
         "identitySystem": "このワークスペース（システムトークン）",
         "identitySelf": "自分（個人トークン）",
         "identitySystemHelp": "このトークンで開始した実行はワークスペースに属し、個人には紐づきません。誰の個人 Claude / Codex / GLM サブスクリプションも利用できないため、それらのモデルを指定したタスクは、不在の相手に課金される代わりに拒否されます。CI や共有連携にはこちらを使ってください。",
-        "identitySelfHelp": "このトークンで開始した実行はあなたのものとして扱われ、あなたの個人 Claude / Codex / GLM サブスクリプションを利用できます。その際は毎回のリクエストで X-Personal-Password ヘッダーに個人パスワードを送る必要があります。パスワードは保存されません。自分のヘッドレス実行にはこちらを使ってください。"
+        "identitySelfHelp": "このトークンで開始した実行はあなたのものとして扱われ、あなたの個人 Claude / Codex / GLM サブスクリプションを利用できます。その際は毎回のリクエストで X-Personal-Password ヘッダーに個人パスワードを送る必要があります。パスワードは保存されません。自分のヘッドレス実行にはこちらを使ってください。",
+        "reach": "ワークスペース",
+        "reachHelp": "このトークンが操作できるワークスペース。複数のワークスペースに届くトークンは、各呼び出しで x-cat-factory-workspace ヘッダーにワークスペースを指定します。",
+        "reachThis": "このワークスペースのみ",
+        "reachAll": "アカウント内のすべてのワークスペース",
+        "reachSelected": "選択したワークスペース",
+        "reachPick": "ワークスペースを選択"
       },
       "scopes": {
         "read": "読み取り専用",
@@ -3899,9 +3933,7 @@
       "toast": {
         "connected": "OpenRouter キーを接続しました",
         "connectFailed": "キーを接続できませんでした",
-        "rejected": "OpenRouter がキーを拒否しました。",
         "unreachable": "OpenRouter に接続できませんでした",
-        "connectFirst": "まず OpenRouter キーを接続してください。",
         "saved": "OpenRouter カタログを保存しました",
         "saveFailed": "カタログを保存できませんでした"
       }
@@ -4496,7 +4528,6 @@
     "connect": {
       "yourInstallations": "あなたのインストール",
       "refresh": "更新",
-      "lookingForInstallations": "インストールを検索中…",
       "noInstallations": "App のインストールがまだ見つかりません。下からインストールするか、ID で接続してください。",
       "installationMeta": "{targetType} · インストール {id}",
       "linked": "リンク済み",
@@ -4523,14 +4554,12 @@
       "resync": "再同期",
       "backfill": "バックフィル",
       "disconnect": "切断",
-      "loading": "読み込み中…",
       "tabs": {
         "repos": "リポジトリ",
         "issues": "イシュー"
       },
       "linkedToBoard": "このボードにリンク済み",
       "manageRepos": "リポジトリを管理",
-      "loadingRepos": "リポジトリを読み込み中…",
       "private": "プライベート",
       "saveSelection": "選択を保存",
       "noLinkedRepos": "リンクされたリポジトリはまだありません。このボードが追跡するリポジトリを選ぶには「リポジトリの管理」を使用してください。",
@@ -4613,7 +4642,6 @@
     },
     "repoTree": {
       "root": "ルート",
-      "loading": "読み込み中…",
       "noSubdirectories": "ここにサブディレクトリはありません。",
       "empty": "ここには何もありません。",
       "select": "選択",
@@ -4870,7 +4898,8 @@
         "scopes": "次の権限が求められます: {scopes}",
         "fallback": "トークンを使いますか？下のフィールドをご利用ください。",
         "failed": "{source} へのサインインを開始できませんでした"
-      }
+      },
+      "disconnectFailed": "切断できませんでした"
     },
     "spawn": {
       "title": "構造をプレビュー",
@@ -5018,7 +5047,8 @@
       "updateConnection": "接続を更新",
       "connect": "接続",
       "oauthButton": "{label} で接続",
-      "oauthOr": "または API キーで接続"
+      "oauthOr": "または API キーで接続",
+      "disconnectFailed": "切断できませんでした"
     }
   },
   "bugHunt": {
@@ -5127,12 +5157,10 @@
   "guidedReview": {
     "title": "ガイド付きレビュー",
     "titleFor": "{repo} #{number}: {title}",
-    "loading": "レビューを読み込んでいます…",
     "outOfDate": "ライブ更新に失敗したため、この表示は最新でない可能性があります。",
     "openFromTask": "ガイド付きレビューで調べる",
     "picker": {
       "intro": "リポジトリとプルリクエストを選んでください。変更の概要が表示され、別々のスレッドで質問できます。",
-      "loading": "リポジトリを読み込んでいます…",
       "noRepos": "このワークスペースにはまだリポジトリがリンクされていません。",
       "repo": "リポジトリ",
       "openPulls": "オープン中のプルリクエスト",
@@ -5800,7 +5828,6 @@
     "answerVerb": "回答",
     "dismissVerb": "却下",
     "empty": "レビューはまだありません。このタスクのパイプラインが開始すると、レビュアーが最初のステップとして自動的に実行されます。",
-    "loadingReview": "レビューを読み込み中…",
     "reviewing": "要件をレビュー中…",
     "settled": "要件が確定しました。以下のドキュメントは、下流のすべてのエージェントステップが使用するものです。",
     "exceeded": {
@@ -5940,7 +5967,6 @@
     "introAnswer": "回答",
     "introDismiss": "却下",
     "empty": "まだレビューはありません。このタスクのパイプラインが開始すると、レビュアーが最初のステップとして自動的に実行されます。",
-    "loadingReview": "レビューを読み込み中…",
     "triaging": "バグ報告をトリアージ中…",
     "converged": "バグ報告が明確化されました。以下の報告が、下流のすべてのエージェントステップで使用されるものです。",
     "capHeading": "指摘が未解決のまま、反復回数{max}回の上限に達しました。",
@@ -6014,7 +6040,6 @@
   "consensus": {
     "titlePrefix": "コンセンサス",
     "participantCount": "参加者なし | 参加者1名 | 参加者{count}名",
-    "loading": "コンセンサスセッションを読み込み中…",
     "empty": "このステップではまだコンセンサスセッションが実行されていません。",
     "failed": "コンセンサスに失敗しました: {error}",
     "unknownError": "不明なエラー",
@@ -6062,7 +6087,6 @@
     "introChoose": "採用",
     "introDismiss": "却下",
     "empty": "まだブレインストームはありません。このタスクのパイプラインがブレインストームステップに到達すると自動的に実行されます。",
-    "loading": "ブレインストームを読み込み中…",
     "generating": "選択肢を生成中…",
     "settledBanner": "{doc}は確定しました。以下のドキュメントが次のステージで使用されます。",
     "exceeded": {
@@ -6140,7 +6164,6 @@
   },
   "spec": {
     "title": "要件",
-    "loading": "仕様を読み込み中…",
     "error": "仕様を読み込めませんでした。このウィンドウを開き直してください。",
     "overview": "概要",
     "noFeatureGroups": "機能グループなし",
@@ -6330,8 +6353,7 @@
     },
     "shot": {
       "failed": "失敗",
-      "failedToLoad": "読み込みに失敗しました",
-      "loading": "読み込み中…"
+      "failedToLoad": "読み込みに失敗しました"
     },
     "screenshotAlt": "{view}(スクリーンショット)",
     "screenshots": "スクリーンショット",
@@ -7043,7 +7065,6 @@
       "awaiting": "{total} 件の候補が生成され、比較を待っています。"
     },
     "asset": {
-      "loading": "ファイルを読み込んでいます…",
       "loadFailed": "保存されたファイルを読み込めませんでした。",
       "retry": "再試行",
       "open": "開く",
@@ -7985,6 +8006,7 @@
     "connect": {
       "or": "または",
       "noneConfigured": "このデプロイにはソース管理の接続が設定されていません。GitHub App または GitLab へのアクセスの設定を運用者に依頼してください。",
+      "adminRequired": "リポジトリホストを接続できるのはボードの管理者だけです。このボードの管理者に依頼してください。",
       "gitlab": {
         "intro": "GitLab の個人用アクセストークンを貼り付けて、このワークスペースを接続します。cat-factory はこれを使ってプロジェクトの一覧取得、ブランチのプッシュ、マージリクエストの作成を行います。",
         "tokenLabel": "個人用アクセストークン",
@@ -8002,7 +8024,8 @@
     "onboarding": {
       "title": "cat-factory を {provider} に接続",
       "titleAny": "cat-factory をリポジトリに接続",
-      "intro": "cat-factory はリポジトリ上でプルリクエストを開くことで動作します。続行するにはリポジトリホストを接続してください。"
+      "intro": "cat-factory はリポジトリ上でプルリクエストを開くことで動作します。続行するにはリポジトリホストを接続してください。",
+      "switchBoard": "目的のボードではありませんか？別のボードに切り替えるか、自分のボードを作成してください。"
     },
     "addService": {
       "intro": "ボードサービスとして追加する既存の{provider}リポジトリを選択してください。ブートストラップはありません。リポジトリはそのまま新しいサービスフレームにリンクされ、その上で実行するタスクはそのリポジトリを対象とします。",
@@ -8118,6 +8141,10 @@
           "canvas": {
             "title": "ボード",
             "body": "サービス、モジュール、タスクはこのキャンバス上にあります。ドラッグで移動、スクロールでズーム、カードをクリックすると詳細を確認できます。"
+          },
+          "views": {
+            "title": "2 つのビュー",
+            "body": "ボードには 2 つ目のビューがあります。キューには、すべてのサービスで対応が必要なものが並びます。ツアーが終わったら、ここでキューとこのキャンバスを切り替えます。アプリは最後に使ったビューで開きます。"
           },
           "sidebar": {
             "title": "サイドバー",
@@ -8738,5 +8765,146 @@
         "unsupportedVersion": "このテーマは、このアプリが対応していない新しいエディター形式で作成されています。"
       }
     }
+  },
+  "setup": {
+    "title": "セットアップ",
+    "progress": "{total} 件中 {done} 件完了",
+    "intro": "このワークスペースでタスクを実行してマージするために必要なものです。",
+    "required": "必須",
+    "optional": "任意",
+    "action": {
+      "change": "変更",
+      "connect": "設定",
+      "fix": "修正",
+      "review": "確認",
+      "retry": "再試行"
+    },
+    "rows": {
+      "checking": "確認中…",
+      "notNeeded": "このデプロイでは使用しません。",
+      "model": {
+        "title": "モデル",
+        "done": "利用できるモデルがあります。",
+        "missing": "利用可能なモデルがありません。プロバイダーを接続するまで、どのエージェントも実行できません。"
+      },
+      "sourceControl": {
+        "title": "ソース管理",
+        "done": "接続済み。エージェントはブランチをプッシュし、プルリクエストを作成できます。",
+        "missing": "未接続。エージェントはプルリクエストを作成できません。"
+      },
+      "agentExecutor": {
+        "title": "エージェントの実行場所",
+        "done": "ランナーが設定されています。",
+        "missing": "ランナーが設定されていません。接続するまで何も実行できません。",
+        "notNeeded": "このデプロイでは、ランナーなしでエージェントを実行します。"
+      },
+      "ephemeralEnvironments": {
+        "title": "テスト環境",
+        "done": "設定済み。テスターはライブプレビューを使用できます。",
+        "missing": "未設定。ライブプレビューが必要なテスターは実行されません。それ以外のエージェントは実行されます。"
+      },
+      "binaryStorage": {
+        "title": "スクリーンショットの保存先",
+        "done": "設定済み。ビジュアルチェックは有効です。",
+        "missing": "未設定。ビジュアルチェックは無効です。"
+      }
+    },
+    "causes": {
+      "unreachable": "設定済みですが、現在到達できません。",
+      "incomplete": "接続済みですが、必須の設定が不足しています。",
+      "rejected": "GitHub がアクセストークンを拒否しました。",
+      "underscoped": "アクセストークンでは、プッシュもプルリクエストの作成もできません。",
+      "presetBroken": "既定のモデルプリセットが、利用できないモデルを指しています。",
+      "probeFailed": "確認の応答がありませんでした。",
+      "notReported": "このデプロイメントはこの項目を報告しません。"
+    },
+    "also": {
+      "title": "その他",
+      "pipelines": "パイプライン",
+      "riskPolicies": "マージポリシー",
+      "modelPresets": "モデルプリセット",
+      "counts": {
+        "repair": "修復が必要: {count} 件",
+        "outdated": "古いもの: {count} 件",
+        "new": "新規: {count} 件"
+      },
+      "settings": "設定と接続",
+      "workspaceSettings": "ワークスペース設定",
+      "integrations": "連携"
+    }
+  },
+  "queue": {
+    "title": "キュー",
+    "summary": "対応が必要 {needsYou} 件 · マージ可能 {ready} 件",
+    "filter": {
+      "allServices": "すべてのサービス",
+      "service": "サービスで絞り込む"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "対応が必要",
+        "empty": "あなたの対応を待っているものはありません。"
+      },
+      "inFlight": {
+        "label": "進行中",
+        "empty": "現在動作中のエージェントはありません。"
+      },
+      "readyToMerge": {
+        "label": "マージ可能",
+        "empty": "マージ待ちのプルリクエストはありません。"
+      }
+    },
+    "waiting": {
+      "label": "未着手（{count}）",
+      "empty": "開始待ちのものはありません。"
+    },
+    "done": {
+      "count": "{date} 以降にマージ済み: {count} 件",
+      "countAll": "マージ済み: {count} 件",
+      "show": "表示",
+      "hide": "非表示",
+      "capped": "{total} 件中、新しい {shown} 件を表示しています。"
+    },
+    "card": {
+      "waited": "{duration} 待機",
+      "active": "{duration} 前に動作",
+      "merged": "{duration} 前にマージ",
+      "step": "ステップ {current} / {total}",
+      "showOnBoard": "ボードで表示",
+      "answer": "回答",
+      "budgetPaused": "支出上限により、この実行は一時停止中です。上限を引き上げると再開します。",
+      "parked": "この実行は人の対応を待っています。タスクを開いて必要な内容を確認してください。",
+      "waitingOn": "{deps} を待機中",
+      "pr": "プルリクエスト #{number}"
+    },
+    "describeWork": "新しい作業を記述"
+  },
+  "views": {
+    "title": "ビュー",
+    "queue": "キュー",
+    "board": "ボード",
+    "openQueue": "キュー ビューを開く"
+  },
+  "describeWork": {
+    "title": "新しい作業を記述",
+    "textLabel": "やるべきこと",
+    "textHint": "1文で十分です。詳細があれば追加してください。",
+    "textPlaceholder": "サインインイベントの監査ログを追加する。各サインインを、時刻、ユーザー、結果とともに記録する。",
+    "savedAs": "タスクのタイトル: {title}",
+    "serviceLabel": "サービス",
+    "servicePlaceholder": "サービスを選択",
+    "kindLabel": "種類",
+    "kind": {
+      "feature": "機能",
+      "bug": "バグ"
+    },
+    "moreKinds": "その他の種類…",
+    "changeHowItRuns": "実行方法を変更",
+    "workspaceDefault": "ワークスペースの既定",
+    "defaultPipelineHint": "ワークスペースの既定: {name}。ここで選んだパイプラインは、このタスクで既定の代わりに使われます。",
+    "attachContext": "コンテキストを添付（完全なフォームを開きます）",
+    "add": "キューに追加",
+    "addAndStart": "追加して開始",
+    "addedToast": "「{title}」をキューに追加しました"
   }
 }

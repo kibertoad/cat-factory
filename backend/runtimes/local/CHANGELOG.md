@@ -1,5 +1,104 @@
 # @cat-factory/local-server
 
+## 0.155.6
+
+### Patch Changes
+
+- @cat-factory/server@0.334.1
+  - @cat-factory/executor-harness@1.163.4
+  - @cat-factory/node-server@0.239.1
+
+## 0.155.5
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+  - @cat-factory/kernel@0.359.0
+  - @cat-factory/integrations@0.176.0
+  - @cat-factory/server@0.334.0
+  - @cat-factory/node-server@0.239.0
+  - @cat-factory/orchestration@0.321.0
+  - @cat-factory/executor-harness@1.163.4
+  - @cat-factory/agents@0.171.7
+  - @cat-factory/binary-generators@0.3.68
+  - @cat-factory/gitlab@0.24.4
+  - @cat-factory/prompt-fragments@1.1.64
+
+## 0.155.4
+
+### Patch Changes
+
+- Updated dependencies [91dedb6]
+  - @cat-factory/contracts@0.365.0
+  - @cat-factory/server@0.333.0
+  - @cat-factory/integrations@0.175.3
+  - @cat-factory/executor-harness@1.163.4
+  - @cat-factory/agents@0.171.6
+  - @cat-factory/binary-generators@0.3.67
+  - @cat-factory/gitlab@0.24.3
+  - @cat-factory/kernel@0.358.1
+  - @cat-factory/orchestration@0.320.4
+  - @cat-factory/prompt-fragments@1.1.63
+  - @cat-factory/node-server@0.238.2
+
+## 0.155.3
+
+### Patch Changes
+
+- Updated dependencies [22b6812]
+  - @cat-factory/server@0.332.3
+  - @cat-factory/agents@0.171.5
+  - @cat-factory/orchestration@0.320.3
+  - @cat-factory/executor-harness@1.163.4
+  - @cat-factory/node-server@0.238.1
+  - @cat-factory/binary-generators@0.3.66
+
+## 0.155.2
+
+### Patch Changes
+
+- 5ec1794: Record a per-account directory change feed. Every write to a user, account membership, workspace,
+  workspace membership or repo projection row now appends a `directory_changes` row naming the entity,
+  in the same transaction (Postgres) or batch (D1), with a per-account `seq` whose commit order equals
+  its numeric order. New migrations: D1 `0107_directory_changes.sql` and Drizzle
+  `20261009141534_directory_changes`. Nothing reads the feed yet; the public directory API and
+  webhooks follow (docs/initiatives/directory-sync.md).
+  
+  The local `linkRepo` helper now writes the repo through `DrizzleRepoProjectionRepository`, so
+  re-linking a repo keeps its monorepo flag instead of resetting it.
+- Updated dependencies [5ec1794]
+  - @cat-factory/contracts@0.364.0
+  - @cat-factory/kernel@0.358.0
+  - @cat-factory/node-server@0.238.0
+  - @cat-factory/executor-harness@1.163.4
+  - @cat-factory/agents@0.171.4
+  - @cat-factory/binary-generators@0.3.66
+  - @cat-factory/gitlab@0.24.2
+  - @cat-factory/integrations@0.175.2
+  - @cat-factory/orchestration@0.320.2
+  - @cat-factory/prompt-fragments@1.1.62
+  - @cat-factory/server@0.332.2
+
+## 0.155.1
+
+### Patch Changes
+
+- Updated dependencies [1a42f34]
+- Updated dependencies [3c04dfa]
+  - @cat-factory/kernel@0.357.1
+  - @cat-factory/server@0.332.1
+  - @cat-factory/executor-harness@1.163.4
+  - @cat-factory/agents@0.171.3
+  - @cat-factory/binary-generators@0.3.65
+  - @cat-factory/gitlab@0.24.1
+  - @cat-factory/integrations@0.175.1
+  - @cat-factory/orchestration@0.320.1
+  - @cat-factory/prompt-fragments@1.1.61
+  - @cat-factory/node-server@0.237.1
+
 ## 0.155.0
 
 ### Minor Changes

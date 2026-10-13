@@ -3,6 +3,7 @@ import { setActivePinia, createPinia } from 'pinia'
 import type { Block, BlockStatus } from '~/types/domain'
 import { useBoardStore } from '~/stores/board'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { UNDO_WINDOW_MS } from '~/stores/board/context'
 import { EMPTY_FRAME_SIZE } from '~/utils/framePlacement'
 import { frameContentSize, laneBodyHeightIn, LANE_GEOMETRY } from '~/utils/laneGeometry'
 
@@ -591,9 +592,17 @@ describe('board store deferred delete + undo', () => {
   })
 
   it('undo cancels the pending delete and restores the subtree', async () => {
-    const { store, removeSpy, actions } = setup(async () => {})
+    const { store, removeSpy, addSpy, actions } = setup(async () => {})
     store.hydrate([frame('f1'), moduleBlock('m1', 'f1'), task('t1', 'm1')])
     store.removeBlock('f1')
+    // The toast stays exactly as long as the delete is held open, or its Undo would undo nothing.
+    expect(addSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'board.toast.deleted',
+        color: 'success',
+        duration: UNDO_WINDOW_MS,
+      }),
+    )
     expect(actions).toHaveLength(1)
     actions[0]!.onClick()
     expect(store.getBlock('f1')?.id).toBe('f1')

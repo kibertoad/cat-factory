@@ -212,6 +212,24 @@ const SURFACE = {
 
   // ---- Kaizen entries (`read` to consume the backlog, `write` to acknowledge one) ----------
   listPublicKaizenEntries: { group: 'kaizen', method: 'listEntries', paginates: 'entries' },
+  // ---- Directory (`read`; account-scoped, for keeping an external copy in sync) ------------
+  listDirectoryChanges: { group: 'directory', method: 'listChanges' },
+  listDirectoryWorkspaces: { group: 'directory', method: 'listWorkspaces', paginates: 'items' },
+  listDirectoryUsers: { group: 'directory', method: 'listUsers', paginates: 'items' },
+  listDirectoryAccountMemberships: {
+    group: 'directory',
+    method: 'listAccountMemberships',
+    paginates: 'items',
+  },
+  listDirectoryWorkspaceMemberships: {
+    group: 'directory',
+    method: 'listWorkspaceMemberships',
+    paginates: 'items',
+  },
+  listDirectoryRepos: { group: 'directory', method: 'listRepos', paginates: 'items' },
+  listDirectoryWebhooks: { group: 'directory', method: 'listWebhooks' },
+  putDirectoryWebhook: { group: 'directory', method: 'putWebhook' },
+  deleteDirectoryWebhook: { group: 'directory', method: 'deleteWebhook' },
   getPublicKaizenEntry: { group: 'kaizen', method: 'getEntry' },
   acknowledgePublicKaizenEntry: { group: 'kaizen', method: 'acknowledgeEntry' },
   // ---- Guided PR review (`read` to follow a session, `write` to open, ask or draft) ---------
@@ -227,6 +245,7 @@ const SURFACE = {
   editPublicGuidedReviewDraft: { group: 'guidedReviews', method: 'editDraft' },
   postPublicGuidedReviewDrafts: { group: 'guidedReviews', method: 'postDrafts' },
   streamPublicGuidedReview: { group: 'guidedReviews', method: 'stream' },
+  assessPublicPullRequest: { group: 'prAssessments', method: 'assess' },
 
   // ---- Headless key provisioning (`admin` scope) ------------------------------------------
   listPublicKeys: { group: 'keys', method: 'list' },
@@ -346,6 +365,8 @@ export const MCP_TOOL_HINTS = {
   // whole subtree and every run recorded under it. Idempotent in EFFECT (a second call finds
   // nothing left to remove and 404s), which says nothing about the first one being recoverable.
   deletePublicService: { destructive: true, idempotent: true },
+  deleteDirectoryWebhook: { destructive: true, idempotent: true },
+  putDirectoryWebhook: { destructive: true, idempotent: true },
   // The outbound webhook, same pair and for a subtler reason: neither call spends anything, and
   // both overwrite state whose previous value cannot be recovered through this API: the endpoint
   // someone else's integration is registered at, and a signing secret that is never readable back.
@@ -403,10 +424,14 @@ export const GROUP_DOCS = {
     "What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included.",
   mergeRecords:
     'The evidence behind the auto-merge policy: what kind of change each merged run made, what the merger scored it, what happened to the pull request, and how much review a human actually spent, plus the per-class rollups that justify widening a rule. Reading takes a `read` key and recording an effort tag a `write` one: neither merges anything.',
+  directory:
+    "The account's directory, for keeping an external copy in sync: workspaces, users, account and workspace memberships, and linked repositories as keyset-paged snapshots, plus the ordered change feed that brings a copy up to date. Everything here takes a `read` key; users and account memberships need one that reaches every workspace.",
   kaizen:
     "The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything.",
   guidedReviews:
     'Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking, drafting and posting drafts take a `write` key. Posting publishes plain comments on the pull request and never approves or requests changes.',
+  prAssessments:
+    "Assess a pull request in a linked repository: the merger's complexity, risk and impact scores with a rationale, the change class its paths fall in, and whether a risk policy would let it land with no person. The verdict is given without publishing the policy's ceilings. Takes a `write` key: each assessment is one model call. Nothing is persisted and no run starts.",
   keys: "The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted).",
 }
 

@@ -1,5 +1,147 @@
 # @cat-factory/server
 
+## 0.334.1
+
+### Patch Changes
+
+- Updated dependencies [5d586fc]
+  - @cat-factory/mcp-server@0.55.1
+
+## 0.334.0
+
+### Minor Changes
+
+- 04c1587: Public-API keys belong to an account and reach every workspace in it or a chosen list. A
+  workspace-scoped `/api/v1` call names its workspace in the `x-cat-factory-workspace` header, which a
+  key reaching one workspace may omit, so every existing key keeps working unchanged. `PublicApiKey`
+  and `GET /api/v1/me` gain `workspaceIds`; both mint bodies accept it. Widening a key past the board
+  it is minted from takes an account admin, and a key can never mint or revoke one reaching further
+  than itself. The header is on the CORS allow-list, so a browser client can send it. The four SDK
+  clients take a workspace option. OpenAPI 1.80.0.
+  
+  Storage break (internal): `public_api_keys.workspace_id` is replaced by `all_workspaces` plus the
+  `public_api_key_workspaces` grant table (D1 `0108`, Drizzle `20261009143721` and `20261009143724`),
+  backfilled from the old column. The account cap is 200 live keys, where it was 50 per workspace,
+  and a key left with no workspace after its boards were deleted holds no slot.
+- f1b6c9a: `/api/v1/directory/*`: an account's workspaces, users, account memberships, workspace memberships
+  and linked repositories as keyset-paged snapshots, plus an ordered change feed whose changes carry
+  each entity's current state (or `null` once it is gone), for an integration keeping its own copy in
+  sync. A feed cursor older than the new `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30) is refused
+  with the new `cursor_expired` conflict reason. OpenAPI 1.81.0.
+  
+  Internal: the change-row mapping both facades share moves to kernel's `directoryChangeFromRow`.
+  The slice 1 `DirectoryChangeRepository` port becomes `DirectoryRepository` and joins
+  `CoreDependencies` as a required member, with its reads on the mothership allow-list.
+- 20d4f01: Directory webhooks: `/api/v1/directory/webhooks` registers account-level endpoints that the
+  directory change feed is pushed to every couple of minutes, signed like the notification webhooks.
+  Each push is a `directory.changed` page of hydrated changes, or `directory.resync_required` for an
+  endpoint that fell behind the feed's retention. Delivery is a sweep on both facades (the Worker's
+  frequent cron, a Node timer) that takes a per-endpoint lease before a push and moves the endpoint's
+  position only after the push succeeds, so pushes are at-least-once, arrive in feed order, and are
+  never doubled by concurrent sweepers; a lease whose sweeper died expires and the page is sent again. The spec gains an OpenAPI 3.1 `webhooks` section naming every push body, so
+  `DirectoryWebhookDelivery`, `NotificationWebhookDelivery`, `RunWebhookDelivery` and
+  `PlatformAlertWebhookDelivery` become generated types in every client.
+  OpenAPI 1.82.0. New migrations: D1 `0109_directory_webhooks.sql`, Drizzle
+  `20261010113115_directory_webhooks`.
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+  - @cat-factory/kernel@0.359.0
+  - @cat-factory/integrations@0.176.0
+  - @cat-factory/mcp-server@0.55.0
+  - @cat-factory/orchestration@0.321.0
+  - @cat-factory/agents@0.171.7
+  - @cat-factory/spend@0.23.13
+
+## 0.333.0
+
+### Minor Changes
+
+- 91dedb6: Setup advisories now go to the people who can act on them. The workspace snapshot carries
+  `infraSetupOwners` beside `infraSetup`, naming who can close each gap: a board admin
+  (`workspace_admin`), an account admin (`account_admin`) or the deployment operator (`operator`).
+  Content storage falls to the operator when the deployment gives an account admin no backend to
+  select (`AccountSettingsService.canSelectContentStorage`).
+  
+  In the SPA, the infra-setup and provider-config cards render only for a caller who can save the
+  fix, and never on the designer surface. A caller who cannot act, but whose runs the gap stops (today,
+  a missing or unreachable runner pool), gets one compact line instead: it names who can fix it, or
+  tells an admin on the designer surface to switch role. A viewer gets nothing. The line honours the
+  card's session and permanent dismissals. The default test-environment prompt is also kept off the
+  designer surface, and the account-admin check now lives once in the accounts store
+  (`isActiveAccountAdmin`).
+  
+  On the repository-host gate, a caller without `integrations.manage` reads that a board admin can
+  connect the host, instead of "this deployment has nothing configured, ask an operator", and the
+  gate offers the board switcher without the items that need the board page's dialogs. The AI setup
+  dialog sends a member to the direct keys on their own
+  "My keys" scope, where their save lands, instead of the workspace pool they cannot write. That
+  default follows the active board's grant until the user picks a scope by hand.
+  
+  The new snapshot field is optional and internal: an older SPA ignores it, and this SPA falls back
+  to "a board admin" when a backend does not send it.
+
+### Patch Changes
+
+- Updated dependencies [91dedb6]
+  - @cat-factory/contracts@0.365.0
+  - @cat-factory/integrations@0.175.3
+  - @cat-factory/agents@0.171.6
+  - @cat-factory/kernel@0.358.1
+  - @cat-factory/orchestration@0.320.4
+  - @cat-factory/spend@0.23.12
+
+## 0.332.3
+
+### Patch Changes
+
+- 22b6812: `GET /internal/agent-kinds` serves each distinct bundled skill and tool server once, in top-level
+  `bundledSkills` and `toolServers` lists, and each kind references them by index
+  (`skills.bundledRefs`, `toolServers.serverRefs`). A definition assigned to several kinds no longer
+  serialises once per kind (the Nuxt UI capability drops from ~300 KB to ~100 KB per mothership-mode
+  dispatch). The reply now carries a `version`, and a node refuses any version but its own with
+  `details.cause: 'mothership_version_mismatch'`.
+  
+  Boot validation refuses a bundled skill or tool server whose shape does not match its type
+  (`invalid_bundled_skill_definition`, `invalid_tool_server_definition`), naming the field.
+  
+  Internal wire break, with no compatibility path: update mothership-mode nodes together with the
+  mothership. Until then, on a deployment with assigned capabilities, every container dispatch on a
+  node whose build differs from its mothership fails with `agent_kinds_unreachable`. A newer node
+  names the cause; an older node cannot. An empty layer (no assigned capabilities) keeps working in
+  both directions.
+- Updated dependencies [22b6812]
+  - @cat-factory/agents@0.171.5
+  - @cat-factory/orchestration@0.320.3
+
+## 0.332.2
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/contracts@0.364.0
+  - @cat-factory/kernel@0.358.0
+  - @cat-factory/agents@0.171.4
+  - @cat-factory/integrations@0.175.2
+  - @cat-factory/orchestration@0.320.2
+  - @cat-factory/spend@0.23.11
+
+## 0.332.1
+
+### Patch Changes
+
+- 3c04dfa: A mothership-mode node now rebuilds a remote repository's `unavailable`, `unauthorized` and `rate_limited` refusals as `DomainError`s. They used to come back as plain errors, so the node answered 500 and dropped `details.reason`. The rebuilt-code table is a `Record` over `DomainErrorCode`, so a new code fails the typecheck until someone decides how the client treats it.
+- Updated dependencies [1a42f34]
+  - @cat-factory/kernel@0.357.1
+  - @cat-factory/agents@0.171.3
+  - @cat-factory/integrations@0.175.1
+  - @cat-factory/orchestration@0.320.1
+  - @cat-factory/spend@0.23.10
+
 ## 0.332.0
 
 ### Minor Changes

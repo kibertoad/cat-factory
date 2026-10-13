@@ -49,6 +49,16 @@ export {
   normalizeSkillRefs,
   normalizeToolRefs,
 } from './agents/kinds/capabilities.js'
+// The SHAPE of those definitions as valibot schemas, held equal to the types at compile time:
+// checked at boot (`validateRegistrations`) and by a mothership-mode node reading them off the wire.
+export {
+  bundledSkillDefinitionSchema,
+  catalogSkillRefSchema,
+  definitionIssues,
+  type Equals,
+  exactly,
+  mcpServerDefinitionSchema,
+} from './agents/kinds/definition-schemas.js'
 // The Nuxt UI capability: an OPT-IN bundled skill + MCP tool server a facade attaches to the coder
 // kinds. Not in `defaultAgentKindRegistry()` — the framework default stays stack-agnostic. See
 // `backend/packages/agents/src/agents/kinds/nuxt-ui/index.ts`.
@@ -513,6 +523,12 @@ export {
   type GuidedReviewThreadPromptInput,
   type GuidedReviewTurn,
 } from './agents/prompts/guided-review.js'
+export {
+  PR_ASSESSMENT_SYSTEM_PROMPT,
+  PR_ASSESSOR_AGENT_KIND,
+  renderPrAssessmentPrompt,
+  type PrAssessmentPromptInput,
+} from './agents/prompts/pr-assessment.js'
 export {
   FRAGMENT_TITLE_AGENT_KIND,
   FRAGMENT_TITLE_SYSTEM_PROMPT,

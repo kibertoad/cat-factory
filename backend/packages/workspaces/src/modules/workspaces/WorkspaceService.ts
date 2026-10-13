@@ -246,6 +246,11 @@ export class WorkspaceService {
     return this.workspaceRepository.accountOf(id)
   }
 
+  /** The owning account of each named board in one read; a board that does not exist has no key. */
+  accountIdsOf(ids: string[]): Promise<Record<string, string | null>> {
+    return this.workspaceRepository.accountIdsOf(ids)
+  }
+
   /**
    * The narrow access row workspace-RBAC resolution reads in one hot-path query (owning
    * account, legacy owner, access mode); `undefined` when the board doesn't exist.

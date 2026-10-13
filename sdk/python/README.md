@@ -33,7 +33,7 @@ Wire names are `camelCase`; attributes are `snake_case`.
 
 `jobs`, `services`, `tasks`, `pipelines`, `notifications`, `webhook`, `usage`, `decisions`,
 `debug`:
-one per tag of the published OpenAPI surface. Every call is scoped to the key's workspace.
+one per tag of the published OpenAPI surface. A workspace-scoped call acts on the key's only workspace, or on `workspace_id` for a key that reaches several.
 
 ## Watching a run
 

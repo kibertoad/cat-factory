@@ -8,6 +8,7 @@ import {
   infraSetupSchema,
   infraSetupStatusSchema,
   isInfraSetupHealthStatus,
+  isInfraSetupOwner,
   isInfraSetupProbedArea,
 } from './infra-setup.js'
 
@@ -126,5 +127,19 @@ describe('applyInfraSetupTransition', () => {
     const out = applyInfraSetupTransition(projection(), 'agentExecutor', 'unreachable')
     expect(out.ephemeralEnvironments).toBe('configured')
     expect(out.binaryStorage).toBe('configured')
+  })
+})
+
+describe('isInfraSetupOwner', () => {
+  it('accepts every owner the schema lists', () => {
+    for (const owner of ['workspace_admin', 'account_admin', 'operator']) {
+      expect(isInfraSetupOwner(owner)).toBe(true)
+    }
+  })
+
+  it('rejects an owner a newer server might send and anything that is not a string', () => {
+    expect(isInfraSetupOwner('board_owner')).toBe(false)
+    expect(isInfraSetupOwner(undefined)).toBe(false)
+    expect(isInfraSetupOwner(null)).toBe(false)
   })
 })

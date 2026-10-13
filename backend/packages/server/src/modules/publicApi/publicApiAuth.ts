@@ -1,6 +1,17 @@
-import type { PublicApiScope } from '@cat-factory/contracts'
-import { scopeSatisfies, type PublicApiKeyAuth } from '@cat-factory/integrations'
-import { ForbiddenError, UnauthorizedError, UnavailableError } from '@cat-factory/kernel'
+import { PUBLIC_API_WORKSPACE_HEADER, type PublicApiScope } from '@cat-factory/contracts'
+import {
+  keyReaches,
+  scopeSatisfies,
+  type PublicApiKeyAuth,
+  type PublicApiKeyIdentity,
+} from '@cat-factory/integrations'
+import {
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+  UnavailableError,
+  ValidationError,
+} from '@cat-factory/kernel'
 import type { Context, TypedResponse } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 
@@ -16,17 +27,23 @@ import type { AppEnv } from '../../http/env.js'
  * the error the handler should emit. Kept as DATA rather than a `Response` so the contract
  * handlers stay typed against their declared response schemas.
  */
-export type KeyResult =
-  | { auth: PublicApiKeyAuth }
-  | { fail: { status: 401 | 403 | 503; code: string; message: string } }
+export type KeyResult = { auth: PublicApiKeyAuth } | { fail: KeyFailure }
 
-type KeyFailure = Extract<KeyResult, { fail: unknown }>['fail']
+type KeyFailure = {
+  status: 401 | 403 | 404 | 422 | 503
+  code: string
+  message: string
+  /** Machine-readable context (a `{ reason }`), rendered as the envelope's `details`. */
+  details?: { reason: string }
+}
+
+type IdentityResult = { auth: PublicApiKeyIdentity } | { fail: KeyFailure }
 
 /**
  * The wire body of a refusal. Spelt out as the declared return type of {@link refuse} because the
  * type `c.json` infers names a hono-internal alias that a declaration emit cannot reference.
  */
-type RefusalBody = { error: { code: string; message: string } }
+type RefusalBody = { error: { code: string; message: string; details?: { reason: string } } }
 
 /**
  * The raw key the caller presented, stripped of its `Bearer` prefix.
@@ -53,11 +70,12 @@ export function refuse<E extends AppEnv>(
   c: Context<E>,
   fail: KeyFailure,
 ): Response & TypedResponse<RefusalBody, KeyFailure['status'], 'json'> {
-  return c.json({ error: { code: fail.code, message: fail.message } }, fail.status)
+  const details = fail.details === undefined ? {} : { details: fail.details }
+  return c.json({ error: { code: fail.code, message: fail.message, ...details } }, fail.status)
 }
 
 /** Resolve the caller's public-API key to a workspace scope, or the error to emit. */
-async function resolveKey<E extends AppEnv>(c: Context<E>): Promise<KeyResult> {
+async function resolveKey<E extends AppEnv>(c: Context<E>): Promise<IdentityResult> {
   const svc = c.get('container').publicApiKeys
   if (!svc) {
     return { fail: { status: 503, code: 'unavailable', message: 'Public API is not configured' } }
@@ -80,6 +98,22 @@ export async function authorize<E extends AppEnv>(
   c: Context<E>,
   need: PublicApiScope,
 ): Promise<KeyResult> {
+  const result = await authorizeAccount(c, need)
+  if ('fail' in result) return result
+  const workspace = await resolveWorkspace(c, result.auth)
+  if ('fail' in workspace) return workspace
+  return { auth: { ...result.auth, workspaceId: workspace.workspaceId } }
+}
+
+/**
+ * {@link authorize} for an ACCOUNT-scoped route (the directory surface): the key and its scope, with
+ * no workspace resolved and no `x-cat-factory-workspace` header read. The handler applies the key's
+ * workspace reach itself, because what a restricted key may see there is a filter, not a refusal.
+ */
+export async function authorizeAccount<E extends AppEnv>(
+  c: Context<E>,
+  need: PublicApiScope,
+): Promise<{ auth: PublicApiKeyIdentity } | { fail: KeyFailure }> {
   const result = await resolveKey(c)
   if ('fail' in result) return result
   if (!scopeSatisfies(result.auth.scope, need)) {
@@ -92,6 +126,45 @@ export async function authorize<E extends AppEnv>(
     }
   }
   return result
+}
+
+/**
+ * The workspace a request acts on: the one the {@link PUBLIC_API_WORKSPACE_HEADER} header names, or
+ * the key's only workspace when it has exactly one (every key minted before keys could span
+ * workspaces). A restricted key's grants were checked against its account at mint, and a board
+ * never leaves an account once linked, so only an unrestricted key naming a board needs the
+ * ownership read. Absent and out of reach answer the same 404, so a key cannot probe for
+ * workspaces it was not granted.
+ */
+async function resolveWorkspace<E extends AppEnv>(
+  c: Context<E>,
+  key: PublicApiKeyIdentity,
+): Promise<{ workspaceId: string } | { fail: KeyFailure }> {
+  const named = c.req.header(PUBLIC_API_WORKSPACE_HEADER)?.trim()
+  const implied = key.workspaceIds?.length === 1 ? key.workspaceIds[0] : undefined
+  const workspaceId = named || implied
+  if (!workspaceId) {
+    return {
+      fail: {
+        status: 422,
+        code: 'validation',
+        message: `This key reaches several workspaces; name one in the '${PUBLIC_API_WORKSPACE_HEADER}' header`,
+        details: { reason: 'workspace_required' },
+      },
+    }
+  }
+  const notFound: { fail: KeyFailure } = {
+    fail: {
+      status: 404,
+      code: 'not_found',
+      message: 'Workspace not found',
+      details: { reason: 'workspace_not_found' },
+    },
+  }
+  if (!keyReaches(key.workspaceIds, workspaceId)) return notFound
+  if (key.workspaceIds !== null) return { workspaceId }
+  const accountId = await c.get('container').workspaceService.accountOf(workspaceId)
+  return accountId === key.accountId ? { workspaceId } : notFound
 }
 
 /**
@@ -113,12 +186,16 @@ export async function authorizeOrThrow<E extends AppEnv>(
 ): Promise<PublicApiKeyAuth> {
   const result = await authorize(c, need)
   if (!('fail' in result)) return result.auth
-  const { status, code, message } = result.fail
+  const { status, code, message, details } = result.fail
   switch (status) {
     case 401:
       throw new UnauthorizedError(message, 'invalid_api_key')
     case 403:
       throw new ForbiddenError(message, { reason: code, requiredScope: need })
+    case 404:
+      throw new NotFoundError('Workspace', c.req.header(PUBLIC_API_WORKSPACE_HEADER) ?? '', details)
+    case 422:
+      throw new ValidationError(message, details)
     case 503:
       throw new UnavailableError(message, 'public_api_unconfigured')
   }

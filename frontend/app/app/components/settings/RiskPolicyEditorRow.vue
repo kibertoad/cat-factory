@@ -130,7 +130,7 @@ const deleteBlocked = computed(
         >
           {{ t('settings.riskPolicy.makeUnattendedDefaultShort') }}
         </UButton>
-        <UBadge v-if="policy.isDefault" color="primary" variant="subtle" size="sm">
+        <UBadge v-if="policy.isDefault" variant="subtle" size="sm">
           {{ t('settings.riskPolicy.default') }}
         </UBadge>
         <UButton
@@ -317,7 +317,6 @@ const deleteBlocked = computed(
         "
       />
       <UButton
-        color="primary"
         variant="soft"
         size="xs"
         icon="i-lucide-save"

@@ -1284,7 +1284,9 @@ export const publicApiKeys = pgTable(
   {
     id: text('id').primaryKey(),
     account_id: text('account_id').notNull(),
-    workspace_id: text('workspace_id').notNull(),
+    // 1 = the key reaches every workspace in its account, including later ones; 0 = exactly the
+    // workspaces granted in `public_api_key_workspaces`. Mirror of D1 migration 0108.
+    all_workspaces: integer('all_workspaces').notNull().default(0),
     label: text('label').notNull(),
     // Permission on `/api/v1`: read ⊂ write ⊂ admin. Existing rows backfill to `write` (D1
     // migration 0053). Kept as text (matches D1) rather than a pg enum, so the two runtimes'
@@ -1317,8 +1319,23 @@ export const publicApiKeys = pgTable(
     revoked_at: bigint('revoked_at', { mode: 'number' }),
   },
   (t) => [
-    index('idx_public_api_keys_workspace').on(t.workspace_id),
     index('idx_public_api_keys_minter').on(t.created_by_key_id),
+    index('idx_public_api_keys_account').on(t.account_id),
+  ],
+)
+
+// The workspaces a restricted public-API key may act on (`public_api_keys.all_workspaces = 0`).
+// Carries `workspace_id`, so the shared workspace cascade drops a deleted board's grants. Mirror
+// of D1 migration 0108.
+export const publicApiKeyWorkspaces = pgTable(
+  'public_api_key_workspaces',
+  {
+    key_id: text('key_id').notNull(),
+    workspace_id: text('workspace_id').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.key_id, t.workspace_id] }),
+    index('idx_public_api_key_workspaces_workspace').on(t.workspace_id),
   ],
 )
 

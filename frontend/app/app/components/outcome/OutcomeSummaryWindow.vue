@@ -427,7 +427,6 @@ function openTestReport() {
         <UBadge
           :color="DISPOSITION_COLOR[disposition]"
           variant="subtle"
-          size="md"
           data-testid="outcome-disposition"
           :data-disposition="disposition"
         >
@@ -535,7 +534,6 @@ function openTestReport() {
             <UBadge
               v-if="outcome.requirements.regressions > 0"
               color="error"
-              variant="solid"
               size="sm"
               icon="i-lucide-triangle-alert"
               data-testid="outcome-regressions"
@@ -780,7 +778,6 @@ function openTestReport() {
               target="_blank"
               rel="noopener"
               external
-              color="primary"
               variant="soft"
               size="xs"
               class="mt-1.5"

@@ -1001,16 +1001,33 @@ async function checkEntityCallScope(
   return undefined
 }
 
+// Which codes the client rebuilds as a `DomainError`, so the node's `handleError` answers with the
+// mothership's status and keeps `details.reason`. A `Record` over `DomainErrorCode`, so a new code
+// fails `tsc` until it is decided here: a code left out comes back as a plain `Error` and reads as
+// a 500. `forbidden` stays a plain `Error` on purpose: the transport itself answers `forbidden` for
+// a rejected MACHINE token, and relaying that as a 403 would tell the browser user they lack a
+// workspace permission they do have.
+const REHYDRATED_DOMAIN_CODES: Record<DomainErrorCode, boolean> = {
+  not_found: true,
+  validation: true,
+  conflict: true,
+  credential_required: true,
+  forbidden: false,
+  unavailable: true,
+  unauthorized: true,
+  rate_limited: true,
+}
+
+function isRehydratedDomainCode(code: PersistenceErrorCode): code is DomainErrorCode {
+  return (
+    Object.hasOwn(REHYDRATED_DOMAIN_CODES, code) && REHYDRATED_DOMAIN_CODES[code as DomainErrorCode]
+  )
+}
+
 /** Reconstruct the thrown error from an error envelope (client side). */
 export function persistenceErrorToThrowable(error: PersistenceRpcError): Error {
-  const domainCodes: DomainErrorCode[] = [
-    'not_found',
-    'validation',
-    'conflict',
-    'credential_required',
-  ]
-  if ((domainCodes as string[]).includes(error.code)) {
-    return new DomainError(error.code as DomainErrorCode, error.message, error.details)
+  if (isRehydratedDomainCode(error.code)) {
+    return new DomainError(error.code, error.message, error.details)
   }
   // Rebuilt as the real class, so a mothership-mode node's engine recognises a poison row exactly
   // as a direct-database one does. The fault is decoded through kernel's own predicate: a value

@@ -27,3 +27,9 @@ export {
   PasswordResetService,
   type PasswordResetServiceDependencies,
 } from './modules/auth/PasswordResetService.js'
+export {
+  DirectoryService,
+  type DirectoryReader,
+  type DirectoryServiceDependencies,
+  type SnapshotPage,
+} from './modules/directory/DirectoryService.js'

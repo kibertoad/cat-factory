@@ -18,17 +18,24 @@ hours earlier in another process, so a resolver reading a brief-only fact would 
 repository and poll another, reporting a live run as one that never appeared. Every field of the
 scope is guaranteed, not best-effort: the engine refuses a poll whose handle is short of one rather
 than filling it in, which is the other half of the property. A handle that names no work repository
-(a record written before it was persisted) is REFUSED rather than defaulted, for the reason the
-result reader refuses a handle with no branches. It is asked ONCE per call and threaded down, so a
-resolver that reads a config map or counts a metric sees one addressing decision per call.
+or no base branch (a record written before they were persisted) is REFUSED rather than defaulted,
+for the reason the result reader refuses a handle with no branches. The base branch is on the scope
+because it is the `ref` a caller shim is dispatched on. It is asked ONCE per call and threaded
+down, so a resolver that reads a config map or counts a metric sees one addressing decision per
+call.
 
 **The three problems, and where each is solved:**
 
-- **`workflow_dispatch` answers `204` with no run id**, and the run does not exist yet when it
-  answers, so there is nothing to poll and nothing to look up. `correlation.ts` solves it with the
-  brief's `correlationKey`: the caller workflow renders `correlationRunName(key)` into its own
-  `run-name:`, and the run becomes findable by a string the platform chose. **The marker is matched
-  against `display_title`**, which is where GitHub puts an evaluated `run-name:`; `name` keeps the
+- **A replayed `start` holds only the brief.** github.com answers a dispatch `200` with
+  `workflow_run_id`, and `start` returns that id with no scan. But an attempt that dispatched and
+  died before its answer was persisted leaves the replay nothing to go on, and a server that
+  predates the change answers `204` with no id while the run does not exist yet. `correlation.ts`
+  solves both with the brief's `correlationKey`: the caller workflow renders
+  `correlationRunName(key)` into its own `run-name:`, and the run becomes findable by a string the
+  platform chose. A run known from the dispatch answer was never matched by name, so `start` reads
+  it back once and states on the record (and logs) when it lacks the marker: such a workflow works
+  on every fresh dispatch and duplicates only on a replay. **The marker is matched against
+  `display_title`**, which is where GitHub puts an evaluated `run-name:`; `name` keeps the
   workflow's own `name:` and is read only as a fallback for an Enterprise release with no
   `display_title`. **`start` is idempotent because it looks first**, which is the whole point: both
   durable drivers replay, and a second dispatch means two workflows on one branch and two pull

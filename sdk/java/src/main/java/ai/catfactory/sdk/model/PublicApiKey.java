@@ -5,6 +5,7 @@ package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -21,6 +22,7 @@ import org.jspecify.annotations.Nullable;
  * @param revokedAt Always present; {@code null} when the server has no value for it.
  * @param scope the {@code scope} field.
  * @param workspaceId the {@code workspaceId} field.
+ * @param workspaceIds Always present; {@code null} when the server has no value for it.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicApiKey(
@@ -52,7 +54,10 @@ public record PublicApiKey(
 
     @JsonProperty("scope") PublicApiKeyScope scope,
 
-    @JsonProperty("workspaceId") String workspaceId
+    @JsonProperty("workspaceId") String workspaceId,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("workspaceIds") @Nullable List<String> workspaceIds
 ) {
 
     /** A new builder for {@link PublicApiKey}. */
@@ -79,6 +84,7 @@ public record PublicApiKey(
         private @Nullable Double revokedAt;
         private @Nullable PublicApiKeyScope scope;
         private @Nullable String workspaceId;
+        private @Nullable List<String> workspaceIds;
 
         /** Set {@code accountId}. */
         public Builder accountId(@Nullable String accountId) {
@@ -152,9 +158,15 @@ public record PublicApiKey(
             return this;
         }
 
+        /** Set {@code workspaceIds}. */
+        public Builder workspaceIds(@Nullable List<String> workspaceIds) {
+            this.workspaceIds = workspaceIds;
+            return this;
+        }
+
         /** Build the {@link PublicApiKey}. */
         public PublicApiKey build() {
-            return new PublicApiKey(accountId, actsAsUserId, createdAt, createdByKeyId, createdByUserId, externalIdentity, id, label, lastUsedAt, revokedAt, scope, workspaceId);
+            return new PublicApiKey(accountId, actsAsUserId, createdAt, createdByKeyId, createdByUserId, externalIdentity, id, label, lastUsedAt, revokedAt, scope, workspaceId, workspaceIds);
         }
     }
 }

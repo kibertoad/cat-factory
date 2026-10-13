@@ -63,6 +63,7 @@ import {
   startServiceCatalogSweeper,
 } from './foundationalServices.js'
 import { startPlatformHealthSweeper } from './platformHealth.js'
+import { startDirectoryWebhookSweeper } from './directoryWebhooks.js'
 import { startInfraReachabilitySweeper } from './infraReachability.js'
 import { startSpendAlertSweeper } from './spendAlerts.js'
 import { buildRealtimePropagator } from './propagator.js'
@@ -631,6 +632,7 @@ function startBackgroundSweepers(deps: {
       // The account audit log, in its own `audit` schema: audit retention is measured in years
       // and gets its own knob, so it can never be shortened by tuning something else.
       auditEventRepository: repos.auditEventRepository,
+      directoryRepository: repos.directoryRepository,
       // The durable cost-attribution rollup: this sweep is its only writer, and prunes it
       // nowhere (see `RetentionRepos`).
       spendRollupRepository: repos.spendRollupRepository,
@@ -727,6 +729,9 @@ function startBackgroundSweepers(deps: {
   // while there is still time to act (the Worker uses cron). No opt-in flag: a configured budget
   // is the opt-in, and the sweep no-ops when notifications are unwired.
   const stopSpendAlerts = startSpendAlertSweeper(container, clock, logger, sweepHealth)
+  // Push the directory change feed to registered webhook endpoints (the Worker uses cron). No-op
+  // without an `ENCRYPTION_KEY` to seal endpoint secrets.
+  const stopDirectoryWebhooks = startDirectoryWebhookSweeper(container, logger, sweepHealth)
   // Refresh repo-linked foundational-service sources so a merged contract change reaches the
   // catalog without anyone opening the management surface (the Worker uses cron). No-op unless
   // the catalog + GitHub are both wired.
@@ -765,6 +770,7 @@ function startBackgroundSweepers(deps: {
     stopPlatformHealth,
     stopInfraReachability,
     stopSpendAlerts,
+    stopDirectoryWebhooks,
     stopFoundationalSources,
     stopServiceCatalog,
   }

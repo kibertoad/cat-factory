@@ -52,7 +52,6 @@
     }
   },
   "common": {
-    "loading": "Ładowanie…",
     "save": "Zapisz",
     "cancel": "Anuluj",
     "retry": "Ponów",
@@ -151,7 +150,8 @@
     "infrastructure": "Infrastruktura",
     "foundationalServices": "Usługi fundamentalne",
     "tutorials": "Samouczki",
-    "help": "Pomoc"
+    "help": "Pomoc",
+    "setupChecklist": "Lista konfiguracji"
   },
   "board": {
     "toast": {
@@ -732,7 +732,8 @@
         "delegated_claim_missing": "Ten krok nie ma zewnętrznej pracy do sprawdzenia",
         "thread_busy": "Ten wątek wciąż odpowiada",
         "draft_conflict": "Ten szkic się zmienił",
-        "session_stale": "Pull request poszedł dalej"
+        "session_stale": "Pull request poszedł dalej",
+        "cursor_expired": "Kanał zmian wyszedł poza ten kursor"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -792,7 +793,8 @@
         "delegated_claim_missing": "Brakuje zapisu tego, co przebieg wysłał do zewnętrznego wykonawcy, więc nie ma czego odpytywać. Z samym wykonawcą wszystko jest w porządku. Odśwież przebieg i uruchom krok ponownie, jeśli nadal stoi.",
         "thread_busy": "Poprzednie pytanie w tym wątku nie ma jeszcze odpowiedzi. Poczekaj na nią albo zapytaj w innym wątku.",
         "draft_conflict": "Od wczytania ten szkic komentarza został edytowany, opublikowany lub odrzucony. Wczytaj szkice ponownie i wprowadź zmianę jeszcze raz.",
-        "session_stale": "Po przygotowaniu tej recenzji pojawiły się nowe commity, więc szkice mogą wskazywać złe linie. Odśwież recenzję, sprawdź szkice i dopiero wtedy opublikuj."
+        "session_stale": "Po przygotowaniu tej recenzji pojawiły się nowe commity, więc szkice mogą wskazywać złe linie. Odśwież recenzję, sprawdź szkice i dopiero wtedy opublikuj.",
+        "cursor_expired": "Zmiany po tym kursorze nie są już przechowywane. Pobierz nowy zrzut katalogu, a potem śledź kanał od pozycji, którą zwróci."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -831,6 +833,9 @@
       "title": "Nie udało się wczytać tego widoku",
       "body": "Nie udało się wczytać jego kodu. Zwykle oznacza to, że aplikacja została zaktualizowana, gdy ta karta była otwarta, więc plików żądanych przez tę stronę nie ma już na serwerze. Odśwież, aby pobrać aktualną wersję.",
       "reload": "Odśwież"
+    },
+    "reported": {
+      "description": "Operacja została wykonana i zgłosiła błąd. Pokaż szczegóły, aby zobaczyć, co zgłosiła."
     }
   },
   "personalSubscriptions": {
@@ -1848,8 +1853,6 @@
     "exportJson": "Eksportuj JSON",
     "exportHint": "Pobierz przyjazny dla LLM eksport JSON tego uruchomienia",
     "closeEsc": "Zamknij (Esc)",
-    "loadingActivity": "Ładowanie aktywności modelu…",
-    "loadingContext": "Ładowanie dostarczonego kontekstu…",
     "noCalls": "Brak zarejestrowanych wywołań modelu dla tego uruchomienia.",
     "noContext": "Brak zapisanego kontekstu agenta dla tego uruchomienia. Jest on przechwytywany przy każdym wysłaniu, gdy w obszarze roboczym włączono opcję 'Przechowuj pełny kontekst agenta'.",
     "contextError": "Nie udało się załadować dostarczonego kontekstu.",
@@ -1941,7 +1944,6 @@
       "details": "Szczegóły"
     },
     "webSearch": "Wyszukiwanie w sieci",
-    "loadingSearch": "Ładowanie wyszukań w sieci…",
     "noSearch": "Nie zarejestrowano wyszukań w sieci dla tego uruchomienia. Zapytania są rejestrowane, gdy wyszukiwanie w sieci jest uruchomione, a przestrzeń robocza ma włączone „Przechowuj pełny kontekst agenta”.",
     "search": {
       "available": "Dostępne",
@@ -1980,7 +1982,6 @@
     "toolCalls": {
       "title": "Wywołania narzędzi",
       "subtitle": "co zrobiły agenty, w kolejności, w jakiej to robiły",
-      "loading": "Ładowanie wywołań narzędzi…",
       "error": "Nie udało się załadować wywołań narzędzi.",
       "none": "Brak zarejestrowanych wywołań narzędzi dla tego uruchomienia.",
       "noneMatching": "Żadne wywołanie narzędzia nie pasuje do tego filtra.",
@@ -2001,7 +2002,6 @@
     "title": "Obserwowalność platformy",
     "refresh": "Odśwież",
     "close": "Zamknij",
-    "loading": "Ładowanie stanu platformy…",
     "retry": "Ponów",
     "window": {
       "oneHour": "Ostatnia godzina",
@@ -2082,7 +2082,6 @@
   "reports": {
     "title": "Raporty",
     "refresh": "Odśwież",
-    "loading": "Wczytywanie raportów…",
     "retry": "Spróbuj ponownie",
     "error": "Nie udało się wczytać raportów.",
     "period": "Od {from} do {to}",
@@ -2479,7 +2478,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} więcej niepokazanych",
-      "failingRunGone": "To uruchomienie nie jest już wczytane i nie ma zadania do otwarcia."
+      "failingRunGone": "To uruchomienie nie jest już wczytane i nie ma zadania do otwarcia.",
+      "goTo": {
+        "review": "Przejrzyj",
+        "answer": "Odpowiedz",
+        "test": "Przetestuj",
+        "confirm": "Potwierdź",
+        "triage": "Posortuj",
+        "choose": "Wybierz",
+        "open": "Otwórz"
+      }
     },
     "aiProvidersBanner": {
       "setup": {
@@ -2560,6 +2568,18 @@
         "action": "Sprawdź połączenie"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "Na tej tablicy agenci nie mogą jeszcze działać: nie podłączono żadnej puli runnerów.",
+        "outage": "Agenci nie mogą teraz działać: pula runnerów tej tablicy jest nieosiągalna."
+      },
+      "owner": {
+        "workspace_admin": "Może to naprawić administrator tablicy.",
+        "account_admin": "Może to naprawić administrator konta.",
+        "operator": "Może to naprawić tylko operator wdrożenia."
+      },
+      "fullSurface": "Możesz to naprawić sam: zmień rolę u góry panelu bocznego."
+    },
     "spendWarningBanner": {
       "title": "Osiągnięto limit wydatków, wykonywanie agentów wstrzymane",
       "body": "Wydatki na tokeny w tym miesiącu osiągnęły skonfigurowany budżet, dlatego działające potoki zostały wstrzymane, aby uniknąć dalszych kosztów. Wykonywanie wznowi się automatycznie po odnowieniu budżetu w przyszłym miesiącu lub po podniesieniu limitu.",
@@ -2637,7 +2657,10 @@
         "toggleUiMode": "Zmień tryb interfejsu",
         "chooseRole": "Zmień swoją rolę",
         "foundationalServices": "Usługi fundamentalne",
-        "notificationSettings": "Zarządzaj routingiem powiadomień"
+        "notificationSettings": "Zarządzaj routingiem powiadomień",
+        "setupChecklist": "Lista konfiguracji",
+        "queueView": "Otwórz widok kolejki",
+        "boardView": "Otwórz widok tablicy"
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
@@ -2665,7 +2688,11 @@
         "chooseRole": "rola inżynier menedżer produktu projektant persona prostszy widok",
         "tutorial": "samouczek przewodnik pomoc nauka wprowadzenie",
         "foundationalServices": "wspólna możliwość platforma usługa api kontrakt openapi katalog",
-        "notificationSettings": "powiadomienia e-mail routing kanały skrzynka"
+        "notificationSettings": "powiadomienia e-mail routing kanały skrzynka",
+        "setupChecklist": "konfiguracja lista setup runner model github magazyn środowisko",
+        "queueView": "kolejka widok lista oczekuje",
+        "boardView": "tablica kanwa mapa widok planowanie",
+        "describeWork": "opisz nową pracę zadanie dodaj utwórz funkcja błąd"
       }
     },
     "integrationsHub": {
@@ -2923,7 +2950,6 @@
         "intro": "Każde ustawienie wybiera {baseModel} dla każdego agenta, z opcjonalnymi nadpisaniami dla poszczególnych agentów. Model przypięty do pojedynczego zadania nadal ma pierwszeństwo przed ustawieniem.",
         "introBaseModel": "model bazowy",
         "newPreset": "Nowe ustawienie",
-        "loadingCatalog": "Wczytywanie katalogu modeli…",
         "default": "Domyślne",
         "setDefaultTitle": "Ustaw jako domyślne dla obszaru roboczego",
         "editTitle": "Edytuj ustawienie",
@@ -2932,7 +2958,8 @@
         "basePrefix": "Bazowy:",
         "overrideCount": "{count} nadpisanie | {count} nadpisania | {count} nadpisań",
         "empty": "Brak ustawień. Utwórz jedno, aby przypisać modele do swoich agentów.",
-        "customRouteOrder": "własna kolejność tras"
+        "customRouteOrder": "własna kolejność tras",
+        "catalogFailed": "Katalog modeli nie został wczytany. Ponów, aby zobaczyć ustawienia."
       },
       "editor": {
         "useBaseModel": "Użyj modelu bazowego",
@@ -2952,7 +2979,8 @@
         "deleteFailed": "Nie udało się usunąć ustawienia",
         "nameRequiredTitle": "Wymagana nazwa",
         "nameRequiredBody": "Nadaj ustawieniu nazwę.",
-        "saveFailed": "Nie udało się zapisać ustawienia"
+        "saveFailed": "Nie udało się zapisać ustawienia",
+        "catalogFailed": "Nie udało się wczytać katalogu modeli"
       },
       "confirmDelete": {
         "title": "Usunąć ten preset modelu?",
@@ -3148,7 +3176,6 @@
     },
     "taskTypeSuppressions": {
       "intro": "Wybierz, które operacje wielokrotnego użytku tego wdrożenia są dostępne na tej tablicy. Ukrycie usuwa operację z listy wyboru przy tworzeniu zadania i blokuje tworzenie pracy tego typu; inne tablice pozostają bez zmian.",
-      "loading": "Wczytywanie operacji…",
       "empty": "To wdrożenie nie rejestruje żadnych operacji wielokrotnego użytku.",
       "offer": "Udostępnij na tej tablicy",
       "saveFailed": "Nie udało się zmienić operacji dostępnych na tej tablicy"
@@ -3575,7 +3602,9 @@
         "createdByKey": "klucz API {id}",
         "revoke": "Unieważnij token",
         "boundToYou": "Twoja subskrypcja",
-        "boundToOther": "Subskrypcja użytkownika {user}"
+        "boundToOther": "Subskrypcja użytkownika {user}",
+        "reachAll": "Wszystkie obszary robocze",
+        "reachCount": "Obszary robocze: {count}"
       },
       "add": {
         "heading": "Utwórz token",
@@ -3589,7 +3618,13 @@
         "identitySystem": "Ten obszar roboczy (token systemowy)",
         "identitySelf": "Ja (token osobisty)",
         "identitySystemHelp": "Uruchomienia rozpoczęte tym tokenem należą do obszaru roboczego i nie są przypisywane do żadnej osoby. Token nie może korzystać z niczyjej osobistej subskrypcji Claude / Codex / GLM, więc zadanie przypięte do takiego modelu zostanie odrzucone, zamiast obciążyć kogoś nieobecnego. Użyj go do CI i wspólnych integracji.",
-        "identitySelfHelp": "Uruchomienia rozpoczęte tym tokenem są przypisywane Tobie i mogą korzystać z Twojej osobistej subskrypcji Claude / Codex / GLM. Każde takie wywołanie musi dodatkowo przesłać Twoje hasło osobiste w nagłówku X-Personal-Password; nie jest ono nigdzie zapisywane. Użyj go do własnych uruchomień headless."
+        "identitySelfHelp": "Uruchomienia rozpoczęte tym tokenem są przypisywane Tobie i mogą korzystać z Twojej osobistej subskrypcji Claude / Codex / GLM. Każde takie wywołanie musi dodatkowo przesłać Twoje hasło osobiste w nagłówku X-Personal-Password; nie jest ono nigdzie zapisywane. Użyj go do własnych uruchomień headless.",
+        "reach": "Obszary robocze",
+        "reachHelp": "W których obszarach roboczych ten token może działać. Token obejmujący więcej niż jeden wskazuje obszar roboczy przy każdym wywołaniu w nagłówku x-cat-factory-workspace.",
+        "reachThis": "Tylko ten obszar roboczy",
+        "reachAll": "Wszystkie obszary robocze konta",
+        "reachSelected": "Wybrane obszary robocze",
+        "reachPick": "Wybierz obszary robocze"
       },
       "scopes": {
         "read": "Tylko odczyt",
@@ -3757,9 +3792,7 @@
       "toast": {
         "connected": "Klucz OpenRouter połączony",
         "connectFailed": "Nie udało się połączyć klucza",
-        "rejected": "OpenRouter odrzucił klucz.",
         "unreachable": "Nie udało się połączyć z OpenRouter",
-        "connectFirst": "Najpierw połącz klucz OpenRouter.",
         "saved": "Katalog OpenRouter zapisany",
         "saveFailed": "Nie udało się zapisać katalogu"
       }
@@ -4083,7 +4116,6 @@
         "overrideActive": "Aktywne",
         "personalOverrideHint": "Nadpisz handler przestrzeni roboczej dla tego typu provisioningu na własnej maszynie. Przechowywane na użytkownika.",
         "removeOverride": "Usuń nadpisanie",
-        "loading": "Ładowanie ustawień infrastruktury…",
         "kubeNoun": "obsługę Kubernetes",
         "kubeOverrideNoun": "nadpisanie Kubernetes",
         "customNoun": "tę obsługę",
@@ -4496,7 +4528,6 @@
     "connect": {
       "yourInstallations": "Twoje instalacje",
       "refresh": "Odśwież",
-      "lookingForInstallations": "Szukanie instalacji…",
       "noInstallations": "Nie znaleziono jeszcze żadnych instalacji aplikacji. Zainstaluj ją poniżej lub połącz za pomocą ID.",
       "installationMeta": "{targetType} · instalacja {id}",
       "linked": "powiązana",
@@ -4523,14 +4554,12 @@
       "resync": "Zsynchronizuj ponownie",
       "backfill": "Uzupełnij",
       "disconnect": "Rozłącz",
-      "loading": "Ładowanie…",
       "tabs": {
         "repos": "Repozytoria",
         "issues": "Zgłoszenia"
       },
       "linkedToBoard": "Powiązane z tą tablicą",
       "manageRepos": "Zarządzaj repozytoriami",
-      "loadingRepos": "Ładowanie repozytoriów…",
       "private": "prywatne",
       "saveSelection": "Zapisz wybór",
       "noLinkedRepos": "Nie powiązano jeszcze żadnych repozytoriów. Użyj opcji Zarządzaj repozytoriami, aby wybrać, które repozytoria śledzi ta tablica.",
@@ -4613,7 +4642,6 @@
     },
     "repoTree": {
       "root": "katalog główny",
-      "loading": "Ładowanie…",
       "noSubdirectories": "Brak podkatalogów.",
       "empty": "Pusto.",
       "select": "Wybierz",
@@ -4870,7 +4898,8 @@
         "scopes": "Zostaniesz poproszony o uprawnienia: {scopes}",
         "fallback": "Wolisz token? Skorzystaj z pól poniżej.",
         "failed": "Nie udało się rozpocząć logowania do {source}"
-      }
+      },
+      "disconnectFailed": "Nie można rozłączyć"
     },
     "spawn": {
       "title": "Podgląd struktury",
@@ -5018,7 +5047,8 @@
       "updateConnection": "Zaktualizuj połączenie",
       "connect": "Połącz",
       "oauthButton": "Połącz z {label}",
-      "oauthOr": "lub połącz za pomocą klucza API"
+      "oauthOr": "lub połącz za pomocą klucza API",
+      "disconnectFailed": "Nie można rozłączyć"
     }
   },
   "bugHunt": {
@@ -5127,12 +5157,10 @@
   "guidedReview": {
     "title": "Przegląd z przewodnikiem",
     "titleFor": "{repo} #{number}: {title}",
-    "loading": "Wczytywanie przeglądu…",
     "outOfDate": "Aktualizacje na żywo nie powiodły się, więc ten widok może być nieaktualny.",
     "openFromTask": "Zbadaj w przeglądzie z przewodnikiem",
     "picker": {
       "intro": "Wybierz repozytorium i pull request. Dostaniesz przegląd zmiany i możesz zadawać pytania w osobnych wątkach.",
-      "loading": "Wczytywanie repozytoriów…",
       "noRepos": "Do tego obszaru roboczego nie podłączono jeszcze żadnych repozytoriów.",
       "repo": "Repozytorium",
       "openPulls": "Otwarte pull requesty",
@@ -5800,7 +5828,6 @@
     "answerVerb": "Odpowiedz",
     "dismissVerb": "odrzuć",
     "empty": "Brak przeglądu. Recenzent uruchamia się automatycznie jako pierwszy krok po starcie potoku tego zadania.",
-    "loadingReview": "Ładowanie przeglądu…",
     "reviewing": "Przeglądanie wymagań…",
     "settled": "Wymagania są ustalone. Poniższy dokument jest tym, którego używa każdy kolejny krok agenta.",
     "exceeded": {
@@ -5940,7 +5967,6 @@
     "introAnswer": "Odpowiedz",
     "introDismiss": "odrzuć",
     "empty": "Brak recenzji. Recenzent uruchamia się automatycznie jako pierwszy krok przy starcie potoku tego zadania.",
-    "loadingReview": "Wczytywanie recenzji…",
     "triaging": "Klasyfikowanie zgłoszenia błędu…",
     "converged": "Zgłoszenie błędu jest doprecyzowane. Poniższy raport jest tym, czego używa każdy kolejny krok agenta.",
     "capHeading": "Osiągnięto limit {max} iteracji z wciąż otwartymi uwagami.",
@@ -6014,7 +6040,6 @@
   "consensus": {
     "titlePrefix": "Konsensus",
     "participantCount": "jeden uczestnik | {count} uczestnicy | {count} uczestników",
-    "loading": "Ładowanie sesji konsensusu…",
     "empty": "Dla tego kroku nie uruchomiono jeszcze żadnej sesji konsensusu.",
     "failed": "Konsensus nie powiódł się: {error}",
     "unknownError": "nieznany błąd",
@@ -6062,7 +6087,6 @@
     "introChoose": "Wybierz",
     "introDismiss": "odrzuć",
     "empty": "Jeszcze nie ma burzy mózgów. Uruchamia się automatycznie, gdy pipeline tego zadania osiągnie krok burzy mózgów.",
-    "loading": "Wczytywanie burzy mózgów…",
     "generating": "Generowanie opcji…",
     "settledBanner": "{doc} jest ustalony. Dokument poniżej jest tym, czego używa następny etap.",
     "exceeded": {
@@ -6140,7 +6164,6 @@
   },
   "spec": {
     "title": "Wymagania",
-    "loading": "Ładowanie specyfikacji…",
     "error": "Nie udało się załadować specyfikacji. Spróbuj otworzyć to okno ponownie.",
     "overview": "Przegląd",
     "noFeatureGroups": "Brak grup funkcji",
@@ -6330,8 +6353,7 @@
     },
     "shot": {
       "failed": "Błąd",
-      "failedToLoad": "Błąd ładowania",
-      "loading": "Ładowanie…"
+      "failedToLoad": "Błąd ładowania"
     },
     "screenshotAlt": "{view} (zrzut ekranu)",
     "screenshots": "Zrzuty ekranu",
@@ -7043,7 +7065,6 @@
       "awaiting": "Wygenerowano {total} kandydatów i czekają na porównanie."
     },
     "asset": {
-      "loading": "Wczytywanie pliku…",
       "loadFailed": "Nie udało się wczytać zapisanego pliku.",
       "retry": "Spróbuj ponownie",
       "open": "Otwórz",
@@ -7985,6 +8006,7 @@
     "connect": {
       "or": "lub",
       "noneConfigured": "W tym wdrożeniu nie skonfigurowano połączenia z systemem kontroli źródeł. Poproś operatora o skonfigurowanie aplikacji GitHub lub dostępu do GitLab.",
+      "adminRequired": "Tylko administrator tablicy może podłączyć hosta repozytoriów. Poproś o to administratora tej tablicy.",
       "gitlab": {
         "intro": "Wklej osobisty token dostępu GitLab, aby połączyć ten obszar roboczy. cat-factory używa go do wyświetlania Twoich projektów, wypychania gałęzi i otwierania merge requestów.",
         "tokenLabel": "Osobisty token dostępu",
@@ -8002,7 +8024,8 @@
     "onboarding": {
       "title": "Połącz cat-factory z {provider}",
       "titleAny": "Połącz cat-factory ze swoimi repozytoriami",
-      "intro": "cat-factory działa, otwierając pull requesty w Twoich repozytoriach. Połącz swojego dostawcę repozytoriów, aby kontynuować."
+      "intro": "cat-factory działa, otwierając pull requesty w Twoich repozytoriach. Połącz swojego dostawcę repozytoriów, aby kontynuować.",
+      "switchBoard": "To nie ta tablica? Przełącz się na inną albo utwórz własną."
     },
     "addService": {
       "intro": "Wybierz istniejące repozytorium {provider}, aby dodać je jako usługę tablicy. Bez inicjowania: repozytorium jest wiązane bez zmian z nową ramką usługi, a uruchamiane na nim zadania celują w to repozytorium.",
@@ -8118,6 +8141,10 @@
           "canvas": {
             "title": "Tablica",
             "body": "Usługi, moduły i zadania żyją na tym płótnie. Przeciągaj, aby przesuwać widok, przewijaj, aby zmieniać powiększenie, i klikaj karty, aby zobaczyć szczegóły."
+          },
+          "views": {
+            "title": "Dwa widoki",
+            "body": "Tablica ma drugi widok. Kolejka pokazuje, co czeka na ciebie we wszystkich usługach. Po zakończeniu przewodnika przełączasz się tutaj między kolejką a tym obszarem roboczym. Aplikacja otwiera ostatnio używany widok."
           },
           "sidebar": {
             "title": "Pasek boczny",
@@ -8738,5 +8765,146 @@
         "unsupportedVersion": "Ten motyw powstał w nowszym formacie edytora, niż rozumie ta aplikacja."
       }
     }
+  },
+  "setup": {
+    "title": "Konfiguracja",
+    "progress": "{done} z {total} gotowe",
+    "intro": "Czego ten workspace potrzebuje, aby zadanie mogło działać i zostać scalone.",
+    "required": "wymagane",
+    "optional": "opcjonalne",
+    "action": {
+      "change": "Zmień",
+      "connect": "Skonfiguruj",
+      "fix": "Napraw",
+      "review": "Sprawdź",
+      "retry": "Spróbuj ponownie"
+    },
+    "rows": {
+      "checking": "Sprawdzanie…",
+      "notNeeded": "To wdrożenie tego nie używa.",
+      "model": {
+        "title": "Model",
+        "done": "Model jest dostępny.",
+        "missing": "Brak dostępnego modelu. Żaden agent nie może działać, dopóki nie połączysz dostawcy."
+      },
+      "sourceControl": {
+        "title": "Kontrola wersji",
+        "done": "Połączono. Agenci mogą wypychać gałęzie i otwierać pull requesty.",
+        "missing": "Nie połączono. Agenci nie mogą otwierać pull requestów."
+      },
+      "agentExecutor": {
+        "title": "Gdzie działają agenci",
+        "done": "Runner jest skonfigurowany.",
+        "missing": "Brak skonfigurowanego runnera. Nic nie może działać, dopóki go nie połączysz.",
+        "notNeeded": "To wdrożenie uruchamia agentów bez runnera."
+      },
+      "ephemeralEnvironments": {
+        "title": "Środowiska testowe",
+        "done": "Skonfigurowano. Testerzy mogą używać podglądu na żywo.",
+        "missing": "Nie skonfigurowano. Testerzy, którzy potrzebują podglądu na żywo, nie działają. Pozostali agenci działają."
+      },
+      "binaryStorage": {
+        "title": "Magazyn zrzutów ekranu",
+        "done": "Skonfigurowano. Kontrole wizualne są włączone.",
+        "missing": "Nie skonfigurowano. Kontrole wizualne są wyłączone."
+      }
+    },
+    "causes": {
+      "unreachable": "Skonfigurowane, ale teraz nieosiągalne.",
+      "incomplete": "Połączone, ale brakuje wymaganego ustawienia.",
+      "rejected": "GitHub odrzucił token dostępu.",
+      "underscoped": "Token dostępu nie może wypychać zmian ani otwierać pull requestów.",
+      "presetBroken": "Domyślny preset modelu wskazuje model, który nie jest dostępny.",
+      "probeFailed": "Sprawdzenie nie odpowiedziało.",
+      "notReported": "To wdrożenie tego nie zgłasza."
+    },
+    "also": {
+      "title": "Także tutaj",
+      "pipelines": "Pipeline'y",
+      "riskPolicies": "Zasady scalania",
+      "modelPresets": "Presety modeli",
+      "counts": {
+        "repair": "Do naprawy: {count}",
+        "outdated": "Nieaktualne: {count}",
+        "new": "Nowe: {count}"
+      },
+      "settings": "Ustawienia i połączenia",
+      "workspaceSettings": "Ustawienia workspace'u",
+      "integrations": "Integracje"
+    }
+  },
+  "queue": {
+    "title": "Kolejka",
+    "summary": "Czeka na ciebie: {needsYou} · gotowe do scalenia: {ready}",
+    "filter": {
+      "allServices": "Wszystkie serwisy",
+      "service": "Filtruj według serwisu"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Czeka na ciebie",
+        "empty": "Nic na ciebie nie czeka."
+      },
+      "inFlight": {
+        "label": "W toku",
+        "empty": "Żaden agent teraz nie pracuje."
+      },
+      "readyToMerge": {
+        "label": "Gotowe do scalenia",
+        "empty": "Żaden pull request nie czeka na scalenie."
+      }
+    },
+    "waiting": {
+      "label": "Nierozpoczęte ({count})",
+      "empty": "Nic nie czeka na start."
+    },
+    "done": {
+      "count": "Scalone od {date}: {count}",
+      "countAll": "Scalone: {count}",
+      "show": "Pokaż",
+      "hide": "Ukryj",
+      "capped": "Pokazuje najnowsze {shown} z {total}."
+    },
+    "card": {
+      "waited": "czekało {duration}",
+      "active": "aktywne {duration} temu",
+      "merged": "scalone {duration} temu",
+      "step": "krok {current} z {total}",
+      "showOnBoard": "Pokaż na tablicy",
+      "answer": "Odpowiedz",
+      "budgetPaused": "Limit wydatków wstrzymał to uruchomienie. Będzie kontynuowane po podniesieniu limitu.",
+      "parked": "Uruchomienie czeka na człowieka. Otwórz zadanie, aby zobaczyć, czego potrzebuje.",
+      "waitingOn": "Czeka na {deps}",
+      "pr": "Pull request #{number}"
+    },
+    "describeWork": "Opisz nową pracę"
+  },
+  "views": {
+    "title": "Widoki",
+    "queue": "Kolejka",
+    "board": "Tablica",
+    "openQueue": "Otwórz widok kolejki"
+  },
+  "describeWork": {
+    "title": "Opisz nową pracę",
+    "textLabel": "Co trzeba zrobić",
+    "textHint": "Wystarczy jedno zdanie. Dodaj więcej szczegółów, jeśli je masz.",
+    "textPlaceholder": "Dodaj dziennik audytu dla zdarzeń logowania. Zapisuj każde logowanie z czasem, użytkownikiem i wynikiem.",
+    "savedAs": "Tytuł zadania: {title}",
+    "serviceLabel": "Serwis",
+    "servicePlaceholder": "Wybierz serwis",
+    "kindLabel": "Rodzaj",
+    "kind": {
+      "feature": "Funkcja",
+      "bug": "Błąd"
+    },
+    "moreKinds": "Więcej rodzajów…",
+    "changeHowItRuns": "Zmień sposób uruchomienia",
+    "workspaceDefault": "Domyślne dla workspace'u",
+    "defaultPipelineHint": "Domyślny dla workspace'u: {name}. Pipeline wybrany tutaj zastępuje go w tym zadaniu.",
+    "attachContext": "Dołącz kontekst (otwiera pełny formularz)",
+    "add": "Dodaj do kolejki",
+    "addAndStart": "Dodaj i uruchom",
+    "addedToast": "Dodano „{title}” do kolejki"
   }
 }

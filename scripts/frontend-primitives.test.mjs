@@ -15,10 +15,8 @@ import {
   findRedundantTitle,
   findRenderedControls,
   findTitleOnlyIconButton,
-  openingTag,
-  templateHalf,
 } from './check-frontend-primitives.mjs'
-import { codeLines } from './lib/frontend-scan.mjs'
+import { codeLines, openingTag, templateHalf } from './lib/frontend-scan.mjs'
 
 /** The scanner's own `tagOf`, so a fixture can be written as the wrapped lines it really is. */
 const tagReader = (lines, index) => (from) => openingTag(lines, index, from)

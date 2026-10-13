@@ -108,6 +108,8 @@ export type {
   InfraSetup,
   InfraSetupStatus,
   InfraSetupArea,
+  InfraSetupOwner,
+  InfraSetupOwners,
   ServiceFragmentDefaults,
   KaizenGradingStatus,
   KaizenGrading,

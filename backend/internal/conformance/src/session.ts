@@ -1,4 +1,9 @@
-import { HmacSigner, TOKEN_AUDIENCE, type SessionPayload } from '@cat-factory/server'
+import {
+  HmacSigner,
+  type MachinePayload,
+  TOKEN_AUDIENCE,
+  type SessionPayload,
+} from '@cat-factory/server'
 
 // Mint a real signed user session for the auth-ENABLED conformance assertions (workspace
 // RBAC). The dev-open harnesses resolve NO access object and allow everything, so an
@@ -21,6 +26,21 @@ export function mintSession(
     // created `users` row carries, so an assertion that only cares about RBAC needs no setup. A
     // revocation assertion passes the value it expects instead.
     gen: user.generation ?? 0,
+  }
+  return new HmacSigner(secret).sign(payload)
+}
+
+/**
+ * Mint a real signed MACHINE token (the audience a mothership-mode node presents on `/internal/*`)
+ * for the auth-ENABLED assertions that read a machine endpoint's reply rather than only its 403.
+ */
+export function mintMachineToken(secret: string): Promise<string> {
+  const payload: MachinePayload = {
+    aud: TOKEN_AUDIENCE.machine,
+    nodeId: 'node_conformance',
+    userId: 'usr_conformance',
+    scope: { accountIds: [] },
+    exp: Date.now() + 3_600_000,
   }
   return new HmacSigner(secret).sign(payload)
 }

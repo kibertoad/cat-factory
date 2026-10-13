@@ -3,8 +3,11 @@
 // has no connection yet. cat-factory's whole flow runs on a connected repository host (agents
 // open pull/merge requests on the user's repos), so the board is withheld until the workspace
 // connects one. <VcsConnectSurfaces> renders whichever connect methods the deployment serves; a
-// "Sign out" escape hatch avoids trapping a user who needs to switch accounts.
+// "Sign out" escape hatch avoids trapping a user who needs to switch accounts. The board switcher is
+// the other escape: the gate replaces the whole board, sidebar included, so without it a member
+// who landed on a board they cannot connect had no way to reach a board they can.
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
+import BoardSwitcher from '~/components/layout/BoardSwitcher.vue'
 import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 
 const { t } = useI18n()
@@ -38,6 +41,11 @@ const title = computed(() =>
       </div>
 
       <VcsConnectSurfaces :app-intro="t('github.onboarding.appIntro')" />
+
+      <div class="mt-6 border-t border-default pt-4" data-testid="vcs-onboarding-switch-board">
+        <p class="mb-2 text-xs text-muted">{{ t('vcs.onboarding.switchBoard') }}</p>
+        <BoardSwitcher standalone />
+      </div>
 
       <p
         v-if="auth.required && auth.user"
