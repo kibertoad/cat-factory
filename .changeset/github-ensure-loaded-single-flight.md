@@ -1,5 +1,0 @@
----
-'@cat-factory/app': patch
----
-
-Selecting a service frame no longer reads the GitHub repos, pull requests and issues twice. The inspector asks for the projection when the frame opens, and concurrent callers share one read. A connected workspace with no linked repos counts as loaded, so the inspector does not read it again on every open. The store records what the projection was loaded for (the workspace and its connection), so a failed load, a board reset, a disconnect and a reinstalled App each make the next request read again. One generation counter decides whether a read may land: an older read that finishes last, a read for a board you left, a read that finishes after a disconnect, and a read that started before a direct write (saving linked repos, opening or merging a pull request) no longer overwrite newer rows. The loading flag clears as soon as the projection is cleared. The add-service-from-repo, bootstrap and GitHub panel surfaces still re-read on open, and share a read that is already running. A failed read on frame open now shows the standard error toast.
