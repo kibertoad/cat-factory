@@ -852,7 +852,7 @@
         "labelHelp": "Ein Name, um dieses Token später wiederzuerkennen.",
         "labelPlaceholder": "z. B. CI-Pipeline",
         "scope": "Berechtigung",
-        "scopeHelp": "Was dieses Token darf: nur Lesen, Lesen und Schreiben oder Vollzugriff (der auch das Löschen erlaubt).",
+        "scopeHelp": "Jede Stufe umfasst alles, was die vorherige erlaubt. Lesen: Aufgaben, Läufe und deren Ergebnisse ansehen. Schreiben: zusätzlich Aufgaben anlegen, bearbeiten, starten, stoppen und wiederholen sowie Reviews und Bewertungen ausführen. Entscheiden: zusätzlich die menschlichen Entscheidungen eines Laufs beantworten (Freigaben, Review-Befunde, Interview- und Rückfragen, manuelle Tests); diese Stufe braucht ein Token auch, um eine Pipeline zu starten, die an einer solchen Entscheidung anhalten kann. Vollzugriff: zusätzlich Services anlegen, konfigurieren und löschen, Aufgaben löschen, Repositories verknüpfen, Umgebungsverbindungen und Webhooks verwalten und auf Benachrichtigungen reagieren.",
         "create": "Token erstellen",
         "identity": "Läuft als",
         "identitySystem": "Dieser Arbeitsbereich (System-Token)",
@@ -867,10 +867,10 @@
         "reachPick": "Arbeitsbereiche auswählen"
       },
       "scopes": {
-        "read": "Nur Lesen",
-        "write": "Lesen und Schreiben",
-        "decide": "Antworten auf Entscheidungen",
-        "admin": "Vollzugriff"
+        "read": "Lesen",
+        "write": "Schreiben (inkl. Lesen)",
+        "decide": "Entscheiden (inkl. Schreiben)",
+        "admin": "Vollzugriff (inkl. Entscheiden)"
       },
       "toast": {
         "loadFailed": "API-Tokens konnten nicht geladen werden",

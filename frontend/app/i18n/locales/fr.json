@@ -3612,7 +3612,7 @@
         "labelHelp": "Un nom pour reconnaître ce jeton plus tard.",
         "labelPlaceholder": "ex. pipeline CI",
         "scope": "Portée",
-        "scopeHelp": "Ce que ce jeton peut faire : lecture seule, lecture et écriture, ou accès complet (qui autorise aussi la suppression).",
+        "scopeHelp": "Chaque niveau inclut tout ce que permet le précédent. Lecture : consulter les tâches, les exécutions et leurs résultats. Écriture : en plus, créer, modifier, démarrer, arrêter et relancer des tâches, et lancer des revues et des évaluations. Décision : en plus, répondre aux décisions humaines d'une exécution (approbations, constats de revue, questions d'entretien et de clarification, tests manuels) ; un jeton a aussi besoin de ce niveau pour démarrer un pipeline qui peut s'arrêter sur l'une d'elles. Accès complet : en plus, ajouter, configurer et supprimer des services, supprimer des tâches, lier des dépôts, gérer les connexions d'environnement et les webhooks, et agir sur les notifications.",
         "create": "Créer le jeton",
         "identity": "S'exécute en tant que",
         "identitySystem": "Cet espace de travail (jeton système)",
@@ -3627,10 +3627,10 @@
         "reachPick": "Choisir des espaces de travail"
       },
       "scopes": {
-        "read": "Lecture seule",
-        "write": "Lecture et écriture",
-        "decide": "Répondre aux décisions",
-        "admin": "Accès complet"
+        "read": "Lecture",
+        "write": "Écriture (inclut Lecture)",
+        "decide": "Décision (inclut Écriture)",
+        "admin": "Accès complet (inclut Décision)"
       },
       "toast": {
         "loadFailed": "Impossible de charger les jetons d'API",

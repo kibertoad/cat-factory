@@ -3753,7 +3753,7 @@
         "labelHelp": "Bu belirteci daha sonra tanımak için bir ad.",
         "labelPlaceholder": "örn. CI hattı",
         "scope": "Kapsam",
-        "scopeHelp": "Bu belirtecin yapabilecekleri: yalnızca okuma, okuma ve yazma ya da tam erişim (silmeye de izin verir).",
+        "scopeHelp": "Her seviye, bir öncekinin izin verdiği her şeyi içerir. Okuma: görevleri, çalıştırmaları ve sonuçlarını görüntüleme. Yazma: ayrıca görev oluşturma, düzenleme, başlatma, durdurma ve yeniden deneme, inceleme ve değerlendirme başlatma. Karar: ayrıca bir çalıştırmanın insan kararlarını yanıtlama (onaylar, inceleme bulguları, görüşme ve netleştirme soruları, manuel testler); bir belirtecin, bunlardan birinde durabilecek bir işlem hattını başlatmak için de bu seviyeye ihtiyacı vardır. Tam erişim: ayrıca hizmet ekleme, yapılandırma ve silme, görev silme, depo bağlama, ortam bağlantılarını ve webhookları yönetme ve bildirimler üzerinde işlem yapma.",
         "create": "Belirteç oluştur",
         "identity": "Şu kimlikle çalışır",
         "identitySystem": "Bu çalışma alanı (sistem belirteci)",
@@ -3768,10 +3768,10 @@
         "reachPick": "Çalışma alanlarını seçin"
       },
       "scopes": {
-        "read": "Yalnızca okuma",
-        "write": "Okuma ve yazma",
-        "decide": "Kararları yanıtlama",
-        "admin": "Tam erişim"
+        "read": "Okuma",
+        "write": "Yazma (Okuma dahil)",
+        "decide": "Karar (Yazma dahil)",
+        "admin": "Tam erişim (Karar dahil)"
       },
       "toast": {
         "loadFailed": "API belirteçleri yüklenemedi",

@@ -3612,7 +3612,7 @@
         "labelHelp": "Un nombre para reconocer este token más adelante.",
         "labelPlaceholder": "p. ej. pipeline de CI",
         "scope": "Alcance",
-        "scopeHelp": "Lo que puede hacer este token: solo lectura, lectura y escritura o acceso completo (que también permite eliminar).",
+        "scopeHelp": "Cada nivel incluye todo lo que permite el anterior. Lectura: ver tareas, ejecuciones y sus resultados. Escritura: además, crear, editar, iniciar, detener y reintentar tareas, y lanzar revisiones y evaluaciones. Decisión: además, responder a las decisiones humanas de una ejecución (aprobaciones, hallazgos de revisión, preguntas de entrevista y de aclaración, pruebas manuales); un token también necesita este nivel para iniciar una canalización que pueda detenerse en una de ellas. Acceso completo: además, añadir, configurar y eliminar servicios, eliminar tareas, vincular repositorios, gestionar conexiones de entorno y webhooks, y actuar sobre notificaciones.",
         "create": "Crear token",
         "identity": "Se ejecuta como",
         "identitySystem": "Este espacio de trabajo (token de sistema)",
@@ -3627,10 +3627,10 @@
         "reachPick": "Elige espacios de trabajo"
       },
       "scopes": {
-        "read": "Solo lectura",
-        "write": "Lectura y escritura",
-        "decide": "Responder decisiones",
-        "admin": "Acceso completo"
+        "read": "Lectura",
+        "write": "Escritura (incluye Lectura)",
+        "decide": "Decisión (incluye Escritura)",
+        "admin": "Acceso completo (incluye Decisión)"
       },
       "toast": {
         "loadFailed": "No se pudieron cargar los tokens de la API",
