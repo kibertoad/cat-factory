@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
-import { onKeyStroke } from '@vueuse/core'
 import type { TableColumn } from '@nuxt/ui'
 import type { PlatformObservabilityWindow } from '~/types/execution'
 import { formatMs } from '~/utils/observability'
@@ -8,7 +7,7 @@ import { FAILURE_KIND_KEYS, isAgentFailureKind } from '~/utils/failureKinds'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
-import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
 // active account's runs — outcome totals + success rate, a time-bucketed outcome trend, the
@@ -105,9 +104,6 @@ function refresh() {
 function close() {
   ui.closeOperatorDashboard()
 }
-onKeyStroke('Escape', () => {
-  if (open.value) close()
-})
 
 // Load (and refresh) whenever the dashboard opens.
 watch(
@@ -122,13 +118,12 @@ watch(
 <template>
   <Teleport to="body">
     <Transition name="obs-fade">
-      <div
+      <TakeoverShell
         v-if="open"
-        class="z-[60] flex-col bg-app-950/96 backdrop-blur-sm"
-        :class="FULL_BLEED_TAKEOVER_CLASS"
-        role="dialog"
-        aria-modal="true"
+        :label="t('platformObservability.title')"
+        class="flex-col bg-app-950/96 backdrop-blur-sm"
         data-testid="operator-dashboard"
+        @close="close"
       >
         <header class="flex flex-wrap items-center gap-3 border-b border-default px-6 py-4">
           <div
@@ -553,7 +548,7 @@ watch(
             </div>
           </div>
         </div>
-      </div>
+      </TakeoverShell>
     </Transition>
   </Teleport>
 </template>

@@ -2,38 +2,15 @@
 // The single, app-wide confirmation dialog. Mounted once in `pages/index.vue` and driven
 // entirely by the `useConfirm()` singleton, so any caller can `await confirm({...})` without
 // rendering its own modal. UModal already provides the focus trap, Escape-to-close and
-// backdrop, so this component adds none of that — it only resolves the pending promise and,
-// crucially, resolves `false` whenever the modal closes without an explicit choice.
-import { computed, onUnmounted, watch } from 'vue'
-import { sharedOverlayStack, type OverlayStackTicket } from '@modular-vue/core'
+// backdrop, so this component adds none of that. It only resolves the pending promise, and
+// resolves `false` whenever the modal closes without an explicit choice. Its place on
+// the shared overlay stack, which makes a takeover or window under it leave Escape to it, comes
+// from `utils/foreignLayers.ts`, as for every Nuxt UI layer.
+import { computed } from 'vue'
 import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const { open, current, accept, cancel, dismissed } = useConfirm()
-
-// Register on the app's ONE overlay stack for as long as the dialog is up.
-//
-// The stack is what `useModalBehavior` (`ResultWindowShell`, the lightbox, every modular overlay)
-// asks before it handles Escape, and this dialog is a Nuxt UI modal, so without a registration it
-// is invisible to that question. A confirm opened FROM a result window then lost the race for its
-// own Escape key: the shell's capture-phase listener still believed it was topmost, so it
-// preventDefault-ed and re-entered its close request, which supersedes the confirm the user was
-// trying to cancel. Pushing a ticket makes the shell stand down while this is on top, which is
-// exactly the ordering the stack exists to state.
-let ticket: OverlayStackTicket | null = null
-function release(): void {
-  ticket?.release()
-  ticket = null
-}
-watch(
-  open,
-  (isOpen) => {
-    if (isOpen) ticket ??= sharedOverlayStack.push()
-    else release()
-  },
-  { immediate: true },
-)
-onUnmounted(release)
 
 const model = computed({
   get: () => open.value,
