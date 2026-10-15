@@ -1,5 +1,18 @@
 # @cat-factory/server
 
+## 0.336.1
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+  - @cat-factory/integrations@0.176.3
+  - @cat-factory/mcp-server@0.57.1
+  - @cat-factory/agents@0.172.2
+  - @cat-factory/kernel@0.360.1
+  - @cat-factory/orchestration@0.322.2
+  - @cat-factory/spend@0.23.16
+
 ## 0.336.0
 
 ### Minor Changes
