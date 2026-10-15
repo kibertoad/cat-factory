@@ -127,12 +127,12 @@ export function definePublicWebhookConformance(harness: ConformanceHarness): voi
       expect((await app.call('DELETE', ENDPOINT, undefined, decideAuth)).status).toBe(403)
       expect((await app.call('GET', ENDPOINT)).status).toBe(401)
 
-      // Two layers refuse a bad endpoint and they answer differently, which is worth pinning
-      // rather than papering over with an "any 4xx" range. The wire schema catches plaintext
-      // before the handler runs (400); the SSRF guard inside the SERVICE catches a private host
-      // (422, a thrown `ValidationError` through the shared error funnel). The second is the one
-      // that matters here: it is the same guard the delivery path re-applies on every redirect
-      // hop, so the public surface cannot admit an endpoint deliveries would then refuse.
+      // The wire schema admits `http://` and `https://` alike and leaves the decision to the
+      // deployment's URL policy, the SSRF guard inside the SERVICE (422, a thrown
+      // `ValidationError` through the shared error funnel). Under the default strict policy it
+      // refuses plaintext and a private host. It is the same guard the delivery path re-applies
+      // on every redirect hop, so the public surface cannot admit an endpoint deliveries would
+      // then refuse.
       const adminAuth = await mintKey(app, wsId, 'admin')
       const plaintext = await app.call(
         'PUT',
@@ -140,7 +140,9 @@ export function definePublicWebhookConformance(harness: ConformanceHarness): voi
         { url: 'http://hooks.example.com/cat-factory' },
         adminAuth,
       )
-      expect(plaintext.status).toBe(400)
+      expect(plaintext.status).toBe(422)
+      const notAUrl = await app.call('PUT', ENDPOINT, { url: 'ftp://hooks.example.com' }, adminAuth)
+      expect(notAUrl.status).toBe(400)
       const internal = await app.call('PUT', ENDPOINT, { url: 'https://127.0.0.1/hook' }, adminAuth)
       expect(internal.status).toBe(422)
 
