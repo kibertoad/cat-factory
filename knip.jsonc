@@ -207,8 +207,13 @@
       "ignoreDependencies": ["cloudflare", "@gadgets/integration-tests"],
     },
     "deploy/frontend": {
-      // Backs `nuxt typecheck` in the deploy consumer.
-      "ignoreDependencies": ["vue-tsc"],
+      // msw's generated service worker: Storybook serves it from `.storybook/public` and the
+      // preview registers it by URL, so no module imports it.
+      "ignore": [".storybook/public/mockServiceWorker.js"],
+      // vue-tsc backs `nuxt typecheck` in the deploy consumer. `@nuxt/ui` arrives through the
+      // `@cat-factory/app` layer, which declares it; the Storybook preview imports `UApp` from it
+      // directly, and a second declaration here would be a second version to keep in step.
+      "ignoreDependencies": ["vue-tsc", "@nuxt/ui"],
     },
   },
 }

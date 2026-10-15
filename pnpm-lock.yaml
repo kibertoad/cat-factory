@@ -1454,15 +1454,18 @@ importers:
         specifier: ^0.2.17
         version: 0.2.17
     devDependencies:
-      '@nuxtjs/storybook':
+      '@storybook-vue/nuxt':
         specifier: 10.0.1
-        version: 10.0.1(3fb8d618fc5ae7ede4c9e09c237bd135)
+        version: 10.0.1(patch_hash=ae3346237ad5a728800da48d162be5896109aa60677b90bcfc54f6860ed07c78)(4bdfbdd092353849d928a78e445fef8a)
       '@storybook/addon-a11y':
         specifier: 10.6.1
         version: 10.6.1(storybook@10.6.1(react@19.3.0))
       '@storybook/addon-vitest':
         specifier: 10.6.1
         version: 10.6.1(@vitest/browser-playwright@4.1.11)(@vitest/browser@4.1.11)(@vitest/runner@4.1.11)(react@19.3.0)(storybook@10.6.1(react@19.3.0))(vitest@4.1.11)
+      '@storybook/vue3':
+        specifier: 10.6.1
+        version: 10.6.1(storybook@10.6.1(react@19.3.0))(typescript@6.0.3)(vue@3.5.43(typescript@6.0.3))
       '@vitest/browser':
         specifier: 4.1.11
         version: 4.1.11(msw@2.15.0(@types/node@26.6.4)(typescript@6.0.3))(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))(vitest@4.1.11)
@@ -3734,12 +3737,6 @@ packages:
   '@nuxtjs/i18n@10.6.0':
     resolution: {integrity: sha512-20YXYOcc8cSh/pSpNgj+MHAn11qUbsFR1IBJh6qYtRPVhUUmgqJ1DyMu39MB+uEYYL/fsberL2ByMYrFaROslw==}
     engines: {node: '>=20.11.1'}
-
-  '@nuxtjs/storybook@10.0.1':
-    resolution: {integrity: sha512-T9JXXTjH8nudFyiyk9G7IOdD10zCWAXS8X3DNQ0MY/BmUroGIRv/zMMzE/i3o1KtqwyzVuMJ+s+V7JHIwTAtUw==}
-    engines: {node: '>=22.0.0'}
-    peerDependencies:
-      storybook: ^10.6.0
 
   '@open-draft/deferred-promise@2.2.0':
     resolution: {integrity: sha512-CecwLWx3rhxVQF6V4bAgPS5t+So2sTbPgAzafKkVizyi7tlwpcFpdFqq+wqF2OwNBmqFuu6tOyouTuxgpMfzmA==}
@@ -13903,65 +13900,6 @@ snapshots:
       - vue
       - webpack
 
-  '@nuxtjs/storybook@10.0.1(3fb8d618fc5ae7ede4c9e09c237bd135)':
-    dependencies:
-      '@nuxt/devtools-kit': 3.4.2(@nuxt/schema@4.6.1)(confbox@0.3.1)(dotenv@17.4.2)(giget@3.3.1)(jiti@2.7.0)(magic-string@1.4.3)(mlly@1.8.2)(oxc-parser@0.150.0)(rolldown@1.2.13)(unplugin@3.4.0(esbuild@0.28.1)(rolldown@1.2.13)(rollup@4.64.2)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)))(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
-      '@nuxt/kit': 4.6.1(@nuxt/schema@4.6.1)(confbox@0.3.1)(dotenv@17.4.2)(giget@3.3.1)(jiti@2.7.0)(magic-string@1.4.3)(mlly@1.8.2)(oxc-parser@0.150.0)(rolldown@1.2.13)(unplugin@3.4.0(esbuild@0.28.1)(rolldown@1.2.13)(rollup@4.64.2)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)))
-      '@storybook-vue/nuxt': 10.0.1(patch_hash=ae3346237ad5a728800da48d162be5896109aa60677b90bcfc54f6860ed07c78)(4bdfbdd092353849d928a78e445fef8a)
-      chalk: 5.6.2
-      consola: 3.4.2
-      defu: 6.1.7
-      get-port-please: 3.2.0
-      storybook: 10.6.1(react@19.3.0)
-      ufo: 1.6.4
-    transitivePeerDependencies:
-      - '@babel/plugin-proposal-decorators'
-      - '@babel/plugin-syntax-jsx'
-      - '@biomejs/biome'
-      - '@farmfe/core'
-      - '@nuxt/schema'
-      - '@pinia/colada'
-      - '@rsbuild/core'
-      - '@rspack/core'
-      - '@types/node'
-      - '@vitejs/devtools'
-      - '@vue/compiler-sfc'
-      - bun-types-no-globals
-      - confbox
-      - dotenv
-      - esbuild
-      - eslint
-      - giget
-      - jiti
-      - less
-      - magic-string
-      - meow
-      - mlly
-      - nuxt
-      - optionator
-      - oxc-parser
-      - oxlint
-      - pinia
-      - rolldown
-      - rollup
-      - rollup-plugin-visualizer
-      - sass
-      - sass-embedded
-      - stylelint
-      - stylus
-      - sugarss
-      - supports-color
-      - terser
-      - tsx
-      - typescript
-      - unloader
-      - unplugin
-      - vite
-      - vue
-      - vue-tsc
-      - webpack
-      - yaml
-
   '@open-draft/deferred-promise@2.2.0': {}
 
   '@open-draft/deferred-promise@3.0.0': {}
@@ -14981,7 +14919,7 @@ snapshots:
     dependencies:
       '@storybook/global': 5.0.0
       '@vue/compiler-dom': 3.5.43
-      '@vue/language-core': 3.3.12
+      '@vue/language-core': 3.3.13
       storybook: 10.6.1(react@19.3.0)
       type-fest: 5.10.0
       vue: 3.5.43(typescript@6.0.3)
@@ -14995,7 +14933,7 @@ snapshots:
     dependencies:
       '@storybook/global': 5.0.0
       '@vue/compiler-dom': 3.5.43
-      '@vue/language-core': 3.3.12
+      '@vue/language-core': 3.3.13
       storybook: 10.6.1(react@19.3.0)
       type-fest: 5.10.0
       vue: 3.5.43(typescript@6.0.3)
