@@ -99,7 +99,7 @@ watch(
   open,
   (isOpen) => {
     if (!isOpen) return
-    if (github.connected) void github.load()
+    if (github.connected) void github.refresh()
   },
   { immediate: true },
 )

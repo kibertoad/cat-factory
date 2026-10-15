@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, type Mock } from 'vitest'
 import { useGitHubStore } from '~/stores/github'
 import { useWorkspaceStore } from '~/stores/workspace'
-import type { GitHubConnection, GitHubPatCheck, GitHubRepo, VcsConnectOption } from '~/types/domain'
+import type {
+  GitHubConnection,
+  GitHubPatCheck,
+  GitHubPullRequest,
+  GitHubRepo,
+  VcsConnectOption,
+} from '~/types/domain'
 
 // The VCS connect surface of the (single, GitHub-shaped) repo store: which connect methods the
 // deployment offers, the per-workspace GitLab PAT connect, and the provider-routed disconnect.
@@ -423,8 +429,8 @@ describe('github store: ensureLoaded', () => {
     expect(api.listGitHubIssues).toHaveBeenCalledTimes(1)
   })
 
-  // A connected workspace with no linked repos is loaded, not unloaded. An empty list is the
-  // answer, so a later call must not read it again.
+  // A connected workspace with no linked repos counts as loaded: the empty list is its answer, so
+  // a later call does not read it again.
   it('does not load again for a connected workspace with no repos', async () => {
     const api = stubApi({
       getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
@@ -512,7 +518,7 @@ describe('github store: ensureLoaded', () => {
   })
 
   // The reads behind `ensureLoaded()` and a later `load()` overlap, and the older one can finish
-  // last. Its result is older than what is already shown, so it must not replace it.
+  // last. Its result is older than what is already shown, so it does not replace it.
   it('keeps the newer read when an older one finishes after it', async () => {
     let finishOlderRead: (repos: GitHubRepo[]) => void = () => {}
     const newer: GitHubRepo = { ...repo, githubId: 2, name: 'web' }
@@ -566,8 +572,8 @@ describe('github store: ensureLoaded', () => {
     expect(github.repos).toEqual([])
   })
 
-  // In the usual order the older read finishes first. It still lands (nothing newer has written
-  // yet), but the projection is not settled until the newer read finishes too.
+  // In the usual order the older read finishes first. A newer read has started by then, so the older
+  // result is dropped, and the projection is not settled until the newer read finishes.
   it('stays loading until the newest read finishes', async () => {
     const finish: Array<(repos: GitHubRepo[]) => void> = []
     const newer: GitHubRepo = { ...repo, githubId: 2, name: 'web' }
@@ -589,7 +595,7 @@ describe('github store: ensureLoaded', () => {
     finish[0]?.([repo])
     await ensured
 
-    expect(github.repos).toEqual([repo])
+    expect(github.repos).toEqual([])
     expect(github.loading).toBe(true)
 
     finish[1]?.([newer])
@@ -618,6 +624,8 @@ describe('github store: ensureLoaded', () => {
 
     const ensured = github.ensureLoaded()
     await github.disconnect()
+    // Nothing is left to wait for, so no spinner stays up for a read whose result is thrown away.
+    expect(github.loading).toBe(false)
     finishRead([repo])
     await ensured
 
@@ -644,5 +652,98 @@ describe('github store: ensureLoaded', () => {
 
     expect(api.listGitHubRepos).toHaveBeenCalledTimes(1)
     expect(github.repos).toEqual([repo])
+  })
+
+  // The App is uninstalled and installed again from another tab. The probe sees the new
+  // connection, and the earlier load belongs to the old one.
+  it('loads again when the probe finds a different connection', async () => {
+    const getGitHubConnection = vi
+      .fn()
+      .mockResolvedValueOnce({ connection: connection() })
+      .mockResolvedValueOnce({ connection: null })
+      .mockResolvedValue({ connection: connection({ installationId: 43, connectedAt: 2 }) })
+    const api = stubApi({
+      getGitHubConnection,
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      listGitHubRepos: vi.fn().mockResolvedValue([repo]),
+    })
+    const github = storeWithWorkspace()
+
+    await github.ensureLoaded()
+    await github.probe()
+    await github.probe()
+    await github.ensureLoaded()
+
+    expect(api.listGitHubRepos).toHaveBeenCalledTimes(2)
+  })
+
+  // `refresh()` is the plain re-read for a surface opening while another read runs. It shares that
+  // read, where `load()` is the after-write door and starts its own.
+  it('shares an in-flight read on refresh() and starts a new one on load()', async () => {
+    const api = stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+    })
+    const github = storeWithWorkspace()
+    await github.probe()
+
+    await Promise.all([github.ensureLoaded(), github.refresh()])
+    expect(api.listGitHubRepos).toHaveBeenCalledTimes(1)
+
+    await Promise.all([github.ensureLoaded(), github.load()])
+    expect(api.listGitHubRepos).toHaveBeenCalledTimes(2)
+  })
+
+  // Saving the linked repos sets the projection directly. A read that started before the save
+  // must not put the earlier rows back, even if the reload that follows the save fails.
+  it('keeps the saved repos when a read that started before the save finishes afterwards', async () => {
+    let finishRead: (repos: GitHubRepo[]) => void = () => {}
+    const saved: GitHubRepo = { ...repo, githubId: 2, name: 'web' }
+    stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      listGitHubRepos: vi
+        .fn()
+        .mockReturnValueOnce(
+          new Promise<GitHubRepo[]>((resolve) => {
+            finishRead = resolve
+          }),
+        )
+        .mockRejectedValueOnce(new Error('500')),
+      setGitHubLinkedRepos: vi.fn().mockResolvedValue([saved]),
+    })
+    const github = storeWithWorkspace()
+    await github.probe()
+
+    const ensured = github.ensureLoaded()
+    await expect(github.setLinkedRepos([2])).rejects.toThrow('500')
+    finishRead([repo])
+    await ensured
+
+    expect(github.repos).toEqual([saved])
+  })
+
+  it('keeps a pull request opened while a read was in flight', async () => {
+    let finishPulls: (pulls: GitHubPullRequest[]) => void = () => {}
+    const opened = { repoGithubId: 1, number: 7 } as GitHubPullRequest
+    stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      listGitHubPullRequests: vi.fn().mockReturnValueOnce(
+        new Promise<GitHubPullRequest[]>((resolve) => {
+          finishPulls = resolve
+        }),
+      ),
+      openGitHubPullRequest: vi.fn().mockResolvedValue(opened),
+    })
+    const github = storeWithWorkspace()
+    await github.probe()
+
+    const ensured = github.ensureLoaded()
+    await github.openPullRequest(1, {} as never)
+    finishPulls([])
+    await ensured
+
+    expect(github.pulls).toEqual([opened])
   })
 })

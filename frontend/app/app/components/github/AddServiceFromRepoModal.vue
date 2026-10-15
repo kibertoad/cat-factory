@@ -61,7 +61,7 @@ async function loadRepos() {
     // Load the linked-repo projection once per board (to flag repos already on the board). The
     // available-repos list is NOT prefetched — it's searched server-side on demand once
     // the user types (see the repoQueryRaw watcher), so a wide install isn't shipped whole.
-    await github.ensureLoaded()
+    await github.refresh()
   } catch {
     // Integration off / unreachable → the picker stays empty, GitHubConnect shows.
   }

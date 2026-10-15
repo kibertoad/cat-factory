@@ -143,14 +143,16 @@ export const useGitHubStore = defineStore('github', () => {
   const projection = createGitHubProjectionLoad({
     api,
     workspace,
-    connected,
+    connection,
     repos,
     pulls,
     issues,
     loading,
   })
-  /** Load the cached repos, pull requests and issues for the workspace. */
+  /** Reload the cached repos, pull requests and issues after a write. */
   const load = projection.load
+  /** Reload them on demand, sharing a read already in flight. */
+  const refresh = projection.refresh
 
   /** Full file listing per repo (recursive tree), cached by GitHub numeric id. */
   const repoFiles = ref<Record<number, RepoTreeEntry[]>>({})
@@ -180,6 +182,7 @@ export const useGitHubStore = defineStore('github', () => {
     syncing,
     connected,
     load,
+    markWritten: projection.markWritten,
     clearProjection: projection.clearProjection,
   }
   // The board-load probe (integration availability + the bound connection + the connect options +
@@ -254,6 +257,7 @@ export const useGitHubStore = defineStore('github', () => {
     probe,
     ensureProbed,
     load,
+    refresh,
     ensureLoaded,
     repoFiles,
     ...connectionActions,

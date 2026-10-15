@@ -49,10 +49,10 @@ const ui = useUiStore()
 const { t, te } = useI18n()
 
 // The custom-manifest-type catalog feeds the `custom` picker. Cheap + shared (coalesced).
-// The repo list backs the detect-from-repo affordance (owner/name lookup).
+// The repo list behind the detect-from-repo affordance (owner/name lookup) is loaded by the
+// surface that hosts this section: the inspector panel, or the add-service modal on open.
 onMounted(() => {
   void infra.ensureLoaded()
-  void github.ensureLoaded()
 })
 
 // The service's declared provision type (absent ⇒ treated as `infraless`: no environment
