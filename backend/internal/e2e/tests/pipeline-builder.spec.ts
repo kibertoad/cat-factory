@@ -165,9 +165,10 @@ test.describe('pipeline builder (author a pipeline by hand, then run it)', () =>
     page,
     seededBoard: _seededBoard,
   }) => {
-    // The builder is a modal Reka slideover, which sets `pointer-events: none` on <body>. The model
-    // configuration is the app's own takeover, so opened OVER the builder it showed but every click
-    // landed on the builder behind it. It now replaces the builder and hands back on close.
+    // The builder is a modal Reka slideover, which sets `pointer-events: none` on <body> until it
+    // unmounts. The model configuration is the app's own takeover, so opened OVER the builder it
+    // showed but every click landed on the builder behind it. It now shows after the builder has
+    // left, and hands back on close.
     await page.getByTestId('nav-build-pipeline').click()
     const palette = page.getByTestId('pipeline-builder-palette')
     await expect(palette).toBeVisible({ timeout: LIVE_TIMEOUT })
@@ -176,13 +177,13 @@ test.describe('pipeline builder (author a pipeline by hand, then run it)', () =>
     await expect(steps).toHaveCount(1)
 
     await page.getByTestId('pipeline-builder-configure-models').click()
-    const modelConfig = page.getByRole('heading', { name: 'Model Configuration', level: 1 })
+    const modelConfig = page.getByTestId('model-configuration-panel')
     await expect(modelConfig).toBeVisible()
     await expect(palette).toBeHidden()
 
     // A real pointer click, which Playwright refuses when another element would receive it, so this
     // is the assertion that failed while the builder was still open under the panel.
-    await page.getByRole('button', { name: 'New preset' }).click()
+    await page.getByTestId('model-preset-new').click()
     await expect(page.getByTestId('model-preset-name')).toBeVisible()
 
     // Escape backs out of the editor, then closes the panel, and the builder comes back with the
@@ -194,34 +195,5 @@ test.describe('pipeline builder (author a pipeline by hand, then run it)', () =>
     await expect(palette).toBeVisible()
     await expect(steps).toHaveCount(1)
     await expect(steps.nth(0)).toHaveAttribute('data-agent-kind', 'architect')
-  })
-
-  test('the model configuration takes clicks while the builder is still closing', async ({
-    page,
-    seededBoard: _seededBoard,
-  }) => {
-    // Reka keeps `pointer-events: none` on <body> until the slideover unmounts, which is after its
-    // 200ms exit animation. The animation is stretched here so that window is wide enough to click
-    // in every time, instead of a race the test wins or loses on timing.
-    await page.addStyleTag({
-      content: '[role="dialog"][data-state="closed"] { animation-duration: 10s !important; }',
-    })
-    await page.getByTestId('nav-build-pipeline').click()
-    await expect(page.getByTestId('pipeline-builder-palette')).toBeVisible({
-      timeout: LIVE_TIMEOUT,
-    })
-
-    await page.getByTestId('pipeline-builder-configure-models').click()
-    await expect(page.getByRole('heading', { name: 'Model Configuration', level: 1 })).toBeVisible()
-    const bodyPointerEvents = () => page.evaluate(() => document.body.style.pointerEvents)
-    expect(await bodyPointerEvents()).toBe('none')
-
-    // `force` skips Playwright's wait for the element to receive events, which would otherwise
-    // hold the click until the lock lifts. The click goes to the button's coordinates as a real
-    // pointer would.
-    await page.getByRole('button', { name: 'New preset' }).click({ force: true })
-    await expect(page.getByTestId('model-preset-name')).toBeVisible()
-    // Still inside the window, so the click above landed while <body> refused pointer events.
-    expect(await bodyPointerEvents()).toBe('none')
   })
 })

@@ -309,12 +309,10 @@ async function save() {
 <template>
   <Teleport to="body">
     <Transition name="reader-fade">
-      <!-- `pointer-events-auto`: opened from the pipeline builder, the builder's Reka slideover
-           keeps `pointer-events: none` on <body> through its exit animation, and without this the
-           panel ignores clicks until that ends. -->
       <div
         v-if="open"
-        class="pointer-events-auto z-50 flex-col bg-app-950/96 backdrop-blur-sm"
+        data-testid="model-configuration-panel"
+        class="z-50 flex-col bg-app-950/96 backdrop-blur-sm"
         :class="FULL_BLEED_TAKEOVER_CLASS"
         role="dialog"
         aria-modal="true"
@@ -380,7 +378,13 @@ async function save() {
                     </template>
                   </i18n-t>
                 </p>
-                <UButton icon="i-lucide-plus" size="sm" class="shrink-0" @click="startCreate">
+                <UButton
+                  icon="i-lucide-plus"
+                  size="sm"
+                  class="shrink-0"
+                  data-testid="model-preset-new"
+                  @click="startCreate"
+                >
                   {{ t('settings.modelConfiguration.list.newPreset') }}
                 </UButton>
               </div>
