@@ -44,8 +44,8 @@ over the WebSocket. How that sync works is written up in
 
 ## Tech stack
 
-- **Nuxt 4 / Vue 3** SPA: the board and its queue view are `pages/index.vue`, beside three standalone routes
-  (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-password.vue`).
+- **Nuxt 4 / Vue 3** SPA: the board and its queue view are `pages/index.vue`, beside three
+  standalone routes (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-password.vue`).
 - **Pinia** (+ `pinia-plugin-persistedstate`): feature stores.
 - **Vue Flow** (`core`, `background`, `controls`, `node-resizer`): the canvas.
 - **Nuxt UI** + Tailwind: components and styling.

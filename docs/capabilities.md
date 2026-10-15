@@ -34,7 +34,7 @@ Inside each service, tasks sit in status lanes the board DERIVES rather than pla
 
 ### Queue view
 
-The board's second view: every task across every service, in the column that says what it needs (**Needs you**, **In flight**, **Ready to merge**, and the Done lane's window), each card carrying the one action its state implies (Answer, Start, Merge). It reads the same verdict as the swimlanes, so a task never shows one state in the queue and another on the canvas. The app opens on the view a person used last in that browser; someone who has not chosen lands on the queue. The canvas's decision counter opens it.
+The board's second view: every task across every service, in the column that says what it needs (**Needs you**, **In flight**, **Ready to merge**). **In flight** also lists the tasks nobody has started or that wait on dependencies, under **Not started**. Done is a count under Ready to merge, inside the Done lane's retention window, with a show/hide toggle. A card carries the action its state implies when it has one: Answer or Review on a parked task, Start on an unstarted one, **Read outcome** and Merge on a pull request waiting to land (Merge is the secondary button when the outcome is readable). Running tasks and tasks waiting on dependencies carry no action. It reads the same verdict as the swimlanes, so a task never shows one state in the queue and another on the canvas. The app opens on the view a person used last in that browser; someone who has not chosen lands on the queue. The canvas's decision counter opens it.
 
 ### In-repo service spec
 
@@ -298,7 +298,7 @@ A deployment-level admin dashboard of run health (outcomes, failure taxonomy, li
 
 ### Setup checklist
 
-**Configuration → Setup checklist** lists every prerequisite for "a task can run and merge" in one place: the model, source control, where agents run, test environments and screenshot storage. Each row has its state, the cause when it needs attention (unreachable, incomplete, rejected, under-scoped), and one action. A row adds no probe of its own: it reads what the matching setup banner or startup dialog reads and opens the same fix, so the two cannot disagree. A person who cannot change the setup sees who can instead of a button.
+**Configuration → Setup checklist** lists every prerequisite for "a task can run and merge" in one place: the model, source control, where agents run, test environments and screenshot storage. Each row has its state, the cause when it needs attention (unreachable, incomplete, rejected, under-scoped, a default preset that names an unusable model, a probe that failed, or an area the backend does not report), and the action that fixes it, when there is one: rows still checking, not needed, or not reported have none. A row adds no probe of its own: it reads what the matching setup banner or startup dialog reads and opens the same fix. The model row also keeps its own load-failure state, so it can show "probe failed" while no banner says anything. The entry is open to people who can manage integrations or settings. For a row they cannot act on, they see who can, or are told to switch to the full surface.
 
 ### Infrastructure reachability
 

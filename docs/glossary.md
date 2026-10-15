@@ -39,11 +39,13 @@ conflate them.
 
 ### "board" names the workspace and one of its two views
 
-A workspace's **board** is the whole surface. It has two **views** (`stores/workView.ts`, `?view=`):
-`'queue'`, which lists every task by what it needs, and `'board'`, the canvas. The code comments
-call the second one "canvas", and so should new prose, so "board" stays free for the whole
-surface. The queue view is not the gates' approval queue or the review task's skill queue: those
-hold approvals and skills, not tasks. Design: [`frontend/app/README.md` → Queue view](../frontend/app/README.md#queue-view).
+A workspace's **board** is the whole surface. It has two **views** (`stores/workView.ts`,
+`?view=`): `'queue'`, which lists every task by what it needs, and `'board'`, the canvas where the
+work is planned. The Views switcher labels them "Queue" and "Board", so prose says "the queue
+view" and "the board view", and "the canvas" only for the spatial surface itself. The queue view is
+not the Gatekeeper's approval queue or the review task's skill queue: those hold approvals and
+skills, not tasks. Design:
+[`frontend/app/README.md` → Queue view](../frontend/app/README.md#queue-view).
 
 ## Runtime facades: directory ↔ package name
 
