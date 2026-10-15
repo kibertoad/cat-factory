@@ -2,7 +2,7 @@
 // built-in runner, so CI's guards job stays install-free.
 //
 // The boundary is NAMED versus PICKED: an `AppModal` names the kind of content and takes its width
-// from that; a raw `UModal` or `USlideover`, or an `AppModal` carrying its own `max-w-*`, picks one.
+// from that; a raw `UModal`, or an `AppModal` carrying its own `max-w-*`, picks one.
 
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
@@ -24,12 +24,12 @@ describe('findOverlayOffenders', () => {
     )
   })
 
-  it('flags a raw UModal or USlideover in either casing, wherever its attributes wrap', () => {
+  it('flags a raw UModal in either casing, wherever its attributes wrap', () => {
     assert.deepEqual(found('  <UModal v-model:open="open">\n  </UModal>'), ['6 raw <UModal>'])
     assert.deepEqual(found('  <u-modal v-model:open="open"></u-modal>'), ['6 raw <UModal>'])
     assert.deepEqual(
-      found('  <USlideover\n    side="left"\n    :ui="{ content: \'max-w-md\' }"\n  />'),
-      ['6 raw <USlideover>'],
+      found('  <UModal\n    v-model:open="open"\n    :ui="{ content: \'max-w-md\' }"\n  />'),
+      ['6 raw <UModal>'],
     )
   })
 
@@ -54,11 +54,43 @@ describe('findOverlayOffenders', () => {
     assert.deepEqual(found('  <AppModal size="prompt" :ui="{ content: \'z-[70]\' }" />'), [])
   })
 
+  it('reads only the content slot of :ui, since no other slot reaches the modal width', () => {
+    assert.deepEqual(
+      found('  <AppModal size="form" :ui="{ footer: \'w-full justify-end\', body: \'w-1/2\' }" />'),
+      [],
+    )
+    assert.deepEqual(
+      found(
+        '  <AppModal size="form" :ui="{ footer: \'w-full\', content: \'max-w-5xl, z-10\' }" />',
+      ),
+      ['6 <AppModal> with max-w-5xl'],
+    )
+    assert.deepEqual(found('  <AppModal size="form" :ui="{ \'content\': \'sm:max-w-3xl\' }" />'), [
+      '6 <AppModal> with max-w-3xl',
+    ])
+  })
+
   it('refuses an AppModal whose classes the guard cannot read', () => {
     assert.deepEqual(found('  <AppModal size="form" :ui="wideUi" />'), ['6 <AppModal> binds '])
     assert.deepEqual(found('  <AppModal size="form" v-bind="modalProps" />'), [
       '6 <AppModal> spreads v-bind',
     ])
+    // A width held in a variable inside the literal, or in a bound class, is as unreadable.
+    assert.deepEqual(found('  <AppModal size="form" :ui="{ content: wideClass }" />'), [
+      '6 <AppModal> reads its content from a variable',
+    ])
+    assert.deepEqual(found('  <AppModal size="form" :class="widthClass" />'), [
+      '6 <AppModal> reads its class from a variable',
+    ])
+    assert.deepEqual(found('  <AppModal size="form" :ui="{ content }" />'), [
+      '6 <AppModal> names content as a variable',
+    ])
+    assert.deepEqual(found('  <AppModal size="form" :ui="{ ...base, footer: \'p-2\' }" />'), [
+      '6 <AppModal> spreads into ',
+    ])
+    // A string literal in a bound class or content, or a variable in another slot, is readable.
+    assert.deepEqual(found('  <AppModal size="form" :class="\'z-10\'" />'), [])
+    assert.deepEqual(found('  <AppModal size="form" :ui="{ footer: footerClass }" />'), [])
     // A `v-model:` or `v-bind:` on another prop is not a spread.
     assert.deepEqual(found('  <AppModal size="form" v-model:open="open" v-bind:title="t" />'), [])
   })
@@ -67,6 +99,22 @@ describe('findOverlayOffenders', () => {
     assert.deepEqual(found('  <UModal v-model:open="open" fullscreen title="T" />'), [])
     assert.deepEqual(found('  <UModal :fullscreen="true" title="T" />'), [])
     assert.deepEqual(found('  <UModal title="Not fullscreen" />'), ['6 raw <UModal>'])
+    // The word inside a quoted value, between spaces, is not the attribute.
+    assert.deepEqual(
+      found('  <UModal title="Toggle fullscreen view" :ui="{ content: \'max-w-5xl\' }" />'),
+      ['6 raw <UModal>'],
+    )
+    assert.deepEqual(found('  <UModal title=\'a :fullscreen="true" b\' />'), ['6 raw <UModal>'])
+  })
+
+  it('reads a lazy-prefixed modal as the modal it loads', () => {
+    assert.deepEqual(found('  <LazyUModal :ui="{ content: \'max-w-5xl\' }" />'), ['6 raw <UModal>'])
+    assert.deepEqual(found('  <lazy-u-modal />'), ['6 raw <UModal>'])
+    assert.deepEqual(found('  <LazyUModal fullscreen />'), [])
+  })
+
+  it('leaves a side panel alone, since the named widths are for centered dialogs', () => {
+    assert.deepEqual(found('  <USlideover side="left" :ui="{ content: \'max-w-md\' }" />'), [])
   })
 
   it('does not exempt a modal that is fullscreen only sometimes', () => {
@@ -95,9 +143,9 @@ describe('findOverlayOffenders', () => {
     )
     assert.deepEqual(
       found(
-        '  <!-- workbench-width-ok: the pipeline builder, up to 1152px. Its shell\n' +
+        '  <!-- workbench-width-ok: the prompt editor, up to 1024px. Its shell\n' +
           '       waits on #2359. -->\n' +
-          '  <USlideover\n    side="left"\n  />',
+          '  <UModal\n    v-model:open="open"\n  />',
       ),
       [],
     )

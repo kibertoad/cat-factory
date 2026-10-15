@@ -399,8 +399,6 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
 </script>
 
 <template>
-  <!-- workbench-width-ok: the pipeline builder, up to 1152px on a large screen. Its shell waits
-       on #2359. -->
   <USlideover
     v-model:open="open"
     :title="t('pipeline.builder.title')"
