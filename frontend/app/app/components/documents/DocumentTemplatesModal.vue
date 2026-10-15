@@ -5,6 +5,7 @@ import DocumentOriginLink from '~/components/documents/DocumentOriginLink.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 // Manage the workspace's per-DocKind TEMPLATE (singular) + EXEMPLAR (multi) document links (WS1).
 // A kind can be pointed at one of the workspace's already-imported documents so its parsed
@@ -89,7 +90,7 @@ async function unlink(doc: SourceDocument) {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('documents.templates.title')">
+  <AppModal size="form" v-model:open="open" :title="t('documents.templates.title')">
     <template #title>
       <IntegrationBackTitle :title="t('documents.templates.title')" @back="back" />
     </template>
@@ -238,5 +239,5 @@ async function unlink(doc: SourceDocument) {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

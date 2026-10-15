@@ -7,6 +7,7 @@
 // pages/index.vue. See backend/docs/review-debt-friction.md.
 import { computed } from 'vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -76,12 +77,12 @@ function createAnyway() {
 </script>
 
 <template>
-  <UModal
+  <AppModal
+    size="prompt"
     v-model:open="open"
     :title="title"
     :dismissible="!pending"
     :close="{ disabled: pending }"
-    :ui="{ content: 'max-w-xl' }"
   >
     <template #body>
       <div v-if="ctx" class="space-y-5">
@@ -144,5 +145,5 @@ function createAnyway() {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

@@ -4544,6 +4544,7 @@
       },
       "errors": {
         "listInstallations": "GitHub yüklemeleri listelenemedi",
+        "loadProjection": "Depolar, çekme istekleri ve sorunlar yüklenemedi",
         "startInstall": "GitHub App yüklemesi başlatılamadı",
         "connect": "Bağlanamadı"
       }

@@ -17,6 +17,7 @@ import {
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 const slack = useSlackStore()
@@ -202,7 +203,7 @@ async function saveMapping() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('slack.panel.title')" :ui="{ content: 'max-w-2xl' }">
+  <AppModal size="form" v-model:open="open" :title="t('slack.panel.title')">
     <template #title>
       <IntegrationBackTitle :title="t('slack.panel.title')" @back="back" />
     </template>
@@ -372,5 +373,5 @@ async function saveMapping() {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

@@ -13,6 +13,7 @@ import { apiErrorReason } from '~/composables/api/errors'
 import { pipelineAllowedForSchedule } from '~/utils/pipeline'
 import { appliesIntakePredicate } from '~/utils/intakePredicates'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -403,7 +404,7 @@ async function add() {
 </script>
 
 <template>
-  <UModal v-model:open="modalOpen" :title="t('board.recurring.title')">
+  <AppModal size="form" v-model:open="modalOpen" :title="t('board.recurring.title')">
     <template #body>
       <div class="space-y-4">
         <p v-if="frame" class="text-xs text-muted">
@@ -689,5 +690,5 @@ async function add() {
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

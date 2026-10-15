@@ -10,6 +10,7 @@ import type { SubscriptionVendor } from '~/types/domain'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t, n } = useI18n()
 const ui = useUiStore()
@@ -173,11 +174,7 @@ function vendorLabel(v: SubscriptionVendor): string {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('providers.vendorCredentials.title')"
-    :ui="{ content: 'max-w-2xl' }"
-  >
+  <AppModal size="wide" v-model:open="open" :title="t('providers.vendorCredentials.title')">
     <template #title>
       <IntegrationBackTitle :title="t('providers.vendorCredentials.title')" @back="back" />
     </template>
@@ -337,5 +334,5 @@ function vendorLabel(v: SubscriptionVendor): string {
         </template>
       </UTabs>
     </template>
-  </UModal>
+  </AppModal>
 </template>

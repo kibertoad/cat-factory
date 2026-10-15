@@ -6,6 +6,7 @@ import { splitDescribedWork } from '~/utils/describeWork'
 import { isReviewDebtConflict, reviewFrictionContext } from '~/utils/reviewFriction'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import { showOverrideField } from '~/utils/uiMode'
+import AppModal from '~/components/common/AppModal.vue'
 
 /**
  * The one-sentence intake (issue #2258): what needs doing, which service, feature or bug. Nothing else on the
@@ -220,7 +221,7 @@ async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('describeWork.title')" :ui="{ content: 'sm:max-w-2xl' }">
+  <AppModal size="wide" v-model:open="open" :title="t('describeWork.title')">
     <template #body>
       <div class="space-y-4" data-testid="describe-work-modal">
         <UFormField :label="t('describeWork.textLabel')" :description="t('describeWork.textHint')">
@@ -363,5 +364,5 @@ async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

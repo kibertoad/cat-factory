@@ -65,6 +65,77 @@ const repo = (githubId: number, overrides: Partial<GitHubRepo> = {}): GitHubRepo
   ...overrides,
 })
 
+/** A user's host accounts: which link writes record a change, and how a read serves them. */
+function defineAccountCases(
+  makeRepos: () => DirectoryFeedRepos,
+  ids: () => { acc: string; usr: string },
+): void {
+  it('records a host login linked to a user, and the user it moves from', async () => {
+    const r = makeRepos()
+    const { acc, usr } = ids()
+    const other = `${usr}-other`
+    const subject = `gh-${usr}`
+    await seedUser(r, usr)
+    await seedUser(r, other)
+    for (const userId of [usr, other]) {
+      await r.memberships.upsert({ accountId: acc, userId, roles: ['developer'], createdAt: 1 })
+    }
+    const link = (userId: string, provider: 'github' | 'password', id: string) =>
+      r.users.linkIdentity({
+        userId,
+        provider,
+        subject: id,
+        secret: null,
+        metadata: null,
+        createdAt: 2,
+      })
+    const head = await r.changes.headSeq(acc)
+
+    // A password login is not a directory account, so it changes nothing a mirror reads.
+    await link(usr, 'password', `${usr}@example.com`)
+    expect(await entries(r, acc, head)).toEqual([])
+
+    await link(usr, 'github', subject)
+    expect(await entries(r, acc, head)).toEqual([['user', null, usr]])
+
+    const moved = await r.changes.headSeq(acc)
+    await link(other, 'github', subject)
+    expect(await entries(r, acc, moved)).toEqual([
+      ['user', null, usr],
+      ['user', null, other],
+    ])
+  })
+
+  it('hydrates a user with their host accounts in order, leaving other logins out', async () => {
+    const r = makeRepos()
+    const { acc, usr } = ids()
+    await seedUser(r, usr)
+    await r.memberships.upsert({ accountId: acc, userId: usr, roles: ['admin'], createdAt: 1 })
+    const identity = { userId: usr, secret: null, createdAt: 2 }
+    await r.users.linkIdentity({
+      ...identity,
+      provider: 'gitlab',
+      subject: `9-${usr}`,
+      metadata: JSON.stringify({ login: 'ada-gl' }),
+    })
+    await r.users.linkIdentity({
+      ...identity,
+      provider: 'github',
+      subject: `1-${usr}`,
+      metadata: JSON.stringify({ login: 'ada' }),
+    })
+    await r.users.linkIdentity({ ...identity, provider: 'google', subject: usr, metadata: null })
+
+    const expected = [
+      { provider: 'github', id: `1-${usr}`, login: 'ada' },
+      { provider: 'gitlab', id: `9-${usr}`, login: 'ada-gl' },
+    ]
+    expect((await r.changes.getUsers(acc, [usr]))[0]?.accounts).toEqual(expected)
+    const listed = await r.changes.listUsers(acc, null, 10)
+    expect(listed.find((u) => u.id === usr)?.accounts).toEqual(expected)
+  })
+}
+
 export function defineDirectoryFeedSuite(name: string, makeRepos: () => DirectoryFeedRepos): void {
   describe(`[${name}] directory change feed parity`, () => {
     let n = 0
@@ -128,6 +199,8 @@ export function defineDirectoryFeedSuite(name: string, makeRepos: () => Director
         ]),
       )
     })
+
+    defineAccountCases(makeRepos, ids)
 
     it('records workspace and workspace-membership writes against the owning account', async () => {
       const r = makeRepos()

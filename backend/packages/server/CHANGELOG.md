@@ -1,5 +1,56 @@
 # @cat-factory/server
 
+## 0.336.0
+
+### Minor Changes
+
+- 58b57cc: A directory `DirectoryUser` carries `accounts`: the GitHub and GitLab accounts the user signed in
+  with, as `{ provider, id, login }` where `id` is the host's numeric user id, so a system mirroring
+  the directory can match people on their host account instead of an email. Linking such an account
+  to a user, or moving it to another user, records a `user` change on the feed for each user
+  involved. Password, Google and OIDC logins are not published. OpenAPI 1.84.0.
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/contracts@0.368.0
+  - @cat-factory/kernel@0.360.0
+  - @cat-factory/mcp-server@0.57.0
+  - @cat-factory/agents@0.172.1
+  - @cat-factory/integrations@0.176.2
+  - @cat-factory/orchestration@0.322.1
+  - @cat-factory/spend@0.23.15
+
+## 0.335.0
+
+### Minor Changes
+
+- 918e977: `POST /api/v1/pr-assessments` (`client.prAssessments.assess`) scores a pull request in a linked
+  repository on the merger's complexity, risk and impact axes, classifies it by its changed paths, and
+  says whether a risk policy would let it land with no person: the named policy, or the workspace's
+  unattended default. The verdict comes from the merge step's own precedence ladder, now a pure
+  function shared by both (`mergePrecedence.ts`), so the policy's ceilings stay unpublished. A key bound to a person is judged under that person's
+  workspace role, as the runs it starts are. One
+  synchronous inline model call at `write` scope; nothing is persisted. OpenAPI 1.83.0.
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/contracts@0.367.0
+  - @cat-factory/agents@0.172.0
+  - @cat-factory/orchestration@0.322.0
+  - @cat-factory/mcp-server@0.56.0
+  - @cat-factory/integrations@0.176.1
+  - @cat-factory/kernel@0.359.1
+  - @cat-factory/spend@0.23.14
+
+## 0.334.1
+
+### Patch Changes
+
+- Updated dependencies [5d586fc]
+  - @cat-factory/mcp-server@0.55.1
+
 ## 0.334.0
 
 ### Minor Changes
