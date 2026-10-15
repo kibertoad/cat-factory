@@ -54,7 +54,7 @@ watch(
 async function loadGitHubRepos() {
   try {
     await github.probe()
-    if (github.connected) await github.load()
+    await github.refresh()
   } catch {
     // GitHub integration off / unreachable → the repo picker just isn't offered.
   }
