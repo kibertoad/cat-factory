@@ -250,7 +250,7 @@ export const putDirectoryWebhookSchema = v.object({
       v.string(),
       v.trim(),
       v.url(),
-      v.startsWith('https://', 'The webhook endpoint must be an https:// URL'),
+      v.regex(/^https?:\/\//i, 'The webhook endpoint must be an http:// or https:// URL'),
       v.maxLength(2000),
     ),
   ),
