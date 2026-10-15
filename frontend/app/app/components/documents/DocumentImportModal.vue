@@ -4,6 +4,7 @@ import DocumentSyncState from '~/components/documents/DocumentSyncState.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 // Import pages from a connected document source and pick one to expand into
 // board structure. A source selector lets the user choose which connected source
@@ -73,7 +74,7 @@ function preview(externalId: string) {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('documents.import.title')">
+  <AppModal size="form" v-model:open="open" :title="t('documents.import.title')">
     <template #title>
       <IntegrationBackTitle :title="t('documents.import.title')" @back="back" />
     </template>
@@ -163,5 +164,5 @@ function preview(externalId: string) {
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

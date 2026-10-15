@@ -26,6 +26,7 @@ import { GENERIC_PRESET_ID } from '~/stores/initiative'
 import DescriptorFields from '~/components/common/DescriptorFields.vue'
 import ContextAttachmentFields from '~/components/context/ContextAttachmentFields.vue'
 import type { PendingContext } from '~/composables/useContextLinking'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -175,7 +176,7 @@ async function create() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('initiative.create.title')">
+  <AppModal size="form" v-model:open="open" :title="t('initiative.create.title')">
     <template #body>
       <div class="space-y-4" data-testid="create-initiative-modal">
         <p v-if="frame" class="text-xs text-muted">
@@ -291,5 +292,5 @@ async function create() {
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

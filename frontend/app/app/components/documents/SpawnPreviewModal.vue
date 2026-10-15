@@ -2,6 +2,7 @@
 import { isDesignSource } from '@cat-factory/contracts'
 import type { DocumentBoardPlan } from '~/types/domain'
 import Spinner from '~/components/common/Spinner.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 // Preview the structure an imported document expands into, then spawn it. The
 // plan is fetched fresh on open; a badge makes clear whether an LLM or the
@@ -122,7 +123,7 @@ async function spawn() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('documents.spawn.title')">
+  <AppModal size="form" v-model:open="open" :title="t('documents.spawn.title')">
     <template #body>
       <div class="space-y-4">
         <div v-if="plan" class="flex items-center justify-between gap-2">
@@ -227,5 +228,5 @@ async function spawn() {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

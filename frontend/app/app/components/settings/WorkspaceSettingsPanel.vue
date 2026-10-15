@@ -328,6 +328,7 @@ async function save() {
 </script>
 
 <template>
+  <!-- workbench-width-ok: tabbed workspace settings (768px). Its shell waits on #2359. -->
   <UModal
     v-model:open="open"
     :title="t('settings.workspaceSettings.title')"

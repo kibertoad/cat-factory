@@ -9,6 +9,7 @@ import { showOverrideField } from '~/utils/uiMode'
 import type { PublicApiKey, PublicApiScope } from '~/types/publicApiKeys'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t, d } = useI18n()
 
@@ -227,7 +228,7 @@ async function revokeToken(key: PublicApiKey) {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('settings.apiTokens.title')" :ui="{ content: 'max-w-lg' }">
+  <AppModal size="form" v-model:open="open" :title="t('settings.apiTokens.title')">
     <template #title>
       <IntegrationBackTitle :title="t('settings.apiTokens.title')" @back="back" />
     </template>
@@ -416,5 +417,5 @@ async function revokeToken(key: PublicApiKey) {
         </section>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>
