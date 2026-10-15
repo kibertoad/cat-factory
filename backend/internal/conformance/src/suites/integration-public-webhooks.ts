@@ -127,24 +127,24 @@ export function definePublicWebhookConformance(harness: ConformanceHarness): voi
       expect((await app.call('DELETE', ENDPOINT, undefined, decideAuth)).status).toBe(403)
       expect((await app.call('GET', ENDPOINT)).status).toBe(401)
 
-      // The wire schema admits `http://` and `https://` alike and leaves the decision to the
-      // deployment's URL policy, the SSRF guard inside the SERVICE (422, a thrown
-      // `ValidationError` through the shared error funnel). Under the default strict policy it
-      // refuses plaintext and a private host. It is the same guard the delivery path re-applies
-      // on every redirect hop, so the public surface cannot admit an endpoint deliveries would
-      // then refuse.
+      // Two layers refuse a bad endpoint and they answer differently. The wire schema refuses a
+      // scheme other than `http://` or `https://` before the handler runs (400). Everything else
+      // is the deployment's URL policy, the SSRF guard inside the SERVICE (422, a thrown
+      // `ValidationError` through the shared error funnel), and it is the same guard the delivery
+      // path re-applies on every redirect hop, so the public surface cannot admit an endpoint
+      // deliveries would then refuse. Plaintext and loopback are left out on purpose: local mode
+      // widens its policy to admit both, so only the cloud-metadata host is refused by every
+      // facade's policy.
       const adminAuth = await mintKey(app, wsId, 'admin')
-      const plaintext = await app.call(
+      const notHttp = await app.call('PUT', ENDPOINT, { url: 'ftp://hooks.example.com' }, adminAuth)
+      expect(notHttp.status).toBe(400)
+      const metadata = await app.call(
         'PUT',
         ENDPOINT,
-        { url: 'http://hooks.example.com/cat-factory' },
+        { url: 'https://169.254.169.254/latest/meta-data' },
         adminAuth,
       )
-      expect(plaintext.status).toBe(422)
-      const notAUrl = await app.call('PUT', ENDPOINT, { url: 'ftp://hooks.example.com' }, adminAuth)
-      expect(notAUrl.status).toBe(400)
-      const internal = await app.call('PUT', ENDPOINT, { url: 'https://127.0.0.1/hook' }, adminAuth)
-      expect(internal.status).toBe(422)
+      expect(metadata.status).toBe(422)
 
       // Keep-on-omit needs something to keep. Against an empty workspace the refusal carries a
       // machine-readable reason, so a client can tell "register one first" from the SSRF guard
