@@ -138,7 +138,8 @@ until item 4 decides what a detail surface is.
   one.
 - **A takeover cannot be opened over a Reka modal that stays open.** The modal's focus scope pulls
   every `focusin` outside its content back, so the takeover's initial focus and Tab trap lose.
-  Close the modal first, as `PipelineBuilder` does before opening the model configuration.
+  Close the modal first: the UI store's builder handoff does it for the model configuration, which
+  shows once the builder's slideover has left.
 - **Shift+Tab from the dialog root.** The root is not the first control, so the upstream trap lets
   the first Shift+Tab walk out to the board. `TakeoverShell` wraps it to the last visible control.
 - **The focus trap counts hidden controls.** `trapTabFocus` (`@modular-frontend/core`) builds its

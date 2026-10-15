@@ -199,6 +199,22 @@ expectMutuallyAssignable<
   sdk.GuidedReviewPostResult,
   v.InferOutput<typeof contracts.guidedReviewPostResultSchema>
 >()
+expectMutuallyAssignable<
+  sdk.AssessPublicPullRequest,
+  v.InferOutput<typeof contracts.assessPublicPullRequestSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrAssessment,
+  v.InferOutput<typeof contracts.publicPrAssessmentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrAssessmentPolicy,
+  v.InferOutput<typeof contracts.publicPrAssessmentPolicySchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrAssessmentVerdict,
+  v.InferOutput<typeof contracts.publicPrAssessmentVerdictSchema>
+>()
 expectMutuallyAssignable<sdk.PublicPipeline, v.InferOutput<typeof contracts.publicPipelineSchema>>()
 expectMutuallyAssignable<
   sdk.PublicPipelineList,
@@ -565,6 +581,10 @@ expectMutuallyAssignable<
 >()
 expectMutuallyAssignable<sdk.DirectoryUser, v.InferOutput<typeof contracts.directoryUserSchema>>()
 expectMutuallyAssignable<
+  sdk.DirectoryUserAccount,
+  v.InferOutput<typeof contracts.directoryUserAccountSchema>
+>()
+expectMutuallyAssignable<
   sdk.DirectoryAccountMembership,
   v.InferOutput<typeof contracts.directoryAccountMembershipSchema>
 >()
@@ -662,6 +682,7 @@ const ASSERTED_COMPONENTS = [
   'DirectoryWebhookDelivery',
   'DirectoryWorkspace',
   'DirectoryUser',
+  'DirectoryUserAccount',
   'DirectoryAccountMembership',
   'DirectoryWorkspaceMembership',
   'DirectoryRepo',
@@ -713,6 +734,10 @@ const ASSERTED_COMPONENTS = [
   'EditGuidedReviewDraft',
   'PostGuidedReviewDrafts',
   'GuidedReviewPostResult',
+  'AssessPublicPullRequest',
+  'PublicPrAssessment',
+  'PublicPrAssessmentPolicy',
+  'PublicPrAssessmentVerdict',
   'PublicPipeline',
   'PublicPipelineList',
   'PublicPromptFragment',

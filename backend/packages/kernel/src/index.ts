@@ -1136,8 +1136,12 @@ export {
 } from './domain/workspace-cascade.js'
 export { changedDirectoryRepoIds, type StoredDirectoryRepo } from './domain/directory-repos.js'
 export {
+  DIRECTORY_ACCOUNT_PROVIDERS,
   directoryChangeFromRow,
+  isDirectoryAccountProvider,
   type StoredDirectoryChange,
+  type StoredUserIdentity,
+  withDirectoryAccounts,
   WORKSPACE_DIRECTORY_ENTITY_TYPES,
 } from './domain/directory-changes.js'
 

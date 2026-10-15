@@ -1,5 +1,29 @@
 # @cat-factory/gatekeeper-worker
 
+## 0.7.12
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/sdk@0.59.0
+  - @cat-factory/gatekeeper-bindings@0.38.7
+
+## 0.7.11
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/sdk@0.58.0
+  - @cat-factory/gatekeeper-bindings@0.38.6
+
+## 0.7.10
+
+### Patch Changes
+
+- 5d586fc: The SDK packages no longer pin each other to an exact version. A dependency on a sibling publishes as a caret range, so a consumer a patch ahead on `@cat-factory/sdk` keeps one copy of it. `@cat-factory/directory-sync` takes `@cat-factory/sdk` as a peer (`>=0.57.0 <1.0.0`): the client it drives is the integrator's own, so it now uses their copy of the SDK and installs none of its own. Add `@cat-factory/sdk` to your dependencies if you did not already have it.
+- Updated dependencies [5d586fc]
+  - @cat-factory/gatekeeper-bindings@0.38.5
+
 ## 0.7.9
 
 ### Patch Changes

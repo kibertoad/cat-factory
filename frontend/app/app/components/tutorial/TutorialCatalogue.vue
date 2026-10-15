@@ -14,6 +14,7 @@ import { buildCatalogueRows, summarizeProgress } from './TutorialCatalogue.logic
 import type { TutorialCatalogueRow } from './TutorialCatalogue.logic'
 import { TUTORIAL_ACTION_KEYS, TUTORIAL_STATUS_KEYS } from '~/utils/tutorial'
 import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const tutorial = useTutorialStore()
@@ -51,11 +52,11 @@ const statusColor = (row: TutorialCatalogueRow) =>
 </script>
 
 <template>
-  <UModal
+  <AppModal
+    size="form"
     v-model:open="open"
     :title="t('tutorial.catalogue.title')"
     :description="t('tutorial.catalogue.intro')"
-    :ui="{ content: 'max-w-2xl' }"
   >
     <template #body>
       <div class="space-y-4" data-testid="tutorial-catalogue">
@@ -162,5 +163,5 @@ const statusColor = (row: TutorialCatalogueRow) =>
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

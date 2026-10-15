@@ -4331,6 +4331,47 @@ func (s *GuidedReviewsService) Stream(ctx context.Context, sessionID string) (*E
 	return s.client.stream(ctx, req)
 }
 
+// PrAssessmentsService assess a pull request in a linked repository: the merger's complexity, risk and impact scores
+// with a rationale, the change class its paths fall in, and whether a risk policy would let it
+// land with no person. The verdict is given without publishing the policy's ceilings. Takes a
+// `write` key: each assessment is one model call. Nothing is persisted and no run starts.
+type PrAssessmentsService struct {
+	client *Client
+}
+
+// Assess assess a pull request against a risk policy
+// Score one pull request in a repository linked to the workspace on the merger’s three axes
+// (complexity, risk, impact, each 0..1, with a rationale), classify it by its changed paths, and
+// say whether a risk policy would let it land with no person. The policy is the one named by
+// `riskPolicyId` from `GET /api/v1/risk-policies`, else the workspace’s unattended default (the
+// one a run started through this API resolves); an unknown id is `422` with `details.reason:
+// "risk_policy_not_found"`, and a workspace with no unattended default is `503`
+// `risk_policy_default_missing`. The verdict comes from the same decision the merge step makes,
+// so the policy’s ceilings are never published: `verdict.reason` and `verdict.exceededAxes` say
+// why. A key bound to a person is judged under that person’s workspace role, as a task it creates
+// is admitted, so the role-scoped rules (`classRulesByRole`, `dryRunRoles`,
+// `submissionClassesByRole`) apply to it; a key bound to nobody has no role and they do not.
+// Synchronous: one inline model call, nothing persisted, no run. An unlinked repository is `404`
+// `repo_not_linked`, a PR the host cannot find is `404` `pr_not_found`, a PR that received
+// commits while it was read is `503` `pr_head_moved` (retry), an exhausted budget is `429`
+// `budget_exhausted`, no configured model is `503` `model_unavailable`, a failed model call is
+// `503` `generation_failed`, a call that runs out of time is `503` `generation_timeout`, and a
+// reply that is not an assessment is `503` `unreadable_reply`. A key bound to a person reads the
+// PR and calls the model as that person. Requires a `write` key.
+// POST /api/v1/pr-assessments (operation assessPublicPullRequest).
+func (s *PrAssessmentsService) Assess(ctx context.Context, body AssessPublicPullRequest) (*PublicPrAssessment, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   "/api/v1/pr-assessments",
+		Body:   body,
+	}
+	var out PublicPrAssessment
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // KeysService the workspace's own API keys: provision one headlessly, list them, revoke one (and what it
 // minted).
 type KeysService struct {

@@ -8,6 +8,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import type { ObservabilityProviderKind } from '~/types/releaseHealth'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -136,11 +137,7 @@ const connectedLabel = computed(() => {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('settings.observabilityConnection.title')"
-    :ui="{ content: 'max-w-lg' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('settings.observabilityConnection.title')">
     <template #title>
       <IntegrationBackTitle :title="t('settings.observabilityConnection.title')" @back="back" />
     </template>
@@ -261,5 +258,5 @@ const connectedLabel = computed(() => {
         </section>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

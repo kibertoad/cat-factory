@@ -24,6 +24,7 @@ import type { AssistantActionId, AssistantOutcome } from '~/types/domain'
 import { answerFor, assistantSurface, revealTarget, submitGate } from './AssistantModal.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import Spinner from '~/components/common/Spinner.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -153,7 +154,7 @@ function reveal(blockId: string): void {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('assistant.title')" :ui="{ content: 'max-w-2xl' }">
+  <AppModal size="form" v-model:open="open" :title="t('assistant.title')">
     <template #body>
       <div class="space-y-4">
         <p class="text-sm text-muted">{{ t('assistant.intro') }}</p>
@@ -361,5 +362,5 @@ function reveal(blockId: string): void {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

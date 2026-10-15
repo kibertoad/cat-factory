@@ -4544,6 +4544,7 @@
       },
       "errors": {
         "listInstallations": "Не вдалося отримати список встановлень GitHub",
+        "loadProjection": "Не вдалося завантажити репозиторії, pull request-и та issue",
         "startInstall": "Не вдалося розпочати встановлення застосунку GitHub",
         "connect": "Не вдалося підключити"
       }

@@ -21,6 +21,7 @@
 import { refRowFor, classifyRefFailure, type RefState } from './ContextDocumentPicker.logic'
 import type { DocumentSourceKind, ResolvedDocumentRef } from '~/types/domain'
 import Spinner from '~/components/common/Spinner.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -151,7 +152,7 @@ function stage() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('documents.startFromDesign.title')">
+  <AppModal size="form" v-model:open="open" :title="t('documents.startFromDesign.title')">
     <template #body>
       <div class="space-y-4">
         <p class="text-sm text-muted">{{ t('documents.startFromDesign.intro') }}</p>
@@ -232,5 +233,5 @@ function stage() {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

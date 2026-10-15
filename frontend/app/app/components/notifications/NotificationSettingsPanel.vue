@@ -26,6 +26,7 @@ import type {
 } from '~/types/notifications'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 const notifications = useNotificationsStore()
@@ -134,11 +135,7 @@ function resetToDefaults() {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('notificationSettings.panel.title')"
-    :ui="{ content: 'max-w-2xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('notificationSettings.panel.title')">
     <template #title>
       <IntegrationBackTitle :title="t('notificationSettings.panel.title')" @back="back" />
     </template>
@@ -235,5 +232,5 @@ function resetToDefaults() {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

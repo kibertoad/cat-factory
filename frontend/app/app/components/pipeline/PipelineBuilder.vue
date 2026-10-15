@@ -31,6 +31,7 @@ import type { ConsensusStrategy } from '~/types/consensus'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 type DraftUnit = { index: number; kind: AgentKind; companionIndex: number | null }
 
@@ -247,18 +248,12 @@ const open = computed({
   set: (v: boolean) => (ui.builderOpen = v),
 })
 
-// The slideover is a Reka modal, whose focus scope pulls focus back from anything opened over it,
-// so a takeover opened while it is up could never be reached by keyboard. Close it first; the
-// draft lives in the pipelines store and is still there when the builder reopens.
-function configureModels() {
-  open.value = false
-  ui.openModelConfig()
-}
-
 // Refresh the observability-integration state whenever the builder opens so the palette
 // knows whether to offer the post-release-health gate (it's loaded on demand, not from
 // the snapshot). Best-effort: a failure just leaves the gate hidden.
 onModalOpen(open, () => {
+  // Coming back from the model configuration, where none of this changed.
+  if (ui.consumeBuilderReturn()) return
   releaseHealth.load().catch(() => {})
   // The prompt-override index badges the steps whose agent no longer runs the shipped prompt.
   // Best-effort: the builder is fully usable without it, and a deployment that wires no
@@ -411,6 +406,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
     :title="t('pipeline.builder.title')"
     side="left"
     :ui="{ content: 'max-w-[90vw] sm:max-w-2xl lg:max-w-5xl xl:max-w-6xl' }"
+    @after:leave="ui.builderLeft()"
   >
     <template #body>
       <!-- On compact viewports the three sections stack and the slideover body
@@ -450,7 +446,8 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               size="xs"
               icon="i-lucide-cpu"
               :title="t('pipeline.builder.configureModelsTooltip')"
-              @click="configureModels"
+              data-testid="pipeline-builder-configure-models"
+              @click="ui.openModelConfig()"
             >
               {{ t('pipeline.builder.configureModels') }}
             </UButton>
@@ -1400,7 +1397,11 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
   </USlideover>
 
   <!-- Add-agent form -->
-  <UModal v-model:open="addAgentOpen" :title="t('pipeline.builder.addAgentModal.title')">
+  <AppModal
+    size="prompt"
+    v-model:open="addAgentOpen"
+    :title="t('pipeline.builder.addAgentModal.title')"
+  >
     <template #body>
       <div class="space-y-3">
         <div>
@@ -1464,7 +1465,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 
   <!-- The per-workspace system-prompt editor for one agent kind. Mounted alongside the builder
        (not inside its slideover body) so its own modal isn't nested inside the scrolling column. -->

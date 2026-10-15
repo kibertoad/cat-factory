@@ -170,6 +170,8 @@ function revisionLabel(revision: AgentPromptRevision): string {
 </script>
 
 <template>
+  <!-- workbench-width-ok: a prompt editor, up to 1024px on a large screen. Its shell waits on
+       #2359. -->
   <UModal
     v-model:open="open"
     :title="t('agentPrompt.title', { agent: label })"

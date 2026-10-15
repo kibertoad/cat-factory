@@ -4544,6 +4544,7 @@
       },
       "errors": {
         "listInstallations": "GitHub のインストール一覧を取得できませんでした",
+        "loadProjection": "リポジトリ、プルリクエスト、イシューを読み込めませんでした",
         "startInstall": "GitHub App のインストールを開始できませんでした",
         "connect": "接続できませんでした"
       }

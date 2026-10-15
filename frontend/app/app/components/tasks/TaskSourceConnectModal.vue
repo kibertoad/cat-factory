@@ -12,6 +12,7 @@
 // available (Jira connected / the GitHub App installed) — there is nothing to offer
 // before that.
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -116,7 +117,7 @@ async function toggleEnabled(enabled: boolean) {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="descriptor?.label ?? t('tasks.connect.title')">
+  <AppModal size="form" v-model:open="open" :title="descriptor?.label ?? t('tasks.connect.title')">
     <template #title>
       <IntegrationBackTitle :title="descriptor?.label ?? t('tasks.connect.title')" @back="back" />
     </template>
@@ -212,5 +213,5 @@ async function toggleEnabled(enabled: boolean) {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>
