@@ -48,6 +48,7 @@ import { descriptorFieldDefaults } from '@cat-factory/contracts'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import { buildTaskTypePickerRows } from '~/utils/taskTypePicker'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 // Interface tier. In BASIC mode this form asks for the task itself (type, title,
@@ -910,7 +911,7 @@ function createRefusalMessage(error: unknown): string | null {
 </script>
 
 <template>
-  <UModal v-model:open="modalOpen" :title="t('board.addTask.title')">
+  <AppModal size="form" v-model:open="modalOpen" :title="t('board.addTask.title')">
     <template #body>
       <div class="space-y-4" data-testid="add-task-modal">
         <p v-if="container" class="text-xs text-muted">
@@ -1459,5 +1460,5 @@ function createRefusalMessage(error: unknown): string | null {
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

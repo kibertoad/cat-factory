@@ -29,6 +29,7 @@ import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue
 import { appInstallationManageUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 
@@ -58,10 +59,10 @@ const adding = ref(false)
 async function loadRepos() {
   try {
     await github.probe()
-    // Load only the linked-repo projection (to flag repos already on the board). The
+    // Load the linked-repo projection once per board (to flag repos already on the board). The
     // available-repos list is NOT prefetched — it's searched server-side on demand once
     // the user types (see the repoQueryRaw watcher), so a wide install isn't shipped whole.
-    if (github.connected) await github.load()
+    await github.refresh()
   } catch {
     // Integration off / unreachable → the picker stays empty, GitHubConnect shows.
   }
@@ -437,7 +438,7 @@ function done() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('github.addService.title')" :ui="{ content: 'max-w-xl' }">
+  <AppModal size="form" v-model:open="open" :title="t('github.addService.title')">
     <template #body>
       <div class="space-y-6">
         <p class="text-sm text-muted">
@@ -682,5 +683,5 @@ function done() {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

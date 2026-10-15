@@ -24,10 +24,15 @@ const recurring = useRecurringPipelinesStore()
 const requirements = useRequirementsStore()
 const access = useWorkspaceAccess()
 const { t } = useI18n()
+const { present } = usePipelineErrorToast()
 
 onMounted(() => {
   fragments.ensureLoaded()
-  github.ensureLoaded()
+  // The repo list behind the inspector's repo link and the service config's detect-from-repo
+  // lookup. Both read the store, so this one call serves them.
+  github.ensureLoaded().catch((error: unknown) => {
+    present(error, 'github.connect.errors.loadProjection')
+  })
 })
 
 const block = computed<Block | undefined>(() =>

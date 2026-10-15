@@ -15,6 +15,7 @@
 // prompt never auto-opens again), while closing without answering defers to next launch.
 import { TUTORIAL_ACTION_KEYS } from '~/utils/tutorial'
 import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const tutorial = useTutorialStore()
@@ -34,7 +35,7 @@ const undecided = computed(() => tutorial.decision === null)
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('tutorial.prompt.title')" :ui="{ content: 'max-w-lg' }">
+  <AppModal size="prompt" v-model:open="open" :title="t('tutorial.prompt.title')">
     <template #body>
       <!-- NOTE for spec authors: this marks the modal's BODY, so it is the "prompt is
            showing" signal, not a container for everything in the prompt. The footer's
@@ -125,5 +126,5 @@ const undecided = computed(() => tutorial.decision === null)
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

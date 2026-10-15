@@ -13,6 +13,7 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -99,7 +100,7 @@ watch(
   open,
   (isOpen) => {
     if (!isOpen) return
-    if (github.connected) void github.load()
+    if (github.connected) void github.refresh()
   },
   { immediate: true },
 )
@@ -287,7 +288,7 @@ async function merge(pr: GitHubPullRequest) {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="panelTitle" :ui="{ content: 'max-w-2xl' }">
+  <AppModal size="form" v-model:open="open" :title="panelTitle">
     <template #title>
       <IntegrationBackTitle :title="panelTitle" @back="back" />
     </template>
@@ -716,5 +717,5 @@ async function merge(pr: GitHubPullRequest) {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

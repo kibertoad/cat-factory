@@ -4544,6 +4544,7 @@
       },
       "errors": {
         "listInstallations": "לא ניתן היה לרשום את התקנות GitHub",
+        "loadProjection": "לא ניתן היה לטעון מאגרים, בקשות משיכה ובעיות",
         "startInstall": "לא ניתן היה להתחיל את התקנת אפליקציית GitHub",
         "connect": "לא ניתן היה להתחבר"
       }

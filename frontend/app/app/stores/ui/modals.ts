@@ -183,6 +183,80 @@ function createHealthAdvisoryModals() {
 }
 
 /**
+ * The pipeline builder and the model configuration never stack. Opening the model configuration
+ * from the builder closes the builder, shows the model configuration once the builder has
+ * finished leaving, and brings the builder back when the model configuration closes.
+ *
+ * The builder is a `USlideover`, a modal Reka layer: while it is mounted, Reka sets
+ * `pointer-events: none` on `<body>`, and lifts it only when the exit animation ends. The model
+ * configuration is the app's own takeover, teleported to `<body>` and not a Reka layer, so shown
+ * over the builder (or during its exit) every click landed on the builder behind it. Waiting for
+ * the exit (`builderLeft`, from the builder's `after:leave`) fixes that without an escape hatch on
+ * the panel, which would also defeat the pointer lock of the panel's OWN dropdowns. The fix lives
+ * here, not at the builder's "Configure models" button, because the "choose a model" action on a
+ * run-admission failure toast (`preset_unsatisfiable`, `model_policy_blocked`) also opens the
+ * model configuration.
+ *
+ * This owns BOTH openers: `openBuilder` closes the model configuration and drops a pending return,
+ * so a builder the user opened another way is not followed by a stale reopen.
+ *
+ * Closing the builder unmounts its body. The draft pipeline is in the pipelines store and survives,
+ * but component-local state does not: a half-typed output size in the binary-output picker, the
+ * rejected media types and references it reports, and the guarded-gate roster. The builder
+ * reloads nothing on the way back (`consumeBuilderReturn`), since nothing it loads changes while
+ * the model configuration is open.
+ *
+ * Other takeovers (reports, kaizen, operator dashboard) opened over a modal Reka layer have the
+ * same unclickable-takeover defect and are not handled here.
+ */
+function createBuilderModelConfigHandoff(
+  misc: Pick<ReturnType<typeof createMiscModals>, 'builderOpen'>,
+  panels: Pick<ReturnType<typeof createIntegrationPanelModals>, 'modelConfigOpen'>,
+) {
+  const returnToBuilder = ref(false)
+  const showAfterBuilderExit = ref(false)
+  const returningToBuilder = ref(false)
+
+  function openModelConfig() {
+    if (showAfterBuilderExit.value) return
+    if (misc.builderOpen.value) {
+      misc.builderOpen.value = false
+      returnToBuilder.value = true
+      showAfterBuilderExit.value = true
+      return
+    }
+    panels.modelConfigOpen.value = true
+  }
+  function builderLeft() {
+    if (!showAfterBuilderExit.value) return
+    showAfterBuilderExit.value = false
+    panels.modelConfigOpen.value = true
+  }
+  function closeModelConfig() {
+    panels.modelConfigOpen.value = false
+    if (!returnToBuilder.value) return
+    returnToBuilder.value = false
+    returningToBuilder.value = true
+    misc.builderOpen.value = true
+  }
+  function openBuilder() {
+    panels.modelConfigOpen.value = false
+    showAfterBuilderExit.value = false
+    returnToBuilder.value = false
+    returningToBuilder.value = false
+    misc.builderOpen.value = true
+  }
+  /** True once per return from the model configuration, so the builder can skip its reloads. */
+  function consumeBuilderReturn(): boolean {
+    const returning = returningToBuilder.value
+    returningToBuilder.value = false
+    return returning
+  }
+
+  return { openModelConfig, closeModelConfig, openBuilder, builderLeft, consumeBuilderReturn }
+}
+
+/**
  * Small standalone surfaces with no hub relationship: the pipeline builder and the
  * decision-wait window.
  */
@@ -190,9 +264,6 @@ function createMiscModals() {
   const builderOpen = ref(false)
   const decisionContext = ref<{ instanceId: string; decisionId: string } | null>(null)
 
-  function openBuilder() {
-    builderOpen.value = true
-  }
   function openDecision(instanceId: string, decisionId: string) {
     decisionContext.value = { instanceId, decisionId }
   }
@@ -200,7 +271,7 @@ function createMiscModals() {
     decisionContext.value = null
   }
 
-  return { builderOpen, decisionContext, openBuilder, openDecision, closeDecision }
+  return { builderOpen, decisionContext, openDecision, closeDecision }
 }
 
 /** What the guided review window opens on: a session, a pull request, or neither (the picker). */
@@ -590,6 +661,7 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   // API access tokens: the workspace's inbound public-API keys external systems present to
   // the `/api/v1` surface. Opened from the Integrations hub.
   const apiTokensOpen = ref(false)
+  // Opened and closed by `createBuilderModelConfigHandoff`, which hands the pipeline builder over.
   const modelConfigOpen = ref(false)
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
   // / Codex harnesses). `vendorCredentialsTab` lets a caller deep-link to one tab —
@@ -650,12 +722,6 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   }
   function closeApiTokens() {
     apiTokensOpen.value = false
-  }
-  function openModelConfig() {
-    modelConfigOpen.value = true
-  }
-  function closeModelConfig() {
-    modelConfigOpen.value = false
   }
   function openVendorCredentials(tab = 'pool') {
     resetHubReturn()
@@ -718,8 +784,6 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
     closeOperatorDashboard,
     openApiTokens,
     closeApiTokens,
-    openModelConfig,
-    closeModelConfig,
     openVendorCredentials,
     setVendorCredentialsTab,
     closeVendorCredentials,
@@ -1223,6 +1287,7 @@ export function createUiModals() {
   const settings = createSettingsModals(resetHubReturn)
   const infra = createInfraModals(resetHubReturn)
   const ai = createAiOnboardingModals()
+  const builderHandoff = createBuilderModelConfigHandoff(misc, panels)
 
   return {
     integrationsOpen,
@@ -1249,5 +1314,6 @@ export function createUiModals() {
     ...settings,
     ...infra,
     ...ai,
+    ...builderHandoff,
   }
 }

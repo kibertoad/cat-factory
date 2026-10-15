@@ -7,8 +7,8 @@ guide is [`README.md`](./README.md); this file is the short orientation and the 
 agent loads as instructions when it reads a file here.
 
 **Entry:** `nuxt.config.ts` (the layer's `main`). Source lives under `app/` (the Nuxt srcDir):
-`app.vue` is the root; `app/pages/index.vue` is the board, beside three standalone routes
-(`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-password.vue`).
+`app.vue` is the root; `app/pages/index.vue` is the board and its queue view, beside three
+standalone routes (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-password.vue`).
 
 **Where things live:**
 
@@ -42,6 +42,9 @@ agent loads as instructions when it reads a file here.
   never an arbitrary value; in CSS, `var(--ui-radius)` or a `calc()` of it, never a `--radius-*`
   variable or a literal. [Rule](./README.md#radius-through-the-theme-scale), guarded by
   `scripts/check-frontend-radius.mjs`.
+- **A modal is `<AppModal size="prompt|form|wide">`**, never a raw `UModal` and never a `max-w-*` of
+  its own; a workbench surface that waits on #2359 says so in a `workbench-width-ok:` comment.
+  [Rule](./README.md#modals-open-at-a-named-width), guarded by `scripts/check-frontend-geometry.mjs`.
 - **A control is its Nuxt UI component** (`UButton`, `UInput`, `USelect`, `UTable`, `UCollapsible`,
   `UForm`, `ULink`), never the raw element; an icon-only button is `common/IconButton.vue`, which
   owns the tooltip. [Rule](./README.md#a-control-is-its-nuxt-ui-component), guarded by
@@ -74,7 +77,7 @@ is whole-tree from the root (AGENTS.md). Run these where stated:
 - `node scripts/check-component-imports.mjs`, `node scripts/check-frontend-palette.mjs`,
   `node scripts/check-frontend-type-scale.mjs`, `node scripts/check-frontend-radius.mjs`,
   `node scripts/check-frontend-primitives.mjs`, `node scripts/check-frontend-variants.mjs`,
-  `node scripts/check-frontend-feedback.mjs`,
+  `node scripts/check-frontend-feedback.mjs`, `node scripts/check-frontend-geometry.mjs`,
   `node scripts/check-file-size.mjs` from the repo root (install-free guards CI runs).
 
 **See also:** [`README.md`](./README.md), [`app/docs/architecture.md`](./app/docs/architecture.md),

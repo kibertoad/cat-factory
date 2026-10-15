@@ -14,6 +14,7 @@
 // hub row-for-row so the two read as siblings.
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -167,11 +168,7 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('layout.modelProvidersHub.title')"
-    :ui="{ content: 'max-w-xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('layout.modelProvidersHub.title')">
     <template #body>
       <div class="space-y-5" data-testid="model-providers-hub">
         <p class="text-xs text-muted">
@@ -245,5 +242,5 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
         </section>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

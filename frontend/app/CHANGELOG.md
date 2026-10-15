@@ -1,5 +1,33 @@
 # @cat-factory/app
 
+## 0.315.6
+
+### Patch Changes
+
+- f3e31b4: The model configuration opened from the pipeline builder now takes clicks. It shows once the builder has closed, and the builder comes back with its draft when the model configuration closes. Before, the builder stayed open under it and took every click.
+
+## 0.315.5
+
+### Patch Changes
+
+- df137d3: Selecting a service frame no longer reads the GitHub repos, pull requests and issues twice. The inspector asks for the projection when the frame opens, and concurrent callers share one read. A connected workspace with no linked repos counts as loaded, so the inspector does not read it again on every open. The store records what the projection was loaded for (the workspace and its connection), so a failed load, a board reset, a disconnect and a reinstalled App each make the next request read again. One generation counter decides whether a read may land: an older read that finishes last, a read for a board you left, a read that finishes after a disconnect, and a read that started before a direct write (saving linked repos, opening or merging a pull request) no longer overwrite newer rows. The loading flag clears as soon as the projection is cleared. The add-service-from-repo, bootstrap and GitHub panel surfaces still re-read on open, and share a read that is already running. A failed read on frame open now shows the standard error toast.
+
+## 0.315.4
+
+### Patch Changes
+
+- 9fd2cd4: Modals open at one of three named widths instead of a width picked per dialog.
+  
+  A new `AppModal` wraps `UModal` with a required `size` from `utils/overlaySize.ts`: `prompt` (448px)
+  for confirmations, decisions and one- or two-field dialogs, `form` (576px) for forms, lists and
+  hubs, and `wide` (672px) for card lists with an action beside each paragraph, tabbed forms and three
+  pickers in a row. 46 modals move onto it. 13 keep their width, 31 move by one Tailwind step, and two
+  short dialogs (review friction, AI preset mismatch) narrow from 576px to 448px. The nine workbench
+  surfaces keep their own widths until #2359 decides their shell, each with a `workbench-width-ok:`
+  comment. `scripts/check-frontend-geometry.mjs` refuses a raw `UModal` without that waiver, and an
+  `AppModal` that names its own width utility or reads its classes from a variable. An `AppModal`
+  bound `:fullscreen` drops its width while fullscreen.
+
 ## 0.315.3
 
 ### Patch Changes
