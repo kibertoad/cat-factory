@@ -149,8 +149,10 @@ export type NotificationWebhook = v.InferOutput<typeof notificationWebhookSchema
  * on a workspace with nothing registered still needs one, and the service refuses with
  * `reason: 'webhook_url_required'` rather than storing a half-endpoint.
  *
- * When supplied it must be `https:`: deliveries carry a signed payload describing internal work,
- * and plaintext HTTP would leak it on the wire.
+ * When supplied it is `https:`, because deliveries carry a signed payload describing internal
+ * work and plaintext HTTP would leak it on the wire. The schema admits `http:` as well so that
+ * the deployment's URL policy (`NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS`) makes that call, at the
+ * write boundary, with a message naming it.
  *
  * `secret` is write-only: omit it to keep the stored one, pass a new value to rotate it.
  */
@@ -161,7 +163,7 @@ export const putNotificationWebhookSchema = v.object({
       v.string(),
       v.trim(),
       v.url(),
-      v.startsWith('https://', 'The webhook endpoint must be an https:// URL'),
+      v.regex(/^https?:\/\//i, 'The webhook endpoint must be an http:// or https:// URL'),
       v.maxLength(2000),
     ),
   ),
