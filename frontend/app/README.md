@@ -34,7 +34,8 @@ A spatial planning surface. You lay out a system as a **board** of frames
 (services), modules and tasks on a [Vue Flow](https://vueflow.dev) canvas, wire up
 dependencies, attach requirements, and apply **agent pipelines** to blocks.
 Execution streams back in real time (step/subtask progress bars, decision
-prompts, failures with retry) so the canvas doubles as a live dashboard.
+prompts, failures with retry) so the canvas doubles as a live dashboard. The board's second view,
+the [queue](#queue-view), lists the same tasks by what each one needs.
 
 It is a thin client: there is **no business logic here**. Every mutation calls the
 Worker API and the stores hydrate from server snapshots and live updates pushed
@@ -43,8 +44,8 @@ over the WebSocket. How that sync works is written up in
 
 ## Tech stack
 
-- **Nuxt 4 / Vue 3** SPA: the board is `pages/index.vue`, beside three standalone routes
-  (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-password.vue`).
+- **Nuxt 4 / Vue 3** SPA: the board and its queue view are `pages/index.vue`, beside three
+  standalone routes (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-password.vue`).
 - **Pinia** (+ `pinia-plugin-persistedstate`): feature stores.
 - **Vue Flow** (`core`, `background`, `controls`, `node-resizer`): the canvas.
 - **Nuxt UI** + Tailwind: components and styling.
@@ -1489,7 +1490,10 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
   `taskExpansion` store and driven by `useTaskExpansion`.
 - **Sidebar & chrome** (`components/layout`): board/account switchers, palettes
   entry points, the language + [interface-mode](#interface-modes-basic--advanced)
-  switchers, the `SpendWarningBanner`, and the toolbar (zoom, LOD, decision queue).
+  switchers, the Views switcher (`WorkViewSwitcher`), the `SpendWarningBanner`, and the toolbar
+  (zoom, LOD, and the decision counter, which opens the queue view).
+- **Queue view** (`components/queue`): `QueueView` and `QueueCard`, the board's second view. It
+  regroups the swimlane verdict and reuses the board card's actions; see [Queue view](#queue-view).
 - **Palettes** (`components/palettes`): drag blocks, pipelines and agents onto
   the board.
 - **Describe new work** (`components/queue/DescribeWorkModal.vue`, `utils/describeWork.ts`): the
@@ -1504,6 +1508,11 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
   setup. It adds no probe of its own: each row reads what its banner or startup dialog already
   reads (`useSetupChecklist`) and opens the same surface. "Checking" and "missing" are separate
   states, because an unanswered probe and an absent capability are opposite facts.
+- **Notifications inbox** (`components/layout/NotificationsInbox.vue`, `utils/notificationRoutes.ts`):
+  a card that asks for a person carries its verb ("Answer", "Review", ...) as the primary button,
+  and "Mark read" is secondary. `NOTIFICATION_ROUTES` is exhaustive over the notification types and
+  holds each one's verb and destination, so the title link and the button cannot open different
+  places. A route that can only select the task is named "Open".
 - **Inspector** (`components/panels` + `panels/inspector`): per-block tabs:
   structure, dependencies, model + fragment picker, live execution, and linked
   docs/issues/scenarios. Decisions resolve via `DecisionModal`. A `review` task
