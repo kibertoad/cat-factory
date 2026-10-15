@@ -27,10 +27,10 @@ index 31cc2cc99b59403c5eb0bdc952e01cbf25fd9f1b..be6756d22624db2d648d0959b8c54e57
 +  return (clientContexts[key] ||= makeClientCtx())
 +}
 +
-+// PATCH: `@storybook/addon-vitest` runs stories through the portable-stories path, which calls
-+// `setup()` with NO story context, so every story threw "StoryContext is not provided" and the
-+// whole test lane was red before a single assertion ran. The key is only a NAME: it labels this
-+// story's Nuxt app and its context entry. When there is no canvas to take it from, count.
++// PATCH: under `@storybook/addon-vitest` the story's canvas is a div with an EMPTY id, so every
++// story threw "StoryContext is not provided" before a single assertion ran (upstream: nuxt-modules/
++// storybook#1140). The key is only a NAME: it labels this story's Nuxt app and its context entry.
++// When the canvas gives no id, count.
 +let fallbackKey = 0;
 +
  const pluginsTyped = plugins;

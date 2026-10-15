@@ -164,7 +164,8 @@ minimumReleaseAgeExclude:
 # `globalThis.__nuxt_app_ctx__`, not in the `unctx` registry the preset writes to, so every
 # story dies with NUXT_E1001: https://github.com/nuxt-modules/storybook/issues/1138 (fix in
 # review: https://github.com/nuxt-modules/storybook/pull/1139).
-# (2) `@storybook/addon-vitest` calls the preset's `setup()` with no story context, so every
-# story test threw "StoryContext is not provided".
+# (2) Under `@storybook/addon-vitest` the story's canvas has an empty `id`, which the preset uses
+# as its key, so every story test throws "StoryContext is not provided":
+# https://github.com/nuxt-modules/storybook/issues/1140.
 patchedDependencies:
   '@storybook-vue/nuxt@10.0.1': patches/@storybook-vue__nuxt@10.0.1.patch

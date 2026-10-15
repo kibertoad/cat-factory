@@ -63,7 +63,7 @@ router and its screens get the stories), and `DependencyConnectOverlay` and `Tas
 
 - **The preset is patched.** Two upstream bugs, described in the internal doc and linked from
   `pnpm-workspace.yaml` (nuxt-modules/storybook#1138 for the Nuxt 4.6 one, with its fix in
-  review as #1139). Remove the patch when a
+  review as #1139, and #1140 for the empty canvas id under addon-vitest). Remove the patch when a
   release fixes both; until then a bump of `@storybook-vue/nuxt` fails the install.
 - **The story lane is nightly, not per PR.** The whole tree takes about 10 minutes. Running it
   without browser isolation took about 2 and was rejected: shuffled, 2 of 4 runs timed out on

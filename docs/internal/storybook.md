@@ -30,8 +30,10 @@ of applying a stale fix. Remove the patch when a release fixes both.
    by the open [#1139](https://github.com/nuxt-modules/storybook/pull/1139) on the `10.x` branch.
    The patch writes to the registry Nuxt 4.6 reads.
 2. **Every story test throws "StoryContext is not provided".** `setup()` takes its key from
-   `storyContext.canvasElement.id`, and `@storybook/addon-vitest` calls it with no context. The
-   key only names the story's Nuxt app, so the patch counts when there is no canvas.
+   `storyContext.canvasElement.id`, and under `@storybook/addon-vitest` the canvas is a `div` with
+   an empty `id`. Upstream:
+   [nuxt-modules/storybook#1140](https://github.com/nuxt-modules/storybook/issues/1140). The key
+   only names the story's Nuxt app, so the patch counts when the id is empty.
 
 Any story whose component reads `useAppConfig()` (`Spinner` does) throws
 `NUXT_E1001` if the first fix comes unstuck.
