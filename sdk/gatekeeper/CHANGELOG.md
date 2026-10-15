@@ -1,5 +1,37 @@
 # @cat-factory/gatekeeper-bindings
 
+## 0.38.7
+
+### Patch Changes
+
+- 58b57cc: A directory `DirectoryUser` carries `accounts`: the GitHub and GitLab accounts the user signed in
+  with, as `{ provider, id, login }` where `id` is the host's numeric user id, so a system mirroring
+  the directory can match people on their host account instead of an email. Linking such an account
+  to a user, or moving it to another user, records a `user` change on the feed for each user
+  involved. Password, Google and OIDC logins are not published. OpenAPI 1.84.0.
+- Updated dependencies [58b57cc]
+  - @cat-factory/sdk@0.59.0
+
+## 0.38.6
+
+### Patch Changes
+
+- 918e977: `POST /api/v1/pr-assessments` (`client.prAssessments.assess`) scores a pull request in a linked
+  repository on the merger's complexity, risk and impact axes, classifies it by its changed paths, and
+  says whether a risk policy would let it land with no person: the named policy, or the workspace's
+  unattended default. The verdict comes from the merge step's own precedence ladder, now a pure
+  function shared by both (`mergePrecedence.ts`), so the policy's ceilings stay unpublished. A key bound to a person is judged under that person's
+  workspace role, as the runs it starts are. One
+  synchronous inline model call at `write` scope; nothing is persisted. OpenAPI 1.83.0.
+- Updated dependencies [918e977]
+  - @cat-factory/sdk@0.58.0
+
+## 0.38.5
+
+### Patch Changes
+
+- 5d586fc: The SDK packages no longer pin each other to an exact version. A dependency on a sibling publishes as a caret range, so a consumer a patch ahead on `@cat-factory/sdk` keeps one copy of it. `@cat-factory/directory-sync` takes `@cat-factory/sdk` as a peer (`>=0.57.0 <1.0.0`): the client it drives is the integrator's own, so it now uses their copy of the SDK and installs none of its own. Add `@cat-factory/sdk` to your dependencies if you did not already have it.
+
 ## 0.38.4
 
 ### Patch Changes

@@ -11,6 +11,7 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -142,11 +143,7 @@ async function remove() {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('settings.userSecrets.title')"
-    :ui="{ content: 'max-w-xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('settings.userSecrets.title')">
     <template #title>
       <IntegrationBackTitle :title="t('settings.userSecrets.title')" @back="back" />
     </template>
@@ -247,5 +244,5 @@ async function remove() {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

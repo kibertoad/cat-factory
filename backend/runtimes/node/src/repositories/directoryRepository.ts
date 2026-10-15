@@ -6,11 +6,14 @@ import {
   type DirectoryWorkspaceMembership,
 } from '@cat-factory/contracts'
 import {
+  DIRECTORY_ACCOUNT_PROVIDERS,
   type DirectoryChangeRecord,
   type DirectoryRepoKey,
   type DirectoryRepository,
   directoryChangeFromRow,
+  type StoredUserIdentity,
   WORKSPACE_DIRECTORY_ENTITY_TYPES,
+  withDirectoryAccounts,
   type WorkspaceMembershipKey,
 } from '@cat-factory/kernel'
 import { type SQL, and, asc, eq, gt, inArray, isNull, lte, max, min, or, sql } from 'drizzle-orm'
@@ -20,6 +23,7 @@ import {
   directoryChanges,
   githubRepos,
   memberships,
+  userIdentities,
   users,
   workspaceMembers,
   workspaces,
@@ -244,13 +248,33 @@ export class DrizzleDirectoryRepository implements DirectoryRepository {
     after: string | null,
     limit: number,
   ): Promise<DirectoryUser[]> {
-    return this.db
+    const rows = await this.db
       .select(userColumns)
       .from(users)
       .innerJoin(memberships, eq(memberships.user_id, users.id))
       .where(and(eq(memberships.account_id, accountId), gt(users.id, after ?? '')))
       .orderBy(asc(users.id))
       .limit(limit)
+    return withDirectoryAccounts(rows, await this.hostIdentitiesOf(rows.map((row) => row.id)))
+  }
+
+  /** One read for the host-account identities of these users, whatever their number. */
+  private async hostIdentitiesOf(userIds: string[]): Promise<StoredUserIdentity[]> {
+    if (userIds.length === 0) return []
+    return this.db
+      .select({
+        user_id: userIdentities.user_id,
+        provider: userIdentities.provider,
+        subject: userIdentities.subject,
+        metadata: userIdentities.metadata,
+      })
+      .from(userIdentities)
+      .where(
+        and(
+          inArray(userIdentities.user_id, userIds),
+          inArray(userIdentities.provider, [...DIRECTORY_ACCOUNT_PROVIDERS]),
+        ),
+      )
   }
 
   async listAccountMemberships(
@@ -339,11 +363,16 @@ export class DrizzleDirectoryRepository implements DirectoryRepository {
 
   async getUsers(accountId: string, ids: string[]): Promise<DirectoryUser[]> {
     if (ids.length === 0) return []
-    return this.db
-      .select(userColumns)
-      .from(users)
-      .innerJoin(memberships, eq(memberships.user_id, users.id))
-      .where(and(eq(memberships.account_id, accountId), inArray(users.id, ids)))
+    // The ids are known up front, so the identities are read beside the users rather than after.
+    const [rows, identities] = await Promise.all([
+      this.db
+        .select(userColumns)
+        .from(users)
+        .innerJoin(memberships, eq(memberships.user_id, users.id))
+        .where(and(eq(memberships.account_id, accountId), inArray(users.id, ids))),
+      this.hostIdentitiesOf(ids),
+    ])
+    return withDirectoryAccounts(rows, identities)
   }
 
   async getAccountMemberships(

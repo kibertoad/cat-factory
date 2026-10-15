@@ -335,6 +335,8 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
 </script>
 
 <template>
+  <!-- workbench-width-ok: a ranked list of tracker bugs with scan controls (768px). Its shell
+       waits on #2359. -->
   <UModal v-model:open="open" :title="t('bugHunt.title')" :ui="{ content: 'max-w-3xl' }">
     <template #title>
       <IntegrationBackTitle :title="t('bugHunt.title')" @back="back" />

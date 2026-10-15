@@ -29,6 +29,7 @@ import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue
 import { appInstallationManageUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 
@@ -437,7 +438,7 @@ function done() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('github.addService.title')" :ui="{ content: 'max-w-xl' }">
+  <AppModal size="form" v-model:open="open" :title="t('github.addService.title')">
     <template #body>
       <div class="space-y-6">
         <p class="text-sm text-muted">
@@ -682,5 +683,5 @@ function done() {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

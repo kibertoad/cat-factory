@@ -11,6 +11,7 @@
 // next launch asks again. There is deliberately no "don't ask me again": an unanswered question
 // costs nothing here, where a wrongly-recorded answer costs a person destinations they need.
 import { ROLE_PRESENTATION, UI_ROLES, type UiRole } from '~/utils/uiRole'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const uiRole = useUiRoleStore()
@@ -26,7 +27,7 @@ function pick(role: UiRole) {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('uiRole.prompt.title')" :ui="{ content: 'max-w-lg' }">
+  <AppModal size="prompt" v-model:open="open" :title="t('uiRole.prompt.title')">
     <template #body>
       <div class="space-y-4" data-testid="role-prompt">
         <p class="text-sm text-toned">{{ t('uiRole.prompt.intro') }}</p>
@@ -72,5 +73,5 @@ function pick(role: UiRole) {
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

@@ -19,6 +19,7 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -269,11 +270,7 @@ async function remove(p: LocalRunner) {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('settings.localModelEndpoints.title')"
-    :ui="{ content: 'max-w-2xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('settings.localModelEndpoints.title')">
     <template #title>
       <IntegrationBackTitle :title="t('settings.localModelEndpoints.title')" @back="back" />
     </template>
@@ -483,5 +480,5 @@ async function remove(p: LocalRunner) {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

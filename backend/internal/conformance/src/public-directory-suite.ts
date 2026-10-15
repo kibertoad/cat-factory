@@ -100,6 +100,10 @@ export function definePublicDirectorySuite(harness: ConformanceHarness): void {
       expect(users.status).toBe(200)
       expect(users.body.items.map((u) => u.id).sort()).toEqual([admin, member].sort())
       expect(users.body.nextCursor).toBeNull()
+      // The member signed in through GitHub, so the mirror can match them on that account.
+      expect(users.body.items.find((u) => u.id === member)?.accounts).toEqual([
+        { provider: 'github', id: expect.stringContaining('dir-member-'), login: null },
+      ])
     })
 
     it('serves each change with the current state, and null once the entity is gone', async () => {

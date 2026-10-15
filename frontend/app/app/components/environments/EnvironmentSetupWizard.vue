@@ -35,6 +35,8 @@ const input = computed(() => ({ frameId: ui.environmentWizardFrameId }))
 </script>
 
 <template>
+  <!-- workbench-width-ok: a multi-step wizard with a stepper (768px). Its shell waits on #2359.
+       -->
   <UModal
     v-model:open="open"
     :title="t('environmentWizard.title')"

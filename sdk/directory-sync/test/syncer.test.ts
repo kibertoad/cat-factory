@@ -25,7 +25,13 @@ const workspace = (id: string, name = id): DirectoryWorkspace => ({
   description: null,
   accessMode: 'account',
 })
-const user = (id: string): DirectoryUser => ({ id, name: id, email: null, avatarUrl: null })
+const user = (id: string): DirectoryUser => ({
+  id,
+  name: id,
+  email: null,
+  avatarUrl: null,
+  accounts: [],
+})
 
 function fakeDirectory(options: { restricted?: boolean; reach?: string[] } = {}) {
   const state = {

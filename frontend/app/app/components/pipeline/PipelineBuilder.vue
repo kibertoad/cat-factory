@@ -31,6 +31,7 @@ import type { ConsensusStrategy } from '~/types/consensus'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 type DraftUnit = { index: number; kind: AgentKind; companionIndex: number | null }
 
@@ -1392,7 +1393,11 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
   </USlideover>
 
   <!-- Add-agent form -->
-  <UModal v-model:open="addAgentOpen" :title="t('pipeline.builder.addAgentModal.title')">
+  <AppModal
+    size="prompt"
+    v-model:open="addAgentOpen"
+    :title="t('pipeline.builder.addAgentModal.title')"
+  >
     <template #body>
       <div class="space-y-3">
         <div>
@@ -1456,7 +1461,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 
   <!-- The per-workspace system-prompt editor for one agent kind. Mounted alongside the builder
        (not inside its slideover body) so its own modal isn't nested inside the scrolling column. -->
