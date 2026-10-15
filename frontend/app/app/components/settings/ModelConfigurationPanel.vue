@@ -311,6 +311,7 @@ async function save() {
     <Transition name="reader-fade">
       <div
         v-if="open"
+        data-testid="model-configuration-panel"
         class="z-50 flex-col bg-app-950/96 backdrop-blur-sm"
         :class="FULL_BLEED_TAKEOVER_CLASS"
         role="dialog"
@@ -377,7 +378,13 @@ async function save() {
                     </template>
                   </i18n-t>
                 </p>
-                <UButton icon="i-lucide-plus" size="sm" class="shrink-0" @click="startCreate">
+                <UButton
+                  icon="i-lucide-plus"
+                  size="sm"
+                  class="shrink-0"
+                  data-testid="model-preset-new"
+                  @click="startCreate"
+                >
                   {{ t('settings.modelConfiguration.list.newPreset') }}
                 </UButton>
               </div>
@@ -491,6 +498,7 @@ async function save() {
                   </SectionLabel>
                   <UInput
                     v-model="editor.name"
+                    data-testid="model-preset-name"
                     :placeholder="t('settings.modelConfiguration.editor.namePlaceholder')"
                     size="sm"
                     class="w-full"

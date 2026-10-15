@@ -252,6 +252,8 @@ const open = computed({
 // knows whether to offer the post-release-health gate (it's loaded on demand, not from
 // the snapshot). Best-effort: a failure just leaves the gate hidden.
 onModalOpen(open, () => {
+  // Coming back from the model configuration, where none of this changed.
+  if (ui.consumeBuilderReturn()) return
   releaseHealth.load().catch(() => {})
   // The prompt-override index badges the steps whose agent no longer runs the shipped prompt.
   // Best-effort: the builder is fully usable without it, and a deployment that wires no
@@ -404,6 +406,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
     :title="t('pipeline.builder.title')"
     side="left"
     :ui="{ content: 'max-w-[90vw] sm:max-w-2xl lg:max-w-5xl xl:max-w-6xl' }"
+    @after:leave="ui.builderLeft()"
   >
     <template #body>
       <!-- On compact viewports the three sections stack and the slideover body
@@ -443,6 +446,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               size="xs"
               icon="i-lucide-cpu"
               :title="t('pipeline.builder.configureModelsTooltip')"
+              data-testid="pipeline-builder-configure-models"
               @click="ui.openModelConfig()"
             >
               {{ t('pipeline.builder.configureModels') }}
