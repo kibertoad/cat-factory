@@ -10,7 +10,10 @@
     "build": "nuxt build",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "deploy": "wrangler pages deploy"
+    "deploy": "wrangler pages deploy",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "test:stories": "vitest run --config vitest.stories.config.ts"
   },
   "dependencies": {
     "@cat-factory/app": "workspace:*",
@@ -19,7 +22,14 @@
     "tinyglobby": "^0.2.17"
   },
   "devDependencies": {
+    "@nuxtjs/storybook": "10.0.1",
+    "@storybook/addon-a11y": "10.6.1",
+    "@storybook/addon-vitest": "10.6.1",
+    "@vitest/browser": "4.1.11",
+    "@vitest/browser-playwright": "4.1.11",
+    "storybook": "10.6.1",
     "typescript": "^6.0.3",
+    "vitest": "4.1.11",
     "vue-tsc": "^3.3.12",
     "wrangler": "4.148.0"
   }

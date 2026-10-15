@@ -1,0 +1,58 @@
+diff --git a/dist/preview.mjs b/dist/preview.mjs
+index 31cc2cc99b59403c5eb0bdc952e01cbf25fd9f1b..be6756d22624db2d648d0959b8c54e57c8e4704c 100644
+--- a/dist/preview.mjs
++++ b/dist/preview.mjs
+@@ -7,15 +7,39 @@ export { applyDecorators, argTypesEnhancers, mount, parameters, render, renderTo
+ import '#build/css';
+ import plugins from '#build/plugins';
+ 
++
++// PATCH: Nuxt >= 4.6 keeps the client-side app context in `globalThis.__nuxt_app_ctx__`
++// (dist/app/internal/context.js), not in the `unctx` registry this preset writes to, so
++// `useNuxtApp()` inside applyPlugins found nothing and every story died with NUXT_E1001.
++// Write into whichever registry the installed Nuxt actually reads.
++function makeClientCtx() {
++  let instance
++  return {
++    use: () => { if (instance === undefined) throw new Error('Context is not available'); return instance },
++    tryUse: () => instance ?? null,
++    set: (v) => { instance = v },
++    unset: () => { instance = undefined },
++    call: (v, cb) => { instance = v; return cb() },
++    callAsync: (v, cb) => { instance = v; return Promise.resolve(cb()) },
++  }
++}
++function getNuxtCtx(key) {
++  const clientContexts = (globalThis.__nuxt_app_ctx__ ||= {})
++  return (clientContexts[key] ||= makeClientCtx())
++}
++
++// PATCH: `@storybook/addon-vitest` runs stories through the portable-stories path, which calls
++// `setup()` with NO story context, so every story threw "StoryContext is not provided" and the
++// whole test lane was red before a single assertion ran. The key is only a NAME: it labels this
++// story's Nuxt app and its context entry. When there is no canvas to take it from, count.
++let fallbackKey = 0;
++
+ const pluginsTyped = plugins;
+ setup(async (_vueApp, storyContext) => {
+   const vueApp = _vueApp;
+-  const key = storyContext?.canvasElement.id;
+-  if (!key) {
+-    throw new Error("StoryContext is not provided");
+-  }
++  const key = storyContext?.canvasElement?.id || `portable-${++fallbackKey}`;
+   const storyNuxtAppId = `nuxt-app-${key}`;
+-  const storyNuxtCtx = getContext(storyNuxtAppId);
++  const storyNuxtCtx = getNuxtCtx(storyNuxtAppId);
+   window.__NUXT__ = createNuxtPayload();
+   if (!globalThis.$fetch) {
+     globalThis.$fetch = $fetch.create({
+@@ -28,7 +52,7 @@ setup(async (_vueApp, storyContext) => {
+     vueApp
+   });
+   storyNuxtCtx.set(nuxt, true);
+-  getContext("nuxt-app").set(nuxt, true);
++  getNuxtCtx("nuxt-app").set(nuxt, true);
+   await applyPlugins(nuxt, pluginsTyped);
+   await nuxt.hooks.callHook("app:created", vueApp);
+   await nuxt.hooks.callHook("app:beforeMount", vueApp);

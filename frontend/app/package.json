@@ -9,6 +9,8 @@
   },
   "files": [
     "app",
+    "!app/stories",
+    "!app/**/*.stories.ts",
     "i18n",
     "nuxt.config.ts"
   ],
@@ -52,10 +54,12 @@
     "wretch": "^3.0.9"
   },
   "devDependencies": {
+    "@storybook/vue3": "10.6.1",
     "@toad-contracts/testing": "1.0.0",
     "happy-dom": "^20.14.5",
     "msw": "^2.15.0",
     "nuxt": "^4.6.1",
+    "storybook": "10.6.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11",
     "vue-i18n-extract": "^2.0.7",
