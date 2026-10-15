@@ -1,0 +1,106 @@
+// The answers to the integration probes the app shell starts: the sidebar on every board open, and
+// the command bar each time it opens. Each probe decides whether a destination or a command shows,
+// so a story that leaves one unanswered both warns and renders less than the app would. The board
+// connects GitHub, Slack, Confluence and Jira, keeps no fragments of its own, and has both
+// infrastructure providers set up. Pass `false` to turn an integration off: its probe then answers
+// 503, as a deployment that does not offer it does.
+import {
+  describeEnvironmentProviderContract,
+  describeRunnerPoolProviderContract,
+  getEnvironmentConnectionContract,
+  getRunnerPoolConnectionContract,
+  getSlackConnectionContract,
+  listDocumentConnectionsContract,
+  listDocumentSourcesContract,
+  listTaskConnectionsContract,
+  listTaskSourcesContract,
+} from '@cat-factory/contracts'
+import type { DocumentConnection } from '@cat-factory/contracts'
+import type { HttpHandler } from 'msw'
+import { apiRefusal, apiResponse, storyWorkspacePrefix } from './api'
+import { fragmentLibraryApi } from './fragmentLibraryApi'
+import { fragmentCatalog } from './fragments.stories.mocks'
+import { githubProbeApi } from './githubApi'
+import {
+  documentConnections,
+  documentSources,
+  slackConnection,
+  taskConnections,
+  taskSources,
+} from './integrations.stories.mocks'
+import { providerProbeApi } from './setupApi'
+
+const pathPrefix = storyWorkspacePrefix
+
+/** The 503 a deployment answers for an integration it does not offer, in the controller's words. */
+function notOffered(contract: Parameters<typeof apiRefusal>[0], message: string): HttpHandler {
+  return apiRefusal(contract, {
+    pathPrefix,
+    status: 503,
+    error: { code: 'unavailable', message },
+  })
+}
+
+const documentsOff = 'Document-source integration is not configured'
+const tasksOff = 'Task-source integration is not configured'
+const environmentOff = 'Environment integration is not configured'
+const runnersOff = 'Runner pool integration is not configured'
+
+/**
+ * The documents store's probe: the sources the deployment offers and the ones the board
+ * connected. With `offered: false` the source list answers 503, as a deployment without the
+ * integration does.
+ */
+export function documentProbeApi({
+  offered = true,
+  connections = documentConnections,
+}: { offered?: boolean; connections?: DocumentConnection[] } = {}): HttpHandler[] {
+  return [
+    offered
+      ? apiResponse(listDocumentSourcesContract, {
+          pathPrefix,
+          body: { sources: documentSources, oauthSources: [] },
+        })
+      : notOffered(listDocumentSourcesContract, documentsOff),
+    apiResponse(listDocumentConnectionsContract, { pathPrefix, body: { connections } }),
+  ]
+}
+
+export function shellProbeApi({
+  documents = true,
+  tasks = true,
+  slack = true,
+  infrastructure = true,
+}: {
+  documents?: boolean
+  tasks?: boolean
+  slack?: boolean
+  infrastructure?: boolean
+} = {}): HttpHandler[] {
+  return [
+    ...githubProbeApi(),
+    ...documentProbeApi({ offered: documents, connections: documents ? documentConnections : [] }),
+    tasks
+      ? apiResponse(listTaskSourcesContract, { pathPrefix, body: { sources: taskSources } })
+      : notOffered(listTaskSourcesContract, tasksOff),
+    apiResponse(listTaskConnectionsContract, {
+      pathPrefix,
+      body: { connections: tasks ? taskConnections : [] },
+    }),
+    slack
+      ? apiResponse(getSlackConnectionContract, {
+          pathPrefix,
+          body: { connection: slackConnection, oauthEnabled: true },
+        })
+      : notOffered(getSlackConnectionContract, 'Slack integration is not configured'),
+    ...fragmentLibraryApi('workspace', { resolved: fragmentCatalog }),
+    ...(infrastructure
+      ? providerProbeApi()
+      : [
+          notOffered(describeEnvironmentProviderContract, environmentOff),
+          notOffered(getEnvironmentConnectionContract, environmentOff),
+          notOffered(describeRunnerPoolProviderContract, runnersOff),
+          notOffered(getRunnerPoolConnectionContract, runnersOff),
+        ]),
+  ]
+}
