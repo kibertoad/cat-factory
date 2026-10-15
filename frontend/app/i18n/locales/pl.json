@@ -4544,6 +4544,7 @@
       },
       "errors": {
         "listInstallations": "Nie udało się wyświetlić instalacji GitHub",
+        "loadProjection": "Nie udało się wczytać repozytoriów, pull requestów i zgłoszeń",
         "startInstall": "Nie udało się rozpocząć instalacji aplikacji GitHub",
         "connect": "Nie udało się połączyć"
       }

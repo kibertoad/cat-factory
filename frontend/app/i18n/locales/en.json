@@ -4720,6 +4720,7 @@
       },
       "errors": {
         "listInstallations": "Could not list GitHub installations",
+        "loadProjection": "Could not load repositories, pull requests and issues",
         "startInstall": "Could not start the GitHub App install",
         "connect": "Could not connect"
       }

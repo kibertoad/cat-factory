@@ -6,6 +6,7 @@
 // password. The copy follows the pending vendor (Claude / GLM / ChatGPT-Codex).
 import { computed, ref } from 'vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const personal = usePersonalSubscriptionsStore()
@@ -85,7 +86,7 @@ function goConnect() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="title" :ui="{ content: 'max-w-md' }">
+  <AppModal size="prompt" v-model:open="open" :title="title">
     <template #body>
       <div class="space-y-4">
         <template v-if="needsConnect">
@@ -141,5 +142,5 @@ function goConnect() {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

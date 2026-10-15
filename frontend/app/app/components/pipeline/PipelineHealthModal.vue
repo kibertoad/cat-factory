@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppModal from '~/components/common/AppModal.vue'
 // Startup advisory for unhealthy pipelines. Opened once per session from the board page when
 // `usePipelineHealth` reports any issue. Lists:
 //   • new built-in pipelines the workspace doesn't have yet (ADD them);
@@ -121,7 +122,7 @@ const reseedableCount = computed(
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('pipeline.health.title')" :ui="{ content: 'max-w-2xl' }">
+  <AppModal size="form" v-model:open="open" :title="t('pipeline.health.title')">
     <template #body>
       <div v-if="!hasIssues" class="py-6 text-center text-sm text-muted">
         <UIcon name="i-lucide-check-circle-2" class="mx-auto mb-2 h-8 w-8 text-app-success-400" />
@@ -331,5 +332,5 @@ const reseedableCount = computed(
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

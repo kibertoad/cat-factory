@@ -4544,6 +4544,7 @@
       },
       "errors": {
         "listInstallations": "Impossible de lister les installations GitHub",
+        "loadProjection": "Impossible de charger les dépôts, les pull requests et les issues",
         "startInstall": "Impossible de démarrer l'installation de la GitHub App",
         "connect": "Connexion impossible"
       }

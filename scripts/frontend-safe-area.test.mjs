@@ -3,7 +3,12 @@
 
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { findFullScreenFixed, isFullScreenFixed } from './check-frontend-safe-area.mjs'
+import {
+  CLASS_OWNERS,
+  findForeignClassUse,
+  findFullScreenFixed,
+  isFullScreenFixed,
+} from './check-frontend-safe-area.mjs'
 
 describe('isFullScreenFixed', () => {
   it('flags `fixed` beside any token that spans a whole side, in any order', () => {
@@ -80,5 +85,37 @@ describe('findFullScreenFixed', () => {
       '/>',
     ]
     assert.deepEqual(findFullScreenFixed(tag.join('\n')), [])
+  })
+})
+
+describe('findForeignClassUse', () => {
+  const panel = 'frontend/app/app/components/panels/SomePanel.vue'
+  const bind = (name) => `import { ${name} } from '~/utils/safeArea'\n<div :class="${name}" />`
+
+  it('lets each owning shell name its own class list', () => {
+    for (const [name, owner] of Object.entries(CLASS_OWNERS)) {
+      assert.deepEqual(findForeignClassUse(bind(name), owner), [])
+    }
+  })
+
+  it('flags a class list named outside its shell, the other shell included', () => {
+    assert.deepEqual(findForeignClassUse(bind('FULL_BLEED_TAKEOVER_CLASS'), panel), [
+      { line: 1, name: 'FULL_BLEED_TAKEOVER_CLASS' },
+      { line: 2, name: 'FULL_BLEED_TAKEOVER_CLASS' },
+    ])
+    const otherShell = CLASS_OWNERS.WINDOWED_OVERLAY_CLASS
+    assert.deepEqual(findForeignClassUse(bind('FULL_BLEED_TAKEOVER_CLASS'), otherShell).length, 2)
+  })
+
+  it('reads no comment as a use, and leaves the definitions and the specs alone', () => {
+    assert.deepEqual(findForeignClassUse('// binds FULL_BLEED_TAKEOVER_CLASS\nx', panel), [])
+    assert.deepEqual(findForeignClassUse('<!-- WINDOWED_OVERLAY_CLASS -->\n<p>', panel), [])
+    const defs = 'export const FULL_BLEED_TAKEOVER_CLASS = []'
+    assert.deepEqual(findForeignClassUse(defs, 'frontend/app/app/utils/safeArea.ts'), [])
+    assert.deepEqual(findForeignClassUse(defs, 'frontend/app/app/utils/safeArea.spec.ts'), [])
+  })
+
+  it('matches the whole name only', () => {
+    assert.deepEqual(findForeignClassUse('const MY_FULL_BLEED_TAKEOVER_CLASS_X = 1', panel), [])
   })
 })

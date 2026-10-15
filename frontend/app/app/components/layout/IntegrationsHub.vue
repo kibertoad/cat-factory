@@ -2,6 +2,7 @@
 import { showOverrideField } from '~/utils/uiMode'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 // The Integrations hub: a single modal that lists the OPTIONAL external systems the WORKSPACE
 // can enable or link in — the ones that feed a run its context (source control, documents,
@@ -370,11 +371,7 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('layout.integrationsHub.title')"
-    :ui="{ content: 'max-w-xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('layout.integrationsHub.title')">
     <template #body>
       <!-- Named for the same reason `model-providers-hub` is: the tutorial tour that explains
            what a connection adds to a run points at this list. -->
@@ -489,5 +486,5 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
         </section>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

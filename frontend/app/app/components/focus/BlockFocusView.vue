@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { onKeyStroke } from '@vueuse/core'
+import { onBeforeUnmount, onMounted } from 'vue'
+import { useEventListener } from '@vueuse/core'
+import { sharedOverlayStack, type OverlayStackTicket } from '@modular-vue/core'
 import type { Block } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
@@ -79,9 +81,28 @@ function close() {
   ui.focus(null)
 }
 
-onKeyStroke('Escape', () => {
-  if (ui.focusBlockId) close()
+// The focus view is one more layer on the shared overlay stack: it holds a ticket while mounted and
+// takes Escape only when that ticket is the top one. A takeover, window, Nuxt UI menu or modal
+// opened from here is pushed after it, so it is the top overlay and keeps its own Escape. The
+// listener is in the CAPTURE phase and registered at setup, so it runs before the listener of any
+// overlay opened later and reads the stack as it was when the key was pressed, before that
+// overlay's close can release its ticket.
+let ticket: OverlayStackTicket | null = null
+onMounted(() => {
+  ticket = sharedOverlayStack.push()
 })
+onBeforeUnmount(() => {
+  ticket?.release()
+  ticket = null
+})
+useEventListener(
+  window,
+  'keydown',
+  (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && ticket?.isTop() && ui.focusBlockId) close()
+  },
+  { capture: true },
+)
 
 function openDecisionFor(decisionId: string) {
   if (instance.value) ui.openDecision(instance.value.id, decisionId)
