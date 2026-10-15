@@ -523,6 +523,12 @@ const CLASSIFICATION = [
     reason: 'installs the OTLP log exporter from observability-otel (swept there)',
   },
   {
+    path: 'deploy/frontend/.storybook/public/mockServiceWorker.js',
+    kind: 'internal',
+    reason:
+      "msw's generated service worker for the component stories: it passes the preview page's own requests through and calls no API of its own",
+  },
+  {
     path: 'frontend/app/',
     kind: 'internal',
     reason: 'the SPA reaches our own /api/v1 only; no browser code holds a vendor credential',

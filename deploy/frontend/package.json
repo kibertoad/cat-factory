@@ -29,7 +29,7 @@
     "@vitest/browser-playwright": "4.1.11",
     "storybook": "10.6.1",
     "typescript": "^6.0.3",
-    "vitest": "4.1.11",
+    "vitest": "^4.1.11",
     "vue-tsc": "^3.3.12",
     "wrangler": "4.148.0"
   }

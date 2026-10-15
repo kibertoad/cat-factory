@@ -67,9 +67,11 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
+      # Through the e2e package, as `ci.yml` does: it declares `@playwright/test`, so the `playwright`
+      # binary is linked there, where `deploy/frontend` only has it transitively.
       - name: Install Playwright Chromium
         if: ${{ steps.pw-cache.outputs.cache-hit != 'true' }}
-        run: pnpm --filter @cat-factory/deploy-frontend exec playwright install --with-deps chromium
+        run: pnpm --filter @cat-factory/e2e exec playwright install --with-deps chromium
 
       - name: Render every story
         run: pnpm --filter @cat-factory/deploy-frontend run test:stories
