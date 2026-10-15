@@ -1,5 +1,11 @@
 # @cat-factory/app
 
+## 0.315.6
+
+### Patch Changes
+
+- f3e31b4: The model configuration opened from the pipeline builder now takes clicks. It shows once the builder has closed, and the builder comes back with its draft when the model configuration closes. Before, the builder stayed open under it and took every click.
+
 ## 0.315.5
 
 ### Patch Changes
