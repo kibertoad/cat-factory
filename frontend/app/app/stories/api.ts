@@ -196,6 +196,7 @@ export function apiHandler<T extends ApiContract>(
     const query = new URL(request.url).searchParams
     const json = validated(contract, respond({ pathParams: flat, body, query }))
     return new HttpResponse(JSON.stringify(json), {
+      status: successStatus(contract),
       headers: { 'content-type': 'application/json' },
     })
   })
