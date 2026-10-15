@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onKeyStroke } from '@vueuse/core'
-import { sharedOverlayStack } from '@modular-vue/core'
+import { onBeforeUnmount, onMounted } from 'vue'
+import { useEventListener } from '@vueuse/core'
+import { sharedOverlayStack, type OverlayStackTicket } from '@modular-vue/core'
 import type { Block } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
@@ -80,15 +81,28 @@ function close() {
   ui.focus(null)
 }
 
-// The focus view is not on the shared overlay stack, so it takes Escape only when nothing on the
-// stack is up. A takeover or window opened from here handles Escape first, in the capture phase,
-// and calls `preventDefault()`. By this listener's turn its unmount may already have released its
-// ticket, so the flag is the reliable signal. The stack size covers a Nuxt UI menu or modal: Reka
-// never prevents the key, but the layer holds a ticket while it is open (`utils/foreignLayers.ts`).
-onKeyStroke('Escape', (e) => {
-  if (e.defaultPrevented || sharedOverlayStack.size > 0) return
-  if (ui.focusBlockId) close()
+// The focus view is one more layer on the shared overlay stack: it holds a ticket while mounted and
+// takes Escape only when that ticket is the top one. A takeover, window, Nuxt UI menu or modal
+// opened from here is pushed after it, so it is the top overlay and keeps its own Escape. The
+// listener is in the CAPTURE phase and registered at setup, so it runs before the listener of any
+// overlay opened later and reads the stack as it was when the key was pressed, before that
+// overlay's close can release its ticket.
+let ticket: OverlayStackTicket | null = null
+onMounted(() => {
+  ticket = sharedOverlayStack.push()
 })
+onBeforeUnmount(() => {
+  ticket?.release()
+  ticket = null
+})
+useEventListener(
+  window,
+  'keydown',
+  (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && ticket?.isTop() && ui.focusBlockId) close()
+  },
+  { capture: true },
+)
 
 function openDecisionFor(decisionId: string) {
   if (instance.value) ui.openDecision(instance.value.id, decisionId)

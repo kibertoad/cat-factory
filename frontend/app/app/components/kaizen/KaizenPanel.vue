@@ -65,7 +65,7 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
       <TakeoverShell
         v-if="open"
         :label="t('kaizen.title')"
-        class="z-[60] flex-col bg-app-950/96 backdrop-blur-sm"
+        class="flex-col bg-app-950/96 backdrop-blur-sm"
         @close="close"
       >
         <header class="flex items-center gap-3 border-b border-default px-6 py-4">

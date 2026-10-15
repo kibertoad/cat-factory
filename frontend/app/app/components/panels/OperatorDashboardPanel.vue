@@ -121,7 +121,7 @@ watch(
       <TakeoverShell
         v-if="open"
         :label="t('platformObservability.title')"
-        class="z-[60] flex-col bg-app-950/96 backdrop-blur-sm"
+        class="flex-col bg-app-950/96 backdrop-blur-sm"
         data-testid="operator-dashboard"
         @close="close"
       >

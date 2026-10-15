@@ -247,6 +247,14 @@ const open = computed({
   set: (v: boolean) => (ui.builderOpen = v),
 })
 
+// The slideover is a Reka modal, whose focus scope pulls focus back from anything opened over it,
+// so a takeover opened while it is up could never be reached by keyboard. Close it first; the
+// draft lives in the pipelines store and is still there when the builder reopens.
+function configureModels() {
+  open.value = false
+  ui.openModelConfig()
+}
+
 // Refresh the observability-integration state whenever the builder opens so the palette
 // knows whether to offer the post-release-health gate (it's loaded on demand, not from
 // the snapshot). Best-effort: a failure just leaves the gate hidden.
@@ -442,7 +450,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               size="xs"
               icon="i-lucide-cpu"
               :title="t('pipeline.builder.configureModelsTooltip')"
-              @click="ui.openModelConfig()"
+              @click="configureModels"
             >
               {{ t('pipeline.builder.configureModels') }}
             </UButton>

@@ -393,7 +393,7 @@ async function copyOutput() {
     :content-key="ctx && `${ctx.instanceId}:${ctx.stepIndex}`"
     data-testid="step-detail"
     :data-agent-kind="step?.agentKind"
-    class="z-50 bg-app-950/96 backdrop-blur-sm"
+    class="bg-app-950/96 backdrop-blur-sm"
     @close="close"
   >
     <!-- ToC sidebar (only meaningful when there are prose headings) -->

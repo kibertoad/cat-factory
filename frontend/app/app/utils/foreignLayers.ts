@@ -26,22 +26,16 @@ export const FOREIGN_LAYER_SELECTOR =
 
 const ANY_LAYER = '[data-dismissable-layer]'
 
-/** Whether a mutation can have opened or closed a layer, so most board renders cost no query. */
-function touchesLayer(record: MutationRecord): boolean {
-  if (record.type === 'attributes') {
-    return record.target instanceof Element && record.target.matches(ANY_LAYER)
-  }
-  const nodes = [...record.addedNodes, ...record.removedNodes]
-  return nodes.some(
-    (node) =>
-      node instanceof Element &&
-      (node.matches(ANY_LAYER) || node.querySelector(ANY_LAYER) !== null),
-  )
-}
-
 /**
  * Hold one `stack` ticket for each open layer under `root`, for as long as it is open. Returns the
  * function that stops tracking and releases every ticket.
+ *
+ * What is observed is kept narrow, because `root` is `<body>` and the board re-renders under it
+ * constantly. Reka teleports each layer to `<body>`, so an opening or a closing is a change to
+ * `root`'s DIRECT children, which a non-subtree `childList` observer sees without ever being
+ * told about a board patch. A layer's own exit animation is its `data-state` flipping to
+ * `closed`, which the attribute observer sees; it is filtered to that one attribute and then to
+ * records whose target is a layer. Only those records trigger the one `sync` query.
  */
 export function trackForeignLayers(root: HTMLElement, stack: OverlayStack): () => void {
   const tickets = new Map<Element, OverlayStackTicket>()
@@ -59,19 +53,18 @@ export function trackForeignLayers(root: HTMLElement, stack: OverlayStack): () =
     }
   }
 
-  const observer = new MutationObserver((records) => {
-    if (records.some(touchesLayer)) sync()
+  const portals = new MutationObserver(sync)
+  portals.observe(root, { childList: true })
+
+  const layerState = new MutationObserver((records) => {
+    if (records.some((r) => r.target instanceof Element && r.target.matches(ANY_LAYER))) sync()
   })
-  observer.observe(root, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['data-state'],
-  })
+  layerState.observe(root, { subtree: true, attributes: true, attributeFilter: ['data-state'] })
   sync()
 
   return () => {
-    observer.disconnect()
+    portals.disconnect()
+    layerState.disconnect()
     for (const ticket of tickets.values()) ticket.release()
     tickets.clear()
   }

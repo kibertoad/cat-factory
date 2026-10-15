@@ -125,15 +125,25 @@ until item 4 decides what a detail surface is.
   `utils/foreignLayers.ts` gives each open, focus-taking Reka layer a ticket in open order, and a
   tooltip (a layer with no role) none, so the Tab trap under it stays on. An upstream doc change and
   helper for this interop are proposed for `kibertoad/modular-react`.
-- **A listener that is not on the stack must check before it acts.** `BlockFocusView` is part of the
-  board, not a modal, and keeps its own Escape listener. A step reader opened from it closed on the
-  same key press as the focus view, because by the time the bubble-phase listener runs, the
-  reader's unmount can already have released its ticket. It now skips an Escape that is
-  `defaultPrevented` or that arrives while anything is on the stack, and
-  `result-window-shell.spec.ts` asserts it stays open under a window's Escape. Whether it should be
-  a shell surface at all belongs with item 4.
+- **A listener that reads the stack must read it before the overlay it guards closes.**
+  `BlockFocusView` holds a ticket on the shared stack while mounted and takes Escape only when it is
+  the top one. A step reader opened from it closed on the same key press as the focus view when the
+  focus view listened in the bubble phase, because by then the reader's unmount could already have
+  released its ticket. Its listener is now registered in the capture phase at setup, so it runs
+  before the listener of any overlay opened later. `result-window-shell.spec.ts` asserts it stays
+  open under a window's Escape. Whether it should be a shell surface at all belongs with item 4.
+- **Stack order and paint order must be the same order.** Every takeover paints at `z-50` inside
+  `TakeoverShell`, teleported to `<body>` on open, so DOM order is open order. A per-site z-index
+  let a later-opened `z-50` takeover win focus and Escape while painting under an earlier `z-[60]`
+  one.
+- **A takeover cannot be opened over a Reka modal that stays open.** The modal's focus scope pulls
+  every `focusin` outside its content back, so the takeover's initial focus and Tab trap lose.
+  Close the modal first, as `PipelineBuilder` does before opening the model configuration.
+- **Shift+Tab from the dialog root.** The root is not the first control, so the upstream trap lets
+  the first Shift+Tab walk out to the board. `TakeoverShell` wraps it to the last visible control.
 - **The focus trap counts hidden controls.** `trapTabFocus` (`@modular-frontend/core`) builds its
   list from a selector and does not skip `display: none` controls, such as the step reader's outline
   below `md` (`hidden md:flex`). When the first or last control in that list is hidden, the wrap calls
   `focus()` on an element that cannot take it. Focus does not leave the dialog, but the wrap does
-  not move it either. This is from reading the code; no test covers it yet.
+  not move it either. This is from reading the code; no test covers it yet. `TakeoverShell`'s own
+  Shift+Tab wrap from the root does skip hidden controls.

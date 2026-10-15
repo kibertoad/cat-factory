@@ -68,6 +68,8 @@ test.describe('takeover shell', () => {
     // Focus moves into the reader on open, and no number of Tab presses in either direction takes
     // it back to the board. 30 is more than the reader has controls, so the trap has to wrap.
     await expect(reader).toBeFocused()
+    // The very first Shift+Tab, from the dialog root, must not leave for the board behind.
+    await assertFocusStaysInside(page, reader, 'Shift+Tab', 1)
     await assertFocusStaysInside(page, reader, 'Tab', 30)
     await assertFocusStaysInside(page, reader, 'Shift+Tab', 5)
 
@@ -77,6 +79,13 @@ test.describe('takeover shell', () => {
     const observability = page.getByTestId('observability-panel')
     await expect(observability).toBeVisible({ timeout: LIVE_TIMEOUT })
     await expect(observability).toBeFocused()
+    // The top overlay on the stack is also the top layer on screen.
+    expect(
+      await observability.evaluate((el) => {
+        const { x, y, width, height } = el.getBoundingClientRect()
+        return el.contains(document.elementFromPoint(x + width / 2, y + height / 2))
+      }),
+    ).toBe(true)
 
     // One Escape closes only the top overlay, and focus goes back to the control that opened it.
     await page.keyboard.press('Escape')
@@ -117,6 +126,8 @@ test.describe('takeover shell', () => {
     // With no layer over it, the next Escape is the panel's again: back out of the editor.
     await page.keyboard.press('Escape')
     await expect(name).toBeHidden()
+    // The focused input left the DOM with the editor, so focus returns to the dialog root.
+    await expect(panel).toBeFocused()
 
     // The default preset cannot be deleted, so pick the first one that can.
     await panel.locator('[data-testid="model-preset-delete"]:not([disabled])').first().click()

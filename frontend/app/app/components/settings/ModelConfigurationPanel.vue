@@ -310,7 +310,8 @@ async function save() {
       <TakeoverShell
         v-if="open"
         :label="t('settings.modelConfiguration.title')"
-        class="z-50 flex-col bg-app-950/96 backdrop-blur-sm"
+        :content-key="editor ? 'editor' : 'list'"
+        class="flex-col bg-app-950/96 backdrop-blur-sm"
         data-testid="model-configuration-panel"
         @close="backOut"
       >

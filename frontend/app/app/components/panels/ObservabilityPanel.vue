@@ -536,7 +536,7 @@ function exportJson() {
       <TakeoverShell
         v-if="open"
         :label="t('observability.modelActivity')"
-        class="z-[60] flex-col bg-app-950/96 backdrop-blur-sm"
+        class="flex-col bg-app-950/96 backdrop-blur-sm"
         data-testid="observability-panel"
         @close="close"
       >

@@ -20,10 +20,15 @@
 // (`utils/foreignLayers.ts`), so one opened inside a takeover is the top overlay and keeps its own
 // Escape.
 //
+// Every takeover paints at the SAME z-index (`z-50`, as `ResultWindowShell` does) and is teleported
+// to `<body>` when it opens, so DOM order is open order: the overlay stack's top ticket is also the
+// top layer. A per-site z-index let a later-opened `z-50` takeover take focus and Escape while
+// painting under an earlier `z-[60]` one.
+//
 // The takeover is OPEN while this shell is mounted: each site gates it with its own `v-if` inside
 // its own `Teleport` and `Transition`, so a fade owned by a parent mount (`pages/index.vue` for the
 // step reader) still plays in both directions.
-import { onMounted, ref } from 'vue'
+import { useMounted } from '@vueuse/core'
 import { useModalBehavior } from '@modular-vue/core'
 import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
 
@@ -42,10 +47,7 @@ const emit = defineEmits<{ close: [] }>()
 // The behaviour activates on MOUNT, not in setup. Most takeovers are async views, and on their first
 // open Nuxt's Suspense defers the mount, so focus moved during setup would find no element yet and
 // stay on the board.
-const mounted = ref(false)
-onMounted(() => {
-  mounted.value = true
-})
+const mounted = useMounted()
 
 // Initial focus goes to the dialog root, not to its first control: a takeover is a whole screen of
 // content, so the reader starts at its top and the first Tab reaches the first control.
@@ -55,6 +57,24 @@ const { dialogRef, isTop } = useModalBehavior({
   initialFocus: () => dialogRef.value,
   contentKey: () => props.contentKey,
 })
+
+// The trap wraps Tab only when focus is outside the dialog or on its first or last control, and the
+// root is none of those, so the first Shift+Tab from the root would leave for the board behind
+// (the browser moves to the last tabbable element before the root in DOM order). Wrap it here.
+// Hidden controls (`display: none`, such as the reader's outline below `md`) cannot take focus, so
+// they are skipped.
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function wrapShiftTabFromRoot(event: KeyboardEvent): void {
+  const root = dialogRef.value
+  if (event.key !== 'Tab' || !event.shiftKey || !root || event.target !== root) return
+  const controls = [...root.querySelectorAll<HTMLElement>(FOCUSABLE)]
+  const last = controls.findLast((el) => el.checkVisibility())
+  if (!last) return
+  event.preventDefault()
+  last.focus()
+}
 
 // A takeover with its own keys (the lightbox's arrows and zoom) reads this, so its keys stay inert
 // while another overlay is on top of it.
@@ -68,8 +88,9 @@ defineExpose({ isTop })
     role="dialog"
     aria-modal="true"
     :aria-label="label"
-    class="focus:outline-none"
+    class="z-50 focus:outline-none"
     :class="FULL_BLEED_TAKEOVER_CLASS"
+    @keydown="wrapShiftTabFromRoot"
   >
     <slot />
   </div>

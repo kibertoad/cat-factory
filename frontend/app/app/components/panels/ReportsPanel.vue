@@ -195,7 +195,7 @@ watch(
       <TakeoverShell
         v-if="open"
         :label="t('reports.title')"
-        class="z-[60] flex-col bg-app-950/96 backdrop-blur-sm"
+        class="flex-col bg-app-950/96 backdrop-blur-sm"
         data-testid="reports-panel"
         @close="close"
       >

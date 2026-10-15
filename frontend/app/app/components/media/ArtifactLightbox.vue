@@ -157,7 +157,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
     <TakeoverShell
       v-if="open"
       ref="shell"
-      class="z-[60] flex-col bg-app-950/95 backdrop-blur-sm"
+      class="flex-col bg-app-950/95 backdrop-blur-sm"
       data-testid="artifact-lightbox"
       :label="
         current
