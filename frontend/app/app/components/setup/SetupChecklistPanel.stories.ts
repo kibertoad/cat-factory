@@ -8,14 +8,14 @@ import { githubProbeApi } from '~/stories/githubApi'
 import { claudeOnlyCatalog } from '~/stories/providers.stories.mocks'
 import { providerProbeApi } from '~/stories/setupApi'
 import { buildPipeline, snapshot } from '~/stories/snapshot.stories.mocks'
-import { seedModelCatalog, seedSnapshot, withSeed } from '~/stories/withStores'
+import { seedMember, seedModelCatalog, seedSnapshot, withSeed } from '~/stories/withStores'
 import { useUiStore } from '~/stores/ui'
 import { useWorkspaceStore } from '~/stores/workspace'
 import SetupChecklistPanel from './SetupChecklistPanel.vue'
 
 // The setup checklist: each thing a task needs before it can run and merge (a model, source
 // control, an agent runner, and the optional test environments and content storage), its state,
-// and one button per row. Below it, the advisories that used to open at startup. Opening it asks
+// and one button per row. Below it, the advisories: a newer version of a pipeline, a new built-in one. Opening it asks
 // the model catalog, the GitHub probe and the two infrastructure providers again, so every story
 // answers those reads (`githubProbeApi`, `providerProbeApi`). The infrastructure status is the
 // snapshot's `infraSetup`, seeded here. A row the viewer cannot fix says who can instead. Each
@@ -44,10 +44,7 @@ function opened(setup: Setup = {}) {
       workspace.infraSetup = setup.infra ?? configured
     }
     if (setup.member) {
-      workspace.access = {
-        role: 'member',
-        permissions: ['workspace.read', 'board.write', 'runs.execute'],
-      }
+      seedMember()
       workspace.infraSetupOwners = {
         agentExecutor: 'operator',
         ephemeralEnvironments: 'workspace_admin',

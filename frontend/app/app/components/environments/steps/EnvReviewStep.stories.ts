@@ -1,6 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { ExecutionInstance, ProvisioningRecommendation } from '@cat-factory/contracts'
-import { detectServiceProvisioningContract, mergeAnalystRecipeDraft } from '@cat-factory/contracts'
+import {
+  detectServiceProvisioningContract,
+  ENVIRONMENT_ANALYST_AGENT_KIND,
+  mergeAnalystRecipeDraft,
+} from '@cat-factory/contracts'
 import { userEvent, within } from 'storybook/test'
 import { apiRefusal } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
@@ -10,9 +14,12 @@ import {
   composeRecommendation,
   composeRecommendationWithCli,
 } from '~/stories/composeSetup.stories.mocks'
+import { failure, step } from '~/stories/pipelineStep.stories.mocks'
 import { snapshot } from '~/stories/snapshot.stories.mocks'
 import { seedSnapshot, seedVcs, withSeed } from '~/stories/withStores'
 import { useEnvironmentWizardStore } from '~/stores/environmentWizard'
+import { useGitHubStore } from '~/stores/github'
+import { useServicesStore } from '~/stores/services'
 import EnvReviewStep from './EnvReviewStep.vue'
 
 // The wizard step where the operator checks the Docker Compose recipe the detector read from the
@@ -35,7 +42,10 @@ function onFrame(
 ) {
   return withSeed(() => {
     seedSnapshot(snapshot({ executions: state.runs ?? [] }))
-    if (state.linked !== false) seedVcs()
+    if (state.linked === false) {
+      useServicesStore().hydrate([], [])
+      useGitHubStore().reset()
+    } else seedVcs()
     const wizard = useEnvironmentWizardStore()
     wizard.frameId = authService.id
     const recommendation =
@@ -55,7 +65,6 @@ const meta = {
   component: EnvReviewStep,
   args: { input: { frameId: authService.id }, exit: () => {}, goBack: () => {} },
   parameters: { width: 'prose' },
-  decorators: [onFrame()],
 } satisfies Meta<typeof EnvReviewStep>
 export default meta
 
@@ -65,13 +74,13 @@ type Story = StoryObj<typeof meta>
  * The detector's recipe: `auth` exposed, the base file and its override layered, the macOS and
  * WSL overrides and the observability profile offered, and one seed dump to import.
  */
-export const Default: Story = {}
+export const Default: Story = { decorators: [onFrame()] }
 
 /** The service has no linked repository: Re-detect is off, and the step says why. */
 export const NoRepo: Story = { decorators: [onFrame({ recommendation: null, linked: false })] }
 
 /** Detection failed: the step's own message, and Next stays off. */
-export const Error: Story = {
+export const DetectFailed: Story = {
   decorators: [onFrame({ recommendation: null })],
   parameters: {
     api: [
@@ -114,13 +123,25 @@ export const AnalysisFailed: Story = {
   decorators: [
     onFrame({
       recommendation: composeRecommendationWithCli(),
-      runs: [analystRun({ status: 'failed', steps: [] })],
+      runs: [
+        analystRun({
+          status: 'failed',
+          steps: [
+            step({ agentKind: ENVIRONMENT_ANALYST_AGENT_KIND, state: 'failed', progress: 0.3 }),
+          ],
+          failure: failure({
+            message: 'The environment analyst could not read the repository.',
+            stepIndex: 0,
+          }),
+        }),
+      ],
     }),
   ],
 }
 
 /** The raw recipe editor, open on the working recipe as JSON. */
 export const RawEditor: Story = {
+  decorators: [onFrame()],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await userEvent.click(canvas.getByTestId('env-setup-raw-toggle'))
@@ -130,6 +151,7 @@ export const RawEditor: Story = {
 
 /** A raw edit the recipe schema refuses: an empty compose file list. The error is the schema's. */
 export const RawEditorInvalid: Story = {
+  decorators: [onFrame()],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await userEvent.click(canvas.getByTestId('env-setup-raw-toggle'))

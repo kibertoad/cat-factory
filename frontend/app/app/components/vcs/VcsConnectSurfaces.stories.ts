@@ -4,9 +4,8 @@ import { listGitHubInstallationsContract } from '@cat-factory/contracts'
 import { apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { githubInstallations, vcsConnectOptions } from '~/stories/vcs.stories.mocks'
-import { seedWorkspace, withSeed } from '~/stories/withStores'
+import { seedMember, seedWorkspace, withSeed } from '~/stories/withStores'
 import { useGitHubStore } from '~/stores/github'
-import { useWorkspaceStore } from '~/stores/workspace'
 import VcsConnectSurfaces from './VcsConnectSurfaces.vue'
 
 // The ways this deployment lets a workspace connect a repository host: the GitHub App picker, the
@@ -56,12 +55,5 @@ export const Empty: Story = { decorators: [offering([])] }
 
 /** A member, who may not connect: a line names who can. */
 export const AdminRequired: Story = {
-  decorators: [
-    withSeed(() => {
-      useWorkspaceStore().access = {
-        role: 'member',
-        permissions: ['workspace.read', 'board.write', 'runs.execute'],
-      }
-    }),
-  ],
+  decorators: [withSeed(seedMember)],
 }

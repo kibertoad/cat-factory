@@ -33,7 +33,7 @@ export const Default: Story = {}
  * GitLab refused the token. The backend's refusal (`VcsPatConnectionService` in integrations)
  * names the provider by its id, so it reads "gitlab".
  */
-export const Error: Story = {
+export const LoadFailed: Story = {
   parameters: {
     api: [
       apiRefusal(connectGitLabContract, {

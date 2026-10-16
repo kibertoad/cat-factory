@@ -23,8 +23,13 @@ import {
 } from '~/stories/integrations.stories.mocks'
 import { repoFilesApi } from '~/stories/repoFilesApi'
 import { availableRepos } from '~/stories/vcs.stories.mocks'
-import { seedDocumentSources, seedVcs, seedWorkspace, withSeed } from '~/stories/withStores'
-import { useWorkspaceStore } from '~/stores/workspace'
+import {
+  seedDocumentSources,
+  seedMember,
+  seedVcs,
+  seedWorkspace,
+  withSeed,
+} from '~/stories/withStores'
 import ContextDocumentPicker from './ContextDocumentPicker.vue'
 
 // Attach a document to a task as agent context, inline in the add-task form and the inspector.
@@ -150,10 +155,7 @@ export const NoSourceMember: Story = {
   decorators: [
     withSeed(() => {
       seedDocumentSources(documentSources, [])
-      useWorkspaceStore().access = {
-        role: 'member',
-        permissions: ['workspace.read', 'board.write', 'runs.execute'],
-      }
+      seedMember()
     }),
   ],
 }

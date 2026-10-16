@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { INFRA_SETUP_DISMISSED_STORAGE_KEY, type InfraSetup } from '@cat-factory/contracts'
 import { screen, userEvent, within } from 'storybook/test'
-import { seedWorkspace, withSeed } from '~/stories/withStores'
+import { seedMember, seedWorkspace, withSeed } from '~/stories/withStores'
 import { useWorkspaceStore } from '~/stores/workspace'
 import InfraSetupBanner from './InfraSetupBanner.vue'
 
@@ -87,12 +87,7 @@ export const Notice: Story = {
       agentExecutor: 'not_defined',
       ephemeralEnvironments: 'not_defined',
     }),
-    withSeed(() => {
-      useWorkspaceStore().access = {
-        role: 'member',
-        permissions: ['workspace.read', 'board.write', 'runs.execute'],
-      }
-    }),
+    withSeed(seedMember),
   ],
 }
 

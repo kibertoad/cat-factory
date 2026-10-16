@@ -155,41 +155,56 @@ const spec: SpecDoc = {
   ],
 }
 
-const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-
-/** The `.feature` files, one per group with acceptance criteria, as the backend renders them. */
-const features: ServiceSpecView['features'] = spec.modules.flatMap((module) =>
-  (module.groups ?? []).flatMap((group) => {
-    const scenarios = (group.requirements ?? []).flatMap((r) =>
-      (r.acceptance ?? []).flatMap((a, i, all) => {
-        const tags = [
-          ...(r.priority === 'must' ? ['@must'] : []),
-          ...((r.state ?? 'aspirational') !== 'established' ? ['@aspirational'] : []),
-        ]
-        return [
-          `  # requirement: ${r.id}`,
-          ...(tags.length ? [`  ${tags.join(' ')}`] : []),
-          `  Scenario: ${all.length > 1 ? `${r.title} (#${i + 1})` : r.title}`,
-          ...(a.given ? [`    Given ${a.given}`] : []),
-          ...(a.when ? [`    When ${a.when}`] : []),
-          `    Then ${a.outcome}`,
-          '',
-        ]
-      }),
-    )
-    if (!scenarios.length) return []
-    const head = [`Feature: ${module.name} — ${group.name}`]
-    if (group.summary) head.push(`  ${group.summary}`)
-    return [
-      {
-        module: module.name,
-        group: group.name,
-        path: `spec/features/${slug(module.name)}/${slug(group.name)}.feature`,
-        content: `${[...head, '', ...scenarios].join('\n').trimEnd()}\n`,
-      },
-    ]
-  }),
-)
+/** The `.feature` files for the two groups that carry acceptance criteria. */
+const features: ServiceSpecView['features'] = [
+  {
+    module: 'Sessions',
+    group: 'Refresh tokens',
+    path: 'spec/features/sessions/refresh-tokens.feature',
+    content: [
+      'Feature: Sessions — Refresh tokens',
+      '  How a session stays alive without a new sign-in.',
+      '',
+      '  # requirement: req-refresh-rotate',
+      '  @must',
+      '  Scenario: Rotate refresh tokens on use',
+      '    Given a signed-in user with refresh token A',
+      '    When the client refreshes with A',
+      '    Then the response carries a new token B and A is revoked',
+      '',
+      '  # requirement: req-refresh-reuse',
+      '  @must @aspirational',
+      '  Scenario: Revoke the family on reuse (#1)',
+      '    Given refresh token A was rotated to B',
+      '    When the client refreshes with A',
+      '    Then the request is refused and B is revoked',
+      '',
+      '  # requirement: req-refresh-reuse',
+      '  @must @aspirational',
+      '  Scenario: Revoke the family on reuse (#2)',
+      '    Given two refreshes with token A arrive at once',
+      '    When both are processed',
+      '    Then at most one succeeds',
+      '',
+    ].join('\n'),
+  },
+  {
+    module: 'Sessions',
+    group: 'Sign-out',
+    path: 'spec/features/sessions/sign-out.feature',
+    content: [
+      'Feature: Sessions — Sign-out',
+      '',
+      '  # requirement: req-logout-everywhere',
+      '  @aspirational',
+      '  Scenario: Log out everywhere',
+      '    Given a user signed in on a phone and a laptop',
+      '    When they log out everywhere from the laptop',
+      '    Then the phone session is revoked and the laptop stays signed in',
+      '',
+    ].join('\n'),
+  },
+]
 
 function specIs(body: ServiceSpecView) {
   return apiResponse(getServiceSpecContract, {
@@ -243,7 +258,7 @@ export const Loading: Story = {
 }
 
 /** The read failed: a message and Retry. */
-export const Error: Story = {
+export const LoadFailed: Story = {
   parameters: {
     api: [
       apiFailure(getServiceSpecContract, {

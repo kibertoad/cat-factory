@@ -33,7 +33,7 @@ const repoSearch = apiHandler(
   { pathPrefix: storyWorkspacePrefix, pattern: undefined },
   ({ query }) => {
     const q = (query.get('q') ?? '').toLowerCase()
-    return availableRepos.filter((r) => `${r.owner}/${r.name}`.includes(q))
+    return availableRepos.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
   },
 )
 
