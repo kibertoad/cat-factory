@@ -134,26 +134,8 @@ function navAnchoredSteps(): {
   )
 }
 
-/**
- * Every combination of the {@link NavGates} booleans, yielded lazily so the 2^N gate sets are
- * never all live at once.
- *
- * Enumerating rather than reasoning is deliberate. The pairing below is an IMPLICATION over
- * gate sets — anything that satisfies a tour must also render its entry — between two
- * predicates written independently in two files, and nothing about their shape is guaranteed
- * (either may be a conjunction, a disjunction, or read a field the other doesn't). The matrix
- * doubles with every field {@link NavGates} gains, so the cost is worth re-measuring rather than
- * quoting from here: at the field count this spec runs against today it is a fraction of a
- * second, a fair price for a guard that needs no assumption about how either side is spelled.
- */
-function* everyGateSet(): Generator<NavGates> {
-  const keys = Object.keys(ALL_GATES) as (keyof NavGates)[]
-  for (let mask = 0; mask < 2 ** keys.length; mask++) {
-    const gates = {} as Record<keyof NavGates, boolean>
-    for (const [bit, key] of keys.entries()) gates[key] = (mask & (1 << bit)) !== 0
-    yield gates as NavGates
-  }
-}
+/** The fields of a gate set, in a stable order. */
+const GATE_KEYS = Object.keys(ALL_GATES) as (keyof NavGates)[]
 
 /** The gate fields a witness has turned OFF — the interesting half of a failure message. */
 function absentGates(gates: NavGates): readonly string[] {
@@ -162,39 +144,65 @@ function absentGates(gates: NavGates): readonly string[] {
     .map(([key]) => key)
 }
 
+/** One pair's verdict over `gates`: does it offer the tour while the entry is NOT rendered? */
+function drifts(pair: ReturnType<typeof navAnchoredSteps>[number], gates: NavGates): boolean {
+  if (!(pair.tour.requires ?? []).every((requirement) => requirement.met(gates))) return false
+  if (pair.step.when && !pair.step.when(gates)) return false
+  return !navItemVisible(pair.item, gates)
+}
+
 /**
- * For each pair, a gate set that OFFERS its tour while the entry its step clicks is NOT
+ * For one pair, a gate set that OFFERS its tour while the entry its step clicks is NOT
  * rendered, or `undefined` when no such set exists (what the guard wants). A step the gate set
  * DROPS (`when`) needs no anchor, so it cannot be a counterexample.
  *
  * Of the many counterexamples one break produces, the one reported is the SMALLEST: the gate
  * set closest to fully-permitted, so its absent fields are exactly the ones that matter. The
- * first witness the matrix happens to reach names most of `NavGates` and reads as noise, which
+ * first witness a search happens to reach names most of `NavGates` and reads as noise, which
  * is the difference between a failure that says "declare `advancedMode`" and one that says
  * "something about fourteen gates".
  *
- * The matrix is walked ONCE for every pair together: building each gate set per pair made the
- * test several times slower, enough to cross vitest's timeout on a loaded CI runner.
+ * The search covers only the fields the pair's predicates READ, recorded through a proxy, so
+ * its cost follows what one tour and one entry depend on, not the size of `NavGates` (walking
+ * all `2 ** n` gate sets per pair crossed vitest's timeout on a loaded CI runner). It assumes
+ * nothing about how either predicate is spelled. Start with no field in the search and every
+ * field `true`; enumerate every assignment of the searched fields, the rest held `true`; when an
+ * evaluation reads a field outside the search, add that field and enumerate again. At the
+ * fixpoint no assignment reads a field outside the search, and a pure predicate that never
+ * reads a field cannot depend on it, so the searched fields decide the verdict for EVERY gate
+ * set. Holding the rest `true` also keeps each witness as small as one can be.
  */
-function navRequirementDrifts(
-  pairs: readonly ReturnType<typeof navAnchoredSteps>[number][],
-): (NavGates | undefined)[] {
-  const smallest: (NavGates | undefined)[] = pairs.map(() => undefined)
-  const fewestAbsent = pairs.map(() => Number.POSITIVE_INFINITY)
-  for (const gates of everyGateSet()) {
-    let absent: number | undefined
-    for (const [index, pair] of pairs.entries()) {
-      if (!(pair.tour.requires ?? []).every((requirement) => requirement.met(gates))) continue
-      if (pair.step.when && !pair.step.when(gates)) continue
-      if (navItemVisible(pair.item, gates)) continue
-      absent ??= absentGates(gates).length
-      if (absent < fewestAbsent[index]!) {
-        fewestAbsent[index] = absent
-        smallest[index] = gates
+function navRequirementDrift(
+  pair: ReturnType<typeof navAnchoredSteps>[number],
+): NavGates | undefined {
+  const searched: (keyof NavGates)[] = []
+  for (;;) {
+    let smallest: NavGates | undefined
+    let fewestAbsent = Number.POSITIVE_INFINITY
+    let unsearched: keyof NavGates | undefined
+    for (let mask = 0; mask < 2 ** searched.length && unsearched === undefined; mask++) {
+      const gates = Object.fromEntries(GATE_KEYS.map((key) => [key, true])) as Record<
+        keyof NavGates,
+        boolean
+      >
+      for (const [bit, key] of searched.entries()) gates[key] = (mask & (1 << bit)) !== 0
+      const recorded = new Proxy(gates, {
+        get(target, key) {
+          if (typeof key === 'string' && key in target && !searched.includes(key as keyof NavGates))
+            unsearched ??= key as keyof NavGates
+          return Reflect.get(target, key)
+        },
+      }) as NavGates
+      if (!drifts(pair, recorded) || unsearched !== undefined) continue
+      const absent = absentGates(gates).length
+      if (absent < fewestAbsent) {
+        fewestAbsent = absent
+        smallest = { ...gates }
       }
     }
+    if (unsearched === undefined) return smallest
+    searched.push(unsearched)
   }
-  return smallest
 }
 
 /** Every static test id this layer actually renders. */
@@ -312,7 +320,7 @@ describe('the built-in tutorial tour catalog', () => {
     expect(pairs.length).toBeGreaterThanOrEqual(8)
     expect(Object.values(ALL_GATES).every((value) => typeof value === 'boolean')).toBe(true)
 
-    const witnesses = navRequirementDrifts(pairs)
+    const witnesses = pairs.map(navRequirementDrift)
     const drifted = pairs.flatMap((pair, index) => {
       const witness = witnesses[index]
       if (witness === undefined) return []
@@ -481,7 +489,7 @@ describe('tour availability across the catalog', () => {
 
   it('holds the interface tier as a requirement of the tours whose surface hides in basic', () => {
     // Two different reasons, one requirement. `share-services` clicks a nav entry marked
-    // `advanced: true` (which `navRequirementDrifts` also enforces); `panel-reviews` clicks a
+    // `advanced: true` (which `navRequirementDrift` also enforces); `panel-reviews` clicks a
     // BASIC entry whose consensus section renders only in advanced mode or once a group exists,
     // one level below anything the nav guard can see. Basic is the shipped default, so without
     // this both would be offered to nearly every user and find nothing.
