@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { Account } from '@cat-factory/contracts'
+import type { AuthUser } from '~/types/domain'
 import { orgAccount, signedInUser } from '~/stories/accounts.stories.mocks'
 import { accountTeamApi } from '~/stories/accountsApi'
 import { infrastructureCapabilities } from '~/stories/infra.stories.mocks'
@@ -21,14 +22,23 @@ import AccountTeamSettings from './AccountTeamSettings.vue'
 // the value '', Reka's SelectItem throws for an empty value, and Storybook's error display covers
 // the tab for every admin viewer (#2393). The personal account's viewer is an admin too.
 
-/** `account` active, with the viewer signed in on a deployment that can govern model families. */
-function active(account: Account) {
+/** Tomás, a developer on the shared roster: the viewer whose row says what `account.roles` says. */
+const developerUser: AuthUser = {
+  id: 'usr_tomas',
+  login: 'truiz',
+  name: 'Tomás Ruiz',
+  avatarUrl: null,
+  email: 'tomas@acme.dev',
+}
+
+/** `account` active, with `user` signed in on a deployment that can govern model families. */
+function active(account: Account, user: AuthUser = signedInUser) {
   return withSeed(() => {
     const accounts = useAccountsStore()
     accounts.accounts = [account]
     accounts.activeAccountId = account.id
     const auth = useAuthStore()
-    auth.user = signedInUser
+    auth.user = user
     auth.infrastructure = infrastructureCapabilities()
   })
 }
@@ -44,7 +54,7 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-/** A developer of Acme: the roles as text, no way to end a session, and no admin section. */
+/** Tomás, a developer of Acme: the roles as text, no way to end a session, and no admin section. */
 export const Default: Story = {
-  decorators: [active({ ...orgAccount, roles: ['developer'] })],
+  decorators: [active({ ...orgAccount, roles: ['developer'] }, developerUser)],
 }

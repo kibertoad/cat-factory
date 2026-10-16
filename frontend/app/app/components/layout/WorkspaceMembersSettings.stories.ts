@@ -9,6 +9,7 @@ import { apiPending, apiResponse } from '~/stories/api'
 import { STORY_WORKSPACE_ID } from '~/stories/workspace'
 import {
   accountBoards,
+  accountMembers,
   orgAccount,
   signedInUser,
   workspaceMembers,
@@ -22,26 +23,6 @@ import WorkspaceMembersSettings from './WorkspaceMembersSettings.vue'
 // or restricted to its own roster, the roster with a role picker and a remove button per member,
 // and a row that adds an account member. The panel loads the roster and the account's members
 // when it mounts, so each story answers those reads. The signed-in user is Maya.
-
-function accountMember(
-  overrides: Partial<AccountMember> & Pick<AccountMember, 'userId'>,
-): AccountMember {
-  return {
-    accountId: orgAccount.id,
-    roles: ['developer'],
-    createdAt: Date.UTC(2026, 7, 2),
-    avatarUrl: null,
-    ...overrides,
-  }
-}
-
-/** The board's three members, and Jonas, who is in the account but not on the board. */
-const accountMembers: AccountMember[] = [
-  accountMember({ userId: 'usr_maya', roles: ['admin'], name: 'Maya Lindqvist' }),
-  accountMember({ userId: 'usr_priya', name: 'Priya Natarajan', email: 'priya@acme.dev' }),
-  accountMember({ userId: 'usr_tomas', roles: ['product'], name: 'Tomás Ruiz' }),
-  accountMember({ userId: 'usr_jonas', name: 'Jonas Weber', email: 'jonas@acme.dev' }),
-]
 
 function loads(roster: WorkspaceMember[], account: AccountMember[] = accountMembers) {
   return [
@@ -102,7 +83,12 @@ export const Loading: Story = {
 
 /** Every account member is already on the board: the add row is off, with a note. */
 export const NoCandidates: Story = {
-  parameters: { api: loads(workspaceMembers, accountMembers.slice(0, 3)) },
+  parameters: {
+    api: loads(
+      workspaceMembers,
+      accountMembers.filter((member) => member.userId !== 'usr_jonas'),
+    ),
+  },
 }
 
 /** A board that belongs to no account: a note in place of the add row. */

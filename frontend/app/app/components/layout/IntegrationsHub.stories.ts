@@ -86,7 +86,7 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 /**
- * GitHub, Slack, two document sources and two trackers connected, each group with its connected
+ * GitHub, Slack, three document sources and two trackers connected, each group with its connected
  * rows first, and Jira named as the filing tracker.
  */
 export const Default: Story = {}
