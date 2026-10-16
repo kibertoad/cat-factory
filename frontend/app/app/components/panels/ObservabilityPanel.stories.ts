@@ -199,7 +199,6 @@ const failedRun = loginRun({
     s.agentKind === 'coder'
       ? {
           ...s,
-          state: 'failed',
           metrics: stepMetrics({
             calls: 4,
             byPhase: [{ ...loginPhases[0]!, errors: 1 }, loginPhases[1]!],

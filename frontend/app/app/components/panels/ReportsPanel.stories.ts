@@ -9,6 +9,7 @@ import { getReportsContract } from '@cat-factory/contracts'
 import { apiFailure, apiPending, apiResponse } from '~/stories/api'
 import { STORY_WORKSPACE_ID } from '~/stories/workspace'
 import { accountBoards, accounts, orgAccount } from '~/stories/accounts.stories.mocks'
+import { spendRow } from '~/stories/reports.stories.mocks'
 import { withSeed } from '~/stories/withStores'
 import { useAccountsStore } from '~/stores/accounts'
 import { useReportsStore } from '~/stores/reports'
@@ -32,9 +33,9 @@ const DAY = 24 * 3_600_000
 const NOW = Date.UTC(2026, 9, 11, 12, 0)
 
 const byModel = [
-  spend('anthropic:claude-sonnet-5-5', null, 121.4),
-  spend('anthropic:claude-opus-5-5', null, 41.9, 38.2),
-  spend('anthropic:claude-haiku-5-5', null, 10.9, 14.4),
+  spendRow('anthropic:claude-sonnet-5-5', null, 121.4),
+  spendRow('anthropic:claude-opus-5-5', null, 41.9, 38.2),
+  spendRow('anthropic:claude-haiku-5-5', null, 10.9, 14.4),
 ]
 
 const meta = {
@@ -63,25 +64,6 @@ function withReports(window: ReportWindow, workspaceFilter: string | null = null
 
 function reportIs(view: ReportsView) {
   return apiResponse(getReportsContract, { pathParams: { accountId: orgAccount.id }, body: view })
-}
-
-/** A spend slice: `metered` euros billed, `subscription` euros illustrative. */
-function spend(
-  key: string,
-  label: string | null,
-  metered: number,
-  subscription = 0,
-  calls = Math.round((metered + subscription) * 9),
-): ReportSpendRow {
-  return {
-    key,
-    label,
-    inputTokens: calls * 21_000,
-    outputTokens: calls * 1_400,
-    calls,
-    meteredCost: metered,
-    subscriptionCost: subscription,
-  }
 }
 
 /** An activity slice: `done` and `failed` runs, plus `running`, averaging `avgMin` minutes. */
@@ -149,43 +131,43 @@ function report(overrides: Partial<ReportsView> = {}): ReportsView {
     spend: {
       byModel,
       byAgentKind: [
-        spend('coder', null, 88.3, 30.1),
-        spend('reviewer', null, 34.6, 9.2),
-        spend('architect', null, 26.7, 8.9),
-        spend('tester-api', null, 18.1),
-        spend('kaizen', null, 6.5, 4.4),
+        spendRow('coder', null, 88.3, 30.1),
+        spendRow('reviewer', null, 34.6, 9.2),
+        spendRow('architect', null, 26.7, 8.9),
+        spendRow('tester-api', null, 18.1),
+        spendRow('kaizen', null, 6.5, 4.4),
       ],
       byWorkspace: [
-        spend(STORY_WORKSPACE_ID, 'Core services', 112.8, 41.3),
-        spend('ws_payments', 'Payments platform', 47.9, 11.3),
-        spend('ws_mobile', 'Mobile app', 11.4),
-        spend('', null, 2.1),
+        spendRow(STORY_WORKSPACE_ID, 'Core services', 112.8, 41.3),
+        spendRow('ws_payments', 'Payments platform', 47.9, 11.3),
+        spendRow('ws_mobile', 'Mobile app', 11.4),
+        spendRow('', null, 2.1),
       ],
       byService: [
-        spend('svc_auth', 'Auth Service', 81.2, 29.5),
-        spend('svc_gateway', 'API Gateway', 31.6, 11.8),
-        spend('svc_ledger', 'Ledger', 47.9, 11.3),
-        spend('', null, 13.5),
+        spendRow('svc_auth', 'Auth Service', 81.2, 29.5),
+        spendRow('svc_gateway', 'API Gateway', 31.6, 11.8),
+        spendRow('svc_ledger', 'Ledger', 47.9, 11.3),
+        spendRow('', null, 13.5),
       ],
       byRepo: [
-        spend('101', 'acme/auth-service', 81.2, 29.5),
-        spend('102', 'acme/api-gateway', 31.6, 11.8),
-        spend('734102', 'acme/platform', 47.9, 11.3),
-        spend('', null, 13.5),
+        spendRow('101', 'acme/auth-service', 81.2, 29.5),
+        spendRow('102', 'acme/api-gateway', 31.6, 11.8),
+        spendRow('734102', 'acme/platform', 47.9, 11.3),
+        spendRow('', null, 13.5),
       ],
       byTaskType: [
-        spend('feature', null, 118.6, 37.4),
-        spend('bug', null, 41.3, 12.1),
-        spend('review', null, 14.3, 3.1),
+        spendRow('feature', null, 118.6, 37.4),
+        spendRow('bug', null, 41.3, 12.1),
+        spendRow('review', null, 14.3, 3.1),
       ],
       byTicket: [
-        spend('jira:AUTH-142', null, 22.7, 8.4),
-        spend('github:acme/auth-service#88', null, 9.6),
+        spendRow('jira:AUTH-142', null, 22.7, 8.4),
+        spendRow('github:acme/auth-service#88', null, 9.6),
       ],
       byRun: [
-        spend('exec_login', 'Login endpoint', 18.3, 7.2),
-        spend('exec_rate_limit', 'Rate-limit login attempts', 14.9, 3.8),
-        spend('exec_bootstrap_billing', null, 6.2),
+        spendRow('exec_login', 'Login endpoint', 18.3, 7.2),
+        spendRow('exec_rate_limit', 'Rate-limit login attempts', 14.9, 3.8),
+        spendRow('exec_bootstrap_billing', null, 6.2),
       ],
     },
     capped: [],
@@ -311,7 +293,7 @@ function scaleBySpendShare(rows: ReportSpendRow[], target: Amounts): ReportSpend
     (target.meteredCost + target.subscriptionCost) /
     (accountTotals.meteredCost + accountTotals.subscriptionCost)
   return rows.map((r) =>
-    spend(
+    spendRow(
       r.key,
       r.label,
       Math.round(r.meteredCost * share * 100) / 100,
@@ -376,7 +358,7 @@ export const RollupStale: Story = {
   },
 }
 
-const board = spend(STORY_WORKSPACE_ID, 'Core services', 112.8, 41.3)
+const board = spendRow(STORY_WORKSPACE_ID, 'Core services', 112.8, 41.3)
 
 /**
  * Narrowed to Core services: the board filter names it, and every section is that board's. The

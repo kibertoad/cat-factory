@@ -1,19 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { ReportSpendRow } from '~/types/execution'
+import { spendRow } from '~/stories/reports.stories.mocks'
 import ReportsSpendBreakdown from './ReportsSpendBreakdown.vue'
 
 // One spend breakdown from the reports panel: a bar per slice, scaled against the heaviest slice
 // in the list. Metered spend and the subscription equivalent are separate segments and are never
 // added. When the projection capped the list, a footer says how many slices were left out.
-const row = (key: string, metered: number, calls: number, subscription = 0): ReportSpendRow => ({
-  key,
-  label: key,
-  inputTokens: calls * 4200,
-  outputTokens: calls * 900,
-  calls,
-  meteredCost: metered,
-  subscriptionCost: subscription,
-})
+const row = (key: string, metered: number, calls: number, subscription = 0): ReportSpendRow =>
+  spendRow(key, key, metered, subscription, calls)
 
 const meta = {
   title: 'Run telemetry/Components/ReportsSpendBreakdown',

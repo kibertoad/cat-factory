@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { HumanTestRound, HumanTestStepState } from '@cat-factory/contracts'
+import { PREVIEW_ENV_ID, PREVIEW_ENV_URL } from '~/stories/outcome.stories.mocks'
 import { step } from '~/stories/pipelineStep.stories.mocks'
 import { execution, snapshot } from '~/stories/snapshot.stories.mocks'
 import { seedResultView, seedSnapshot, withSeed } from '~/stories/withStores'
@@ -10,14 +11,13 @@ import HumanTestWindow from './HumanTestWindow.vue'
 // in), a box for what went wrong, which a fixer then works on, and the rounds so far; Confirm
 // passes the gate. The state rides on the run's human-test step, so each story seeds its own run. The
 // degraded reason is the backend's own wording (`HumanTestController`); the findings are made up.
-const ENV_URL = 'https://login-pr-212.preview.acme.dev'
 
 function gate(overrides: Partial<HumanTestStepState> = {}): HumanTestStepState {
   return {
     phase: 'awaiting_human',
     environment: {
-      id: 'env_212',
-      url: ENV_URL,
+      id: PREVIEW_ENV_ID,
+      url: PREVIEW_ENV_URL,
       status: 'ready',
       expiresAt: Date.UTC(2026, 9, 16, 18, 0),
     },
@@ -83,7 +83,7 @@ export const Provisioning: Story = {
     opened(
       gate({
         phase: 'provisioning',
-        environment: { id: 'env_212', url: null, status: 'provisioning', expiresAt: null },
+        environment: { id: PREVIEW_ENV_ID, url: null, status: 'provisioning', expiresAt: null },
       }),
     ),
   ],
@@ -124,7 +124,12 @@ export const Passed: Story = {
         phase: 'passed',
         attempts: 1,
         rounds: [fixRound],
-        environment: { id: 'env_212', url: ENV_URL, status: 'torn_down', expiresAt: null },
+        environment: {
+          id: PREVIEW_ENV_ID,
+          url: PREVIEW_ENV_URL,
+          status: 'torn_down',
+          expiresAt: null,
+        },
       }),
     ),
   ],
