@@ -14,6 +14,7 @@ import type {
   TaskSourceDescriptor,
   TaskSourceState,
 } from '@cat-factory/contracts'
+import type { PendingContext } from '~/composables/useContextLinking'
 
 export const jiraDescriptor: TaskSourceDescriptor = {
   source: 'jira',
@@ -141,6 +142,21 @@ export function sourceTask(overrides: Partial<SourceTask> = {}): SourceTask {
     ...overrides,
   }
 }
+
+/** The issue from `sourceTask()` attached to a task being written, as the form holds it. */
+export const linkedIssue: PendingContext = (() => {
+  const issue = sourceTask()
+  return {
+    kind: 'task',
+    source: 'jira',
+    externalId: issue.externalId,
+    title: `${issue.externalId} · ${issue.title}`,
+    subtitle: issue.status,
+    icon: jiraDescriptor.icon,
+    description: issue.description,
+    needsImport: false,
+  }
+})()
 
 /** Three tracker issues: two Jira issues and one GitHub issue, one already linked to a task. */
 export const sourceTasks: SourceTask[] = [

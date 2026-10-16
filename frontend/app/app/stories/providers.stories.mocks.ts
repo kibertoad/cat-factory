@@ -1,6 +1,7 @@
 // Model providers, the model catalog, infrastructure provider connections and spend, for the
-// settings and setup stories. Each factory returns one realistic row; a story passes overrides for the variant it
-// shows (an expired subscription, a blocked runner URL, an exceeded budget).
+// settings and setup stories. Each factory returns one realistic row; a story passes
+// overrides for the variant it shows (an expired subscription, a blocked runner URL, an
+// exceeded budget).
 import type {
   ApiKey,
   ConnectionTestResult,
