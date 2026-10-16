@@ -3807,7 +3807,8 @@
         "servicesAddedDescription": "{count} servizio aggiunto alla board. | {count} servizi aggiunti alla board.",
         "frontendLinkedNote": "{directory} è stata aggiunta come frontend e collegata alle altre. Assegna il nome alle sue variabili d'ambiente con gli URL dei backend nel suo inspector.",
         "frontendWiringFailedNote": "Le impostazioni del frontend non sono state salvate. Apri l'inspector di ogni app frontend per impostarne la sottodirectory e i servizi backend."
-      }
+      },
+      "prefillProviderMismatch": "Il link chiedeva {repo} su un altro provider, e questa board è collegata a {connected}. Cerca il repository a mano, oppure apri il link su una board collegata al suo provider."
     },
     "repoTree": {
       "root": "root",

@@ -4639,7 +4639,8 @@
         "frontendWiringFailedNote": "Los ajustes del frontend no se guardaron. Abre el inspector de cada aplicación frontend para definir su subdirectorio y sus servicios backend."
       },
       "repoType": "Tipo de repositorio",
-      "repoTypeHint": "Qué es este repositorio: un servicio backend, una aplicación frontend, una biblioteca compartida o un repositorio de documentación (solo documentos/spikes)."
+      "repoTypeHint": "Qué es este repositorio: un servicio backend, una aplicación frontend, una biblioteca compartida o un repositorio de documentación (solo documentos/spikes).",
+      "prefillProviderMismatch": "El enlace pedía {repo} en otro proveedor, y este tablero está conectado a {connected}. Busca el repositorio a mano o abre el enlace en un tablero conectado a su proveedor."
     },
     "repoTree": {
       "root": "raíz",
