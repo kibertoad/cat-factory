@@ -357,13 +357,14 @@ type CreateHeadlessPublicApiKey struct {
 type CreateHeadlessPublicApiKeyScope string
 
 const (
-	CreateHeadlessPublicApiKeyScopeRead   CreateHeadlessPublicApiKeyScope = "read"
-	CreateHeadlessPublicApiKeyScopeWrite  CreateHeadlessPublicApiKeyScope = "write"
-	CreateHeadlessPublicApiKeyScopeDecide CreateHeadlessPublicApiKeyScope = "decide"
+	CreateHeadlessPublicApiKeyScopeRead     CreateHeadlessPublicApiKeyScope = "read"
+	CreateHeadlessPublicApiKeyScopeWebhooks CreateHeadlessPublicApiKeyScope = "webhooks"
+	CreateHeadlessPublicApiKeyScopeWrite    CreateHeadlessPublicApiKeyScope = "write"
+	CreateHeadlessPublicApiKeyScopeDecide   CreateHeadlessPublicApiKeyScope = "decide"
 )
 
 // CreateHeadlessPublicApiKeyScopeValues lists every CreateHeadlessPublicApiKeyScope this SDK release knows.
-var CreateHeadlessPublicApiKeyScopeValues = []CreateHeadlessPublicApiKeyScope{CreateHeadlessPublicApiKeyScopeRead, CreateHeadlessPublicApiKeyScopeWrite, CreateHeadlessPublicApiKeyScopeDecide}
+var CreateHeadlessPublicApiKeyScopeValues = []CreateHeadlessPublicApiKeyScope{CreateHeadlessPublicApiKeyScopeRead, CreateHeadlessPublicApiKeyScopeWebhooks, CreateHeadlessPublicApiKeyScopeWrite, CreateHeadlessPublicApiKeyScopeDecide}
 
 // CreatePublicJob is the `CreatePublicJob` wire model.
 type CreatePublicJob struct {
@@ -4705,14 +4706,15 @@ type PublicApiKeyList struct {
 type PublicApiKeyScope string
 
 const (
-	PublicApiKeyScopeRead   PublicApiKeyScope = "read"
-	PublicApiKeyScopeWrite  PublicApiKeyScope = "write"
-	PublicApiKeyScopeDecide PublicApiKeyScope = "decide"
-	PublicApiKeyScopeAdmin  PublicApiKeyScope = "admin"
+	PublicApiKeyScopeRead     PublicApiKeyScope = "read"
+	PublicApiKeyScopeWebhooks PublicApiKeyScope = "webhooks"
+	PublicApiKeyScopeWrite    PublicApiKeyScope = "write"
+	PublicApiKeyScopeDecide   PublicApiKeyScope = "decide"
+	PublicApiKeyScopeAdmin    PublicApiKeyScope = "admin"
 )
 
 // PublicApiKeyScopeValues lists every PublicApiKeyScope this SDK release knows.
-var PublicApiKeyScopeValues = []PublicApiKeyScope{PublicApiKeyScopeRead, PublicApiKeyScopeWrite, PublicApiKeyScopeDecide, PublicApiKeyScopeAdmin}
+var PublicApiKeyScopeValues = []PublicApiKeyScope{PublicApiKeyScopeRead, PublicApiKeyScopeWebhooks, PublicApiKeyScopeWrite, PublicApiKeyScopeDecide, PublicApiKeyScopeAdmin}
 
 // PublicApprovalGateDecision is the `PublicApprovalGateDecision` wire model.
 type PublicApprovalGateDecision struct {

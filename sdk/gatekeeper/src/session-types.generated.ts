@@ -281,37 +281,37 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
   },
   {
     name: 'webhook_delete',
-    doc: '  /**\n   * Remove the outbound webhook\n   *\n   * `DELETE /api/v1/notification-webhook`, scope floor `admin`.\n   */\n',
+    doc: '  /**\n   * Remove the outbound webhook\n   *\n   * `DELETE /api/v1/notification-webhook`, scope floor `webhooks`.\n   */\n',
     signature: '  webhook_delete(): Promise<unknown>\n',
   },
   {
     name: 'webhook_delete_named',
-    doc: '  /**\n   * Remove one named outbound webhook\n   *\n   * `DELETE /api/v1/notification-webhooks/{webhookId}`, scope floor `admin`.\n   */\n',
+    doc: '  /**\n   * Remove one named outbound webhook\n   *\n   * `DELETE /api/v1/notification-webhooks/{webhookId}`, scope floor `webhooks`.\n   */\n',
     signature: '  webhook_delete_named(args: { webhookId: string }): Promise<unknown>\n',
   },
   {
     name: 'webhook_get',
-    doc: '  /**\n   * Read the workspace\'s outbound webhook\n   *\n   * `GET /api/v1/notification-webhook`, scope floor `admin`.\n   */\n',
+    doc: '  /**\n   * Read the workspace\'s outbound webhook\n   *\n   * `GET /api/v1/notification-webhook`, scope floor `webhooks`.\n   */\n',
     signature: '  webhook_get(): Promise<unknown>\n',
   },
   {
     name: 'webhook_get_named',
-    doc: '  /**\n   * Read one named outbound webhook\n   *\n   * `GET /api/v1/notification-webhooks/{webhookId}`, scope floor `admin`.\n   */\n',
+    doc: '  /**\n   * Read one named outbound webhook\n   *\n   * `GET /api/v1/notification-webhooks/{webhookId}`, scope floor `webhooks`.\n   */\n',
     signature: '  webhook_get_named(args: { webhookId: string }): Promise<unknown>\n',
   },
   {
     name: 'webhook_list',
-    doc: '  /**\n   * List the workspace\'s outbound webhooks\n   *\n   * `GET /api/v1/notification-webhooks`, scope floor `admin`.\n   */\n',
+    doc: '  /**\n   * List the workspace\'s outbound webhooks\n   *\n   * `GET /api/v1/notification-webhooks`, scope floor `webhooks`.\n   */\n',
     signature: '  webhook_list(): Promise<unknown>\n',
   },
   {
     name: 'webhook_set',
-    doc: '  /**\n   * Register or update the outbound webhook\n   *\n   * `PUT /api/v1/notification-webhook`, scope floor `admin`.\n   */\n',
+    doc: '  /**\n   * Register or update the outbound webhook\n   *\n   * `PUT /api/v1/notification-webhook`, scope floor `webhooks`.\n   */\n',
     signature: '  webhook_set(args?: { body?: unknown }): Promise<unknown>\n',
   },
   {
     name: 'webhook_set_named',
-    doc: '  /**\n   * Register or update one named outbound webhook\n   *\n   * `PUT /api/v1/notification-webhooks/{webhookId}`, scope floor `admin`.\n   */\n',
+    doc: '  /**\n   * Register or update one named outbound webhook\n   *\n   * `PUT /api/v1/notification-webhooks/{webhookId}`, scope floor `webhooks`.\n   */\n',
     signature: '  webhook_set_named(args: { webhookId: string; body?: unknown }): Promise<unknown>\n',
   },
   {
@@ -656,7 +656,7 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
   },
   {
     name: 'directory_delete_webhook',
-    doc: '  /**\n   * Remove a directory webhook\n   *\n   * `DELETE /api/v1/directory/webhooks/{webhookId}`, scope floor `admin`.\n   */\n',
+    doc: '  /**\n   * Remove a directory webhook\n   *\n   * `DELETE /api/v1/directory/webhooks/{webhookId}`, scope floor `webhooks`.\n   */\n',
     signature: '  directory_delete_webhook(args: { webhookId: string }): Promise<unknown>\n',
   },
   {
@@ -681,7 +681,7 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
   },
   {
     name: 'directory_list_webhooks',
-    doc: '  /**\n   * List the account\'s directory webhooks\n   *\n   * `GET /api/v1/directory/webhooks`, scope floor `admin`.\n   */\n',
+    doc: '  /**\n   * List the account\'s directory webhooks\n   *\n   * `GET /api/v1/directory/webhooks`, scope floor `webhooks`.\n   */\n',
     signature: '  directory_list_webhooks(): Promise<unknown>\n',
   },
   {
@@ -696,7 +696,7 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
   },
   {
     name: 'directory_put_webhook',
-    doc: '  /**\n   * Register or edit a directory webhook\n   *\n   * `PUT /api/v1/directory/webhooks/{webhookId}`, scope floor `admin`.\n   */\n',
+    doc: '  /**\n   * Register or edit a directory webhook\n   *\n   * `PUT /api/v1/directory/webhooks/{webhookId}`, scope floor `webhooks`.\n   */\n',
     signature: '  directory_put_webhook(args: { webhookId: string; body?: unknown }): Promise<unknown>\n',
   },
   {

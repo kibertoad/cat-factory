@@ -3065,19 +3065,23 @@
     "scopeHint": "Each level includes the ones above it.",
     "scope": {
       "read": {
-        "label": "Read only",
+        "label": "Read",
         "description": "See services, tasks, pipelines and runs."
       },
+      "webhooks": {
+        "label": "Webhooks",
+        "description": "Also register webhooks that push changes to another system."
+      },
       "write": {
-        "label": "Read and write",
+        "label": "Write",
         "description": "Also create and start tasks."
       },
       "decide": {
-        "label": "Read, write and decide",
+        "label": "Decide",
         "description": "Also answer the questions a parked run is waiting on."
       },
       "admin": {
-        "label": "Full access",
+        "label": "Admin",
         "description": "Also delete tasks and act on notifications, which can merge a pull request."
       }
     },
@@ -3920,7 +3924,7 @@
         "labelHelp": "A name to recognize this token by later.",
         "labelPlaceholder": "e.g. CI pipeline",
         "scope": "Scope",
-        "scopeHelp": "Each level includes everything the one before it allows. Read: view tasks, runs and their results. Write: also create, edit, start, stop and retry tasks, and run reviews and assessments. Decide: also answer a run's human decisions (approvals, review findings, interview and clarifying questions, human tests); a token also needs this level to start a pipeline that can stop for one. Full access: also add, configure and delete services, delete tasks, link repositories, manage environment connections and webhooks, and act on notifications.",
+        "scopeHelp": "Each level includes everything the one before it allows. Read: view tasks, runs and their results. Webhooks: also register and remove webhooks that push changes to another system, such as directory and notification webhooks. Write: also create, edit, start, stop and retry tasks, and run reviews and assessments. Decide: also answer a run's human decisions (approvals, review findings, interview and clarifying questions, human tests); a token also needs this level to start a pipeline that can stop for one. Admin: also add, configure and delete services, delete tasks, link repositories, manage environment connections, and act on notifications.",
         "create": "Create token",
         "identity": "Runs as",
         "identitySystem": "This workspace (system token)",
@@ -3929,6 +3933,7 @@
         "identitySelfHelp": "Runs started with this token count as yours and can use your personal Claude / Codex / GLM subscription. Every such call must also send your personal password in the X-Personal-Password header; it is never stored. Use this to drive your own headless runs.",
         "reach": "Workspaces",
         "reachHelp": "Which workspaces this token can act on. A token reaching more than one names the workspace on each call in the x-cat-factory-workspace header.",
+        "reachAdminOnly": "Only an account admin can create a token that reaches other workspaces, which directory webhooks need. Ask one to create it.",
         "reachThis": "This workspace only",
         "reachAll": "Every workspace in the account",
         "reachSelected": "Selected workspaces",
@@ -3936,9 +3941,10 @@
       },
       "scopes": {
         "read": "Read",
-        "write": "Write (includes Read)",
+        "webhooks": "Webhooks (includes Read)",
+        "write": "Write (includes Webhooks)",
         "decide": "Decide (includes Write)",
-        "admin": "Full access (includes Decide)"
+        "admin": "Admin (includes Decide)"
       },
       "toast": {
         "loadFailed": "Could not load API tokens",

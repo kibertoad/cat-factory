@@ -171,10 +171,10 @@ export interface CreateHeadlessPublicApiKey {
   workspaceIds?: string[] | null
 }
 
-export type CreateHeadlessPublicApiKeyScope = 'read' | 'write' | 'decide'
+export type CreateHeadlessPublicApiKeyScope = 'read' | 'webhooks' | 'write' | 'decide'
 
 /** Every `CreateHeadlessPublicApiKeyScope` value, for exhaustive handling and runtime validation. */
-export const CREATE_HEADLESS_PUBLIC_API_KEY_SCOPE_VALUES = ['read', 'write', 'decide'] as const
+export const CREATE_HEADLESS_PUBLIC_API_KEY_SCOPE_VALUES = ['read', 'webhooks', 'write', 'decide'] as const
 
 export interface CreatePublicJob {
   /** Length 1..50000. */
@@ -2752,10 +2752,10 @@ export interface PublicApiKeyList {
   keys: PublicApiKey[]
 }
 
-export type PublicApiKeyScope = 'read' | 'write' | 'decide' | 'admin'
+export type PublicApiKeyScope = 'read' | 'webhooks' | 'write' | 'decide' | 'admin'
 
 /** Every `PublicApiKeyScope` value, for exhaustive handling and runtime validation. */
-export const PUBLIC_API_KEY_SCOPE_VALUES = ['read', 'write', 'decide', 'admin'] as const
+export const PUBLIC_API_KEY_SCOPE_VALUES = ['read', 'webhooks', 'write', 'decide', 'admin'] as const
 
 export interface PublicApprovalGateDecision {
   approvalId: string

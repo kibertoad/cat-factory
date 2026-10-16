@@ -27,7 +27,7 @@ const COLLECTION = '/api/v1/notification-webhooks'
 async function mintKey(
   app: Awaited<ReturnType<ConformanceHarness['makeApp']>>,
   workspaceId: string,
-  scope: 'read' | 'write' | 'decide' | 'admin',
+  scope: 'read' | 'webhooks' | 'write' | 'decide' | 'admin',
 ): Promise<Record<string, string>> {
   const created = await app.call<{ key: { id: string }; secret: string }>(
     'POST',
@@ -45,7 +45,8 @@ export function definePublicWebhookConformance(harness: ConformanceHarness): voi
       // Public-API keys are ACCOUNT-scoped, so the mint route refuses an account-less board.
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const auth = await mintKey(app, wsId, 'admin')
+      // The lowest rung that manages endpoints, so this pins that `webhooks` is enough.
+      const auth = await mintKey(app, wsId, 'webhooks')
 
       // Nothing registered is a VALUE, not a 404: an integration's startup self-check reads one
       // response shape rather than branching on a status the surface also uses for a bad path.
@@ -71,7 +72,7 @@ export function definePublicWebhookConformance(harness: ConformanceHarness): voi
         hasSecret: true,
       })
       // The secret is write-only: the projection reports THAT one is set and never what it is, on
-      // this surface exactly as on the session one. An `admin` key rotates; it cannot exfiltrate.
+      // this surface exactly as on the session one. A key rotates it; it cannot exfiltrate it.
       expect(JSON.stringify(registered.body)).not.toContain('a-signing-secret-of-length')
 
       const read = await app.call<PublicNotificationWebhook>('GET', ENDPOINT, undefined, auth)
@@ -107,24 +108,24 @@ export function definePublicWebhookConformance(harness: ConformanceHarness): voi
       expect((await app.call('DELETE', ENDPOINT, undefined, auth)).status).toBe(204)
     })
 
-    it('refuses a key below `admin` and an endpoint the delivery path would reject', async () => {
+    it('refuses a key below `webhooks` and an endpoint the delivery path would reject', async () => {
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const decideAuth = await mintKey(app, wsId, 'decide')
+      const readAuth = await mintKey(app, wsId, 'read')
 
-      // `decide` is the rung directly below, so this pins the ladder rather than just "some key is
+      // `read` is the rung directly below, so this pins the ladder rather than just "some key is
       // refused". A valid-but-narrow key is a 403, distinct from the 401 an unknown key gets.
-      const read = await app.call('GET', ENDPOINT, undefined, decideAuth)
+      const read = await app.call('GET', ENDPOINT, undefined, readAuth)
       expect(read.status).toBe(403)
       const write = await app.call(
         'PUT',
         ENDPOINT,
         { url: 'https://hooks.example.com/cat-factory' },
-        decideAuth,
+        readAuth,
       )
       expect(write.status).toBe(403)
-      expect((await app.call('DELETE', ENDPOINT, undefined, decideAuth)).status).toBe(403)
+      expect((await app.call('DELETE', ENDPOINT, undefined, readAuth)).status).toBe(403)
       expect((await app.call('GET', ENDPOINT)).status).toBe(401)
 
       // Two layers refuse a bad endpoint and they answer differently. The wire schema refuses a
@@ -295,20 +296,20 @@ export function definePublicWebhookConformance(harness: ConformanceHarness): voi
       expect(singularSurvived.body.webhook?.url).toBe('https://hooks.example.com/legacy')
     })
 
-    it('refuses a malformed id, a key below `admin`, and a registration past the cap', async () => {
+    it('refuses a malformed id, a key below `webhooks`, and a registration past the cap', async () => {
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace({ seed: true })
-      const auth = await mintKey(app, workspace.id, 'admin')
-      const decideAuth = await mintKey(app, workspace.id, 'decide')
+      const auth = await mintKey(app, workspace.id, 'webhooks')
+      const readAuth = await mintKey(app, workspace.id, 'read')
 
-      // The collection carries the SAME `admin` floor as the singular routes. A facade that mounted
-      // it without the gate would hand a `decide` key the ability to redirect a workspace's push.
-      expect((await app.call('GET', COLLECTION, undefined, decideAuth)).status).toBe(403)
+      // The collection carries the SAME `webhooks` floor as the singular routes. A facade that
+      // mounted it without the gate would hand a `read` key the ability to redirect a workspace's push.
+      expect((await app.call('GET', COLLECTION, undefined, readAuth)).status).toBe(403)
       expect(
-        (await app.call('PUT', `${COLLECTION}/x`, { url: 'https://a.example.com/h' }, decideAuth))
+        (await app.call('PUT', `${COLLECTION}/x`, { url: 'https://a.example.com/h' }, readAuth))
           .status,
       ).toBe(403)
-      expect((await app.call('DELETE', `${COLLECTION}/x`, undefined, decideAuth)).status).toBe(403)
+      expect((await app.call('DELETE', `${COLLECTION}/x`, undefined, readAuth)).status).toBe(403)
 
       const badId = await app.call<{ error: { details?: { reason?: string } } }>(
         'PUT',

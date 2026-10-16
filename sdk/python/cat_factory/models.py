@@ -787,6 +787,7 @@ class CreateHeadlessPublicApiKeyScope(StrEnum):
     a release it was never told about.
     """
     READ = "read"
+    WEBHOOKS = "webhooks"
     WRITE = "write"
     DECIDE = "decide"
 
@@ -11438,6 +11439,7 @@ class PublicApiKeyScope(StrEnum):
     a release it was never told about.
     """
     READ = "read"
+    WEBHOOKS = "webhooks"
     WRITE = "write"
     DECIDE = "decide"
     ADMIN = "admin"

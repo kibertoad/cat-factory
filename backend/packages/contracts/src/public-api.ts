@@ -999,7 +999,7 @@ export const publicIdentitySchema = v.object({
   /** Every workspace the key may act on, or `null` for all of the account's workspaces. */
   workspaceIds: publicApiKeyWorkspaceIdsSchema,
   /**
-   * What the key may do. The ladder is inclusive (`read` ⊂ `write` ⊂ `decide` ⊂ `admin`), so an
+   * What the key may do. The ladder is inclusive (`read` ⊂ `webhooks` ⊂ `write` ⊂ `decide` ⊂ `admin`), so an
    * integration comparing its own scope against what it needs should test the RUNG, not equality.
    */
   scope: publicApiScopeSchema,

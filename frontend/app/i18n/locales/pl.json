@@ -2910,19 +2910,23 @@
     "scopeHint": "Każdy poziom obejmuje poprzednie.",
     "scope": {
       "read": {
-        "label": "Tylko odczyt",
+        "label": "Odczyt · read",
         "description": "Podgląd usług, zadań, potoków i uruchomień."
       },
+      "webhooks": {
+        "label": "Webhooki · webhooks",
+        "description": "Dodatkowo rejestrowanie webhooków wysyłających zmiany do innego systemu."
+      },
       "write": {
-        "label": "Odczyt i zapis",
+        "label": "Zapis · write",
         "description": "Dodatkowo tworzenie i uruchamianie zadań."
       },
       "decide": {
-        "label": "Odczyt, zapis i decyzje",
+        "label": "Decyzje · decide",
         "description": "Dodatkowo odpowiadanie na pytania, na które czeka wstrzymane uruchomienie."
       },
       "admin": {
-        "label": "Pełny dostęp",
+        "label": "Pełny dostęp · admin",
         "description": "Dodatkowo usuwanie zadań i reagowanie na powiadomienia, co może scalić pull request."
       }
     },
@@ -3612,7 +3616,7 @@
         "labelHelp": "Nazwa, po której później rozpoznasz ten token.",
         "labelPlaceholder": "np. potok CI",
         "scope": "Zakres",
-        "scopeHelp": "Każdy poziom obejmuje wszystko, na co pozwala poprzedni. Odczyt: przeglądanie zadań, przebiegów i ich wyników. Zapis: dodatkowo tworzenie, edytowanie, uruchamianie, zatrzymywanie i ponawianie zadań oraz uruchamianie przeglądów i ocen. Decyzje: dodatkowo odpowiadanie na decyzje człowieka w przebiegu (zatwierdzenia, uwagi z przeglądu, pytania z wywiadu i pytania doprecyzowujące, testy ręczne); token potrzebuje tego poziomu także do uruchomienia potoku, który może się zatrzymać na takiej decyzji. Pełny dostęp: dodatkowo dodawanie, konfigurowanie i usuwanie usług, usuwanie zadań, łączenie repozytoriów, zarządzanie połączeniami środowisk i webhookami oraz reagowanie na powiadomienia.",
+        "scopeHelp": "Każdy poziom obejmuje wszystko, na co pozwala poprzedni. Odczyt: przeglądanie zadań, przebiegów i ich wyników. Webhooki: dodatkowo rejestrowanie i usuwanie webhooków wysyłających zmiany do innego systemu, takich jak webhooki katalogu i powiadomień. Zapis: dodatkowo tworzenie, edytowanie, uruchamianie, zatrzymywanie i ponawianie zadań oraz uruchamianie przeglądów i ocen. Decyzje: dodatkowo odpowiadanie na decyzje człowieka w przebiegu (zatwierdzenia, uwagi z przeglądu, pytania z wywiadu i pytania doprecyzowujące, testy ręczne); token potrzebuje tego poziomu także do uruchomienia potoku, który może się zatrzymać na takiej decyzji. Pełny dostęp (admin): dodatkowo dodawanie, konfigurowanie i usuwanie usług, usuwanie zadań, łączenie repozytoriów, zarządzanie połączeniami środowisk oraz reagowanie na powiadomienia.",
         "create": "Utwórz token",
         "identity": "Działa jako",
         "identitySystem": "Ten obszar roboczy (token systemowy)",
@@ -3621,16 +3625,18 @@
         "identitySelfHelp": "Uruchomienia rozpoczęte tym tokenem są przypisywane Tobie i mogą korzystać z Twojej osobistej subskrypcji Claude / Codex / GLM. Każde takie wywołanie musi dodatkowo przesłać Twoje hasło osobiste w nagłówku X-Personal-Password; nie jest ono nigdzie zapisywane. Użyj go do własnych uruchomień headless.",
         "reach": "Obszary robocze",
         "reachHelp": "W których obszarach roboczych ten token może działać. Token obejmujący więcej niż jeden wskazuje obszar roboczy przy każdym wywołaniu w nagłówku x-cat-factory-workspace.",
+        "reachAdminOnly": "Tylko administrator konta może utworzyć token obejmujący inne obszary robocze, którego wymagają webhooki katalogu. Poproś o to administratora.",
         "reachThis": "Tylko ten obszar roboczy",
         "reachAll": "Wszystkie obszary robocze konta",
         "reachSelected": "Wybrane obszary robocze",
         "reachPick": "Wybierz obszary robocze"
       },
       "scopes": {
-        "read": "Odczyt",
-        "write": "Zapis (obejmuje Odczyt)",
-        "decide": "Decyzje (obejmuje Zapis)",
-        "admin": "Pełny dostęp (obejmuje Decyzje)"
+        "read": "Odczyt · read",
+        "webhooks": "Webhooki · webhooks (obejmuje Odczyt)",
+        "write": "Zapis · write (obejmuje Webhooki)",
+        "decide": "Decyzje · decide (obejmuje Zapis)",
+        "admin": "Pełny dostęp · admin (obejmuje Decyzje)"
       },
       "toast": {
         "loadFailed": "Nie udało się załadować tokenów API",
