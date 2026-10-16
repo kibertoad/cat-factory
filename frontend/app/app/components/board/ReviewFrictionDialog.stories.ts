@@ -21,7 +21,7 @@ type Story = StoryObj<typeof meta>
  * not on the shared board, so no row contradicts a shared fixture.
  */
 const debt: ReviewDebtRow[] = [
-  { blockId: 'task_rate_limit', title: 'Rate-limit login attempts', waitingMinutes: 1460 },
+  { blockId: 'task_audit_trail', title: 'Record an audit trail for exports', waitingMinutes: 1460 },
   { blockId: 'task_cache', title: 'Cache session lookups', waitingMinutes: 312 },
   { blockId: 'task_untitled', title: null, waitingMinutes: 45 },
 ]

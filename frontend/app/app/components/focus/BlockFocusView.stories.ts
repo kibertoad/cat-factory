@@ -6,9 +6,14 @@ import { riskPolicy } from '~/stories/policies.stories.mocks'
 import { claudeOnlyCatalog } from '~/stories/providers.stories.mocks'
 import { execution } from '~/stories/snapshot.stories.mocks'
 import { taskFormSnapshot } from '~/stories/taskForm.stories.mocks'
-import { seedModelCatalog, seedSnapshot, seedUiMode, withSeed } from '~/stories/withStores'
+import {
+  seedMember,
+  seedModelCatalog,
+  seedSnapshot,
+  seedUiMode,
+  withSeed,
+} from '~/stories/withStores'
 import { useUiStore } from '~/stores/ui'
-import { useWorkspaceStore } from '~/stores/workspace'
 import type { UiMode } from '~/utils/uiMode'
 import BlockFocusView from './BlockFocusView.vue'
 
@@ -21,19 +26,13 @@ import BlockFocusView from './BlockFocusView.vue'
 function focused(
   blockId: string,
   board: WorkspaceSnapshot,
-  { mode = 'basic', role }: { mode?: UiMode; role?: 'member' } = {},
+  { mode = 'basic', member = false }: { mode?: UiMode; member?: boolean } = {},
 ) {
   return withSeed(() => {
     seedSnapshot(board)
     seedModelCatalog(claudeOnlyCatalog)
     seedUiMode(mode)
-    // The member's permissions are the backend's (`WORKSPACE_ROLE_PERMISSIONS` in kernel).
-    if (role) {
-      useWorkspaceStore().access = {
-        role,
-        permissions: ['workspace.read', 'board.write', 'runs.execute'],
-      }
-    }
+    if (member) seedMember()
     useUiStore().focus(blockId)
   })
 }
@@ -87,7 +86,7 @@ export const DryRunForced: Story = {
         executions: [execution()],
         riskPolicies: [riskPolicy({ dryRunRoles: ['member'] })],
       }),
-      { role: 'member' },
+      { member: true },
     ),
   ],
 }

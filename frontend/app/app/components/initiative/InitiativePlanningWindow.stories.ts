@@ -84,17 +84,14 @@ export const Empty: Story = {
   parameters: { api: readAnswers(null) },
 }
 
-const preparing = initiativeSnapshot(
-  initiative({ interview: { round: 0, maxRounds: 3, status: 'awaiting' } }),
-  {
-    run: planningRun('running', 0, [
-      step({ agentKind: 'initiative-analyst', state: 'working', progress: 0.4 }),
-      step({ agentKind: 'initiative-interviewer', state: 'pending', progress: 0 }),
-      step({ agentKind: 'initiative-planner', state: 'pending', progress: 0 }),
-      step({ agentKind: 'initiative-committer', state: 'pending', progress: 0 }),
-    ]),
-  },
-)
+const preparing = initiativeSnapshot(initiative(), {
+  run: planningRun('running', 0, [
+    step({ agentKind: 'initiative-analyst', state: 'working', progress: 0.4 }),
+    step({ agentKind: 'initiative-interviewer', state: 'pending', progress: 0 }),
+    step({ agentKind: 'initiative-planner', state: 'pending', progress: 0 }),
+    step({ agentKind: 'initiative-committer', state: 'pending', progress: 0 }),
+  ]),
+})
 
 /** The analyst still reads the codebase, ahead of the interview: nothing is asked yet. */
 export const Preparing: Story = {
