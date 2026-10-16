@@ -163,29 +163,35 @@ function absentGates(gates: NavGates): readonly string[] {
 }
 
 /**
- * A gate set that OFFERS this tour while the entry its step clicks is NOT rendered, or
- * `undefined` when no such set exists (what the guard wants). A step the gate set DROPS
- * (`when`) needs no anchor, so it cannot be a counterexample.
+ * For each pair, a gate set that OFFERS its tour while the entry its step clicks is NOT
+ * rendered, or `undefined` when no such set exists (what the guard wants). A step the gate set
+ * DROPS (`when`) needs no anchor, so it cannot be a counterexample.
  *
  * Of the many counterexamples one break produces, the one reported is the SMALLEST: the gate
  * set closest to fully-permitted, so its absent fields are exactly the ones that matter. The
  * first witness the matrix happens to reach names most of `NavGates` and reads as noise, which
  * is the difference between a failure that says "declare `advancedMode`" and one that says
  * "something about fourteen gates".
+ *
+ * The matrix is walked ONCE for every pair together: building each gate set per pair made the
+ * test several times slower, enough to cross vitest's timeout on a loaded CI runner.
  */
-function navRequirementDrift(
-  pair: ReturnType<typeof navAnchoredSteps>[number],
-): NavGates | undefined {
-  let smallest: NavGates | undefined
-  let fewestAbsent = Number.POSITIVE_INFINITY
+function navRequirementDrifts(
+  pairs: readonly ReturnType<typeof navAnchoredSteps>[number][],
+): (NavGates | undefined)[] {
+  const smallest: (NavGates | undefined)[] = pairs.map(() => undefined)
+  const fewestAbsent = pairs.map(() => Number.POSITIVE_INFINITY)
   for (const gates of everyGateSet()) {
-    if (!(pair.tour.requires ?? []).every((requirement) => requirement.met(gates))) continue
-    if (pair.step.when && !pair.step.when(gates)) continue
-    if (navItemVisible(pair.item, gates)) continue
-    const absent = absentGates(gates).length
-    if (absent < fewestAbsent) {
-      fewestAbsent = absent
-      smallest = gates
+    let absent: number | undefined
+    for (const [index, pair] of pairs.entries()) {
+      if (!(pair.tour.requires ?? []).every((requirement) => requirement.met(gates))) continue
+      if (pair.step.when && !pair.step.when(gates)) continue
+      if (navItemVisible(pair.item, gates)) continue
+      absent ??= absentGates(gates).length
+      if (absent < fewestAbsent[index]!) {
+        fewestAbsent[index] = absent
+        smallest[index] = gates
+      }
     }
   }
   return smallest
@@ -306,8 +312,9 @@ describe('the built-in tutorial tour catalog', () => {
     expect(pairs.length).toBeGreaterThanOrEqual(8)
     expect(Object.values(ALL_GATES).every((value) => typeof value === 'boolean')).toBe(true)
 
-    const drifted = pairs.flatMap((pair) => {
-      const witness = navRequirementDrift(pair)
+    const witnesses = navRequirementDrifts(pairs)
+    const drifted = pairs.flatMap((pair, index) => {
+      const witness = witnesses[index]
       if (witness === undefined) return []
       return [`${pair.label} is offered without ${absentGates(witness).join(' / ')}`]
     })
@@ -474,7 +481,7 @@ describe('tour availability across the catalog', () => {
 
   it('holds the interface tier as a requirement of the tours whose surface hides in basic', () => {
     // Two different reasons, one requirement. `share-services` clicks a nav entry marked
-    // `advanced: true` (which `navRequirementDrift` also enforces); `panel-reviews` clicks a
+    // `advanced: true` (which `navRequirementDrifts` also enforces); `panel-reviews` clicks a
     // BASIC entry whose consensus section renders only in advanced mode or once a group exists,
     // one level below anything the nav guard can see. Basic is the shipped default, so without
     // this both would be offered to nearly every user and find nothing.

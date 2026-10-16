@@ -514,3 +514,14 @@ people across systems on `(provider, id)`, which survives a rename on the host. 
 account to a user, or moving it to another user, records a `user` change for each user involved.
 
 Additive. A client built against an older document reads users as before.
+
+## 1.86.0
+
+The scope ladder gains a `webhooks` rung between `read` and `write`
+(`read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin`). It is `read` plus registering and removing push
+endpoints: the directory webhooks (`/api/v1/directory/webhooks`, still for a key reaching every
+workspace) and a workspace's notification webhooks (`/api/v1/notification-webhook[s]`). Those
+operations move from `admin` to `webhooks`.
+
+Additive: a new enum value on `scope`, and operations that admit more keys than before. Every key
+that could call them still can.

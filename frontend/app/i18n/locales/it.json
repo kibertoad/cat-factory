@@ -9,19 +9,23 @@
     "scopeHint": "Ogni livello include quelli precedenti.",
     "scope": {
       "read": {
-        "label": "Sola lettura",
+        "label": "Lettura · read",
         "description": "Vedere servizi, attività, pipeline ed esecuzioni."
       },
+      "webhooks": {
+        "label": "Webhook · webhooks",
+        "description": "Inoltre registrare webhook che inviano le modifiche a un altro sistema."
+      },
       "write": {
-        "label": "Lettura e scrittura",
+        "label": "Scrittura · write",
         "description": "Inoltre creare e avviare attività."
       },
       "decide": {
-        "label": "Lettura, scrittura e decisione",
+        "label": "Decisione · decide",
         "description": "Inoltre rispondere alle domande su cui un'esecuzione è in attesa."
       },
       "admin": {
-        "label": "Accesso completo",
+        "label": "Accesso completo · admin",
         "description": "Inoltre eliminare attività e agire sulle notifiche, il che può unire una pull request."
       }
     },
@@ -852,7 +856,7 @@
         "labelHelp": "Un nome per riconoscere questo token in seguito.",
         "labelPlaceholder": "es. pipeline CI",
         "scope": "Ambito",
-        "scopeHelp": "Ogni livello include tutto ciò che consente il precedente. Lettura: visualizzare attività, esecuzioni e i loro risultati. Scrittura: inoltre creare, modificare, avviare, fermare e riprovare attività, ed eseguire revisioni e valutazioni. Decisione: inoltre rispondere alle decisioni umane di un'esecuzione (approvazioni, rilievi di revisione, domande di intervista e di chiarimento, test manuali); un token ha bisogno di questo livello anche per avviare una pipeline che può fermarsi su una di esse. Accesso completo: inoltre aggiungere, configurare ed eliminare servizi, eliminare attività, collegare repository, gestire connessioni di ambiente e webhook, e agire sulle notifiche.",
+        "scopeHelp": "Ogni livello include tutto ciò che consente il precedente. Lettura: visualizzare attività, esecuzioni e i loro risultati. Webhook: inoltre registrare e rimuovere i webhook che inviano le modifiche a un altro sistema, come i webhook di directory e di notifica. Scrittura: inoltre creare, modificare, avviare, fermare e riprovare attività, ed eseguire revisioni e valutazioni. Decisione: inoltre rispondere alle decisioni umane di un'esecuzione (approvazioni, rilievi di revisione, domande di intervista e di chiarimento, test manuali); un token ha bisogno di questo livello anche per avviare una pipeline che può fermarsi su una di esse. Accesso completo (admin): inoltre aggiungere, configurare ed eliminare servizi, eliminare attività, collegare repository, gestire connessioni di ambiente, e agire sulle notifiche.",
         "create": "Crea token",
         "identity": "Viene eseguito come",
         "identitySystem": "Questo spazio di lavoro (token di sistema)",
@@ -861,16 +865,18 @@
         "identitySelfHelp": "Le esecuzioni avviate con questo token sono attribuite a te e possono usare il tuo abbonamento personale Claude / Codex / GLM. Ogni chiamata deve inviare anche la tua password personale nell'intestazione X-Personal-Password; non viene mai memorizzata. Usalo per le tue esecuzioni headless.",
         "reach": "Spazi di lavoro",
         "reachHelp": "Su quali spazi di lavoro questo token può agire. Un token che ne raggiunge più di uno indica lo spazio di lavoro a ogni chiamata nell’header x-cat-factory-workspace.",
+        "reachAdminOnly": "Solo un amministratore dell'account può creare un token che raggiunge altri spazi di lavoro, come richiedono i webhook di directory. Chiedilo a uno di loro.",
         "reachThis": "Solo questo spazio di lavoro",
         "reachAll": "Tutti gli spazi di lavoro dell’account",
         "reachSelected": "Spazi di lavoro selezionati",
         "reachPick": "Scegli gli spazi di lavoro"
       },
       "scopes": {
-        "read": "Lettura",
-        "write": "Scrittura (include Lettura)",
-        "decide": "Decisione (include Scrittura)",
-        "admin": "Accesso completo (include Decisione)"
+        "read": "Lettura · read",
+        "webhooks": "Webhook · webhooks (include Lettura)",
+        "write": "Scrittura · write (include Webhook)",
+        "decide": "Decisione · decide (include Scrittura)",
+        "admin": "Accesso completo · admin (include Decisione)"
       },
       "toast": {
         "loadFailed": "Impossibile caricare i token API",

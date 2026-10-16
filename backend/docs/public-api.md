@@ -131,12 +131,13 @@ reach.
 
 Scopes are an ordered, **inclusive** ladder; each rung can do everything below it:
 
-| Scope    | Adds                                                                                                                                                                                                                                                                                                                                          |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage` and its [spend breakdowns](#spend-by-repository-ticket-or-run), a run's [evidence](#run-evidence-report--outcome--artifacts) and its [merge record](#merge-evidence-apiv1merge-records), the whole [`/debug` surface](./debug-api.md). |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification, tag the [reviewer effort](#merge-evidence-apiv1merge-records) a merged pull request needed.                                                                                                                       |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                                                                                                                                         |
-| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge** and carries the optional reviewer-effort tag), manage the [outbound webhook](#outbound-webhooks-push), and [provision keys](#key-provisioning-apiv1keys).                                                                 |
+| Scope      | Adds                                                                                                                                                                                                                                                                                                                                          |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`     | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage` and its [spend breakdowns](#spend-by-repository-ticket-or-run), a run's [evidence](#run-evidence-report--outcome--artifacts) and its [merge record](#merge-evidence-apiv1merge-records), the whole [`/debug` surface](./debug-api.md). |
+| `webhooks` | Register and remove push endpoints: the [outbound webhooks](#outbound-webhooks-push) and, for a key reaching every workspace, the directory webhooks. Nothing on the board changes.                                                                                                                                                           |
+| `write`    | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification, tag the [reviewer effort](#merge-evidence-apiv1merge-records) a merged pull request needed.                                                                                                                       |
+| `decide`   | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                                                                                                                                         |
+| `admin`    | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge** and carries the optional reviewer-effort tag), and [provision keys](#key-provisioning-apiv1keys).                                                                                                                         |
 
 Two things to know before minting `decide` or `admin`:
 
@@ -3029,7 +3030,7 @@ of every membership and repository under it, since those rows are not served. Mi
 **Directory webhooks** push the same pages instead of waiting for a poll. Register an endpoint with
 `PUT /api/v1/directory/webhooks/:webhookId` (`{ url, secret?, enabled? }`, `https` only, at most 10
 per account), list them with `GET /api/v1/directory/webhooks`, remove one with `DELETE`. All three
-need an `admin` key reaching every workspace. A new endpoint starts at the feed head. Every couple
+need a `webhooks` key (or above) reaching every workspace. A new endpoint starts at the feed head. Every couple
 of minutes each endpoint is sent a signed `directory.changed` body (`deliveryId`, `accountId`,
 `changes`, `nextAfter`, `headSeq`), or `directory.resync_required` when it fell behind the feed's
 retention. Signing is the notification webhooks' scheme ([Verify signatures](#verify-signatures)).
@@ -3127,7 +3128,7 @@ keys, `read` scope. Fully documented in [`debug-api.md`](./debug-api.md).
 ### Outbound webhook management
 
 `GET|PUT|DELETE /api/v1/notification-webhook` and the
-`GET /api/v1/notification-webhooks` collection beside it, `admin` scope: register the endpoints this
+`GET /api/v1/notification-webhooks` collection beside it, `webhooks` scope: register the endpoints this
 workspace pushes to, read what is registered, or unregister. Documented with the delivery contract
 they configure, in [Outbound webhooks](#outbound-webhooks-push) below.
 
@@ -3165,15 +3166,15 @@ curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: appl
   "$BASE/api/v1/notification-webhook"
 ```
 
-| Route                                             | Scope   | Notes                                                                  |
-| ------------------------------------------------- | ------- | ---------------------------------------------------------------------- |
-| `GET /api/v1/notification-webhook`                | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set.         |
-| `PUT /api/v1/notification-webhook`                | `admin` | Register, edit or rotate. Returns the stored config.                   |
-| `DELETE /api/v1/notification-webhook`             | `admin` | Unregister. Idempotent, `204`.                                         |
-| `GET /api/v1/notification-webhooks`               | `admin` | `{ "webhooks": [ … ] }`, every endpoint, ordered by id. Not paginated. |
-| `GET /api/v1/notification-webhooks/:webhookId`    | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when that id has none.    |
-| `PUT /api/v1/notification-webhooks/:webhookId`    | `admin` | Register, edit or rotate ONE named endpoint.                           |
-| `DELETE /api/v1/notification-webhooks/:webhookId` | `admin` | Unregister one. Idempotent, `204`; siblings untouched.                 |
+| Route                                             | Scope      | Notes                                                                  |
+| ------------------------------------------------- | ---------- | ---------------------------------------------------------------------- |
+| `GET /api/v1/notification-webhook`                | `webhooks` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set.         |
+| `PUT /api/v1/notification-webhook`                | `webhooks` | Register, edit or rotate. Returns the stored config.                   |
+| `DELETE /api/v1/notification-webhook`             | `webhooks` | Unregister. Idempotent, `204`.                                         |
+| `GET /api/v1/notification-webhooks`               | `webhooks` | `{ "webhooks": [ … ] }`, every endpoint, ordered by id. Not paginated. |
+| `GET /api/v1/notification-webhooks/:webhookId`    | `webhooks` | `{ "webhook": … }`, or `{ "webhook": null }` when that id has none.    |
+| `PUT /api/v1/notification-webhooks/:webhookId`    | `webhooks` | Register, edit or rotate ONE named endpoint.                           |
+| `DELETE /api/v1/notification-webhooks/:webhookId` | `webhooks` | Unregister one. Idempotent, `204`; siblings untouched.                 |
 
 `GET` returns the config with `hasSecret: true|false`; the secret itself is **write-only**, sealed
 at rest, never readable back. An `admin` key can rotate the signing secret but never learn the

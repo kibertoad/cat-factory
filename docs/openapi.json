@@ -121,6 +121,7 @@
           "scope": {
             "enum": [
               "read",
+              "webhooks",
               "write",
               "decide"
             ],
@@ -4856,6 +4857,7 @@
           "scope": {
             "enum": [
               "read",
+              "webhooks",
               "write",
               "decide",
               "admin"
@@ -6165,6 +6167,7 @@
           "scope": {
             "enum": [
               "read",
+              "webhooks",
               "write",
               "decide",
               "admin"
@@ -9491,7 +9494,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.85.0"
+    "version": "1.86.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -14293,7 +14296,7 @@
         "tags": [
           "Directory"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       }
     },
     "/api/v1/directory/webhooks/{webhookId}": {
@@ -14339,7 +14342,7 @@
         "tags": [
           "Directory"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       },
       "put": {
         "description": "Register an endpoint the directory change feed is pushed to, or edit one; an omitted field keeps its stored value, and `url` is required only when registering. A new endpoint starts at the feed head: it is pushed what changes from now on, and its receiver bootstraps the past from the snapshots. Pushes run every couple of minutes, signed like the notification webhooks, each a `DirectoryWebhookDelivery`. An account holds at most 10 (`409` with `reason: \"webhook_limit_reached\"`).",
@@ -14400,7 +14403,7 @@
         "tags": [
           "Directory"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       }
     },
     "/api/v1/directory/workspace-memberships": {
@@ -17679,7 +17682,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       },
       "get": {
         "description": "The endpoint this workspace delivers notifications, run-lifecycle events and platform-health alerts to, or `{ \"webhook\": null }` when none is registered. The signing secret is never returned; `hasSecret` reports only whether one is set.",
@@ -17720,7 +17723,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       },
       "put": {
         "description": "Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered. Every omitted field keeps its stored value, so subscribing to run events is a one-field call that re-sends neither the URL nor the secret. `url` is required only on the first call, when there is nothing registered to keep; omitting it otherwise leaves the endpoint alone. Supplying `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be `https:` and publicly routable unless the deployment widened its allow-list.",
@@ -17771,7 +17774,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       }
     },
     "/api/v1/notification-webhooks": {
@@ -17814,7 +17817,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       }
     },
     "/api/v1/notification-webhooks/{webhookId}": {
@@ -17860,7 +17863,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       },
       "get": {
         "description": "The endpoint registered under this id, or `{ \"webhook\": null }` when there is none — the same shape the unnamed read answers, so an integration's startup self-check does not branch on a status code. The signing secret is never returned.",
@@ -17911,7 +17914,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       },
       "put": {
         "description": "Register an endpoint under an id YOU choose (1-63 characters of lowercase letters, digits, `-` or `_`), or update the one already there. Idempotent by id, so an integration can enroll its own receiver on every cold start without tracking whether it has enrolled before, and without displacing anything else the workspace registered. Every field follows the same keep-on-omit rule as the unnamed route, `url` being required only when there is nothing under this id to keep, and a supplied `secret` rotating this endpoint's own signing secret. Refused with `reason: \"invalid_webhook_id\"` for an id that is not a slug, and `reason: \"webhook_limit_reached\"` (409) when registering a NEW id would exceed the per-workspace cap; editing an existing one is admitted either way.",
@@ -17972,7 +17975,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       }
     },
     "/api/v1/notifications": {
@@ -26958,6 +26961,7 @@
   },
   "x-public-api-scopes": [
     "read",
+    "webhooks",
     "write",
     "decide",
     "admin"

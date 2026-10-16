@@ -200,20 +200,29 @@ export function definePublicDirectorySuite(harness: ConformanceHarness): void {
       expect(forged.body.error.details?.reason).toBe('invalid_cursor')
     })
 
-    it('manages directory webhooks with an account-wide admin key only', async () => {
+    it('manages directory webhooks with an account-wide `webhooks` key or above only', async () => {
       const app = harness.makeApp()
       const { w1, adminAuth } = await scenario(app)
-      const mintAdmin = async (workspaceIds: string[] | null) => {
+      const mint = async (scope: 'read' | 'webhooks', workspaceIds: string[] | null) => {
         const created = await app.call<{ secret: string }>(
           'POST',
           `/workspaces/${w1}/public-api-keys`,
-          { label: 'directory-admin', scope: 'admin', workspaceIds },
+          { label: `directory-${scope}`, scope, workspaceIds },
           adminAuth,
         )
         return bearer(created.body.secret)
       }
-      const accountAdmin = await mintAdmin(null)
-      const w1Admin = await mintAdmin([w1])
+      const accountAdmin = await mint('webhooks', null)
+      const w1Admin = await mint('webhooks', [w1])
+      const accountReader = await mint('read', null)
+      const passive = await app.call<Refusal>(
+        'GET',
+        '/api/v1/directory/webhooks',
+        undefined,
+        accountReader,
+      )
+      expect(passive.status).toBe(403)
+      expect(passive.body.error.code).toBe('insufficient_scope')
       const head = (
         await app.call<DirectoryChangePage>(
           'GET',

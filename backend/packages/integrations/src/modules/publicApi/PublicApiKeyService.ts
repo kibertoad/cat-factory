@@ -55,7 +55,7 @@ export interface PublicApiKeyAuth {
   /** Every workspace the key may act on, or `null` for all of the account's workspaces. */
   workspaceIds: string[] | null
   /**
-   * What this key may do (read ⊂ write ⊂ decide ⊂ admin) — the public surface gates each
+   * What this key may do (read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin). The public surface gates each
    * route on it.
    */
   scope: PublicApiScope
@@ -141,7 +141,7 @@ export class PublicApiKeyService {
 
   /**
    * Mint a new key for an account, returning the record + the one-time raw secret. `scope`
-   * (default `write`) is the permission the key carries on `/api/v1` (read ⊂ write ⊂ admin).
+   * (default `write`) is the permission the key carries on `/api/v1` (read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin).
    */
   async issue(
     owner: {
