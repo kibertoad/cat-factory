@@ -131,8 +131,10 @@ never a sibling sidebar node. Dashes in titles are banned, which makes this mech
 
 ### One state vocabulary
 
-`Default`, `Empty`, `Loading`, `Error`, then names for states only that surface has. `Default` is
-the populated, realistic case and comes first.
+`Default`, `Empty`, `Loading`, `Failed`, then names for states only that surface has. `Default` is
+the populated, realistic case and comes first. `Failed` is any read or action that failed. It is
+not `Error`, because `export const Error` shadows the global `Error` constructor for the whole
+stories file.
 
 ### Every story renders something
 
@@ -184,7 +186,7 @@ Data a component LOADS is answered over HTTP (`app/stories/api.ts`). A story lis
   contract the app's client uses, and validates `body` against the contract's success schema. A
   workspace route takes `pathPrefix: storyWorkspacePrefix`, from `app/stories/workspace.ts`.
 - `apiPending` never answers (a `Loading` story); `apiFailure` sends the backend's 500 envelope (an
-  `Error` story); `apiRefusal` sends a refusal with the status, code and message copied from the
+  `Failed` story); `apiRefusal` sends a refusal with the status, code and message copied from the
   handler that refuses; `apiNoContent` answers a 204; `apiHandler` computes the response from the
   request and still validates it.
 - `artifactBlobResponse`, `artifactBlobPending` and `artifactBlobFailure` answer a stored
