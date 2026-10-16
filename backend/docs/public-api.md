@@ -116,6 +116,15 @@ A key can only ever be bound to the person minting it — the field is a boolean
 the id from the session — so there is no way to mint a key onto someone else's subscription. A mint
 with no signed-in user is refused, and headless provisioning (`POST /api/v1/keys`) never binds.
 
+An integration that needs a person's own key (to run on their subscription for them) cannot mint
+it, so it sends them to mint it: `<appUrl>/?newApiKey=1&label=<label>&scope=<scope>&runsAsSelf=1`
+opens the API tokens window with the create form filled in, where `appUrl` comes from
+`GET /api/v1/deployment`. Every parameter but `newApiKey` is optional; a `scope` outside the ladder
+is ignored, `runsAsSelf=1` picks the personal identity when someone is signed in to bind it to, and
+`ws=<id>` pins the board. Nothing is minted until the person clicks create, and signing in first
+keeps the link. Its sibling, `?addRepo=<owner>/<name>&provider=<host>`, opens the add-service window
+on a repository the same way.
+
 An operator with no browser can do the same over `/api/v1` itself: see
 [Key provisioning](#key-provisioning-apiv1keys). The two surfaces share one store, so a key minted
 either way is listed and revoked by both.
