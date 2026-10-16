@@ -12,6 +12,7 @@ import {
   findColourLiterals,
   findFixedBlackWhite,
   findRawPalette,
+  isLiteralExempt,
 } from './check-frontend-palette.mjs'
 import { codeLines } from './lib/frontend-scan.mjs'
 
@@ -220,5 +221,20 @@ describe('findFixedBlackWhite', () => {
 
   it('strips a trailing HTML comment, so a comment naming a utility is prose', () => {
     assert.deepEqual(blackWhite('<div class="bg-muted" /> <!-- was bg-white -->'), [])
+  })
+})
+
+describe('the literal rule reads production code only', () => {
+  it('skips tests, stories and the shared story fixtures', () => {
+    assert.equal(isLiteralExempt('frontend/app/app/utils/theme/css.spec.ts'), true)
+    assert.equal(isLiteralExempt('frontend/app/app/components/board/AddTaskModal.stories.ts'), true)
+    assert.equal(isLiteralExempt('frontend/app/app/stories/pipelines.stories.mocks.ts'), true)
+    assert.equal(isLiteralExempt('frontend/app/app/stories/api.ts'), true)
+  })
+
+  it('reads a component, a composable and a util', () => {
+    assert.equal(isLiteralExempt('frontend/app/app/components/board/AddTaskModal.vue'), false)
+    assert.equal(isLiteralExempt('frontend/app/app/composables/useTheme.ts'), false)
+    assert.equal(isLiteralExempt('frontend/app/app/utils/theme/css.ts'), false)
   })
 })
