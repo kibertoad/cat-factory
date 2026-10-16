@@ -169,8 +169,17 @@ export const publicApiKeySchema = v.object({
    * workspaces; `workspaceIds` is the key's actual reach.
    */
   workspaceId: v.string(),
-  /** Every workspace the key may act on, or `null` for all of the account's workspaces. */
-  workspaceIds: publicApiKeyWorkspaceIdsSchema,
+  /**
+   * Every workspace the key may act on, or `null` for all of the account's workspaces. Empty for
+   * a key that {@link publicApiKeySchema.entries.followsMemberships}: its reach is not a list.
+   */
+  workspaceIds: v.nullable(v.array(v.string())),
+  /**
+   * Whether the key reaches whatever its bound person (`actsAsUserId`) can act in, decided on
+   * each call rather than stored: joining a workspace grants it, leaving takes it away. `GET
+   * /api/v1/me` and `GET /api/v1/directory/reach` answer the workspaces that is right now.
+   */
+  followsMemberships: v.boolean(),
   label: v.string(),
   /** What the key is allowed to do on `/api/v1` (read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin). */
   scope: publicApiScopeSchema,
@@ -246,6 +255,13 @@ export const createPublicApiKeySchema = v.object({
    * Anything wider than that workspace requires an account admin.
    */
   workspaceIds: v.optional(publicApiKeyWorkspaceIdsSchema),
+  /**
+   * Reach every workspace the minting person can act in, on each call, instead of a list: the key
+   * for a person who works across several workspaces, which needs no re-mint when they join or
+   * leave one. Only with `actsAsSelf`, and never with `workspaceIds`. It needs no account admin,
+   * because it can never reach past what that person can already do in the app.
+   */
+  followsMemberships: v.optional(v.boolean(), false),
 })
 export type CreatePublicApiKeyInput = v.InferOutput<typeof createPublicApiKeySchema>
 

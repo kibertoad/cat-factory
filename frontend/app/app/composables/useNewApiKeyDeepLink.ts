@@ -1,6 +1,6 @@
 /**
  * Boot-time replay of a NEW API KEY deep link:
- * `?newApiKey=1&label=<label>&scope=<scope>&runsAsSelf=1&ws=<id>`.
+ * `?newApiKey=1&label=<label>&scope=<scope>&runsAsSelf=1&reach=memberships&ws=<id>`.
  *
  * An integration that needs a person's OWN key (one bound to them, which is what lets a run use
  * their personal model subscription) cannot mint it for them: a bound key can only be minted by
@@ -23,13 +23,22 @@ export interface NewApiKeyPrefill {
   label: string | null
   scope: PublicApiScope | null
   runsAsSelf: boolean
+  /** `memberships`: reach whatever the person can act in. Only with `runsAsSelf`. */
+  reach: 'memberships' | null
 }
 
 interface PendingNewApiKeyLink extends NewApiKeyPrefill {
   workspaceId: string | null
 }
 
-const NEW_API_KEY_LINK_PARAMS = ['newApiKey', 'label', 'scope', 'runsAsSelf', 'ws'] as const
+const NEW_API_KEY_LINK_PARAMS = [
+  'newApiKey',
+  'label',
+  'scope',
+  'runsAsSelf',
+  'reach',
+  'ws',
+] as const
 
 /** The form's own label limit, so a prefill never starts out invalid. */
 const LABEL_MAX_LENGTH = 120
@@ -53,6 +62,7 @@ export function captureNewApiKeyDeepLink(): PendingNewApiKeyLink | null {
     label,
     scope: scopeOf(params.get('scope')),
     runsAsSelf: params.get('runsAsSelf') === '1',
+    reach: params.get('reach') === 'memberships' ? 'memberships' : null,
     workspaceId: params.get('ws'),
   }
   for (const key of NEW_API_KEY_LINK_PARAMS) params.delete(key)
@@ -79,7 +89,12 @@ export function useNewApiKeyDeepLink(): void {
     (ready) => {
       if (!ready || applied) return
       applied = true
-      ui.openApiTokens({ label: link.label, scope: link.scope, runsAsSelf: link.runsAsSelf })
+      ui.openApiTokens({
+        label: link.label,
+        scope: link.scope,
+        runsAsSelf: link.runsAsSelf,
+        reach: link.reach,
+      })
       stop?.()
     },
     { immediate: true },

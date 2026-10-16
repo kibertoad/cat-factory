@@ -94,7 +94,11 @@ export function definePublicDirectorySuite(harness: ConformanceHarness): void {
         undefined,
         w1Key,
       )
-      expect(narrow.body).toEqual({ accountId: wide.body.accountId, workspaceIds: [w1] })
+      expect(narrow.body).toEqual({
+        accountId: wide.body.accountId,
+        workspaceIds: [w1],
+        followsMemberships: false,
+      })
     })
 
     it('pages a snapshot under one watermark, and reads the users of the account', async () => {

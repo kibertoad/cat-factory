@@ -3608,6 +3608,7 @@
         "boundToYou": "Votre abonnement",
         "boundToOther": "Abonnement de {user}",
         "reachAll": "Tous les espaces de travail",
+        "reachMemberships": "Suit les espaces de travail de sa personne",
         "reachCount": "{count} espaces de travail"
       },
       "add": {
@@ -3629,6 +3630,8 @@
         "reachThis": "Cet espace de travail uniquement",
         "reachAll": "Tous les espaces de travail du compte",
         "reachSelected": "Espaces de travail sélectionnés",
+        "reachMemberships": "Mes espaces de travail (suit mes adhésions)",
+        "reachMembershipsHelp": "Atteint à chaque appel chaque espace de travail où vous pouvez agir : en rejoindre ou en quitter un le change, sans rien recréer. Dans chacun, il ne peut pas faire plus que votre rôle ne le permet.",
         "reachPick": "Choisir des espaces de travail"
       },
       "scopes": {

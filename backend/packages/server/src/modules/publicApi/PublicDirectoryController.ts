@@ -30,8 +30,8 @@ export function publicDirectoryController(): Hono<AppEnv> {
   buildHonoRoute(app, getDirectoryReachContract, async (c) => {
     const gate = await authorizeAccount(c, getDirectoryReachContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
-    const { accountId, workspaceIds } = gate.auth
-    return c.json({ accountId, workspaceIds }, 200)
+    const { accountId, workspaceIds, followsMemberships } = gate.auth
+    return c.json({ accountId, workspaceIds, followsMemberships }, 200)
   })
 
   buildHonoRoute(app, listDirectoryChangesContract, async (c) => {

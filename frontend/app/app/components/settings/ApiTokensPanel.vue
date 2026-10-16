@@ -43,23 +43,66 @@ const store = usePublicApiKeysStore()
 const accounts = useAccountsStore()
 const workspace = useWorkspaceStore()
 
-// A key's reach. The default is this board alone. The wider choices are an account admin's to
-// make, so the field is shown to everyone in both UI modes and disabled for anyone else, with the
-// reason, because a directory webhook needs a key that reaches every workspace.
-type TokenReach = 'this' | 'all' | 'selected'
+// WHO the next key runs as. Two named options rather than an unchecked box, because they are two
+// different credentials with two different blast radii and neither is a mere setting on the other:
+//
+//  - `system` (the default): the token belongs to the workspace. Its runs are attributed to nobody
+//    and it can reach no personal subscription, so a leaked shared credential can never spend one
+//    person's Claude quota. This is what a CI job or a shared integration should hold.
+//  - `self`: the token belongs to the person minting it. Its runs are theirs and may unlock their
+//    personal Claude / Codex / GLM subscription, with the password sent on each such call.
+//
+// NOT gated on the interface mode, unlike an override field. This whole panel is the Integrations
+// hub's Development surface, reached only by someone already minting an API key, and `scope` next
+// to it is ungated for the same reason. Hiding it in basic mode would leave that person a key that
+// silently cannot run their own models, with nothing on screen to say why.
+type TokenIdentity = 'system' | 'self'
+const identity = ref<TokenIdentity>('system')
+// Nobody to bind on a board with no signed-in user (a dev-open deployment): the server refuses
+// such a mint outright, so the choice is withheld and every key is a system key, which is what
+// that deployment can honestly offer.
+const canBindSelf = computed(() => auth.user !== null && auth.user !== undefined)
+const identityItems = computed(() => [
+  { value: 'system' as const, label: t('settings.apiTokens.add.identitySystem') },
+  { value: 'self' as const, label: t('settings.apiTokens.add.identitySelf') },
+])
+
+// A key's reach. The default is this board alone. 'all' and 'selected' are an account admin's to
+// make, because a directory webhook needs a key that reaches every workspace. 'memberships' is
+// anyone's for a key that runs as them: it reaches whatever they can act in, call by call, and
+// never more than their role allows in each, so it is the default for such a key.
+type TokenReach = 'this' | 'all' | 'selected' | 'memberships'
 const reach = ref<TokenReach>('this')
 const selectedWorkspaceIds = ref<string[]>([])
 const canWidenReach = computed(() => accounts.activeAccount?.roles?.includes('admin') === true)
 const reachItems = computed(() => [
   { value: 'this' as const, label: t('settings.apiTokens.add.reachThis') },
-  { value: 'all' as const, label: t('settings.apiTokens.add.reachAll') },
-  { value: 'selected' as const, label: t('settings.apiTokens.add.reachSelected') },
+  ...(identity.value === 'self'
+    ? [{ value: 'memberships' as const, label: t('settings.apiTokens.add.reachMemberships') }]
+    : []),
+  {
+    value: 'all' as const,
+    label: t('settings.apiTokens.add.reachAll'),
+    disabled: !canWidenReach.value,
+  },
+  {
+    value: 'selected' as const,
+    label: t('settings.apiTokens.add.reachSelected'),
+    disabled: !canWidenReach.value,
+  },
 ])
+const reachHelp = computed(() => {
+  if (reach.value === 'memberships') return t('settings.apiTokens.add.reachMembershipsHelp')
+  return canWidenReach.value
+    ? t('settings.apiTokens.add.reachHelp')
+    : t('settings.apiTokens.add.reachAdminOnly')
+})
 const workspaceItems = computed(() =>
   workspace.accountWorkspaces.map((w) => ({ value: w.id, label: w.name })),
 )
-/** The `workspaceIds` to mint with: omitted for this board, `null` for all, or the picked list. */
-function requestedReach(): string[] | null | undefined {
+/** The reach to mint with: omitted for this board, `null` for all, the picked list, or memberships. */
+function requestedReach(): string[] | null | 'memberships' | undefined {
+  if (reach.value === 'memberships') return identity.value === 'self' ? 'memberships' : undefined
   if (!canWidenReach.value || reach.value === 'this') return undefined
   if (reach.value === 'all') return null
   return selectedWorkspaceIds.value
@@ -73,6 +116,7 @@ const reachIncomplete = computed(
 
 /** The reach badge for a listed key; none for a key reaching this one board. */
 function reachLabel(key: PublicApiKey): string | null {
+  if (key.followsMemberships) return t('settings.apiTokens.list.reachMemberships')
   if (key.workspaceIds === null) return t('settings.apiTokens.list.reachAll')
   if (key.workspaceIds.length > 1) {
     return t('settings.apiTokens.list.reachCount', { count: key.workspaceIds.length })
@@ -130,29 +174,13 @@ const back = useIntegrationBack(open)
 const label = ref('')
 // The scope the next minted key will carry; defaults to the safe middle of the ladder.
 const scope = ref<PublicApiScope>('write')
-// WHO the next key runs as. Two named options rather than an unchecked box, because they are two
-// different credentials with two different blast radii and neither is a mere setting on the other:
-//
-//  - `system` (the default): the token belongs to the workspace. Its runs are attributed to nobody
-//    and it can reach no personal subscription, so a leaked shared credential can never spend one
-//    person's Claude quota. This is what a CI job or a shared integration should hold.
-//  - `self`: the token belongs to the person minting it. Its runs are theirs and may unlock their
-//    personal Claude / Codex / GLM subscription, with the password sent on each such call.
-//
-// NOT gated on the interface mode, unlike an override field. This whole panel is the Integrations
-// hub's Development surface, reached only by someone already minting an API key, and `scope` next
-// to it is ungated for the same reason. Hiding it in basic mode would leave that person a key that
-// silently cannot run their own models, with nothing on screen to say why.
-type TokenIdentity = 'system' | 'self'
-const identity = ref<TokenIdentity>('system')
-// Nobody to bind on a board with no signed-in user (a dev-open deployment): the server refuses
-// such a mint outright, so the choice is withheld and every key is a system key, which is what
-// that deployment can honestly offer.
-const canBindSelf = computed(() => auth.user !== null && auth.user !== undefined)
-const identityItems = computed(() => [
-  { value: 'system' as const, label: t('settings.apiTokens.add.identitySystem') },
-  { value: 'self' as const, label: t('settings.apiTokens.add.identitySelf') },
-])
+// A key that runs as its person follows their workspaces unless they pick otherwise, and one that
+// runs as nobody has no memberships to follow.
+watch(identity, (next) => {
+  if (next === 'self' && reach.value === 'this') reach.value = 'memberships'
+  if (next === 'system' && reach.value === 'memberships') reach.value = 'this'
+})
+
 /** The help text under the picker, so each option explains ITSELF rather than only its opposite. */
 const identityHelp = computed(() =>
   identity.value === 'self'
@@ -189,6 +217,7 @@ function applyPrefill() {
   if (prefill.label) label.value = prefill.label
   if (prefill.scope) scope.value = prefill.scope
   if (prefill.runsAsSelf && canBindSelf.value) identity.value = 'self'
+  if (prefill.reach === 'memberships' && identity.value === 'self') reach.value = 'memberships'
   ui.apiTokensPrefill = null
 }
 
@@ -392,18 +421,11 @@ async function revokeToken(key: PublicApiKey) {
               data-testid="api-token-identity"
             />
           </UFormField>
-          <UFormField
-            :label="t('settings.apiTokens.add.reach')"
-            :help="
-              canWidenReach
-                ? t('settings.apiTokens.add.reachHelp')
-                : t('settings.apiTokens.add.reachAdminOnly')
-            "
-          >
+          <UFormField :label="t('settings.apiTokens.add.reach')" :help="reachHelp">
             <USelect
               v-model="reach"
               :items="reachItems"
-              :disabled="!canWidenReach"
+              :disabled="!canWidenReach && identity !== 'self'"
               class="w-full"
               data-testid="api-token-reach"
             />

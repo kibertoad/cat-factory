@@ -13,11 +13,14 @@ describe('captureNewApiKeyDeepLink', () => {
   })
 
   it('parses the link an integration builds, and strips only its own params', () => {
-    setUrl('?newApiKey=1&label=sainte-beuve&scope=decide&runsAsSelf=1&ws=ws_1&keep=yes')
+    setUrl(
+      '?newApiKey=1&label=sainte-beuve&scope=decide&runsAsSelf=1&reach=memberships&ws=ws_1&keep=yes',
+    )
     expect(captureNewApiKeyDeepLink()).toEqual({
       label: 'sainte-beuve',
       scope: 'decide',
       runsAsSelf: true,
+      reach: 'memberships',
       workspaceId: 'ws_1',
     })
     expect(window.location.search).toBe('?keep=yes')
@@ -30,9 +33,15 @@ describe('captureNewApiKeyDeepLink', () => {
       label: null,
       scope: null,
       runsAsSelf: false,
+      reach: null,
       workspaceId: null,
     })
     expect(window.location.search).toBe('')
+  })
+
+  it('drops a reach this build does not know rather than guessing one', () => {
+    setUrl('?newApiKey=1&runsAsSelf=1&reach=everything')
+    expect(captureNewApiKeyDeepLink()).toMatchObject({ reach: null })
   })
 
   it('drops a scope this build does not know rather than guessing one', () => {

@@ -24,6 +24,14 @@ export interface PublicApiKeyRecord {
    * an empty list and no longer authenticates.
    */
   workspaceIds: string[] | null
+  /**
+   * The key's reach is its bound person's: every workspace {@link PublicApiKeyRecord.actsAsUserId}
+   * can act in at the moment a call is made, never a stored list. Joining a workspace grants it on
+   * the next call and leaving takes it away, with nothing to re-mint. Only a bound key has a person
+   * to follow, so it is set only with `actsAsUserId`, and its `workspaceIds` is always `[]`: a
+   * reader that missed this flag sees a key that reaches nothing, never one that reaches more.
+   */
+  followsMemberships: boolean
   label: string
   /** What the key may do on `/api/v1` (read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin). */
   scope: PublicApiScope

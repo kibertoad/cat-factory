@@ -3,6 +3,7 @@ import type {
   IdGenerator,
   PublicApiKeyRecord,
   PublicApiKeyRepository,
+  WorkspaceRole,
 } from '@cat-factory/kernel'
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { PUBLIC_API_SCOPES, type PublicApiScope } from '@cat-factory/contracts'
@@ -52,8 +53,14 @@ export interface PublicApiKeyAuth {
   accountId: string
   /** The one workspace this request acts on, resolved from the key's reach and the request. */
   workspaceId: string
-  /** Every workspace the key may act on, or `null` for all of the account's workspaces. */
+  /**
+   * Every workspace the key may act on, or `null` for all of the account's workspaces. For a key
+   * that follows its person's memberships, `authenticate` answers `[]` and the request layer fills
+   * in the workspaces that person can act in now (`withMembershipReach` in the server).
+   */
   workspaceIds: string[] | null
+  /** Whether {@link PublicApiKeyAuth.workspaceIds} is its bound person's current memberships. */
+  followsMemberships: boolean
   /**
    * What this key may do (read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin). The public surface gates each
    * route on it.
@@ -109,6 +116,37 @@ export function keyReaches(workspaceIds: string[] | null, workspaceId: string): 
 }
 
 /**
+ * The highest rung a key following its person's memberships may use in a workspace, from that
+ * person's role there: what each role can already do in the app. Without it such a key, minted
+ * `admin` where its person is an admin, would carry admin into every board they merely view.
+ */
+const SCOPE_CEILING: Record<WorkspaceRole, PublicApiScope> = {
+  viewer: 'read',
+  member: 'decide',
+  admin: 'admin',
+}
+
+/** The scope a membership-following key acts with in a workspace where its person holds `role`. */
+export function scopeInWorkspace(scope: PublicApiScope, role: WorkspaceRole): PublicApiScope {
+  const ceiling = SCOPE_CEILING[role]
+  return SCOPE_RANK[scope] <= SCOPE_RANK[ceiling] ? scope : ceiling
+}
+
+/** Who is looking at a workspace's key panel: the signed-in person, and whether they admin the account. */
+export interface KeyViewer {
+  userId: string | null
+  accountAdmin: boolean
+}
+
+/** Whether `viewer` may see and revoke a key that follows its person's memberships. */
+export function managesMembershipKey(
+  viewer: KeyViewer,
+  key: Pick<PublicApiKeyRecord, 'actsAsUserId'>,
+): boolean {
+  return viewer.accountAdmin || (viewer.userId !== null && viewer.userId === key.actsAsUserId)
+}
+
+/**
  * Whether reach `outer` includes everything reach `inner` does: how a key minting or revoking
  * another proves it is not handing out or taking away more than it holds itself.
  */
@@ -152,6 +190,8 @@ export class PublicApiKeyService {
       createdByKeyId?: string | null
       externalIdentity?: string | null
       actsAsUserId?: string | null
+      /** Reach whatever `actsAsUserId` can act in, call by call, instead of `workspaceIds`. */
+      followsMemberships?: boolean
     },
     label: string,
     scope: PublicApiScope = 'write',
@@ -168,7 +208,14 @@ export class PublicApiKeyService {
     if (!PUBLIC_API_SCOPES.includes(scope)) {
       throw new ConflictError(`Unknown public-API key scope: ${scope}`)
     }
-    if (owner.workspaceIds !== null && owner.workspaceIds.length === 0) {
+    const followsMemberships = owner.followsMemberships ?? false
+    if (followsMemberships && !owner.actsAsUserId) {
+      throw new ValidationError(
+        "Only a key bound to a person can follow that person's workspaces: mint it as yourself",
+        { reason: 'follows_memberships_requires_person' },
+      )
+    }
+    if (!followsMemberships && owner.workspaceIds !== null && owner.workspaceIds.length === 0) {
       throw new ValidationError('A key must reach at least one workspace', {
         reason: 'workspace_required',
       })
@@ -178,7 +225,12 @@ export class PublicApiKeyService {
     const record: PublicApiKeyRecord = {
       id,
       accountId: owner.accountId,
-      workspaceIds: owner.workspaceIds === null ? null : [...new Set(owner.workspaceIds)].sort(),
+      workspaceIds: followsMemberships
+        ? []
+        : owner.workspaceIds === null
+          ? null
+          : [...new Set(owner.workspaceIds)].sort(),
+      followsMemberships,
       label,
       scope,
       secretHash: await this.hash(secret),
@@ -194,10 +246,23 @@ export class PublicApiKeyService {
     return { record, secret: `${RAW_KEY_PREFIX}${id}.${secret}` }
   }
 
-  /** The account's live keys that can act on `workspaceId`, newest first. */
-  async listReaching(accountId: string, workspaceId: string): Promise<PublicApiKeyRecord[]> {
+  /**
+   * The account's live keys a workspace's panel lists, newest first: those whose grants reach
+   * `workspaceId`, and the keys that follow a person's memberships which `viewer` may manage (their
+   * own, or any as an account admin). A membership key's reach is a fact about its person rather
+   * than about any one workspace, so it is listed to whoever answers for it.
+   */
+  async listReaching(
+    accountId: string,
+    workspaceId: string,
+    viewer: KeyViewer,
+  ): Promise<PublicApiKeyRecord[]> {
     const keys = await this.deps.repository.listByAccount(accountId)
-    return keys.filter((key) => keyReaches(key.workspaceIds, workspaceId))
+    return keys.filter((key) =>
+      key.followsMemberships
+        ? managesMembershipKey(viewer, key)
+        : keyReaches(key.workspaceIds, workspaceId),
+    )
   }
 
   /** One live key of the account, or null when it is unknown, revoked or another account's. */
@@ -232,7 +297,13 @@ export class PublicApiKeyService {
     if (!record || record.revokedAt !== null) return null
     // A restricted key whose every workspace was deleted reaches nothing; refusing it here keeps
     // it from authenticating into the account-level routes with no workspace left to its name.
-    if (record.workspaceIds !== null && record.workspaceIds.length === 0) return null
+    if (
+      !record.followsMemberships &&
+      record.workspaceIds !== null &&
+      record.workspaceIds.length === 0
+    ) {
+      return null
+    }
     const presented = await this.hash(parsed.secret)
     if (!timingSafeEqualHex(presented, record.secretHash)) return null
     // Stamp `lastUsedAt`, but throttled: skip the write when the existing stamp is recent enough,
@@ -245,6 +316,7 @@ export class PublicApiKeyService {
       keyId: record.id,
       accountId: record.accountId,
       workspaceIds: record.workspaceIds,
+      followsMemberships: record.followsMemberships,
       scope: record.scope,
       label: record.label,
       externalIdentity: record.externalIdentity,

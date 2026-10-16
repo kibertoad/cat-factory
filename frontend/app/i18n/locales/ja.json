@@ -3749,6 +3749,7 @@
         "boundToYou": "あなたのサブスクリプション",
         "boundToOther": "{user} のサブスクリプション",
         "reachAll": "すべてのワークスペース",
+        "reachMemberships": "所有者のワークスペースに追従",
         "reachCount": "{count} 個のワークスペース"
       },
       "add": {
@@ -3770,6 +3771,8 @@
         "reachThis": "このワークスペースのみ",
         "reachAll": "アカウント内のすべてのワークスペース",
         "reachSelected": "選択したワークスペース",
+        "reachMemberships": "自分のワークスペース（メンバーシップに追従）",
+        "reachMembershipsHelp": "呼び出しのたびに、あなたが操作できるすべてのワークスペースに届きます。参加や脱退で変わり、作り直しは不要です。各ワークスペースでは、そこでのあなたのロールが許す以上のことはできません。",
         "reachPick": "ワークスペースを選択"
       },
       "scopes": {

@@ -10,11 +10,11 @@ import {
   seedPasswordUser,
 } from './helpers'
 
-// The new-API-key deep link (`?newApiKey=1&label=…&scope=…&runsAsSelf=1`), the way an integration
+// The new-API-key deep link (`?newApiKey=1&label=…&scope=…&runsAsSelf=1&reach=memberships`), the way an integration
 // sends a person to mint a key bound to them. The link is worth something only if the person lands
 // on the API tokens window with the form filled in AND nothing minted yet: they review and create.
 
-const LINK = '/?newApiKey=1&label=sainte-beuve&scope=decide&runsAsSelf=1'
+const LINK = '/?newApiKey=1&label=sainte-beuve&scope=decide&runsAsSelf=1&reach=memberships'
 
 async function expectPrefilledForm(page: Page): Promise<void> {
   const panel = page.getByTestId('api-tokens-panel')
@@ -39,8 +39,10 @@ test.describe('new-API-key deep link', () => {
     await page.goto(LINK)
 
     await expectPrefilledForm(page)
-    // A dev-open board has nobody to bind a key to, so the runs-as choice is withheld.
+    // A dev-open board has nobody to bind a key to, so the runs-as choice is withheld, and with it
+    // the memberships a key could follow.
     await expect(page.getByTestId('api-token-identity')).toHaveCount(0)
+    await expect(page.getByTestId('api-token-reach')).toContainText('This workspace only')
   })
 
   test.describe('signed out (the real login gate)', () => {
@@ -70,6 +72,14 @@ test.describe('new-API-key deep link', () => {
 
       await expectPrefilledForm(page)
       await expect(page.getByTestId('api-token-identity')).toContainText('Me (personal token)')
+      await expect(page.getByTestId('api-token-reach')).toContainText('My workspaces')
+
+      // Created only on the person's click, and listed here as following their workspaces.
+      await page.getByTestId('api-token-create').click()
+      await expect(page.getByTestId('api-token-secret')).toBeVisible({ timeout: LIVE_TIMEOUT })
+      await expect(page.getByTestId(/^api-token-reach-/)).toContainText(
+        "Follows its owner's workspaces",
+      )
     })
   })
 })
