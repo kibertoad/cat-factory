@@ -1,4 +1,42 @@
 import {
+  accountSchema,
+  accountInvitationSchema,
+  emailConnectionSchema,
+  accountSettingsViewSchema,
+  workspaceMemberSchema,
+  accountMemberSchema,
+  workspaceListItemSchema,
+  bootstrapJobSchema,
+  referenceArchitectureSchema,
+  taskSourceStateSchema,
+  taskConnectionSchema,
+  sourceTaskSchema,
+  taskSearchResultSchema,
+  documentSourceDescriptorSchema,
+  documentConnectionSchema,
+  sourceDocumentSchema,
+  resolvedDocumentRefSchema,
+  slackConnectionSchema,
+  mergeClassRollupSchema,
+  testReportSchema,
+  testerStepStateSchema,
+  stepMetricsSchema,
+  stepPhaseMetricsSchema,
+  llmCallMetricSchema,
+  agentToolCallSchema,
+  agentContextSnapshotSchema,
+  agentSearchQuerySchema,
+  kaizenGradingSchema,
+  kaizenVerifiedComboSchema,
+  guidedReviewCommentDraftSchema,
+  guidedReviewSessionSchema,
+  guidedReviewThreadViewSchema,
+  agentEffortReportSchema,
+  validationReportSchema,
+  reproductionReportSchema,
+  executionInstanceSchema,
+  serviceSpecViewSchema,
+  binaryCandidateStepStateSchema,
   agentFailureSchema,
   blockSchema,
   companionVerdictSchema,
@@ -22,6 +60,79 @@ import {
 } from '@cat-factory/contracts'
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
+import {
+  accountBoards,
+  accountMembers,
+  accountSettingsView,
+  accounts,
+  invitations,
+  resendConnection,
+  workspaceMembers,
+} from './accounts.stories.mocks'
+import {
+  adoptionDecisions,
+  applyingJob,
+  awaitingReviewJob,
+  bootstrapJob,
+  failedApplyJob,
+  referenceArchitectures,
+  succeededNewRepoJob,
+  surveyReads,
+} from './bootstrap.stories.mocks'
+import {
+  authServiceIssues,
+  documentConnections,
+  documentSources,
+  resolvedDocumentRef,
+  resolvedDocumentRefWithDroppedScope,
+  resolvedFigmaFrameRef,
+  sessionSearchHits,
+  slackConnection,
+  sourceDocuments,
+  sourceTasks,
+  taskConnections,
+  taskSources,
+  zeplinDescriptor,
+} from './integrations.stories.mocks'
+import { candidateState } from './binaryCandidates.stories.mocks'
+import {
+  awaitingAnswersSnapshot,
+  initiative,
+  initiativeItems,
+  initiativeSnapshot,
+  interviewingSnapshot,
+  interviewQuestions,
+  planGateSnapshot,
+  trackedInitiative,
+} from './initiative.stories.mocks'
+import {
+  guidedReviewDraft,
+  guidedReviewSession,
+  guidedReviewThread,
+  indexAnswer,
+  indexQuestion,
+  raceAnswer,
+  raceQuestion,
+} from './guidedReview.stories.mocks'
+import { gradingHistory, kaizenGrading, verifiedCombos } from './kaizen.stories.mocks'
+import { mergeClassRollups } from './mergeTrackRecord.stories.mocks'
+import {
+  loginCalls,
+  loginContext,
+  loginPhases,
+  loginSearches,
+  loginToolCalls,
+  rateLimitedCall,
+  stepMetrics,
+} from './observability.stories.mocks'
+import { failedRun, passedRun, runSpec } from './outcome.stories.mocks'
+import {
+  effortReport,
+  reproductionReport,
+  validationFailed,
+  validationPassed,
+} from './stepReports.stories.mocks'
+import { testerState, testReport } from './testing.stories.mocks'
 import { block, estimate } from './block.stories.mocks'
 import { authInitiative } from './board.stories.mocks'
 import {
@@ -52,6 +163,69 @@ import {
 // typecheck already holds them to the TYPE; this also holds them to what the type cannot say (an
 // id pattern, a minimum, a non-empty list), so a story never renders a row the API would refuse.
 const cases: [string, v.GenericSchema, unknown[]][] = [
+  ['account', accountSchema, accounts],
+  ['account settings', accountSettingsViewSchema, [accountSettingsView]],
+  ['workspace member', workspaceMemberSchema, workspaceMembers],
+  ['account member', accountMemberSchema, accountMembers],
+  ['account invitation', accountInvitationSchema, invitations],
+  ['email connection', emailConnectionSchema, [resendConnection]],
+  ['board list item', workspaceListItemSchema, accountBoards],
+  [
+    'bootstrap job',
+    bootstrapJobSchema,
+    [bootstrapJob(), awaitingReviewJob(), applyingJob(), failedApplyJob(), succeededNewRepoJob()],
+  ],
+  ['reference architecture', referenceArchitectureSchema, referenceArchitectures],
+  ['task source', taskSourceStateSchema, taskSources],
+  ['task connection', taskConnectionSchema, taskConnections],
+  ['source task', sourceTaskSchema, [...sourceTasks, ...authServiceIssues]],
+  ['task search result', taskSearchResultSchema, sessionSearchHits],
+  ['document source', documentSourceDescriptorSchema, [...documentSources, zeplinDescriptor]],
+  ['document connection', documentConnectionSchema, documentConnections],
+  ['source document', sourceDocumentSchema, sourceDocuments],
+  [
+    'resolved document ref',
+    resolvedDocumentRefSchema,
+    [resolvedDocumentRef, resolvedDocumentRefWithDroppedScope, resolvedFigmaFrameRef],
+  ],
+  ['slack connection', slackConnectionSchema, [slackConnection]],
+  ['merge class rollup', mergeClassRollupSchema, mergeClassRollups],
+  ['test report', testReportSchema, [testReport()]],
+  ['tester state', testerStepStateSchema, [testerState()]],
+  ['step metrics', stepMetricsSchema, [stepMetrics()]],
+  ['step phase metrics', stepPhaseMetricsSchema, loginPhases],
+  ['model call', llmCallMetricSchema, [...loginCalls, rateLimitedCall]],
+  ['tool call', agentToolCallSchema, loginToolCalls],
+  ['agent context snapshot', agentContextSnapshotSchema, loginContext],
+  ['web search query', agentSearchQuerySchema, loginSearches],
+  ['kaizen grading', kaizenGradingSchema, [kaizenGrading(), ...gradingHistory]],
+  ['kaizen combo', kaizenVerifiedComboSchema, verifiedCombos],
+  ['guided review draft', guidedReviewCommentDraftSchema, [guidedReviewDraft()]],
+  ['guided review session', guidedReviewSessionSchema, [guidedReviewSession()]],
+  [
+    'guided review thread',
+    guidedReviewThreadViewSchema,
+    [guidedReviewThread([raceQuestion, raceAnswer, indexQuestion, indexAnswer])],
+  ],
+  ['effort report', agentEffortReportSchema, [effortReport]],
+  ['validation report', validationReportSchema, [validationPassed, validationFailed]],
+  ['reproduction report', reproductionReportSchema, [reproductionReport()]],
+  ['run spec', serviceSpecViewSchema, [runSpec]],
+  ['outcome run', executionInstanceSchema, [passedRun, failedRun]],
+  ['binary candidates', binaryCandidateStepStateSchema, [candidateState()]],
+  [
+    'initiative snapshot',
+    workspaceSnapshotSchema,
+    [
+      initiativeSnapshot(initiative({ status: 'executing', items: initiativeItems })),
+      initiativeSnapshot(initiative({ qa: interviewQuestions })),
+      initiativeSnapshot(trackedInitiative()),
+      awaitingAnswersSnapshot(),
+      interviewingSnapshot(),
+      planGateSnapshot(),
+      planGateSnapshot({ rendered: true }),
+    ],
+  ],
   ['block', blockSchema, [block(), authInitiative]],
   ['task estimate', taskEstimateSchema, [estimate()]],
   ['GitHub connection', githubConnectionSchema, [githubConnection]],
@@ -98,5 +272,16 @@ describe('the repo fixtures', () => {
       ids.set(name, (ids.get(name) ?? new Set()).add(repo.githubId))
     }
     expect([...ids].filter(([, set]) => set.size > 1).map(([name]) => name)).toEqual([])
+  })
+})
+
+// The backend drops a recommendation whose evidence names no path the survey read
+// (`surveyedPaths` in kernel's `monorepo-adoption.logic.ts`), so a story decision that cited one
+// would show a plan the backend never stores.
+describe('the adoption fixture', () => {
+  it('cites only paths the survey read', () => {
+    const read = new Set(surveyReads.filter((r) => r.outcome === 'read').map((r) => r.path))
+    const cited = adoptionDecisions.flatMap((d) => d.evidence)
+    expect(cited.filter((path) => !read.has(path))).toEqual([])
   })
 })
