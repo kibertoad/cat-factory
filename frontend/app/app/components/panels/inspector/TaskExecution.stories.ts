@@ -25,11 +25,13 @@ const minute = 60_000
 
 /** The login task, linked to its run and with the board's other blocks around it. */
 function withRun(
-  run: ExecutionInstance | null,
+  makeRun: () => ExecutionInstance | null,
   changes: Partial<Block> = {},
   pipelines: Pipeline[] = [buildPipeline],
 ) {
   return withSeed(() => {
+    // Built in the seed, so the run's times are relative to when the story mounts.
+    const run = makeRun()
     const task = { ...loginTask, executionId: run?.id ?? null, ...changes }
     seedSnapshot(snapshot({ blocks: boardWith(task), executions: run ? [run] : [], pipelines }))
     seedModelCatalog(claudeOnlyCatalog)
@@ -75,7 +77,7 @@ const meta = {
   component: TaskExecution,
   parameters: { width: 'panel' },
   args: { block: { ...loginTask, executionId: 'exec_login' } },
-  decorators: [withRun(runningBuild())],
+  decorators: [withRun(() => runningBuild())],
 } satisfies Meta<typeof TaskExecution>
 export default meta
 
@@ -87,13 +89,13 @@ export const Default: Story = {}
 /** No run, no pull request: the empty state. */
 export const Empty: Story = {
   args: { block: loginTask },
-  decorators: [withRun(null)],
+  decorators: [withRun(() => null)],
 }
 
 /** The architect asks a question: Resolve on its row. */
 export const NeedsDecision: Story = {
   decorators: [
-    withRun(
+    withRun(() =>
       execution({
         steps: [
           step({ agentKind: 'architect', state: 'waiting_decision', decision: decision() }),
@@ -108,7 +110,7 @@ export const NeedsDecision: Story = {
 }
 
 /** The architect's plan waits for a person: Approve on its row. */
-export const NeedsApproval: Story = { decorators: [withRun(parkedExecution())] }
+export const NeedsApproval: Story = { decorators: [withRun(parkedExecution)] }
 
 /**
  * The container ran out of memory in the coder: the row reads Failed, and the failure card and
@@ -116,7 +118,7 @@ export const NeedsApproval: Story = { decorators: [withRun(parkedExecution())] }
  */
 export const Failed: Story = {
   decorators: [
-    withRun(
+    withRun(() =>
       runningBuild({
         status: 'failed',
         failure: failure({
@@ -132,7 +134,7 @@ export const Failed: Story = {
 }
 
 /** A dry run: the Dry run badge beside the pipeline name, because nothing will merge. */
-export const DryRun: Story = { decorators: [withRun(runningBuild({ mode: 'dry_run' }))] }
+export const DryRun: Story = { decorators: [withRun(() => runningBuild({ mode: 'dry_run' }))] }
 
 const blockedGate: RunInputGate = {
   status: 'blocked',
@@ -148,7 +150,7 @@ const blockedGate: RunInputGate = {
  */
 export const InputGateParked: Story = {
   decorators: [
-    withRun(
+    withRun(() =>
       execution({
         steps: [
           step({ agentKind: 'architect', state: 'working', progress: 0, approval: approval() }),
@@ -177,23 +179,24 @@ export const AwaitingMerge: Story = {
   args: { block: { ...loginTask, executionId: 'exec_login', status: 'pr_ready', pullRequest } },
   decorators: [
     withRun(
-      execution({
-        pipelineId: mergingPipeline.id,
-        pipelineName: mergingPipeline.name,
-        steps: [
-          step({ agentKind: 'architect', state: 'done', progress: 1 }),
-          step({ agentKind: 'coder', state: 'done', progress: 1 }),
-          step({ agentKind: 'pr-reviewer', state: 'done', progress: 1 }),
-          step({
-            agentKind: 'merger',
-            state: 'done',
-            progress: 1,
-            custom: { changeClass: 'source' },
-          }),
-        ],
-        currentStep: 3,
-        status: 'done',
-      }),
+      () =>
+        execution({
+          pipelineId: mergingPipeline.id,
+          pipelineName: mergingPipeline.name,
+          steps: [
+            step({ agentKind: 'architect', state: 'done', progress: 1 }),
+            step({ agentKind: 'coder', state: 'done', progress: 1 }),
+            step({ agentKind: 'pr-reviewer', state: 'done', progress: 1 }),
+            step({
+              agentKind: 'merger',
+              state: 'done',
+              progress: 1,
+              custom: { changeClass: 'source' },
+            }),
+          ],
+          currentStep: 3,
+          status: 'done',
+        }),
       { status: 'pr_ready', pullRequest },
       [buildPipeline, mergingPipeline],
     ),
@@ -211,5 +214,5 @@ export const AwaitingMerge: Story = {
 /** Merged, with the run long gone: Read the result and the merged pull request. */
 export const Merged: Story = {
   args: { block: { ...loginTask, status: 'done', pullRequest } },
-  decorators: [withRun(null, { status: 'done', pullRequest })],
+  decorators: [withRun(() => null, { status: 'done', pullRequest })],
 }

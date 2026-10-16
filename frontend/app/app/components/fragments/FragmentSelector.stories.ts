@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { resolvedFragmentsContract } from '@cat-factory/contracts'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { screen, userEvent, within } from 'storybook/test'
 import { accounts } from '~/stories/accounts.stories.mocks'
 import { apiResponse } from '~/stories/api'
@@ -37,7 +37,15 @@ const meta = {
   },
   render: (args) => ({
     components: { FragmentSelector },
-    setup: () => ({ args, selected: ref(args.modelValue) }),
+    setup() {
+      const selected = ref(args.modelValue)
+      // Keeps the local model in step with the Controls panel.
+      watch(
+        () => args.modelValue,
+        (value) => (selected.value = value),
+      )
+      return { args, selected }
+    },
     template: '<div class="pb-96"><FragmentSelector v-bind="args" v-model="selected" /></div>',
   }),
 } satisfies Meta<typeof FragmentSelector>

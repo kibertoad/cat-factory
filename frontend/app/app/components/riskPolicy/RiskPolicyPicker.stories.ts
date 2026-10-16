@@ -1,8 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { fn, screen, userEvent, within } from 'storybook/test'
 import { manualReviewPolicy, riskPolicy } from '~/stories/policies.stories.mocks'
-import { withSeed } from '~/stories/withStores'
-import { useWorkspaceStore } from '~/stores/workspace'
+import { seedMember, withSeed } from '~/stories/withStores'
 import RiskPolicyPicker from './RiskPolicyPicker.vue'
 
 // The merge policy picker of a task: a button that opens a list of policy names, with what the
@@ -29,17 +28,14 @@ const meta = {
     modelValue: manualReviewPolicy.id,
     options: [balanced, manualReviewPolicy, unattended],
     defaultPolicy: balanced,
-    noneLabel: '',
+    // The inspector's `Default ({name})` row label, as English text so Controls can edit it.
+    noneLabel: `Default (${balanced.name})`,
     'onUpdate:modelValue': fn(),
   },
   render: (args) => ({
     components: { RiskPolicyPicker },
-    setup() {
-      const { t } = useI18n()
-      const noneLabel = t('inspector.runSettings.defaultRiskPolicy', { name: balanced.name })
-      return { args, noneLabel }
-    },
-    template: '<div class="pb-96"><RiskPolicyPicker v-bind="args" :none-label="noneLabel" /></div>',
+    setup: () => ({ args }),
+    template: '<div class="pb-96"><RiskPolicyPicker v-bind="args" /></div>',
   }),
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByTestId('risk-policy-picker-trigger'))
@@ -63,14 +59,7 @@ export const WorkspaceDefault: Story = { args: { modelValue: '' } }
  */
 export const Refused: Story = {
   args: { modelValue: balanced.id },
-  decorators: [
-    withSeed(() => {
-      useWorkspaceStore().access = {
-        role: 'member',
-        permissions: ['workspace.read', 'board.write', 'runs.execute'],
-      }
-    }),
-  ],
+  decorators: [withSeed(seedMember)],
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByTestId('risk-policy-picker-trigger'))
     await userEvent.hover(await screen.findByTestId('risk-policy-option-mp_unattended'))

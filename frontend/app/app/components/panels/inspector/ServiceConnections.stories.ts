@@ -44,17 +44,14 @@ const meta = {
   component: ServiceConnections,
   parameters: { width: 'panel' },
   decorators: [withBoard([auth, ...others, consumer])],
-  // `InspectorSection` opens CLOSED, which is right in a panel of a dozen sections and useless in
-  // a story: every one would be a titled bar. Opening it is a play rather than a prop because the
-  // section owns its own `open` model and a caller cannot set it.
-  play: async ({ canvasElement }) => {
-    await open(canvasElement)
-  },
 } satisfies Meta<typeof ServiceConnections>
 export default meta
 
 type Story = StoryObj<typeof meta>
 
+// `InspectorSection` opens CLOSED, which is right in a panel of a dozen sections and useless in a
+// story: every one would be a titled bar. Opening it is a play rather than a prop because the
+// section owns its own `open` model and a caller cannot set it.
 async function open(canvasElement: HTMLElement) {
   await userEvent.click(within(canvasElement).getByTestId('inspector-section-toggle'))
 }

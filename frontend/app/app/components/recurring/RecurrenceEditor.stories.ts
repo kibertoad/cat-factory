@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { Recurrence } from '~/types/recurring'
 import RecurrenceEditor from './RecurrenceEditor.vue'
 
@@ -23,6 +23,11 @@ const meta = {
     components: { RecurrenceEditor },
     setup() {
       const value = ref<Recurrence>(args.modelValue)
+      // Keeps the local model in step with the Controls panel.
+      watch(
+        () => args.modelValue,
+        (next) => (value.value = next),
+      )
       return { value }
     },
     template: '<RecurrenceEditor v-model="value" />',
