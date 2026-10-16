@@ -13,6 +13,7 @@ const GRADER = 'anthropic:claude-haiku-5-5'
 /** A complete grading of the login run's coder step: a 3, with two recommendations. */
 export function kaizenGrading(overrides: Partial<KaizenGrading> = {}): KaizenGrading {
   const agentKind = overrides.agentKind ?? 'coder'
+  const model = overrides.model ?? MODEL
   const promptVersion = overrides.promptVersion ?? 14
   return {
     id: 'kz_login_coder',
@@ -20,9 +21,9 @@ export function kaizenGrading(overrides: Partial<KaizenGrading> = {}): KaizenGra
     blockId: 'task_login',
     stepIndex: 1,
     agentKind,
-    model: MODEL,
+    model,
     promptVersion,
-    comboKey: `${agentKind}|${MODEL}|${promptVersion}`,
+    comboKey: `${agentKind}|${model}|${promptVersion}`,
     status: 'complete',
     grade: 3,
     summary:

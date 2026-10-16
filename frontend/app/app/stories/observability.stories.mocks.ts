@@ -37,10 +37,8 @@ export function stepMetrics(overrides: Partial<StepMetrics> = {}): StepMetrics {
   }
 }
 
-// ---- The login run's tool calls ---------------------------------------------------------
-
 const JOB = 'exec_login-coder'
-const START = Date.UTC(2026, 9, 11, 9, 14, 0)
+const START = Date.UTC(2026, 9, 11, 9, 3, 0)
 
 let clock = START
 
@@ -152,13 +150,14 @@ export const loginToolFailures: RunToolCallFailures = {
   failuresTruncated: false,
 }
 
-// ---- The login run's model calls ---------------------------------------------------------
-
 const CALLS_START = Date.UTC(2026, 9, 11, 9, 2, 0)
 
-/** One model call of the login run, served by the gateway. A plain, successful turn by default. */
+/**
+ * One model call of the login run, served by the gateway. A plain, successful turn by default. The
+ * total is the sum of the four counts, as the proxy records it, so an override of a count moves it.
+ */
 export function llmCall(overrides: Partial<LlmCallMetric> = {}): LlmCallMetric {
-  return {
+  const row: LlmCallMetric = {
     id: 'llm_login_0',
     workspaceId: STORY_WORKSPACE_ID,
     executionId: 'exec_login',
@@ -178,7 +177,7 @@ export function llmCall(overrides: Partial<LlmCallMetric> = {}): LlmCallMetric {
     cacheReadTokens: 41_800,
     cacheWriteTokens: 0,
     completionTokens: 1_150,
-    totalTokens: 46_150,
+    totalTokens: 0,
     finishReason: 'tool_calls',
     upstreamMs: 9_400,
     overheadMs: 180,
@@ -195,6 +194,11 @@ export function llmCall(overrides: Partial<LlmCallMetric> = {}): LlmCallMetric {
     reasoningText: '',
     reportedCostUsd: 0.0214,
     ...overrides,
+  }
+  return {
+    ...row,
+    totalTokens:
+      row.promptTokens + row.cacheReadTokens + row.cacheWriteTokens + row.completionTokens,
   }
 }
 
@@ -269,7 +273,6 @@ export const rateLimitedCall = llmCall({
   promptTokens: 0,
   cacheReadTokens: 0,
   completionTokens: 0,
-  totalTokens: 0,
   upstreamMs: 0,
   overheadMs: 340,
   totalMs: 340,
@@ -313,8 +316,6 @@ export const loginPhases: StepPhaseMetrics[] = [
     costEstimate: 0.09,
   },
 ]
-
-// ---- What the login run's agents were given, and what they searched ------------------------
 
 /** The context each container agent of the login run was given. */
 export const loginContext: AgentContextSnapshot[] = [

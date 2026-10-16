@@ -111,7 +111,9 @@ export const passingReport: TestReport = testReport({
   ],
 })
 
-const ENV_URL = 'https://login-pr-212.preview.acme.dev'
+/** The preview environment of pull request 212, where the login run's checks ran. */
+export const PREVIEW_ENV_ID = 'env_212'
+export const PREVIEW_ENV_URL = 'https://login-pr-212.preview.acme.dev'
 
 /** The run's steps, with `report` on the tester and the CI gate at `ci`. */
 function steps(report: TestReport, ci: 'pass' | 'fail'): PipelineStep[] {
@@ -122,7 +124,9 @@ function steps(report: TestReport, ci: 'pass' | 'fail'): PipelineStep[] {
       agentKind: 'deployer',
       state: 'done',
       progress: 1,
-      deployEnvs: { [authService.id]: { status: 'ready', url: ENV_URL, environmentId: 'env_212' } },
+      deployEnvs: {
+        [authService.id]: { status: 'ready', url: PREVIEW_ENV_URL, environmentId: PREVIEW_ENV_ID },
+      },
     }),
     step({
       agentKind: 'tester-ui',
@@ -132,8 +136,8 @@ function steps(report: TestReport, ci: 'pass' | 'fail'): PipelineStep[] {
       test: testerState({ phase: 'testing', lastReport: report }),
       validation: validationPassed,
       environment: {
-        id: 'env_212',
-        url: ENV_URL,
+        id: PREVIEW_ENV_ID,
+        url: PREVIEW_ENV_URL,
         status: 'ready',
         expiresAt: Date.UTC(2026, 9, 16, 18, 0),
       },

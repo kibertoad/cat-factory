@@ -1,5 +1,6 @@
 import {
   accountSchema,
+  getExecutionToolCallFailuresContract,
   accountInvitationSchema,
   emailConnectionSchema,
   accountSettingsViewSchema,
@@ -122,10 +123,11 @@ import {
   loginPhases,
   loginSearches,
   loginToolCalls,
+  loginToolFailures,
   rateLimitedCall,
   stepMetrics,
 } from './observability.stories.mocks'
-import { failedRun, passedRun, runSpec } from './outcome.stories.mocks'
+import { failedRun, outcomeTask, passedRun, runSpec } from './outcome.stories.mocks'
 import {
   effortReport,
   reproductionReport,
@@ -196,6 +198,11 @@ const cases: [string, v.GenericSchema, unknown[]][] = [
   ['step phase metrics', stepPhaseMetricsSchema, loginPhases],
   ['model call', llmCallMetricSchema, [...loginCalls, rateLimitedCall]],
   ['tool call', agentToolCallSchema, loginToolCalls],
+  [
+    'tool call failures',
+    getExecutionToolCallFailuresContract.responsesByStatusCode[200],
+    [{ executionId: 'exec_login', ...loginToolFailures }],
+  ],
   ['agent context snapshot', agentContextSnapshotSchema, loginContext],
   ['web search query', agentSearchQuerySchema, loginSearches],
   ['kaizen grading', kaizenGradingSchema, [kaizenGrading(), ...gradingHistory]],
@@ -212,6 +219,7 @@ const cases: [string, v.GenericSchema, unknown[]][] = [
   ['reproduction report', reproductionReportSchema, [reproductionReport()]],
   ['run spec', serviceSpecViewSchema, [runSpec]],
   ['outcome run', executionInstanceSchema, [passedRun, failedRun]],
+  ['outcome task', blockSchema, [outcomeTask()]],
   ['binary candidates', binaryCandidateStepStateSchema, [candidateState()]],
   [
     'initiative snapshot',
