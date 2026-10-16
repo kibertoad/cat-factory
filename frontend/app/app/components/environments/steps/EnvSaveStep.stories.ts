@@ -63,7 +63,7 @@ type Story = StoryObj<typeof meta>
 export const Default: Story = {}
 
 /** Save failed: the step shows the backend's message as it came, and Save stays. */
-export const LoadFailed: Story = {
+export const Failed: Story = {
   parameters: {
     api: [apiFailure(registerEnvironmentHandlerContract, { pathPrefix: storyWorkspacePrefix })],
   },

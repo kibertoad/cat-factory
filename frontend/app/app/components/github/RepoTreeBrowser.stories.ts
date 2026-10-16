@@ -67,7 +67,7 @@ export const Loading: Story = {
 export const Empty: Story = { args: { startPath: 'packages/shared' } }
 
 /** The read failed: the error toast, and an empty folder. */
-export const LoadFailed: Story = {
+export const Failed: Story = {
   parameters: {
     api: [
       apiFailure(listGitHubRepoTreeContract, {

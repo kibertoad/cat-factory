@@ -259,7 +259,7 @@ export const Loading: Story = {
 }
 
 /** The read failed: a message and Retry. */
-export const LoadFailed: Story = {
+export const Failed: Story = {
   parameters: {
     api: [
       apiFailure(getServiceSpecContract, {

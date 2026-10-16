@@ -42,7 +42,7 @@ export const Loading: Story = {
 }
 
 /** The list failed: the error toast, and the empty list under it. */
-export const LoadFailed: Story = {
+export const Failed: Story = {
   parameters: {
     api: [apiFailure(listGitHubInstallationsContract, { pathPrefix: storyWorkspacePrefix })],
   },

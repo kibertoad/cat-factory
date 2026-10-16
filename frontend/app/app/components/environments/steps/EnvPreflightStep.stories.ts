@@ -126,7 +126,7 @@ export const Unavailable: Story = {
 }
 
 /** The request failed: the step shows the backend's message as it came. */
-export const LoadFailed: Story = {
+export const Failed: Story = {
   parameters: { api: [apiFailure(runPreflightsContract, { pathPrefix: storyWorkspacePrefix })] },
   play: async ({ canvasElement }) => runChecks(canvasElement, 'env-setup-preflight-error'),
 }
