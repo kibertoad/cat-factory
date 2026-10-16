@@ -1,6 +1,7 @@
 import { nextTick } from 'vue'
 import { useVueFlow } from '@vue-flow/core'
 import { BOARD_FLOW_ID } from '~/composables/useBoardFlow'
+import { LOD_MIN_ZOOM } from '~/composables/useSemanticZoom'
 import {
   EMPTY_FRAME_SIZE,
   EPIC_NODE_SIZE,
@@ -27,7 +28,8 @@ const MIN_FOCUS_ZOOM = 0.6
 
 export function useFramePlacement() {
   const board = useBoardStore()
-  const { viewport, setCenter, screenToFlowCoordinate } = useVueFlow(BOARD_FLOW_ID)
+  const { viewport, setCenter, screenToFlowCoordinate, findNode, onNodesInitialized } =
+    useVueFlow(BOARD_FLOW_ID)
 
   /**
    * Every existing top-level board node's rect in flow-space — both service frames
@@ -87,5 +89,62 @@ export function useFramePlacement() {
     setCenter(cx, cy, { zoom, duration: opts?.duration ?? 400 })
   }
 
-  return { freeFramePosition, focusFrame }
+  /** Whether the canvas has drawn the frame, so there is a measured node to centre on. */
+  function isRendered(id: string): boolean {
+    const node = findNode(id)
+    return !!node && node.dimensions.width > 0
+  }
+
+  /**
+   * Resolves once the canvas has measured the frame's node. A deep link followed on a fresh load
+   * arrives before the board has measured its nodes, and centring on a frame with no size yet puts
+   * the camera on its corner, or nowhere.
+   */
+  async function whenRendered(id: string): Promise<void> {
+    if (isRendered(id)) return
+    await new Promise<void>((resolve) => {
+      const { off } = onNodesInitialized(() => {
+        if (!isRendered(id)) return
+        off()
+        resolve()
+      })
+    })
+  }
+
+  /**
+   * Centre the camera on a task card, zoomed in to the level where the board renders a task's
+   * pipeline steps (`steps`), once the canvas has drawn its frame. A closer zoom is left alone. A
+   * task has no position of its own (it lives in its frame's swimlanes), so its centre is read off
+   * the card the frame drew; with no card to read, the camera centres on the frame instead.
+   */
+  async function focusTaskWhenRendered(taskId: string, frameId: string): Promise<void> {
+    if (!board.getBlock(frameId)) return
+    await whenRendered(frameId)
+    await nextTick()
+    // The card inside the frame's own node, not another surface that names the same task.
+    const selector = `.vue-flow__node[data-id="${CSS.escape(frameId)}"] [data-block-id="${CSS.escape(taskId)}"]`
+    if (!document.querySelector(selector)) {
+      await focusFrame(frameId)
+      return
+    }
+    const zoom = Math.max(viewport.value.zoom, LOD_MIN_ZOOM.steps)
+    await centreOn(selector, zoom, 400)
+    // The card renders larger at the `steps` level it was zoomed to, so it is measured again there.
+    await nextTick()
+    await centreOn(selector, zoom, 200)
+  }
+
+  /** Centre the camera on an element of the board at `zoom`, resolving when the move lands. */
+  async function centreOn(selector: string, zoom: number, duration: number): Promise<void> {
+    const element = document.querySelector(selector)
+    if (!element) return
+    const rect = element.getBoundingClientRect()
+    const centre = screenToFlowCoordinate({
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    })
+    await setCenter(centre.x, centre.y, { zoom, duration })
+  }
+
+  return { freeFramePosition, focusFrame, focusTaskWhenRendered }
 }
