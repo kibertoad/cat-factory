@@ -1,4 +1,9 @@
-import type { DirectoryChangePage, DirectoryUser, DirectoryWorkspace } from '@cat-factory/contracts'
+import type {
+  DirectoryChangePage,
+  DirectoryReach,
+  DirectoryUser,
+  DirectoryWorkspace,
+} from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceApp, ConformanceHarness } from './harness.js'
 
@@ -66,6 +71,35 @@ export function definePublicDirectorySuite(harness: ConformanceHarness): void {
         w1Key: await mint([w1]),
       }
     }
+
+    it("answers a key's reach with no workspace header, whatever it reaches", async () => {
+      const app = harness.makeApp()
+      const { w1, accountKey, w1Key } = await scenario(app)
+
+      // `/me` names one workspace, so it refuses a key reaching several that sends no header.
+      // The directory's own reach read is account-scoped and answers both kinds of key.
+      const me = await app.call<Refusal>('GET', '/api/v1/me', undefined, accountKey)
+      expect(me.status).toBe(422)
+      const wide = await app.call<DirectoryReach>(
+        'GET',
+        '/api/v1/directory/reach',
+        undefined,
+        accountKey,
+      )
+      expect(wide.status).toBe(200)
+      expect(wide.body.workspaceIds).toBeNull()
+      const narrow = await app.call<DirectoryReach>(
+        'GET',
+        '/api/v1/directory/reach',
+        undefined,
+        w1Key,
+      )
+      expect(narrow.body).toEqual({
+        accountId: wide.body.accountId,
+        workspaceIds: [w1],
+        followsMemberships: false,
+      })
+    })
 
     it('pages a snapshot under one watermark, and reads the users of the account', async () => {
       const app = harness.makeApp()
@@ -200,20 +234,29 @@ export function definePublicDirectorySuite(harness: ConformanceHarness): void {
       expect(forged.body.error.details?.reason).toBe('invalid_cursor')
     })
 
-    it('manages directory webhooks with an account-wide admin key only', async () => {
+    it('manages directory webhooks with an account-wide `webhooks` key or above only', async () => {
       const app = harness.makeApp()
       const { w1, adminAuth } = await scenario(app)
-      const mintAdmin = async (workspaceIds: string[] | null) => {
+      const mint = async (scope: 'read' | 'webhooks', workspaceIds: string[] | null) => {
         const created = await app.call<{ secret: string }>(
           'POST',
           `/workspaces/${w1}/public-api-keys`,
-          { label: 'directory-admin', scope: 'admin', workspaceIds },
+          { label: `directory-${scope}`, scope, workspaceIds },
           adminAuth,
         )
         return bearer(created.body.secret)
       }
-      const accountAdmin = await mintAdmin(null)
-      const w1Admin = await mintAdmin([w1])
+      const accountAdmin = await mint('webhooks', null)
+      const w1Admin = await mint('webhooks', [w1])
+      const accountReader = await mint('read', null)
+      const passive = await app.call<Refusal>(
+        'GET',
+        '/api/v1/directory/webhooks',
+        undefined,
+        accountReader,
+      )
+      expect(passive.status).toBe(403)
+      expect(passive.body.error.code).toBe('insufficient_scope')
       const head = (
         await app.call<DirectoryChangePage>(
           'GET',

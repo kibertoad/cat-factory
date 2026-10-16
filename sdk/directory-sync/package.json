@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/directory-sync",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Keep a copy of a cat-factory account's directory (workspaces, users, memberships, linked repositories) in sync: snapshot bootstrap, change-feed catch-up, signed webhook pushes and periodic reconciliation, over a storage adapter you implement.",
   "keywords": [
     "cat-factory",

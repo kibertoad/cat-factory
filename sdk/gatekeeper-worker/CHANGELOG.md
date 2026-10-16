@@ -1,5 +1,50 @@
 # @cat-factory/gatekeeper-worker
 
+## 0.7.16
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/sdk@0.63.0
+  - @cat-factory/gatekeeper-bindings@0.41.0
+
+## 0.7.15
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/sdk@0.62.0
+  - @cat-factory/gatekeeper-bindings@0.40.1
+
+## 0.7.14
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/sdk@0.61.0
+  - @cat-factory/gatekeeper-bindings@0.40.0
+
+## 0.7.13
+
+### Patch Changes
+
+- 6f574e9: API keys gain a `webhooks` scope between `read` and `write`: everything `read` can do, plus
+  registering and removing push endpoints. The directory webhooks (`/api/v1/directory/webhooks`,
+  still for a key reaching every workspace) and the notification webhooks
+  (`/api/v1/notification-webhook[s]`) now need `webhooks` instead of `admin`, so a sync integration
+  can follow changes with a key that cannot author or delete work. Every key that could manage
+  webhooks before still can. OpenAPI 1.86.0.
+  
+  The API token form names each scope by its API name (`read`, `webhooks`, `write`, `decide`,
+  `admin`), so the screen, the docs and the refusal messages agree. "Full access" is now "Admin".
+  
+  The token form always shows the Workspaces picker, in basic and advanced mode. It is disabled for
+  anyone who is not an account admin, with a line saying so, because only an account admin may mint
+  a key that reaches other workspaces.
+- Updated dependencies [6f574e9]
+  - @cat-factory/sdk@0.60.0
+  - @cat-factory/gatekeeper-bindings@0.39.0
+
 ## 0.7.12
 
 ### Patch Changes

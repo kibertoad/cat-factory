@@ -263,6 +263,10 @@ expectMutuallyAssignable<
 expectMutuallyAssignable<sdk.PublicSpend, v.InferOutput<typeof contracts.publicSpendSchema>>()
 expectMutuallyAssignable<sdk.PublicIdentity, v.InferOutput<typeof contracts.publicIdentitySchema>>()
 expectMutuallyAssignable<
+  sdk.PublicDeployment,
+  v.InferOutput<typeof contracts.publicDeploymentSchema>
+>()
+expectMutuallyAssignable<
   sdk.PublicUnanswerableWait,
   v.InferOutput<typeof contracts.publicUnanswerableWaitSchema>
 >()
@@ -630,6 +634,7 @@ expectMutuallyAssignable<
   sdk.DirectoryWebhookList,
   v.InferOutput<typeof contracts.directoryWebhookListSchema>
 >()
+expectMutuallyAssignable<sdk.DirectoryReach, v.InferOutput<typeof contracts.directoryReachSchema>>()
 expectMutuallyAssignable<
   sdk.PutDirectoryWebhook,
   v.InferOutput<typeof contracts.putDirectoryWebhookSchema>
@@ -678,6 +683,7 @@ const ASSERTED_COMPONENTS = [
   'PlatformAlertWebhookDelivery',
   'DirectoryWebhook',
   'DirectoryWebhookList',
+  'DirectoryReach',
   'PutDirectoryWebhook',
   'DirectoryWebhookDelivery',
   'DirectoryWorkspace',
@@ -755,6 +761,7 @@ const ASSERTED_COMPONENTS = [
   'PublicSpendTotals',
   'PublicSpend',
   'PublicIdentity',
+  'PublicDeployment',
   'PublicUnanswerableWait',
   'PublicReviewFinding',
   'PublicRequirementsDecision',
