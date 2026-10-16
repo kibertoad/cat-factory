@@ -25,7 +25,7 @@ const studioFields: WorkspaceMetadataFieldDefinition[] = [
   },
 ]
 
-/** Add `fields` to the `workspaceMetadataFields` slot, over what the app's registry resolved. */
+/** Replace the `workspaceMetadataFields` slot with `fields`, whatever the app's registry resolved. */
 function withMetadataFields(fields: WorkspaceMetadataFieldDefinition[]): Decorator {
   return (story) => {
     const Story = story()

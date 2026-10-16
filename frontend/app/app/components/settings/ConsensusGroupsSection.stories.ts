@@ -13,8 +13,8 @@ import ConsensusGroupsSection from './ConsensusGroupsSection.vue'
 // and the estimate a task must reach to earn the panel. A pipeline step names a set of groups and
 // the engine runs the most demanding one the task clears. The section is advanced-tier authoring,
 // shown in basic mode only once the library holds a group, so an empty library in basic mode
-// renders nothing and has no story. Each story seeds the library, the
-// model catalog and a Claude subscription, as the snapshot carries them.
+// renders nothing and has no story. Each story seeds the library, the model
+// catalog and a Claude subscription, as the snapshot carries them.
 function seeded(groups: ConsensusGroup[], mode: 'basic' | 'advanced' = 'advanced') {
   return withSeed(() => {
     seedModelCatalog([modelOption(), claudeOnlyCatalog[2]!])

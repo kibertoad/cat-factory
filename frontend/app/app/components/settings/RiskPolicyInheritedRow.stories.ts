@@ -6,13 +6,11 @@ import RiskPolicyInheritedRow from './RiskPolicyInheritedRow.vue'
 // A merge policy the board inherits from its account: read only, with the account badge, the two
 // actions a board has over it (clone, hide) and the same preview the task picker shows. The
 // policy is made up: an account policy with auto-merge on and a lower risk ceiling.
-const accountPolicy = accountStrictPolicy
-
 const meta = {
   title: 'Settings/Components/RiskPolicyInheritedRow',
   component: RiskPolicyInheritedRow,
   parameters: { width: 'prose' },
-  args: { policy: accountPolicy, busy: null, onClone: fn(), onHide: fn() },
+  args: { policy: accountStrictPolicy, busy: null, onClone: fn(), onHide: fn() },
 } satisfies Meta<typeof RiskPolicyInheritedRow>
 export default meta
 

@@ -22,8 +22,6 @@ import RiskPolicyPanel from './RiskPolicyPanel.vue'
 // answers that read.
 const pathPrefix = storyWorkspacePrefix
 
-const accountPolicy: RiskPolicyLibraryEntry = accountStrictPolicy
-
 function seeded(presets: RiskPolicyLibraryEntry[]) {
   return withSeed(() => {
     seedWorkspace()
@@ -41,7 +39,7 @@ function hiddenAre(body: RiskPolicySuppression[]) {
 const meta = {
   title: 'Settings/Components/RiskPolicyPanel',
   component: RiskPolicyPanel,
-  decorators: [seeded([accountPolicy, riskPolicy(), manualReviewPolicy])],
+  decorators: [seeded([accountStrictPolicy, riskPolicy(), manualReviewPolicy])],
   parameters: { width: 'prose', api: [hiddenAre([])] },
 } satisfies Meta<typeof RiskPolicyPanel>
 export default meta

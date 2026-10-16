@@ -125,8 +125,8 @@ export const LocalMode: Story = {
 
 /**
  * Local k3s picked with no cluster connected: the hint to register one first, and the form
- * filled in for a local cluster, the deployment's executor image too. The board still runs agents on Local Docker until a cluster is
- * connected.
+ * filled in for a local cluster, the deployment's executor image too. The board still runs agents
+ * on Local Docker until a cluster is connected.
  */
 export const RegisterHint: Story = {
   decorators: [deployment(local, { local: true })],

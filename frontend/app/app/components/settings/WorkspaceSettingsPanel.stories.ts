@@ -23,8 +23,8 @@ import WorkspaceSettingsPanel from './WorkspaceSettingsPanel.vue'
 // `WorkspaceMembersSettings`). The Workspace tab reads the board's settings and pipelines from
 // the snapshot, so each story seeds them and nothing loads. With no access seeded every
 // permission holds, as on a deployment with sign-in off, so the Members tab shows. The Metadata
-// tab shows in every story: Storybook runs the example deployment's module (`acme-security` in
-// `deploy/frontend`), which declares two custom board fields.
+// tab does not show: no first-party module declares a custom board field, and Storybook does not
+// run a deployment's module (`WorkspaceMetadataSettings` has the story that fills the slot).
 
 /** The window opened on the Workspace tab, with the board's settings `overrides` on the defaults. */
 function opened(overrides: Partial<WorkspaceSettings> = {}) {
@@ -52,7 +52,7 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-/** The board's defaults: eight tabs, no running task limit, and review friction off. */
+/** The board's defaults: seven tabs, no running task limit, and review friction off. */
 export const Default: Story = {}
 
 /**
@@ -83,7 +83,7 @@ export const ReviewFrictionEnforce: Story = {
   ],
 }
 
-/** A deployment that also registers reusable operations: the Operations tab, nine tabs in all. */
+/** A deployment that also registers reusable operations: the Operations tab, eight tabs in all. */
 export const AllTabs: Story = {
   decorators: [
     withSeed(() => {
