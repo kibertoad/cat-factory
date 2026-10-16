@@ -73,7 +73,7 @@ export const NoLinks: Story = {
  * The tagged documents could not be read: a toast says so, and the sections show no links,
  * because the tags were never loaded.
  */
-export const LoadFailed: Story = {
+export const Failed: Story = {
   parameters: {
     api: [
       apiResponse(listDocumentsContract, {
