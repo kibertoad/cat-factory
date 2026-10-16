@@ -4,6 +4,7 @@ import {
   type DirectoryFeedReader,
   type DirectoryWebhookRecord,
   type DirectoryWebhookRepository,
+  type UrlSafetyPolicy,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { DirectoryWebhookService } from './DirectoryWebhookService.js'
@@ -91,7 +92,11 @@ function feed(head: number, options: { expired?: boolean } = {}): DirectoryFeedR
   }
 }
 
-function build(head: number, status = 200, options: { expired?: boolean } = {}) {
+function build(
+  head: number,
+  status = 200,
+  options: { expired?: boolean; urlSafetyPolicy?: UrlSafetyPolicy } = {},
+) {
   const repo = new MemoryRepo()
   const sent: { url: string; body: unknown; signature: string | null }[] = []
   const counted: { counter: string; dimensions: unknown }[] = []
@@ -100,6 +105,7 @@ function build(head: number, status = 200, options: { expired?: boolean } = {}) 
     feed: feed(head, options),
     secretCipher: cipher,
     clock,
+    ...(options.urlSafetyPolicy ? { urlSafetyPolicy: options.urlSafetyPolicy } : {}),
     operationalMetrics: {
       increment: (counter, dimensions) => counted.push({ counter, dimensions }),
     },
@@ -126,6 +132,15 @@ describe('DirectoryWebhookService', () => {
     expect(created).toMatchObject({ deliveredSeq: 7, hasSecret: true, enabled: true })
     expect(repo.rows.get('acc/mirror')?.secretSealed).toBe('sealed:a-signing-secret-long-enough')
     expect(JSON.stringify(created)).not.toContain('a-signing-secret')
+  })
+
+  it('takes a plain http endpoint only where the deployment allows its host', async () => {
+    const url = 'http://localhost:8788/webhooks/cat-factory/default'
+    await expect(build(0).service.put('acc', 'local', { url })).rejects.toThrow()
+    const allowing = build(0, 200, {
+      urlSafetyPolicy: { schemes: ['https', 'http'], allowHosts: ['localhost'] },
+    })
+    expect(await allowing.service.put('acc', 'local', { url })).toMatchObject({ url })
   })
 
   it('refuses a new endpoint with no url, and an eleventh one', async () => {

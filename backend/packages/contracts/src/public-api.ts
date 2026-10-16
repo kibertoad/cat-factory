@@ -999,7 +999,12 @@ export const publicIdentitySchema = v.object({
   /** Every workspace the key may act on, or `null` for all of the account's workspaces. */
   workspaceIds: publicApiKeyWorkspaceIdsSchema,
   /**
-   * What the key may do. The ladder is inclusive (`read` ⊂ `write` ⊂ `decide` ⊂ `admin`), so an
+   * Whether `workspaceIds` is the bound person's memberships as of this call (see
+   * `followsMemberships` on a key), rather than a fixed grant.
+   */
+  followsMemberships: v.boolean(),
+  /**
+   * What the key may do. The ladder is inclusive (`read` ⊂ `webhooks` ⊂ `write` ⊂ `decide` ⊂ `admin`), so an
    * integration comparing its own scope against what it needs should test the RUNG, not equality.
    */
   scope: publicApiScopeSchema,
@@ -1016,3 +1021,18 @@ export const publicIdentitySchema = v.object({
   createdAt: v.number(),
 })
 export type PublicIdentity = v.InferOutput<typeof publicIdentitySchema>
+
+/**
+ * Facts about the deployment an integration needs to send a PERSON somewhere in it, answered to
+ * any key with no workspace named.
+ *
+ * `appUrl` is where the deployment serves its web app: `APP_BASE_URL` when set, otherwise the
+ * origin this API was reached on. An integration that cannot do something itself (say, add a
+ * service for a repository) links a person to the app's deep links from here rather than asking
+ * its operator to configure a second URL. The link formats are published at
+ * https://catfactory.ai/extend/public-api.html#sending-a-person-to-add-a-repository
+ */
+export const publicDeploymentSchema = v.object({
+  appUrl: v.string(),
+})
+export type PublicDeployment = v.InferOutput<typeof publicDeploymentSchema>

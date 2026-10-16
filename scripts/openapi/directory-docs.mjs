@@ -4,6 +4,12 @@
 
 /** Operation docs for `/api/v1/directory/*`, keyed by operationId like `OPERATION_DOCS`. */
 export const DIRECTORY_OPERATION_DOCS = {
+  getDirectoryReach: {
+    tag: 'Directory',
+    summary: "Read the key's directory reach",
+    description:
+      'The calling key’s account and the workspaces it reaches, `null` for every workspace in the account (later ones included). Account-scoped like the rest of the directory: no `x-cat-factory-workspace` header is read, so a key reaching several workspaces gets an answer where `GET /api/v1/me` asks it to name one. A mirror reads this to filter what a directory push may write, and to tell an account-wide key from one limited to some workspaces.',
+  },
   listDirectoryChanges: {
     tag: 'Directory',
     summary: 'List directory changes',
