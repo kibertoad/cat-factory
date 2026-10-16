@@ -200,9 +200,17 @@ must set it in every story of its file.
 
 ### Plays
 
+A play ENDS by waiting for the state its story is named after: a `findBy*` for text, a role or a
+test id that only that state draws. A play that only clicks passes when the click lands, even if
+the state never renders.
+
 A `play` that opens a menu, popover or modal queries `screen`, not `within(canvasElement)`: Nuxt
 UI teleports overlays to `body`. A play that types into a debounced field needs no sleep:
 `findBy*` retries for up to a second.
+
+A story that changes the runtime config (`useRuntimeConfig().public`) puts the old value back when
+it unmounts. The preset shares that object between stories, so a value one story sets stays for
+every later story in the session.
 
 ## Checks
 
