@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { listGitHubBranchesContract } from '@cat-factory/contracts'
-import { userEvent, within } from 'storybook/test'
+
 import { accountMembers, orgAccount } from '~/stories/accounts.stories.mocks'
 import { apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
@@ -13,6 +13,7 @@ import { seedModelCatalog, seedSnapshot, seedUiMode, seedVcs, withSeed } from '~
 import { useAccountsStore } from '~/stores/accounts'
 import type { Block } from '~/types/domain'
 import TaskRunSettings from './TaskRunSettings.vue'
+import { opensTo } from '~/stories/inspectorSection'
 
 // How a task runs: its default pipeline, merge policy and model preset, whether it is technical,
 // the connected services it also changes, existing branches to hand the run, the tracker
@@ -86,14 +87,6 @@ const meta = {
 export default meta
 
 type Story = StoryObj<typeof meta>
-
-/** Open the section, then wait for what the story shows. */
-function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
-  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: /Run settings/ }))
-    await shown(within(canvasElement))
-  }
-}
 
 /**
  * Advanced tier: the build pipeline, the manual review policy, the Claude Opus preset, API

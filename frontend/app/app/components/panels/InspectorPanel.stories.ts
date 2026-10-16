@@ -27,7 +27,7 @@ const selecting = (id: string) =>
   })
 
 const meta = {
-  title: 'Inspector/Components/InspectorPanel',
+  title: 'Inspector/Pages/InspectorPanel',
   component: InspectorPanel,
   parameters: { layout: 'fullscreen', api: inspectorApi() },
   render: () => ({

@@ -14,6 +14,7 @@ import {
 import { seedBoard, seedWorkspace, withSeed } from '~/stories/withStores'
 import { useTasksStore } from '~/stores/tasks'
 import TaskContextIssues from './TaskContextIssues.vue'
+import { openSection, opensTo } from '~/stories/inspectorSection'
 
 // The tracker issues attached to a task or an initiative as agent context, each a link to the
 // issue with its status as the tracker names it. Attach opens the same inline picker as the
@@ -63,18 +64,6 @@ function withTrackers(sources: TaskSourceState[]) {
     tasks.available = true
     tasks.sources = sources
   })
-}
-
-async function openSection(canvasElement: HTMLElement) {
-  await userEvent.click(within(canvasElement).getByTestId('inspector-section-toggle'))
-}
-
-/** Open the section, then wait for what the story shows. */
-function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
-  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await openSection(canvasElement)
-    await shown(within(canvasElement))
-  }
 }
 
 /**

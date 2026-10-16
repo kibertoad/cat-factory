@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { expect, userEvent, within } from 'storybook/test'
+import { expect, within } from 'storybook/test'
 import { block } from '~/stories/block.stories.mocks'
 import { gatewayService } from '~/stories/board.stories.mocks'
 import { withBoard } from '~/stories/withStores'
 import ServiceConnections from './ServiceConnections.vue'
+import { openSection } from '~/stories/inspectorSection'
 
 // Which other services this one uses, and, read-only below, which services use it. The rows come
 // off the block; the provider picker and the "Used by" list come from the other service frames
@@ -49,16 +50,9 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-// `InspectorSection` opens CLOSED, which is right in a panel of a dozen sections and useless in a
-// story: every one would be a titled bar. Opening it is a play rather than a prop because the
-// section owns its own `open` model and a caller cannot set it.
-async function open(canvasElement: HTMLElement) {
-  await userEvent.click(within(canvasElement).getByTestId('inspector-section-toggle'))
-}
-
 /** Open the section, then wait for the empty state. */
 async function opensEmpty({ canvasElement }: { canvasElement: HTMLElement }) {
-  await open(canvasElement)
+  await openSection(canvasElement)
   await within(canvasElement).findByText(
     'No connections. Add one to link this service to another service it uses.',
   )
@@ -76,7 +70,7 @@ export const Default: Story = {
     }),
   },
   play: async ({ canvasElement }) => {
-    await open(canvasElement)
+    await openSection(canvasElement)
     await within(canvasElement).findByTestId('service-connections-used-by')
   },
 }
@@ -98,7 +92,7 @@ export const AllTaken: Story = {
     }),
   },
   play: async ({ canvasElement }) => {
-    await open(canvasElement)
+    await openSection(canvasElement)
     const canvas = within(canvasElement)
     await canvas.findByTestId('service-connections-used-by')
     await expect(canvas.getByTestId('service-connection-add')).toBeDisabled()

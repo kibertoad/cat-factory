@@ -1,12 +1,13 @@
 import { resolvedFragmentsContract } from '@cat-factory/contracts'
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+
 import { authService, boardBlocks } from '~/stories/board.stories.mocks'
 import { fragmentCatalog } from '~/stories/fragments.stories.mocks'
 import { apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { seedBoard, seedWorkspace, withSeed } from '~/stories/withStores'
 import ServiceFragments from './ServiceFragments.vue'
+import { opensTo } from '~/stories/inspectorSection'
 
 // The best-practice fragments chosen for a whole service, as removable badges under a picker. A
 // new task in the service starts with this selection. The section starts closed in the inspector,
@@ -39,13 +40,6 @@ type Story = StoryObj<typeof meta>
  * `InspectorSection` opens closed, so each play opens it first and then waits for what the story
  * shows.
  */
-function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
-  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
-    await shown(within(canvasElement))
-  }
-}
-
 /** Two fragments chosen. */
 export const Default: Story = {
   args: {

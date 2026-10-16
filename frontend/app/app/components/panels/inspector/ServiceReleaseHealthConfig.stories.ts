@@ -4,13 +4,14 @@ import {
   getObservabilityConnectionContract,
   listReleaseHealthConfigsContract,
 } from '@cat-factory/contracts'
-import { userEvent, within } from 'storybook/test'
+
 import { apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { authService, boardBlocks } from '~/stories/board.stories.mocks'
 import { seedBoard, seedUiMode, seedWorkspace, withSeed } from '~/stories/withStores'
 import type { UiMode } from '~/utils/uiMode'
 import ServiceReleaseHealthConfig from './ServiceReleaseHealthConfig.vue'
+import { opensTo } from '~/stories/inspectorSection'
 
 // The monitors and SLOs that the post-release-health gate watches after a service ships. The
 // workspace has one observability connection; until it is connected, the section offers only a
@@ -53,13 +54,6 @@ type Story = StoryObj<typeof meta>
  * `InspectorSection` opens closed, so each play opens it first and then waits for what the story
  * shows.
  */
-function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
-  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
-    await shown(within(canvasElement))
-  }
-}
-
 function withService(mode: UiMode) {
   return withSeed(() => {
     seedWorkspace()

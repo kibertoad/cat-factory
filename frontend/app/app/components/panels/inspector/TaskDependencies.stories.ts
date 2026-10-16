@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+import { within } from 'storybook/test'
 import { boardBlocks, boardWith, logoutTask, rateLimitTask } from '~/stories/board.stories.mocks'
 import { withBoard } from '~/stories/withStores'
 import TaskDependencies from './TaskDependencies.vue'
+import { opensTo } from '~/stories/inspectorSection'
 
 // The tasks this task waits on. A merged dependency is neutral, an unmerged one is in the warning
 // colour, and a dependency in another container is prefixed with that container's name. While any
@@ -22,13 +23,6 @@ type Story = StoryObj<typeof meta>
  * `InspectorSection` opens closed, so each play opens it first and then waits for what the story
  * shows.
  */
-function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
-  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
-    await shown(within(canvasElement))
-  }
-}
-
 /** Two dependencies in the Sessions module, one merged and one not: blocked. */
 export const Default: Story = {
   args: { block: logoutTask },

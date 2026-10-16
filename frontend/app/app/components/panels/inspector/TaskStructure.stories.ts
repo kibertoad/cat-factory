@@ -1,12 +1,13 @@
 import { resolvedFragmentsContract } from '@cat-factory/contracts'
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+
 import { boardBlocks, loginTask, logoutTask } from '~/stories/board.stories.mocks'
 import { fragmentCatalog } from '~/stories/fragments.stories.mocks'
 import { apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { seedBoard, seedWorkspace, withSeed } from '~/stories/withStores'
 import TaskStructure from './TaskStructure.vue'
+import { opensTo } from '~/stories/inspectorSection'
 
 // A task's module and its own best-practice fragments. The module picker offers the modules of the
 // task's service, plus the task's declared module when no block exists for it yet. The fragment
@@ -40,13 +41,6 @@ type Story = StoryObj<typeof meta>
  * `InspectorSection` opens closed, so each play opens it first and then waits for what the story
  * shows.
  */
-function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
-  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
-    await shown(within(canvasElement))
-  }
-}
-
 /** In the Sessions module, with one fragment of its own. */
 export const Default: Story = {
   args: { block: { ...loginTask, moduleName: 'Sessions', fragmentIds: ['node.performance'] } },

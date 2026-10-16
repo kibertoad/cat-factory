@@ -19,6 +19,7 @@ import {
 } from '~/stories/integrations.stories.mocks'
 import { seedBoard, seedDocumentSources, seedWorkspace, withSeed } from '~/stories/withStores'
 import TaskContextDocs from './TaskContextDocs.vue'
+import { openSection, opensTo } from '~/stories/inspectorSection'
 
 // The documents attached to a task or an initiative as agent context, each a link to its source
 // page with its sync state. Attach opens the same inline picker as the add-task form; a pick is
@@ -54,18 +55,6 @@ function withSources(sources: DocumentSourceDescriptor[], connections: DocumentC
     seedBoard(boardWithInitiative)
     seedDocumentSources(sources, connections)
   })
-}
-
-async function openSection(canvasElement: HTMLElement) {
-  await userEvent.click(within(canvasElement).getByTestId('inspector-section-toggle'))
-}
-
-/** Open the section, then wait for what the story shows. */
-function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
-  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await openSection(canvasElement)
-    await shown(within(canvasElement))
-  }
 }
 
 /** Two documents, each with its source icon and when it was last synced. */

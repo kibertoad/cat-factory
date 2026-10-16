@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { AgentConfigDescriptor, Pipeline } from '@cat-factory/contracts'
-import { userEvent, within } from 'storybook/test'
+
 import { boardWith, loginTask } from '~/stories/board.stories.mocks'
 import { buildPipeline, execution, snapshot } from '~/stories/snapshot.stories.mocks'
 import { withSnapshot } from '~/stories/withStores'
 import TaskAgentConfig from './TaskAgentConfig.vue'
+import { opensTo } from '~/stories/inspectorSection'
 
 // The task options that the agents in the task's pipeline contribute, such as the coder's
 // implementation-fork decision. Each option can change until its agent's step starts, then it
@@ -25,13 +26,6 @@ type Story = StoryObj<typeof meta>
  * `InspectorSection` opens closed, so each play opens it first and then waits for what the story
  * shows.
  */
-function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
-  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
-    await shown(within(canvasElement))
-  }
-}
-
 const forkDecision: AgentConfigDescriptor = {
   id: 'coder.forkDecision',
   agentKind: 'coder',

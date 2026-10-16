@@ -1,10 +1,11 @@
 import type { CustomTaskType } from '@cat-factory/contracts'
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+
 import { boardBlocks, loginTask } from '~/stories/board.stories.mocks'
 import { seedBoard, withSeed } from '~/stories/withStores'
 import { useTaskTypesStore } from '~/stores/taskTypes'
 import TaskTypeFields from './TaskTypeFields.vue'
+import { opensTo } from '~/stories/inspectorSection'
 
 // The answers to a custom task type's own fields, editable after the task exists, through the same
 // field renderer the create form uses. Save and Revert appear once an answer changes. A built-in
@@ -52,13 +53,6 @@ type Story = StoryObj<typeof meta>
  * `InspectorSection` opens closed, so each play opens it first and then waits for what the story
  * shows.
  */
-function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
-  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
-    await shown(within(canvasElement))
-  }
-}
-
 /** Both fields answered. */
 export const Default: Story = {
   args: {

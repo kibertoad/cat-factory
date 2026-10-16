@@ -3,24 +3,13 @@ import { userEvent, within } from 'storybook/test'
 import { authService, boardBlocks } from '~/stories/board.stories.mocks'
 import { seedBoard, seedUiMode, withSeed } from '~/stories/withStores'
 import ServiceTestingContext from './ServiceTestingContext.vue'
+import { openSection, opensTo } from '~/stories/inspectorSection'
 
 // Free prose about how a service is tested, which every tester prompt for the service receives
 // as written. A banner says it must not hold a secret. "Discard changes" appears and Save enables
 // once the text changes. In the basic tier the section shows only when the service already has text; an
 // empty one in the basic tier renders nothing, so there is no story for it. The section starts
 // closed, so each story opens it.
-const open = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-  await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
-}
-
-/** Open the section, then wait for what the story shows. */
-function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
-  return async (context: { canvasElement: HTMLElement }) => {
-    await open(context)
-    await shown(within(context.canvasElement))
-  }
-}
-
 const briefed = {
   ...authService,
   testingContext:
@@ -58,7 +47,7 @@ export const Empty: Story = {
 export const Edited: Story = {
   args: { block: briefed },
   play: async (context) => {
-    await open(context)
+    await openSection(context.canvasElement)
     await userEvent.type(
       within(context.canvasElement).getByTestId('testing-context-input'),
       ' Use the EU region.',
