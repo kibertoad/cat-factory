@@ -51,7 +51,11 @@ a `.vue` file are fine, because Vite compiles those with Nuxt's transform.
 
 **`preview-head.html` stubs `window.__NUXT_COLOR_MODE__`.** The colour-mode module injects that
 global through Nuxt's HTML template, and Storybook's `iframe.html` is not that template. Without it
-the plugin reads `preference` off undefined and nothing renders.
+the plugin reads `preference` off undefined and nothing renders. The plugin reads the global once
+and seeds a story's `useColorMode()` from it when the story's Nuxt app starts. So `preview.ts`
+changes the global's `preference` and `value` with each toolbar change, and its decorator sets the
+running story's `useColorMode().preference`. If only the class changed, a dark story would report
+`light`.
 
 **`@nuxt/fonts` kills the process on the first `/_fonts/*` request.** Its Storybook branch calls
 its own h3 handler with a bare `{ path }`, which throws out of a middleware nothing catches, and
@@ -187,9 +191,10 @@ A request no story answered is logged as an msw warning. `mockServiceWorker.js` 
 
 ### State between stories
 
-`beforeEach` in `preview.ts` resets the module registry, clears every cookie (the app keeps nine
-Pinia stores in cookies, so the advanced tier leaked into every later story) and replaces the msw
-handlers. `withConfirmDialog` mounts the app's one `ConfirmDialog` beside the story and cancels a
+`beforeEach` in `preview.ts` resets the module registry and clears every cookie (the app keeps
+nine Pinia stores in cookies, so the advanced tier leaked into every later story). The msw handlers
+are replaced in the first preview loader, because Storybook runs the loaders before `beforeEach`:
+a story loader that fetches gets that story's answers. `withConfirmDialog` mounts the app's one `ConfirmDialog` beside the story and cancels a
 request an earlier story left open. Local storage is NOT cleared: a story that writes a key there
 must set it in every story of its file.
 

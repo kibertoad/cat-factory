@@ -23,8 +23,10 @@
     window.__NUXT_COLOR_MODE__ = {
       preference: mode,
       value: mode,
+      // `preview.ts` changes `preference` and `value` when the toolbar changes the mode, so this
+      // reads the field instead of the mode at page load.
       getColorScheme: function () {
-        return mode
+        return window.__NUXT_COLOR_MODE__.value
       },
       addColorScheme: function (c) {
         document.documentElement.classList.add(c)
