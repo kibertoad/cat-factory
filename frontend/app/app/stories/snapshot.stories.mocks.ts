@@ -5,7 +5,7 @@
 // to be kept consistent by hand. Only `workspace`, `blocks`, `pipelines` and `executions` are
 // required; a story adds what its surface reads.
 import type { ExecutionInstance, Pipeline, WorkspaceSnapshot } from '@cat-factory/contracts'
-import { STORY_WORKSPACE_ID } from './api'
+import { STORY_WORKSPACE_ID } from './workspace'
 import { boardBlocks } from './board.stories.mocks'
 import { approval, step } from './pipelineStep.stories.mocks'
 

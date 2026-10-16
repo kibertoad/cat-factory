@@ -5,7 +5,8 @@ import {
   type FollowUpsStepState,
 } from '@cat-factory/contracts'
 import { screen, userEvent } from 'storybook/test'
-import { apiRefusal, storyWorkspacePrefix } from '~/stories/api'
+import { apiRefusal } from '~/stories/api'
+import { storyWorkspacePrefix } from '~/stories/workspace'
 import { step } from '~/stories/pipelineStep.stories.mocks'
 import { execution, snapshot } from '~/stories/snapshot.stories.mocks'
 import { seedResultView, seedSnapshot, seedViewer, withSeed } from '~/stories/withStores'
