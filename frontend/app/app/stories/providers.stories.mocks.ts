@@ -191,7 +191,8 @@ export const claudeOnlyCatalog: ModelOption[] = [
     description: "Z.ai's newest agentic-coding model.",
     available: false,
     model: '@cf/zai-org/glm-5.3',
-    contextTokens: 1_310_720,
+    // The Workers AI route's window. 1,310,720 is the OpenRouter route's.
+    contextTokens: 1_048_576,
   }),
   modelOption({
     id: 'claude-opus',

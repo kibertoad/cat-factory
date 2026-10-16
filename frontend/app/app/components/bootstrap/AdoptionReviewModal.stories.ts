@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent, waitFor } from 'storybook/test'
 import { adoptionPlan, awaitingReviewJob, surveyReads } from '~/stories/bootstrap.stories.mocks'
 import AdoptionReviewModal from './AdoptionReviewModal.vue'
 
@@ -26,6 +26,8 @@ export const Default: Story = {}
 export const AllAccepted: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Accept all suggestions' }))
+    const approve = await screen.findByRole('button', { name: 'Approve and build' })
+    await waitFor(() => expect(approve).toBeEnabled())
   },
 }
 
@@ -38,6 +40,7 @@ export const SurveyOpen: Story = {
     await userEvent.click(
       await screen.findByRole('button', { name: 'Show every read the survey made' }),
     )
+    await screen.findAllByText('refused')
   },
 }
 

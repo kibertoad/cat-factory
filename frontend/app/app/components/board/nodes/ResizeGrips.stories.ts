@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+import { expect, userEvent, waitFor, within } from 'storybook/test'
 import { block } from '~/stories/block.stories.mocks'
 import ResizeGrips from './ResizeGrips.vue'
 
@@ -20,6 +20,14 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
+// Hover a grip, then wait for its mark to take the lit tone class. The lit state is only a class
+// on the grip's child mark (`markClass` in the component), so the play reads that class.
+async function hoverUntilLit(canvasElement: HTMLElement, edge: string, litClass: string) {
+  const grip = within(canvasElement).getByTestId(`resize-${edge}`)
+  await userEvent.hover(grip)
+  await waitFor(() => expect(grip.firstElementChild).toHaveClass(litClass))
+}
+
 export const Default: Story = {
   args: { block: block({ level: 'frame', type: 'service' }), tone: 'frame' },
 }
@@ -32,15 +40,11 @@ export const Module: Story = {
 /** The pointer on the right edge of a frame: that bar lights up. */
 export const HoverEdge: Story = {
   args: { block: block({ level: 'frame', type: 'service' }), tone: 'frame' },
-  play: async ({ canvasElement }) => {
-    await userEvent.hover(within(canvasElement).getByTestId('resize-e'))
-  },
+  play: ({ canvasElement }) => hoverUntilLit(canvasElement, 'e', 'bg-app-info-400'),
 }
 
 /** The pointer on a module's top-left corner: the corner mark lights up. */
 export const HoverCorner: Story = {
   args: { block: block({ level: 'module', type: 'service' }), tone: 'module' },
-  play: async ({ canvasElement }) => {
-    await userEvent.hover(within(canvasElement).getByTestId('resize-nw'))
-  },
+  play: ({ canvasElement }) => hoverUntilLit(canvasElement, 'nw', 'border-app-secondary-300'),
 }

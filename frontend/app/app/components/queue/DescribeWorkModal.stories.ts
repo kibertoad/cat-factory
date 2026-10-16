@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent, waitFor } from 'storybook/test'
 import { authService } from '~/stories/board.stories.mocks'
 import { taskFormSnapshot } from '~/stories/taskForm.stories.mocks'
 import { seedSnapshot, seedUiMode, seedViewer, withSeed } from '~/stories/withStores'
@@ -31,8 +31,19 @@ const text =
   'Lock the account after five failed sign-ins. After five wrong passwords in ten minutes, ' +
   'lock the account for fifteen minutes and email the owner.'
 
+/** Type the text, wait for the title it is saved as, and return the Add button. */
 async function describe() {
   await userEvent.type(await screen.findByTestId('describe-work-text'), text)
+  await screen.findByTestId('describe-work-title')
+  return screen.getByTestId('describe-work-add')
+}
+
+/** Type the text, then wait until Add is enabled (`true`) or stays disabled (`false`). */
+function describeThenAdd(enabled: boolean) {
+  return async () => {
+    const add = await describe()
+    await waitFor(() => (enabled ? expect(add).toBeEnabled() : expect(add).toBeDisabled()))
+  }
 }
 
 const meta = {
@@ -51,7 +62,7 @@ export const Default: Story = {
 /** Text typed: the title it is saved as, and both Add buttons on. */
 export const Filled: Story = {
   decorators: [opened()],
-  play: describe,
+  play: describeThenAdd(true),
 }
 
 /** The advanced tier, with the disclosure open: the pipeline, the merge policy and the preset. */
@@ -59,6 +70,7 @@ export const OverridesOpen: Story = {
   decorators: [opened({ mode: 'advanced' })],
   play: async () => {
     await userEvent.click(await screen.findByTestId('describe-work-overrides'))
+    await screen.findByText('Pipeline', { selector: 'label' })
   },
 }
 
@@ -68,11 +80,11 @@ export const OverridesOpen: Story = {
  */
 export const NoServiceChosen: Story = {
   decorators: [opened({ serviceId: null })],
-  play: describe,
+  play: describeThenAdd(false),
 }
 
 /** A board viewer can type, but cannot add. */
 export const ReadOnly: Story = {
   decorators: [opened({ viewer: true })],
-  play: describe,
+  play: describeThenAdd(false),
 }

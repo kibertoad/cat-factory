@@ -1,7 +1,7 @@
 // The answers to the integration probes the app shell starts: the sidebar on every board open, and
 // the command bar each time it opens. Each probe decides whether a destination or a command shows,
 // so a story that leaves one unanswered both warns and renders less than the app would. The board
-// connects GitHub, Slack, Confluence and Jira, keeps no fragments of its own, and has both
+// connects GitHub, Slack, Confluence, Figma and Jira, keeps no fragments of its own, and has both
 // infrastructure providers set up. Pass `false` to turn an integration off: its probe then answers
 // 503, as a deployment that does not offer it does.
 import {

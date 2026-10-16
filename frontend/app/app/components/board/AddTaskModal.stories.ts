@@ -53,9 +53,11 @@ function opened({
   })
 }
 
-function pick(type: string) {
+/** Click the kind `type`, then wait for `shown`, a field label only that kind draws. */
+function pick(type: string, shown?: string | RegExp) {
   return async () => {
     await userEvent.click(await screen.findByTestId(`task-type-${type}`))
+    if (shown) await screen.findByText(shown)
   }
 }
 
@@ -81,7 +83,7 @@ export const Advanced: Story = {
 /** A bug: the severity and the steps to reproduce. */
 export const Bug: Story = {
   decorators: [opened()],
-  play: pick('bug'),
+  play: pick('bug', 'Steps to reproduce'),
 }
 
 /**
@@ -90,13 +92,13 @@ export const Bug: Story = {
  */
 export const BugFishing: Story = {
   decorators: [opened({ mode: 'advanced' })],
-  play: pick('bug-fishing'),
+  play: pick('bug-fishing', 'Maximum passes'),
 }
 
 /** A spike: the timebox, the research question, the success criteria, the options and the path. */
 export const Spike: Story = {
   decorators: [opened()],
-  play: pick('spike'),
+  play: pick('spike', 'Research question'),
 }
 
 /** A document, with PRD picked: the audience, the path, the outline and the PRD's own fields. */
@@ -105,19 +107,20 @@ export const Document: Story = {
   play: async () => {
     await pick('document')()
     await userEvent.click(await screen.findByRole('button', { name: 'prd' }))
+    await screen.findByText('Target users')
   },
 }
 
 /** A review: the pull request in place of a title, the focus, and the review playbooks. */
 export const Review: Story = {
   decorators: [opened()],
-  play: pick('review'),
+  play: pick('review', 'Review focus'),
 }
 
 /** Recurring: the form hands over to the schedule, so only a line and Continue are left. */
 export const Recurring: Story = {
   decorators: [opened()],
-  play: pick('recurring'),
+  play: pick('recurring', /A recurring task runs a pipeline on a cadence/),
 }
 
 const handbook = block({
@@ -190,5 +193,8 @@ const introduceApi: CustomTaskTypeEntry = {
  */
 export const CustomTaskType: Story = {
   decorators: [opened({ board: taskFormSnapshot({ customTaskTypes: [introduceApi] }) })],
-  play: pick(introduceApi.taskType),
+  play: async () => {
+    await pick(introduceApi.taskType)()
+    await screen.findByTestId('custom-task-fields')
+  },
 }

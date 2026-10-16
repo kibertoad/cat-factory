@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/vue3'
 import type { SkillSummary } from '@cat-factory/contracts'
 import { MAX_REVIEW_SKILLS } from '@cat-factory/contracts'
 import { ref } from 'vue'
-import { userEvent, within } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import { skillCatalog as catalog } from '~/stories/skills.stories.mocks'
 import { withSeed } from '~/stories/withStores'
 import { useSkillsStore } from '~/stores/skills'
@@ -31,7 +31,7 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-const openPicker: Story['play'] = async ({ canvasElement }) => {
+async function openPicker({ canvasElement }: { canvasElement: HTMLElement }) {
   await userEvent.click(within(canvasElement).getByTestId('review-skill-add'))
 }
 
@@ -49,14 +49,23 @@ export const Default: Story = {}
 export const Empty: Story = { args: { modelValue: [] } }
 
 /** The picker: the four review skills, the two queued ones ticked. The build skill is left out. */
-export const PickerOpen: Story = { render: withPickerRoom, play: openPicker }
+export const PickerOpen: Story = {
+  render: withPickerRoom,
+  play: async (context) => {
+    await openPicker(context)
+    await screen.findByTestId('review-skill-option-skill_security')
+  },
+}
 
 /** A catalog with no review skills: the picker says how to offer one. */
 export const NoReviewSkills: Story = {
   args: { modelValue: [] },
   decorators: [withCatalog(catalog.filter((s) => s.group !== 'review'))],
   render: withPickerRoom,
-  play: openPicker,
+  play: async (context) => {
+    await openPicker(context)
+    await screen.findByText(/No review skills in your catalog/)
+  },
 }
 
 /**
@@ -82,7 +91,10 @@ export const AtCap: Story = {
     ]),
   ],
   render: withPickerRoom,
-  play: openPicker,
+  play: async (context) => {
+    await openPicker(context)
+    await screen.findByText(`A review carries at most ${MAX_REVIEW_SKILLS} skills.`)
+  },
 }
 
 /**

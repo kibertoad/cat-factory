@@ -16,11 +16,14 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-/** Three tasks waiting on review, worst first. A row with no title shows Untitled task. */
+/**
+ * Three tasks waiting on review, worst first. A row with no title shows Untitled task. The ids are
+ * not on the shared board, so no row contradicts a shared fixture.
+ */
 const debt: ReviewDebtRow[] = [
   { blockId: 'task_rate_limit', title: 'Rate-limit login attempts', waitingMinutes: 1460 },
-  { blockId: 'task_refresh', title: 'Token refresh', waitingMinutes: 312 },
-  { blockId: 'task_audit', title: null, waitingMinutes: 45 },
+  { blockId: 'task_cache', title: 'Cache session lookups', waitingMinutes: 312 },
+  { blockId: 'task_untitled', title: null, waitingMinutes: 45 },
 ]
 
 function withFriction(ctx: Partial<ReviewFrictionModalContext>) {

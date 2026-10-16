@@ -41,7 +41,7 @@ import AddServiceFromRepoModal from './AddServiceFromRepoModal.vue'
 //
 // MonorepoFrontendMark leaves the frontend select closed: its none item has the value '', and
 // Reka's SelectItem throws for an empty value when the menu opens, so an open select shows
-// Storybook's error display.
+// Storybook's error display (#2393). No story opens that select until #2393 is fixed.
 const pathPrefix = storyWorkspacePrefix
 
 /** A repository the App can see that is not on any board yet, for the whole-repo add. */
@@ -155,6 +155,7 @@ export const Default: Story = {
     await userEvent.click(
       await screen.findByPlaceholderText('Search repositories by owner or name…'),
     )
+    await screen.findByText(/Repositories the GitHub App can access/)
   },
 }
 
@@ -171,7 +172,10 @@ export const SearchResults: Story = {
 
 /** A whole repository picked: its role, the monorepo switch off, and Add service ready. */
 export const RepoSelected: Story = {
-  play: () => pick(notificationsRepo),
+  play: async () => {
+    await pick(notificationsRepo)
+    await screen.findByRole('switch', { name: /This is a monorepo/ })
+  },
 }
 
 const platformRepo = availableRepos.find((r) => r.githubId === PLATFORM_REPO_ID)!
@@ -184,6 +188,7 @@ export const Monorepo: Story = {
   play: async () => {
     await pick(platformRepo)
     await selectPackages(1)
+    await screen.findByRole('button', { name: 'Add 1 service' })
   },
 }
 
@@ -192,6 +197,7 @@ export const MonorepoFrontendMark: Story = {
   play: async () => {
     await pick(platformRepo)
     await selectPackages(2)
+    await screen.findByTestId('add-service-frontend-select')
   },
 }
 

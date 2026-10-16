@@ -28,5 +28,6 @@ export const Open: Story = {
   args: { detail },
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Show detail' }))
+    await within(canvasElement).findByText(/killed: out of memory/)
   },
 }

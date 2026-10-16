@@ -123,6 +123,7 @@ export const EditingPolicy: Story = {
   ...tracker(executing),
   play: async () => {
     await userEvent.click(await screen.findByTestId('initiative-policy-edit'))
+    await screen.findByTestId('initiative-policy-max-concurrent')
   },
 }
 
@@ -134,5 +135,6 @@ export const PromotingFollowUp: Story = {
   ...tracker(executing),
   play: async () => {
     await userEvent.click(await screen.findByTestId('initiative-followup-promote'))
+    await screen.findByTestId('initiative-promote-title')
   },
 }

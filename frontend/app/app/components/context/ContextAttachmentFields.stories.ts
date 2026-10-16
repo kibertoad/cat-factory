@@ -152,5 +152,6 @@ export const DocumentPickerOpen: Story = {
   play: async () => {
     const [attachDocument] = await screen.findAllByRole('button', { name: 'Attach' })
     await userEvent.click(attachDocument!)
+    await screen.findByText('Token store')
   },
 }

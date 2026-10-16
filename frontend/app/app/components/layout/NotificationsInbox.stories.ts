@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { Notification } from '@cat-factory/contracts'
 import { listMergeClassRollupsContract } from '@cat-factory/contracts'
-import { screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent } from 'storybook/test'
 import { apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { mergeClassRollups } from '~/stories/mergeTrackRecord.stories.mocks'
@@ -72,7 +72,10 @@ export const Open: Story = {
 /** The merge card waited past the escalation threshold: Overdue, and the bell turns red. */
 export const Urgent: Story = {
   decorators: [inbox([{ ...mergeReviewCard, severity: 'urgent' }, prReviewCard])],
-  play: openInbox,
+  play: async () => {
+    await openInbox()
+    await screen.findByText('Overdue')
+  },
 }
 
 /**
@@ -81,11 +84,19 @@ export const Urgent: Story = {
  */
 export const PlatformHealth: Story = {
   decorators: [inbox([platformHealthCard])],
-  play: openInbox,
+  play: async () => {
+    await openInbox()
+    await screen.findByTestId('notification-failing-runs')
+  },
 }
 
 /** A board viewer: every action is disabled. */
 export const Viewer: Story = {
   decorators: [inbox(cards, { viewer: true })],
-  play: openInbox,
+  play: async () => {
+    await openInbox()
+    for (const dismiss of await screen.findAllByTestId('notification-dismiss')) {
+      await expect(dismiss).toBeDisabled()
+    }
+  },
 }

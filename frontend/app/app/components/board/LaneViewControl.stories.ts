@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import { seedUiMode, withSeed } from '~/stories/withStores'
 import { useLaneViewStore } from '~/stores/laneView'
 import LaneViewControl from './LaneViewControl.vue'
@@ -29,7 +29,10 @@ export const Default: Story = {}
 
 /** The sort and group sections, with a check on Recommended per lane and on No grouping. */
 export const Open: Story = {
-  play: async ({ canvasElement }) => openMenu(canvasElement),
+  play: async ({ canvasElement }) => {
+    await openMenu(canvasElement)
+    await screen.findByRole('menuitem', { name: 'Recommended per lane' })
+  },
 }
 
 /**
@@ -44,7 +47,10 @@ export const Overridden: Story = {
       laneView.setGroupKey('module')
     }),
   ],
-  play: async ({ canvasElement }) => openMenu(canvasElement),
+  play: async ({ canvasElement }) => {
+    await openMenu(canvasElement)
+    await screen.findByRole('menuitem', { name: 'Reset to defaults' })
+  },
 }
 
 /**

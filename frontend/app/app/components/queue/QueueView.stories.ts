@@ -57,6 +57,7 @@ export const Empty: Story = {
 export const DoneOpen: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Show' }))
+    await screen.findByRole('button', { name: 'Hide' })
   },
 }
 

@@ -19,7 +19,8 @@ export const orgAccount: Account = {
   name: 'Acme',
   githubAccountLogin: 'acme',
   createdAt: Date.UTC(2026, 7, 1),
-  roles: ['admin'],
+  // The viewer's own roles here, the same as their row in `accountMembers`.
+  roles: ['admin', 'developer'],
   spendMonthlyLimit: 500,
 }
 

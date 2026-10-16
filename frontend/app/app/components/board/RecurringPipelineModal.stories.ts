@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { Pipeline, WorkspaceSnapshot } from '@cat-factory/contracts'
 import { DEFAULT_TRACKER_WRITEBACK } from '@cat-factory/contracts'
-import { screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent, waitFor } from 'storybook/test'
 import { shellProbeApi } from '~/stories/shellApi'
 import { authService } from '~/stories/board.stories.mocks'
 import { bugTriagePipeline } from '~/stories/pipelines.stories.mocks'
@@ -74,6 +74,7 @@ export const OnDemand: Story = {
   decorators: [opened()],
   play: async () => {
     await userEvent.click(await switchNumber(0))
+    await waitFor(() => expect(screen.queryByText('Run every')).toBeNull())
   },
 }
 
@@ -95,7 +96,10 @@ export const IssueTracker: Story = {
       }),
     ),
   ],
-  play: () => pickPipeline(techDebtAudit.id),
+  play: async () => {
+    await pickPipeline(techDebtAudit.id)
+    await screen.findByText('Issue tracker')
+  },
 }
 
 /**
@@ -107,6 +111,7 @@ export const BugIntake: Story = {
   play: async () => {
     await pickPipeline(bugTriagePipeline.id)
     await userEvent.click(await screen.findByRole('button', { name: 'Jira' }))
+    await screen.findByText(/picks up the oldest matching issue/)
   },
 }
 
@@ -114,7 +119,10 @@ export const BugIntake: Story = {
 export const NoIntakeSources: Story = {
   decorators: [opened()],
   parameters: { api: shellProbeApi({ tasks: false }) },
-  play: () => pickPipeline(bugTriagePipeline.id),
+  play: async () => {
+    await pickPipeline(bugTriagePipeline.id)
+    await screen.findByText(/Connect a task source first/)
+  },
 }
 
 /**
@@ -126,5 +134,6 @@ export const TrackerTrigger: Story = {
   play: async () => {
     await userEvent.click(await switchNumber(1))
     await userEvent.click(await screen.findByRole('button', { name: 'GitHub Issues' }))
+    await screen.findByText(/imports that ticket as its own task/)
   },
 }

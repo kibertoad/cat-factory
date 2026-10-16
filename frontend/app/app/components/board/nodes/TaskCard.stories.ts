@@ -7,7 +7,7 @@ import {
   rateLimitTask,
   refreshTask,
 } from '~/stories/board.stories.mocks'
-import { block } from '~/stories/block.stories.mocks'
+import { auditTask as audit } from '~/stories/lanes.stories.mocks'
 import { execution, snapshot } from '~/stories/snapshot.stories.mocks'
 import { withSnapshot } from '~/stories/withStores'
 import TaskCard from './TaskCard.vue'
@@ -31,14 +31,6 @@ export const Default: Story = { args: { taskId: running.id } }
 
 /** Waiting on two dependencies, one of them unmerged. */
 export const Blocked: Story = { args: { taskId: logoutTask.id } }
-
-const audit = block({
-  id: 'task_audit',
-  title: 'Audit log for sign-ins',
-  parentId: 'svc_auth',
-  status: 'planned',
-  progress: 0,
-})
 
 /** Planned with nothing in its way: the Run button. */
 export const Ready: Story = {
