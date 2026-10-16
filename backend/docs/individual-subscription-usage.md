@@ -238,6 +238,12 @@ subscription" has no representation, not merely no permission. A mint with no si
 (dev-open) is refused rather than silently producing an unbound key. Headless provisioning
 (`POST /api/v1/keys`) can never bind: a provisioning key holds nobody's consent.
 
+**A personal token can follow its person's workspaces.** Minted with `followsMemberships`, it
+reaches every workspace its person can act in, resolved on each call, so someone who works across
+several needs one token rather than one per workspace, and joining or leaving one changes it with
+nothing to re-mint. Its scope in each workspace is lowered to what their role there allows. See
+"Keys that follow your workspaces" in [`public-api.md`](./public-api.md).
+
 **Prefer a system token.** It is the narrower credential and the right one for CI and shared
 integrations: a leak cannot spend one person's quota, because there is no person attached.
 Reach for a personal token when the runs genuinely are yours — the acceptance suite is the

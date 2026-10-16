@@ -183,6 +183,10 @@ onMounted(() => {
   // board it names is the one that opens. This is what makes the observability link on an
   // engine-published PR verification report resolve.
   useRunDeepLink()
+  // `?addRepo=<owner>/<name>`: an integration sending a person to add a service for a repository.
+  useAddRepoDeepLink()
+  // `?newApiKey=1`: an integration sending a person to mint a key bound to them.
+  useNewApiKeyDeepLink()
   // `?view=queue` / `?view=board`: a link that opens one of the board's two views.
   views.consumeDeepLink()
   void workspace.init()

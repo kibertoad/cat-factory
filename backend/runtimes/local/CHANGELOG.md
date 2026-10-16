@@ -1,5 +1,105 @@
 # @cat-factory/local-server
 
+## 0.156.4
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/contracts@0.373.0
+  - @cat-factory/kernel@0.361.0
+  - @cat-factory/integrations@0.177.0
+  - @cat-factory/server@0.340.0
+  - @cat-factory/node-server@0.241.0
+  - @cat-factory/executor-harness@1.163.4
+  - @cat-factory/agents@0.172.6
+  - @cat-factory/binary-generators@0.3.75
+  - @cat-factory/gitlab@0.24.11
+  - @cat-factory/orchestration@0.322.6
+  - @cat-factory/prompt-fragments@1.1.71
+
+## 0.156.3
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+  - @cat-factory/server@0.339.0
+  - @cat-factory/executor-harness@1.163.4
+  - @cat-factory/agents@0.172.5
+  - @cat-factory/binary-generators@0.3.74
+  - @cat-factory/gitlab@0.24.10
+  - @cat-factory/integrations@0.176.6
+  - @cat-factory/kernel@0.360.4
+  - @cat-factory/orchestration@0.322.5
+  - @cat-factory/prompt-fragments@1.1.70
+  - @cat-factory/node-server@0.240.4
+
+## 0.156.2
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+  - @cat-factory/server@0.338.0
+  - @cat-factory/executor-harness@1.163.4
+  - @cat-factory/agents@0.172.4
+  - @cat-factory/binary-generators@0.3.73
+  - @cat-factory/gitlab@0.24.9
+  - @cat-factory/integrations@0.176.5
+  - @cat-factory/kernel@0.360.3
+  - @cat-factory/orchestration@0.322.4
+  - @cat-factory/prompt-fragments@1.1.69
+  - @cat-factory/node-server@0.240.3
+
+## 0.156.1
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+  - @cat-factory/server@0.337.0
+  - @cat-factory/integrations@0.176.4
+  - @cat-factory/kernel@0.360.2
+  - @cat-factory/executor-harness@1.163.4
+  - @cat-factory/agents@0.172.3
+  - @cat-factory/binary-generators@0.3.72
+  - @cat-factory/gitlab@0.24.8
+  - @cat-factory/orchestration@0.322.3
+  - @cat-factory/prompt-fragments@1.1.68
+  - @cat-factory/node-server@0.240.2
+
+## 0.156.0
+
+### Minor Changes
+
+- 96e7e3d: Directory and notification webhook endpoints may be `http://` where the deployment allows it.
+  The request schemas refused every `http://` URL before the URL policy ran, so
+  `NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS` and `NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS` could never
+  admit one. The schemas now accept `http://` and `https://`, and the policy decides: hosted
+  deployments stay https-only with no private hosts, as before.
+  
+  Local mode turns that policy on by default for `localhost`, `127.0.0.1`,
+  `host.docker.internal` and `*.localhost`, the way it already does for environment URLs. A
+  receiver on the same laptop (a local sainte-beuve following the directory) can register its
+  push endpoint with no tunnel.
+  
+  The SDK clients are regenerated against OpenAPI 1.85.0.
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+  - @cat-factory/integrations@0.176.3
+  - @cat-factory/executor-harness@1.163.4
+  - @cat-factory/agents@0.172.2
+  - @cat-factory/binary-generators@0.3.71
+  - @cat-factory/gitlab@0.24.7
+  - @cat-factory/kernel@0.360.1
+  - @cat-factory/orchestration@0.322.2
+  - @cat-factory/prompt-fragments@1.1.67
+  - @cat-factory/server@0.336.1
+  - @cat-factory/node-server@0.240.1
+
 ## 0.155.8
 
 ### Patch Changes

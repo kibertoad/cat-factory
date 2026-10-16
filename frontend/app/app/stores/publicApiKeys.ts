@@ -59,14 +59,15 @@ export const usePublicApiKeysStore = defineStore('publicApiKeys', () => {
    * it starts can unlock them with the password sent on that call. Passed through rather than
    * defaulted here: the server writes the id off the session, so this is only ever a yes/no.
    *
-   * `workspaceIds` is the key's reach: omitted for this workspace alone, `null` for every workspace
-   * in the account, or a list. Anything past this workspace needs an account admin.
+   * `reach` is omitted for this workspace alone, `null` for every workspace in the account, a list,
+   * or `'memberships'` for whatever the person can act in on each call (a bound key only). A list
+   * or `null` needs an account admin; following memberships does not.
    */
   async function create(
     label: string,
     scope: PublicApiScope,
     actsAsSelf = false,
-    workspaceIds?: string[] | null,
+    reach?: string[] | null | 'memberships',
   ): Promise<CreatedPublicApiKey> {
     const ws = useWorkspaceStore()
     const workspaceId = ws.requireId()
@@ -74,14 +75,17 @@ export const usePublicApiKeysStore = defineStore('publicApiKeys', () => {
       label,
       scope,
       actsAsSelf,
-      ...(workspaceIds === undefined ? {} : { workspaceIds }),
+      followsMemberships: reach === 'memberships',
+      ...(reach === undefined || reach === 'memberships' ? {} : { workspaceIds: reach }),
     })
     // Prepend: the backend lists newest-first, so the freshly minted key belongs at the
     // top — matching the order a subsequent `load()` would produce. A key picked to reach only
     // other workspaces is not in this board's list, and revoking it from here would be refused as
     // a no-op, so it is not shown.
     const reaches =
-      created.key.workspaceIds === null || created.key.workspaceIds.includes(workspaceId)
+      created.key.followsMemberships ||
+      created.key.workspaceIds === null ||
+      created.key.workspaceIds.includes(workspaceId)
     if (reaches) keys.value = [created.key, ...keys.value]
     available.value = true
     return created
