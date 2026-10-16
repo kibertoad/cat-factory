@@ -38,6 +38,9 @@ import {
   blockSchema,
   companionVerdictSchema,
   decisionSchema,
+  documentConnectionSchema,
+  documentSourceDescriptorSchema,
+  fragmentSourceSchema,
   githubAvailableRepoSchema,
   githubBranchSchema,
   githubConnectionSchema,
@@ -46,18 +49,26 @@ import {
   githubPullRequestSchema,
   githubRepoSchema,
   priorStepOutputSchema,
+  promptFragmentSchema,
   prReviewStatusSchema,
   prReviewStepStateSchema,
+  resolvedDocumentRefSchema,
+  resolvedFragmentSchema,
   runInputGateSchema,
   serviceSchema,
+  slackConnectionSchema,
+  sourceDocumentSchema,
+  sourceTaskSchema,
   stepApprovalSchema,
+  taskConnectionSchema,
   taskEstimateSchema,
+  taskSearchResultSchema,
+  taskSourceStateSchema,
   vcsConnectOptionSchema,
   workspaceSnapshotSchema,
 } from '@cat-factory/contracts'
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
-import { block, estimate } from './block.stories.mocks'
 import {
   accountBoards,
   accountMembers,
@@ -67,6 +78,7 @@ import {
   resendConnection,
   workspaceMembers,
 } from './accounts.stories.mocks'
+import { block, estimate } from './block.stories.mocks'
 import { consensusGroups } from './consensus.stories.mocks'
 import { forkDecisionState } from './forkDecision.stories.mocks'
 import { gradingHistory, kaizenGrading, verifiedCombos } from './kaizen.stories.mocks'
@@ -118,6 +130,29 @@ import {
 import { testerState, testReport } from './testing.stories.mocks'
 import { authInitiative } from './board.stories.mocks'
 import {
+  accountFragments,
+  fragmentCatalog,
+  handbookSource,
+  layeredCatalog,
+  platformStandardsSource,
+  workspaceFragments,
+} from './fragments.stories.mocks'
+import {
+  authServiceIssues,
+  documentConnections,
+  documentSources,
+  resolvedDocumentRef,
+  resolvedDocumentRefWithDroppedScope,
+  resolvedFigmaFrameRef,
+  sessionSearchHits,
+  slackConnection,
+  sourceDocuments,
+  sourceTasks,
+  taskConnections,
+  taskSources,
+  zeplinDescriptor,
+} from './integrations.stories.mocks'
+import {
   approval,
   blockedInputGate,
   companionVerdicts,
@@ -145,6 +180,57 @@ import {
 // typecheck already holds them to the TYPE; this also holds them to what the type cannot say (an
 // id pattern, a minimum, a non-empty list), so a story never renders a row the API would refuse.
 const cases: [string, v.GenericSchema, unknown[]][] = [
+  ['account', accountSchema, accounts],
+  ['account settings', accountSettingsViewSchema, [accountSettingsView]],
+  ['workspace member', workspaceMemberSchema, workspaceMembers],
+  ['account member', accountMemberSchema, accountMembers],
+  ['account invitation', accountInvitationSchema, invitations],
+  ['email connection', emailConnectionSchema, [resendConnection]],
+  ['board list item', workspaceListItemSchema, accountBoards],
+  ['prompt fragment', promptFragmentSchema, [...workspaceFragments, ...accountFragments]],
+  ['fragment source', fragmentSourceSchema, [handbookSource, platformStandardsSource]],
+  ['resolved fragment', resolvedFragmentSchema, [...layeredCatalog, ...fragmentCatalog]],
+  ['task source', taskSourceStateSchema, taskSources],
+  ['task connection', taskConnectionSchema, taskConnections],
+  ['source task', sourceTaskSchema, [...sourceTasks, ...authServiceIssues]],
+  ['task search result', taskSearchResultSchema, sessionSearchHits],
+  ['document source', documentSourceDescriptorSchema, [...documentSources, zeplinDescriptor]],
+  ['document connection', documentConnectionSchema, documentConnections],
+  ['source document', sourceDocumentSchema, sourceDocuments],
+  [
+    'resolved document ref',
+    resolvedDocumentRefSchema,
+    [resolvedDocumentRef, resolvedDocumentRefWithDroppedScope, resolvedFigmaFrameRef],
+  ],
+  ['slack connection', slackConnectionSchema, [slackConnection]],
+  ['environment connection', environmentConnectionSchema, [environmentConnection]],
+  [
+    'runner pool connection',
+    runnerPoolConnectionSchema,
+    [runnerPoolConnection, kubernetesRunnerConnection],
+  ],
+  ['runner pool manifest', runnerPoolManifestSchema, [runnerPoolManifest]],
+  [
+    'provider descriptor',
+    providerDescriptorSchema,
+    [
+      providerDescriptor(environmentConnection),
+      manifestRunnerDescriptor,
+      kubernetesRunnerDescriptor(true),
+      kubernetesRunnerDescriptor(false),
+      kubernetesEnvironmentDescriptor,
+    ],
+  ],
+  ['connection test', connectionTestResultSchema, [connectionTestWithWarnings]],
+  ['local model endpoint', localModelEndpointSchema, [localModelEndpoint()]],
+  ['personal subscription', personalSubscriptionStatusSchema, [personalSubscription()]],
+  ['vendor credential', vendorCredentialSchema, [vendorCredential()]],
+  ['API key', apiKeySchema, [apiKey(), ...accountApiKeys]],
+  ['spend status', spendStatusSchema, [spendStatus()]],
+  ['model option', modelOptionSchema, [...claudeOnlyCatalog, ...presetModelCatalog]],
+  ['effort report', agentEffortReportSchema, [effortReport]],
+  ['validation report', validationReportSchema, [validationPassed, validationFailed]],
+  ['reproduction report', reproductionReportSchema, [reproductionReport()]],
   ['block', blockSchema, [block(), authInitiative]],
   ['account', accountSchema, accounts],
   ['account settings', accountSettingsViewSchema, [accountSettingsView]],
