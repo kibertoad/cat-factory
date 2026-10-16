@@ -156,7 +156,7 @@ export const Loading: Story = {
 }
 
 /** The read failed: the client's message as it arrives, and Retry. */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: {
     api: [
       apiFailure(getPlatformObservabilityContract, { pathParams: { accountId: orgAccount.id } }),

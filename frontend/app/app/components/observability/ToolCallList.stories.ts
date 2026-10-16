@@ -48,7 +48,7 @@ export const Default: Story = { args: loaded }
 export const Loading: Story = { args: { loading: true, failuresLoading: true } }
 
 /** The trajectory read failed: the message and Retry. */
-export const Error: Story = {
+export const Failed: Story = {
   args: { failures, error: 'Internal server error' },
 }
 

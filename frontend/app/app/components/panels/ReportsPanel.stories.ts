@@ -213,7 +213,7 @@ export const Loading: Story = {
 }
 
 /** The read failed: a translated heading, the client's message under it, and Retry. */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: {
     api: [apiFailure(getReportsContract, { pathParams: { accountId: orgAccount.id } })],
   },

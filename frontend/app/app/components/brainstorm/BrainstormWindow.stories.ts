@@ -167,7 +167,7 @@ export const Empty: Story = { parameters: { api: [sessionIs(null)] } }
  * The session read failed: the store treats any failure as the feature being off and keeps no
  * session, so the window shows the same empty state as no session.
  */
-export const LoadFailed: Story = {
+export const Failed: Story = {
   parameters: {
     api: [
       apiFailure(getBrainstormContract, {

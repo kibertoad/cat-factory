@@ -165,7 +165,7 @@ export const Loading: Story = panel(loginRun(), {
  * The call list could not be read: its error and Retry, and the pinned summary says that nothing
  * can be concluded about the calls.
  */
-export const Error: Story = panel(loginRun(), {
+export const Failed: Story = panel(loginRun(), {
   calls: apiFailure(getExecutionLlmMetricsContract, loginAt),
 })
 

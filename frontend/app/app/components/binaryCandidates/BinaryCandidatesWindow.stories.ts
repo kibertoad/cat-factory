@@ -153,7 +153,7 @@ export const Loading: Story = {
 }
 
 /** The read failed: the error, and Retry. */
-export const Error: Story = {
+export const Failed: Story = {
   decorators: [opened(null)],
   parameters: { api: [apiFailure(getBinaryCandidatesContract, params)] },
 }

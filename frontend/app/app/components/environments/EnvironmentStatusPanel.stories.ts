@@ -47,7 +47,7 @@ export const Provisioning: Story = {
 }
 
 /** The rollout failed: the provider's error, as it came. */
-export const Error: Story = {
+export const Failed: Story = {
   args: {
     environment: environment({
       url: null,

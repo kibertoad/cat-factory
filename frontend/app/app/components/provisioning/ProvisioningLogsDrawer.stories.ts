@@ -16,7 +16,7 @@ import ProvisioningLogsDrawer from './ProvisioningLogsDrawer.vue'
 // By run id, the first load never shows: `loadForExecution` writes its result through the plain
 // object that `byExecution[id] ??= emptyState()` returns, not through the store's reactive proxy,
 // so the drawer keeps its placeholder rows and a disabled Refresh while the store holds the
-// answer. A live run recovers on its next poll; a finished one does not. The Default, Error and
+// answer. A live run recovers on its next poll; a finished one does not. The Default, Failed and
 // Empty stories show that (#2394). The subsystem drawer is not affected.
 
 function entry(
@@ -126,7 +126,7 @@ export const Loading: Story = {
  * The read failed. By run id the error is never rendered either, so this also shows placeholder
  * rows.
  */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: {
     api: [apiFailure(listProvisioningLogsContract, { pathPrefix: storyWorkspacePrefix })],
   },
