@@ -137,6 +137,12 @@ function navAnchoredSteps(): {
 /** The fields of a gate set, in a stable order. */
 const GATE_KEYS = Object.keys(ALL_GATES) as (keyof NavGates)[]
 
+/** Every gate field `true`: the base each searched assignment starts from. */
+const ALL_TRUE = Object.fromEntries(GATE_KEYS.map((key) => [key, true])) as Record<
+  keyof NavGates,
+  boolean
+>
+
 /** The gate fields a witness has turned OFF — the interesting half of a failure message. */
 function absentGates(gates: NavGates): readonly string[] {
   return Object.entries(gates)
@@ -181,10 +187,7 @@ function navRequirementDrift(
     let fewestAbsent = Number.POSITIVE_INFINITY
     let unsearched: keyof NavGates | undefined
     for (let mask = 0; mask < 2 ** searched.length && unsearched === undefined; mask++) {
-      const gates = Object.fromEntries(GATE_KEYS.map((key) => [key, true])) as Record<
-        keyof NavGates,
-        boolean
-      >
+      const gates = { ...ALL_TRUE }
       for (const [bit, key] of searched.entries()) gates[key] = (mask & (1 << bit)) !== 0
       const recorded = new Proxy(gates, {
         get(target, key) {
@@ -192,12 +195,20 @@ function navRequirementDrift(
             unsearched ??= key as keyof NavGates
           return Reflect.get(target, key)
         },
+        // A read through `in` or the key list is invisible to `get`, so the search could stop
+        // before it reaches the field and pass with the drift unreported. Refuse it loudly.
+        has() {
+          throw new Error('a nav predicate read the gates with `in`; read each field directly')
+        },
+        ownKeys() {
+          throw new Error('a nav predicate listed the gate keys; read each field directly')
+        },
       }) as NavGates
       if (!drifts(pair, recorded) || unsearched !== undefined) continue
       const absent = absentGates(gates).length
       if (absent < fewestAbsent) {
         fewestAbsent = absent
-        smallest = { ...gates }
+        smallest = gates
       }
     }
     if (unsearched === undefined) return smallest
