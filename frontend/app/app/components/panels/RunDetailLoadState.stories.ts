@@ -41,7 +41,7 @@ export const Default: Story = {
 }
 
 /** The read failed: the warning and the reason. */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: {
     api: [
       apiFailure(getExecutionContract, {

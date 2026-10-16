@@ -141,7 +141,7 @@ export const Running: Story = {
 }
 
 /** The session failed: the reason, with a copy button. The provider error is made up. */
-export const Failed: Story = {
+export const SessionFailed: Story = {
   parameters: {
     api: [
       sessionIs(
@@ -161,7 +161,7 @@ export const Failed: Story = {
  * The read failed. The store drops every load error, so the window shows the empty state, the
  * same as a task with no session.
  */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: {
     api: [
       apiFailure(getConsensusSessionContract, {

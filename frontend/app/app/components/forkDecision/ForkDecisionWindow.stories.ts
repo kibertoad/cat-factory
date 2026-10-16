@@ -173,7 +173,7 @@ export const ChatBudgetSpent: Story = {
 }
 
 /** The pick was refused, because the run moved on: the refusal shows above the approaches. */
-export const Error: Story = {
+export const Failed: Story = {
   decorators: [opened(waiting)],
   parameters: {
     api: [

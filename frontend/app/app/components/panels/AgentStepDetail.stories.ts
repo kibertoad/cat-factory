@@ -175,7 +175,7 @@ const runRead = { pathPrefix: storyWorkspacePrefix, pathParams: { executionId: '
 export const Loading: Story = opened(projected, 0, [apiPending(getExecutionContract, runRead)])
 
 /** The read of the whole run failed: the load line says so. */
-export const Error: Story = opened(projected, 0, [apiFailure(getExecutionContract, runRead)])
+export const Failed: Story = opened(projected, 0, [apiFailure(getExecutionContract, runRead)])
 
 /** The coder at work with no prose yet: the live clock, and the empty state. */
 export const Working: Story = opened(loginRun([architectDone, coderWorking, reviewerPending]), 1)

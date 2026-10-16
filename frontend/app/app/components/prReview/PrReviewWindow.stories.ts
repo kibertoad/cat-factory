@@ -153,7 +153,7 @@ export const Default: Story = opened(review())
 export const Empty: Story = opened(review({ findings: [], summary: 'Nothing worth a comment.' }))
 
 /** The read when the window opens failed: the error line over the findings from the board. */
-export const Error: Story = opened(review(), {}, apiFailure(getPrReviewContract, read))
+export const Failed: Story = opened(review(), {}, apiFailure(getPrReviewContract, read))
 
 /** The reviewer has not reported a slice plan yet: the neutral "reviewing" state, and Resume. */
 export const Planning: Story = opened(review({ status: 'reviewing', findings: [], summary: null }))

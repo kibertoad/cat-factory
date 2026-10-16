@@ -67,7 +67,7 @@ export const Resolving: Story = {
  * The last choice failed. The line is the error's own message, untranslated; this one is made
  * up.
  */
-export const Error: Story = {
+export const Failed: Story = {
   decorators: [
     withSeed(() => {
       useInputGateStore().error = 'The run is no longer waiting on the input check.'

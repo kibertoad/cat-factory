@@ -43,4 +43,4 @@ export const File: Story = {
 export const Loading: Story = { parameters: { api: [artifactBlobPending('art_login_hero')] } }
 
 /** The bytes could not load: a line and Retry. */
-export const Error: Story = { parameters: { api: [artifactBlobFailure('art_login_hero')] } }
+export const Failed: Story = { parameters: { api: [artifactBlobFailure('art_login_hero')] } }
