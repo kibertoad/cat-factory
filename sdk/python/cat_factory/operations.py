@@ -101,6 +101,7 @@ from .models import (
     PublicChallengePrReviewFinding,
     PublicChooseFork,
     PublicDecisionList,
+    PublicDeployment,
     PublicGuidedReviewList,
     PublicIdentity,
     PublicIncorporate,
@@ -1527,6 +1528,32 @@ class MeResource:
             timeout=timeout,
         )
         return PublicIdentity.from_dict(raw)
+
+
+class DeploymentResource:
+    """Where the deployment serves its web app, for sending a person to one of the app's deep
+    links (the prefilled add-service screen, say). Any key may ask, with no workspace named.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def get(self, *, timeout: float | None = None) -> PublicDeployment:
+        """Describe the deployment
+        Report where this deployment serves its web app (`appUrl`): `APP_BASE_URL` when the
+        operator set one, otherwise the origin this API was reached on. An integration uses
+        it to send a person to one of the app’s deep links, such as the prefilled
+        add-service screen (`?addRepo=<owner>/<name>`). Account-level, so a key reaching
+        several workspaces calls it without naming one. `read` scope.
+        `GET /api/v1/deployment` (operation `getPublicDeployment`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/deployment",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDeployment.from_dict(raw)
 
 
 class DecisionsResource:
@@ -3488,6 +3515,7 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "webhook": WebhookResource(transport),
         "usage": UsageResource(transport),
         "me": MeResource(transport),
+        "deployment": DeploymentResource(transport),
         "decisions": DecisionsResource(transport),
         "debug": DebugResource(transport),
         "evidence": EvidenceResource(transport),

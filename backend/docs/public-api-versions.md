@@ -525,3 +525,12 @@ operations move from `admin` to `webhooks`.
 
 Additive: a new enum value on `scope`, and operations that admit more keys than before. Every key
 that could call them still can.
+
+## 1.87.0
+
+`GET /api/v1/deployment` is new (`client.deployment.get`): where the deployment serves its web
+app (`appUrl`), so an integration can send a person to one of its deep links, such as the
+add-service screen prefilled with a repository (`?addRepo=<owner>/<name>`). It is account-level, so
+a key reaching several workspaces calls it without naming one, and any `read` key may.
+
+Additive: one `read` operation and its `PublicDeployment` shape.

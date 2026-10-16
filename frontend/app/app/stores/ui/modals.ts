@@ -10,6 +10,7 @@ import type {
   InfrastructureTab,
   ProviderConnectionKind,
 } from '~/types/providerConnections'
+import type { AddServicePrefill } from '~/composables/useAddRepoDeepLink'
 import type { PendingContext } from '~/composables/useContextLinking'
 import {
   infraSetupDismissalKey,
@@ -523,6 +524,8 @@ function createOverlayModals() {
   const bootstrapOpen = ref(false)
   // "Add a service from an existing GitHub repo" modal (no bootstrap run).
   const addServiceOpen = ref(false)
+  // The repository an add-repository deep link opened the window for, consumed on open.
+  const addServicePrefill = ref<AddServicePrefill | null>(null)
   // Prompt-fragment library panel (manage the board's best-practice catalog +
   // linked guideline repos; ADR 0006).
   const fragmentLibraryOpen = ref(false)
@@ -546,11 +549,13 @@ function createOverlayModals() {
   function closeBootstrap() {
     bootstrapOpen.value = false
   }
-  function openAddService() {
+  function openAddService(prefill: AddServicePrefill | null = null) {
+    addServicePrefill.value = prefill
     addServiceOpen.value = true
   }
   function closeAddService() {
     addServiceOpen.value = false
+    addServicePrefill.value = null
   }
   function openFragmentLibrary() {
     fragmentLibraryOpen.value = true
@@ -601,6 +606,7 @@ function createOverlayModals() {
   return {
     bootstrapOpen,
     addServiceOpen,
+    addServicePrefill,
     fragmentLibraryOpen,
     foundationalServicesOpen,
     commandBarOpen,
