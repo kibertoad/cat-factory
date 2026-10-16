@@ -5,7 +5,7 @@ import {
   type InfrastructureCapabilities,
   type RunnerPoolConnection,
 } from '@cat-factory/contracts'
-import { screen, userEvent } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import { apiFailure } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { infrastructureCapabilities } from '~/stories/infra.stories.mocks'
@@ -112,8 +112,9 @@ export const TestEnvAxis: Story = {
   parameters: {
     api: environmentConnectionApi({ descriptor: kubernetesEnvironmentDescriptor }),
   },
-  play: async () => {
+  play: async ({ canvasElement }) => {
     await userEvent.click(await screen.findByRole('radio', { name: /Kubernetes cluster/ }))
+    await within(canvasElement).findByText('API server URL')
   },
 }
 
@@ -129,8 +130,9 @@ export const LocalMode: Story = {
  */
 export const RegisterHint: Story = {
   decorators: [deployment(local, { local: true })],
-  play: async () => {
+  play: async ({ canvasElement }) => {
     await userEvent.click(await screen.findByRole('radio', { name: /Local Kubernetes/ }))
+    await within(canvasElement).findByText('Register a runner pool below to enable this.')
   },
 }
 

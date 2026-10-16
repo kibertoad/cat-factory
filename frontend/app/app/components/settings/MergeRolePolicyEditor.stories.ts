@@ -42,12 +42,20 @@ export const Empty: Story = { args: { classRulesByRole: {}, dryRunRoles: [] } }
  * The member row open: the allowlist switch, then a rule per class. Schema has no stricter rule
  * to offer, because the policy already never merges it.
  */
-export const Expanded: Story = { play: openMember }
+export const Expanded: Story = {
+  play: async (context) => {
+    await openMember(context)
+    await within(context.canvasElement).findByTestId('merge-role-submission-member')
+  },
+}
 
 /** Members limited to an empty allowlist: the badge on the row, and the lands-nothing line. */
 export const LandsNothing: Story = {
   args: { submissionClassesByRole: { member: [] } },
-  play: openMember,
+  play: async (context) => {
+    await openMember(context)
+    await within(context.canvasElement).findByTestId('merge-role-submission-none-member')
+  },
 }
 
 /** Auto-merge off: the warning that class rules have nothing left to make stricter. */

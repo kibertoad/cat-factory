@@ -13,17 +13,9 @@ import WorkspaceMetadataSettings from './WorkspaceMetadataSettings.vue'
 // fields come from the `workspaceMetadataFields` slot of the app registry, which no first-party
 // module fills, so a decorator adds them to the slots this story's components see. The values
 // come from the board's stored settings. The deployment, its fields and the values are made up.
+// No story shows a select field: its not-set item has the value '', and Reka's SelectItem throws
+// for an empty value, so Storybook shows its error display (#2393).
 const studioFields: WorkspaceMetadataFieldDefinition[] = [
-  {
-    key: 'gameId',
-    label: 'Game',
-    type: 'select',
-    description: 'The map editor and the build dashboard open on this game.',
-    options: [
-      { value: 'skyreach', label: 'Skyreach' },
-      { value: 'tidebound', label: 'Tidebound' },
-    ],
-  },
   { key: 'maxPlayers', label: 'Players per match', type: 'number', placeholder: '8' },
   {
     key: 'editorProject',
@@ -59,7 +51,7 @@ const meta = {
       const store = useWorkspaceSettingsStore()
       store.settings = {
         ...store.settings,
-        metadata: { gameId: 'skyreach', maxPlayers: '12', editorProject: 'proj-4471' },
+        metadata: { maxPlayers: '12', editorProject: 'proj-4471' },
       }
     }),
   ],
@@ -69,11 +61,7 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-/**
- * A select, a number and a text field, each filled from the board's stored values. This story
- * shows Storybook's error display: the select's not-set item has the value '', and Reka's
- * SelectItem throws for an empty value. The panel renders in full under the display.
- */
+/** A number and a text field, each filled from the board's stored values. */
 export const Default: Story = {}
 
 /**

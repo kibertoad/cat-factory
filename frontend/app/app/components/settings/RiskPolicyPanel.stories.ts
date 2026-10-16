@@ -5,6 +5,7 @@ import { apiFailure, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { mergeClassRollups } from '~/stories/mergeTrackRecord.stories.mocks'
 import {
+  accountStrictPolicy,
   manualReviewPolicy,
   riskPolicy,
   riskPolicyCatalogVersions,
@@ -21,11 +22,7 @@ import RiskPolicyPanel from './RiskPolicyPanel.vue'
 // answers that read.
 const pathPrefix = storyWorkspacePrefix
 
-const accountPolicy: RiskPolicyLibraryEntry = {
-  ...riskPolicy({ id: 'mp_acct_strict', name: 'Acme strict', maxRisk: 0.2, maxImpact: 0.3 }),
-  isDefault: false,
-  tier: 'account',
-}
+const accountPolicy: RiskPolicyLibraryEntry = accountStrictPolicy
 
 function seeded(presets: RiskPolicyLibraryEntry[]) {
   return withSeed(() => {

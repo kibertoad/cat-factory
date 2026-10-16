@@ -105,6 +105,7 @@ import {
 } from './integrations.stories.mocks'
 import {
   accountFragments,
+  fragmentCatalog,
   handbookSource,
   layeredCatalog,
   platformStandardsSource,
@@ -123,6 +124,7 @@ import {
   standardBuild,
 } from './pipelines.stories.mocks'
 import {
+  accountStrictPolicy,
   manualReviewPolicy,
   modelPreset,
   modelPresetLibrary,
@@ -209,7 +211,7 @@ const cases: [string, v.GenericSchema, unknown[]][] = [
   ['email connection', emailConnectionSchema, [resendConnection]],
   ['prompt fragment', promptFragmentSchema, [...workspaceFragments, ...accountFragments]],
   ['fragment source', fragmentSourceSchema, [handbookSource, platformStandardsSource]],
-  ['resolved fragment', resolvedFragmentSchema, layeredCatalog],
+  ['resolved fragment', resolvedFragmentSchema, [...layeredCatalog, ...fragmentCatalog]],
   ['board list item', workspaceListItemSchema, accountBoards],
   ['infra setup', infraSetupSchema, [infraSetupNeedsWork, infraSetupDone]],
   ['infrastructure capabilities', infrastructureCapabilitiesSchema, [infrastructureCapabilities()]],
@@ -236,7 +238,11 @@ const cases: [string, v.GenericSchema, unknown[]][] = [
   ],
   ['slack connection', slackConnectionSchema, [slackConnection]],
   ['merge class rollup', mergeClassRollupSchema, mergeClassRollups],
-  ['risk policy', riskPolicyLibraryEntrySchema, [riskPolicy(), manualReviewPolicy]],
+  [
+    'risk policy',
+    riskPolicyLibraryEntrySchema,
+    [riskPolicy(), manualReviewPolicy, accountStrictPolicy],
+  ],
   ['model preset', modelPresetSchema, [modelPreset(), ...modelPresetLibrary]],
   [
     'pipeline',

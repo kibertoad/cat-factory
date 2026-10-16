@@ -85,7 +85,10 @@ export const TestDiscovered: Story = {
       }),
     ],
   },
-  play: () => testUrl('Ollama on this laptop'),
+  play: async () => {
+    await testUrl('Ollama on this laptop')
+    await screen.findByText('Enable models')
+  },
 }
 
 /** Nothing listens at the laptop's URL: the runner's failure as it came. */
@@ -100,7 +103,10 @@ export const TestUnreachable: Story = {
       }),
     ],
   },
-  play: () => testUrl('Ollama on this laptop'),
+  play: async () => {
+    await testUrl('Ollama on this laptop')
+    await screen.findByText('connect ECONNREFUSED 127.0.0.1:11434')
+  },
 }
 
 /**
@@ -125,5 +131,6 @@ export const TestRefused: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
     await testUrl('vLLM on the GPU box')
+    await screen.findByText(/LOCAL_MODELS_ALLOW_LAN=true/)
   },
 }

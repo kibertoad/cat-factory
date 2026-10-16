@@ -55,5 +55,6 @@ export const UnknownFragment: Story = {
 export const AddMenuOpen: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add fragment' }))
+    await screen.findByRole('menuitem', { name: /React state management/ })
   },
 }

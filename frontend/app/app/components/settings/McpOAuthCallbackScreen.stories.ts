@@ -45,7 +45,7 @@ export const Loading: Story = {
 /**
  * The backend refused the grant: the signed-in user lacks `secrets.manage` on the board. The page
  * reads the message from a field the API error does not have, so it shows its generic line
- * instead of the reason.
+ * instead of the reason (#2396).
  */
 export const Error: Story = {
   parameters: {

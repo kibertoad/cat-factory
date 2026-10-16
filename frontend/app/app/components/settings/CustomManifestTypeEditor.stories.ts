@@ -38,5 +38,6 @@ export const Editing: Story = {
   play: async ({ canvasElement }) => {
     const row = within(canvasElement).getByText(workspaceManifestType.label).closest('li')!
     await userEvent.click(within(row as HTMLElement).getAllByRole('button')[0]!)
+    await within(canvasElement).findByRole('button', { name: 'Cancel' })
   },
 }

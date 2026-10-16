@@ -57,7 +57,7 @@ export const AccountTier: Story = {
   },
 }
 
-/** The fork gate on: its four floors and what to do when a task has no estimate. */
+/** The fork gate on: its three floors and what to do when a task has no estimate. */
 export const ForkGateOn: Story = {
   args: {
     policy: riskPolicy({

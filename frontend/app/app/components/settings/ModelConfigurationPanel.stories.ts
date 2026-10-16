@@ -91,6 +91,7 @@ export const Editing: Story = {
   play: async () => {
     const edits = await screen.findAllByRole('button', { name: 'Edit preset' })
     await userEvent.click(edits[4]!)
+    await screen.findByTestId('preset-route-order-reset')
   },
 }
 
@@ -100,5 +101,6 @@ export const EditingAdvanced: Story = {
   play: async () => {
     const [kimi] = await screen.findAllByRole('button', { name: 'Edit preset' })
     await userEvent.click(kimi!)
+    await screen.findByText(/This preset follows the deployment default/)
   },
 }

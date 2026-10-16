@@ -1,20 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { fn } from 'storybook/test'
-import { riskPolicy } from '~/stories/policies.stories.mocks'
+import { accountStrictPolicy } from '~/stories/policies.stories.mocks'
 import RiskPolicyInheritedRow from './RiskPolicyInheritedRow.vue'
 
 // A merge policy the board inherits from its account: read only, with the account badge, the two
 // actions a board has over it (clone, hide) and the same preview the task picker shows. The
 // policy is made up: an account policy with auto-merge on and a lower risk ceiling.
-const accountPolicy = riskPolicy({
-  id: 'mp_acme_strict',
-  name: 'Acme strict',
-  maxRisk: 0.2,
-  maxImpact: 0.3,
-  isDefault: false,
-  version: 1,
-  tier: 'account',
-})
+const accountPolicy = accountStrictPolicy
 
 const meta = {
   title: 'Settings/Components/RiskPolicyInheritedRow',

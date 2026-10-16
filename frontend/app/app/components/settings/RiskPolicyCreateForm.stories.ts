@@ -25,5 +25,12 @@ export const Default: Story = {
   },
 }
 
-/** A create request in flight: Add spins and stays disabled. */
-export const Busy: Story = { args: { busy: true } }
+/** A create request in flight: with a name typed, Add spins and stays disabled. */
+export const Busy: Story = {
+  args: { busy: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await userEvent.type(canvas.getByTestId('risk-policy-create-name'), 'Release train')
+    await expect(canvas.getByTestId('risk-policy-create-submit')).toBeDisabled()
+  },
+}

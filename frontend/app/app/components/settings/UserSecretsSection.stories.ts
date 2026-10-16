@@ -104,7 +104,10 @@ export const TestPassed: Story = {
       }),
     ],
   },
-  play: typeAndTest,
+  play: async () => {
+    await typeAndTest()
+    await screen.findByText(/reaches every repository you can push to/)
+  },
 }
 
 /** GitHub refuses the replacement token: the backend's verdict in red. */
@@ -115,5 +118,8 @@ export const TestFailed: Story = {
       testAnswers({ ok: false, message: 'GitHub rejected the token (HTTP 401)' }),
     ],
   },
-  play: typeAndTest,
+  play: async () => {
+    await typeAndTest()
+    await screen.findByText('GitHub rejected the token (HTTP 401)')
+  },
 }

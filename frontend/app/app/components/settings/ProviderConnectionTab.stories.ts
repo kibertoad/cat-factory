@@ -131,5 +131,6 @@ export const LogsOpen: Story = {
   },
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'View logs' }))
+    await screen.findByText('Tear down')
   },
 }

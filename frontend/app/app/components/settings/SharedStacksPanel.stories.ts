@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { SharedStack } from '@cat-factory/contracts'
-import { screen, userEvent } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import { STORY_WORKSPACE_ID } from '~/stories/workspace'
 import { seedWorkspace, withSeed } from '~/stories/withStores'
 import { useSharedStacksStore } from '~/stores/sharedStacks'
@@ -97,7 +97,8 @@ export const EditingAdvancedLayers: Story = {
       }),
     ]),
   ],
-  play: async () => {
+  play: async ({ canvasElement }) => {
     await userEvent.click(await screen.findByTestId('shared-stack-edit-stk_mixed'))
+    await within(canvasElement).findByTestId('shared-stack-compose-layers')
   },
 }

@@ -5,7 +5,7 @@ import {
   getObservabilityConnectionContract,
   listReleaseHealthConfigsContract,
 } from '@cat-factory/contracts'
-import { apiFailure, apiResponse } from '~/stories/api'
+import { apiFailure, apiRefusal, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { seedWorkspace, withSeed } from '~/stories/withStores'
 import { useUiStore } from '~/stores/ui'
@@ -21,7 +21,7 @@ const pathPrefix = storyWorkspacePrefix
 function answers(options: {
   connection?: ObservabilityConnectionView
   connectionFails?: boolean
-  incident?: IncidentEnrichmentView | 'fails'
+  incident?: IncidentEnrichmentView | 'unavailable'
 }) {
   return [
     options.connectionFails
@@ -31,8 +31,15 @@ function answers(options: {
           body: options.connection ?? { connected: false, provider: null, summary: null },
         }),
     apiResponse(listReleaseHealthConfigsContract, { pathPrefix, body: [] }),
-    options.incident === 'fails'
-      ? apiFailure(getIncidentEnrichmentContract, { pathPrefix })
+    options.incident === 'unavailable'
+      ? apiRefusal(getIncidentEnrichmentContract, {
+          pathPrefix,
+          status: 503,
+          error: {
+            code: 'unavailable',
+            message: 'The incident-enrichment integration is not configured',
+          },
+        })
       : apiResponse(getIncidentEnrichmentContract, {
           pathPrefix,
           body: options.incident ?? { connected: false, summary: null },
@@ -72,9 +79,9 @@ export const Default: Story = {}
 /** Nothing connected: both forms, both Not set. */
 export const Empty: Story = { parameters: { api: answers({}) } }
 
-/** The deployment has no incident tools wired: that section is gone. */
+/** The deployment has no incident tools wired (the read answers 503): that section is gone. */
 export const IncidentUnavailable: Story = {
-  parameters: { api: answers({ connection: datadogEu, incident: 'fails' }) },
+  parameters: { api: answers({ connection: datadogEu, incident: 'unavailable' }) },
 }
 
 /**

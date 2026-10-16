@@ -7,9 +7,9 @@ import ToolServerChecklist from './ToolServerChecklist.vue'
 // The deployment's tool servers (MCP): for each, which agent kinds get it, which harnesses can
 // serve its transport, the credentials it needs, its OAuth grant when it has one, and a Test that
 // speaks the protocol to it. Each row names every reason the server might never reach a run. The
-// section renders only when the deployment registers a server. The stories seed the inventory and
-// any test result, so nothing is loaded. Nuxt UI is the server the deployment can register as
-// shipped (`nuxt-ui` in agents); the issue tracker and the internal docs servers are made up.
+// section renders only when the deployment registers a server, so there is no story for none. The
+// stories seed the inventory and any test result, so nothing is loaded. Nuxt UI is the server the
+// deployment can register as shipped (`nuxt-ui` in agents); the tracker and docs servers are made up.
 function server(overrides: Partial<ToolServerView> & Pick<ToolServerView, 'id' | 'label'>) {
   return {
     transport: 'http',
@@ -38,6 +38,14 @@ const tracker = server({
   allowedTools: ['search_issues', 'get_issue'],
   credentials: [],
   oauth: { grant: 'authorization_code', connected: false },
+})
+
+const docs = server({
+  id: 'acme-docs',
+  label: 'Acme docs',
+  target: 'https://docs.acme.dev/mcp',
+  declaredBy: ['planner'],
+  credentials: [{ key: 'ACME_DOCS_TOKEN', required: true }],
 })
 
 function seeded(servers: ToolServerView[], results: Record<string, ToolServerProbeResult> = {}) {
@@ -75,9 +83,6 @@ export const Default: Story = {
     }),
   ],
 }
-
-/** No server registered: the section does not render. */
-export const Empty: Story = { decorators: [seeded([])] }
 
 /**
  * A server no agent kind declares, served only over stdio: it can never reach a run, so the row
@@ -128,22 +133,43 @@ export const OAuthConnected: Story = {
 }
 
 /**
- * Test reached the server and it answered 401: the HTTP error status, one allowed tool that
- * matches nothing the server offers, and the backend's detail behind Show details.
+ * The same server, granted, tested: it answered, and one allowed tool matches nothing the server
+ * offers.
  */
-export const ProbeFailed: Story = {
+export const AllowedToolUnmatched: Story = {
   decorators: [
-    seeded([tracker], {
+    seeded([{ ...tracker, oauth: { grant: 'authorization_code', connected: true } }], {
       'acme-tracker': {
         serverId: 'acme-tracker',
-        status: 'http_error',
-        httpStatus: 401,
+        status: 'ok',
+        serverName: 'acme-tracker',
+        serverVersion: '1.2.0',
+        protocolVersion: '2025-06-18',
+        toolCount: 1,
+        tools: ['search_issues'],
+        toolsComplete: true,
         allowedTools: {
           declared: ['search_issues', 'get_issue'],
           unmatched: ['get_issue'],
           checked: true,
         },
-        error: 'POST https://tracker.acme.dev/mcp answered 401: {"error":"invalid_token"}',
+      },
+    }),
+  ],
+}
+
+/**
+ * A server with a static credential, tested: it answered 401. The HTTP error status, and the
+ * backend's detail behind Show details.
+ */
+export const ProbeFailed: Story = {
+  decorators: [
+    seeded([docs], {
+      'acme-docs': {
+        serverId: 'acme-docs',
+        status: 'http_error',
+        httpStatus: 401,
+        error: 'POST https://docs.acme.dev/mcp answered 401: {"error":"invalid_token"}',
       },
     }),
   ],

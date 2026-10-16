@@ -4,7 +4,7 @@ import {
   listEnvironmentUserHandlersContract,
   type EnvironmentHandlerView,
 } from '@cat-factory/contracts'
-import { screen, userEvent } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import { apiPending, apiResponse } from '~/stories/api'
 import { STORY_WORKSPACE_ID, storyWorkspacePrefix } from '~/stories/workspace'
 import {
@@ -140,7 +140,8 @@ export const LocalMode: Story = {
       }),
     ],
   },
-  play: async () => {
+  play: async ({ canvasElement }) => {
     await userEvent.click(await screen.findByRole('button', { name: /Personal override/ }))
+    await within(canvasElement).findByText(/Override the workspace handler for this provision type/)
   },
 }
