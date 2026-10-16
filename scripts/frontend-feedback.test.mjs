@@ -4,10 +4,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  findFeedbackOffences,
   PENDING,
   SPINNER,
   TOAST_FUNNELS,
+  findFeedbackOffences,
+  isFeedbackExempt,
 } from './check-frontend-feedback.mjs'
 import { codeLines } from './lib/frontend-scan.mjs'
 
@@ -84,5 +85,24 @@ describe('PENDING', () => {
       assert.ok(rel.startsWith('frontend/app/app/'), rel)
       assert.ok(reason.trim().length > 0, rel)
     }
+  })
+})
+
+describe('the files the guard skips', () => {
+  it('skips tests, stories and the shared story fixtures', () => {
+    assert.equal(isFeedbackExempt('frontend/app/app/stores/github.spec.ts'), true)
+    assert.equal(
+      isFeedbackExempt('frontend/app/app/components/documents/ContextDocumentPicker.stories.ts'),
+      true,
+    )
+    assert.equal(isFeedbackExempt('frontend/app/app/stories/withStores.ts'), true)
+  })
+
+  it('reads components and composables', () => {
+    assert.equal(
+      isFeedbackExempt('frontend/app/app/components/documents/ContextDocumentPicker.vue'),
+      false,
+    )
+    assert.equal(isFeedbackExempt('frontend/app/app/composables/useActionToast.ts'), false)
   })
 })
