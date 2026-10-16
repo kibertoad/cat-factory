@@ -9,19 +9,23 @@
     "scopeHint": "Jede Stufe schließt die darüberliegenden ein.",
     "scope": {
       "read": {
-        "label": "Nur lesen",
+        "label": "Lesen · read",
         "description": "Services, Aufgaben, Pipelines und Läufe ansehen."
       },
+      "webhooks": {
+        "label": "Webhooks",
+        "description": "Zusätzlich Webhooks registrieren, die Änderungen an ein anderes System senden."
+      },
       "write": {
-        "label": "Lesen und schreiben",
+        "label": "Schreiben · write",
         "description": "Zusätzlich Aufgaben anlegen und starten."
       },
       "decide": {
-        "label": "Lesen, schreiben und entscheiden",
+        "label": "Entscheiden · decide",
         "description": "Zusätzlich die Fragen beantworten, auf die ein pausierter Lauf wartet."
       },
       "admin": {
-        "label": "Voller Zugriff",
+        "label": "Vollzugriff · admin",
         "description": "Zusätzlich Aufgaben löschen und auf Benachrichtigungen reagieren, was einen Pull Request zusammenführen kann."
       }
     },
@@ -852,7 +856,7 @@
         "labelHelp": "Ein Name, um dieses Token später wiederzuerkennen.",
         "labelPlaceholder": "z. B. CI-Pipeline",
         "scope": "Berechtigung",
-        "scopeHelp": "Jede Stufe umfasst alles, was die vorherige erlaubt. Lesen: Aufgaben, Läufe und deren Ergebnisse ansehen. Schreiben: zusätzlich Aufgaben anlegen, bearbeiten, starten, stoppen und wiederholen sowie Reviews und Bewertungen ausführen. Entscheiden: zusätzlich die menschlichen Entscheidungen eines Laufs beantworten (Freigaben, Review-Befunde, Interview- und Rückfragen, manuelle Tests); diese Stufe braucht ein Token auch, um eine Pipeline zu starten, die an einer solchen Entscheidung anhalten kann. Vollzugriff: zusätzlich Services anlegen, konfigurieren und löschen, Aufgaben löschen, Repositories verknüpfen, Umgebungsverbindungen und Webhooks verwalten und auf Benachrichtigungen reagieren.",
+        "scopeHelp": "Jede Stufe umfasst alles, was die vorherige erlaubt. Lesen: Aufgaben, Läufe und deren Ergebnisse ansehen. Webhooks: zusätzlich Webhooks registrieren und entfernen, die Änderungen an ein anderes System senden, etwa Verzeichnis- und Benachrichtigungs-Webhooks. Schreiben: zusätzlich Aufgaben anlegen, bearbeiten, starten, stoppen und wiederholen sowie Reviews und Bewertungen ausführen. Entscheiden: zusätzlich die menschlichen Entscheidungen eines Laufs beantworten (Freigaben, Review-Befunde, Interview- und Rückfragen, manuelle Tests); diese Stufe braucht ein Token auch, um eine Pipeline zu starten, die an einer solchen Entscheidung anhalten kann. Vollzugriff (admin): zusätzlich Services anlegen, konfigurieren und löschen, Aufgaben löschen, Repositories verknüpfen, Umgebungsverbindungen verwalten und auf Benachrichtigungen reagieren.",
         "create": "Token erstellen",
         "identity": "Läuft als",
         "identitySystem": "Dieser Arbeitsbereich (System-Token)",
@@ -861,16 +865,18 @@
         "identitySelfHelp": "Mit diesem Token gestartete Läufe gelten als Ihre und können Ihr persönliches Claude-/Codex-/GLM-Abonnement nutzen. Jeder solche Aufruf muss zusätzlich Ihr persönliches Passwort im Header X-Personal-Password senden; es wird nie gespeichert. Für Ihre eigenen Headless-Läufe.",
         "reach": "Arbeitsbereiche",
         "reachHelp": "Auf welchen Arbeitsbereichen dieses Token handeln darf. Ein Token für mehr als einen Arbeitsbereich nennt den Arbeitsbereich bei jedem Aufruf im Header x-cat-factory-workspace.",
+        "reachAdminOnly": "Nur ein Konto-Admin kann ein Token anlegen, das weitere Arbeitsbereiche erreicht, wie es Verzeichnis-Webhooks brauchen. Bitte einen Konto-Admin darum.",
         "reachThis": "Nur dieser Arbeitsbereich",
         "reachAll": "Alle Arbeitsbereiche des Kontos",
         "reachSelected": "Ausgewählte Arbeitsbereiche",
         "reachPick": "Arbeitsbereiche auswählen"
       },
       "scopes": {
-        "read": "Lesen",
-        "write": "Schreiben (inkl. Lesen)",
-        "decide": "Entscheiden (inkl. Schreiben)",
-        "admin": "Vollzugriff (inkl. Entscheiden)"
+        "read": "Lesen · read",
+        "webhooks": "Webhooks (inkl. Lesen)",
+        "write": "Schreiben · write (inkl. Webhooks)",
+        "decide": "Entscheiden · decide (inkl. Schreiben)",
+        "admin": "Vollzugriff · admin (inkl. Entscheiden)"
       },
       "toast": {
         "loadFailed": "API-Tokens konnten nicht geladen werden",

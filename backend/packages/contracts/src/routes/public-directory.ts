@@ -97,12 +97,12 @@ export const listDirectoryReposContract = withMinScope(
   }),
 )
 
-// ---- Directory webhooks: account-level push endpoints (`admin`, account-wide keys only) --------
+// ---- Directory webhooks: account-level push endpoints (`webhooks`, account-wide keys only) --------
 
 const webhookIdParams = singleStringParam('webhookId')
 
 export const listDirectoryWebhooksContract = withMinScope(
-  'admin',
+  'webhooks',
   defineApiContract({
     method: 'get',
     pathResolver: () => '/api/v1/directory/webhooks',
@@ -111,7 +111,7 @@ export const listDirectoryWebhooksContract = withMinScope(
 )
 
 export const putDirectoryWebhookContract = withMinScope(
-  'admin',
+  'webhooks',
   defineApiContract({
     method: 'put',
     requestPathParamsSchema: webhookIdParams,
@@ -122,7 +122,7 @@ export const putDirectoryWebhookContract = withMinScope(
 )
 
 export const deleteDirectoryWebhookContract = withMinScope(
-  'admin',
+  'webhooks',
   defineApiContract({
     method: 'delete',
     requestPathParamsSchema: webhookIdParams,

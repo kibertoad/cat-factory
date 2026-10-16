@@ -89,7 +89,7 @@ async function resolveKey<E extends AppEnv>(c: Context<E>): Promise<IdentityResu
 
 /**
  * Authenticate the caller AND require a minimum permission scope. The scope ladder is inclusive
- * (read ⊂ write ⊂ decide ⊂ admin), so a `write` key satisfies a `read` requirement and an `admin`
+ * (read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin), so a `write` key satisfies a `read` requirement and an `admin`
  * key satisfies any. A valid key whose scope is too low is a 403 `insufficient_scope` (distinct
  * from the 401 an unknown/absent key gets) — the caller can tell "wrong key" from "key can't do
  * this". Every `/api/v1` handler gates through this, naming the least scope it needs.

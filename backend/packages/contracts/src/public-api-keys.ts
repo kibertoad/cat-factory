@@ -18,10 +18,15 @@ import * as v from 'valibot'
 
 /**
  * The permission a key carries on the `/api/v1` surface. An ordered ladder — each level
- * INCLUDES the ones below it (`admin` ⊃ `write` ⊃ `read`), so an endpoint gates on a MINIMUM:
+ * INCLUDES the ones below it (`admin` ⊃ `decide` ⊃ `write` ⊃ `webhooks` ⊃ `read`), so an endpoint
+ * gates on a MINIMUM:
  *
  *  - `read`   — read-only reads/streams (list services/tasks/pipelines, poll a run, SSE).
- *  - `write`  — everything `read` can do, PLUS non-destructive mutations (create/start/stop/
+ *  - `webhooks`: everything `read` can do, PLUS registering and removing the push endpoints that
+ *    deliver what `read` could already poll: the account's directory webhooks (for a key reaching
+ *    every workspace) and a workspace's notification webhooks. It changes nothing on the board, so
+ *    a sync integration that only follows changes needs no rung that can author or delete work.
+ *  - `write`: everything `webhooks` can do, PLUS non-destructive mutations (create/start/stop/
  *    retry/edit a task, start an initiative run).
  *  - `decide` — everything `write` can do, PLUS answering a run's PARKED human decisions
  *    (requirement-review findings, implementation-fork choices) — and, because of that,
@@ -46,7 +51,7 @@ import * as v from 'valibot'
  * validation and the server-side `scope ≥ required` check read from one source of truth —
  * the ARRAY ORDER *is* the ladder, and `scopeSatisfies` derives its ranks from it.
  */
-export const PUBLIC_API_SCOPES = ['read', 'write', 'decide', 'admin'] as const
+export const PUBLIC_API_SCOPES = ['read', 'webhooks', 'write', 'decide', 'admin'] as const
 export const publicApiScopeSchema = v.picklist(PUBLIC_API_SCOPES)
 export type PublicApiScope = v.InferOutput<typeof publicApiScopeSchema>
 
@@ -167,7 +172,7 @@ export const publicApiKeySchema = v.object({
   /** Every workspace the key may act on, or `null` for all of the account's workspaces. */
   workspaceIds: publicApiKeyWorkspaceIdsSchema,
   label: v.string(),
-  /** What the key is allowed to do on `/api/v1` (read ⊂ write ⊂ admin). */
+  /** What the key is allowed to do on `/api/v1` (read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin). */
   scope: publicApiScopeSchema,
   /** The user who minted the key (`usr_*`), for audit/UI attribution; `null` when unknown. */
   createdByUserId: v.nullable(v.string()),

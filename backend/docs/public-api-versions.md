@@ -517,6 +517,17 @@ Additive. A client built against an older document reads users as before.
 
 ## 1.86.0
 
+The scope ladder gains a `webhooks` rung between `read` and `write`
+(`read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin`). It is `read` plus registering and removing push
+endpoints: the directory webhooks (`/api/v1/directory/webhooks`, still for a key reaching every
+workspace) and a workspace's notification webhooks (`/api/v1/notification-webhook[s]`). Those
+operations move from `admin` to `webhooks`.
+
+Additive: a new enum value on `scope`, and operations that admit more keys than before. Every key
+that could call them still can.
+
+## 1.87.0
+
 `GET /api/v1/directory/reach` is new (`client.directory.getReach`): the calling key's
 `accountId` and `workspaceIds` (`null` for every workspace), account-scoped like the rest of the
 directory, so it needs no `x-cat-factory-workspace` header. `GET /api/v1/me` names one workspace and

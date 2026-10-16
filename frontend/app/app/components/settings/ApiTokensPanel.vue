@@ -5,7 +5,6 @@
 // renders metadata only (label + created / last-used). To rotate a token, revoke it and mint a new
 // one. Opened from the Integrations hub.
 import { computed, ref, watch } from 'vue'
-import { showOverrideField } from '~/utils/uiMode'
 import type { PublicApiKey, PublicApiScope } from '~/types/publicApiKeys'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
@@ -13,18 +12,21 @@ import AppModal from '~/components/common/AppModal.vue'
 
 const { t, d } = useI18n()
 
-// The permission ladder a minted key can carry (read ⊂ write ⊂ decide ⊂ admin), mirroring the
-// backend contract. A `read` key can only observe; `write` adds create/start/manage; `decide` adds
+// The permission ladder a minted key can carry (read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin), mirroring
+// the backend contract. A `read` key can only observe; `webhooks` adds registering push endpoints;
+// `write` adds create/start/manage; `decide` adds
 // answering a run's PARKED human decisions (and, because of that, starting a headless run on a
 // pipeline that can park at all); `admin` adds the destructive/merge-adjacent operations (e.g.
 // deleting a task).
-const SCOPES: PublicApiScope[] = ['read', 'write', 'decide', 'admin']
+const SCOPES: PublicApiScope[] = ['read', 'webhooks', 'write', 'decide', 'admin']
 
 /** Localized label for a scope — an exhaustive switch, so a new scope is a compile error here. */
 function scopeLabel(scope: PublicApiScope): string {
   switch (scope) {
     case 'read':
       return t('settings.apiTokens.scopes.read')
+    case 'webhooks':
+      return t('settings.apiTokens.scopes.webhooks')
     case 'write':
       return t('settings.apiTokens.scopes.write')
     case 'decide':
@@ -40,19 +42,14 @@ const auth = useAuthStore()
 const store = usePublicApiKeysStore()
 const accounts = useAccountsStore()
 const workspace = useWorkspaceStore()
-const uiMode = useUiModeStore()
 
-// A key's reach. The default is this board alone, which is what every key was before keys could
-// span workspaces; the wider choices are an override only an account admin can make, so the field
-// is hidden for everyone else rather than offered and refused.
+// A key's reach. The default is this board alone. The wider choices are an account admin's to
+// make, so the field is shown to everyone in both UI modes and disabled for anyone else, with the
+// reason, because a directory webhook needs a key that reaches every workspace.
 type TokenReach = 'this' | 'all' | 'selected'
 const reach = ref<TokenReach>('this')
 const selectedWorkspaceIds = ref<string[]>([])
-const canWidenReach = computed(
-  () =>
-    accounts.activeAccount?.roles?.includes('admin') === true &&
-    showOverrideField(uiMode.isAdvanced),
-)
+const canWidenReach = computed(() => accounts.activeAccount?.roles?.includes('admin') === true)
 const reachItems = computed(() => [
   { value: 'this' as const, label: t('settings.apiTokens.add.reachThis') },
   { value: 'all' as const, label: t('settings.apiTokens.add.reachAll') },
@@ -385,13 +382,17 @@ async function revokeToken(key: PublicApiKey) {
             />
           </UFormField>
           <UFormField
-            v-if="canWidenReach"
             :label="t('settings.apiTokens.add.reach')"
-            :help="t('settings.apiTokens.add.reachHelp')"
+            :help="
+              canWidenReach
+                ? t('settings.apiTokens.add.reachHelp')
+                : t('settings.apiTokens.add.reachAdminOnly')
+            "
           >
             <USelect
               v-model="reach"
               :items="reachItems"
+              :disabled="!canWidenReach"
               class="w-full"
               data-testid="api-token-reach"
             />
