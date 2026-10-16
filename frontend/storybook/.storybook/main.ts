@@ -7,7 +7,7 @@ import type { StorybookConfig } from '@storybook-vue/nuxt'
 // what renders the stories; the module is not needed for it.
 const config: StorybookConfig = {
   framework: { name: '@storybook-vue/nuxt', options: {} },
-  stories: ['../../../frontend/app/app/components/**/*.stories.@(js|ts)'],
+  stories: ['../../app/app/components/**/*.stories.@(js|ts)'],
   // axe over every story, in both colour modes. This is the browser-based contrast lane the
   // render-snapshot initiative wanted and PR #2260 could not land as regex: text-on-fill contrast
   // is a COMPUTED property, and the line-scoped rules kept growing special cases for variant

@@ -1627,8 +1627,8 @@ pnpm i18n:check                                      # catalog is well-formed
 pnpm i18n:parity                                     # locales are in parity
 
 # Component stories, from the repo root:
-pnpm --filter @cat-factory/deploy-frontend run storybook      # http://localhost:6006
-pnpm --filter @cat-factory/deploy-frontend run test:stories   # every story in headless Chromium
+pnpm --filter @cat-factory/storybook run storybook      # http://localhost:6006
+pnpm --filter @cat-factory/storybook run test:stories   # every story in headless Chromium
 ```
 
 A component's stories sit beside it as `Foo.stories.ts`; the fixtures and helpers they share are in

@@ -104,6 +104,7 @@ packages:
   - 'backend/runtimes/*'
   - 'backend/internal/*'
   - 'frontend/app'
+  - 'frontend/storybook'
   - 'deploy/backend'
   - 'deploy/frontend'
   - 'deploy/node'

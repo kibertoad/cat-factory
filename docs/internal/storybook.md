@@ -1,12 +1,13 @@
 # Component stories (Storybook)
 
 The SPA's components have stories: one `Foo.stories.ts` beside each `Foo.vue` under
-`frontend/app/app/components/`, in CSF3. Storybook runs from `deploy/frontend`, the same Nuxt
-deployment the SPA builds from.
+`frontend/app/app/components/`, in CSF3. Storybook runs from `frontend/storybook`, a private
+workspace package whose Nuxt app extends the `@cat-factory/app` layer and nothing else. It is not
+part of `deploy/frontend`, so the deployment template stays copyable outside this repository.
 
 ```bash
-pnpm --filter @cat-factory/deploy-frontend run storybook        # http://localhost:6006
-pnpm --filter @cat-factory/deploy-frontend run test:stories     # every story as a test
+pnpm --filter @cat-factory/storybook run storybook        # http://localhost:6006
+pnpm --filter @cat-factory/storybook run test:stories     # every story as a test
 ```
 
 Stories cover what a component draws for a given state. Whether the backend agrees with what the

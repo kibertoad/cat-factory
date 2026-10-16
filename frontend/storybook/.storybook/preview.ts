@@ -1,7 +1,7 @@
 import { h } from 'vue'
 import UApp from '@nuxt/ui/components/App.vue'
-import { __resetConsumerModulesForTest } from '../../../frontend/app/app/modular/registry'
-import { installApiResponses, startApiWorker } from '../../../frontend/app/app/stories/api'
+import { __resetConsumerModulesForTest } from '../../app/app/modular/registry'
+import { installApiResponses, startApiWorker } from '../../app/app/stories/api'
 import type { Preview } from '@storybook/vue3'
 
 // Every story renders inside `UApp`, exactly as `app.vue` does.

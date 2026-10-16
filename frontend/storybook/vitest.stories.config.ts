@@ -12,7 +12,7 @@ import { defineConfig } from 'vitest/config'
 // `.github/workflows/stories.yml` runs it. It boots a browser and the whole Nuxt Vite graph, about
 // 10 minutes for the tree, so it does not belong in a lane a PR waits on.
 //
-//   pnpm --filter @cat-factory/deploy-frontend run test:stories
+//   pnpm --filter @cat-factory/storybook run test:stories
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
