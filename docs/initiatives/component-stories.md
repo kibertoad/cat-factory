@@ -42,13 +42,13 @@ rows in `fixtures.spec.ts`.
 | --- | ---------------------------------------------------------------------- | ----------- | --------- | ----------------------------------------------------------- |
 | 1   | Infrastructure, the patch, the guard, the nightly lane, three examples | 3           | 12        | (this PR)                                                   |
 | 2   | Primitives and Shell                                                   | 36          | 130       | [#2384](https://github.com/kibertoad/cat-factory/pull/2384) |
-| 3   | Board                                                                  | 43          | 205       |                                                             |
-| 4   | Inspector                                                              | 35          | 149       |                                                             |
-| 5   | Pipeline                                                               | 47          | 241       |                                                             |
-| 6   | Review and Run telemetry                                               | 31          | 167       |                                                             |
-| 7   | Documents and Setup                                                    | 36          | 164       |                                                             |
-| 8   | Settings, first half                                                   | 40          | about 180 |                                                             |
-| 9   | Settings, second half                                                  | 41          | about 180 |                                                             |
+| 3   | Board                                                                  | 43          | 205       | [#2385](https://github.com/kibertoad/cat-factory/pull/2385) |
+| 4   | Inspector                                                              | 35          | 149       | [#2386](https://github.com/kibertoad/cat-factory/pull/2386) |
+| 5   | Pipeline                                                               | 47          | 241       | [#2387](https://github.com/kibertoad/cat-factory/pull/2387) |
+| 6   | Review and Run telemetry                                               | 31          | 167       | [#2388](https://github.com/kibertoad/cat-factory/pull/2388) |
+| 7   | Documents and Setup                                                    | 36          | 164       | [#2389](https://github.com/kibertoad/cat-factory/pull/2389) |
+| 8   | Settings, first half                                                   | 40          | about 180 | [#2390](https://github.com/kibertoad/cat-factory/pull/2390) |
+| 9   | Settings, second half                                                  | 41          | about 180 | [#2391](https://github.com/kibertoad/cat-factory/pull/2391) |
 
 The domain counts include the examples in PR 1 (one each in Review, Board and Pipeline).
 
