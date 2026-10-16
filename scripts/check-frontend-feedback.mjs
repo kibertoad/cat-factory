@@ -71,11 +71,23 @@ export function findFeedbackOffences(rel, { code }) {
   return found
 }
 
+/**
+ * Whether the guard skips a file: tests and stories. Neither ships, and a test or a story names a
+ * toast or a spinner class to FIND one in the rendered output, not to draw it.
+ */
+export function isFeedbackExempt(rel) {
+  return (
+    rel.endsWith('.spec.ts') ||
+    rel.endsWith('.stories.ts') ||
+    rel.includes('frontend/app/app/stories/')
+  )
+}
+
 function main() {
   const offenders = []
   const pendingStillOffends = new Set()
   for (const file of spaSourceFiles()) {
-    if (file.rel.endsWith('.spec.ts')) continue
+    if (isFeedbackExempt(file.rel)) continue
     readCodeLines(file).forEach((line, i) => {
       const matches = findFeedbackOffences(file.rel, line)
       if (!matches.length) return
