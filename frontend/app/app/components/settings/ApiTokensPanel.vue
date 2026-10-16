@@ -172,6 +172,7 @@ watch(
       newSecret.value = null
       return
     }
+    applyPrefill()
     try {
       await store.ensureLoaded()
     } catch (e) {
@@ -180,6 +181,16 @@ watch(
   },
   { immediate: true },
 )
+
+/** Fill the create form from a new-API-key deep link (`useNewApiKeyDeepLink`), once. */
+function applyPrefill() {
+  const prefill = ui.apiTokensPrefill
+  if (!prefill) return
+  if (prefill.label) label.value = prefill.label
+  if (prefill.scope) scope.value = prefill.scope
+  if (prefill.runsAsSelf && canBindSelf.value) identity.value = 'self'
+  ui.apiTokensPrefill = null
+}
 
 async function createToken() {
   const trimmed = label.value.trim()

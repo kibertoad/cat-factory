@@ -11,6 +11,7 @@ import type {
   ProviderConnectionKind,
 } from '~/types/providerConnections'
 import type { AddServicePrefill } from '~/composables/useAddRepoDeepLink'
+import type { NewApiKeyPrefill } from '~/composables/useNewApiKeyDeepLink'
 import type { PendingContext } from '~/composables/useContextLinking'
 import {
   infraSetupDismissalKey,
@@ -667,6 +668,8 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   // API access tokens: the workspace's inbound public-API keys external systems present to
   // the `/api/v1` surface. Opened from the Integrations hub.
   const apiTokensOpen = ref(false)
+  // The create form a new-API-key deep link opened the window with, consumed on open.
+  const apiTokensPrefill = ref<NewApiKeyPrefill | null>(null)
   // Opened and closed by `createBuilderModelConfigHandoff`, which hands the pipeline builder over.
   const modelConfigOpen = ref(false)
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
@@ -722,12 +725,14 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   function closeReports() {
     reportsOpen.value = false
   }
-  function openApiTokens() {
+  function openApiTokens(prefill: NewApiKeyPrefill | null = null) {
     resetHubReturn()
+    apiTokensPrefill.value = prefill
     apiTokensOpen.value = true
   }
   function closeApiTokens() {
     apiTokensOpen.value = false
+    apiTokensPrefill.value = null
   }
   function openVendorCredentials(tab = 'pool') {
     resetHubReturn()
@@ -770,6 +775,7 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
     operatorDashboardOpen,
     reportsOpen,
     apiTokensOpen,
+    apiTokensPrefill,
     modelConfigOpen,
     vendorCredentialsOpen,
     vendorCredentialsTab,
