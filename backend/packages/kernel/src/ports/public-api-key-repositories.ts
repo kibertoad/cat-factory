@@ -7,7 +7,7 @@
 // yields no usable keys. The raw key is shown exactly once, on issue.
 //
 // A key is scoped to one account + workspace; every call it authenticates is bound to
-// that workspace. It also carries a permission `scope` (read ⊂ write ⊂ admin) the public
+// that workspace. It also carries a permission `scope` (read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin) the public
 // surface gates each endpoint on. Both runtimes implement this (Cloudflare D1 + Node/local
 // Postgres) so behaviour is identical everywhere.
 
@@ -25,7 +25,7 @@ export interface PublicApiKeyRecord {
    */
   workspaceIds: string[] | null
   label: string
-  /** What the key may do on `/api/v1` (read ⊂ write ⊂ admin). */
+  /** What the key may do on `/api/v1` (read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin). */
   scope: PublicApiScope
   /** Hex `HMAC-SHA256(secret, ENCRYPTION_KEY)` of the key's secret portion. */
   secretHash: string

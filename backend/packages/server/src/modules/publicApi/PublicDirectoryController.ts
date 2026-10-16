@@ -79,8 +79,9 @@ export function publicDirectoryController(): Hono<AppEnv> {
   })
 
   // ---- Directory webhooks: account-level push endpoints --------------------------------------
-  // `admin` and account-wide only: an endpoint receives every directory change in the account, so
-  // a key limited to some workspaces could otherwise read the rest through a push it registered.
+  // `webhooks` and account-wide only: an endpoint receives every directory change in the account,
+  // so a key limited to some workspaces could otherwise read the rest through a push it registered.
+  // The reach check is what protects the data; the scope only keeps a plain `read` key passive.
 
   buildHonoRoute(app, listDirectoryWebhooksContract, async (c) => {
     const gate = await authorizeAccount(c, listDirectoryWebhooksContract.minScope)

@@ -28,19 +28,19 @@ import { authorize, refuse } from './publicApiAuth.js'
 //
 // Three things shape this controller:
 //
-//  1. **`admin` scope on all three verbs, the read included.** The obvious alternative, `read` for
-//     the GET since it returns no secret, buys an integration nothing it cannot get from its own
-//     configuration, and the URL it discloses is a receiver's address plus, in practice, the
-//     deployment's routing shape. What decides it is ADR 0034: a scope can be RELAXED later
-//     without breaking a live key, never tightened, so where the two readings are close the strict
-//     one is the reversible one.
+//  1. **`webhooks` scope on all three verbs, the read included.** The rung sits just above `read`
+//     because an endpoint only delivers what a `read` key could already poll, so registering one
+//     needs no power to author or delete work. It is a rung of its own rather than `read`: an
+//     enrolment stores state and points this deployment's outbound requests at an address, and
+//     the URL a read discloses is a receiver's address plus, in practice, the deployment's
+//     routing shape.
 //  2. **No parallel logic.** Every verb delegates to the same `NotificationWebhookService` method
 //     the session controller calls, so the SSRF guard on the endpoint, the keep-on-omit rule for
 //     each field and the per-workspace endpoint cap hold identically whichever surface
 //     writes. A `ValidationError` from the URL guard propagates to `handleError` rather than being
 //     re-mapped here, so the refusal keeps its `details`.
 //  3. **The secret stays write-only.** `put` accepts one and `get` reports `hasSecret`; nothing
-//     reads it back. An `admin` key can rotate the signing secret, and cannot learn the stored
+//     reads it back. A `webhooks` key can rotate the signing secret, and cannot learn the stored
 //     one, which is what keeps this surface from turning a key compromise into the ability to
 //     FORGE deliveries that a receiver would verify.
 //
@@ -105,7 +105,7 @@ export function publicNotificationWebhookController(): Hono<AppEnv> {
   //
   // Every one of these is the corresponding singular route with the id supplied instead of
   // defaulted. That is the whole difference, deliberately: the enrolment rules a caller has to
-  // reason about (keep-on-omit, the write-only secret, the SSRF guard, `admin` scope) must not
+  // reason about (keep-on-omit, the write-only secret, the SSRF guard, `webhooks` scope) must not
   // depend on which of the two shapes it happened to call.
 
   buildHonoRoute(app, listPublicNotificationWebhooksContract, async (c) => {
