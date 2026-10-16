@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { resolveDecisionContract } from '@cat-factory/contracts'
-import { screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent, waitFor } from 'storybook/test'
 import { apiPending } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { decision, step } from '~/stories/pipelineStep.stories.mocks'
@@ -62,5 +62,7 @@ export const Resolving: Story = {
   },
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'In process only' }))
+    const other = screen.getByRole('button', { name: 'Redis, beside the session cache' })
+    await waitFor(() => expect(other).toBeDisabled())
   },
 }

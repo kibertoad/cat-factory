@@ -196,6 +196,7 @@ export const InfraSetupFailed: Story = {
   ],
   play: async () => {
     await userEvent.click(await screen.findByTestId('tester-infra-setup-logs-toggle'))
+    await screen.findByTestId('tester-infra-setup-logs')
   },
 }
 

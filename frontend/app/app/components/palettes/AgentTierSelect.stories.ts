@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import { withSeed } from '~/stories/withStores'
 import { useAgentTierStore } from '~/stores/agentTier'
 import AgentTierSelect from './AgentTierSelect.vue'
@@ -36,5 +36,6 @@ export const Open: Story = {
   }),
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('button'))
+    await screen.findByText('Shows every agent, including the specialist ones.')
   },
 }

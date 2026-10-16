@@ -285,6 +285,7 @@ export const Triaged: Story = {
   ),
   play: async () => {
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Show decided' }))
+    await screen.findByTestId('bug-fishing-finding-bf_lockout_reset')
   },
 }
 
@@ -374,6 +375,7 @@ export const PhaseFailed: Story = {
   ),
   play: async () => {
     await userEvent.click(await screen.findByTestId('bug-fishing-phase-concurrency'))
+    await screen.findByTestId('bug-fishing-phase-failed')
   },
 }
 

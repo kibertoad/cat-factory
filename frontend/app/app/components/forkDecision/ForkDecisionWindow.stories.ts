@@ -21,15 +21,18 @@ import ForkDecisionWindow from './ForkDecisionWindow.vue'
 const params = { pathPrefix: storyWorkspacePrefix, pathParams: { executionId: 'exec_login' } }
 
 function opened(state: ForkDecisionStepState | null, { viewer = false } = {}) {
+  // The backend takes a choice only on a parked step of a blocked run (`ForkDecisionController`).
+  const parked = state?.status === 'awaiting_choice' || state?.status === 'answering'
   const run = execution({
+    status: parked ? 'blocked' : 'running',
     steps: [
       step({ agentKind: 'architect', state: 'done', progress: 1 }),
       step({
         agentKind: 'coder',
-        state: 'working',
+        state: parked ? 'waiting_decision' : 'working',
         progress: 0.1,
         ...(state ? { forkDecision: state } : {}),
-        ...(state?.status === 'awaiting_choice' || state?.status === 'answering'
+        ...(parked
           ? { approval: approval({ id: 'appr_login_fork', proposal: 'Pick an approach.' }) }
           : {}),
       }),
@@ -109,8 +112,6 @@ async function showChat() {
 const meta = {
   title: 'Pipeline/Components/ForkDecisionWindow',
   component: ForkDecisionWindow,
-  decorators: [opened(waiting)],
-  parameters: { api: reads(waiting) },
 } satisfies Meta<typeof ForkDecisionWindow>
 export default meta
 
@@ -120,12 +121,17 @@ type Story = StoryObj<typeof meta>
  * Three approaches, the session service one recommended and picked, then "my own approach". The
  * chat has no question yet.
  */
-export const Default: Story = {}
+export const Default: Story = {
+  decorators: [opened(waiting)],
+  parameters: { api: reads(waiting) },
+}
+
+const skipped = forkDecisionState({ status: 'skipped', forks: [], seamSummary: null })
 
 /** The step skipped the decision (the estimate was below the gate): nothing to decide. */
 export const Empty: Story = {
-  decorators: [opened(forkDecisionState({ status: 'skipped', forks: [], seamSummary: null }))],
-  parameters: { api: reads(null) },
+  decorators: [opened(skipped)],
+  parameters: { api: reads(skipped) },
 }
 
 /** The proposer is still reading the repository. */
@@ -150,18 +156,25 @@ export const Chosen: Story = {
 export const Answering: Story = {
   decorators: [opened(answering)],
   parameters: { api: reads(answering) },
-  play: showChat,
+  play: async () => {
+    await showChat()
+    await screen.findByText('Thinking…')
+  },
 }
 
 /** The chat has used both of its questions: the box is off and says so. */
 export const ChatBudgetSpent: Story = {
   decorators: [opened(budgetSpent)],
   parameters: { api: reads(budgetSpent) },
-  play: showChat,
+  play: async () => {
+    await showChat()
+    await screen.findByPlaceholderText(/Chat limit reached/)
+  },
 }
 
 /** The pick was refused, because the run moved on: the refusal shows above the approaches. */
 export const Error: Story = {
+  decorators: [opened(waiting)],
   parameters: {
     api: [
       apiRefusal(chooseForkContract, {
@@ -185,5 +198,8 @@ export const Error: Story = {
 export const Viewer: Story = {
   decorators: [opened(forkDecisionState({ chat: forkChat }), { viewer: true })],
   parameters: { api: reads(forkDecisionState({ chat: forkChat })) },
-  play: showChat,
+  play: async () => {
+    await showChat()
+    await screen.findAllByTitle(/Read-only access/)
+  },
 }

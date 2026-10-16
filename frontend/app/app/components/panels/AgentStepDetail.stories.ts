@@ -90,13 +90,14 @@ function gradings(...rows: ReturnType<typeof kaizenGrading>[]): HttpHandler {
 /**
  * Step `stepIndex` of `run` opened, with `api` answering the requests. `direct` sets the open step
  * without the router that sends a step to its own window: the state of a step whose park arrives
- * while this panel is already open.
+ * while this panel is already open. `graded` gives the run's gradings; without it, the run has
+ * none.
  */
 function opened(
   run: ExecutionInstance,
   stepIndex: number,
   api: HttpHandler[] = [],
-  { direct = false } = {},
+  { direct = false, graded = gradings() } = {},
 ): Story {
   return {
     decorators: [
@@ -107,7 +108,7 @@ function opened(
         else useUiStore().openStepDetail(run.id, stepIndex)
       }),
     ],
-    parameters: { api: [...api, gradings()] },
+    parameters: { api: [...api, graded] },
   }
 }
 
@@ -121,21 +122,45 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 /**
- * The architect's finished plan: the details card, the Kaizen grade, and the plan in sections,
- * with the contents list beside it.
+ * The architect's finished plan while the coder works: the details card, and the plan in sections,
+ * with the contents list beside it. Kaizen grades nothing before the run is done.
  */
-export const Default: Story = opened(loginRun([architectDone, coderWorking, reviewerPending]), 0, [
-  gradings(
-    kaizenGrading({
-      id: 'kz_login_architect',
-      stepIndex: 0,
-      agentKind: 'architect',
-      grade: 4,
-      summary: 'A clear plan that names the in-flight case. It does not say how to roll it out.',
-      recommendations: ['State the rollout order when a change touches two services.'],
-    }),
+export const Default: Story = opened(loginRun([architectDone, coderWorking, reviewerPending]), 0)
+
+/**
+ * The run is done, so Kaizen graded it (`KaizenService` grades only a finished run): the grade and
+ * the recommendation under the architect's plan.
+ */
+export const Graded: Story = {
+  ...opened(
+    loginRun(
+      [
+        architectDone,
+        { ...coderWorking, state: 'done', progress: 1, finishedAt: started + 40 * 60_000 },
+        { ...reviewerPending, state: 'done', progress: 1 },
+      ],
+      { status: 'done', currentStep: 2 },
+    ),
+    0,
+    [],
+    {
+      graded: gradings(
+        kaizenGrading({
+          id: 'kz_login_architect',
+          stepIndex: 0,
+          agentKind: 'architect',
+          grade: 4,
+          summary:
+            'A clear plan that names the in-flight case. It does not say how to roll it out.',
+          recommendations: ['State the rollout order when a change touches two services.'],
+        }),
+      ),
+    },
   ),
-])
+  play: async () => {
+    await screen.findByText('4/5')
+  },
+}
 
 /** The board's run withholds the prose, and the whole run is still on its way. */
 const projected = loginRun(
@@ -286,5 +311,6 @@ export const FailedWithHistory: Story = {
   ),
   play: async () => {
     await userEvent.click(await screen.findByTestId('step-execution-history-toggle'))
+    await screen.findAllByTestId('step-history-failure-entry')
   },
 }

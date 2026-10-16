@@ -267,5 +267,6 @@ export const RecommendChosen: Story = {
   play: async () => {
     const card = (await screen.findAllByTestId('requirements-finding'))[0]!
     await userEvent.click(within(card).getByTestId('requirements-mode-recommend'))
+    await within(card).findByPlaceholderText('Guidance for the recommendation (optional)…')
   },
 }

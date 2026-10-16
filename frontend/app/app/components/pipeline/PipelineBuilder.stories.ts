@@ -167,6 +167,7 @@ export const ArchivedShown: Story = {
   decorators: [builder(buildDraft)],
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Archived (1)' }))
+    await screen.findByRole('button', { name: 'Unarchive' })
   },
 }
 
@@ -175,5 +176,6 @@ export const AddAgentOpen: Story = {
   decorators: [builder(buildDraft)],
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add agent' }))
+    await screen.findByPlaceholderText('e.g. Security Auditor')
   },
 }

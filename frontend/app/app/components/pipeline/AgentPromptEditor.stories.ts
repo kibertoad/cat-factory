@@ -104,6 +104,7 @@ export const EmptyHistory: Story = {
 export const AppendedTextOpen: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: /show what/i }))
+    await screen.findByText('Appended by the platform (not editable)')
   },
 }
 
@@ -111,5 +112,6 @@ export const AppendedTextOpen: Story = {
 export const BuiltinShown: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: /compare with built-in/i }))
+    await screen.findByText('Built-in prompt')
   },
 }

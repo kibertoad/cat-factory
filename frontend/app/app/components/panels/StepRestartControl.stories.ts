@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { restartExecutionContract } from '@cat-factory/contracts'
-import { userEvent, within } from 'storybook/test'
+import { expect, userEvent, waitFor, within } from 'storybook/test'
 import { apiPending } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { execution, snapshot } from '~/stories/snapshot.stories.mocks'
@@ -29,7 +29,12 @@ async function arm(canvasElement: HTMLElement) {
 export const Default: Story = {}
 
 /** One click: Restart from here and Cancel. */
-export const Armed: Story = { play: async ({ canvasElement }) => arm(canvasElement) }
+export const Armed: Story = {
+  play: async ({ canvasElement }) => {
+    await arm(canvasElement)
+    await within(canvasElement).findByRole('button', { name: 'Cancel' })
+  },
+}
 
 /** The second click: the restart is in flight, so the button spins and Cancel disables. */
 export const Restarting: Story = {
@@ -44,5 +49,7 @@ export const Restarting: Story = {
   play: async ({ canvasElement }) => {
     await arm(canvasElement)
     await userEvent.click(within(canvasElement).getByRole('button', { name: /restart from here/i }))
+    const cancel = within(canvasElement).getByRole('button', { name: 'Cancel' })
+    await waitFor(() => expect(cancel).toBeDisabled())
   },
 }

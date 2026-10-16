@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import type { PipelinePurpose } from '@cat-factory/contracts'
 import PipelinePurposeSelect from './PipelinePurposeSelect.vue'
 
@@ -38,5 +38,6 @@ export const Open: Story = {
   }),
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByTestId('pipeline-purpose-select'))
+    await screen.findAllByRole('menuitem')
   },
 }

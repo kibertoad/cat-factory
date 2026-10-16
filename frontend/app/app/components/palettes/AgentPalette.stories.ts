@@ -77,5 +77,6 @@ export const WithObservabilityGate: Story = {
 export const CollapsedCategory: Story = {
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('button', { name: /Implementation/ }))
+    await within(canvasElement).findByRole('button', { name: /Implementation/, expanded: false })
   },
 }

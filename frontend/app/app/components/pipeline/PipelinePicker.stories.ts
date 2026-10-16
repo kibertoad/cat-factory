@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { ref } from 'vue'
-import { userEvent, within } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import { adaptiveBuild, bugfixPipeline, standardBuild } from '~/stories/pipelines.stories.mocks'
 import PipelinePicker from './PipelinePicker.vue'
 
@@ -21,19 +21,32 @@ const meta = {
     setup: () => ({ args, selected: ref(args.modelValue) }),
     template: '<div class="pb-96"><PipelinePicker v-bind="args" v-model="selected" /></div>',
   }),
-  play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByTestId('pipeline-picker-trigger'))
-  },
 } satisfies Meta<typeof PipelinePicker>
 export default meta
 
 type Story = StoryObj<typeof meta>
 
+/** Open the popover. */
+async function open(canvasElement: HTMLElement) {
+  await userEvent.click(within(canvasElement).getByTestId('pipeline-picker-trigger'))
+}
+
 /** Standard build selected, and its eleven steps in the preview. */
-export const Default: Story = {}
+export const Default: Story = {
+  play: async ({ canvasElement }) => {
+    await open(canvasElement)
+    await screen.findByTestId('pipeline-preview')
+  },
+}
 
 /** The none row selected: the preview says the pipeline is chosen at run time. */
-export const NoneSelected: Story = { args: { modelValue: '' } }
+export const NoneSelected: Story = {
+  args: { modelValue: '' },
+  play: async ({ canvasElement }) => {
+    await open(canvasElement)
+    await screen.findByText('No default pipeline. You choose one when you run the task.')
+  },
+}
 
 /**
  * A schedule must have a pipeline, so there is no none row: the trigger shows the prompt and the
@@ -41,6 +54,10 @@ export const NoneSelected: Story = { args: { modelValue: '' } }
  */
 export const WithoutNoneRow: Story = {
   args: { modelValue: '', noneLabel: undefined, placeholder: 'Pick a pipeline' },
+  play: async ({ canvasElement }) => {
+    await open(canvasElement)
+    await screen.findByText('Hover a pipeline to see the steps it runs.')
+  },
 }
 
 /** The closed trigger with the selected pipeline's name. */
@@ -50,5 +67,7 @@ export const Closed: Story = {
     setup: () => ({ args, selected: ref(args.modelValue) }),
     template: '<PipelinePicker v-bind="args" v-model="selected" />',
   }),
-  play: async () => {},
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findByRole('button', { name: standardBuild.name })
+  },
 }
