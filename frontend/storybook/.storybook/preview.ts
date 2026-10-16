@@ -1,7 +1,8 @@
 import { h } from 'vue'
+import { useColorMode } from '#imports'
 import UApp from '@nuxt/ui/components/App.vue'
-import { __resetConsumerModulesForTest } from '../../../frontend/app/app/modular/registry'
-import { installApiResponses, startApiWorker } from '../../../frontend/app/app/stories/api'
+import { __resetConsumerModulesForTest } from '../../app/app/modular/registry'
+import { installApiResponses, startApiWorker } from '../../app/app/stories/api'
 import type { Preview } from '@storybook/vue3'
 
 // Every story renders inside `UApp`, exactly as `app.vue` does.
@@ -16,13 +17,31 @@ import type { Preview } from '@storybook/vue3'
 // `<UApp>` there resolves to a literal `<uapp>` element that provides nothing and looks fine in
 // the DOM. Components inside a story's own `.vue` file are a different matter: those are
 // compiled by Vite with Nuxt's transform and auto-import normally.
+/** The colour-mode helper `preview-head.html` stubs, in the fields `@nuxtjs/color-mode` reads. */
+interface ColorModeHelper {
+  preference: string
+  value: string
+}
+
 /**
- * Apply a colour mode the way the app does: a class on `<html>`.
+ * Apply a colour mode the way the app does: a class on `<html>`, and the colour-mode helper.
  *
  * `tokens.css` is dark-first (`:root` holds the dark values, `.light` overrides them), so the
  * class is not a cosmetic switch. Without it a story renders dark tokens on a white page.
+ *
+ * The helper matters for every component that reads `useColorMode()`. The colour-mode plugin
+ * reads `window.__NUXT_COLOR_MODE__` once, when it loads, and seeds each story's Nuxt app from
+ * its `preference` and `value`. If only the class changed, a story opened in light and switched
+ * to dark would draw dark tokens while `useColorMode().value` still said `light`. The plugin
+ * holds the same object, so changing its fields here is enough.
  */
 function setColorMode(mode: string): void {
+  const helper = (window as unknown as { __NUXT_COLOR_MODE__?: ColorModeHelper })
+    .__NUXT_COLOR_MODE__
+  if (helper) {
+    helper.preference = mode
+    helper.value = mode
+  }
   const root = document.documentElement
   root.classList.remove('light', 'dark')
   root.classList.add(mode)
@@ -76,12 +95,9 @@ const preview: Preview = {
   // The reset has to run BEFORE the plugins do. Storybook's `beforeEach` is in the prepare
   // phase, ahead of `renderToCanvas` where the preset's `setup()` callback lives; a decorator
   // would be too late. The helper is named for tests because tests were its first caller.
-  beforeEach: (context) => {
+  beforeEach: () => {
     __resetConsumerModulesForTest()
     clearCookies()
-    // A story's API responses (`parameters.api`), installed before the component's loaders run.
-    // Every story replaces the previous story's set, so none answers for another.
-    installApiResponses(context.parameters.api ?? [])
   },
 
   // One msw worker for the whole preview: registering a service worker per story would be slow
@@ -90,8 +106,18 @@ const preview: Preview = {
     await startApiWorker()
   },
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  loaders: [(context: any) => setColorMode(context.globals.colorMode ?? 'light')],
+  // Storybook runs the loaders BEFORE `beforeEach`, so what a story's own loaders need is set up
+  // here, in the first preview loader. The preview's loaders run before the story's.
+  loaders: [
+    // A story's API responses (`parameters.api`). Every story replaces the previous story's set,
+    // so none answers for another, and a story loader that fetches gets this story's answers.
+    (context) => {
+      installApiResponses(context.parameters.api ?? [])
+    },
+    (context) => {
+      setColorMode(context.globals.colorMode ?? 'light')
+    },
+  ],
 
   // Width is a story PARAMETER because a component stretched to the full canvas is a lie about
   // where it lives: `RunFailureSummary` sits in an inspector panel, not across 1280px, and the
@@ -104,6 +130,10 @@ const preview: Preview = {
   // the board canvas remounted the canvas three times.
   decorators: [
     (story, context) => {
+      // The story's own colour-mode state. Its Nuxt app outlives a toolbar change, so the state
+      // it was seeded with at the start would still say the old mode. Setting the preference
+      // lets the colour-mode plugin update the value and the class, as it does in the app.
+      useColorMode().preference = context.globals.colorMode ?? 'light'
       const Story = story()
       const width = { panel: '420px', narrow: '280px', prose: '640px' }[
         context.parameters.width as string

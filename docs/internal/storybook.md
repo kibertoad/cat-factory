@@ -1,12 +1,13 @@
 # Component stories (Storybook)
 
 The SPA's components have stories: one `Foo.stories.ts` beside each `Foo.vue` under
-`frontend/app/app/components/`, in CSF3. Storybook runs from `deploy/frontend`, the same Nuxt
-deployment the SPA builds from.
+`frontend/app/app/components/`, in CSF3. Storybook runs from `frontend/storybook`, a private
+workspace package whose Nuxt app extends the `@cat-factory/app` layer and nothing else. It is not
+part of `deploy/frontend`, so the deployment template stays copyable outside this repository.
 
 ```bash
-pnpm --filter @cat-factory/deploy-frontend run storybook        # http://localhost:6006
-pnpm --filter @cat-factory/deploy-frontend run test:stories     # every story as a test
+pnpm --filter @cat-factory/storybook run storybook        # http://localhost:6006
+pnpm --filter @cat-factory/storybook run test:stories     # every story as a test
 ```
 
 Stories cover what a component draws for a given state. Whether the backend agrees with what the
@@ -50,7 +51,11 @@ a `.vue` file are fine, because Vite compiles those with Nuxt's transform.
 
 **`preview-head.html` stubs `window.__NUXT_COLOR_MODE__`.** The colour-mode module injects that
 global through Nuxt's HTML template, and Storybook's `iframe.html` is not that template. Without it
-the plugin reads `preference` off undefined and nothing renders.
+the plugin reads `preference` off undefined and nothing renders. The plugin reads the global once
+and seeds a story's `useColorMode()` from it when the story's Nuxt app starts. So `preview.ts`
+changes the global's `preference` and `value` with each toolbar change, and its decorator sets the
+running story's `useColorMode().preference`. If only the class changed, a dark story would report
+`light`.
 
 **`@nuxt/fonts` kills the process on the first `/_fonts/*` request.** Its Storybook branch calls
 its own h3 handler with a bare `{ path }`, which throws out of a middleware nothing catches, and
@@ -105,7 +110,7 @@ Pick the layer first: it decides what mounts, what fakes the data, and who the s
 ### Titles are product language
 
 ```
-<Domain>/<Kind>/<Component>        Pipeline/Components/GateFailingCheckList
+<Domain>/<Kind>/<Component>        Review/Components/GateFailingCheckList
 ```
 
 A title names the surface a user recognises, not the component tree.
@@ -173,7 +178,7 @@ Data a component LOADS is answered over HTTP (`app/stories/api.ts`). A story lis
 
 - `apiResponse(contract, { pathPrefix, pathParams, body })` builds the response from the route
   contract the app's client uses, and validates `body` against the contract's success schema. A
-  workspace route takes `pathPrefix: storyWorkspacePrefix`.
+  workspace route takes `pathPrefix: storyWorkspacePrefix`, from `app/stories/workspace.ts`.
 - `apiPending` never answers (a `Loading` story); `apiFailure` sends the backend's 500 envelope (an
   `Error` story); `apiRefusal` sends a refusal with the status, code and message copied from the
   handler that refuses; `apiNoContent` answers a 204; `apiHandler` computes the response from the
@@ -186,9 +191,10 @@ A request no story answered is logged as an msw warning. `mockServiceWorker.js` 
 
 ### State between stories
 
-`beforeEach` in `preview.ts` resets the module registry, clears every cookie (the app keeps nine
-Pinia stores in cookies, so the advanced tier leaked into every later story) and replaces the msw
-handlers. `withConfirmDialog` mounts the app's one `ConfirmDialog` beside the story and cancels a
+`beforeEach` in `preview.ts` resets the module registry and clears every cookie (the app keeps
+nine Pinia stores in cookies, so the advanced tier leaked into every later story). The msw handlers
+are replaced in the first preview loader, because Storybook runs the loaders before `beforeEach`:
+a story loader that fetches gets that story's answers. `withConfirmDialog` mounts the app's one `ConfirmDialog` beside the story and cancels a
 request an earlier story left open. Local storage is NOT cleared: a story that writes a key there
 must set it in every story of its file.
 

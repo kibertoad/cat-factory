@@ -12,12 +12,7 @@ import type { ApiContract } from '@toad-contracts/core'
 import { delay, http, HttpResponse, type HttpHandler } from 'msw'
 import { setupWorker, type SetupWorker } from 'msw/browser'
 import type { SuccessBodyOf } from '~/composables/api/client'
-
-/** The workspace every API-backed story runs in; `seedWorkspace` makes it the active one. */
-export const STORY_WORKSPACE_ID = 'ws_story'
-
-/** The `pathPrefix` the app's client puts in front of a workspace-scoped contract path. */
-export const storyWorkspacePrefix = `/workspaces/${STORY_WORKSPACE_ID}`
+import { storyWorkspacePrefix } from './workspace'
 
 /** Hosts Storybook itself fetches from: Iconify's icon API, and the fonts in `preview-head.html`. */
 const STORYBOOK_HOSTS = new Set(['api.iconify.design', 'fonts.googleapis.com', 'fonts.gstatic.com'])

@@ -43,7 +43,7 @@ import { useWorkspaceStore } from '~/stores/workspace'
 import { applySnapshotToStores } from '~/stores/workspace/hydrate'
 import type { LaneGroupKey } from '~/utils/laneSort'
 import type { UiMode } from '~/utils/uiMode'
-import { STORY_WORKSPACE_ID } from './api'
+import { STORY_WORKSPACE_ID } from './workspace'
 import { authRepo, authServiceRow, githubConnection } from './vcs.stories.mocks'
 
 /**

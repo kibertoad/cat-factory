@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { ExecutionInstance } from '@cat-factory/contracts'
 import { getExecutionContract } from '@cat-factory/contracts'
-import { apiFailure, apiPending, storyWorkspacePrefix } from '~/stories/api'
+import { apiFailure, apiPending } from '~/stories/api'
+import { storyWorkspacePrefix } from '~/stories/workspace'
 import { step } from '~/stories/pipelineStep.stories.mocks'
 import { execution, snapshot } from '~/stories/snapshot.stories.mocks'
 import {

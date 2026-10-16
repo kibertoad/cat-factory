@@ -23,7 +23,8 @@ import type {
   RunnerPoolConnection,
 } from '@cat-factory/contracts'
 import type { HttpHandler } from 'msw'
-import { apiResponse, storyWorkspacePrefix } from './api'
+import { apiResponse } from './api'
+import { storyWorkspacePrefix } from './workspace'
 import {
   environmentConnection,
   providerDescriptor,

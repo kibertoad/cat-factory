@@ -46,9 +46,6 @@ export const DOMAINS = [
 /** The second segment. A closed vocabulary so the sidebar's shape is the same under every domain. */
 export const KINDS = ['Components', 'Pages', 'Scenes', 'Docs']
 
-/** The states every surface is expected to be able to show, named the same way everywhere. */
-export const STATE_VOCABULARY = ['Default', 'Empty', 'Loading', 'Error']
-
 // `title:` is read LINE-ANCHORED and only AFTER the meta opens.
 //
 // Line-anchored is how the formatter writes a meta, and it keeps a component's own `title` ARG

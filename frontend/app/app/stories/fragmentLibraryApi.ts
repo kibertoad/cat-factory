@@ -10,7 +10,8 @@ import {
 } from '@cat-factory/contracts'
 import type { FragmentSource, PromptFragment, ResolvedFragment } from '@cat-factory/contracts'
 import type { HttpHandler } from 'msw'
-import { apiFailure, apiResponse, storyWorkspacePrefix } from './api'
+import { apiFailure, apiResponse } from './api'
+import { storyWorkspacePrefix } from './workspace'
 
 export function fragmentLibraryApi(
   owner: { accountId: string } | 'workspace',

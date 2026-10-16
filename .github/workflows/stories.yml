@@ -20,13 +20,18 @@ on:
   schedule:
     - cron: '50 2 * * *'
   # A change to the story lane ITSELF runs it on the PR making the change, so a broken config is
-  # found before it merges rather than as a red nightly on main. An ordinary PR pays nothing.
+  # found before it merges rather than as a red nightly on main: the Storybook package and its
+  # dependencies, the shared story helpers, the patch and where it is registered, and the lockfile
+  # (a dependency sweep changes only that and the package files). An ordinary PR pays nothing.
   pull_request:
     paths:
       - '.github/workflows/stories.yml'
-      - 'deploy/frontend/.storybook/**'
-      - 'deploy/frontend/vitest.stories.config.ts'
+      - 'frontend/storybook/**'
+      - 'frontend/app/app/stories/**'
+      - 'frontend/app/package.json'
       - 'patches/@storybook-vue__nuxt@*.patch'
+      - 'pnpm-workspace.yaml'
+      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 concurrency:
@@ -57,7 +62,7 @@ jobs:
       # The stories import the built `dist` of the workspace packages the SPA depends on
       # (`@cat-factory/contracts` among them), so build exactly those.
       - name: Build the SPA's workspace dependencies
-        run: pnpm exec turbo run build --filter='@cat-factory/deploy-frontend^...'
+        run: pnpm exec turbo run build --filter='@cat-factory/storybook^...'
 
       # The same cache the e2e lane uses: one Playwright version is pinned in the lockfile for both.
       - name: Cache Playwright browser
@@ -68,10 +73,10 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Through the e2e package, as `ci.yml` does: it declares `@playwright/test`, so the `playwright`
-      # binary is linked there, where `deploy/frontend` only has it transitively.
+      # binary is linked there, where `frontend/storybook` only has it transitively.
       - name: Install Playwright Chromium
         if: ${{ steps.pw-cache.outputs.cache-hit != 'true' }}
         run: pnpm --filter @cat-factory/e2e exec playwright install --with-deps chromium
 
       - name: Render every story
-        run: pnpm --filter @cat-factory/deploy-frontend run test:stories
+        run: pnpm --filter @cat-factory/storybook run test:stories

@@ -22,7 +22,8 @@ import type {
   VcsConnectOption,
 } from '@cat-factory/contracts'
 import type { HttpHandler } from 'msw'
-import { apiResponse, storyWorkspacePrefix } from './api'
+import { apiResponse } from './api'
+import { storyWorkspacePrefix } from './workspace'
 import { authRepo, githubConnection } from './vcs.stories.mocks'
 
 export function githubProbeApi({

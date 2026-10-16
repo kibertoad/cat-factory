@@ -10,7 +10,7 @@ import type {
   WorkspaceMember,
 } from '@cat-factory/contracts'
 import type { AuthUser } from '~/types/domain'
-import { STORY_WORKSPACE_ID } from './api'
+import { STORY_WORKSPACE_ID } from './workspace'
 
 /** The org the story workspace belongs to. The viewer is an admin there. */
 export const orgAccount: Account = {

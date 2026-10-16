@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { screen, userEvent, within } from 'storybook/test'
 import { accountBoards as boards, accounts, orgAccount } from '~/stories/accounts.stories.mocks'
-import { STORY_WORKSPACE_ID } from '~/stories/api'
+import { STORY_WORKSPACE_ID } from '~/stories/workspace'
 import { seedViewer, withSeed } from '~/stories/withStores'
 import { useAccountsStore } from '~/stores/accounts'
 import { useWorkspaceStore } from '~/stores/workspace'

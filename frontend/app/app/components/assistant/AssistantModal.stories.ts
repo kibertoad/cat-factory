@@ -7,7 +7,8 @@ import {
   type AssistantTurn,
 } from '@cat-factory/contracts'
 import { screen, userEvent } from 'storybook/test'
-import { apiFailure, apiPending, apiResponse, storyWorkspacePrefix } from '~/stories/api'
+import { apiFailure, apiPending, apiResponse } from '~/stories/api'
+import { storyWorkspacePrefix } from '~/stories/workspace'
 import { seedWorkspace, withSeed } from '~/stories/withStores'
 import { useUiStore } from '~/stores/ui'
 import AssistantModal from './AssistantModal.vue'

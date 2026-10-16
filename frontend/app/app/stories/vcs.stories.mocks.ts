@@ -35,7 +35,7 @@ export const authRepo: GitHubRepo = {
   syncedAt: Date.UTC(2026, 9, 11),
 }
 
-/** The monorepo a bootstrap run writes into (`bootstrapJob` in `bootstrap.stories.mocks.ts`). */
+/** The monorepo. `availableRepos` lists it with the same `githubId`, so the two join. */
 export const platformRepo: GitHubRepo = {
   githubId: 734_102,
   installationId: 9001,
@@ -99,7 +99,7 @@ export const availableRepos: GitHubAvailableRepo[] = [
     personal: false,
   },
   {
-    githubId: 103,
+    githubId: 734_102,
     owner: 'acme',
     name: 'platform',
     defaultBranch: 'trunk',

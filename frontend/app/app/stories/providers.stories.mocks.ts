@@ -14,7 +14,7 @@ import type {
   VendorCredential,
 } from '@cat-factory/contracts'
 import { orgAccount } from './accounts.stories.mocks'
-import { STORY_WORKSPACE_ID } from './api'
+import { STORY_WORKSPACE_ID } from './workspace'
 
 /**
  * The ephemeral-environment provider, registered from a manifest. No `config`: the panels that

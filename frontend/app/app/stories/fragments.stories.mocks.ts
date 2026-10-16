@@ -4,7 +4,7 @@
 // and an account's own tiers, the repositories they sync from, and the catalog they merge into.
 import type { FragmentSource, PromptFragment, ResolvedFragment } from '@cat-factory/contracts'
 import type { BlockType } from '~/types/domain'
-import { STORY_WORKSPACE_ID } from './api'
+import { STORY_WORKSPACE_ID } from './workspace'
 
 function fragment(
   id: string,
