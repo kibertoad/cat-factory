@@ -97,6 +97,7 @@ import {
 } from './foundational.stories.mocks'
 import {
   accountFragments,
+  fragmentCatalog,
   handbookSource,
   layeredCatalog,
   platformStandardsSource,
@@ -129,6 +130,7 @@ import {
   zeplinDescriptor,
 } from './integrations.stories.mocks'
 import {
+  accountStrictPolicy,
   manualReviewPolicy,
   modelPreset,
   modelPresetLibrary,
@@ -223,7 +225,7 @@ const cases: [string, v.GenericSchema, unknown[]][] = [
   ['audit event', auditEventViewSchema, [...auditEvents, ...olderAuditEvents]],
   ['prompt fragment', promptFragmentSchema, [...workspaceFragments, ...accountFragments]],
   ['fragment source', fragmentSourceSchema, [handbookSource, platformStandardsSource]],
-  ['resolved fragment', resolvedFragmentSchema, layeredCatalog],
+  ['resolved fragment', resolvedFragmentSchema, [...layeredCatalog, ...fragmentCatalog]],
   ['board list item', workspaceListItemSchema, accountBoards],
   ['infra setup', infraSetupSchema, [infraSetupNeedsWork, infraSetupDone]],
   ['infrastructure capabilities', infrastructureCapabilitiesSchema, [infrastructureCapabilities()]],
@@ -249,7 +251,11 @@ const cases: [string, v.GenericSchema, unknown[]][] = [
     [resolvedDocumentRef, resolvedDocumentRefWithDroppedScope, resolvedFigmaFrameRef],
   ],
   ['slack connection', slackConnectionSchema, [slackConnection]],
-  ['risk policy', riskPolicyLibraryEntrySchema, [riskPolicy(), manualReviewPolicy]],
+  [
+    'risk policy',
+    riskPolicyLibraryEntrySchema,
+    [riskPolicy(), manualReviewPolicy, accountStrictPolicy],
+  ],
   ['model preset', modelPresetSchema, [modelPreset(), ...modelPresetLibrary]],
   ['environment connection', environmentConnectionSchema, [environmentConnection]],
   [

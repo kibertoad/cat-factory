@@ -79,12 +79,18 @@ export const Account: Story = {
 
 /** The board's repositories: a directory of services, synced, and a billing API not synced yet. */
 export const Sources: Story = {
-  play: () => openTab('Repo sources'),
+  play: async () => {
+    await openTab('Repo sources')
+    await screen.findByTestId('foundational-sources')
+  },
 }
 
 /** The board's Backstage, imported in full, with the form that replaces the connection. */
 export const Portal: Story = {
-  play: () => openTab('Developer portal'),
+  play: async () => {
+    await openTab('Developer portal')
+    await screen.findByTestId('service-catalog-connected')
+  },
 }
 
 /** The catalog read failed, which the manager reads as the feature being off: a note only. */

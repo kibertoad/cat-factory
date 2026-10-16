@@ -64,6 +64,7 @@ export const Empty: Story = { decorators: [seeded([])] }
 export const Editing: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await screen.findByPlaceholderText('Leave blank to keep the stored token')
   },
 }
 
@@ -72,6 +73,7 @@ export const AdvancedOpen: Story = {
   decorators: [seeded([])],
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Advanced' }))
+    await screen.findByText('Worker name template')
   },
 }
 
@@ -92,5 +94,8 @@ export const TestFailed: Story = {
   play: async () => {
     await userEvent.type(await screen.findByPlaceholderText('my-account'), 'acme-previews')
     await userEvent.click(screen.getByRole('button', { name: 'Test connection' }))
+    await screen.findByText(
+      "The Cloudflare preview connection has no 'githubToken' secret configured.",
+    )
   },
 }

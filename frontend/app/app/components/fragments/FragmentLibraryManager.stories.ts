@@ -70,7 +70,10 @@ export const Unavailable: Story = {
  * repository, which cannot, and the form that writes a new one.
  */
 export const Authored: Story = {
-  play: () => openTab('This board'),
+  play: async () => {
+    await openTab('This board')
+    await screen.findByText('from repo')
+  },
 }
 
 /** Nothing written on this board yet. */
@@ -78,7 +81,10 @@ export const AuthoredEmpty: Story = {
   parameters: {
     api: [...fragmentLibraryApi('workspace'), ...documentProbeApi(), ...githubProbeApi()],
   },
-  play: () => openTab('This board'),
+  play: async () => {
+    await openTab('This board')
+    await screen.findByText(/No board-specific fragments yet/)
+  },
 }
 
 /**
@@ -89,6 +95,7 @@ export const Documents: Story = {
   play: async () => {
     await openTab('Documents')
     await openTab('Confluence')
+    await screen.findByText('Enter a page id or URL first.')
   },
 }
 
@@ -101,7 +108,10 @@ export const DocumentsNoSource: Story = {
       ...githubProbeApi(),
     ],
   },
-  play: () => openTab('Documents'),
+  play: async () => {
+    await openTab('Documents')
+    await screen.findByText(/Connect a document source \(Confluence, Notion or GitHub\)/)
+  },
 }
 
 /**
@@ -115,7 +125,10 @@ export const Sources: Story = {
       useFragmentLibraryStore().sourceChanges = { [handbookSource.id]: true }
     }),
   ],
-  play: () => openTab('Repo sources'),
+  play: async () => {
+    await openTab('Repo sources')
+    await screen.findByText('Link a guideline repo')
+  },
 }
 
 /**
@@ -131,5 +144,8 @@ export const AccountScope: Story = {
       ...githubProbeApi(),
     ],
   },
-  play: () => openTab('Documents'),
+  play: async () => {
+    await openTab('Documents')
+    await screen.findByText(/Create a board with a connected document source first/)
+  },
 }

@@ -100,6 +100,7 @@ export const NothingConnected: Story = {
 export const NoResults: Story = {
   play: async () => {
     await userEvent.type(await screen.findByRole('textbox'), 'zendesk')
+    await screen.findByText('No integrations match "zendesk".')
   },
 }
 

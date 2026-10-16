@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { BranchProtectionReportView } from '@cat-factory/contracts'
 import { checkGitHubBranchProtectionContract } from '@cat-factory/contracts'
-import { userEvent, within } from 'storybook/test'
+import { expect, userEvent, waitFor, within } from 'storybook/test'
 import { apiFailure, apiPending, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { seedWorkspace, withSeed } from '~/stories/withStores'
@@ -36,7 +36,9 @@ function reportIs(report: BranchProtectionReportView) {
 }
 
 async function check(canvasElement: HTMLElement) {
-  await userEvent.click(within(canvasElement).getByTestId('branch-protection-check'))
+  const canvas = within(canvasElement)
+  await userEvent.click(canvas.getByTestId('branch-protection-check'))
+  return canvas
 }
 
 const meta = {
@@ -58,7 +60,6 @@ const meta = {
       }),
     ],
   },
-  play: async ({ canvasElement }) => check(canvasElement),
 } satisfies Meta<typeof BranchProtectionPreflight>
 export default meta
 
@@ -68,26 +69,43 @@ type Story = StoryObj<typeof meta>
  * One repository exposed, first; one GitHub would not answer for; one protected whose rule could
  * not be read; and one that requires a reviewed pull request and two checks.
  */
-export const Default: Story = {}
+export const Default: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = await check(canvasElement)
+    await canvas.findByText('1 repository has an unprotected default branch.')
+  },
+}
 
 /** Before anyone asks: only the Check button. */
-export const Idle: Story = { play: async () => {} }
+export const Idle: Story = {}
 
 /** The check in flight: the button spins. */
 export const Loading: Story = {
   parameters: {
     api: [apiPending(checkGitHubBranchProtectionContract, { pathPrefix: storyWorkspacePrefix })],
   },
+  play: async ({ canvasElement }) => {
+    const canvas = await check(canvasElement)
+    await waitFor(() => expect(canvas.getByTestId('branch-protection-check')).toBeDisabled())
+  },
 }
 
 /** Every repository protected. */
 export const AllProtected: Story = {
   parameters: { api: [reportIs({ capability: 'ok', omittedRepos: 0, repos: [protectedWithPr] })] },
+  play: async ({ canvasElement }) => {
+    const canvas = await check(canvasElement)
+    await canvas.findByText("Every linked repository's default branch is protected.")
+  },
 }
 
 /** The provider cannot answer the question at all: said, rather than shown as an empty list. */
 export const Unavailable: Story = {
   parameters: { api: [reportIs({ capability: 'unavailable', omittedRepos: 0, repos: [] })] },
+  play: async ({ canvasElement }) => {
+    const canvas = await check(canvasElement)
+    await canvas.findByTestId('branch-protection-unavailable')
+  },
 }
 
 /** The report stopped at its cap: a line says how many repositories it left out. */
@@ -95,11 +113,19 @@ export const Omitted: Story = {
   parameters: {
     api: [reportIs({ capability: 'ok', omittedRepos: 37, repos: [protectedWithPr] })],
   },
+  play: async ({ canvasElement }) => {
+    const canvas = await check(canvasElement)
+    await canvas.findByText('37 further linked repositories were not checked.')
+  },
 }
 
 /** The check failed: a translated line, with the backend's words and the request id behind Show detail. */
 export const Error: Story = {
   parameters: {
     api: [apiFailure(checkGitHubBranchProtectionContract, { pathPrefix: storyWorkspacePrefix })],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = await check(canvasElement)
+    await canvas.findByTestId('branch-protection-failure')
   },
 }

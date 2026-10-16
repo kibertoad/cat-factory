@@ -2,7 +2,8 @@
 // person, an API key and the system), and an older page with an actor who has left and an action
 // this build no longer declares. The people, ids and times are made up.
 import type { AuditEventWire } from '@cat-factory/contracts'
-import { orgAccount } from './accounts.stories.mocks'
+import { orgAccount, signedInUser } from './accounts.stories.mocks'
+import { STORY_WORKSPACE_ID } from './workspace'
 
 function event(
   overrides: Partial<AuditEventWire> & Pick<AuditEventWire, 'id' | 'action' | 'targetId'>,
@@ -10,7 +11,7 @@ function event(
   return {
     at: Date.UTC(2026, 9, 12, 14, 5),
     workspaceId: null,
-    actor: { kind: 'user', userId: 'usr_maya' },
+    actor: { kind: 'user', userId: signedInUser.id },
     targetType: 'user',
     details: {},
     actorName: 'Maya Lindqvist',
@@ -24,7 +25,7 @@ export const auditEvents: AuditEventWire[] = [
   event({
     id: 'aud_06',
     action: 'workspace.member_role_changed',
-    workspaceId: 'ws_story',
+    workspaceId: STORY_WORKSPACE_ID,
     targetId: 'usr_tomas',
     targetName: 'Tomás Ruiz',
     details: { previousRole: 'member', role: 'viewer' },

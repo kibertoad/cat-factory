@@ -56,5 +56,6 @@ export const DisabledKeyOnly: Story = {
 export const NoResults: Story = {
   play: async () => {
     await userEvent.type(await screen.findByPlaceholderText('Search providers…'), 'bedrock')
+    await screen.findByText('No providers match "bedrock".')
   },
 }

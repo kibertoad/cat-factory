@@ -62,5 +62,6 @@ export const OAuthMode: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('combobox'))
     await userEvent.click(await screen.findByRole('option', { name: 'OAuth2 client credentials' }))
+    await screen.findByPlaceholderText('https://idp.example.com/oauth2/token')
   },
 }

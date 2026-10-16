@@ -92,7 +92,10 @@ export const ManageRepos: Story = {
   parameters: {
     api: [...load, apiResponse(listGitHubAvailableReposContract, { pathPrefix, body: reachable })],
   },
-  play: () => click('Manage repos'),
+  play: async () => {
+    await click('Manage repos')
+    await screen.findByText('acme/platform')
+  },
 }
 
 /** Auth Service's repository opened: its branches, two protected, and the new branch form. */
@@ -107,17 +110,26 @@ export const RepoExpanded: Story = {
       }),
     ],
   },
-  play: () => click(/acme\/auth-service/),
+  play: async () => {
+    await click(/acme\/auth-service/)
+    await screen.findByText('spike/refresh-lock')
+  },
 }
 
 /** The pull requests tab: three open, one merged, each with its branches. */
 export const PullRequests: Story = {
-  play: () => click('Pull requests'),
+  play: async () => {
+    await click('Pull requests')
+    await screen.findByText(/Rotate refresh tokens on use/)
+  },
 }
 
 /** The issues tab: three open, one closed, with their labels. */
 export const Issues: Story = {
-  play: () => click('Issues'),
+  play: async () => {
+    await click('Issues')
+    await screen.findByText(/Sessions survive a password change/)
+  },
 }
 
 const gitlabConnection: GitHubConnection = {
@@ -131,7 +143,10 @@ const gitlabConnection: GitHubConnection = {
 /** A GitLab group connected with a token, on the merge requests tab: GitLab's name and nouns (merge requests). */
 export const GitLabConnection: Story = {
   decorators: [opened(gitlabConnection)],
-  play: () => click('Merge requests'),
+  play: async () => {
+    await click('Merge requests')
+    await screen.findByText(/Rotate refresh tokens on use/)
+  },
 }
 
 /** Nothing connected, on a deployment that offers the GitHub App and GitLab tokens. */

@@ -127,6 +127,7 @@ export const ExperimentDetail: Story = {
     // The candidate's first row is its cell on Claude.
     const [onClaude] = await screen.findAllByText('Edge cases first@v2')
     await userEvent.click(onClaude!)
+    await screen.findByText('gap_coverage')
   },
 }
 
@@ -137,6 +138,7 @@ export const Prompts: Story = {
     // The baselines are offered a fork instead, so the candidate's is the first Edit.
     const [candidate] = await screen.findAllByRole('button', { name: 'Edit / version' })
     await userEvent.click(candidate!)
+    await screen.findByText(/New version of · /)
   },
 }
 
@@ -144,5 +146,7 @@ export const Prompts: Story = {
 export const Fixtures: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'Fixtures' }))
+    // Only the Fixtures tab shows where a fixture comes from.
+    await screen.findByText('custom')
   },
 }

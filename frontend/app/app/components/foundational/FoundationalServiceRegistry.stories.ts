@@ -48,6 +48,7 @@ export const Empty: Story = {
 export const Creating: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Register a service' }))
+    await screen.findByText('Register a foundational service')
   },
 }
 
@@ -55,5 +56,6 @@ export const Creating: Story = {
 export const Editing: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await screen.findByText('Edit foundational service')
   },
 }

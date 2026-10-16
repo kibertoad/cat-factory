@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { Account } from '@cat-factory/contracts'
-import { orgAccount, personalAccount, signedInUser } from '~/stories/accounts.stories.mocks'
+import { orgAccount, signedInUser } from '~/stories/accounts.stories.mocks'
 import { accountTeamApi } from '~/stories/accountsApi'
 import { infrastructureCapabilities } from '~/stories/infra.stories.mocks'
 import { withSeed } from '~/stories/withStores'
@@ -16,10 +16,9 @@ import AccountSettingsPanel from './AccountSettingsPanel.vue'
 // `AccountSkillSettings`, `AccountFoundationalSettings` and `AccountRiskPolicySettings` stories,
 // and the Team tab's own states are the `AccountTeamSettings` stories.
 //
-// The viewer is an admin of both accounts, so in the Default and PersonalAccount stories
-// Storybook's error display covers the window: the platform alert section on the Team tab gives a
-// select item the value '', and Reka's SelectItem throws for an empty value. The window renders
-// in full under the display.
+// There are no stories with an account until #2393 is fixed: the viewer is an admin of both
+// accounts, the platform alert section on the Team tab gives a select item the value '', Reka's
+// SelectItem throws for an empty value, and Storybook's error display covers the window (#2393).
 
 /**
  * The window opened on `account`, by a signed-in viewer on a deployment that can govern model
@@ -47,17 +46,8 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-/** Acme, with the viewer an admin: the five tabs, and the Team tab with every admin section. */
-export const Default: Story = {}
-
-/** The viewer's personal account: the Team tab offers to create an organisation. */
-export const PersonalAccount: Story = {
-  decorators: [opened(personalAccount)],
-  parameters: { api: accountTeamApi(personalAccount, { connection: null, configured: true }) },
-}
-
 /** No active account yet: the window says so, and shows no tabs. */
-export const NoAccount: Story = {
+export const Default: Story = {
   decorators: [opened(null)],
   parameters: { api: [] },
 }

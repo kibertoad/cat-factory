@@ -84,6 +84,7 @@ export const FolderMode: Story = {
     await userEvent.click(
       await screen.findByRole('radio', { name: 'Whole folder of contracts, one service' }),
     )
+    await screen.findByTestId('foundational-source-recursive')
   },
 }
 

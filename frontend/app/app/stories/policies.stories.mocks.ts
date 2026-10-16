@@ -72,6 +72,17 @@ export const manualReviewPolicy = riskPolicy({
 })
 
 /** The built-in preset ids, their current catalog versions and their names. */
+/** An account policy a board inherits: auto-merge on, with lower ceilings than the default. */
+export const accountStrictPolicy = riskPolicy({
+  id: 'mp_acme_strict',
+  name: 'Acme strict',
+  maxRisk: 0.2,
+  maxImpact: 0.3,
+  isDefault: false,
+  version: 1,
+  tier: 'account',
+})
+
 export const modelPresetCatalogVersions: Record<string, number> = {
   mdp_kimi: 1,
   mdp_glm: 1,
