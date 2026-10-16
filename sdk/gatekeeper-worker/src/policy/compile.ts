@@ -112,14 +112,14 @@ export interface CompiledPolicy {
 /**
  * `admin` is deliberately unreachable as a tier's `keyScope`.
  *
- * `POST /api/v1/keys` mints `read`, `write` or `decide` and never `admin`, so the platform already
+ * `POST /api/v1/keys` mints every rung below `admin` and never `admin` itself, so the platform already
  * holds the chain to one link: a key provisioned over the API can never itself provision. A tier
  * asking for `admin` is therefore asking for the Gatekeeper's OWN provisioning secret to be handed
  * to a caller, which is the one thing this whole design exists to prevent. Refusing it here names
  * that, rather than letting the mint fail per-actor at runtime with a platform error an operator
  * would read as a bug.
  */
-const MINTABLE_SCOPES: readonly PublicApiScope[] = ['read', 'write', 'decide']
+const MINTABLE_SCOPES: readonly PublicApiScope[] = ['read', 'webhooks', 'write', 'decide']
 
 /**
  * A binding whose result is an SSE reader or raw bytes cannot cross a Cap'n Web call, which

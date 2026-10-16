@@ -1,6 +1,7 @@
 import {
   type ConformanceHarness,
   definePublicDirectorySuite,
+  definePublicKeyMembershipReachSuite,
   definePublicKeyReachSuite,
   defineWorkspaceAccessSuite,
   defineWorkspaceRbacSuite,
@@ -25,6 +26,7 @@ if (databaseUrl) {
   defineWorkspaceAccessSuite(harness)
   defineWorkspaceRbacSuite(harness)
   definePublicKeyReachSuite(harness)
+  definePublicKeyMembershipReachSuite(harness)
   definePublicDirectorySuite(harness)
 } else {
   describe.skip('[node] workspace access (set DATABASE_URL to run)', () => {

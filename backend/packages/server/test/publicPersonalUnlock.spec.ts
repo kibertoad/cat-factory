@@ -27,6 +27,7 @@ const auth = (actsAsUserId: string | null): PublicApiKeyAuth => ({
   accountId: 'acc_1',
   workspaceId: 'ws_1',
   workspaceIds: ['ws_1'],
+  followsMemberships: false,
   scope: 'write',
   label: 'operator',
   externalIdentity: null,
