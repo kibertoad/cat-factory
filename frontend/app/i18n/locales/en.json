@@ -3916,6 +3916,7 @@
         "boundToYou": "Your subscription",
         "boundToOther": "{user}'s subscription",
         "reachAll": "All workspaces",
+        "reachMemberships": "Follows its owner's workspaces",
         "reachCount": "{count} workspaces"
       },
       "add": {
@@ -3937,6 +3938,8 @@
         "reachThis": "This workspace only",
         "reachAll": "Every workspace in the account",
         "reachSelected": "Selected workspaces",
+        "reachMemberships": "My workspaces (follows my memberships)",
+        "reachMembershipsHelp": "Reaches every workspace you can act in, on each call: joining or leaving one changes it, with nothing to re-create. In each workspace it can do no more than your role there allows.",
         "reachPick": "Choose workspaces"
       },
       "scopes": {

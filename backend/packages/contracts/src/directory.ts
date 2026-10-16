@@ -248,6 +248,11 @@ export type DirectoryWebhookList = v.InferOutput<typeof directoryWebhookListSche
 export const directoryReachSchema = v.object({
   accountId: v.string(),
   workspaceIds: publicApiKeyWorkspaceIdsSchema,
+  /**
+   * Whether `workspaceIds` is the key's bound person's memberships as of this call, which the
+   * next call may answer differently, rather than a fixed grant.
+   */
+  followsMemberships: v.boolean(),
 })
 export type DirectoryReach = v.InferOutput<typeof directoryReachSchema>
 

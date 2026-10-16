@@ -11,11 +11,14 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code DirectoryReach} wire model.
  * @param accountId the {@code accountId} field.
+ * @param followsMemberships the {@code followsMemberships} field.
  * @param workspaceIds Always present; {@code null} when the server has no value for it.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record DirectoryReach(
     @JsonProperty("accountId") String accountId,
+
+    @JsonProperty("followsMemberships") Boolean followsMemberships,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("workspaceIds") @Nullable List<String> workspaceIds
@@ -34,11 +37,18 @@ public record DirectoryReach(
      */
     public static final class Builder {
         private @Nullable String accountId;
+        private @Nullable Boolean followsMemberships;
         private @Nullable List<String> workspaceIds;
 
         /** Set {@code accountId}. */
         public Builder accountId(@Nullable String accountId) {
             this.accountId = accountId;
+            return this;
+        }
+
+        /** Set {@code followsMemberships}. */
+        public Builder followsMemberships(@Nullable Boolean followsMemberships) {
+            this.followsMemberships = followsMemberships;
             return this;
         }
 
@@ -50,7 +60,7 @@ public record DirectoryReach(
 
         /** Build the {@link DirectoryReach}. */
         public DirectoryReach build() {
-            return new DirectoryReach(accountId, workspaceIds);
+            return new DirectoryReach(accountId, followsMemberships, workspaceIds);
         }
     }
 }

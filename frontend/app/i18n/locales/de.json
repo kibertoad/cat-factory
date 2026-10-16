@@ -848,6 +848,7 @@
         "boundToYou": "Ihr Abonnement",
         "boundToOther": "Abonnement von {user}",
         "reachAll": "Alle Arbeitsbereiche",
+        "reachMemberships": "Folgt den Arbeitsbereichen seiner Person",
         "reachCount": "{count} Arbeitsbereiche"
       },
       "add": {
@@ -869,6 +870,8 @@
         "reachThis": "Nur dieser Arbeitsbereich",
         "reachAll": "Alle Arbeitsbereiche des Kontos",
         "reachSelected": "Ausgewählte Arbeitsbereiche",
+        "reachMemberships": "Meine Arbeitsbereiche (folgt meinen Mitgliedschaften)",
+        "reachMembershipsHelp": "Erreicht bei jedem Aufruf jeden Arbeitsbereich, in dem du handeln kannst: Beitritt oder Austritt ändert das, ohne neues Token. In jedem Arbeitsbereich kann es nicht mehr, als deine Rolle dort erlaubt.",
         "reachPick": "Arbeitsbereiche auswählen"
       },
       "scopes": {

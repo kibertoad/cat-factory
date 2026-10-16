@@ -3749,6 +3749,7 @@
         "boundToYou": "Aboneliğiniz",
         "boundToOther": "{user} kullanıcısının aboneliği",
         "reachAll": "Tüm çalışma alanları",
+        "reachMemberships": "Sahibinin çalışma alanlarını izler",
         "reachCount": "{count} çalışma alanı"
       },
       "add": {
@@ -3770,6 +3771,8 @@
         "reachThis": "Yalnızca bu çalışma alanı",
         "reachAll": "Hesaptaki tüm çalışma alanları",
         "reachSelected": "Seçili çalışma alanları",
+        "reachMemberships": "Çalışma alanlarım (üyeliklerimi izler)",
+        "reachMembershipsHelp": "Her çağrıda işlem yapabildiğiniz her çalışma alanına ulaşır: birine katılmak ya da ayrılmak bunu değiştirir, yeniden oluşturmak gerekmez. Her birinde oradaki rolünüzün izin verdiğinden fazlasını yapamaz.",
         "reachPick": "Çalışma alanlarını seçin"
       },
       "scopes": {

@@ -3608,6 +3608,7 @@
         "boundToYou": "Twoja subskrypcja",
         "boundToOther": "Subskrypcja użytkownika {user}",
         "reachAll": "Wszystkie obszary robocze",
+        "reachMemberships": "Śledzi obszary robocze swojej osoby",
         "reachCount": "Obszary robocze: {count}"
       },
       "add": {
@@ -3629,6 +3630,8 @@
         "reachThis": "Tylko ten obszar roboczy",
         "reachAll": "Wszystkie obszary robocze konta",
         "reachSelected": "Wybrane obszary robocze",
+        "reachMemberships": "Moje obszary robocze (śledzi moje członkostwa)",
+        "reachMembershipsHelp": "Przy każdym wywołaniu sięga do każdego obszaru roboczego, w którym możesz działać: dołączenie lub odejście to zmienia, bez tworzenia od nowa. W każdym może tyle, ile pozwala tam Twoja rola.",
         "reachPick": "Wybierz obszary robocze"
       },
       "scopes": {

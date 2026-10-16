@@ -39,6 +39,7 @@ export function publicDiscoveryController(): Hono<AppEnv> {
       accountId,
       workspaceId,
       workspaceIds,
+      followsMemberships,
       scope,
       label,
       externalIdentity,
@@ -47,7 +48,17 @@ export function publicDiscoveryController(): Hono<AppEnv> {
     // Straight off the auth result: `authenticate` already loaded the row, so self-description
     // costs no read of its own.
     return c.json(
-      { keyId, accountId, workspaceId, workspaceIds, scope, label, externalIdentity, createdAt },
+      {
+        keyId,
+        accountId,
+        workspaceId,
+        workspaceIds,
+        followsMemberships,
+        scope,
+        label,
+        externalIdentity,
+        createdAt,
+      },
       200,
     )
   })
