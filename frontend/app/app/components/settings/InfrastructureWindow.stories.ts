@@ -12,11 +12,13 @@ import { apiFailure, apiRefusal, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import {
   declaredCapabilityCredentials,
-  infrastructureCapabilities,
   kubernetesHandler,
+  kubernetesTestPassed,
+  localCapabilities,
   localSettings,
   packageRegistryEntries,
   registeredManifestType,
+  workerCapabilities,
 } from '~/stories/infra.stories.mocks'
 import {
   kubernetesEnvironmentDescriptor,
@@ -45,24 +47,6 @@ import InfrastructureWindow from './InfrastructureWindow.vue'
 // opens on. Each tab's sections have their own stories.
 
 const pathPrefix = storyWorkspacePrefix
-
-/** Agents on Cloudflare Containers or a runner pool, and an environment provider: a Worker. */
-const worker = infrastructureCapabilities({
-  execution: {
-    available: ['cloudflare-containers', 'runner-pool'],
-    active: 'cloudflare-containers',
-  },
-  testEnv: { available: ['environment-provider'], active: 'environment-provider' },
-})
-
-/** A local deployment, which names its executor image for the k3s form. */
-const local = infrastructureCapabilities({
-  execution: {
-    available: ['local-docker', 'runner-pool'],
-    active: 'local-docker',
-    suggestedExecutorImage: 'ghcr.io/kibertoad/cat-factory-executor:1.163.4',
-  },
-})
 
 /**
  * The window opened on `tab` on a deployment that reports `capabilities`, local or not. With no
@@ -116,7 +100,7 @@ const providers: HttpHandler[] = [
 const meta = {
   title: 'Settings/Pages/InfrastructureWindow',
   component: InfrastructureWindow,
-  decorators: [opened('runner-pool', worker)],
+  decorators: [opened('runner-pool', workerCapabilities)],
   parameters: { api: [...providers, ...modules] },
 } satisfies Meta<typeof InfrastructureWindow>
 export default meta
@@ -134,16 +118,13 @@ export const Default: Story = {}
  * one custom type, and the guided Docker Compose setup.
  */
 export const TestEnvironments: Story = {
-  decorators: [opened('environment', worker)],
+  decorators: [opened('environment', workerCapabilities)],
   parameters: {
     api: [
       ...providers,
       ...modules,
       environmentHandlersApi([kubernetesHandler], [registeredManifestType]),
-      environmentHandlerTestApi({
-        ok: true,
-        message: 'Reached https://k8s.staging.acme.dev:6443.',
-      }),
+      environmentHandlerTestApi(kubernetesTestPassed),
     ],
   },
 }
@@ -153,7 +134,7 @@ export const TestEnvironments: Story = {
  * says why. The store reads any failure as the integration being off.
  */
 export const HandlersFailed: Story = {
-  decorators: [opened('environment', worker)],
+  decorators: [opened('environment', workerCapabilities)],
   parameters: {
     api: [...providers, ...modules, apiFailure(listEnvironmentHandlersContract, { pathPrefix })],
   },
@@ -164,7 +145,7 @@ export const HandlersFailed: Story = {
  * container pool and checkout reuse under them.
  */
 export const LocalMode: Story = {
-  decorators: [opened('runner-pool', local, { local: true })],
+  decorators: [opened('runner-pool', localCapabilities, { local: true })],
   parameters: {
     api: [
       ...runnerPoolConnectionApi({ descriptor: kubernetesRunnerDescriptor(false) }),
@@ -180,7 +161,7 @@ export const LocalMode: Story = {
  * not read.
  */
 export const MemberWithoutSecrets: Story = {
-  decorators: [opened('runner-pool', worker, { member: true })],
+  decorators: [opened('runner-pool', workerCapabilities, { member: true })],
 }
 
 /**

@@ -9,6 +9,7 @@ import { apiPending, apiResponse } from '~/stories/api'
 import { STORY_WORKSPACE_ID, storyWorkspacePrefix } from '~/stories/workspace'
 import {
   kubernetesHandler,
+  kubernetesTestPassed,
   registeredManifestType,
   workspaceManifestType,
 } from '~/stories/infra.stories.mocks'
@@ -29,10 +30,7 @@ import InfraHandlersConfigurator from './InfraHandlersConfigurator.vue'
 
 const pathPrefix = storyWorkspacePrefix
 
-const reached = environmentHandlerTestApi({
-  ok: true,
-  message: 'Reached https://k8s.staging.acme.dev:6443.',
-})
+const reached = environmentHandlerTestApi(kubernetesTestPassed)
 
 /** The person's own k3d cluster, which replaces the staging cluster on this machine. */
 const k3dOverride: EnvironmentHandlerView = {

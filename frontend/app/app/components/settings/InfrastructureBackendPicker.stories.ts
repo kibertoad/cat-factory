@@ -8,7 +8,7 @@ import {
 import { screen, userEvent, within } from 'storybook/test'
 import { apiFailure } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
-import { infrastructureCapabilities } from '~/stories/infra.stories.mocks'
+import { localCapabilities, workerCapabilities } from '~/stories/infra.stories.mocks'
 import {
   kubernetesEnvironmentDescriptor,
   kubernetesRunnerConnection,
@@ -29,15 +29,6 @@ import InfrastructureBackendPicker from './InfrastructureBackendPicker.vue'
 // deployment and the stored connection decide, so the list only shows the forms, and a line
 // states what is active. The Infrastructure window has probed the two providers when the picker
 // shows, so each story seeds what that probe found, and answers the reads the connect form sends.
-
-/** Agents on Cloudflare Containers, with a runner pool offered beside them: a Worker deployment. */
-const worker = infrastructureCapabilities({
-  execution: {
-    available: ['cloudflare-containers', 'runner-pool'],
-    active: 'cloudflare-containers',
-  },
-  testEnv: { available: ['environment-provider'], active: 'environment-provider' },
-})
 
 /**
  * The picker on a deployment that offers `capabilities`, local or not, where the probe found the
@@ -62,15 +53,6 @@ function deployment(
   })
 }
 
-/** A local deployment, which names its executor image for the k3s form. */
-const local = infrastructureCapabilities({
-  execution: {
-    available: ['local-docker', 'runner-pool'],
-    active: 'local-docker',
-    suggestedExecutorImage: 'ghcr.io/kibertoad/cat-factory-executor:1.163.4',
-  },
-})
-
 const notConnected = runnerPoolConnectionApi({
   descriptor: kubernetesRunnerDescriptor(false),
 })
@@ -79,7 +61,7 @@ const meta = {
   title: 'Settings/Components/InfrastructureBackendPicker',
   component: InfrastructureBackendPicker,
   args: { axis: 'execution' },
-  decorators: [deployment(worker)],
+  decorators: [deployment(workerCapabilities)],
   parameters: { width: 'prose', api: notConnected },
 } satisfies Meta<typeof InfrastructureBackendPicker>
 export default meta
@@ -94,7 +76,7 @@ export const Default: Story = {}
  * stored connection.
  */
 export const ConnectedPool: Story = {
-  decorators: [deployment(worker, { connection: kubernetesRunnerConnection })],
+  decorators: [deployment(workerCapabilities, { connection: kubernetesRunnerConnection })],
   parameters: {
     api: runnerPoolConnectionApi({
       descriptor: kubernetesRunnerDescriptor(true),
@@ -120,7 +102,7 @@ export const TestEnvAxis: Story = {
 
 /** A local deployment: Local Docker picked, no active line, and the local k3s item last. */
 export const LocalMode: Story = {
-  decorators: [deployment(local, { local: true })],
+  decorators: [deployment(localCapabilities, { local: true })],
 }
 
 /**
@@ -129,7 +111,7 @@ export const LocalMode: Story = {
  * on Local Docker until a cluster is connected.
  */
 export const RegisterHint: Story = {
-  decorators: [deployment(local, { local: true })],
+  decorators: [deployment(localCapabilities, { local: true })],
   play: async ({ canvasElement }) => {
     await userEvent.click(await screen.findByRole('radio', { name: /Local Kubernetes/ }))
     await within(canvasElement).findByText('Register a runner pool below to enable this.')

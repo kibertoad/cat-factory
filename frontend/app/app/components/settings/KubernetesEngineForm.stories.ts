@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { fn } from 'storybook/test'
-import { kubernetesHandler } from '~/stories/infra.stories.mocks'
+import { kubernetesHandler, kubernetesTestPassed } from '~/stories/infra.stories.mocks'
 import KubernetesEngineForm from './KubernetesEngineForm.vue'
 
 // The cluster connection form of a Kubernetes test environment handler: the apiserver, TLS, the
@@ -63,7 +63,7 @@ export const TestPassed: Story = {
   args: {
     handler: kubernetesHandler,
     supportsTest: true,
-    testResult: { ok: true, message: 'Reached https://k8s.staging.acme.dev:6443.' },
+    testResult: kubernetesTestPassed,
   },
 }
 
