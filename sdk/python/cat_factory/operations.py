@@ -38,6 +38,7 @@ from .models import (
     DetachPublicTaskDocumentRequest,
     DirectoryAccountMembershipPage,
     DirectoryChangePage,
+    DirectoryReach,
     DirectoryRepoPage,
     DirectoryUserPage,
     DirectoryWebhook,
@@ -2807,6 +2808,24 @@ class DirectoryResource:
             query=None,
             timeout=timeout,
         )
+
+    def get_reach(self, *, timeout: float | None = None) -> DirectoryReach:
+        """Read the key's directory reach
+        The calling key’s account and the workspaces it reaches, `null` for every workspace
+        in the account (later ones included). Account-scoped like the rest of the directory:
+        no `x-cat-factory-workspace` header is read, so a key reaching several workspaces
+        gets an answer where `GET /api/v1/me` asks it to name one. A mirror reads this to
+        filter what a directory push may write, and to tell an account-wide key from one
+        limited to some workspaces.
+        `GET /api/v1/directory/reach` (operation `getDirectoryReach`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/reach",
+            query=None,
+            timeout=timeout,
+        )
+        return DirectoryReach.from_dict(raw)
 
     def list_account_memberships(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryAccountMembershipPage:
         """List the account's memberships

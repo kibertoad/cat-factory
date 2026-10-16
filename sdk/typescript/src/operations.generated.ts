@@ -30,6 +30,7 @@ import type {
   DetachPublicTaskDocumentRequest,
   DirectoryAccountMembershipPage,
   DirectoryChangePage,
+  DirectoryReach,
   DirectoryRepoPage,
   DirectoryUserPage,
   DirectoryWebhook,
@@ -2371,6 +2372,19 @@ export class DirectoryResource {
     return this.#transport.requestNoContent({
       method: 'DELETE',
       path: `/api/v1/directory/webhooks/${encodePathSegment(webhookId)}`,
+      options,
+    })
+  }
+
+  /**
+   * Read the key's directory reach
+   * The calling key’s account and the workspaces it reaches, `null` for every workspace in the account (later ones included). Account-scoped like the rest of the directory: no `x-cat-factory-workspace` header is read, so a key reaching several workspaces gets an answer where `GET /api/v1/me` asks it to name one. A mirror reads this to filter what a directory push may write, and to tell an account-wide key from one limited to some workspaces.
+   * `GET /api/v1/directory/reach` — operation `getDirectoryReach`.
+   */
+  getReach(options: RequestOptions = {}): Promise<DirectoryReach> {
+    return this.#transport.request<DirectoryReach>({
+      method: 'GET',
+      path: `/api/v1/directory/reach`,
       options,
     })
   }

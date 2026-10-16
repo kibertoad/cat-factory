@@ -534,3 +534,13 @@ add-service screen prefilled with a repository (`?addRepo=<owner>/<name>`). It i
 a key reaching several workspaces calls it without naming one, and any `read` key may.
 
 Additive: one `read` operation and its `PublicDeployment` shape.
+
+## 1.88.0
+
+`GET /api/v1/directory/reach` is new (`client.directory.getReach`): the calling key's
+`accountId` and `workspaceIds` (`null` for every workspace), account-scoped like the rest of the
+directory, so it needs no `x-cat-factory-workspace` header. `GET /api/v1/me` names one workspace and
+refuses a key reaching several that sends none, which is every key a directory webhook accepts, so a
+mirror filtering a push by reach reads this instead.
+
+Additive: one `read` operation and its `DirectoryReach` shape.

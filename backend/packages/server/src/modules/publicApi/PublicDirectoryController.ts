@@ -1,5 +1,6 @@
 import {
   deleteDirectoryWebhookContract,
+  getDirectoryReachContract,
   listDirectoryAccountMembershipsContract,
   listDirectoryChangesContract,
   listDirectoryReposContract,
@@ -25,6 +26,13 @@ import { authorizeAccount, refuse } from './publicApiAuth.js'
 
 export function publicDirectoryController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+
+  buildHonoRoute(app, getDirectoryReachContract, async (c) => {
+    const gate = await authorizeAccount(c, getDirectoryReachContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const { accountId, workspaceIds } = gate.auth
+    return c.json({ accountId, workspaceIds }, 200)
+  })
 
   buildHonoRoute(app, listDirectoryChangesContract, async (c) => {
     const gate = await authorizeAccount(c, listDirectoryChangesContract.minScope)

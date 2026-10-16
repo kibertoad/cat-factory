@@ -634,6 +634,7 @@ expectMutuallyAssignable<
   sdk.DirectoryWebhookList,
   v.InferOutput<typeof contracts.directoryWebhookListSchema>
 >()
+expectMutuallyAssignable<sdk.DirectoryReach, v.InferOutput<typeof contracts.directoryReachSchema>>()
 expectMutuallyAssignable<
   sdk.PutDirectoryWebhook,
   v.InferOutput<typeof contracts.putDirectoryWebhookSchema>
@@ -682,6 +683,7 @@ const ASSERTED_COMPONENTS = [
   'PlatformAlertWebhookDelivery',
   'DirectoryWebhook',
   'DirectoryWebhookList',
+  'DirectoryReach',
   'PutDirectoryWebhook',
   'DirectoryWebhookDelivery',
   'DirectoryWorkspace',

@@ -1,4 +1,9 @@
-import type { DirectoryChangePage, DirectoryUser, DirectoryWorkspace } from '@cat-factory/contracts'
+import type {
+  DirectoryChangePage,
+  DirectoryReach,
+  DirectoryUser,
+  DirectoryWorkspace,
+} from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceApp, ConformanceHarness } from './harness.js'
 
@@ -66,6 +71,31 @@ export function definePublicDirectorySuite(harness: ConformanceHarness): void {
         w1Key: await mint([w1]),
       }
     }
+
+    it("answers a key's reach with no workspace header, whatever it reaches", async () => {
+      const app = harness.makeApp()
+      const { w1, accountKey, w1Key } = await scenario(app)
+
+      // `/me` names one workspace, so it refuses a key reaching several that sends no header.
+      // The directory's own reach read is account-scoped and answers both kinds of key.
+      const me = await app.call<Refusal>('GET', '/api/v1/me', undefined, accountKey)
+      expect(me.status).toBe(422)
+      const wide = await app.call<DirectoryReach>(
+        'GET',
+        '/api/v1/directory/reach',
+        undefined,
+        accountKey,
+      )
+      expect(wide.status).toBe(200)
+      expect(wide.body.workspaceIds).toBeNull()
+      const narrow = await app.call<DirectoryReach>(
+        'GET',
+        '/api/v1/directory/reach',
+        undefined,
+        w1Key,
+      )
+      expect(narrow.body).toEqual({ accountId: wide.body.accountId, workspaceIds: [w1] })
+    })
 
     it('pages a snapshot under one watermark, and reads the users of the account', async () => {
       const app = harness.makeApp()

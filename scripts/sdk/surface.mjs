@@ -214,6 +214,7 @@ const SURFACE = {
   // ---- Kaizen entries (`read` to consume the backlog, `write` to acknowledge one) ----------
   listPublicKaizenEntries: { group: 'kaizen', method: 'listEntries', paginates: 'entries' },
   // ---- Directory (`read`; account-scoped, for keeping an external copy in sync) ------------
+  getDirectoryReach: { group: 'directory', method: 'getReach' },
   listDirectoryChanges: { group: 'directory', method: 'listChanges' },
   listDirectoryWorkspaces: { group: 'directory', method: 'listWorkspaces', paginates: 'items' },
   listDirectoryUsers: { group: 'directory', method: 'listUsers', paginates: 'items' },
