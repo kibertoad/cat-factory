@@ -4645,7 +4645,8 @@
         "frontendWiringFailedNote": "Frontend ayarları kaydedilmedi. Alt dizinini ve backend servislerini ayarlamak için her frontend uygulamasının inspector’ını açın."
       },
       "repoType": "Depo türü",
-      "repoTypeHint": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike)."
+      "repoTypeHint": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike).",
+      "prefillProviderMismatch": "Bağlantı başka bir sağlayıcıdaki {repo} deposunu istiyordu, bu pano ise {connected} ile bağlı. Depoyu elle arayın veya bağlantıyı onun sağlayıcısına bağlı bir panoda açın."
     },
     "repoTree": {
       "root": "kök",

@@ -15,4 +15,4 @@ accepts.
 `DirectorySyncer.handleDelivery` read the key's reach from `/me`, so every push to a directory
 webhook failed with `422 workspace_required`. It now reads `/api/v1/directory/reach`, and falls back
 to `/me` against a deployment without that route or with an SDK that predates `getReach`. OpenAPI
-1.87.0.
+1.88.0.

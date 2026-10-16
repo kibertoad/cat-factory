@@ -4830,7 +4830,8 @@
         },
         "frontendLinkedNote": "{directory} was added as the frontend and linked to the others. Name its backend URL environment variables in its inspector.",
         "frontendWiringFailedNote": "The frontend settings did not save. Open each frontend app's inspector to set its subdirectory and its backend services."
-      }
+      },
+      "prefillProviderMismatch": "The link asked for {repo} on a different host, and this board is connected to {connected}. Search for the repository by hand, or open the link on a board connected to its host."
     },
     "repoTree": {
       "root": "root",

@@ -2140,6 +2140,31 @@ func (s *MeService) Get(ctx context.Context) (*PublicIdentity, error) {
 	return &out, nil
 }
 
+// DeploymentService where the deployment serves its web app, for sending a person to one of the app's deep links
+// (the prefilled add-service screen, say). Any key may ask, with no workspace named.
+type DeploymentService struct {
+	client *Client
+}
+
+// Get describe the deployment
+// Report where this deployment serves its web app (`appUrl`): `APP_BASE_URL` when the operator
+// set one, otherwise the origin this API was reached on. An integration uses it to send a person
+// to one of the app’s deep links, such as the prefilled add-service screen
+// (`?addRepo=<owner>/<name>`). Account-level, so a key reaching several workspaces calls it
+// without naming one. `read` scope.
+// GET /api/v1/deployment (operation getPublicDeployment).
+func (s *DeploymentService) Get(ctx context.Context) (*PublicDeployment, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/deployment",
+	}
+	var out PublicDeployment
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // DecisionsService every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge
 // verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview
 // gates.

@@ -94,6 +94,7 @@ import type {
   PublicChallengePrReviewFinding,
   PublicChooseFork,
   PublicDecisionList,
+  PublicDeployment,
   PublicGuidedReviewList,
   PublicIdentity,
   PublicIncorporate,
@@ -1326,6 +1327,28 @@ export class MeResource {
     return this.#transport.request<PublicIdentity>({
       method: 'GET',
       path: `/api/v1/me`,
+      options,
+    })
+  }
+}
+
+/** Where the deployment serves its web app, for sending a person to one of the app's deep links (the prefilled add-service screen, say). Any key may ask, with no workspace named. */
+export class DeploymentResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Describe the deployment
+   * Report where this deployment serves its web app (`appUrl`): `APP_BASE_URL` when the operator set one, otherwise the origin this API was reached on. An integration uses it to send a person to one of the app’s deep links, such as the prefilled add-service screen (`?addRepo=<owner>/<name>`). Account-level, so a key reaching several workspaces calls it without naming one. `read` scope.
+   * `GET /api/v1/deployment` — operation `getPublicDeployment`.
+   */
+  get(options: RequestOptions = {}): Promise<PublicDeployment> {
+    return this.#transport.request<PublicDeployment>({
+      method: 'GET',
+      path: `/api/v1/deployment`,
       options,
     })
   }
@@ -2931,6 +2954,8 @@ export abstract class CatFactoryResources {
   readonly usage: UsageResource
   /** What the calling key is and what it may do — the self-check an integration runs at startup. */
   readonly me: MeResource
+  /** Where the deployment serves its web app, for sending a person to one of the app's deep links (the prefilled add-service screen, say). Any key may ask, with no workspace named. */
+  readonly deployment: DeploymentResource
   /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates. */
   readonly decisions: DecisionsResource
   /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs, and the whole model-activity bundle as one document. */
@@ -2970,6 +2995,7 @@ export abstract class CatFactoryResources {
     this.webhook = new WebhookResource(transport)
     this.usage = new UsageResource(transport)
     this.me = new MeResource(transport)
+    this.deployment = new DeploymentResource(transport)
     this.decisions = new DecisionsResource(transport)
     this.debug = new DebugResource(transport)
     this.evidence = new EvidenceResource(transport)
