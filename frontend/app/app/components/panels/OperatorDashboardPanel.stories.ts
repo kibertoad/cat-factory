@@ -18,7 +18,7 @@ import OperatorDashboardPanel from './OperatorDashboardPanel.vue'
 //
 // The trend draws no bars: its row aligns the columns to the end (`items-end`), so each column
 // is only as tall as its content, and the bars' percentage heights resolve to nothing. Every
-// story that sends trend points shows an empty box with its legend.
+// story that sends trend points shows an empty box with its legend (#2395).
 
 const HOUR = 3_600_000
 const DAY = 24 * HOUR
@@ -52,15 +52,18 @@ function figuresAre(view: PlatformObservability) {
   })
 }
 
-/** A busy day: 24 hourly buckets, quieter overnight. */
+/**
+ * A busy day: 24 hourly buckets, quieter overnight. They add up to the day's outcomes: 58 done,
+ * 7 failed, and the 6 running, blocked or paused runs in the last hour.
+ */
 function hourlyTrend() {
   return Array.from({ length: 24 }, (_, i) => {
     const busy = i >= 8 && i <= 18
     return {
       start: NOW - DAY + i * HOUR,
       done: busy ? 4 + (i % 3) : i % 4 === 0 ? 1 : 0,
-      failed: busy && i % 4 === 1 ? 1 : 0,
-      other: i === 23 ? 3 : 0,
+      failed: busy && i % 3 !== 2 ? 1 : 0,
+      other: i === 23 ? 6 : 0,
     }
   })
 }
@@ -137,7 +140,7 @@ function dailyTrend(days: number, through: number) {
 }
 
 /**
- * The last 24 hours, counted live: the four tiles, an empty trend box (see above), both gates
+ * The last 24 hours, counted live: the four tiles, an empty trend box (see above, #2395), both gates
  * with their clean pass rates, four failure kinds, the runs live now, and the duration
  * percentiles.
  */
@@ -197,10 +200,27 @@ export const Empty: Story = {
 }
 
 const staleThrough = NOW - 5 * DAY
+const stalePoints = dailyTrend(30, staleThrough)
+const staleDone = stalePoints.reduce((n, p) => n + p.done, 0)
+const staleFailed = stalePoints.reduce((n, p) => n + p.failed, 0)
+
+/** The failed runs split over the four failure kinds as in a day, the first kind takes the rest. */
+function failuresOf(failed: number): PlatformObservability['failures'] {
+  const dispatch = Math.round((failed * 2) / 7)
+  const stalled = Math.round(failed / 7)
+  const environment = Math.round(failed / 7)
+  return [
+    { kind: 'agent', count: failed - dispatch - stalled - environment },
+    { kind: 'dispatch', count: dispatch },
+    { kind: 'stalled', count: stalled },
+    { kind: 'environment', count: environment },
+  ]
+}
 
 /**
  * Thirty days from the daily rollup, which last ran five days ago: a warning names the date, so
- * the empty days at the end read as missing data, not as idle days.
+ * the empty days at the end read as missing data, not as idle days. The outcomes and the failure
+ * kinds are the sums of the trend's points.
  */
 export const RollupStale: Story = {
   decorators: [withDashboard('30d')],
@@ -212,7 +232,18 @@ export const RollupStale: Story = {
           since: NOW - 30 * DAY,
           source: 'daily-rollup',
           rolledUpThrough: staleThrough,
-          trend: { bucketMs: DAY, points: dailyTrend(30, staleThrough) },
+          outcomes: {
+            total: staleDone + staleFailed,
+            done: staleDone,
+            failed: staleFailed,
+            running: 0,
+            blocked: 0,
+            paused: 0,
+            other: 0,
+            successRate: staleDone / (staleDone + staleFailed),
+          },
+          trend: { bucketMs: DAY, points: stalePoints },
+          failures: failuresOf(staleFailed),
         }),
       ),
     ],

@@ -32,7 +32,9 @@ export const Selected: Story = { args: { selected: true } }
 /** Edit opened: the comment, its line and its side. */
 export const Editing: Story = {
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: /edit/i }))
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getByRole('button', { name: /edit/i }))
+    await canvas.findByRole('button', { name: 'Save' })
   },
 }
 

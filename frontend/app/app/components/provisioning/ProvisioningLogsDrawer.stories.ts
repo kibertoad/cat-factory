@@ -17,7 +17,7 @@ import ProvisioningLogsDrawer from './ProvisioningLogsDrawer.vue'
 // object that `byExecution[id] ??= emptyState()` returns, not through the store's reactive proxy,
 // so the drawer keeps its placeholder rows and a disabled Refresh while the store holds the
 // answer. A live run recovers on its next poll; a finished one does not. The Default, Error and
-// Empty stories show that. The subsystem drawer is not affected.
+// Empty stories show that (#2394). The subsystem drawer is not affected.
 
 function entry(
   id: string,

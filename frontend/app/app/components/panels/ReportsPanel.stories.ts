@@ -26,7 +26,7 @@ import ReportsPanel from './ReportsPanel.vue'
 // carry no label, so they show their raw key. The amounts are made up.
 //
 // The spend trend draws no bars, for the same reason as the operator dashboard's: its row aligns
-// the columns to the end (`items-end`), so the bars' percentage heights resolve to nothing.
+// the columns to the end (`items-end`), so the bars' percentage heights resolve to nothing (#2395).
 
 const DAY = 24 * 3_600_000
 const NOW = Date.UTC(2026, 9, 11, 12, 0)
@@ -306,12 +306,49 @@ export const RollupStale: Story = {
 }
 
 const board = spend(STORY_WORKSPACE_ID, 'Core services', 112.8, 41.3)
-const boardShare = (112.8 + 41.3) / (174.2 + 52.6)
 
 /**
- * Narrowed to Core services: the board filter names it, and the totals, the trend and the
- * board, service and repository breakdowns are that board's. The model, agent kind, ticket and
- * run rows are left as the account's, which a real filtered read would also narrow.
+ * The rows scaled down to the board's share, so they add up to the board's own row. Each field
+ * is rounded, and the first row takes the rounding rest.
+ */
+function narrowToBoard(rows: ReportSpendRow[]): ReportSpendRow[] {
+  const all = totalOf(rows)
+  const fields = [
+    'inputTokens',
+    'outputTokens',
+    'calls',
+    'meteredCost',
+    'subscriptionCost',
+  ] as const
+  const out = rows.map((r) => ({ ...r }))
+  for (const f of fields) {
+    const cents = f === 'meteredCost' || f === 'subscriptionCost' ? 100 : 1
+    const share = all[f] === 0 ? 0 : board[f] / all[f]
+    for (const r of out) r[f] = Math.round(r[f] * share * cents) / cents
+    const rest = board[f] - out.reduce((n, r) => n + r[f], 0)
+    out[0]![f] = Math.round((out[0]![f] + rest) * cents) / cents
+  }
+  return out
+}
+
+const boardShare = (board.meteredCost + board.subscriptionCost) / (174.2 + 52.6)
+
+/** The ticket and run rows cover only part of the spend, so they scale by the share alone. */
+function scaleToBoard(rows: ReportSpendRow[]): ReportSpendRow[] {
+  return rows.map((r) =>
+    spend(
+      r.key,
+      r.label,
+      Math.round(r.meteredCost * boardShare * 100) / 100,
+      Math.round(r.subscriptionCost * boardShare * 100) / 100,
+    ),
+  )
+}
+
+/**
+ * Narrowed to Core services: the board filter names it, and every section is that board's. The
+ * model, agent kind, task type, ticket and run rows are the account's rows scaled to the board's
+ * share, so each full breakdown adds up to the totals.
  */
 export const FilteredToBoard: Story = {
   decorators: [withReports('7d', STORY_WORKSPACE_ID)],
@@ -331,9 +368,14 @@ export const FilteredToBoard: Story = {
           },
           spend: {
             ...report().spend,
+            byModel: narrowToBoard(report().spend.byModel),
+            byAgentKind: narrowToBoard(report().spend.byAgentKind),
             byWorkspace: [board],
             byService: report().spend.byService.slice(0, 2),
             byRepo: report().spend.byRepo.slice(0, 2),
+            byTaskType: narrowToBoard(report().spend.byTaskType),
+            byTicket: scaleToBoard(report().spend.byTicket),
+            byRun: scaleToBoard(report().spend.byRun),
           },
           activity: {
             ...report().activity,

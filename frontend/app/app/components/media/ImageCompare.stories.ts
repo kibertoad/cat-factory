@@ -48,10 +48,16 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
+/**
+ * Picks a mode, then waits for its button to show as pressed. The component falls back from diff
+ * to overlay with no message when it cannot draw the diff, so a click alone proves nothing.
+ */
 const pickMode =
   (name: RegExp) =>
   async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await userEvent.click(await within(canvasElement).findByRole('button', { name }))
+    const canvas = within(canvasElement)
+    await userEvent.click(await canvas.findByRole('button', { name }))
+    await canvas.findByRole('button', { name, pressed: true })
   }
 
 /** Both images loaded: side by side, with the four mode buttons. */

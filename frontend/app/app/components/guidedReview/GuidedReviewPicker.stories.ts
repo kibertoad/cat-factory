@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { GitHubRepo } from '@cat-factory/contracts'
-import { fn, screen, userEvent, within } from 'storybook/test'
+import { expect, fn, screen, userEvent, within } from 'storybook/test'
 import { authRepo, gatewayRepo, githubConnection, pullRequests } from '~/stories/vcs.stories.mocks'
 import { withSeed } from '~/stories/withStores'
 import { useGitHubStore } from '~/stores/github'
@@ -19,10 +19,12 @@ function withRepos(repos: GitHubRepo[]) {
   })
 }
 
-/** Choose acme/auth-service in the repository menu. */
+/** Choose acme/auth-service in the repository menu, and wait for its first open pull request. */
 async function chooseAuthService(canvasElement: HTMLElement) {
-  await userEvent.click(within(canvasElement).getByTestId('guided-review-picker-repo'))
+  const canvas = within(canvasElement)
+  await userEvent.click(canvas.getByTestId('guided-review-picker-repo'))
   await userEvent.click(await screen.findByRole('option', { name: 'acme/auth-service' }))
+  return canvas.findByTestId('guided-review-picker-pr-212')
 }
 
 const meta = {
@@ -38,7 +40,9 @@ type Story = StoryObj<typeof meta>
 
 /** The auth service chosen: its two open pull requests, and the number field. */
 export const Default: Story = {
-  play: async ({ canvasElement }) => chooseAuthService(canvasElement),
+  play: async ({ canvasElement }) => {
+    await chooseAuthService(canvasElement)
+  },
 }
 
 /** The repositories are loading: two placeholder rows. */
@@ -50,5 +54,7 @@ export const Empty: Story = { decorators: [withRepos([])] }
 /** A pull request was picked and the review is opening: the list is disabled. */
 export const Opening: Story = {
   args: { opening: true },
-  play: async ({ canvasElement }) => chooseAuthService(canvasElement),
+  play: async ({ canvasElement }) => {
+    await expect(await chooseAuthService(canvasElement)).toBeDisabled()
+  },
 }

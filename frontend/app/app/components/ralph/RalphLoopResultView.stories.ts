@@ -112,23 +112,25 @@ function loop(overrides: Partial<RalphStepState> = {}): RalphStepState {
   }
 }
 
-/** The loop's run, with the Ralph step in `ralphStep` and the tail still pending. */
+/**
+ * The loop's run, with the Ralph step in `ralphStep`. The step at `currentStep` works and the
+ * steps after it are pending.
+ */
 function run(
   ralphStep: ReturnType<typeof step>,
   status: ExecutionInstance['status'] = 'running',
+  currentStep = 0,
 ): ExecutionInstance {
+  const tail = (['conflicts', 'ci', 'merger'] as const).map((agentKind, i) =>
+    step({ agentKind, state: i + 1 === currentStep ? 'working' : 'pending', progress: 0 }),
+  )
   return {
     id: 'exec_flaky_expiry',
     blockId: ralphTask.id,
     pipelineId: ralphPipeline.id,
     pipelineName: ralphPipeline.name,
-    steps: [
-      ralphStep,
-      step({ agentKind: 'conflicts', state: 'pending', progress: 0 }),
-      step({ agentKind: 'ci', state: 'pending', progress: 0 }),
-      step({ agentKind: 'merger', state: 'pending', progress: 0 }),
-    ],
-    currentStep: 0,
+    steps: [ralphStep, ...tail],
+    currentStep,
     status,
   }
 }
@@ -181,7 +183,10 @@ export const Empty: Story = {
   decorators: [withLoop(run(step({ agentKind: 'ralph', state: 'pending', progress: 0 })))],
 }
 
-/** Iteration 3 passed: exit 0, all three iterations, and the link to the pull request. */
+/**
+ * Iteration 3 passed: exit 0, all three iterations, and the link to the pull request. The run
+ * moved on to its conflicts gate.
+ */
 export const Passed: Story = {
   decorators: [
     withLoop(
@@ -197,6 +202,8 @@ export const Passed: Story = {
             attemptLog: [first, second, third],
           }),
         }),
+        'running',
+        1,
       ),
       {
         ...ralphTask,

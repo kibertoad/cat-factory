@@ -127,10 +127,12 @@ function panel(run: ExecutionInstance, s: Sinks = {}): Story {
   }
 }
 
-/** Open the tab named `name`. */
-function tab(name: string) {
+/** Open the tab named `name`, then wait for `shown`, a text that only that tab draws. */
+function tab(name: string, shown?: string) {
   return async () => {
     await userEvent.click(await screen.findByRole('tab', { name }))
+    await screen.findByRole('tab', { name, selected: true })
+    if (shown) await screen.findByText(shown)
   }
 }
 
@@ -208,7 +210,7 @@ export const FailedRun: Story = panel(failedRun, failedSinks)
 /** The tool calls tab on the failed run: the coder's seven calls, one failed. */
 export const ToolCalls: Story = {
   ...panel(failedRun, failedSinks),
-  play: tab('Tool calls'),
+  play: tab('Tool calls', 'what the agents did, in the order they did it'),
 }
 
 /** The provided context tab, with the coder's opened: its prompts, fragment, file and details. */
@@ -217,13 +219,14 @@ export const ProvidedContext: Story = {
   play: async () => {
     await tab('Provided context')()
     await userEvent.click(await screen.findByRole('button', { name: /Coder/ }))
+    await screen.findByText('System prompt')
   },
 }
 
 /** The web search tab: search was on, through SearXNG, and the two queries the agents made. */
 export const WebSearch: Story = {
   ...panel(loginRun()),
-  play: tab('Web search'),
+  play: tab('Web search', 'refresh token rotation reuse detection'),
 }
 
 const bootstrapRun = failedApplyJob()

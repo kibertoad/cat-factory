@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+import { expect, userEvent, waitFor, within } from 'storybook/test'
 import InitiativePlanDecision from './InitiativePlanDecision.vue'
 
 // The decision on an initiative's plan: approve it, or send it back with feedback. Send back
@@ -25,6 +25,8 @@ export const WithFeedback: Story = {
       within(canvasElement).getByTestId('initiative-plan-feedback'),
       'Split the session phase in two: revoke first, then rotate.',
     )
+    const sendBack = within(canvasElement).getByTestId('initiative-plan-send-back')
+    await waitFor(() => expect(sendBack).toBeEnabled())
   },
 }
 

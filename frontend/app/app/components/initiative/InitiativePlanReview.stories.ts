@@ -9,7 +9,8 @@ import InitiativePlanReview from './InitiativePlanReview.vue'
 // beside it with the run details, and a rail with the comments and the decision. A click on a
 // block of the plan starts a comment on it. The document is the shared one
 // (`initiativePlanDocument` in `initiative.stories.mocks.ts`). The outline and the run details
-// show from the lg width, and the rail drops under the document below it.
+// show from the lg width, and the rail drops under the document below it. A plan with no headings
+// is not a story: the engine's renderer always starts the plan with a heading.
 
 /** The planner's step, parked on the plan's gate after six minutes, so its clock is stopped. */
 const startedAt = Date.UTC(2026, 9, 12, 8, 40)
@@ -60,22 +61,11 @@ function rotationBlock(canvasElement: HTMLElement) {
 /** Two phases and three items, the policy, a decision and a caveat, with a hint to comment. */
 export const Default: Story = {}
 
-/**
- * A document with no headings, so there is no outline: the run details take the sidebar. The
- * engine's renderer always starts with a heading, so this layout shows only if that changes.
- */
-export const NoHeadings: Story = {
-  args: {
-    planDocument:
-      'Rotate refresh tokens on use, then record every session event in the audit log. ' +
-      'Two items run at once.',
-  },
-}
-
 /** A block of the plan clicked: the composer quotes it in the rail. */
 export const Commenting: Story = {
   play: async ({ canvasElement }) => {
     await userEvent.click(rotationBlock(canvasElement))
+    await within(canvasElement).findByTestId('initiative-plan-composer')
   },
 }
 
@@ -89,6 +79,7 @@ export const WithComments: Story = {
       'Split this: revoke on reuse first, then rotate.',
     )
     await userEvent.click(canvas.getByTestId('initiative-plan-comment-add'))
+    await canvas.findByTestId('initiative-plan-comment')
   },
 }
 

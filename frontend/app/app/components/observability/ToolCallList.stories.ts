@@ -84,7 +84,9 @@ export const Truncated: Story = {
 export const Expanded: Story = {
   args: loaded,
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getAllByRole('button', { name: /bash/ })[0]!)
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getAllByRole('button', { name: /bash/ })[0]!)
+    await canvas.findByText('Arguments')
   },
 }
 
@@ -106,6 +108,8 @@ export const BodiesNotStored: Story = {
     failures,
   },
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getAllByRole('button', { name: /bash/ })[0]!)
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getAllByRole('button', { name: /bash/ })[0]!)
+    await canvas.findByText(/Arguments and results were not captured/)
   },
 }

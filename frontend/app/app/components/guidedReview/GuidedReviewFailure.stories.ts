@@ -35,7 +35,9 @@ export const HeadMoved: Story = {
 /** A long detail, opened: it wraps inside the panel. */
 export const LongDetail: Story = {
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Details' }))
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getByRole('button', { name: 'Details' }))
+    await canvas.findByTestId('guided-review-failure-detail')
   },
   args: {
     failure: {
