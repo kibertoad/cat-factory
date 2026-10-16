@@ -14,8 +14,7 @@ import type {
   TaskSourceDescriptor,
   TaskSourceState,
 } from '@cat-factory/contracts'
-
-// ---- Issue trackers ---------------------------------------------------------
+import type { PendingContext } from '~/composables/useContextLinking'
 
 export const jiraDescriptor: TaskSourceDescriptor = {
   source: 'jira',
@@ -144,6 +143,21 @@ export function sourceTask(overrides: Partial<SourceTask> = {}): SourceTask {
   }
 }
 
+/** The issue from `sourceTask()` attached to a task being written, as the form holds it. */
+export const linkedIssue: PendingContext = (() => {
+  const issue = sourceTask()
+  return {
+    kind: 'task',
+    source: 'jira',
+    externalId: issue.externalId,
+    title: `${issue.externalId} · ${issue.title}`,
+    subtitle: issue.status,
+    icon: jiraDescriptor.icon,
+    description: issue.description,
+    needsImport: false,
+  }
+})()
+
 /** Three tracker issues: two Jira issues and one GitHub issue, one already linked to a task. */
 export const sourceTasks: SourceTask[] = [
   sourceTask(),
@@ -216,8 +230,6 @@ export const sessionSearchHits: TaskSearchResult[] = [
     excerpt: 'The devices page keeps sessions after the device is removed.',
   },
 ]
-
-// ---- Document sources -------------------------------------------------------
 
 export const confluenceDescriptor: DocumentSourceDescriptor = {
   source: 'confluence',
@@ -391,8 +403,6 @@ export const resolvedDocumentRefWithDroppedScope: ResolvedDocumentRef = {
   canonicalUrl: 'https://www.figma.com/design/Xq3hT9mPa2Lk',
   droppedScope: 'I2649:14930;2649:14746',
 }
-
-// ---- Slack ------------------------------------------------------------------
 
 export const slackConnection: SlackConnection = {
   teamId: 'T04ACME123',

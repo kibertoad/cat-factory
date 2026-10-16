@@ -15,6 +15,7 @@ import type {
 } from '@cat-factory/contracts'
 import { STORY_WORKSPACE_ID } from './workspace'
 import { failure } from './pipelineStep.stories.mocks'
+import { platformRepo } from './vcs.stories.mocks'
 
 /** The billing service frame the run materialises on the board. */
 export const BILLING_FRAME_ID = 'svc_billing'
@@ -158,10 +159,10 @@ export function bootstrapJob(overrides: Partial<BootstrapJob> = {}): BootstrapJo
     error: null,
     failure: null,
     monorepo: {
-      repoGithubId: 734_102,
+      repoGithubId: platformRepo.githubId,
       directory: 'services/billing',
-      repoOwner: 'acme',
-      repoName: 'platform',
+      repoOwner: platformRepo.owner,
+      repoName: platformRepo.name,
       branch: null,
     },
     phase: 'survey',

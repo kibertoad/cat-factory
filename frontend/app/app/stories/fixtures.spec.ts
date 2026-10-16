@@ -291,9 +291,9 @@ describe('the repo fixtures', () => {
   })
 })
 
-// The backend drops a recommendation whose evidence names no path the survey read
-// (`surveyedPaths` in kernel's `monorepo-adoption.logic.ts`), so a story decision that cited one
-// would show a plan the backend never stores.
+// The backend strips evidence the survey did not read (`parseAdoptionDecisions` in kernel's
+// `monorepo-adoption.logic.ts`), so a cited unread path would show evidence the stored plan never
+// carries.
 describe('the adoption fixture', () => {
   it('cites only paths the survey read', () => {
     const read = new Set(surveyReads.filter((r) => r.outcome === 'read').map((r) => r.path))

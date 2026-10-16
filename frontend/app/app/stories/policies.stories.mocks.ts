@@ -67,11 +67,15 @@ export function riskPolicy(
 export const manualReviewPolicy = riskPolicy({
   id: 'mp_manual_review',
   name: 'Manual review only',
+  // The ceilings and the judge budget of the `mp_manual_review` seed in kernel's catalog.
+  maxComplexity: 0,
+  maxRisk: 0,
+  maxImpact: 0,
+  judgeMaxBounces: 0,
   autoMergeEnabled: false,
   isDefault: false,
 })
 
-/** The built-in preset ids, their current catalog versions and their names. */
 /** An account policy a board inherits: auto-merge on, with lower ceilings than the default. */
 export const accountStrictPolicy = riskPolicy({
   id: 'mp_acme_strict',
@@ -83,6 +87,7 @@ export const accountStrictPolicy = riskPolicy({
   tier: 'account',
 })
 
+/** The built-in preset ids, their current catalog versions and their names. */
 export const modelPresetCatalogVersions: Record<string, number> = {
   mdp_kimi: 1,
   mdp_glm: 1,
