@@ -2,6 +2,7 @@ import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import {
   directoryAccountMembershipPageSchema,
   directoryChangePageSchema,
+  directoryReachSchema,
   directoryRepoPageSchema,
   directoryUserPageSchema,
   directoryWebhookListSchema,
@@ -24,6 +25,16 @@ import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 // are account-wide facts, so a key limited to some workspaces is refused them; the other three are
 // filtered to the key's workspaces.
 // ---------------------------------------------------------------------------
+
+/** The calling key's account and workspace reach, with no workspace header needed. */
+export const getDirectoryReachContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/directory/reach',
+    responsesByStatusCode: { 200: directoryReachSchema, ...errorResponses },
+  }),
+)
 
 /** The ordered change feed after a cursor. */
 export const listDirectoryChangesContract = withMinScope(

@@ -2217,6 +2217,9 @@ destructive operation is not a check at all. Two things to hold on to when you r
 ladder is **inclusive** (`read` ⊂ `write` ⊂ `decide` ⊂ `admin`), so compare against the rung an
 action needs rather than for equality; and `workspaceId` is the ONE workspace every call under this
 key acts within, which is what a multi-tenant integration should log alongside its own tenant id.
+A key reaching several workspaces names that workspace in the `x-cat-factory-workspace` header here
+too; for the key's whole reach without one, read
+[`GET /api/v1/directory/reach`](#directory-apiv1directory).
 `externalIdentity` is who whoever provisioned this key said it acts for, or `null`
 ([key provisioning](#key-provisioning-apiv1keys)).
 
@@ -3025,6 +3028,12 @@ those workspaces only, and is refused users and account memberships (`403`,
 `entity: null`, of every deleted workspace in the account: deleting a board drops the key's grant on
 it, so this is how the key learns the board is gone. Treat it as the removal of that workspace and
 of every membership and repository under it, since those rows are not served. Mint an account-wide key for a full directory mirror.
+
+`GET /api/v1/directory/reach` answers `{ accountId, workspaceIds }` for the calling key, with
+`workspaceIds: null` for an account-wide key. It is account-scoped like the rest of the directory,
+so no header is needed: use it rather than `GET /api/v1/me`, which names ONE workspace and so
+refuses a key reaching several that sends no `x-cat-factory-workspace` header. A mirror reads it to
+filter a push to what the key can read back.
 
 **Directory webhooks** push the same pages instead of waiting for a poll. Register an endpoint with
 `PUT /api/v1/directory/webhooks/:webhookId` (`{ url, secret?, enabled? }`, `https` only, at most 10

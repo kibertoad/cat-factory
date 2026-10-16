@@ -514,3 +514,13 @@ people across systems on `(provider, id)`, which survives a rename on the host. 
 account to a user, or moving it to another user, records a `user` change for each user involved.
 
 Additive. A client built against an older document reads users as before.
+
+## 1.86.0
+
+`GET /api/v1/directory/reach` is new (`client.directory.getReach`): the calling key's
+`accountId` and `workspaceIds` (`null` for every workspace), account-scoped like the rest of the
+directory, so it needs no `x-cat-factory-workspace` header. `GET /api/v1/me` names one workspace and
+refuses a key reaching several that sends none, which is every key a directory webhook accepts, so a
+mirror filtering a push by reach reads this instead.
+
+Additive: one `read` operation and its `DirectoryReach` shape.

@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { accountRolesSchema } from './accounts.js'
 import { notificationWebhookIdSchema } from './notification-webhooks.js'
+import { publicApiKeyWorkspaceIdsSchema } from './public-api-keys.js'
 import { cursorSchema, pageLimitSchema } from './public-paging.js'
 import { vcsProviderSchema } from './routes/auth.js'
 import { workspaceAccessModeSchema, workspaceRoleSchema } from './workspace-members.js'
@@ -238,6 +239,17 @@ export type DirectoryWebhook = v.InferOutput<typeof directoryWebhookSchema>
 
 export const directoryWebhookListSchema = v.object({ webhooks: v.array(directoryWebhookSchema) })
 export type DirectoryWebhookList = v.InferOutput<typeof directoryWebhookListSchema>
+
+/**
+ * What the calling key may read of the directory: its account, and the workspaces it reaches
+ * (`null` for every workspace, later ones included). The account-scoped twin of `/api/v1/me`,
+ * which names one workspace and so refuses a key reaching several that sends no header.
+ */
+export const directoryReachSchema = v.object({
+  accountId: v.string(),
+  workspaceIds: publicApiKeyWorkspaceIdsSchema,
+})
+export type DirectoryReach = v.InferOutput<typeof directoryReachSchema>
 
 /**
  * Register or edit an endpoint. Every field keeps its stored value when omitted; `url` is required
