@@ -55,6 +55,7 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   doneLaneRetentionDays: 14,
   kaizenEnabled: true,
   delegateAgentsToRunnerPool: false,
+  inheritAccountRunnerPool: true,
   // On, and deliberately not opt-in: every blocking finding names an input a model could not
   // act on either, so the gate can only ever save the call that would have reported the same
   // absence. A workspace that would rather watch before it parks moves this to `advisory`.

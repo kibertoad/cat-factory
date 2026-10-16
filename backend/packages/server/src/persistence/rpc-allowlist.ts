@@ -1223,6 +1223,18 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
     softDelete: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // The ACCOUNT tier of the runner pool: the row every board of the account falls back to when it
+  // has none of its own, read by `RunnerPoolConnectionService`'s dispatch resolver. Both reads are
+  // account-scoped (`getByAccount` by arg0 under the `account` rule, `listByAccounts` by the
+  // `accountList` rule, so every requested id must be in scope) and return the credentials as a
+  // SEALED `secretsCipher` blob, exactly like `runnerPoolConnectionRepository` above, so no
+  // plaintext crosses the machine API. `insertIfAbsent` is NOT exposed: it is the deployment
+  // seed's write, which runs where the deployment declares it (a node never seeds), classified
+  // `sweeper` in the drift guard.
+  accountRunnerPoolRepository: {
+    getByAccount: { scope: { kind: 'account', arg: 0 } },
+    listByAccounts: { scope: { kind: 'accountList', arg: 0 } },
+  },
   // --- Binary-artifact metadata surface (visual-confirmation gate) -----------------
   // The metadata rows for stored binary blobs (UI screenshots + the reference design images they
   // are reviewed against) the visual-confirmation gate + the artifact controllers read/write

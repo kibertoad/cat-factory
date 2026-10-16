@@ -144,6 +144,7 @@ export interface NodeCoreDepsBundle {
   cloudflareModelsEnabled: NodeModelDepsResult['cloudflareModelsEnabled']
   deployDeps: NodeTransportDeployResult['deployDeps']
   runnerPoolConnectionRepository: CoreDependencies['runnerPoolConnectionRepository']
+  accountRunnerPoolRepository: CoreDependencies['accountRunnerPoolRepository']
   agentContextObservability: NodeRunServicesResult['agentContextObservability']
   searchQueryObservability: NodeRunServicesResult['searchQueryObservability']
   resolveTestSecretRefs: NodeRunServicesResult['resolveTestSecretRefs']
@@ -471,8 +472,8 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // …and the pre-declared shared stacks, under the same rules. `createCore` builds the seeder
     // over them (when the shared-stacks module is wired) and exposes it for the same two sites.
     seedSharedStacks: options.seedSharedStacks,
-    // …and the pre-declared runner pool, which `createCore` seeds beside the runners module.
-    seedRunnerPool: options.seedRunnerPool,
+    // …and the declared runner pools, which `createCore` seeds beside the runners module.
+    seedAccountRunnerPool: options.seedAccountRunnerPool,
     serviceFragmentDefaultsRepository: repos.serviceFragmentDefaultsRepository,
     // Requirements-review feature (stateless reviewer + the requirements-rework
     // step). Wired identically to the Cloudflare facade's `selectRequirementsDeps`
@@ -610,6 +611,7 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     cloudflareModelsEnabled,
     deployDeps,
     runnerPoolConnectionRepository,
+    accountRunnerPoolRepository,
     githubClient,
     issueWritebackProvider,
     githubGateDeps,
@@ -656,6 +658,7 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     ...(config.runners.enabled && config.runners.encryptionKey
       ? {
           runnerPoolConnectionRepository,
+          accountRunnerPoolRepository,
           runnerSecretCipher: new WebCryptoSecretCipher({
             masterKeyBase64: config.runners.encryptionKey,
             info: RUNNERS_CIPHER_INFO,

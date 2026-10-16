@@ -546,6 +546,28 @@ describe('account onboarding read surface (account-scoped)', () => {
   })
 })
 
+describe('account runner pool surface', () => {
+  it('forwards getByAccount for an in-scope account and refuses an out-of-scope one (404)', async () => {
+    const repo = remoteRegistry().accountRunnerPoolRepository!
+    expect(await repo.getByAccount!(ACCOUNT)).toMatchObject({ accountId: ACCOUNT })
+    await expect(repo.getByAccount!(OTHER_ACCOUNT)).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('forwards listByAccounts only when EVERY requested account is in scope', async () => {
+    const repo = remoteRegistry().accountRunnerPoolRepository!
+    expect(await repo.listByAccounts!([ACCOUNT])).toEqual([{ accountId: ACCOUNT }])
+    await expect(repo.listByAccounts!([ACCOUNT, OTHER_ACCOUNT])).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('refuses insertIfAbsent (the seed write stays mothership-internal)', async () => {
+    await expect(
+      remoteRegistry().accountRunnerPoolRepository!.insertIfAbsent!({ accountId: ACCOUNT }),
+    ).rejects.toThrow(/not callable/)
+  })
+})
+
 describe('Slack integration management surface', () => {
   // Account-scoped methods (arg0 is an accountId → the `account` rule): the per-account connection
   // read/delete + the member-mapping read/write. Each stub echoes the accountId, proving the call

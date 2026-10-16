@@ -1,24 +1,29 @@
-import type { Clock, Logger } from '@cat-factory/kernel'
-import { noopLogger } from '@cat-factory/kernel'
-import type {
-  RunnerPoolConnectionRecord,
-  RunnerPoolConnectionRepository,
+import {
+  ConflictError,
+  DEFAULT_WORKSPACE_SETTINGS,
+  noopLogger,
+  requireWorkspace,
+  ValidationError,
+  type AccountRunnerPoolRecord,
+  type AccountRunnerPoolRepository,
+  type Clock,
+  type ConnectionTestResult,
+  type Logger,
+  type ProviderDescriptor,
+  type RunnerBackendConfig,
+  type RunnerPoolConnection,
+  type RunnerPoolConnectionRecord,
+  type RunnerPoolConnectionRepository,
+  type RunnerPoolProvider,
+  type RunnerTransport,
+  type SavedConnectionProbe,
+  type SecretCipher,
+  type TestRunnerPoolConnectionInput,
+  type UrlSafetyPolicy,
+  type WorkspaceRepository,
+  type WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import type { SecretCipher } from '@cat-factory/kernel'
-import type { UrlSafetyPolicy } from '@cat-factory/kernel'
-import type {
-  ConnectionTestResult,
-  ProviderDescriptor,
-  RunnerBackendConfig,
-  RunnerPoolConnection,
-  RunnerPoolProvider,
-  RunnerTransport,
-  SavedConnectionProbe,
-  TestRunnerPoolConnectionInput,
-} from '@cat-factory/kernel'
-import { ConflictError, ValidationError } from '@cat-factory/kernel'
-import { requireWorkspace } from '@cat-factory/kernel'
-import type { WorkspaceRepository } from '@cat-factory/kernel'
+import type { RegisterRunnerPoolInput } from '@cat-factory/contracts'
 import { missingRequiredConfigKeys } from '../environments/environments.logic.js'
 import type { RunnerBackendRegistry } from './runner-backends.js'
 
@@ -52,9 +57,22 @@ export interface RunnerPoolConnectionServiceDependencies {
   runnerPoolProvider?: RunnerPoolProvider
   /** The app-owned registry resolving a stored backend `kind` to its provider. */
   runnerBackendRegistry: RunnerBackendRegistry
+  /**
+   * The account tier a board without its own pool falls back to. Both members travel together: the
+   * fallback reads the account's row AND the board's `inheritAccountRunnerPool` marker, and a
+   * resolver that could read one without the other would either ignore the opt-out or never
+   * inherit. Absent ⇒ no account tier (the previous behaviour, byte for byte).
+   */
+  accountRunnerPool?: {
+    repository: AccountRunnerPoolRepository
+    workspaceSettingsRepository: WorkspaceSettingsRepository
+  }
   /** Optional so the service stays unit-testable standalone; every facade wires the real one. */
   logger?: Logger
 }
+
+/** A deployment- or admin-supplied runner pool: what {@link RunnerPoolConnectionService.validate} checks. */
+export type RunnerPoolInput = RegisterRunnerPoolInput
 
 /** A resolved runner backend: the live transport + its identity (for provisioning logs). */
 export interface ResolvedRunnerBackend {
@@ -95,6 +113,73 @@ export class RunnerPoolConnectionService {
     }
   }
 
+  /**
+   * The ONE admission check for a runner pool, shared by an admin's registration and a
+   * deployment's seed so the two cannot disagree: the backend kind is registered, its URLs pass
+   * the safety policy, and every secret the config references is present. Throws a
+   * {@link ValidationError}; returns the resolved provider so a caller needs no second lookup.
+   */
+  validate(input: RunnerPoolInput) {
+    const provider = this.provider(input.config.kind)
+    provider.assertConfigSafe(input.config, this.safetyOptions())
+    const missing = provider
+      .referencedSecretKeys(input.config)
+      .filter((key) => !(key in input.secrets))
+    if (missing.length) {
+      throw new ValidationError(`Missing secret values for: ${missing.join(', ')}`)
+    }
+    return provider
+  }
+
+  /**
+   * Register an ACCOUNT's runner pool unless it already has one: the write a deployment's seed
+   * makes. Validated like any registration, sealed under the same cipher, and inserted in one
+   * conflict-targeted statement, so two seeders racing on the same account leave exactly one row
+   * and an existing row (an earlier seed, or one a future admin surface wrote) is never replaced.
+   * Returns whether this call inserted.
+   */
+  async seedAccount(accountId: string, input: RunnerPoolInput): Promise<boolean> {
+    const accountPool = this.deps.accountRunnerPool
+    if (!accountPool) throw new ConflictError('The account runner pool is not wired')
+    const provider = this.validate(input)
+    const meta = provider.connectionMeta(input.config)
+    const record: AccountRunnerPoolRecord = {
+      accountId,
+      kind: input.config.kind,
+      providerId: meta.providerId,
+      label: meta.label,
+      baseUrl: meta.baseUrl,
+      configJson: JSON.stringify(input.config),
+      secretsCipher: await this.deps.secretCipher.encrypt(JSON.stringify(input.secrets)),
+      createdAt: this.deps.clock.now(),
+    }
+    return accountPool.repository.insertIfAbsent(record)
+  }
+
+  /**
+   * The ONE dispatch-time resolver: the board's own live row, else its account's row, else
+   * nothing. The account tier applies only to a board that belongs to an account (a legacy board
+   * has none and keeps registering per workspace) and has not opted out through
+   * `inheritAccountRunnerPool`. The account's row is returned in the board's record shape, so
+   * every caller reads one type whichever tier answered.
+   *
+   * Every READ of "the board's pool" goes through here; only the writes (`register`,
+   * `updateSecrets`, `unregister`) address the board's own row directly.
+   */
+  private async effective(workspaceId: string): Promise<RunnerPoolConnectionRecord | null> {
+    const own = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
+    if (own) return own
+    const accountPool = this.deps.accountRunnerPool
+    if (!accountPool) return null
+    const accountId = await this.deps.workspaceRepository.accountOf(workspaceId)
+    if (!accountId) return null
+    const settings = await accountPool.workspaceSettingsRepository.get(workspaceId)
+    const inherit = (settings ?? DEFAULT_WORKSPACE_SETTINGS).inheritAccountRunnerPool
+    if (!inherit) return null
+    const row = await accountPool.repository.getByAccount(accountId)
+    return row ? { ...row, workspaceId, deletedAt: null } : null
+  }
+
   /** Register (or replace) a workspace's runner backend. */
   async register(
     workspaceId: string,
@@ -102,14 +187,9 @@ export class RunnerPoolConnectionService {
   ): Promise<RunnerPoolConnection> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const config = input.config
-    const provider = this.provider(config.kind)
-    provider.assertConfigSafe(config, this.safetyOptions())
+    const provider = this.validate(input)
 
-    const missing = provider.referencedSecretKeys(config).filter((key) => !(key in input.secrets))
-    if (missing.length) {
-      throw new ValidationError(`Missing secret values for: ${missing.join(', ')}`)
-    }
-
+    // The board's OWN row only: an inherited account pool is not this board's to carry over.
     const existing = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
     const meta = provider.connectionMeta(config)
     const secretsCipher = await this.deps.secretCipher.encrypt(JSON.stringify(input.secrets))
@@ -172,7 +252,7 @@ export class RunnerPoolConnectionService {
    * manifest backend — it uses the shared flat manifest form, falling back to the raw editor.
    */
   async describeProvider(workspaceId: string, kind?: string): Promise<ProviderDescriptor> {
-    const record = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
+    const record = await this.effective(workspaceId)
     // Resolve + validate the backend kind exactly like the environment service: an explicit
     // (e.g. not-yet-connected custom) kind must be a registered backend, else the stored or
     // default `manifest` kind.
@@ -264,7 +344,7 @@ export class RunnerPoolConnectionService {
 
   /** The workspace's current connection (safe metadata), or null. */
   async getConnection(workspaceId: string): Promise<RunnerPoolConnection | null> {
-    const record = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
+    const record = await this.effective(workspaceId)
     if (!record) return null
     const keys = Object.keys(await this.decryptSecrets(record))
     return this.toConnection(record, keys)
@@ -276,10 +356,14 @@ export class RunnerPoolConnectionService {
    * projection, which only needs the yes/no and runs on the hot board-load path.
    */
   async hasConnection(workspaceId: string): Promise<boolean> {
-    return (await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)) !== null
+    return (await this.effective(workspaceId)) !== null
   }
 
-  /** Resolve the live connection + parsed config, or throw if not registered. */
+  /**
+   * Resolve the board's OWN live connection + parsed config, or throw if it has none. Deliberately
+   * not the effective pool: its caller rotates secrets, and rotating an inherited account pool's
+   * secrets onto a board row would silently fork the board off the account's pool.
+   */
   async requireConnection(
     workspaceId: string,
   ): Promise<{ record: RunnerPoolConnectionRecord; config: RunnerBackendConfig }> {
@@ -298,7 +382,7 @@ export class RunnerPoolConnectionService {
    * registered. Used by the wiring to pick the dispatch backend per job.
    */
   async resolve(workspaceId: string): Promise<ResolvedRunnerBackend | null> {
-    const record = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
+    const record = await this.effective(workspaceId)
     if (!record) return null
     const provider = this.deps.runnerBackendRegistry.get(record.kind)
     if (!provider) return null
@@ -329,7 +413,7 @@ export class RunnerPoolConnectionService {
    * verdict. A de-registered kind that read as `{ ok: false }` would show as permanently down.
    */
   async probeSavedConnection(workspaceId: string): Promise<SavedConnectionProbe> {
-    const record = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
+    const record = await this.effective(workspaceId)
     if (!record) return { state: 'absent' }
     const provider = this.deps.runnerBackendRegistry.get(record.kind)
     if (!provider) {

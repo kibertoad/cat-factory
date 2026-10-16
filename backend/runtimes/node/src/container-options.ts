@@ -12,7 +12,7 @@ import {
   type BackendRegistries,
   type DeployJobClient,
   type RegisterHandlerInput,
-  type RunnerPoolSeed,
+  type RunnerPoolSeedSource,
 } from '@cat-factory/integrations'
 import {
   type CreateSharedStackInput,
@@ -126,14 +126,15 @@ export interface NodeContainerOptions {
    */
   seedSharedStacks?: CreateSharedStackInput[]
   /**
-   * A deployment's pre-declared RUNNER POOL (the `{ config, secrets }` an admin would submit through
-   * Infrastructure → Runner pool), forwarded into `createCore`. Wired like
-   * {@link seedEnvironmentHandlers}: the container exposes a `runnerPoolSeeder`, `start()`/`bootServer`
-   * boot-backfill every existing workspace, and `WorkspaceService.create` seeds each new one. A
-   * workspace that already has a pool keeps it. On stock Node a pool is the only executor, so this
-   * is what lets a new board run an agent with no manual step. Absent ⇒ no seeding.
+   * A deployment's DECLARED runner pools, `(account) => { config, secrets } | undefined`, forwarded
+   * into `createCore`. The container exposes a `runnerPoolSeeder`, `start()` boot-backfills every
+   * account that has no pool, and `WorkspaceService.create` seeds the account of a new board.
+   * Personal and org accounts both inherit; a legacy board with no account gets nothing; an
+   * account that already has a pool keeps it. On stock Node a pool is the only executor, so this
+   * is what lets a new board run an agent with no manual step. Absent ⇒ no seeding. Node only:
+   * the local facade does not take it, and mothership mode does not seed.
    */
-  seedRunnerPool?: RunnerPoolSeed
+  seedAccountRunnerPool?: RunnerPoolSeedSource
   /**
    * Override the direct-vendor API-key pool's repository. When provided it REPLACES the
    * default Drizzle one, so a sibling facade can back the key pool with a different store

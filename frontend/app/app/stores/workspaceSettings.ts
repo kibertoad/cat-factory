@@ -18,6 +18,7 @@ const DEFAULTS: WorkspaceSettings = {
   doneLaneRetentionDays: 14,
   kaizenEnabled: true,
   delegateAgentsToRunnerPool: false,
+  inheritAccountRunnerPool: true,
   inputGateMode: 'standard',
   reviewFrictionMode: 'off',
   reviewFrictionWarnCount: 3,

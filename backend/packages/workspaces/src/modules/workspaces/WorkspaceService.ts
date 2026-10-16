@@ -164,8 +164,8 @@ export interface WorkspaceServiceDependencies {
    */
   getSharedStackSeeder?: () => SharedStackSeeder | undefined
   /**
-   * Late-bound the same way: `create` registers the deployment's declared RUNNER POOL on a new
-   * workspace that has none. Absent ⇒ no seeding.
+   * Late-bound the same way: `create` seeds the deployment's declared RUNNER POOL for the new
+   * board's account when that account has none. Absent ⇒ no seeding.
    */
   getRunnerPoolSeeder?: () => RunnerPoolSeeder | undefined
 }
@@ -348,9 +348,10 @@ export class WorkspaceService {
     // …and the pre-declared shared stacks, under exactly the same rules (idempotent, late-bound,
     // per-seed fault-tolerant), so a board comes up able to attach to the deployment's infra.
     await this.getSharedStackSeeder?.()?.ensureForWorkspace(workspace.id)
-    // …and the pre-declared runner pool, when the board has none, so on a deployment where a pool is
-    // the only executor a new board can run an agent without an Infrastructure step.
-    await this.getRunnerPoolSeeder?.()?.ensureForWorkspace(workspace.id)
+    // …and the declared runner pool of the board's ACCOUNT, when it has none, so on a deployment
+    // where a pool is the only executor a new board runs an agent without an Infrastructure step.
+    // The seeder swallows its own failures (a read error must never fail board creation).
+    await this.getRunnerPoolSeeder?.()?.ensureForAccount(accountId)
     return this.snapshot(workspace.id)
   }
 

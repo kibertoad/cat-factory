@@ -82,6 +82,7 @@ import {
 import { ContainerInstanceRegistry } from './containers/ContainerInstanceRegistry'
 import { D1LiveContainerRepository } from './repositories/D1LiveContainerRepository'
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
+import { D1AccountRunnerPoolRepository } from './repositories/D1AccountRunnerPoolRepository'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
 import { CompositeAgentExecutor } from '@cat-factory/server'
 import { ContainerSessionService } from './containers/ContainerSessionService'
@@ -525,6 +526,10 @@ export function buildResolveTransport(deps: {
       clock,
       logger,
       runnerBackendRegistry,
+      accountRunnerPool: {
+        repository: new D1AccountRunnerPoolRepository({ db }),
+        workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
+      },
       ...(urlPolicy ? { urlPolicy } : {}),
       runnerPoolProvider:
         injectedPoolProvider ?? new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {}),

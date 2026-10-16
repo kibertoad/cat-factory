@@ -91,17 +91,31 @@ describe('WorkspaceService.create — environment-handler seeding', () => {
 })
 
 describe('WorkspaceService.create: runner-pool seeding', () => {
-  // The same late binding as the handler seeder: on a deployment where a pool is the only
-  // executor, this is what lets a brand-new board run an agent with no Infrastructure step.
-  it('registers the declared runner pool on the new workspace via the late-bound accessor', async () => {
-    const ensureForWorkspace = vi.fn(() => Promise.resolve())
-    const seeder: RunnerPoolSeeder = { ensureForWorkspace }
-    const getRunnerPoolSeeder = vi.fn(() => seeder)
-    const { service } = makeService({ getRunnerPoolSeeder })
+  // Late-bound like the handler seeder, but keyed by the board's ACCOUNT: that is the scope a pool
+  // is inherited at. On a deployment where a pool is the only executor, this is what lets a
+  // brand-new board run an agent with no Infrastructure step.
+  const seeder = () =>
+    ({
+      ensureForAccount: vi.fn((_accountId: string | null) => Promise.resolve()),
+      ensureForAllAccounts: vi.fn(() => Promise.resolve()),
+    }) satisfies RunnerPoolSeeder
+
+  it('seeds the account of the new board via the late-bound accessor', async () => {
+    const s = seeder()
+    const { service } = makeService({ getRunnerPoolSeeder: () => s })
+
+    await service.create(INPUT, null, 'acc-1')
+
+    expect(s.ensureForAccount).toHaveBeenCalledWith('acc-1')
+  })
+
+  it('hands a legacy board (no account) to the seeder as null', async () => {
+    const s = seeder()
+    const { service } = makeService({ getRunnerPoolSeeder: () => s })
 
     await service.create(INPUT, null, null)
 
-    expect(ensureForWorkspace).toHaveBeenCalledWith('ws-new')
+    expect(s.ensureForAccount).toHaveBeenCalledWith(null)
   })
 
   it('still creates the workspace when the accessor resolves to no seeder', async () => {

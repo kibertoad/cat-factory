@@ -177,6 +177,22 @@ export const emailConnections = pgTable('email_connections', {
   deleted_at: bigint('deleted_at', { mode: 'number' }),
 })
 
+// The ACCOUNT's runner pool (mirror of D1 migration 0108): the same columns as
+// `runner_pool_connections`, keyed by account. One row per account; the primary key is the
+// arbiter a conflict-targeted insert-if-absent relies on, so two concurrent seeders cannot both
+// insert. No tombstone and no FK, like the other per-account rows beside it.
+export const accountRunnerPools = pgTable('account_runner_pools', {
+  account_id: text('account_id').primaryKey(),
+  kind: text('kind').notNull(),
+  provider_id: text('provider_id').notNull(),
+  label: text('label').notNull(),
+  base_url: text('base_url').notNull(),
+  // The whole discriminated `RunnerBackendConfig` JSON (same payload as `manifest_json` beside it).
+  config_json: text('config_json').notNull(),
+  secrets_cipher: text('secrets_cipher').notNull(),
+  created_at: bigint('created_at', { mode: 'number' }).notNull(),
+})
+
 // Per-account (deployment-wide) settings, moved out of env (mirror of D1 migration 0014's
 // `account_settings`). `config` is non-secret tuning JSON; `secrets_cipher` is ONE sealed
 // blob grouping every integration credential (domain tag 'cat-factory:account-settings');

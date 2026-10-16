@@ -1,77 +1,203 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createRecordingLogger, type RunnerBackendConfig } from '@cat-factory/kernel'
+import {
+  createRecordingLogger,
+  ValidationError,
+  type AccountRecord,
+  type AccountRunnerPoolRecord,
+} from '@cat-factory/kernel'
 import { createRunnerPoolSeeder, type RunnerPoolSeed } from './RunnerPoolSeeder.js'
 
-// The seeder only asks whether the workspace has a pool and hands the seed to `register`, so the
-// fake below is just those two calls. Registration itself (validation, secrets, the stored record)
-// is the connection service's, covered by its own suite.
+// The seeder decides WHICH accounts get a pool and how a failure is reported. Registration itself
+// (validation, sealing, the insert) is the connection service's, covered by its own suite, so the
+// fakes below are just the calls the seeder makes.
 
 const seed: RunnerPoolSeed = {
-  config: { kind: 'manifest' } as unknown as RunnerBackendConfig,
-  secrets: { token: 'seed-token' },
+  config: {
+    kind: 'kubernetes',
+    kubernetes: {
+      label: 'Seeded',
+      apiServerUrl: 'https://k8s.example:6443',
+      namespace: 'cat-factory',
+      image: 'ghcr.io/acme/executor:1',
+    },
+  } as RunnerPoolSeed['config'],
+  secrets: { apiToken: 'seed-token' },
 }
 
-/** A connection service whose `register` makes the workspace report a pool from then on. */
-function fakeConnectionService(registered: string[] = []) {
-  const pools = new Set(registered)
-  return {
-    hasConnection: vi.fn((workspaceId: string) => Promise.resolve(pools.has(workspaceId))),
-    register: vi.fn((workspaceId: string) => {
-      pools.add(workspaceId)
-      return Promise.resolve({} as never)
-    }),
+const account = (id: string, type: AccountRecord['type'] = 'org'): AccountRecord => ({
+  id,
+  type,
+  name: id,
+  githubAccountLogin: null,
+  ownerUserId: type === 'personal' ? `user-${id}` : null,
+  createdAt: 1,
+})
+
+function setup(opts: {
+  accounts?: AccountRecord[]
+  seeded?: string[]
+  seedSource?: Parameters<typeof createRunnerPoolSeeder>[0]['seedSource']
+  seedAccount?: (accountId: string) => Promise<boolean>
+}) {
+  const accounts = opts.accounts ?? [account('acc-a'), account('acc-b', 'personal')]
+  const seeded = new Set(opts.seeded ?? [])
+  const connectionService = {
+    seedAccount: vi.fn(opts.seedAccount ?? (async () => true)),
   }
+  const accountRepository = {
+    get: vi.fn(async (id: string) => accounts.find((a) => a.id === id) ?? null),
+    listAll: vi.fn(async () => accounts),
+  }
+  const accountRunnerPoolRepository = {
+    getByAccount: vi.fn(async (id: string) =>
+      seeded.has(id) ? ({ accountId: id } as AccountRunnerPoolRecord) : null,
+    ),
+    listByAccounts: vi.fn(async (ids: string[]) =>
+      ids
+        .filter((id) => seeded.has(id))
+        .map((id) => ({ accountId: id }) as AccountRunnerPoolRecord),
+    ),
+  }
+  const logger = createRecordingLogger()
+  const seeder = createRunnerPoolSeeder({
+    connectionService,
+    accountRepository,
+    accountRunnerPoolRepository,
+    seedSource: opts.seedSource ?? (() => seed),
+    logger,
+  })
+  return { seeder, connectionService, accountRepository, accountRunnerPoolRepository, logger }
 }
 
-describe('createRunnerPoolSeeder', () => {
-  it('registers the seed on a workspace that has no runner pool', async () => {
-    const cs = fakeConnectionService()
-    const seeder = createRunnerPoolSeeder({ connectionService: cs, seed })
+describe('createRunnerPoolSeeder.ensureForAccount', () => {
+  it('seeds an account that has no pool, passing the account to the callback', async () => {
+    const seedSource = vi.fn(() => seed)
+    const { seeder, connectionService } = setup({ seedSource })
 
-    await seeder.ensureForWorkspace('ws-1')
+    await seeder.ensureForAccount('acc-b')
 
-    expect(cs.register).toHaveBeenCalledWith('ws-1', seed)
+    expect(seedSource).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'acc-b', type: 'personal' }),
+    )
+    expect(connectionService.seedAccount).toHaveBeenCalledWith('acc-b', seed)
   })
 
-  it('never replaces a pool the workspace already has, so an admin choice wins', async () => {
-    const cs = fakeConnectionService(['ws-1'])
-    const seeder = createRunnerPoolSeeder({ connectionService: cs, seed })
+  it('leaves an account that already has a pool alone, without calling the callback', async () => {
+    const seedSource = vi.fn(() => seed)
+    const { seeder, connectionService } = setup({ seeded: ['acc-a'], seedSource })
 
-    await seeder.ensureForWorkspace('ws-1')
+    await seeder.ensureForAccount('acc-a')
 
-    expect(cs.register).not.toHaveBeenCalled()
+    expect(seedSource).not.toHaveBeenCalled()
+    expect(connectionService.seedAccount).not.toHaveBeenCalled()
   })
 
-  it('is idempotent: a second pass over the same workspace registers nothing', async () => {
-    const cs = fakeConnectionService()
-    const seeder = createRunnerPoolSeeder({ connectionService: cs, seed })
+  it('does nothing for a legacy board with no account', async () => {
+    const { seeder, accountRunnerPoolRepository } = setup({})
 
-    await seeder.ensureForWorkspace('ws-1')
-    await seeder.ensureForWorkspace('ws-1')
+    await seeder.ensureForAccount(null)
 
-    expect(cs.register).toHaveBeenCalledTimes(1)
+    expect(accountRunnerPoolRepository.getByAccount).not.toHaveBeenCalled()
   })
 
-  it('does nothing without a seed, not even the presence read', async () => {
-    const cs = fakeConnectionService()
-    const seeder = createRunnerPoolSeeder({ connectionService: cs, seed: undefined })
+  it('seeds nothing when the callback declares no pool for the account', async () => {
+    const { seeder, connectionService, logger } = setup({ seedSource: () => undefined })
 
-    await seeder.ensureForWorkspace('ws-1')
+    await seeder.ensureForAccount('acc-a')
 
-    expect(cs.hasConnection).not.toHaveBeenCalled()
-    expect(cs.register).not.toHaveBeenCalled()
+    expect(connectionService.seedAccount).not.toHaveBeenCalled()
+    expect(logger.lines.filter((l) => l.level === 'error')).toEqual([])
   })
 
-  it('logs and swallows a failed registration, so creation and boot never fail on a seed', async () => {
-    const cs = fakeConnectionService()
-    cs.register.mockRejectedValueOnce(new Error('Missing secret values for: token'))
-    const logger = createRecordingLogger()
-    const seeder = createRunnerPoolSeeder({ connectionService: cs, seed, logger })
+  it('swallows a failed read so board creation cannot fail on it, and says so at warn', async () => {
+    const { seeder, accountRunnerPoolRepository, logger } = setup({})
+    accountRunnerPoolRepository.getByAccount.mockRejectedValueOnce(new Error('store down'))
 
-    await expect(seeder.ensureForWorkspace('ws-1')).resolves.toBeUndefined()
+    await expect(seeder.ensureForAccount('acc-a')).resolves.toBeUndefined()
 
-    const warn = logger.lines.find((l) => l.level === 'warn')
-    expect(warn?.msg).toBe('skipped runner pool seed (registration failed)')
-    expect(warn?.fields).toMatchObject({ workspaceId: 'ws-1', kind: 'manifest' })
+    expect(logger.lines.find((l) => l.level === 'warn')?.fields).toMatchObject({
+      accountId: 'acc-a',
+    })
+  })
+})
+
+describe('createRunnerPoolSeeder bad seeds are loud', () => {
+  it('reports an output that is not a runner pool at error, naming the account', async () => {
+    const { seeder, connectionService, logger } = setup({
+      seedSource: () => ({ config: { kind: 42 }, secrets: {} }) as unknown as RunnerPoolSeed,
+    })
+
+    await seeder.ensureForAccount('acc-a')
+
+    expect(connectionService.seedAccount).not.toHaveBeenCalled()
+    const error = logger.lines.find((l) => l.level === 'error')
+    expect(error?.msg).toBe('declared runner pool is not a valid runner pool')
+    expect(error?.fields).toMatchObject({ accountId: 'acc-a' })
+  })
+
+  it('reports a backend refusal (unknown kind, unsafe URL, missing secret) at error', async () => {
+    const { seeder, logger } = setup({
+      seedAccount: async () => {
+        throw new ValidationError("Unknown runner backend kind: 'nomad'")
+      },
+    })
+
+    await seeder.ensureForAccount('acc-a')
+
+    const error = logger.lines.find((l) => l.level === 'error')
+    expect(error?.msg).toBe('declared runner pool was refused for account')
+    expect(error?.fields).toMatchObject({ accountId: 'acc-a' })
+  })
+
+  it('reports a throwing callback at error', async () => {
+    const { seeder, logger } = setup({
+      seedSource: () => {
+        throw new Error('lookup failed')
+      },
+    })
+
+    await seeder.ensureForAccount('acc-a')
+
+    expect(logger.lines.some((l) => l.level === 'error')).toBe(true)
+  })
+})
+
+describe('createRunnerPoolSeeder.ensureForAllAccounts', () => {
+  it('seeds only the accounts without a pool, over ONE account read and ONE pool read', async () => {
+    const accounts = [account('acc-a'), account('acc-b', 'personal'), account('acc-c')]
+    const { seeder, connectionService, accountRepository, accountRunnerPoolRepository } = setup({
+      accounts,
+      seeded: ['acc-b'],
+    })
+
+    await seeder.ensureForAllAccounts()
+
+    expect(connectionService.seedAccount.mock.calls.map(([id]) => id)).toEqual(['acc-a', 'acc-c'])
+    expect(accountRepository.listAll).toHaveBeenCalledTimes(1)
+    expect(accountRunnerPoolRepository.listByAccounts).toHaveBeenCalledTimes(1)
+    expect(accountRunnerPoolRepository.getByAccount).not.toHaveBeenCalled()
+  })
+
+  it('keeps going past one bad account and reports it', async () => {
+    const { seeder, connectionService, logger } = setup({
+      seedAccount: vi
+        .fn<(id: string) => Promise<boolean>>()
+        .mockRejectedValueOnce(new Error('refused'))
+        .mockResolvedValue(true),
+    })
+
+    await seeder.ensureForAllAccounts()
+
+    expect(connectionService.seedAccount).toHaveBeenCalledTimes(2)
+    expect(logger.lines.filter((l) => l.level === 'error')).toHaveLength(1)
+  })
+
+  it('does not throw when the enumeration itself fails', async () => {
+    const { seeder, accountRepository, logger } = setup({})
+    accountRepository.listAll.mockRejectedValueOnce(new Error('db gone'))
+
+    await expect(seeder.ensureForAllAccounts()).resolves.toBeUndefined()
+
+    expect(logger.lines.some((l) => l.level === 'warn')).toBe(true)
   })
 })

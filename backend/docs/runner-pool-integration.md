@@ -396,13 +396,23 @@ curl -X POST "$API/workspaces/$WS/runner-pool/connection" \
 All under `/workspaces/:workspaceId`. Once registered, that workspace's agent steps
 run on your pool; unregister to revert.
 
-**Or declare it once (Platform):** a deployment can pass `seedRunnerPool` (the same `{ config,
-secrets }`) to `start()` or `startLocal()`. The server registers it on every existing workspace at
-boot and on each new one, and never replaces a pool a workspace already has. On stock Node, where a
-pool is the only executor, this is what lets a new board run an agent with no step above. Same seam
-as `seedEnvironmentHandlers`: kernel `RunnerPoolSeeder`, built in `@cat-factory/integrations`
-beside the runners module. The Worker does not take it, because there a pool is an optional target
-beside the built-in containers.
+**Or declare it once per account (Platform):** a deployment can pass `seedAccountRunnerPool` to the
+Node `start()`: a callback `(account) => { config, secrets } | undefined` (the same payload as the
+form). The server stores the result as the ACCOUNT's pool, for every existing account that has none
+at boot and for the account of each new board, and never replaces a row the account already has.
+Personal and org accounts both inherit. A legacy board (no account) gets nothing and keeps
+registering per workspace. On stock Node, where a pool is the only executor, this is what lets a new
+board run an agent with no step above. The Worker, `startLocal()` and mothership mode do not take it.
+
+How a board resolves its pool (one resolver, `RunnerPoolConnectionService`): its own live row, else
+its account's row, else none. A board stops inheriting with the explicit marker
+`inheritAccountRunnerPool: false` in its settings, and removing a board's own pool (`DELETE
+/runner-pool/connection`) sets that marker unless the call carries `fallBackToAccount=true`, so a
+deletion never silently re-routes work to a pool the board did not choose. The seed is validated like
+a registration (backend kind registered, URL safe, referenced secrets present). A seed that fails is
+logged at `error` naming the account on every boot; a failed read never fails board creation.
+The account row is `account_runner_pools` (one row per account, a unique key makes the insert race
+safe), served to a mothership node through the `accountRunnerPoolRepository` allow-list entry.
 
 ---
 

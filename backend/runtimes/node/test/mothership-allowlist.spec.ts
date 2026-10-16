@@ -9,6 +9,7 @@ import {
   DrizzleReferenceArchitectureRepository,
 } from '../src/repositories/bootstrap.js'
 import {
+  DrizzleAccountRunnerPoolRepository,
   DrizzleGitHubInstallationRepository,
   DrizzleRunnerPoolConnectionRepository,
 } from '../src/repositories/containerExecution.js'
@@ -147,6 +148,8 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     linkAccount: 'admin',
   },
   accountRepository: {
+    // Boot-time enumeration for a deployment's declared seeds: unscoped by nature.
+    listAll: 'sweeper',
     create: 'onboarding',
     ensurePersonal: 'onboarding',
     rename: 'admin',
@@ -567,6 +570,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `secretsCipher` blob (sealed/decrypted in the service under the LOCAL key), so no plaintext
   // crosses the machine API — the same precedent as the observability / environment connections.
   runnerPoolConnectionRepository: {},
+  // The account tier of the runner pool: both reads are remote (account / accountList scope, sealed
+  // credentials). `insertIfAbsent` is the declared seed's write, which runs where the deployment
+  // declares it, so it stays mothership-internal.
+  accountRunnerPoolRepository: { insertIfAbsent: 'sweeper' },
   // The whole documents surface is now remote: the run-path context reads, the import/link WRITE
   // path and its batched siblings, and the WS1 role-link management surface.
   documentRepository: {},
@@ -823,6 +830,7 @@ function reflectAllRepositories(): Record<string, string[]> {
     referenceArchitectureRepository: DrizzleReferenceArchitectureRepository,
     githubInstallationRepository: DrizzleGitHubInstallationRepository,
     runnerPoolConnectionRepository: DrizzleRunnerPoolConnectionRepository,
+    accountRunnerPoolRepository: DrizzleAccountRunnerPoolRepository,
     repoProjectionRepository: DrizzleRepoProjectionRepository,
     branchProjectionRepository: DrizzleBranchProjectionRepository,
     pullRequestProjectionRepository: DrizzlePullRequestProjectionRepository,

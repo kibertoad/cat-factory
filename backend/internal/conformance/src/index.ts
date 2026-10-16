@@ -122,6 +122,10 @@ export { defineEnvironmentHandlersSuite } from './environment-handlers-suite.js'
 export { defineEnvironmentTestSuite } from './environment-test-suite.js'
 export { definePasswordResetTokenSuite } from './password-reset-suite.js'
 export { defineMachineNodeSuite } from './machine-node-suite.js'
+export {
+  defineAccountRunnerPoolSuite,
+  type AccountRunnerPoolSuiteRepos,
+} from './account-runner-pool-suite.js'
 export { defineAuditEventSuite } from './audit-event-suite.js'
 export { defineSessionGenerationSuite } from './session-generation-suite.js'
 export { defineDirectoryFeedSuite, type DirectoryFeedRepos } from './directory-feed-suite.js'
