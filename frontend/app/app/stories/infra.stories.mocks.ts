@@ -5,6 +5,7 @@
 // panels. The registries, the keys and the capabilities that want them are made up.
 import type {
   CapabilityCredentialStatus,
+  ConnectionTestResult,
   CustomManifestType,
   EnvironmentHandlerView,
   InfraSetup,
@@ -47,6 +48,24 @@ export function infrastructureCapabilities(
   }
 }
 
+/** Agents on Cloudflare Containers, with a runner pool offered beside them: a Worker deployment. */
+export const workerCapabilities = infrastructureCapabilities({
+  execution: {
+    available: ['cloudflare-containers', 'runner-pool'],
+    active: 'cloudflare-containers',
+  },
+  testEnv: { available: ['environment-provider'], active: 'environment-provider' },
+})
+
+/** A local deployment, which names its executor image for the k3s form. */
+export const localCapabilities = infrastructureCapabilities({
+  execution: {
+    available: ['local-docker', 'runner-pool'],
+    active: 'local-docker',
+    suggestedExecutorImage: 'ghcr.io/kibertoad/cat-factory-executor:1.163.4',
+  },
+})
+
 /** A warm pool of two containers, and the default checkout settings. */
 export const localSettings: LocalSettings = {
   pool: { size: 2, minWarm: 1, max: 4, idleTtlMs: 600_000 },
@@ -85,6 +104,12 @@ export const kubernetesHandler: EnvironmentHandlerView = {
       },
     },
   },
+}
+
+/** A passing connection test of `kubernetesHandler`, in the backend's words. */
+export const kubernetesTestPassed: ConnectionTestResult = {
+  ok: true,
+  message: 'Reached https://k8s.staging.acme.dev:6443.',
 }
 
 /** A manifest type the deployment registered in code, so the workspace cannot edit it. */

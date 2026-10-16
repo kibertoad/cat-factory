@@ -23,6 +23,7 @@ function key(overrides: Partial<PublicApiKey> & Pick<PublicApiKey, 'id' | 'label
     accountId: orgAccount.id,
     workspaceId: STORY_WORKSPACE_ID,
     workspaceIds: [STORY_WORKSPACE_ID],
+    followsMemberships: false,
     scope: 'write',
     createdByUserId: signedInUser.id,
     createdByKeyId: null,

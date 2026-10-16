@@ -8,7 +8,7 @@ import {
   listAuditEventsContract,
   listInvitationsContract,
 } from '@cat-factory/contracts'
-import type { Account, EmailConnection } from '@cat-factory/contracts'
+import type { EmailConnection } from '@cat-factory/contracts'
 import type { HttpHandler } from 'msw'
 import {
   accountMembers,
@@ -22,20 +22,19 @@ import { auditEvents } from './audit.stories.mocks'
 import { accountApiKeys } from './providers.stories.mocks'
 import { accountApiKeysApi } from './providersApi'
 
-/** What the Team tab reads for `account`, with the e-mail sender as `email` says. */
+/** What the Team tab reads for the Acme org, with the e-mail sender as `email` says. */
 export function accountTeamApi(
-  account: Account = orgAccount,
   email: { connection: EmailConnection | null; configured: boolean } = {
     connection: resendConnection,
     configured: true,
   },
 ): HttpHandler[] {
-  const pathParams = { accountId: account.id }
+  const pathParams = { accountId: orgAccount.id }
   return [
     apiResponse(getEmailConnectionContract, { pathParams, body: email }),
     apiResponse(listAccountMembersContract, { pathParams, body: accountMembers }),
     apiResponse(listInvitationsContract, { pathParams, body: invitations }),
-    accountApiKeysApi(account.id === orgAccount.id ? accountApiKeys : [], account.id),
+    accountApiKeysApi(accountApiKeys, orgAccount.id),
     apiResponse(getAccountSettingsContract, { pathParams, body: accountSettingsView }),
     apiResponse(listAuditEventsContract, {
       pathParams,

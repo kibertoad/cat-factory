@@ -142,9 +142,14 @@ export const sandboxPrompts: SandboxPromptVersion[] = [
   }),
 ]
 
+/**
+ * A fixture with `expectations` made-up findings, each of impact 3. The 1-based positions in
+ * `highImpact` get impact 4, the backend's high-impact threshold, so missing one fails the run.
+ */
 function fixture(
   overrides: Partial<SandboxFixture> & Pick<SandboxFixture, 'id' | 'kind' | 'name'>,
   expectations: number,
+  highImpact: number[] = [],
 ): SandboxFixture {
   return {
     payload: { block: { title: overrides.name, type: 'service', description: '' } },
@@ -156,7 +161,7 @@ function fixture(
         summary: `Expected finding ${i + 1}`,
         detail: '',
         trickiness: 2,
-        impact: 3,
+        impact: highImpact.includes(i + 1) ? 4 : 3,
         matchHints: [],
       })),
     },
@@ -175,6 +180,8 @@ export const sandboxFixtures: SandboxFixture[] = [
       name: 'Notification preferences (simple)',
     },
     4,
+    // The third finding is whether security alerts can be muted, the one a reviewer must not miss.
+    [3],
   ),
   fixture(
     { id: 'req-csv-export-moderate', kind: 'requirements', name: 'CSV export (moderate)' },
@@ -244,6 +251,26 @@ export const olderSandboxExperiments: SandboxExperiment[] = [
   },
 ]
 
+const NOTIFY_OUTPUT =
+  '1. Which channels does the toggle govern: email, push, in-app?\n' +
+  '2. What is the default for a new user?\n' +
+  '3. Can a user mute security alerts and password resets?'
+
+/** The candidate asks about the security alerts first, then the rest. */
+const CANDIDATE_NOTIFY_OUTPUT =
+  '1. Can a user mute security alerts and password resets?\n' +
+  '2. Which channels does the toggle govern: email, push, in-app?\n' +
+  '3. What is the default for a new user?\n' +
+  '4. Does muting a channel also stop the digest e-mail?'
+
+const CSV_OUTPUT =
+  '1. Which columns does the export include, and in what order?\n' +
+  '2. Is the export filtered by the list view, or does it hold every row?\n' +
+  '3. Who may export: every member, or admins only?'
+
+/** The candidate adds the size limit to the baseline's three, and still misses the encoding. */
+const CANDIDATE_CSV_OUTPUT = `${CSV_OUTPUT}\n4. What is the largest export, in rows, before it is sent by e-mail?`
+
 function run(
   id: string,
   prompt: SandboxPromptVersion,
@@ -259,10 +286,7 @@ function run(
     fixtureId,
     repeatIndex: 0,
     status: 'done',
-    outputText:
-      '1. Which channels does the toggle govern: email, push, in-app?\n' +
-      '2. What is the default for a new user?\n' +
-      '3. Can a user mute security alerts and password resets?',
+    outputText: fixtureId === 'req-csv-export-moderate' ? CSV_OUTPUT : NOTIFY_OUTPUT,
     usage: { inputTokens: 3_820, outputTokens: 610 },
     latencyMs: 14_200,
     branch: null,
@@ -277,25 +301,56 @@ function run(
   }
 }
 
+/** Every cell of the matrix: two prompts, two models and two fixtures. */
 const runs: SandboxRun[] = [
-  run('sr_1', requirementsBaseline, 'claude-opus', 'req-notify-prefs-simple'),
+  // The baseline asks about the channels and the default, and never about security alerts.
+  run('sr_1', requirementsBaseline, 'claude-opus', 'req-notify-prefs-simple', {
+    outputText:
+      '1. Which channels does the toggle govern: email, push, in-app?\n' +
+      '2. What is the default for a new user?',
+  }),
   run('sr_2', requirementsBaseline, 'kimi-k2.7', 'req-csv-export-moderate'),
-  run('sr_3', requirementsCandidate, 'claude-opus', 'req-notify-prefs-simple'),
+  run('sr_3', requirementsCandidate, 'claude-opus', 'req-notify-prefs-simple', {
+    outputText: CANDIDATE_NOTIFY_OUTPUT,
+  }),
   run('sr_4', requirementsCandidate, 'kimi-k2.7', 'req-csv-export-moderate', {
     status: 'failed',
     outputText: null,
     usage: null,
     error: 'Workers AI answered 429: the account is over its rate limit.',
   }),
+  run('sr_5', requirementsBaseline, 'claude-opus', 'req-csv-export-moderate'),
+  run('sr_6', requirementsBaseline, 'kimi-k2.7', 'req-notify-prefs-simple'),
+  run('sr_7', requirementsCandidate, 'claude-opus', 'req-csv-export-moderate', {
+    outputText: CANDIDATE_CSV_OUTPUT,
+  }),
+  run('sr_8', requirementsCandidate, 'kimi-k2.7', 'req-notify-prefs-simple', {
+    outputText: CANDIDATE_NOTIFY_OUTPUT,
+  }),
 ]
 
+/**
+ * The judge's grade of `runId` with the objective result the backend computes from its fixture:
+ * `missed` names the expectations the output did not catch (1-based positions), and a missed
+ * expectation of impact 4 or more fails the run (`scoreExpectations`, `sandbox.logic.ts`).
+ */
 function grade(
   runId: string,
   weightedTotal: number,
-  caught: number,
-  total: number,
+  missed: number[],
   scores: SandboxGrade['scores'],
 ): SandboxGrade {
+  const fixtureId = runs.find((r) => r.id === runId)!.fixtureId
+  const objective = sandboxFixtures.find((f) => f.id === fixtureId)?.objective
+  if (objective?.kind !== 'findings') throw new Error(`Fixture ${fixtureId} has no findings`)
+  const { expectations } = objective
+  const missedRows = expectations.filter((_, i) => missed.includes(i + 1))
+  const total = expectations.length
+  const caught = total - missedRows.length
+  const totalImpact = expectations.reduce((sum, e) => sum + e.impact, 0)
+  const missedImpact = missedRows.reduce((sum, e) => sum + e.impact, 0)
+  const impactRecall = Math.round((1 - missedImpact / totalImpact) * 100) / 100
+  const missedHighImpact = missedRows.filter((e) => e.impact >= 4).map((e) => e.id)
   return {
     id: `sg_${runId}`,
     runId,
@@ -304,38 +359,98 @@ function grade(
     weightedTotal,
     objective: {
       kind: 'findings',
-      pass: caught === total,
-      detail: `${caught} of ${total} expected findings caught.`,
-      impactRecall: caught / total,
-      wowBonus: 0,
+      pass: missedHighImpact.length === 0,
+      detail: `Caught ${caught}/${total} expected findings; impact recall ${impactRecall}, wow bonus 1.`,
+      impactRecall,
+      // No expectation is tricky enough to count, so the bonus is the backend's default of 1.
+      wowBonus: 1,
       caught,
       total,
-      missedHighImpact: caught === total ? [] : ['transactional'],
+      missedHighImpact,
     },
     createdAt: Date.UTC(2026, 9, 9, 14, 3),
   }
 }
 
-/** The finished experiment: four cells, three graded and one failed. */
+/** The finished experiment: eight cells, seven graded and one failed. */
 export const sandboxExperimentDetail = {
   experiment: sandboxExperiment,
   runs,
   grades: [
-    grade('sr_1', 3.4, 3, 4, [
-      { key: 'gap_coverage', score: 3, rationale: 'Misses whether security alerts can be muted.' },
-      { key: 'specificity', score: 4, rationale: 'Each question names the field it is about.' },
-    ]),
-    grade('sr_2', 2.6, 2, 5, [
-      {
-        key: 'gap_coverage',
-        score: 2,
-        rationale: 'Asks nothing about the size limit or encoding.',
-      },
-      { key: 'specificity', score: 3, rationale: 'Two questions are generic.' },
-    ]),
-    grade('sr_3', 4.6, 4, 4, [
-      { key: 'gap_coverage', score: 5, rationale: 'Finds all four, the security alerts first.' },
-      { key: 'specificity', score: 4, rationale: 'Each question names the field it is about.' },
-    ]),
+    grade(
+      'sr_1',
+      3.4,
+      [3],
+      [
+        {
+          key: 'gap_coverage',
+          score: 3,
+          rationale: 'Misses whether security alerts can be muted.',
+        },
+        { key: 'specificity', score: 4, rationale: 'Each question names the field it is about.' },
+      ],
+    ),
+    grade(
+      'sr_2',
+      2.6,
+      [4, 5],
+      [
+        {
+          key: 'gap_coverage',
+          score: 2,
+          rationale: 'Asks nothing about the size limit or encoding.',
+        },
+        { key: 'specificity', score: 3, rationale: 'Two questions are generic.' },
+      ],
+    ),
+    grade(
+      'sr_3',
+      4.6,
+      [],
+      [
+        { key: 'gap_coverage', score: 5, rationale: 'Finds all four, the security alerts first.' },
+        { key: 'specificity', score: 4, rationale: 'Each question names the field it is about.' },
+      ],
+    ),
+    grade(
+      'sr_5',
+      3.0,
+      [4, 5],
+      [
+        {
+          key: 'gap_coverage',
+          score: 3,
+          rationale: 'Asks nothing about the size limit or encoding.',
+        },
+        { key: 'specificity', score: 3, rationale: 'The permission question names no role.' },
+      ],
+    ),
+    grade(
+      'sr_6',
+      3.6,
+      [4],
+      [
+        { key: 'gap_coverage', score: 4, rationale: 'Asks about security alerts, but last.' },
+        { key: 'specificity', score: 3, rationale: 'The channel question lists no channel.' },
+      ],
+    ),
+    grade(
+      'sr_7',
+      4.1,
+      [5],
+      [
+        { key: 'gap_coverage', score: 4, rationale: 'Misses only the file encoding.' },
+        { key: 'specificity', score: 4, rationale: 'Each question names the field it is about.' },
+      ],
+    ),
+    grade(
+      'sr_8',
+      4.4,
+      [],
+      [
+        { key: 'gap_coverage', score: 5, rationale: 'Finds all four, the security alerts first.' },
+        { key: 'specificity', score: 4, rationale: 'One question could name the digest setting.' },
+      ],
+    ),
   ],
 }
