@@ -184,6 +184,21 @@ export function modelOption(overrides: Partial<ModelOption> = {}): ModelOption {
  * K2.7 and GLM-5.3 are not, because Workers AI is not enabled. The built-in default preset is
  * all Kimi, so it points at a model the workspace cannot run.
  */
+/** Claude Opus on the Claude subscription, the one model both catalogs below offer. */
+const claudeOpusOption = modelOption({
+  id: 'claude-opus',
+  label: 'Claude Opus 5',
+  description: "Anthropic's flagship agentic-coding model, run through Claude Code.",
+  flavor: 'subscription',
+  providerLabel: 'Claude',
+  provider: 'anthropic',
+  model: 'claude-opus-5',
+  vendor: 'claude',
+  quotaBased: true,
+  cachesPrompts: true,
+  contextTokens: 1_000_000,
+})
+
 export const claudeOnlyCatalog: ModelOption[] = [
   modelOption({ available: false }),
   modelOption({
@@ -195,19 +210,7 @@ export const claudeOnlyCatalog: ModelOption[] = [
     // The Workers AI route's window. 1,310,720 is the OpenRouter route's.
     contextTokens: 1_048_576,
   }),
-  modelOption({
-    id: 'claude-opus',
-    label: 'Claude Opus 5',
-    description: "Anthropic's flagship agentic-coding model, run through Claude Code.",
-    flavor: 'subscription',
-    providerLabel: 'Claude',
-    provider: 'anthropic',
-    model: 'claude-opus-5',
-    vendor: 'claude',
-    quotaBased: true,
-    cachesPrompts: true,
-    contextTokens: 1_000_000,
-  }),
+  claudeOpusOption,
 ]
 
 /** The Acme account's own keys: an Anthropic key every board shares, and an OpenRouter gateway. */
@@ -400,7 +403,7 @@ export const presetModelCatalog: ModelOption[] = [
       'GLM (Z.ai) subscription.',
     model: '@cf/zai-org/glm-5.2',
   }),
-  { ...claudeOnlyCatalog[2]!, available: true },
+  claudeOpusOption,
   modelOption({
     id: 'gpt-5.6-sol',
     label: 'GPT-5.6 Sol',
