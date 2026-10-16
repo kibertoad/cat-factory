@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/gatekeeper-worker",
-  "version": "0.7.8",
+  "version": "0.7.15",
   "description": "The Cloudflare OS Gatekeeper machinery for cat-factory as an installable library: policy-compiled Cap'n Web capabilities over the /api/v1 operation table, per-actor API-key minting, a verified outbound-webhook receiver and the approval inbox that answers every park a run stops on. A deployment supplies only its policy; deploy/gatekeeper is the template it copies.",
   "keywords": [
     "capnweb",
@@ -45,8 +45,9 @@
     "test:os": "vitest run --config vitest.os.config.ts"
   },
   "dependencies": {
-    "@cat-factory/gatekeeper-bindings": "workspace:*",
-    "@cat-factory/sdk": "workspace:*",
+    "@cat-factory/gatekeeper-bindings": "workspace:^",
+    "@cat-factory/sdk": "workspace:^",
+    "@cat-factory/webhooks": "workspace:^",
     "capnweb": "^0.12.0"
   },
   "devDependencies": {

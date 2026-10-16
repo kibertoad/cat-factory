@@ -1,5 +1,59 @@
 # @cat-factory/observability-langfuse
 
+## 0.11.74
+
+### Patch Changes
+
+- @cat-factory/kernel@0.360.4
+  - @cat-factory/observability-otel@0.23.67
+
+## 0.11.73
+
+### Patch Changes
+
+- @cat-factory/kernel@0.360.3
+  - @cat-factory/observability-otel@0.23.66
+
+## 0.11.72
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/kernel@0.360.2
+  - @cat-factory/observability-otel@0.23.65
+
+## 0.11.71
+
+### Patch Changes
+
+- @cat-factory/kernel@0.360.1
+  - @cat-factory/observability-otel@0.23.64
+
+## 0.11.70
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/kernel@0.360.0
+  - @cat-factory/observability-otel@0.23.63
+
+## 0.11.69
+
+### Patch Changes
+
+- @cat-factory/kernel@0.359.1
+  - @cat-factory/observability-otel@0.23.62
+
+## 0.11.68
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/kernel@0.359.0
+  - @cat-factory/observability-otel@0.23.61
+
 ## 0.11.67
 
 ### Patch Changes

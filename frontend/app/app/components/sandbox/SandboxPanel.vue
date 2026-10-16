@@ -272,6 +272,8 @@ async function archive(prompt: SandboxPromptVersion) {
 </script>
 
 <template>
+  <!-- workbench-width-ok: experiments, prompts and fixtures with a graded grid (1024px). Its
+       shell waits on #2359. -->
   <UModal
     v-model:open="open"
     :title="t('sandbox.title')"

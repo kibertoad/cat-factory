@@ -26,6 +26,7 @@ export interface GitHubStoreContext {
   api: ReturnType<typeof useApi>
   workspace: ReturnType<typeof useWorkspaceStore>
   available: Ref<boolean | null>
+  unavailableCause: Ref<'disabled' | 'failed' | null>
   connection: Ref<GitHubConnection | null>
   /** The connect surfaces this deployment can serve (GitHub App / GitLab PAT / …). */
   connectOptions: Ref<VcsConnectOption[]>
@@ -44,6 +45,10 @@ export interface GitHubStoreContext {
   syncing: Ref<boolean>
   /** Whether an App installation is bound (the store's `connected` computed). */
   connected: Readonly<Ref<boolean>>
-  /** Reload the cached repos/PRs/issues projection (the store's `load`). */
+  /** Reload the cached repos/PRs/issues projection after a write (the store's `load`). */
   load: () => Promise<void>
+  /** Record a direct write to the projection, so a read that started before it cannot land. */
+  markWritten: () => void
+  /** Empty the repos/PRs/issues projection and mark it unloaded, so `ensureLoaded` reads it again. */
+  clearProjection: () => void
 }

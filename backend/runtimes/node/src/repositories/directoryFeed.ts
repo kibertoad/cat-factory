@@ -1,10 +1,7 @@
-import { isDirectoryEntityType } from '@cat-factory/contracts'
-import type { DirectoryChangeRecord, DirectoryChangeRepository } from '@cat-factory/kernel'
-import { type SQL, and, asc, eq, gt, max, sql } from 'drizzle-orm'
+import { type SQL, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
-import { directoryChanges } from '../db/schema.js'
 
-// The append half of the directory change feed (docs/initiatives/directory-sync.md), shared by
+// The append half of the directory change feed (backend/docs/adr/0067-directory-sync.md), shared by
 // every repository that writes a directory entity. Mirror of the Cloudflare facade's
 // `directoryFeed.ts`; the conformance suite `defineDirectoryFeedSuite` holds the two to one
 // behaviour.
@@ -16,7 +13,25 @@ import { directoryChanges } from '../db/schema.js'
 /** Advisory-lock class for the feed; the second key is the account. Distinct from every other class. */
 const DIRECTORY_FEED_LOCK_CLASS = 0x6469_7263
 
+/** Advisory-lock class for re-linking one login identity; the second key is `provider:subject`. */
+const IDENTITY_LINK_LOCK_CLASS = 0x6964_6c6b
+
 type Executor = Pick<DrizzleDb, 'execute'>
+
+/**
+ * Serialize the links of one login identity. Taken before the feed lock, it keeps the owner that
+ * `identityOwnerSource` reads at lock time the owner it reads again when appending, so two re-links
+ * of the same subject cannot lock one set of accounts and then append to another.
+ */
+export async function lockIdentityLink(
+  tx: Executor,
+  provider: string,
+  subject: string,
+): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(${IDENTITY_LINK_LOCK_CLASS}, hashtext(${`${provider}:${subject}`}))`,
+  )
+}
 
 /**
  * Take the feed's per-account advisory lock for every account the source names. It is held until
@@ -80,6 +95,18 @@ export function userSource(userId: string): SQL {
                FROM memberships WHERE user_id = ${text(userId)}`
 }
 
+/**
+ * The user a login identity belongs to now, once per account, unless that is `exceptUserId`.
+ * Appended before a re-link so the user losing the account is recorded while the row still names them.
+ */
+export function identityOwnerSource(provider: string, subject: string, exceptUserId: string): SQL {
+  return sql`SELECT m.account_id, CAST('user' AS TEXT) AS entity_type, CAST(NULL AS TEXT) AS workspace_id,
+                    m.user_id AS entity_id
+               FROM memberships m JOIN user_identities i ON i.user_id = m.user_id
+              WHERE i.provider = ${text(provider)} AND i.subject = ${text(subject)}
+                AND i.user_id <> ${text(exceptUserId)}`
+}
+
 /** An account membership, plus the member's `user` entity whose visibility it decides. */
 export function accountMembershipSource(accountId: string, userId: string): SQL {
   return sql`SELECT ${text(accountId)} AS account_id, CAST('account_membership' AS TEXT) AS entity_type,
@@ -135,47 +162,4 @@ export function reposSource(workspaceId: string, githubIds: readonly number[]): 
                   githubIds.map((id) => sql`${id}`),
                   sql`, `,
                 )})`
-}
-
-function rowToChange(row: typeof directoryChanges.$inferSelect): DirectoryChangeRecord {
-  // The vocabulary is append-only, so an unknown value is a row this build cannot interpret, not
-  // one to skip: a reader that dropped it would advance its cursor past a change it never served.
-  if (!isDirectoryEntityType(row.entity_type)) {
-    throw new Error(`Unknown directory entity type '${row.entity_type}' at seq ${row.seq}`)
-  }
-  return {
-    accountId: row.account_id,
-    seq: row.seq,
-    entityType: row.entity_type,
-    workspaceId: row.workspace_id,
-    entityId: row.entity_id,
-    at: row.at,
-  }
-}
-
-/** Postgres read side of the directory change feed. */
-export class DrizzleDirectoryChangeRepository implements DirectoryChangeRepository {
-  constructor(private readonly db: DrizzleDb) {}
-
-  async listAfter(
-    accountId: string,
-    afterSeq: number,
-    limit: number,
-  ): Promise<DirectoryChangeRecord[]> {
-    const rows = await this.db
-      .select()
-      .from(directoryChanges)
-      .where(and(eq(directoryChanges.account_id, accountId), gt(directoryChanges.seq, afterSeq)))
-      .orderBy(asc(directoryChanges.seq))
-      .limit(limit)
-    return rows.map(rowToChange)
-  }
-
-  async headSeq(accountId: string): Promise<number> {
-    const [row] = await this.db
-      .select({ head: max(directoryChanges.seq) })
-      .from(directoryChanges)
-      .where(eq(directoryChanges.account_id, accountId))
-    return row?.head ?? 0
-  }
 }

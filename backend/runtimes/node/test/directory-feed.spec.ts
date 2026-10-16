@@ -1,6 +1,7 @@
-import { defineDirectoryFeedSuite } from '@cat-factory/conformance'
+import { defineDirectoryFeedSuite, defineDirectoryWebhookSuite } from '@cat-factory/conformance'
 import { describe, it } from 'vitest'
-import { DrizzleDirectoryChangeRepository } from '../src/repositories/directoryFeed.js'
+import { DrizzleDirectoryRepository } from '../src/repositories/directoryRepository.js'
+import { DrizzleDirectoryWebhookRepository } from '../src/repositories/directoryWebhookRepository.js'
 import { createDrizzleRepositories } from '../src/repositories/drizzle.js'
 import { DrizzleRepoProjectionRepository } from '../src/repositories/github.js'
 import { setupTestDb } from './harness.js'
@@ -21,9 +22,10 @@ if (databaseUrl) {
       workspaces: repos.workspaceRepository,
       workspaceMembers: repos.workspaceMemberRepository,
       repos: new DrizzleRepoProjectionRepository(db),
-      changes: new DrizzleDirectoryChangeRepository(db),
+      changes: new DrizzleDirectoryRepository(db),
     }
   })
+  defineDirectoryWebhookSuite('node', () => new DrizzleDirectoryWebhookRepository(db))
 } else {
   describe.skip('[node] directory feed (set DATABASE_URL to run)', () => {
     it('requires Postgres', () => {})

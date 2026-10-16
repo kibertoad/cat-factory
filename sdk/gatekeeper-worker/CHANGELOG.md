@@ -1,5 +1,85 @@
 # @cat-factory/gatekeeper-worker
 
+## 0.7.15
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/sdk@0.62.0
+  - @cat-factory/gatekeeper-bindings@0.40.1
+
+## 0.7.14
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/sdk@0.61.0
+  - @cat-factory/gatekeeper-bindings@0.40.0
+
+## 0.7.13
+
+### Patch Changes
+
+- 6f574e9: API keys gain a `webhooks` scope between `read` and `write`: everything `read` can do, plus
+  registering and removing push endpoints. The directory webhooks (`/api/v1/directory/webhooks`,
+  still for a key reaching every workspace) and the notification webhooks
+  (`/api/v1/notification-webhook[s]`) now need `webhooks` instead of `admin`, so a sync integration
+  can follow changes with a key that cannot author or delete work. Every key that could manage
+  webhooks before still can. OpenAPI 1.86.0.
+  
+  The API token form names each scope by its API name (`read`, `webhooks`, `write`, `decide`,
+  `admin`), so the screen, the docs and the refusal messages agree. "Full access" is now "Admin".
+  
+  The token form always shows the Workspaces picker, in basic and advanced mode. It is disabled for
+  anyone who is not an account admin, with a line saying so, because only an account admin may mint
+  a key that reaches other workspaces.
+- Updated dependencies [6f574e9]
+  - @cat-factory/sdk@0.60.0
+  - @cat-factory/gatekeeper-bindings@0.39.0
+
+## 0.7.12
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/sdk@0.59.0
+  - @cat-factory/gatekeeper-bindings@0.38.7
+
+## 0.7.11
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/sdk@0.58.0
+  - @cat-factory/gatekeeper-bindings@0.38.6
+
+## 0.7.10
+
+### Patch Changes
+
+- 5d586fc: The SDK packages no longer pin each other to an exact version. A dependency on a sibling publishes as a caret range, so a consumer a patch ahead on `@cat-factory/sdk` keeps one copy of it. `@cat-factory/directory-sync` takes `@cat-factory/sdk` as a peer (`>=0.57.0 <1.0.0`): the client it drives is the integrator's own, so it now uses their copy of the SDK and installs none of its own. Add `@cat-factory/sdk` to your dependencies if you did not already have it.
+- Updated dependencies [5d586fc]
+  - @cat-factory/gatekeeper-bindings@0.38.5
+
+## 0.7.9
+
+### Patch Changes
+
+- d0a7cb9: Two new packages for integrators. `@cat-factory/webhooks` verifies a signed cat-factory webhook
+  delivery (`verifyDelivery`, plus `verifyRequest` for a Fetch API request), with Web Crypto only so
+  it runs on Node, in a browser or in a worker isolate. `@cat-factory/directory-sync` keeps a copy of
+  an account's directory in sync over a `DirectoryStore` you implement: snapshot bootstrap,
+  change-feed catch-up with a fallback to reconciliation on `cursor_expired`, verified webhook pushes,
+  and a full reconciliation that deletes what the source dropped. `@cat-factory/gatekeeper-worker`
+  now re-exports its delivery verifier from `@cat-factory/webhooks`; its public surface is unchanged.
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [d0a7cb9]
+- Updated dependencies [20d4f01]
+  - @cat-factory/sdk@0.57.0
+  - @cat-factory/gatekeeper-bindings@0.38.4
+  - @cat-factory/webhooks@0.2.0
+
 ## 0.7.8
 
 ### Patch Changes

@@ -4,7 +4,7 @@ import { documentSourceKindSchema } from './documents.js'
 import { descriptorFieldValuesSchema } from './form-fields.js'
 import { notificationSchema } from './notifications.js'
 import { blockTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primitives.js'
-import { publicApiScopeSchema } from './public-api-keys.js'
+import { publicApiKeyWorkspaceIdsSchema, publicApiScopeSchema } from './public-api-keys.js'
 import { MAX_FRAGMENT_ID_LENGTH } from './fragment-library.js'
 import { MAX_TASK_FRAGMENTS } from './public-fragments.js'
 import { cursorSchema, epochMsQuerySchema, pageLimitSchema } from './public-paging.js'
@@ -991,10 +991,15 @@ export const publicIdentitySchema = v.object({
   keyId: v.string(),
   /** The account the key belongs to. */
   accountId: v.string(),
-  /** The ONE workspace every call under this key acts within. */
-  workspaceId: v.string(),
   /**
-   * What the key may do. The ladder is inclusive (`read` ⊂ `write` ⊂ `decide` ⊂ `admin`), so an
+   * The workspace this request acted on: the one the `x-cat-factory-workspace` header named, or
+   * the key's only workspace. A key reaching several workspaces must send the header here too.
+   */
+  workspaceId: v.string(),
+  /** Every workspace the key may act on, or `null` for all of the account's workspaces. */
+  workspaceIds: publicApiKeyWorkspaceIdsSchema,
+  /**
+   * What the key may do. The ladder is inclusive (`read` ⊂ `webhooks` ⊂ `write` ⊂ `decide` ⊂ `admin`), so an
    * integration comparing its own scope against what it needs should test the RUNG, not equality.
    */
   scope: publicApiScopeSchema,
@@ -1011,3 +1016,18 @@ export const publicIdentitySchema = v.object({
   createdAt: v.number(),
 })
 export type PublicIdentity = v.InferOutput<typeof publicIdentitySchema>
+
+/**
+ * Facts about the deployment an integration needs to send a PERSON somewhere in it, answered to
+ * any key with no workspace named.
+ *
+ * `appUrl` is where the deployment serves its web app: `APP_BASE_URL` when set, otherwise the
+ * origin this API was reached on. An integration that cannot do something itself (say, add a
+ * service for a repository) links a person to the app's deep links from here rather than asking
+ * its operator to configure a second URL. The link formats are published at
+ * https://catfactory.ai/extend/public-api.html#sending-a-person-to-add-a-repository
+ */
+export const publicDeploymentSchema = v.object({
+  appUrl: v.string(),
+})
+export type PublicDeployment = v.InferOutput<typeof publicDeploymentSchema>

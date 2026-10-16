@@ -50,7 +50,6 @@ a tracker document](../../AGENTS.md).
 - [Configurable per-agent-kind output budgets](./configurable-agent-output-budgets.md)
 - [Custom initiative definitions (org-registered presets)](./custom-initiative-definitions.md)
 - [Delegated executors (embedding lower-level orchestration under cat-factory)](./delegated-executors.md)
-- [Directory sync for external systems (change feed, webhooks, reconciliation)](./directory-sync.md)
 - [Judge registry (the verdict-gate family)](./judge-registry.md)
 - [Library frame support](./library-frame-support.md)
 - [Monorepo service bootstrap (adoption review)](./monorepo-service-bootstrap.md)
@@ -106,11 +105,13 @@ a tracker document](../../AGENTS.md).
 
 ### Frontend and UX
 
+- [A delivery surface shaped like the job (queue view, intake, setup checklist)](./delivery-surface.md)
 - [Error-message coverage](./error-message-coverage.md)
 - [Frontend extension mechanism](./frontend-extension-mechanism.md)
 - [GitLab product-surface parity](./gitlab-ui-parity.md)
 - [Global search and deep-linkable routing](./global-search-and-deep-links.md)
 - [Mobile-friendly frontend](./mobile-friendly-frontend.md)
+- [One overlay shell per job (the SPA macro layer)](./overlay-shells.md)
 - [UX papercuts](./ux-papercuts.md) ·
   [quality-of-life pass](./ux-qol-pass.md) ·
   [UX assessment 2026-09 (core loop by persona)](./ux-assessment-2026-09.md)

@@ -1,5 +1,231 @@
 # @cat-factory/node-server
 
+## 0.240.4
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+  - @cat-factory/server@0.339.0
+  - @cat-factory/agents@0.172.5
+  - @cat-factory/binary-generators@0.3.74
+  - @cat-factory/consensus@0.19.22
+  - @cat-factory/eks@0.1.413
+  - @cat-factory/gates@0.12.10
+  - @cat-factory/gitlab@0.24.10
+  - @cat-factory/integrations@0.176.6
+  - @cat-factory/kernel@0.360.4
+  - @cat-factory/observability-otel@0.23.67
+  - @cat-factory/orchestration@0.322.5
+  - @cat-factory/prompt-fragments@1.1.70
+  - @cat-factory/spend@0.23.19
+  - @cat-factory/provider-bedrock@0.7.567
+  - @cat-factory/provider-cloudflare@0.7.568
+  - @cat-factory/caching@0.20.108
+  - @cat-factory/observability-langfuse@0.11.74
+  - @cat-factory/provider-s3@0.2.481
+
+## 0.240.3
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+  - @cat-factory/server@0.338.0
+  - @cat-factory/agents@0.172.4
+  - @cat-factory/binary-generators@0.3.73
+  - @cat-factory/consensus@0.19.21
+  - @cat-factory/eks@0.1.412
+  - @cat-factory/gates@0.12.9
+  - @cat-factory/gitlab@0.24.9
+  - @cat-factory/integrations@0.176.5
+  - @cat-factory/kernel@0.360.3
+  - @cat-factory/observability-otel@0.23.66
+  - @cat-factory/orchestration@0.322.4
+  - @cat-factory/prompt-fragments@1.1.69
+  - @cat-factory/spend@0.23.18
+  - @cat-factory/provider-bedrock@0.7.566
+  - @cat-factory/provider-cloudflare@0.7.567
+  - @cat-factory/caching@0.20.107
+  - @cat-factory/observability-langfuse@0.11.73
+  - @cat-factory/provider-s3@0.2.480
+
+## 0.240.2
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+  - @cat-factory/server@0.337.0
+  - @cat-factory/integrations@0.176.4
+  - @cat-factory/kernel@0.360.2
+  - @cat-factory/agents@0.172.3
+  - @cat-factory/binary-generators@0.3.72
+  - @cat-factory/consensus@0.19.20
+  - @cat-factory/eks@0.1.411
+  - @cat-factory/gates@0.12.8
+  - @cat-factory/gitlab@0.24.8
+  - @cat-factory/observability-otel@0.23.65
+  - @cat-factory/orchestration@0.322.3
+  - @cat-factory/prompt-fragments@1.1.68
+  - @cat-factory/spend@0.23.17
+  - @cat-factory/caching@0.20.106
+  - @cat-factory/observability-langfuse@0.11.72
+  - @cat-factory/provider-bedrock@0.7.565
+  - @cat-factory/provider-cloudflare@0.7.566
+  - @cat-factory/provider-s3@0.2.479
+
+## 0.240.1
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+  - @cat-factory/integrations@0.176.3
+  - @cat-factory/agents@0.172.2
+  - @cat-factory/binary-generators@0.3.71
+  - @cat-factory/consensus@0.19.19
+  - @cat-factory/eks@0.1.410
+  - @cat-factory/gates@0.12.7
+  - @cat-factory/gitlab@0.24.7
+  - @cat-factory/kernel@0.360.1
+  - @cat-factory/observability-otel@0.23.64
+  - @cat-factory/orchestration@0.322.2
+  - @cat-factory/prompt-fragments@1.1.67
+  - @cat-factory/server@0.336.1
+  - @cat-factory/spend@0.23.16
+  - @cat-factory/provider-bedrock@0.7.564
+  - @cat-factory/provider-cloudflare@0.7.565
+  - @cat-factory/caching@0.20.105
+  - @cat-factory/observability-langfuse@0.11.71
+  - @cat-factory/provider-s3@0.2.478
+
+## 0.240.0
+
+### Minor Changes
+
+- 58b57cc: A directory `DirectoryUser` carries `accounts`: the GitHub and GitLab accounts the user signed in
+  with, as `{ provider, id, login }` where `id` is the host's numeric user id, so a system mirroring
+  the directory can match people on their host account instead of an email. Linking such an account
+  to a user, or moving it to another user, records a `user` change on the feed for each user
+  involved. Password, Google and OIDC logins are not published. OpenAPI 1.84.0.
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/contracts@0.368.0
+  - @cat-factory/kernel@0.360.0
+  - @cat-factory/server@0.336.0
+  - @cat-factory/agents@0.172.1
+  - @cat-factory/binary-generators@0.3.70
+  - @cat-factory/consensus@0.19.18
+  - @cat-factory/eks@0.1.409
+  - @cat-factory/gates@0.12.6
+  - @cat-factory/gitlab@0.24.6
+  - @cat-factory/integrations@0.176.2
+  - @cat-factory/observability-otel@0.23.63
+  - @cat-factory/orchestration@0.322.1
+  - @cat-factory/prompt-fragments@1.1.66
+  - @cat-factory/spend@0.23.15
+  - @cat-factory/caching@0.20.104
+  - @cat-factory/observability-langfuse@0.11.70
+  - @cat-factory/provider-bedrock@0.7.563
+  - @cat-factory/provider-cloudflare@0.7.564
+  - @cat-factory/provider-s3@0.2.477
+
+## 0.239.2
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/contracts@0.367.0
+  - @cat-factory/agents@0.172.0
+  - @cat-factory/orchestration@0.322.0
+  - @cat-factory/server@0.335.0
+  - @cat-factory/binary-generators@0.3.69
+  - @cat-factory/consensus@0.19.17
+  - @cat-factory/eks@0.1.408
+  - @cat-factory/gates@0.12.5
+  - @cat-factory/gitlab@0.24.5
+  - @cat-factory/integrations@0.176.1
+  - @cat-factory/kernel@0.359.1
+  - @cat-factory/observability-otel@0.23.62
+  - @cat-factory/prompt-fragments@1.1.65
+  - @cat-factory/spend@0.23.14
+  - @cat-factory/provider-bedrock@0.7.562
+  - @cat-factory/provider-cloudflare@0.7.563
+  - @cat-factory/caching@0.20.103
+  - @cat-factory/observability-langfuse@0.11.69
+  - @cat-factory/provider-s3@0.2.476
+
+## 0.239.1
+
+### Patch Changes
+
+- @cat-factory/server@0.334.1
+
+## 0.239.0
+
+### Minor Changes
+
+- 04c1587: Public-API keys belong to an account and reach every workspace in it or a chosen list. A
+  workspace-scoped `/api/v1` call names its workspace in the `x-cat-factory-workspace` header, which a
+  key reaching one workspace may omit, so every existing key keeps working unchanged. `PublicApiKey`
+  and `GET /api/v1/me` gain `workspaceIds`; both mint bodies accept it. Widening a key past the board
+  it is minted from takes an account admin, and a key can never mint or revoke one reaching further
+  than itself. The header is on the CORS allow-list, so a browser client can send it. The four SDK
+  clients take a workspace option. OpenAPI 1.80.0.
+  
+  Storage break (internal): `public_api_keys.workspace_id` is replaced by `all_workspaces` plus the
+  `public_api_key_workspaces` grant table (D1 `0108`, Drizzle `20261009143721` and `20261009143724`),
+  backfilled from the old column. The account cap is 200 live keys, where it was 50 per workspace,
+  and a key left with no workspace after its boards were deleted holds no slot.
+- f1b6c9a: `/api/v1/directory/*`: an account's workspaces, users, account memberships, workspace memberships
+  and linked repositories as keyset-paged snapshots, plus an ordered change feed whose changes carry
+  each entity's current state (or `null` once it is gone), for an integration keeping its own copy in
+  sync. A feed cursor older than the new `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30) is refused
+  with the new `cursor_expired` conflict reason. OpenAPI 1.81.0.
+  
+  Internal: the change-row mapping both facades share moves to kernel's `directoryChangeFromRow`.
+  The slice 1 `DirectoryChangeRepository` port becomes `DirectoryRepository` and joins
+  `CoreDependencies` as a required member, with its reads on the mothership allow-list.
+- 20d4f01: Directory webhooks: `/api/v1/directory/webhooks` registers account-level endpoints that the
+  directory change feed is pushed to every couple of minutes, signed like the notification webhooks.
+  Each push is a `directory.changed` page of hydrated changes, or `directory.resync_required` for an
+  endpoint that fell behind the feed's retention. Delivery is a sweep on both facades (the Worker's
+  frequent cron, a Node timer) that takes a per-endpoint lease before a push and moves the endpoint's
+  position only after the push succeeds, so pushes are at-least-once, arrive in feed order, and are
+  never doubled by concurrent sweepers; a lease whose sweeper died expires and the page is sent again. The spec gains an OpenAPI 3.1 `webhooks` section naming every push body, so
+  `DirectoryWebhookDelivery`, `NotificationWebhookDelivery`, `RunWebhookDelivery` and
+  `PlatformAlertWebhookDelivery` become generated types in every client.
+  OpenAPI 1.82.0. New migrations: D1 `0109_directory_webhooks.sql`, Drizzle
+  `20261010113115_directory_webhooks`.
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+  - @cat-factory/kernel@0.359.0
+  - @cat-factory/integrations@0.176.0
+  - @cat-factory/server@0.334.0
+  - @cat-factory/orchestration@0.321.0
+  - @cat-factory/agents@0.171.7
+  - @cat-factory/binary-generators@0.3.68
+  - @cat-factory/consensus@0.19.16
+  - @cat-factory/eks@0.1.407
+  - @cat-factory/gates@0.12.4
+  - @cat-factory/gitlab@0.24.4
+  - @cat-factory/observability-otel@0.23.61
+  - @cat-factory/prompt-fragments@1.1.64
+  - @cat-factory/spend@0.23.13
+  - @cat-factory/caching@0.20.102
+  - @cat-factory/observability-langfuse@0.11.68
+  - @cat-factory/provider-bedrock@0.7.561
+  - @cat-factory/provider-cloudflare@0.7.562
+  - @cat-factory/provider-s3@0.2.475
+
 ## 0.238.2
 
 ### Patch Changes

@@ -55,5 +55,10 @@ export function loadRetentionConfig(env: Env): RetentionConfig {
     // "we deleted it". Bounded rather than infinite because it is the one table that grows
     // monotonically with run volume; 0 disables the prune for a deployment that exports it.
     auditEventsMs: retentionMs('AUDIT_EVENT_RETENTION_DAYS', env.AUDIT_EVENT_RETENTION_DAYS, 730),
+    directoryChangesMs: retentionMs(
+      'DIRECTORY_CHANGE_RETENTION_DAYS',
+      env.DIRECTORY_CHANGE_RETENTION_DAYS,
+      30,
+    ),
   }
 }

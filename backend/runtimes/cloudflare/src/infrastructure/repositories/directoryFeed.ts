@@ -1,6 +1,6 @@
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types'
 
-// The append half of the directory change feed (docs/initiatives/directory-sync.md), shared by
+// The append half of the directory change feed (backend/docs/adr/0067-directory-sync.md), shared by
 // every repository that writes a directory entity. Mirror of the Node facade's `directoryFeed.ts`;
 // the conformance suite `defineDirectoryFeedSuite` holds the two to one behaviour.
 //
@@ -43,6 +43,23 @@ export function userSource(userId: string): DirectorySource {
     sql: `SELECT account_id, 'user' AS entity_type, NULL AS workspace_id, user_id AS entity_id
             FROM memberships WHERE user_id = ?`,
     binds: [userId],
+  }
+}
+
+/**
+ * The user a login identity belongs to now, once per account, unless that is `exceptUserId`.
+ * Placed before a re-link so the user losing the account is recorded while the row still names them.
+ */
+export function identityOwnerSource(
+  provider: string,
+  subject: string,
+  exceptUserId: string,
+): DirectorySource {
+  return {
+    sql: `SELECT m.account_id, 'user' AS entity_type, NULL AS workspace_id, m.user_id AS entity_id
+            FROM memberships m JOIN user_identities i ON i.user_id = m.user_id
+           WHERE i.provider = ? AND i.subject = ? AND i.user_id <> ?`,
+    binds: [provider, subject, exceptUserId],
   }
 }
 

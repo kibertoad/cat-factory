@@ -39,7 +39,7 @@ import (
 )
 
 // Version is the SDK version, stamped into User-Agent. Kept in step by `pnpm check:sdk`.
-const Version = "0.56.3"
+const Version = "0.62.0"
 
 // Options configures a Client.
 type Options struct {
@@ -56,6 +56,9 @@ type Options struct {
 	MaxRetries int
 	// Header is sent on every request.
 	Header http.Header
+	// WorkspaceID is the workspace every workspace-scoped call acts on, sent as
+	// X-Cat-Factory-Workspace. Needed only for a key that reaches more than one workspace.
+	WorkspaceID string
 	// PersonalPassword is the personal password of the user this key is BOUND to, if any: it
 	// unlocks that user's own model subscription for the runs this client drives. Usually supplied
 	// later with SetPersonalPassword, since a caller learns it is needed from a 428.
@@ -69,7 +72,8 @@ type Options struct {
 
 // Client is a cat-factory public-API client.
 //
-// Every call is scoped to the key's workspace, and each field mirrors one tag of the published
+// A workspace-scoped call acts on Options.WorkspaceID, or on the key's only workspace when it reaches
+// one, and each field mirrors one tag of the published
 // OpenAPI surface. A Client is stateless beyond its configuration and safe for concurrent use.
 type Client struct {
 	baseURL    string
@@ -131,6 +135,8 @@ type Client struct {
 	Debug *DebugService
 	// What the calling key is and what it may do.
 	Me *MeService
+	// Where the deployment serves its web app, for linking a person into it.
+	Deployment *DeploymentService
 	// What a run proved: its verification report and captured artifacts.
 	Evidence *EvidenceService
 	// The evidence behind the auto-merge policy: per-run merge decisions, the per-class
@@ -141,6 +147,11 @@ type Client struct {
 	Kaizen *KaizenService
 	// Guided pull request review: a PR explained, question threads about it, and comment drafts.
 	GuidedReviews *GuidedReviewsService
+	// A pull request scored on the merger's axes, and whether a risk policy would land it.
+	PrAssessments *PrAssessmentsService
+	// The account's directory (workspaces, users, memberships, linked repositories) as snapshots
+	// and a change feed, for keeping an external copy in sync.
+	Directory *DirectoryService
 	// The workspace's own API keys.
 	Keys *KeysService
 }
@@ -170,6 +181,9 @@ func New(options Options) (*Client, error) {
 		agent = options.UserAgent + " "
 	}
 	header.Set("User-Agent", agent+"cat-factory-sdk-go/"+Version)
+	if options.WorkspaceID != "" {
+		header.Set("X-Cat-Factory-Workspace", options.WorkspaceID)
+	}
 
 	httpClient := options.HTTPClient
 	if httpClient == nil {
@@ -205,10 +219,13 @@ func New(options Options) (*Client, error) {
 	client.Decisions = &DecisionsService{client: client}
 	client.Debug = &DebugService{client: client}
 	client.Me = &MeService{client: client}
+	client.Deployment = &DeploymentService{client: client}
 	client.Evidence = &EvidenceService{client: client}
 	client.MergeRecords = &MergeRecordsService{client: client}
 	client.Kaizen = &KaizenService{client: client}
 	client.GuidedReviews = &GuidedReviewsService{client: client}
+	client.PrAssessments = &PrAssessmentsService{client: client}
+	client.Directory = &DirectoryService{client: client}
 	client.Keys = &KeysService{client: client}
 	if options.PersonalPassword != "" {
 		client.SetPersonalPassword(options.PersonalPassword)

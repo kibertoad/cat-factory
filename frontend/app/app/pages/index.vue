@@ -104,6 +104,9 @@ const ModelProvidersHub = defineAsyncView(() => import('~/components/layout/Mode
 const PersonalSetupModal = defineAsyncView(
   () => import('~/components/layout/PersonalSetupModal.vue'),
 )
+const SetupChecklistPanel = defineAsyncView(
+  () => import('~/components/setup/SetupChecklistPanel.vue'),
+)
 const WorkspaceSettingsPanel = defineAsyncView(
   () => import('~/components/settings/WorkspaceSettingsPanel.vue'),
 )
@@ -159,12 +162,16 @@ const TutorialNudge = defineAsyncView(() => import('~/components/tutorial/Tutori
 // The first-run role question (Engineer / Product manager / Designer). Same shape as the tutorial
 // launch prompt: mounted only while its store flag is set, so an answered question costs nothing.
 const RolePrompt = defineAsyncView(() => import('~/components/layout/RolePrompt.vue'))
+// The queue: the board's second view (issue #2258), loaded the first time someone opens it.
+const QueueView = defineAsyncView(() => import('~/components/queue/QueueView.vue'))
+const DescribeWorkModal = defineAsyncView(() => import('~/components/queue/DescribeWorkModal.vue'))
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
 const models = useModelsStore()
 const ui = useUiStore()
 const aiReadiness = useAiReadiness()
+const views = useWorkViewStore()
 
 // App-wide keyboard shortcuts (Escape to deselect, Delete to remove the selected block, ?
 // for the cheatsheet). Registered ONCE here so a single global listener owns them.
@@ -176,6 +183,10 @@ onMounted(() => {
   // board it names is the one that opens. This is what makes the observability link on an
   // engine-published PR verification report resolve.
   useRunDeepLink()
+  // `?addRepo=<owner>/<name>`: an integration sending a person to add a service for a repository.
+  useAddRepoDeepLink()
+  // `?view=queue` / `?view=board`: a link that opens one of the board's two views.
+  views.consumeDeepLink()
   void workspace.init()
   // Honour a `cat-factory k3s` CLI hand-off (`?infraSetup=local-k3s&…`): open the Infrastructure
   // window pre-seeded with the provisioned connection so the user only pastes the token + saves.
@@ -401,6 +412,14 @@ useTutorialNudge()
 // plus the funnel counters. Unconditional and best-effort: with no accounts or no store wired it
 // simply has nothing to talk to, and the browser-persisted store carries on alone.
 useTutorialSync()
+// Starting a tour switches to the canvas, which every tour walks (the view store holds it for the
+// tour's length), and the canvas is then the view used last.
+watch(
+  () => tutorial.touring,
+  (touring) => {
+    if (touring) views.show('board')
+  },
+)
 
 // Subscribe to the backend's real-time event stream and (re)connect whenever the
 // active workspace changes. Runs advance durably server-side; progress arrives as
@@ -462,12 +481,32 @@ watch(
         <main class="relative min-w-0 flex-1">
           <BoardCanvas />
           <!-- Toolbar, nav trigger and every advisory banner, in ONE stacked region that owns
-               their placement, so no two of them can cover each other. -->
-          <BoardTopOverlays
-            :connected="streamConnected"
-            :ever-connected="streamEverConnected"
-            :connection-failed="streamConnectionFailed"
-          />
+               their placement, so no two of them can cover each other.
+
+               The queue view sits OVER the canvas rather than replacing it, so switching back keeps
+               the canvas's camera and selection. Below the inspector (z-20), so a task opened from
+               the queue shows its panel beside it. The same advisories render IN FLOW above its
+               columns, so they push the queue down instead of covering its header.
+
+               ONE overlay instance serves both views, at the same place in this template: two
+               instances would remount every banner on each switch, and a banner whose dismissal
+               is its own component state would come back. On the canvas the wrapper is
+               `display: contents`, so it adds no box and the overlays float over the canvas as
+               before. -->
+          <div
+            :class="
+              views.view === 'queue' ? 'absolute inset-0 z-10 flex flex-col bg-app-950' : 'contents'
+            "
+            :data-testid="views.view === 'queue' ? 'queue-view-host' : undefined"
+          >
+            <BoardTopOverlays
+              :in-flow="views.view === 'queue'"
+              :connected="streamConnected"
+              :ever-connected="streamEverConnected"
+              :connection-failed="streamConnectionFailed"
+            />
+            <QueueView v-if="views.view === 'queue'" class="min-h-0 flex-1" />
+          </div>
           <InspectorPanel />
           <!-- Code-split focus view. The fade lives here (not inside the component) so the
                leave animation still plays when `focusBlockId` clears and the v-if unmounts
@@ -496,6 +535,7 @@ watch(
         <AddTaskModal />
         <ReviewFrictionDialog v-if="ui.reviewFrictionContext" />
         <CreateInitiativeModal />
+        <DescribeWorkModal v-if="ui.describeWorkOpen" />
         <CommandBar />
         <PersonalCredentialModal />
         <ConfirmDialog />
@@ -531,6 +571,7 @@ watch(
         <IntegrationsHub v-if="ui.integrationsOpen" />
         <ModelProvidersHub v-if="ui.modelProvidersOpen" />
         <PersonalSetupModal v-if="ui.personalSetupOpen" />
+        <SetupChecklistPanel v-if="ui.setupChecklistOpen" />
         <WorkspaceSettingsPanel v-if="ui.workspaceSettingsOpen" />
         <AccountSettingsPanel v-if="ui.accountSettingsOpen" />
         <ObservabilityConnectionPanel v-if="ui.observabilityConnectionOpen" />

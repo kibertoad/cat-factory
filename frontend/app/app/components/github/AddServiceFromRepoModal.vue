@@ -27,8 +27,10 @@ import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import { appInstallationManageUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
+import { prefilledRepoMatch, prefillProviderMismatch } from '~/composables/useAddRepoDeepLink'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 
@@ -58,10 +60,10 @@ const adding = ref(false)
 async function loadRepos() {
   try {
     await github.probe()
-    // Load only the linked-repo projection (to flag repos already on the board). The
+    // Load the linked-repo projection once per board (to flag repos already on the board). The
     // available-repos list is NOT prefetched — it's searched server-side on demand once
     // the user types (see the repoQueryRaw watcher), so a wide install isn't shipped whole.
-    if (github.connected) await github.load()
+    await github.refresh()
   } catch {
     // Integration off / unreachable → the picker stays empty, GitHubConnect shows.
   }
@@ -304,9 +306,25 @@ watch(
     if (!isOpen) return
     resetSelection()
     void loadRepos()
+    if (ui.addServicePrefill) repoSearch.value = ui.addServicePrefill.repo
   },
   { immediate: true },
 )
+
+// A deep link names one repository: select it as soon as the search lists it, once. A repository
+// the connection cannot reach never lists, which leaves the search's own empty state (and its
+// grant-access remedy) in front of the person.
+const prefillMismatch = computed(() =>
+  prefillProviderMismatch(ui.addServicePrefill, github.connected ? github.provider : null),
+)
+watch(repoResults, (repos) => {
+  const prefill = ui.addServicePrefill
+  if (!prefill || prefillMismatch.value || selectedRepoId.value !== undefined) return
+  const match = prefilledRepoMatch(prefill, repos)
+  if (!match || toRepoItem(match).disabled) return
+  selectedRepoId.value = match.githubId
+  ui.addServicePrefill = null
+})
 
 // A whole-repo service is added once (then configured inline). A monorepo instead
 // multi-selects directories and adds them together via `addServices`.
@@ -437,7 +455,7 @@ function done() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('github.addService.title')" :ui="{ content: 'max-w-xl' }">
+  <AppModal size="form" v-model:open="open" :title="t('github.addService.title')">
     <template #body>
       <div class="space-y-6">
         <p class="text-sm text-muted">
@@ -509,6 +527,19 @@ function done() {
               </UInputMenu>
             </div>
           </UFormField>
+
+          <p
+            v-if="prefillMismatch"
+            class="text-sm text-app-warning-200/90"
+            data-testid="add-service-prefill-mismatch"
+          >
+            {{
+              t('github.addService.prefillProviderMismatch', {
+                repo: ui.addServicePrefill?.repo,
+                connected: providerLabel,
+              })
+            }}
+          </p>
 
           <UFormField
             :label="t('github.addService.repoType')"
@@ -682,5 +713,5 @@ function done() {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

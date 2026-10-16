@@ -39,6 +39,7 @@ function openObservability() {
         color="neutral"
         variant="ghost"
         v-if="instanceId"
+        data-testid="step-view-all-calls"
         class="p-0 text-2xs text-app-info-400 hover:bg-transparent hover:text-app-info-300"
         @click="openObservability"
       >

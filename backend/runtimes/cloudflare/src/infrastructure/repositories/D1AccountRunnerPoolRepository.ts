@@ -26,7 +26,7 @@ function rowToRecord(row: AccountRunnerPoolRow): AccountRunnerPoolRecord {
   }
 }
 
-/** D1-backed store of account → runner-pool rows (migration 0108). */
+/** D1-backed store of account → runner-pool rows (migration 0110). */
 export class D1AccountRunnerPoolRepository implements AccountRunnerPoolRepository {
   private readonly db: D1Database
 

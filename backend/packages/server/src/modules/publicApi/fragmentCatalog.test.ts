@@ -53,7 +53,7 @@ function listRoute(library: FragmentLibraryModule | undefined) {
     fragmentLibrary: library,
     publicApiKeys: {
       authenticate: async () => ({
-        workspaceId: 'ws_1',
+        workspaceIds: ['ws_1'],
         scope: 'write',
         keyId: 'pak_1',
         actsAsUserId: null,

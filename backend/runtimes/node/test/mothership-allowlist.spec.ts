@@ -180,6 +180,8 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     findByEmail: 'preauth',
     getIdentity: 'preauth',
     linkIdentity: 'onboarding',
+    // The private upsert `linkIdentity` runs, inside its feed transaction for a host identity.
+    upsertIdentity: 'helper',
     listIdentities: 'preauth',
     // The session-revocation WRITE. `sessionGeneration` (the read) is allow-listed so a node stops
     // honouring a revoked bearer, but the bump is the revocation itself: a role-blind token that
@@ -240,6 +242,25 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `deleteOlderThan` is the retention sweep, which the mothership runs against its own store; a
   // node never drives it, and a node that could reach it could erase the trail that describes it.
   auditEventRepository: { append: 'admin', listByAccount: 'admin', deleteOlderThan: 'sweeper' },
+  // The directory change feed's prune is the mothership's retention sweep; every read is on the
+  // allow-list, account-bound, so a node can serve `/api/v1/directory/*`. `headSeqs` spans
+  // accounts and only the mothership's webhook delivery sweep reads it. `hostIdentitiesOf` is the
+  // private helper that reads a page of users' host accounts inside the remote user reads.
+  directoryRepository: { pruneChanges: 'sweeper', headSeqs: 'sweeper', hostIdentitiesOf: 'helper' },
+  // Directory webhook endpoints are account-admin configuration (an endpoint receives every change
+  // in the account), and the machine token scopes ACCOUNTS not ROLES, so management stays on the
+  // mothership: an integration registers its endpoint against the deployment, never a node. The
+  // delivery reads and the lease are the mothership's own sweep.
+  directoryWebhookRepository: {
+    list: 'admin',
+    get: 'admin',
+    put: 'admin',
+    delete: 'admin',
+    listEnabled: 'sweeper',
+    claim: 'sweeper',
+    complete: 'sweeper',
+    release: 'sweeper',
+  },
   // The auth-attempt ledger (SEC-4) is the password throttle's own state. A node that could
   // reach it over the RPC could read attempt patterns or flood a victim's bucket; nothing on
   // a satellite ever needs it. Mothership-internal by construction, like the roster above.

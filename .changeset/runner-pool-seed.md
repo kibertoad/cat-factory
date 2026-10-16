@@ -29,7 +29,7 @@ The seed is validated like an admin registration (backend kind registered, URL s
 secrets present) through a shared `RunnerPoolConnectionService.validate`. A seed that fails is logged
 at `error` naming the account on every boot, and a failed read never fails board creation.
 
-New storage, mirrored on both runtimes: the `account_runner_pools` table (D1 migration 0108 and a
+New storage, mirrored on both runtimes: the `account_runner_pools` table (D1 migration 0110 and a
 Drizzle migration) with an `AccountRunnerPoolRepository` kernel port, a unique key making the insert
 race safe, `AccountRepository.listAll`, and the `inherit_account_runner_pool` settings column. The
 account repository is on the mothership allow-list for reads; mothership nodes and `startLocal()` do

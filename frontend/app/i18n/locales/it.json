@@ -9,19 +9,23 @@
     "scopeHint": "Ogni livello include quelli precedenti.",
     "scope": {
       "read": {
-        "label": "Sola lettura",
+        "label": "Lettura · read",
         "description": "Vedere servizi, attività, pipeline ed esecuzioni."
       },
+      "webhooks": {
+        "label": "Webhook · webhooks",
+        "description": "Inoltre registrare webhook che inviano le modifiche a un altro sistema."
+      },
       "write": {
-        "label": "Lettura e scrittura",
+        "label": "Scrittura · write",
         "description": "Inoltre creare e avviare attività."
       },
       "decide": {
-        "label": "Lettura, scrittura e decisione",
+        "label": "Decisione · decide",
         "description": "Inoltre rispondere alle domande su cui un'esecuzione è in attesa."
       },
       "admin": {
-        "label": "Accesso completo",
+        "label": "Accesso completo · admin",
         "description": "Inoltre eliminare attività e agire sulle notifiche, il che può unire una pull request."
       }
     },
@@ -842,7 +846,9 @@
         "createdByKey": "la chiave API {id}",
         "revoke": "Revoca token",
         "boundToYou": "Il tuo abbonamento",
-        "boundToOther": "Abbonamento di {user}"
+        "boundToOther": "Abbonamento di {user}",
+        "reachAll": "Tutti gli spazi di lavoro",
+        "reachCount": "{count} spazi di lavoro"
       },
       "add": {
         "heading": "Crea un token",
@@ -850,19 +856,27 @@
         "labelHelp": "Un nome per riconoscere questo token in seguito.",
         "labelPlaceholder": "es. pipeline CI",
         "scope": "Ambito",
-        "scopeHelp": "Cosa può fare questo token: sola lettura, lettura e scrittura o accesso completo (che consente anche l'eliminazione).",
+        "scopeHelp": "Ogni livello include tutto ciò che consente il precedente. Lettura: visualizzare attività, esecuzioni e i loro risultati. Webhook: inoltre registrare e rimuovere i webhook che inviano le modifiche a un altro sistema, come i webhook di directory e di notifica. Scrittura: inoltre creare, modificare, avviare, fermare e riprovare attività, ed eseguire revisioni e valutazioni. Decisione: inoltre rispondere alle decisioni umane di un'esecuzione (approvazioni, rilievi di revisione, domande di intervista e di chiarimento, test manuali); un token ha bisogno di questo livello anche per avviare una pipeline che può fermarsi su una di esse. Accesso completo (admin): inoltre aggiungere, configurare ed eliminare servizi, eliminare attività, collegare repository, gestire connessioni di ambiente, e agire sulle notifiche.",
         "create": "Crea token",
         "identity": "Viene eseguito come",
         "identitySystem": "Questo spazio di lavoro (token di sistema)",
         "identitySelf": "Io (token personale)",
         "identitySystemHelp": "Le esecuzioni avviate con questo token appartengono allo spazio di lavoro e non sono attribuite a nessuna persona. Non può usare l'abbonamento personale Claude / Codex / GLM di nessuno: un'attività fissata su uno di quei modelli viene rifiutata anziché addebitata a chi non c'è. Usalo per la CI e le integrazioni condivise.",
-        "identitySelfHelp": "Le esecuzioni avviate con questo token sono attribuite a te e possono usare il tuo abbonamento personale Claude / Codex / GLM. Ogni chiamata deve inviare anche la tua password personale nell'intestazione X-Personal-Password; non viene mai memorizzata. Usalo per le tue esecuzioni headless."
+        "identitySelfHelp": "Le esecuzioni avviate con questo token sono attribuite a te e possono usare il tuo abbonamento personale Claude / Codex / GLM. Ogni chiamata deve inviare anche la tua password personale nell'intestazione X-Personal-Password; non viene mai memorizzata. Usalo per le tue esecuzioni headless.",
+        "reach": "Spazi di lavoro",
+        "reachHelp": "Su quali spazi di lavoro questo token può agire. Un token che ne raggiunge più di uno indica lo spazio di lavoro a ogni chiamata nell’header x-cat-factory-workspace.",
+        "reachAdminOnly": "Solo un amministratore dell'account può creare un token che raggiunge altri spazi di lavoro, come richiedono i webhook di directory. Chiedilo a uno di loro.",
+        "reachThis": "Solo questo spazio di lavoro",
+        "reachAll": "Tutti gli spazi di lavoro dell’account",
+        "reachSelected": "Spazi di lavoro selezionati",
+        "reachPick": "Scegli gli spazi di lavoro"
       },
       "scopes": {
-        "read": "Sola lettura",
-        "write": "Lettura e scrittura",
-        "decide": "Rispondere alle decisioni",
-        "admin": "Accesso completo"
+        "read": "Lettura · read",
+        "webhooks": "Webhook · webhooks (include Lettura)",
+        "write": "Scrittura · write (include Webhook)",
+        "decide": "Decisione · decide (include Scrittura)",
+        "admin": "Accesso completo · admin (include Decisione)"
       },
       "toast": {
         "loadFailed": "Impossibile caricare i token API",
@@ -2603,7 +2617,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "altre {count} non mostrate",
-      "failingRunGone": "Questa esecuzione non è più caricata e non ha alcuna attività da aprire."
+      "failingRunGone": "Questa esecuzione non è più caricata e non ha alcuna attività da aprire.",
+      "goTo": {
+        "review": "Rivedi",
+        "answer": "Rispondi",
+        "test": "Testa",
+        "confirm": "Conferma",
+        "triage": "Smista",
+        "choose": "Scegli",
+        "open": "Apri"
+      }
     },
     "aiProvidersBanner": {
       "setup": {
@@ -2773,7 +2796,10 @@
         "toggleUiMode": "Cambia modalità interfaccia",
         "chooseRole": "Cambia il tuo ruolo",
         "foundationalServices": "Servizi fondamentali",
-        "notificationSettings": "Gestisci l'instradamento delle notifiche"
+        "notificationSettings": "Gestisci l'instradamento delle notifiche",
+        "setupChecklist": "Checklist di configurazione",
+        "queueView": "Apri la vista coda",
+        "boardView": "Apri la vista board"
       },
       "keywords": {
         "newPipeline": "pipeline agenti catena",
@@ -2801,7 +2827,11 @@
         "chooseRole": "ruolo ingegnere responsabile di prodotto designer profilo vista semplice",
         "tutorial": "tutorial tour guida aiuto imparare introduzione",
         "foundationalServices": "capacità condivisa piattaforma servizio api contratto openapi catalogo",
-        "notificationSettings": "notifiche email instradamento canali casella"
+        "notificationSettings": "notifiche email instradamento canali casella",
+        "setupChecklist": "configurazione checklist setup runner modello github archiviazione ambiente",
+        "queueView": "coda vista elenco in attesa",
+        "boardView": "board canvas mappa vista pianificare",
+        "describeWork": "descrivi nuovo lavoro attività aggiungi crea funzionalità bug"
       }
     },
     "shortcuts": {
@@ -3688,6 +3718,7 @@
       },
       "errors": {
         "listInstallations": "Impossibile elencare le installazioni GitHub",
+        "loadProjection": "Impossibile caricare repository, pull request e issue",
         "startInstall": "Impossibile avviare l'installazione della GitHub App",
         "connect": "Impossibile collegare"
       }
@@ -3782,7 +3813,8 @@
         "servicesAddedDescription": "{count} servizio aggiunto alla board. | {count} servizi aggiunti alla board.",
         "frontendLinkedNote": "{directory} è stata aggiunta come frontend e collegata alle altre. Assegna il nome alle sue variabili d'ambiente con gli URL dei backend nel suo inspector.",
         "frontendWiringFailedNote": "Le impostazioni del frontend non sono state salvate. Apri l'inspector di ogni app frontend per impostarne la sottodirectory e i servizi backend."
-      }
+      },
+      "prefillProviderMismatch": "Il link chiedeva {repo} su un altro provider, e questa board è collegata a {connected}. Cerca il repository a mano, oppure apri il link su una board collegata al suo provider."
     },
     "repoTree": {
       "root": "root",
@@ -6294,7 +6326,8 @@
     "reports": "Report",
     "foundationalServices": "Servizi fondamentali",
     "tutorials": "Tutorial",
-    "help": "Aiuto"
+    "help": "Aiuto",
+    "setupChecklist": "Checklist di configurazione"
   },
   "errors": {
     "generic": {
@@ -6417,7 +6450,8 @@
         "delegated_claim_missing": "Questo passo non ha lavoro esterno da controllare",
         "thread_busy": "Questa discussione sta ancora rispondendo",
         "draft_conflict": "Questa bozza è cambiata",
-        "session_stale": "La pull request è andata avanti"
+        "session_stale": "La pull request è andata avanti",
+        "cursor_expired": "Il feed delle modifiche ha superato questo cursore"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6477,7 +6511,8 @@
         "delegated_claim_missing": "Manca la registrazione di ciò che l’esecuzione ha inviato all’esecutore esterno, quindi non c’è nulla da interrogare. L’esecutore in sé non ha alcun problema. Ricarica l’esecuzione e rilancia il passo se resta bloccato.",
         "thread_busy": "La domanda precedente in questa discussione non ha ancora una risposta. Attendi la risposta o chiedi in un'altra discussione.",
         "draft_conflict": "Questa bozza di commento è stata modificata, pubblicata o scartata da quando l'hai caricata. Ricarica le bozze e ripeti la modifica.",
-        "session_stale": "Sono arrivati nuovi commit dopo la preparazione di questa revisione, quindi le bozze potrebbero puntare alle righe sbagliate. Aggiorna la revisione, controlla le bozze e poi pubblica."
+        "session_stale": "Sono arrivati nuovi commit dopo la preparazione di questa revisione, quindi le bozze potrebbero puntare alle righe sbagliate. Aggiorna la revisione, controlla le bozze e poi pubblica.",
+        "cursor_expired": "Le modifiche successive a questo cursore non sono più conservate. Acquisisci una nuova istantanea della directory, poi segui il feed dalla posizione che riporta."
       },
       "action": {
         "connectGitHub": "Collega GitHub",
@@ -8115,6 +8150,10 @@
             "title": "La board",
             "body": "Servizi, moduli e attività vivono su questo canvas. Trascina per spostarti, scorri per lo zoom e clicca su una scheda per esaminarla."
           },
+          "views": {
+            "title": "Due viste",
+            "body": "La board ha una seconda vista. La coda elenca ciò che richiede te in tutti i servizi. Finito il tour, qui passi dalla coda a questa area di lavoro. L’app si apre sulla vista che hai usato per ultima."
+          },
           "sidebar": {
             "title": "La barra laterale",
             "body": "Tutto il resto è qui: creare pipeline, collegare repository e integrazioni, e le impostazioni dello workspace."
@@ -8734,5 +8773,146 @@
         "unsupportedVersion": "Questo tema è stato creato con un formato dell'editor più recente di quello che questa app comprende."
       }
     }
+  },
+  "setup": {
+    "title": "Configurazione",
+    "progress": "{done} su {total} completati",
+    "intro": "Ciò che serve a questo workspace perché un’attività possa essere eseguita e unita.",
+    "required": "obbligatorio",
+    "optional": "facoltativo",
+    "action": {
+      "change": "Modifica",
+      "connect": "Configura",
+      "fix": "Correggi",
+      "review": "Verifica",
+      "retry": "Riprova"
+    },
+    "rows": {
+      "checking": "Verifica in corso…",
+      "notNeeded": "Questo deployment non lo usa.",
+      "model": {
+        "title": "Modello",
+        "done": "È disponibile un modello.",
+        "missing": "Nessun modello disponibile. Nessun agente può essere eseguito finché non colleghi un provider."
+      },
+      "sourceControl": {
+        "title": "Controllo del codice sorgente",
+        "done": "Collegato. Gli agenti possono fare push dei branch e aprire pull request.",
+        "missing": "Non collegato. Gli agenti non possono aprire pull request."
+      },
+      "agentExecutor": {
+        "title": "Dove vengono eseguiti gli agenti",
+        "done": "Un runner è configurato.",
+        "missing": "Nessun runner configurato. Nulla può essere eseguito finché non ne colleghi uno.",
+        "notNeeded": "Questo deployment esegue gli agenti senza runner."
+      },
+      "ephemeralEnvironments": {
+        "title": "Ambienti di test",
+        "done": "Configurato. I tester possono usare un’anteprima live.",
+        "missing": "Non configurato. I tester che richiedono un’anteprima live non vengono eseguiti. Tutti gli altri agenti sì."
+      },
+      "binaryStorage": {
+        "title": "Archiviazione degli screenshot",
+        "done": "Configurato. I controlli visivi sono attivi.",
+        "missing": "Non configurato. I controlli visivi sono disattivati."
+      }
+    },
+    "causes": {
+      "unreachable": "Configurato, ma al momento non raggiungibile.",
+      "incomplete": "Connesso, ma manca un’impostazione obbligatoria.",
+      "rejected": "GitHub ha rifiutato il token di accesso.",
+      "underscoped": "Il token di accesso non può fare push né aprire pull request.",
+      "presetBroken": "Il preset di modello predefinito indica un modello non disponibile.",
+      "probeFailed": "La verifica non ha risposto.",
+      "notReported": "Questo deployment non lo segnala."
+    },
+    "also": {
+      "title": "Anche qui",
+      "pipelines": "Pipeline",
+      "riskPolicies": "Policy di merge",
+      "modelPresets": "Preset di modello",
+      "counts": {
+        "repair": "Da riparare: {count}",
+        "outdated": "Obsoleti: {count}",
+        "new": "Nuovi: {count}"
+      },
+      "settings": "Impostazioni e connessioni",
+      "workspaceSettings": "Impostazioni del workspace",
+      "integrations": "Integrazioni"
+    }
+  },
+  "queue": {
+    "title": "Coda",
+    "summary": "{needsYou} richiedono te · {ready} pronte per il merge",
+    "filter": {
+      "allServices": "Tutti i servizi",
+      "service": "Filtra per servizio"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Richiede te",
+        "empty": "Non c’è nulla in attesa di te."
+      },
+      "inFlight": {
+        "label": "In corso",
+        "empty": "Nessun agente sta lavorando ora."
+      },
+      "readyToMerge": {
+        "label": "Pronta per il merge",
+        "empty": "Nessuna pull request attende il merge."
+      }
+    },
+    "waiting": {
+      "label": "Non iniziato ({count})",
+      "empty": "Non c’è nulla in attesa di partire."
+    },
+    "done": {
+      "count": "Unite dal {date}: {count}",
+      "countAll": "Unite: {count}",
+      "show": "Mostra",
+      "hide": "Nascondi",
+      "capped": "Mostra le {shown} più recenti su {total}."
+    },
+    "card": {
+      "waited": "ha atteso {duration}",
+      "active": "attiva {duration} fa",
+      "merged": "unita {duration} fa",
+      "step": "passo {current} di {total}",
+      "showOnBoard": "Mostra nella board",
+      "answer": "Rispondi",
+      "budgetPaused": "Il limite di spesa ha messo in pausa questa esecuzione. Riprende quando il limite aumenta.",
+      "parked": "L’esecuzione attende una persona. Apri l’attività per vedere cosa serve.",
+      "waitingOn": "In attesa di {deps}",
+      "pr": "Pull request #{number}"
+    },
+    "describeWork": "Descrivi nuovo lavoro"
+  },
+  "views": {
+    "title": "Viste",
+    "queue": "Coda",
+    "board": "Board",
+    "openQueue": "Apri la vista coda"
+  },
+  "describeWork": {
+    "title": "Descrivi nuovo lavoro",
+    "textLabel": "Cosa va fatto",
+    "textHint": "Basta una frase. Aggiungi più dettagli se ne hai.",
+    "textPlaceholder": "Aggiungi un audit log per gli accessi. Registra ogni accesso con ora, utente ed esito.",
+    "savedAs": "Titolo dell’attività: {title}",
+    "serviceLabel": "Servizio",
+    "servicePlaceholder": "Seleziona un servizio",
+    "kindLabel": "Tipo",
+    "kind": {
+      "feature": "Funzionalità",
+      "bug": "Bug"
+    },
+    "moreKinds": "Altri tipi…",
+    "changeHowItRuns": "Cambia come viene eseguita",
+    "workspaceDefault": "Predefinito del workspace",
+    "defaultPipelineHint": "Il predefinito del workspace: {name}. Una pipeline scelta qui lo sostituisce per questa attività.",
+    "attachContext": "Allega contesto (apre il modulo completo)",
+    "add": "Aggiungi alla coda",
+    "addAndStart": "Aggiungi e avvia",
+    "addedToast": "«{title}» aggiunta alla coda"
   }
 }

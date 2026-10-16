@@ -450,3 +450,97 @@ Additive: a new enum value and a new set of `details.reason` codes on the existi
 (`attached_pr_unresolvable`, `attached_pr_not_found`, `attached_pr_repo_mismatch`,
 `attached_pr_not_open`, `attached_pr_from_fork`, `attached_pr_base_mismatch`). The pipeline parks
 nowhere, so a plain `write` key can start it with an empty body.
+
+## 1.80.0
+
+Public-API keys belong to an account and may reach every workspace in it or a listed subset.
+`PublicApiKey` and `GET /api/v1/me` gain `workspaceIds` (`null` meaning every workspace), and both
+key-minting bodies accept an optional `workspaceIds`. A workspace-scoped call names its workspace
+in the new `x-cat-factory-workspace` request header.
+
+Additive. Every key that existed before reaches exactly the one workspace it was minted for, so it
+keeps working with no header, and an omitted `workspaceIds` on a mint still produces a key for the
+workspace the request acts on. `workspaceId` stays on both shapes and means the workspace the
+listing, mint or request acted on. What a consumer notices only once it holds a wider key: a call
+that names no workspace is refused with 422 `details.reason: workspace_required`, and a workspace
+outside the key's reach answers 404 `workspace_not_found`. A key can never mint or revoke a key
+reaching further than itself (403 `workspace_reach_exceeded`).
+
+## 1.81.0
+
+`/api/v1/directory/*` is new: an account's workspaces, users, account memberships, workspace
+memberships and linked repositories, as keyset-paged snapshots plus an ordered change feed
+(`GET /api/v1/directory/changes?after=<seq>`), for an integration keeping its own copy in sync.
+
+Additive: six `read` operations and the shapes they carry. The routes are account-scoped and read no
+`x-cat-factory-workspace` header; a key limited to some workspaces sees those workspaces' entities
+and is refused users and account memberships (`403 account_scope_required`). Its feed also
+carries the `workspace` deletion of every board that no longer exists, since deleting a board drops
+the key's grant on it. `ConflictError` reasons gain `cursor_expired`, for a feed cursor older than
+the feed's retention.
+
+The number is 1.81.0 because 1.80.0 went to account-level keys while this branch was in flight.
+
+## 1.82.0
+
+Directory webhooks: `GET /api/v1/directory/webhooks`, `PUT` and `DELETE
+/api/v1/directory/webhooks/{webhookId}` register account-level endpoints the directory change feed
+is pushed to, every couple of minutes, signed like the notification webhooks. The document gains an
+OpenAPI 3.1 `webhooks` section naming every push body: `DirectoryWebhookDelivery`, and the existing
+`NotificationWebhookDelivery`, `RunWebhookDelivery` and `PlatformAlertWebhookDelivery`, which become
+generated types in every client.
+
+Additive. The management operations need an `admin` key that reaches every workspace. Pushes are
+at-least-once; a receiver dedupes on `deliveryId`, and the change feed stays the guarantee of
+completeness.
+
+## 1.83.0
+
+`POST /api/v1/pr-assessments` is new (`client.prAssessments.assess`): a pull request in a linked
+repository scored on the merger's complexity, risk and impact axes, its path-derived change class,
+and whether a risk policy would let it land with no person. The answer is a verdict
+(`within_policy` or `requires_review`, with the merge-decision reason and the exceeded axes), so
+the policy's ceilings stay unpublished, as `PublicRiskPolicy` already keeps them.
+
+Additive: one `write` operation and the shapes it carries (`AssessPublicPullRequest`,
+`PublicPrAssessment`, `PublicPrAssessmentPolicy`, `PublicPrAssessmentVerdict`). The call is
+synchronous and persists nothing.
+
+## 1.84.0
+
+A directory `DirectoryUser` gains `accounts`: the GitHub and GitLab accounts the user signed in
+with, each as `{ provider, id, login }`, where `id` is the host's numeric user id. A mirror matches
+people across systems on `(provider, id)`, which survives a rename on the host. Linking such an
+account to a user, or moving it to another user, records a `user` change for each user involved.
+
+Additive. A client built against an older document reads users as before.
+
+## 1.86.0
+
+The scope ladder gains a `webhooks` rung between `read` and `write`
+(`read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin`). It is `read` plus registering and removing push
+endpoints: the directory webhooks (`/api/v1/directory/webhooks`, still for a key reaching every
+workspace) and a workspace's notification webhooks (`/api/v1/notification-webhook[s]`). Those
+operations move from `admin` to `webhooks`.
+
+Additive: a new enum value on `scope`, and operations that admit more keys than before. Every key
+that could call them still can.
+
+## 1.87.0
+
+`GET /api/v1/deployment` is new (`client.deployment.get`): where the deployment serves its web
+app (`appUrl`), so an integration can send a person to one of its deep links, such as the
+add-service screen prefilled with a repository (`?addRepo=<owner>/<name>`). It is account-level, so
+a key reaching several workspaces calls it without naming one, and any `read` key may.
+
+Additive: one `read` operation and its `PublicDeployment` shape.
+
+## 1.88.0
+
+`GET /api/v1/directory/reach` is new (`client.directory.getReach`): the calling key's
+`accountId` and `workspaceIds` (`null` for every workspace), account-scoped like the rest of the
+directory, so it needs no `x-cat-factory-workspace` header. `GET /api/v1/me` names one workspace and
+refuses a key reaching several that sends none, which is every key a directory webhook accepts, so a
+mirror filtering a push by reach reads this instead.
+
+Additive: one `read` operation and its `DirectoryReach` shape.

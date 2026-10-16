@@ -1,3 +1,4 @@
+import type { PublicApiKeyRecord } from '@cat-factory/kernel'
 import {
   createPublicKeyContract,
   listPublicKeysContract,
@@ -8,7 +9,11 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
-import { publicApiKeyToWire } from './keyProjection.js'
+import {
+  assertReachCovers,
+  assertWorkspacesInAccount,
+  publicApiKeyToWire,
+} from './keyProjection.js'
 import { authorize, refuse } from './publicApiAuth.js'
 
 // HEADLESS key provisioning (`GET|POST|DELETE /api/v1/keys`): the external counterpart of the
@@ -61,21 +66,29 @@ export function publicKeyController(): Hono<AppEnv> {
   buildHonoRoute(app, listPublicKeysContract, async (c) => {
     const gate = await authorize(c, listPublicKeysContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
-    const keys = keyStore(c)
-    return c.json({ keys: (await keys.list(gate.auth.workspaceId)).map(publicApiKeyToWire) }, 200)
+    const { accountId, workspaceId } = gate.auth
+    const keys = await keyStore(c).listReaching(accountId, workspaceId)
+    return c.json(
+      { keys: keys.map((key: PublicApiKeyRecord) => publicApiKeyToWire(key, workspaceId)) },
+      200,
+    )
   })
 
   buildHonoRoute(app, createPublicKeyContract, async (c) => {
     const gate = await authorize(c, createPublicKeyContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const keys = keyStore(c)
-    const { label, scope, externalIdentity } = c.req.valid('json')
-    // The account and workspace come from the KEY, never from the body: this surface mints into
-    // the caller's own workspace and has no vocabulary for another one.
+    const { label, scope, externalIdentity, workspaceIds } = c.req.valid('json')
+    // The account comes from the KEY, never from the body. The reach defaults to the workspace this
+    // request acts on (what every mint produced before keys could span workspaces) and can never
+    // exceed the minting key's own.
+    const reach = workspaceIds === undefined ? [gate.auth.workspaceId] : workspaceIds
+    assertReachCovers(gate.auth.workspaceIds, reach, 'mint a key with that reach')
+    await assertWorkspacesInAccount(c.get('container').workspaceService, gate.auth.accountId, reach)
     const { record, secret } = await keys.issue(
       {
         accountId: gate.auth.accountId,
-        workspaceId: gate.auth.workspaceId,
+        workspaceIds: reach,
         // No user minted this one. Attributing it to the human who minted the PARENT key would
         // be a guess dressed as provenance. The key is what acted, so the key is what is
         // recorded, and that is also what the revocation cascade follows.
@@ -96,21 +109,27 @@ export function publicKeyController(): Hono<AppEnv> {
       label,
       scope ?? DEFAULT_MINTED_SCOPE,
     )
-    return c.json({ key: publicApiKeyToWire(record), secret }, 201)
+    return c.json({ key: publicApiKeyToWire(record, gate.auth.workspaceId), secret }, 201)
   })
 
   buildHonoRoute(app, revokePublicKeyContract, async (c) => {
     const gate = await authorize(c, revokePublicKeyContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
-    // Scoped to the caller's workspace by the service, and idempotent, so an unknown id is a 204
-    // rather than a 404: this surface must not become an oracle for which key ids exist.
+    // Scoped to the caller's account, and idempotent, so an unknown id is a 204 rather than a 404:
+    // this surface must not become an oracle for which key ids exist. A key reaching workspaces
+    // the caller cannot is refused, so a restricted admin key cannot retire a wider credential.
     //
     // Revoking the CALLING key is allowed on purpose: a provisioning credential retiring itself at
     // the end of a run is the case, and the request is already authorized by the time it lands.
     // That key is always an app-minted `admin` one, since revoking needs the rung this surface
     // cannot mint. Self-revocation is the PROVISIONER standing down (taking everything it
     // handed out with it), never a provisioned key handing itself back.
-    await keyStore(c).revoke(gate.auth.workspaceId, c.req.valid('param').keyId)
+    const keys = keyStore(c)
+    const target = await keys.getLive(gate.auth.accountId, c.req.valid('param').keyId)
+    if (target) {
+      assertReachCovers(gate.auth.workspaceIds, target.workspaceIds, 'revoke that key')
+      await keys.revoke(gate.auth.accountId, target.id)
+    }
     return c.body(null, 204)
   })
 

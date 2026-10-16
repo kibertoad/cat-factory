@@ -150,7 +150,8 @@
     "infrastructure": "Infrastructure",
     "foundationalServices": "Services fondamentaux",
     "tutorials": "Tutoriels",
-    "help": "Aide"
+    "help": "Aide",
+    "setupChecklist": "Liste de configuration"
   },
   "board": {
     "toast": {
@@ -731,7 +732,8 @@
         "delegated_claim_missing": "Cette étape n’a aucun travail externe à interroger",
         "thread_busy": "Ce fil répond encore",
         "draft_conflict": "Ce brouillon a changé",
-        "session_stale": "La pull request a évolué"
+        "session_stale": "La pull request a évolué",
+        "cursor_expired": "Le flux de modifications a dépassé ce curseur"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -791,7 +793,8 @@
         "delegated_claim_missing": "L’enregistrement de ce que l’exécution a envoyé à l’exécuteur externe est absent : il n’y a donc rien à interroger. L’exécuteur lui-même n’a aucun problème. Rechargez l’exécution et relancez l’étape si elle reste bloquée.",
         "thread_busy": "La question précédente de ce fil n'a pas encore reçu de réponse. Attends cette réponse ou pose ta question dans un autre fil.",
         "draft_conflict": "Ce brouillon de commentaire a été modifié, publié ou abandonné depuis que tu l'as chargé. Recharge les brouillons et refais ta modification.",
-        "session_stale": "De nouveaux commits sont arrivés après la préparation de cette revue, donc ses brouillons peuvent viser les mauvaises lignes. Actualise la revue, vérifie les brouillons, puis publie."
+        "session_stale": "De nouveaux commits sont arrivés après la préparation de cette revue, donc ses brouillons peuvent viser les mauvaises lignes. Actualise la revue, vérifie les brouillons, puis publie.",
+        "cursor_expired": "Les modifications après ce curseur ne sont plus conservées. Prenez un nouvel instantané de l’annuaire, puis suivez le flux à partir de la position qu’il indique."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -2475,7 +2478,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} de plus non affichées",
-      "failingRunGone": "Cette exécution n'est plus chargée et n'a aucune tâche à ouvrir."
+      "failingRunGone": "Cette exécution n'est plus chargée et n'a aucune tâche à ouvrir.",
+      "goTo": {
+        "review": "Relire",
+        "answer": "Répondre",
+        "test": "Tester",
+        "confirm": "Confirmer",
+        "triage": "Trier",
+        "choose": "Choisir",
+        "open": "Ouvrir"
+      }
     },
     "aiProvidersBanner": {
       "setup": {
@@ -2645,7 +2657,10 @@
         "toggleUiMode": "Changer le mode d'interface",
         "chooseRole": "Changer de rôle",
         "foundationalServices": "Services fondamentaux",
-        "notificationSettings": "Gérer le routage des notifications"
+        "notificationSettings": "Gérer le routage des notifications",
+        "setupChecklist": "Liste de configuration",
+        "queueView": "Ouvrir la vue file d’attente",
+        "boardView": "Ouvrir la vue tableau"
       },
       "keywords": {
         "newPipeline": "pipeline agents chaîne",
@@ -2673,7 +2688,11 @@
         "chooseRole": "rôle ingénieur chef de produit designer profil vue simplifiée",
         "tutorial": "tutoriel visite guide aide apprendre découverte",
         "foundationalServices": "capacité partagée plateforme service api contrat openapi catalogue",
-        "notificationSettings": "notifications e-mail routage canaux boîte"
+        "notificationSettings": "notifications e-mail routage canaux boîte",
+        "setupChecklist": "configuration liste setup runner modèle github stockage environnement",
+        "queueView": "file attente vue liste en attente",
+        "boardView": "tableau canevas carte vue planifier",
+        "describeWork": "décrire nouveau travail tâche ajouter créer fonctionnalité bug"
       }
     },
     "integrationsHub": {
@@ -2891,19 +2910,23 @@
     "scopeHint": "Chaque niveau inclut les précédents.",
     "scope": {
       "read": {
-        "label": "Lecture seule",
+        "label": "Lecture · read",
         "description": "Voir les services, les tâches, les pipelines et les exécutions."
       },
+      "webhooks": {
+        "label": "Webhooks",
+        "description": "Et aussi enregistrer des webhooks qui envoient les changements à un autre système."
+      },
       "write": {
-        "label": "Lecture et écriture",
+        "label": "Écriture · write",
         "description": "Et aussi créer et lancer des tâches."
       },
       "decide": {
-        "label": "Lecture, écriture et décision",
+        "label": "Décision · decide",
         "description": "Et aussi répondre aux questions qu'attend une exécution en pause."
       },
       "admin": {
-        "label": "Accès complet",
+        "label": "Accès complet · admin",
         "description": "Et aussi supprimer des tâches et agir sur les notifications, ce qui peut fusionner une pull request."
       }
     },
@@ -3583,7 +3606,9 @@
         "createdByKey": "la clé d’API {id}",
         "revoke": "Révoquer le jeton",
         "boundToYou": "Votre abonnement",
-        "boundToOther": "Abonnement de {user}"
+        "boundToOther": "Abonnement de {user}",
+        "reachAll": "Tous les espaces de travail",
+        "reachCount": "{count} espaces de travail"
       },
       "add": {
         "heading": "Créer un jeton",
@@ -3591,19 +3616,27 @@
         "labelHelp": "Un nom pour reconnaître ce jeton plus tard.",
         "labelPlaceholder": "ex. pipeline CI",
         "scope": "Portée",
-        "scopeHelp": "Ce que ce jeton peut faire : lecture seule, lecture et écriture, ou accès complet (qui autorise aussi la suppression).",
+        "scopeHelp": "Chaque niveau inclut tout ce que permet le précédent. Lecture : consulter les tâches, les exécutions et leurs résultats. Webhooks : en plus, enregistrer et supprimer les webhooks qui envoient les changements à un autre système, comme les webhooks d'annuaire et de notification. Écriture : en plus, créer, modifier, démarrer, arrêter et relancer des tâches, et lancer des revues et des évaluations. Décision : en plus, répondre aux décisions humaines d'une exécution (approbations, constats de revue, questions d'entretien et de clarification, tests manuels) ; un jeton a aussi besoin de ce niveau pour démarrer un pipeline qui peut s'arrêter sur l'une d'elles. Accès complet (admin) : en plus, ajouter, configurer et supprimer des services, supprimer des tâches, lier des dépôts, gérer les connexions d'environnement, et agir sur les notifications.",
         "create": "Créer le jeton",
         "identity": "S'exécute en tant que",
         "identitySystem": "Cet espace de travail (jeton système)",
         "identitySelf": "Moi (jeton personnel)",
         "identitySystemHelp": "Les exécutions lancées avec ce jeton appartiennent à l'espace de travail et ne sont attribuées à personne. Il ne peut utiliser l'abonnement personnel Claude / Codex / GLM de qui que ce soit : une tâche fixée sur un tel modèle est refusée plutôt que facturée à quelqu'un d'absent. À utiliser pour la CI et les intégrations partagées.",
-        "identitySelfHelp": "Les exécutions lancées avec ce jeton vous sont attribuées et peuvent utiliser votre abonnement personnel Claude / Codex / GLM. Chaque appel doit aussi envoyer votre mot de passe personnel dans l'en-tête X-Personal-Password ; il n'est jamais conservé. À utiliser pour vos propres exécutions headless."
+        "identitySelfHelp": "Les exécutions lancées avec ce jeton vous sont attribuées et peuvent utiliser votre abonnement personnel Claude / Codex / GLM. Chaque appel doit aussi envoyer votre mot de passe personnel dans l'en-tête X-Personal-Password ; il n'est jamais conservé. À utiliser pour vos propres exécutions headless.",
+        "reach": "Espaces de travail",
+        "reachHelp": "Les espaces de travail sur lesquels ce jeton peut agir. Un jeton qui en couvre plusieurs indique l’espace de travail à chaque appel dans l’en-tête x-cat-factory-workspace.",
+        "reachAdminOnly": "Seul un administrateur du compte peut créer un jeton qui couvre d'autres espaces de travail, ce dont les webhooks d'annuaire ont besoin. Demandez-le à l'un d'eux.",
+        "reachThis": "Cet espace de travail uniquement",
+        "reachAll": "Tous les espaces de travail du compte",
+        "reachSelected": "Espaces de travail sélectionnés",
+        "reachPick": "Choisir des espaces de travail"
       },
       "scopes": {
-        "read": "Lecture seule",
-        "write": "Lecture et écriture",
-        "decide": "Répondre aux décisions",
-        "admin": "Accès complet"
+        "read": "Lecture · read",
+        "webhooks": "Webhooks (inclut Lecture)",
+        "write": "Écriture · write (inclut Webhooks)",
+        "decide": "Décision · decide (inclut Écriture)",
+        "admin": "Accès complet · admin (inclut Décision)"
       },
       "toast": {
         "loadFailed": "Impossible de charger les jetons d'API",
@@ -4517,6 +4550,7 @@
       },
       "errors": {
         "listInstallations": "Impossible de lister les installations GitHub",
+        "loadProjection": "Impossible de charger les dépôts, les pull requests et les issues",
         "startInstall": "Impossible de démarrer l'installation de la GitHub App",
         "connect": "Connexion impossible"
       }
@@ -4611,7 +4645,8 @@
         "frontendWiringFailedNote": "Les réglages du frontend n'ont pas été enregistrés. Ouvrez l'inspecteur de chaque application frontend pour définir son sous-répertoire et ses services backend."
       },
       "repoType": "Type de dépôt",
-      "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement)."
+      "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement).",
+      "prefillProviderMismatch": "Le lien visait {repo} chez un autre hébergeur, et ce tableau est connecté à {connected}. Cherchez le dépôt à la main, ou ouvrez le lien sur un tableau connecté à son hébergeur."
     },
     "repoTree": {
       "root": "racine",
@@ -8115,6 +8150,10 @@
             "title": "Le tableau",
             "body": "Les services, modules et tâches vivent sur ce canevas. Faites glisser pour vous déplacer, faites défiler pour zoomer et cliquez sur une carte pour l'inspecter."
           },
+          "views": {
+            "title": "Deux vues",
+            "body": "Le tableau a une deuxième vue. La file d’attente liste ce qui vous attend dans tous les services. Une fois la visite terminée, passez ici de la file d’attente à ce canevas. L’application s’ouvre sur la dernière vue utilisée."
+          },
           "sidebar": {
             "title": "La barre latérale",
             "body": "Tout le reste se trouve ici : créer des pipelines, connecter des dépôts et des intégrations, et les paramètres de l'espace de travail."
@@ -8734,5 +8773,146 @@
         "unsupportedVersion": "Ce thème a été créé avec un format de l'éditeur plus récent que celui que cette application comprend."
       }
     }
+  },
+  "setup": {
+    "title": "Configuration",
+    "progress": "{done} sur {total} terminées",
+    "intro": "Ce dont ce workspace a besoin pour qu’une tâche s’exécute et soit fusionnée.",
+    "required": "obligatoire",
+    "optional": "facultatif",
+    "action": {
+      "change": "Modifier",
+      "connect": "Configurer",
+      "fix": "Corriger",
+      "review": "Examiner",
+      "retry": "Réessayer"
+    },
+    "rows": {
+      "checking": "Vérification…",
+      "notNeeded": "Ce déploiement ne l’utilise pas.",
+      "model": {
+        "title": "Modèle",
+        "done": "Un modèle est disponible.",
+        "missing": "Aucun modèle n’est disponible. Aucun agent ne peut s’exécuter tant que vous n’avez pas connecté un fournisseur."
+      },
+      "sourceControl": {
+        "title": "Gestion de versions",
+        "done": "Connecté. Les agents peuvent pousser des branches et ouvrir des pull requests.",
+        "missing": "Non connecté. Les agents ne peuvent pas ouvrir de pull requests."
+      },
+      "agentExecutor": {
+        "title": "Où les agents s’exécutent",
+        "done": "Un runner est configuré.",
+        "missing": "Aucun runner n’est configuré. Rien ne peut s’exécuter tant que vous n’en connectez pas un.",
+        "notNeeded": "Ce déploiement exécute les agents sans runner."
+      },
+      "ephemeralEnvironments": {
+        "title": "Environnements de test",
+        "done": "Configuré. Les testeurs peuvent utiliser un aperçu en direct.",
+        "missing": "Non configuré. Les testeurs qui ont besoin d’un aperçu en direct ne s’exécutent pas. Tous les autres agents s’exécutent."
+      },
+      "binaryStorage": {
+        "title": "Stockage des captures d’écran",
+        "done": "Configuré. Les vérifications visuelles sont activées.",
+        "missing": "Non configuré. Les vérifications visuelles sont désactivées."
+      }
+    },
+    "causes": {
+      "unreachable": "Configuré, mais injoignable pour le moment.",
+      "incomplete": "Connecté, mais un réglage obligatoire manque.",
+      "rejected": "GitHub a refusé le jeton d’accès.",
+      "underscoped": "Le jeton d’accès ne peut ni pousser ni ouvrir de pull requests.",
+      "presetBroken": "Le préréglage de modèle par défaut désigne un modèle qui n’est pas disponible.",
+      "probeFailed": "La vérification n’a pas répondu.",
+      "notReported": "Ce déploiement ne le signale pas."
+    },
+    "also": {
+      "title": "Aussi ici",
+      "pipelines": "Pipelines",
+      "riskPolicies": "Politiques de fusion",
+      "modelPresets": "Préréglages de modèle",
+      "counts": {
+        "repair": "À réparer : {count}",
+        "outdated": "Obsolètes : {count}",
+        "new": "Nouveaux : {count}"
+      },
+      "settings": "Réglages et connexions",
+      "workspaceSettings": "Réglages du workspace",
+      "integrations": "Intégrations"
+    }
+  },
+  "queue": {
+    "title": "File d’attente",
+    "summary": "{needsYou} vous attendent · {ready} prêtes à fusionner",
+    "filter": {
+      "allServices": "Tous les services",
+      "service": "Filtrer par service"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Vous attend",
+        "empty": "Rien ne vous attend."
+      },
+      "inFlight": {
+        "label": "En cours",
+        "empty": "Aucun agent ne travaille en ce moment."
+      },
+      "readyToMerge": {
+        "label": "Prête à fusionner",
+        "empty": "Aucune pull request n’attend d’être fusionnée."
+      }
+    },
+    "waiting": {
+      "label": "Pas commencé ({count})",
+      "empty": "Rien n’attend de démarrer."
+    },
+    "done": {
+      "count": "Fusionnées depuis le {date} : {count}",
+      "countAll": "Fusionnées : {count}",
+      "show": "Afficher",
+      "hide": "Masquer",
+      "capped": "Affiche les {shown} plus récentes sur {total}."
+    },
+    "card": {
+      "waited": "a attendu {duration}",
+      "active": "active il y a {duration}",
+      "merged": "fusionnée il y a {duration}",
+      "step": "étape {current} sur {total}",
+      "showOnBoard": "Afficher sur le tableau",
+      "answer": "Répondre",
+      "budgetPaused": "La limite de dépenses a mis cette exécution en pause. Elle reprend quand la limite augmente.",
+      "parked": "L’exécution attend une personne. Ouvrez la tâche pour voir ce qu’il faut.",
+      "waitingOn": "Attend {deps}",
+      "pr": "Pull request #{number}"
+    },
+    "describeWork": "Décrire un nouveau travail"
+  },
+  "views": {
+    "title": "Vues",
+    "queue": "File d’attente",
+    "board": "Tableau",
+    "openQueue": "Ouvrir la vue file d’attente"
+  },
+  "describeWork": {
+    "title": "Décrire un nouveau travail",
+    "textLabel": "Ce qu’il faut faire",
+    "textHint": "Une phrase suffit. Ajoutez plus de détails si vous en avez.",
+    "textPlaceholder": "Ajouter un journal d’audit pour les connexions. Enregistrer chaque connexion avec l’heure, l’utilisateur et le résultat.",
+    "savedAs": "Titre de la tâche : {title}",
+    "serviceLabel": "Service",
+    "servicePlaceholder": "Sélectionnez un service",
+    "kindLabel": "Type",
+    "kind": {
+      "feature": "Fonctionnalité",
+      "bug": "Bogue"
+    },
+    "moreKinds": "Plus de types…",
+    "changeHowItRuns": "Modifier le déroulement",
+    "workspaceDefault": "Défaut du workspace",
+    "defaultPipelineHint": "Le défaut du workspace : {name}. Un pipeline choisi ici le remplace pour cette tâche.",
+    "attachContext": "Joindre du contexte (ouvre le formulaire complet)",
+    "add": "Ajouter à la file",
+    "addAndStart": "Ajouter et démarrer",
+    "addedToast": "« {title} » a été ajoutée à la file"
   }
 }

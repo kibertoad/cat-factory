@@ -55,6 +55,7 @@ export function useNavContributions() {
     foundationalServices: () => ui.openFoundationalServices(),
     mergeThresholds: () => ui.openWorkspaceSettings('merge'),
     workspaceSettings: () => ui.openWorkspaceSettings(),
+    setupChecklist: () => ui.openSetupChecklist(),
     modelConfiguration: () => ui.openModelConfig(),
     serviceFragmentDefaults: () => ui.openWorkspaceSettings('fragments'),
     localModels: () => ui.openLocalModels(),
@@ -72,6 +73,9 @@ export function useNavContributions() {
     // The QUESTION, not a toggle: with three roles there is no unambiguous "next one", and the
     // prompt is the one surface that states what each role gives you before you pick it.
     chooseRole: () => useUiRoleStore().openPrompt(),
+    describeWork: () => ui.openDescribeWork(),
+    queueView: () => useWorkViewStore().show('queue'),
+    boardView: () => useWorkViewStore().show('board'),
   }
 
   /** Run a contribution's action (consumer `run` closure wins over the id map). */

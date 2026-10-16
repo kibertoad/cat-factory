@@ -12,6 +12,7 @@ import type { OpenRouterModelMeta } from '~/types/openrouter'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -205,7 +206,7 @@ function manageKeys() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="OpenRouter" :ui="{ content: 'max-w-2xl' }">
+  <AppModal size="form" v-model:open="open" title="OpenRouter">
     <template #title>
       <IntegrationBackTitle title="OpenRouter" @back="back" />
     </template>
@@ -387,5 +388,5 @@ function manageKeys() {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

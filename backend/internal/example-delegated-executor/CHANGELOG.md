@@ -1,5 +1,60 @@
 # @cat-factory/example-delegated-executor
 
+## 0.1.22
+
+### Patch Changes
+
+- @cat-factory/agents@0.172.5
+  - @cat-factory/kernel@0.360.4
+
+## 0.1.21
+
+### Patch Changes
+
+- @cat-factory/agents@0.172.4
+  - @cat-factory/kernel@0.360.3
+
+## 0.1.20
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/kernel@0.360.2
+  - @cat-factory/agents@0.172.3
+
+## 0.1.19
+
+### Patch Changes
+
+- @cat-factory/agents@0.172.2
+  - @cat-factory/kernel@0.360.1
+
+## 0.1.18
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/kernel@0.360.0
+  - @cat-factory/agents@0.172.1
+
+## 0.1.17
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/agents@0.172.0
+  - @cat-factory/kernel@0.359.1
+
+## 0.1.16
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/kernel@0.359.0
+  - @cat-factory/agents@0.171.7
+
 ## 0.1.15
 
 ### Patch Changes

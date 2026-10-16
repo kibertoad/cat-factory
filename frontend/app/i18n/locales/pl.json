@@ -150,7 +150,8 @@
     "infrastructure": "Infrastruktura",
     "foundationalServices": "Usługi fundamentalne",
     "tutorials": "Samouczki",
-    "help": "Pomoc"
+    "help": "Pomoc",
+    "setupChecklist": "Lista konfiguracji"
   },
   "board": {
     "toast": {
@@ -731,7 +732,8 @@
         "delegated_claim_missing": "Ten krok nie ma zewnętrznej pracy do sprawdzenia",
         "thread_busy": "Ten wątek wciąż odpowiada",
         "draft_conflict": "Ten szkic się zmienił",
-        "session_stale": "Pull request poszedł dalej"
+        "session_stale": "Pull request poszedł dalej",
+        "cursor_expired": "Kanał zmian wyszedł poza ten kursor"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -791,7 +793,8 @@
         "delegated_claim_missing": "Brakuje zapisu tego, co przebieg wysłał do zewnętrznego wykonawcy, więc nie ma czego odpytywać. Z samym wykonawcą wszystko jest w porządku. Odśwież przebieg i uruchom krok ponownie, jeśli nadal stoi.",
         "thread_busy": "Poprzednie pytanie w tym wątku nie ma jeszcze odpowiedzi. Poczekaj na nią albo zapytaj w innym wątku.",
         "draft_conflict": "Od wczytania ten szkic komentarza został edytowany, opublikowany lub odrzucony. Wczytaj szkice ponownie i wprowadź zmianę jeszcze raz.",
-        "session_stale": "Po przygotowaniu tej recenzji pojawiły się nowe commity, więc szkice mogą wskazywać złe linie. Odśwież recenzję, sprawdź szkice i dopiero wtedy opublikuj."
+        "session_stale": "Po przygotowaniu tej recenzji pojawiły się nowe commity, więc szkice mogą wskazywać złe linie. Odśwież recenzję, sprawdź szkice i dopiero wtedy opublikuj.",
+        "cursor_expired": "Zmiany po tym kursorze nie są już przechowywane. Pobierz nowy zrzut katalogu, a potem śledź kanał od pozycji, którą zwróci."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -2475,7 +2478,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} więcej niepokazanych",
-      "failingRunGone": "To uruchomienie nie jest już wczytane i nie ma zadania do otwarcia."
+      "failingRunGone": "To uruchomienie nie jest już wczytane i nie ma zadania do otwarcia.",
+      "goTo": {
+        "review": "Przejrzyj",
+        "answer": "Odpowiedz",
+        "test": "Przetestuj",
+        "confirm": "Potwierdź",
+        "triage": "Posortuj",
+        "choose": "Wybierz",
+        "open": "Otwórz"
+      }
     },
     "aiProvidersBanner": {
       "setup": {
@@ -2645,7 +2657,10 @@
         "toggleUiMode": "Zmień tryb interfejsu",
         "chooseRole": "Zmień swoją rolę",
         "foundationalServices": "Usługi fundamentalne",
-        "notificationSettings": "Zarządzaj routingiem powiadomień"
+        "notificationSettings": "Zarządzaj routingiem powiadomień",
+        "setupChecklist": "Lista konfiguracji",
+        "queueView": "Otwórz widok kolejki",
+        "boardView": "Otwórz widok tablicy"
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
@@ -2673,7 +2688,11 @@
         "chooseRole": "rola inżynier menedżer produktu projektant persona prostszy widok",
         "tutorial": "samouczek przewodnik pomoc nauka wprowadzenie",
         "foundationalServices": "wspólna możliwość platforma usługa api kontrakt openapi katalog",
-        "notificationSettings": "powiadomienia e-mail routing kanały skrzynka"
+        "notificationSettings": "powiadomienia e-mail routing kanały skrzynka",
+        "setupChecklist": "konfiguracja lista setup runner model github magazyn środowisko",
+        "queueView": "kolejka widok lista oczekuje",
+        "boardView": "tablica kanwa mapa widok planowanie",
+        "describeWork": "opisz nową pracę zadanie dodaj utwórz funkcja błąd"
       }
     },
     "integrationsHub": {
@@ -2891,19 +2910,23 @@
     "scopeHint": "Każdy poziom obejmuje poprzednie.",
     "scope": {
       "read": {
-        "label": "Tylko odczyt",
+        "label": "Odczyt · read",
         "description": "Podgląd usług, zadań, potoków i uruchomień."
       },
+      "webhooks": {
+        "label": "Webhooki · webhooks",
+        "description": "Dodatkowo rejestrowanie webhooków wysyłających zmiany do innego systemu."
+      },
       "write": {
-        "label": "Odczyt i zapis",
+        "label": "Zapis · write",
         "description": "Dodatkowo tworzenie i uruchamianie zadań."
       },
       "decide": {
-        "label": "Odczyt, zapis i decyzje",
+        "label": "Decyzje · decide",
         "description": "Dodatkowo odpowiadanie na pytania, na które czeka wstrzymane uruchomienie."
       },
       "admin": {
-        "label": "Pełny dostęp",
+        "label": "Pełny dostęp · admin",
         "description": "Dodatkowo usuwanie zadań i reagowanie na powiadomienia, co może scalić pull request."
       }
     },
@@ -3583,7 +3606,9 @@
         "createdByKey": "klucz API {id}",
         "revoke": "Unieważnij token",
         "boundToYou": "Twoja subskrypcja",
-        "boundToOther": "Subskrypcja użytkownika {user}"
+        "boundToOther": "Subskrypcja użytkownika {user}",
+        "reachAll": "Wszystkie obszary robocze",
+        "reachCount": "Obszary robocze: {count}"
       },
       "add": {
         "heading": "Utwórz token",
@@ -3591,19 +3616,27 @@
         "labelHelp": "Nazwa, po której później rozpoznasz ten token.",
         "labelPlaceholder": "np. potok CI",
         "scope": "Zakres",
-        "scopeHelp": "Co może ten token: tylko odczyt, odczyt i zapis lub pełny dostęp (który pozwala także na usuwanie).",
+        "scopeHelp": "Każdy poziom obejmuje wszystko, na co pozwala poprzedni. Odczyt: przeglądanie zadań, przebiegów i ich wyników. Webhooki: dodatkowo rejestrowanie i usuwanie webhooków wysyłających zmiany do innego systemu, takich jak webhooki katalogu i powiadomień. Zapis: dodatkowo tworzenie, edytowanie, uruchamianie, zatrzymywanie i ponawianie zadań oraz uruchamianie przeglądów i ocen. Decyzje: dodatkowo odpowiadanie na decyzje człowieka w przebiegu (zatwierdzenia, uwagi z przeglądu, pytania z wywiadu i pytania doprecyzowujące, testy ręczne); token potrzebuje tego poziomu także do uruchomienia potoku, który może się zatrzymać na takiej decyzji. Pełny dostęp (admin): dodatkowo dodawanie, konfigurowanie i usuwanie usług, usuwanie zadań, łączenie repozytoriów, zarządzanie połączeniami środowisk oraz reagowanie na powiadomienia.",
         "create": "Utwórz token",
         "identity": "Działa jako",
         "identitySystem": "Ten obszar roboczy (token systemowy)",
         "identitySelf": "Ja (token osobisty)",
         "identitySystemHelp": "Uruchomienia rozpoczęte tym tokenem należą do obszaru roboczego i nie są przypisywane do żadnej osoby. Token nie może korzystać z niczyjej osobistej subskrypcji Claude / Codex / GLM, więc zadanie przypięte do takiego modelu zostanie odrzucone, zamiast obciążyć kogoś nieobecnego. Użyj go do CI i wspólnych integracji.",
-        "identitySelfHelp": "Uruchomienia rozpoczęte tym tokenem są przypisywane Tobie i mogą korzystać z Twojej osobistej subskrypcji Claude / Codex / GLM. Każde takie wywołanie musi dodatkowo przesłać Twoje hasło osobiste w nagłówku X-Personal-Password; nie jest ono nigdzie zapisywane. Użyj go do własnych uruchomień headless."
+        "identitySelfHelp": "Uruchomienia rozpoczęte tym tokenem są przypisywane Tobie i mogą korzystać z Twojej osobistej subskrypcji Claude / Codex / GLM. Każde takie wywołanie musi dodatkowo przesłać Twoje hasło osobiste w nagłówku X-Personal-Password; nie jest ono nigdzie zapisywane. Użyj go do własnych uruchomień headless.",
+        "reach": "Obszary robocze",
+        "reachHelp": "W których obszarach roboczych ten token może działać. Token obejmujący więcej niż jeden wskazuje obszar roboczy przy każdym wywołaniu w nagłówku x-cat-factory-workspace.",
+        "reachAdminOnly": "Tylko administrator konta może utworzyć token obejmujący inne obszary robocze, którego wymagają webhooki katalogu. Poproś o to administratora.",
+        "reachThis": "Tylko ten obszar roboczy",
+        "reachAll": "Wszystkie obszary robocze konta",
+        "reachSelected": "Wybrane obszary robocze",
+        "reachPick": "Wybierz obszary robocze"
       },
       "scopes": {
-        "read": "Tylko odczyt",
-        "write": "Odczyt i zapis",
-        "decide": "Odpowiadanie na decyzje",
-        "admin": "Pełny dostęp"
+        "read": "Odczyt · read",
+        "webhooks": "Webhooki · webhooks (obejmuje Odczyt)",
+        "write": "Zapis · write (obejmuje Webhooki)",
+        "decide": "Decyzje · decide (obejmuje Zapis)",
+        "admin": "Pełny dostęp · admin (obejmuje Decyzje)"
       },
       "toast": {
         "loadFailed": "Nie udało się załadować tokenów API",
@@ -4517,6 +4550,7 @@
       },
       "errors": {
         "listInstallations": "Nie udało się wyświetlić instalacji GitHub",
+        "loadProjection": "Nie udało się wczytać repozytoriów, pull requestów i zgłoszeń",
         "startInstall": "Nie udało się rozpocząć instalacji aplikacji GitHub",
         "connect": "Nie udało się połączyć"
       }
@@ -4611,7 +4645,8 @@
         "frontendWiringFailedNote": "Ustawienia frontendu nie zostały zapisane. Otwórz inspektor każdej aplikacji frontendowej, aby ustawić jej podkatalog i usługi backendowe."
       },
       "repoType": "Typ repozytorium",
-      "repoTypeHint": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i)."
+      "repoTypeHint": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i).",
+      "prefillProviderMismatch": "Link wskazywał {repo} u innego dostawcy, a ta tablica jest połączona z {connected}. Wyszukaj repozytorium ręcznie albo otwórz link na tablicy połączonej z jego dostawcą."
     },
     "repoTree": {
       "root": "katalog główny",
@@ -8115,6 +8150,10 @@
             "title": "Tablica",
             "body": "Usługi, moduły i zadania żyją na tym płótnie. Przeciągaj, aby przesuwać widok, przewijaj, aby zmieniać powiększenie, i klikaj karty, aby zobaczyć szczegóły."
           },
+          "views": {
+            "title": "Dwa widoki",
+            "body": "Tablica ma drugi widok. Kolejka pokazuje, co czeka na ciebie we wszystkich usługach. Po zakończeniu przewodnika przełączasz się tutaj między kolejką a tym obszarem roboczym. Aplikacja otwiera ostatnio używany widok."
+          },
           "sidebar": {
             "title": "Pasek boczny",
             "body": "Tu znajdziesz całą resztę: budowanie potoków, podłączanie repozytoriów i integracji oraz ustawienia obszaru roboczego."
@@ -8734,5 +8773,146 @@
         "unsupportedVersion": "Ten motyw powstał w nowszym formacie edytora, niż rozumie ta aplikacja."
       }
     }
+  },
+  "setup": {
+    "title": "Konfiguracja",
+    "progress": "{done} z {total} gotowe",
+    "intro": "Czego ten workspace potrzebuje, aby zadanie mogło działać i zostać scalone.",
+    "required": "wymagane",
+    "optional": "opcjonalne",
+    "action": {
+      "change": "Zmień",
+      "connect": "Skonfiguruj",
+      "fix": "Napraw",
+      "review": "Sprawdź",
+      "retry": "Spróbuj ponownie"
+    },
+    "rows": {
+      "checking": "Sprawdzanie…",
+      "notNeeded": "To wdrożenie tego nie używa.",
+      "model": {
+        "title": "Model",
+        "done": "Model jest dostępny.",
+        "missing": "Brak dostępnego modelu. Żaden agent nie może działać, dopóki nie połączysz dostawcy."
+      },
+      "sourceControl": {
+        "title": "Kontrola wersji",
+        "done": "Połączono. Agenci mogą wypychać gałęzie i otwierać pull requesty.",
+        "missing": "Nie połączono. Agenci nie mogą otwierać pull requestów."
+      },
+      "agentExecutor": {
+        "title": "Gdzie działają agenci",
+        "done": "Runner jest skonfigurowany.",
+        "missing": "Brak skonfigurowanego runnera. Nic nie może działać, dopóki go nie połączysz.",
+        "notNeeded": "To wdrożenie uruchamia agentów bez runnera."
+      },
+      "ephemeralEnvironments": {
+        "title": "Środowiska testowe",
+        "done": "Skonfigurowano. Testerzy mogą używać podglądu na żywo.",
+        "missing": "Nie skonfigurowano. Testerzy, którzy potrzebują podglądu na żywo, nie działają. Pozostali agenci działają."
+      },
+      "binaryStorage": {
+        "title": "Magazyn zrzutów ekranu",
+        "done": "Skonfigurowano. Kontrole wizualne są włączone.",
+        "missing": "Nie skonfigurowano. Kontrole wizualne są wyłączone."
+      }
+    },
+    "causes": {
+      "unreachable": "Skonfigurowane, ale teraz nieosiągalne.",
+      "incomplete": "Połączone, ale brakuje wymaganego ustawienia.",
+      "rejected": "GitHub odrzucił token dostępu.",
+      "underscoped": "Token dostępu nie może wypychać zmian ani otwierać pull requestów.",
+      "presetBroken": "Domyślny preset modelu wskazuje model, który nie jest dostępny.",
+      "probeFailed": "Sprawdzenie nie odpowiedziało.",
+      "notReported": "To wdrożenie tego nie zgłasza."
+    },
+    "also": {
+      "title": "Także tutaj",
+      "pipelines": "Pipeline'y",
+      "riskPolicies": "Zasady scalania",
+      "modelPresets": "Presety modeli",
+      "counts": {
+        "repair": "Do naprawy: {count}",
+        "outdated": "Nieaktualne: {count}",
+        "new": "Nowe: {count}"
+      },
+      "settings": "Ustawienia i połączenia",
+      "workspaceSettings": "Ustawienia workspace'u",
+      "integrations": "Integracje"
+    }
+  },
+  "queue": {
+    "title": "Kolejka",
+    "summary": "Czeka na ciebie: {needsYou} · gotowe do scalenia: {ready}",
+    "filter": {
+      "allServices": "Wszystkie serwisy",
+      "service": "Filtruj według serwisu"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Czeka na ciebie",
+        "empty": "Nic na ciebie nie czeka."
+      },
+      "inFlight": {
+        "label": "W toku",
+        "empty": "Żaden agent teraz nie pracuje."
+      },
+      "readyToMerge": {
+        "label": "Gotowe do scalenia",
+        "empty": "Żaden pull request nie czeka na scalenie."
+      }
+    },
+    "waiting": {
+      "label": "Nierozpoczęte ({count})",
+      "empty": "Nic nie czeka na start."
+    },
+    "done": {
+      "count": "Scalone od {date}: {count}",
+      "countAll": "Scalone: {count}",
+      "show": "Pokaż",
+      "hide": "Ukryj",
+      "capped": "Pokazuje najnowsze {shown} z {total}."
+    },
+    "card": {
+      "waited": "czekało {duration}",
+      "active": "aktywne {duration} temu",
+      "merged": "scalone {duration} temu",
+      "step": "krok {current} z {total}",
+      "showOnBoard": "Pokaż na tablicy",
+      "answer": "Odpowiedz",
+      "budgetPaused": "Limit wydatków wstrzymał to uruchomienie. Będzie kontynuowane po podniesieniu limitu.",
+      "parked": "Uruchomienie czeka na człowieka. Otwórz zadanie, aby zobaczyć, czego potrzebuje.",
+      "waitingOn": "Czeka na {deps}",
+      "pr": "Pull request #{number}"
+    },
+    "describeWork": "Opisz nową pracę"
+  },
+  "views": {
+    "title": "Widoki",
+    "queue": "Kolejka",
+    "board": "Tablica",
+    "openQueue": "Otwórz widok kolejki"
+  },
+  "describeWork": {
+    "title": "Opisz nową pracę",
+    "textLabel": "Co trzeba zrobić",
+    "textHint": "Wystarczy jedno zdanie. Dodaj więcej szczegółów, jeśli je masz.",
+    "textPlaceholder": "Dodaj dziennik audytu dla zdarzeń logowania. Zapisuj każde logowanie z czasem, użytkownikiem i wynikiem.",
+    "savedAs": "Tytuł zadania: {title}",
+    "serviceLabel": "Serwis",
+    "servicePlaceholder": "Wybierz serwis",
+    "kindLabel": "Rodzaj",
+    "kind": {
+      "feature": "Funkcja",
+      "bug": "Błąd"
+    },
+    "moreKinds": "Więcej rodzajów…",
+    "changeHowItRuns": "Zmień sposób uruchomienia",
+    "workspaceDefault": "Domyślne dla workspace'u",
+    "defaultPipelineHint": "Domyślny dla workspace'u: {name}. Pipeline wybrany tutaj zastępuje go w tym zadaniu.",
+    "attachContext": "Dołącz kontekst (otwiera pełny formularz)",
+    "add": "Dodaj do kolejki",
+    "addAndStart": "Dodaj i uruchom",
+    "addedToast": "Dodano „{title}” do kolejki"
   }
 }

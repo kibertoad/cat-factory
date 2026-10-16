@@ -10,6 +10,7 @@ import type {
   InfrastructureTab,
   ProviderConnectionKind,
 } from '~/types/providerConnections'
+import type { AddServicePrefill } from '~/composables/useAddRepoDeepLink'
 import type { PendingContext } from '~/composables/useContextLinking'
 import {
   infraSetupDismissalKey,
@@ -27,6 +28,14 @@ export interface AddTaskPrefill {
   description?: string
   /** Context items staged on the new task (e.g. the source issue), linked once created. */
   context?: PendingContext[]
+  /**
+   * Choices a person already made on another surface (the one-sentence intake), carried over so
+   * the hand-off does not quietly reset them. Absent means the form's own defaults.
+   */
+  taskType?: 'feature' | 'bug'
+  pipelineId?: string
+  riskPolicyId?: string
+  modelPresetId?: string
 }
 
 /**
@@ -90,6 +99,11 @@ export interface ReviewFrictionModalContext {
    * started a second pipeline run against the same request.
    */
   pending?: () => boolean
+  /**
+   * Close the form that raised the friction. "Go review" and each debt row leave for a waiting
+   * task, and the form must not stay open over it; only the opener knows which form it is.
+   */
+  onLeave: () => void
 }
 
 /** Clears both hub came-from markers; injected into the slices whose `open*` handlers reset them. */
@@ -170,6 +184,80 @@ function createHealthAdvisoryModals() {
 }
 
 /**
+ * The pipeline builder and the model configuration never stack. Opening the model configuration
+ * from the builder closes the builder, shows the model configuration once the builder has
+ * finished leaving, and brings the builder back when the model configuration closes.
+ *
+ * The builder is a `USlideover`, a modal Reka layer: while it is mounted, Reka sets
+ * `pointer-events: none` on `<body>`, and lifts it only when the exit animation ends. The model
+ * configuration is the app's own takeover, teleported to `<body>` and not a Reka layer, so shown
+ * over the builder (or during its exit) every click landed on the builder behind it. Waiting for
+ * the exit (`builderLeft`, from the builder's `after:leave`) fixes that without an escape hatch on
+ * the panel, which would also defeat the pointer lock of the panel's OWN dropdowns. The fix lives
+ * here, not at the builder's "Configure models" button, because the "choose a model" action on a
+ * run-admission failure toast (`preset_unsatisfiable`, `model_policy_blocked`) also opens the
+ * model configuration.
+ *
+ * This owns BOTH openers: `openBuilder` closes the model configuration and drops a pending return,
+ * so a builder the user opened another way is not followed by a stale reopen.
+ *
+ * Closing the builder unmounts its body. The draft pipeline is in the pipelines store and survives,
+ * but component-local state does not: a half-typed output size in the binary-output picker, the
+ * rejected media types and references it reports, and the guarded-gate roster. The builder
+ * reloads nothing on the way back (`consumeBuilderReturn`), since nothing it loads changes while
+ * the model configuration is open.
+ *
+ * Other takeovers (reports, kaizen, operator dashboard) opened over a modal Reka layer have the
+ * same unclickable-takeover defect and are not handled here.
+ */
+function createBuilderModelConfigHandoff(
+  misc: Pick<ReturnType<typeof createMiscModals>, 'builderOpen'>,
+  panels: Pick<ReturnType<typeof createIntegrationPanelModals>, 'modelConfigOpen'>,
+) {
+  const returnToBuilder = ref(false)
+  const showAfterBuilderExit = ref(false)
+  const returningToBuilder = ref(false)
+
+  function openModelConfig() {
+    if (showAfterBuilderExit.value) return
+    if (misc.builderOpen.value) {
+      misc.builderOpen.value = false
+      returnToBuilder.value = true
+      showAfterBuilderExit.value = true
+      return
+    }
+    panels.modelConfigOpen.value = true
+  }
+  function builderLeft() {
+    if (!showAfterBuilderExit.value) return
+    showAfterBuilderExit.value = false
+    panels.modelConfigOpen.value = true
+  }
+  function closeModelConfig() {
+    panels.modelConfigOpen.value = false
+    if (!returnToBuilder.value) return
+    returnToBuilder.value = false
+    returningToBuilder.value = true
+    misc.builderOpen.value = true
+  }
+  function openBuilder() {
+    panels.modelConfigOpen.value = false
+    showAfterBuilderExit.value = false
+    returnToBuilder.value = false
+    returningToBuilder.value = false
+    misc.builderOpen.value = true
+  }
+  /** True once per return from the model configuration, so the builder can skip its reloads. */
+  function consumeBuilderReturn(): boolean {
+    const returning = returningToBuilder.value
+    returningToBuilder.value = false
+    return returning
+  }
+
+  return { openModelConfig, closeModelConfig, openBuilder, builderLeft, consumeBuilderReturn }
+}
+
+/**
  * Small standalone surfaces with no hub relationship: the pipeline builder and the
  * decision-wait window.
  */
@@ -177,9 +265,6 @@ function createMiscModals() {
   const builderOpen = ref(false)
   const decisionContext = ref<{ instanceId: string; decisionId: string } | null>(null)
 
-  function openBuilder() {
-    builderOpen.value = true
-  }
   function openDecision(instanceId: string, decisionId: string) {
     decisionContext.value = { instanceId, decisionId }
   }
@@ -187,7 +272,7 @@ function createMiscModals() {
     decisionContext.value = null
   }
 
-  return { builderOpen, decisionContext, openBuilder, openDecision, closeDecision }
+  return { builderOpen, decisionContext, openDecision, closeDecision }
 }
 
 /** What the guided review window opens on: a session, a pull request, or neither (the picker). */
@@ -340,6 +425,17 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   function closeStartFromDesign() {
     startFromDesign.value = null
   }
+  // The one-sentence intake ("Describe new work", issue #2258): open, and the service it opened
+  // on, or null to let the reader pick one. The full form above stays the home of every other kind.
+  const describeWorkOpen = ref(false)
+  const describeWorkServiceId = ref<string | null>(null)
+  function openDescribeWork(serviceId: string | null = null) {
+    describeWorkServiceId.value = serviceId
+    describeWorkOpen.value = true
+  }
+  function closeDescribeWork() {
+    describeWorkOpen.value = false
+  }
   function openAddTask(containerId: string, prefill: AddTaskPrefill | null = null) {
     addTaskPrefill.value = prefill
     addTaskContainerId.value = containerId
@@ -405,6 +501,10 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     closeStartFromDesign,
     openAddTask,
     closeAddTask,
+    describeWorkOpen,
+    describeWorkServiceId,
+    openDescribeWork,
+    closeDescribeWork,
     openReviewFriction,
     closeReviewFriction,
     openAddRecurring,
@@ -424,6 +524,8 @@ function createOverlayModals() {
   const bootstrapOpen = ref(false)
   // "Add a service from an existing GitHub repo" modal (no bootstrap run).
   const addServiceOpen = ref(false)
+  // The repository an add-repository deep link opened the window for, consumed on open.
+  const addServicePrefill = ref<AddServicePrefill | null>(null)
   // Prompt-fragment library panel (manage the board's best-practice catalog +
   // linked guideline repos; ADR 0006).
   const fragmentLibraryOpen = ref(false)
@@ -447,11 +549,13 @@ function createOverlayModals() {
   function closeBootstrap() {
     bootstrapOpen.value = false
   }
-  function openAddService() {
+  function openAddService(prefill: AddServicePrefill | null = null) {
+    addServicePrefill.value = prefill
     addServiceOpen.value = true
   }
   function closeAddService() {
     addServiceOpen.value = false
+    addServicePrefill.value = null
   }
   function openFragmentLibrary() {
     fragmentLibraryOpen.value = true
@@ -502,6 +606,7 @@ function createOverlayModals() {
   return {
     bootstrapOpen,
     addServiceOpen,
+    addServicePrefill,
     fragmentLibraryOpen,
     foundationalServicesOpen,
     commandBarOpen,
@@ -562,6 +667,7 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   // API access tokens: the workspace's inbound public-API keys external systems present to
   // the `/api/v1` surface. Opened from the Integrations hub.
   const apiTokensOpen = ref(false)
+  // Opened and closed by `createBuilderModelConfigHandoff`, which hands the pipeline builder over.
   const modelConfigOpen = ref(false)
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
   // / Codex harnesses). `vendorCredentialsTab` lets a caller deep-link to one tab —
@@ -622,12 +728,6 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   }
   function closeApiTokens() {
     apiTokensOpen.value = false
-  }
-  function openModelConfig() {
-    modelConfigOpen.value = true
-  }
-  function closeModelConfig() {
-    modelConfigOpen.value = false
   }
   function openVendorCredentials(tab = 'pool') {
     resetHubReturn()
@@ -690,8 +790,6 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
     closeOperatorDashboard,
     openApiTokens,
     closeApiTokens,
-    openModelConfig,
-    closeModelConfig,
     openVendorCredentials,
     setVendorCredentialsTab,
     closeVendorCredentials,
@@ -727,6 +825,17 @@ function createSettingsModals(resetHubReturn: ResetHubReturn) {
   // panel scrolls the matching element into view once, then calls `clearAccountSettingsScrollTarget`
   // so a later plain open doesn't re-scroll. Null when no section was requested.
   const accountSettingsScrollTarget = ref<string | null>(null)
+
+  // Setup checklist: every prerequisite for "a task can run and merge" in one list, composed
+  // from the probes the setup banners already read (issue #2258).
+  const setupChecklistOpen = ref(false)
+  function openSetupChecklist() {
+    resetHubReturn()
+    setupChecklistOpen.value = true
+  }
+  function closeSetupChecklist() {
+    setupChecklistOpen.value = false
+  }
 
   function openWorkspaceSettings(tab = 'workspace') {
     resetHubReturn()
@@ -765,6 +874,9 @@ function createSettingsModals(resetHubReturn: ResetHubReturn) {
   }
 
   return {
+    setupChecklistOpen,
+    openSetupChecklist,
+    closeSetupChecklist,
     workspaceSettingsOpen,
     workspaceSettingsTab,
     accountSettingsOpen,
@@ -1181,6 +1293,7 @@ export function createUiModals() {
   const settings = createSettingsModals(resetHubReturn)
   const infra = createInfraModals(resetHubReturn)
   const ai = createAiOnboardingModals()
+  const builderHandoff = createBuilderModelConfigHandoff(misc, panels)
 
   return {
     integrationsOpen,
@@ -1207,5 +1320,6 @@ export function createUiModals() {
     ...settings,
     ...infra,
     ...ai,
+    ...builderHandoff,
   }
 }

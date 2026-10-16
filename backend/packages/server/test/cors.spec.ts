@@ -16,6 +16,7 @@ describe('CORS_ALLOWED_HEADERS', () => {
       'Authorization',
       'Content-Type',
       'Mcp-Protocol-Version',
+      'X-Cat-Factory-Workspace',
       'X-Connection-Id',
       'X-Personal-Password',
       'X-Request-Id',

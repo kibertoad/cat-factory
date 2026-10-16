@@ -129,6 +129,7 @@ export {
 export { defineAuditEventSuite } from './audit-event-suite.js'
 export { defineSessionGenerationSuite } from './session-generation-suite.js'
 export { defineDirectoryFeedSuite, type DirectoryFeedRepos } from './directory-feed-suite.js'
+export { defineDirectoryWebhookSuite } from './directory-webhook-suite.js'
 export { defineAuthAttemptSuite } from './auth-attempt-suite.js'
 export { defineTokenUsageSuite } from './token-usage-suite.js'
 export { defineCommitProjectionSuite } from './commit-projection-suite.js'
@@ -142,6 +143,8 @@ export { defineTutorialProgressSuite } from './tutorial-progress-suite.js'
 export { defineWorkspaceSettingsSuite } from './workspace-settings-suite.js'
 export { defineWorkspaceAccessSuite } from './workspace-access-suite.js'
 export { defineWorkspaceRbacSuite } from './workspace-rbac-suite.js'
+export { definePublicKeyReachSuite } from './public-key-reach-suite.js'
+export { definePublicDirectorySuite } from './public-directory-suite.js'
 export { mintMachineToken, mintSession } from './session.js'
 export {
   seedFrameRepoLink,

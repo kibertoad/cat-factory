@@ -1,5 +1,145 @@
 # @cat-factory/orchestration
 
+## 0.322.5
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+  - @cat-factory/agents@0.172.5
+  - @cat-factory/integrations@0.176.6
+  - @cat-factory/kernel@0.360.4
+  - @cat-factory/prompt-fragments@1.1.70
+  - @cat-factory/sandbox@0.12.84
+  - @cat-factory/spend@0.23.19
+  - @cat-factory/workspaces@0.30.6
+  - @cat-factory/caching@0.20.108
+
+## 0.322.4
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+  - @cat-factory/agents@0.172.4
+  - @cat-factory/integrations@0.176.5
+  - @cat-factory/kernel@0.360.3
+  - @cat-factory/prompt-fragments@1.1.69
+  - @cat-factory/sandbox@0.12.83
+  - @cat-factory/spend@0.23.18
+  - @cat-factory/workspaces@0.30.5
+  - @cat-factory/caching@0.20.107
+
+## 0.322.3
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+  - @cat-factory/integrations@0.176.4
+  - @cat-factory/kernel@0.360.2
+  - @cat-factory/agents@0.172.3
+  - @cat-factory/prompt-fragments@1.1.68
+  - @cat-factory/sandbox@0.12.82
+  - @cat-factory/spend@0.23.17
+  - @cat-factory/workspaces@0.30.4
+  - @cat-factory/caching@0.20.106
+
+## 0.322.2
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+  - @cat-factory/integrations@0.176.3
+  - @cat-factory/agents@0.172.2
+  - @cat-factory/kernel@0.360.1
+  - @cat-factory/prompt-fragments@1.1.67
+  - @cat-factory/sandbox@0.12.81
+  - @cat-factory/spend@0.23.16
+  - @cat-factory/workspaces@0.30.3
+  - @cat-factory/caching@0.20.105
+
+## 0.322.1
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/contracts@0.368.0
+  - @cat-factory/kernel@0.360.0
+  - @cat-factory/agents@0.172.1
+  - @cat-factory/integrations@0.176.2
+  - @cat-factory/prompt-fragments@1.1.66
+  - @cat-factory/sandbox@0.12.80
+  - @cat-factory/spend@0.23.15
+  - @cat-factory/workspaces@0.30.2
+  - @cat-factory/caching@0.20.104
+
+## 0.322.0
+
+### Minor Changes
+
+- 918e977: `POST /api/v1/pr-assessments` (`client.prAssessments.assess`) scores a pull request in a linked
+  repository on the merger's complexity, risk and impact axes, classifies it by its changed paths, and
+  says whether a risk policy would let it land with no person: the named policy, or the workspace's
+  unattended default. The verdict comes from the merge step's own precedence ladder, now a pure
+  function shared by both (`mergePrecedence.ts`), so the policy's ceilings stay unpublished. A key bound to a person is judged under that person's
+  workspace role, as the runs it starts are. One
+  synchronous inline model call at `write` scope; nothing is persisted. OpenAPI 1.83.0.
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/contracts@0.367.0
+  - @cat-factory/agents@0.172.0
+  - @cat-factory/integrations@0.176.1
+  - @cat-factory/kernel@0.359.1
+  - @cat-factory/prompt-fragments@1.1.65
+  - @cat-factory/sandbox@0.12.79
+  - @cat-factory/spend@0.23.14
+  - @cat-factory/workspaces@0.30.1
+  - @cat-factory/caching@0.20.103
+
+## 0.321.0
+
+### Minor Changes
+
+- f1b6c9a: `/api/v1/directory/*`: an account's workspaces, users, account memberships, workspace memberships
+  and linked repositories as keyset-paged snapshots, plus an ordered change feed whose changes carry
+  each entity's current state (or `null` once it is gone), for an integration keeping its own copy in
+  sync. A feed cursor older than the new `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30) is refused
+  with the new `cursor_expired` conflict reason. OpenAPI 1.81.0.
+  
+  Internal: the change-row mapping both facades share moves to kernel's `directoryChangeFromRow`.
+  The slice 1 `DirectoryChangeRepository` port becomes `DirectoryRepository` and joins
+  `CoreDependencies` as a required member, with its reads on the mothership allow-list.
+- 20d4f01: Directory webhooks: `/api/v1/directory/webhooks` registers account-level endpoints that the
+  directory change feed is pushed to every couple of minutes, signed like the notification webhooks.
+  Each push is a `directory.changed` page of hydrated changes, or `directory.resync_required` for an
+  endpoint that fell behind the feed's retention. Delivery is a sweep on both facades (the Worker's
+  frequent cron, a Node timer) that takes a per-endpoint lease before a push and moves the endpoint's
+  position only after the push succeeds, so pushes are at-least-once, arrive in feed order, and are
+  never doubled by concurrent sweepers; a lease whose sweeper died expires and the page is sent again. The spec gains an OpenAPI 3.1 `webhooks` section naming every push body, so
+  `DirectoryWebhookDelivery`, `NotificationWebhookDelivery`, `RunWebhookDelivery` and
+  `PlatformAlertWebhookDelivery` become generated types in every client.
+  OpenAPI 1.82.0. New migrations: D1 `0109_directory_webhooks.sql`, Drizzle
+  `20261010113115_directory_webhooks`.
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+  - @cat-factory/kernel@0.359.0
+  - @cat-factory/integrations@0.176.0
+  - @cat-factory/workspaces@0.30.0
+  - @cat-factory/agents@0.171.7
+  - @cat-factory/prompt-fragments@1.1.64
+  - @cat-factory/sandbox@0.12.78
+  - @cat-factory/spend@0.23.13
+  - @cat-factory/caching@0.20.102
+
 ## 0.320.4
 
 ### Patch Changes

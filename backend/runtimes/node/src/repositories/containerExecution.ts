@@ -99,7 +99,7 @@ function rowToAccountPool(row: typeof accountRunnerPools.$inferSelect): AccountR
   }
 }
 
-/** Postgres-backed store of account → runner-pool rows (mirror of D1 migration 0108). */
+/** Postgres-backed store of account → runner-pool rows (mirror of D1 migration 0110). */
 export class DrizzleAccountRunnerPoolRepository implements AccountRunnerPoolRepository {
   constructor(private readonly db: DrizzleDb) {}
 

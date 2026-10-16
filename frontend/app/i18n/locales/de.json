@@ -9,19 +9,23 @@
     "scopeHint": "Jede Stufe schließt die darüberliegenden ein.",
     "scope": {
       "read": {
-        "label": "Nur lesen",
+        "label": "Lesen · read",
         "description": "Services, Aufgaben, Pipelines und Läufe ansehen."
       },
+      "webhooks": {
+        "label": "Webhooks",
+        "description": "Zusätzlich Webhooks registrieren, die Änderungen an ein anderes System senden."
+      },
       "write": {
-        "label": "Lesen und schreiben",
+        "label": "Schreiben · write",
         "description": "Zusätzlich Aufgaben anlegen und starten."
       },
       "decide": {
-        "label": "Lesen, schreiben und entscheiden",
+        "label": "Entscheiden · decide",
         "description": "Zusätzlich die Fragen beantworten, auf die ein pausierter Lauf wartet."
       },
       "admin": {
-        "label": "Voller Zugriff",
+        "label": "Vollzugriff · admin",
         "description": "Zusätzlich Aufgaben löschen und auf Benachrichtigungen reagieren, was einen Pull Request zusammenführen kann."
       }
     },
@@ -842,7 +846,9 @@
         "createdByKey": "API-Schlüssel {id}",
         "revoke": "Token widerrufen",
         "boundToYou": "Ihr Abonnement",
-        "boundToOther": "Abonnement von {user}"
+        "boundToOther": "Abonnement von {user}",
+        "reachAll": "Alle Arbeitsbereiche",
+        "reachCount": "{count} Arbeitsbereiche"
       },
       "add": {
         "heading": "Token erstellen",
@@ -850,19 +856,27 @@
         "labelHelp": "Ein Name, um dieses Token später wiederzuerkennen.",
         "labelPlaceholder": "z. B. CI-Pipeline",
         "scope": "Berechtigung",
-        "scopeHelp": "Was dieses Token darf: nur Lesen, Lesen und Schreiben oder Vollzugriff (der auch das Löschen erlaubt).",
+        "scopeHelp": "Jede Stufe umfasst alles, was die vorherige erlaubt. Lesen: Aufgaben, Läufe und deren Ergebnisse ansehen. Webhooks: zusätzlich Webhooks registrieren und entfernen, die Änderungen an ein anderes System senden, etwa Verzeichnis- und Benachrichtigungs-Webhooks. Schreiben: zusätzlich Aufgaben anlegen, bearbeiten, starten, stoppen und wiederholen sowie Reviews und Bewertungen ausführen. Entscheiden: zusätzlich die menschlichen Entscheidungen eines Laufs beantworten (Freigaben, Review-Befunde, Interview- und Rückfragen, manuelle Tests); diese Stufe braucht ein Token auch, um eine Pipeline zu starten, die an einer solchen Entscheidung anhalten kann. Vollzugriff (admin): zusätzlich Services anlegen, konfigurieren und löschen, Aufgaben löschen, Repositories verknüpfen, Umgebungsverbindungen verwalten und auf Benachrichtigungen reagieren.",
         "create": "Token erstellen",
         "identity": "Läuft als",
         "identitySystem": "Dieser Arbeitsbereich (System-Token)",
         "identitySelf": "Ich (persönliches Token)",
         "identitySystemHelp": "Mit diesem Token gestartete Läufe gehören dem Arbeitsbereich und werden keiner Person zugeordnet. Es kann kein persönliches Claude-/Codex-/GLM-Abonnement nutzen: Eine Aufgabe mit einem solchen Modell wird abgelehnt, statt jemandem in Abwesenheit berechnet zu werden. Für CI und gemeinsam genutzte Integrationen.",
-        "identitySelfHelp": "Mit diesem Token gestartete Läufe gelten als Ihre und können Ihr persönliches Claude-/Codex-/GLM-Abonnement nutzen. Jeder solche Aufruf muss zusätzlich Ihr persönliches Passwort im Header X-Personal-Password senden; es wird nie gespeichert. Für Ihre eigenen Headless-Läufe."
+        "identitySelfHelp": "Mit diesem Token gestartete Läufe gelten als Ihre und können Ihr persönliches Claude-/Codex-/GLM-Abonnement nutzen. Jeder solche Aufruf muss zusätzlich Ihr persönliches Passwort im Header X-Personal-Password senden; es wird nie gespeichert. Für Ihre eigenen Headless-Läufe.",
+        "reach": "Arbeitsbereiche",
+        "reachHelp": "Auf welchen Arbeitsbereichen dieses Token handeln darf. Ein Token für mehr als einen Arbeitsbereich nennt den Arbeitsbereich bei jedem Aufruf im Header x-cat-factory-workspace.",
+        "reachAdminOnly": "Nur ein Konto-Admin kann ein Token anlegen, das weitere Arbeitsbereiche erreicht, wie es Verzeichnis-Webhooks brauchen. Bitte einen Konto-Admin darum.",
+        "reachThis": "Nur dieser Arbeitsbereich",
+        "reachAll": "Alle Arbeitsbereiche des Kontos",
+        "reachSelected": "Ausgewählte Arbeitsbereiche",
+        "reachPick": "Arbeitsbereiche auswählen"
       },
       "scopes": {
-        "read": "Nur Lesen",
-        "write": "Lesen und Schreiben",
-        "decide": "Antworten auf Entscheidungen",
-        "admin": "Vollzugriff"
+        "read": "Lesen · read",
+        "webhooks": "Webhooks (inkl. Lesen)",
+        "write": "Schreiben · write (inkl. Webhooks)",
+        "decide": "Entscheiden · decide (inkl. Schreiben)",
+        "admin": "Vollzugriff · admin (inkl. Entscheiden)"
       },
       "toast": {
         "loadFailed": "API-Tokens konnten nicht geladen werden",
@@ -2603,7 +2617,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} weitere nicht angezeigt",
-      "failingRunGone": "Dieser Lauf ist nicht mehr geladen und hat keine Aufgabe zum Öffnen."
+      "failingRunGone": "Dieser Lauf ist nicht mehr geladen und hat keine Aufgabe zum Öffnen.",
+      "goTo": {
+        "review": "Prüfen",
+        "answer": "Antworten",
+        "test": "Testen",
+        "confirm": "Bestätigen",
+        "triage": "Sichten",
+        "choose": "Auswählen",
+        "open": "Öffnen"
+      }
     },
     "aiProvidersBanner": {
       "setup": {
@@ -2773,7 +2796,10 @@
         "toggleUiMode": "Oberflächenmodus wechseln",
         "chooseRole": "Rolle wechseln",
         "foundationalServices": "Basisdienste",
-        "notificationSettings": "Benachrichtigungs-Routing verwalten"
+        "notificationSettings": "Benachrichtigungs-Routing verwalten",
+        "setupChecklist": "Einrichtungs-Checkliste",
+        "queueView": "Warteschlangen-Ansicht öffnen",
+        "boardView": "Board-Ansicht öffnen"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2801,7 +2827,11 @@
         "chooseRole": "rolle entwickler produktmanager designer persona einfachere ansicht",
         "tutorial": "tutorial tour einführung hilfe onboarding lernen grundlagen",
         "foundationalServices": "gemeinsame Fähigkeit Plattform Dienst API Vertrag OpenAPI Katalog",
-        "notificationSettings": "benachrichtigungen e-mail routing kanäle posteingang"
+        "notificationSettings": "benachrichtigungen e-mail routing kanäle posteingang",
+        "setupChecklist": "einrichtung checkliste setup runner modell github speicher umgebung konfigurieren",
+        "queueView": "warteschlange ansicht wartet auf dich liste",
+        "boardView": "board canvas karte ansicht planen",
+        "describeWork": "neue arbeit beschreiben aufgabe hinzufügen erstellen feature bug"
       }
     },
     "shortcuts": {
@@ -3688,6 +3718,7 @@
       },
       "errors": {
         "listInstallations": "GitHub-Installationen konnten nicht aufgelistet werden",
+        "loadProjection": "Repositories, Pull Requests und Issues konnten nicht geladen werden",
         "startInstall": "Die Installation der GitHub App konnte nicht gestartet werden",
         "connect": "Verbindung nicht möglich"
       }
@@ -3782,7 +3813,8 @@
         "servicesAddedDescription": "{count} Service zum Board hinzugefügt. | {count} Services zum Board hinzugefügt.",
         "frontendLinkedNote": "{directory} wurde als Frontend hinzugefügt und mit den übrigen verknüpft. Benennen Sie die Umgebungsvariablen für die Backend-URLs im Inspector.",
         "frontendWiringFailedNote": "Die Frontend-Einstellungen wurden nicht gespeichert. Öffnen Sie den Inspector jeder Frontend-App, um ihr Unterverzeichnis und ihre Backend-Services zu setzen."
-      }
+      },
+      "prefillProviderMismatch": "Der Link verweist auf {repo} bei einem anderen Anbieter, dieses Board ist aber mit {connected} verbunden. Suche das Repository von Hand oder öffne den Link auf einem Board, das mit seinem Anbieter verbunden ist."
     },
     "repoTree": {
       "root": "root",
@@ -6294,7 +6326,8 @@
     "reports": "Berichte",
     "foundationalServices": "Basisdienste",
     "tutorials": "Tutorials",
-    "help": "Hilfe"
+    "help": "Hilfe",
+    "setupChecklist": "Einrichtungs-Checkliste"
   },
   "errors": {
     "generic": {
@@ -6417,7 +6450,8 @@
         "delegated_claim_missing": "Für diesen Schritt gibt es keine externe Arbeit zu prüfen",
         "thread_busy": "Dieser Thread antwortet noch",
         "draft_conflict": "Dieser Entwurf hat sich geändert",
-        "session_stale": "Der Pull Request hat sich weiterentwickelt"
+        "session_stale": "Der Pull Request hat sich weiterentwickelt",
+        "cursor_expired": "Der Änderungsfeed ist über diesen Cursor hinaus"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -6477,7 +6511,8 @@
         "delegated_claim_missing": "Der Eintrag des Laufs darüber, was an den externen Executor geschickt wurde, fehlt, also gibt es nichts abzufragen. Am Executor selbst ist nichts falsch. Lade den Lauf neu und starte den Schritt erneut, falls er weiterhin hängt.",
         "thread_busy": "Die vorherige Frage in diesem Thread ist noch nicht beantwortet. Warte auf die Antwort oder frag in einem anderen Thread.",
         "draft_conflict": "Dieser Kommentarentwurf wurde seit dem Laden bearbeitet, gepostet oder verworfen. Lade die Entwürfe neu und nimm deine Änderung erneut vor.",
-        "session_stale": "Nach der Vorbereitung dieser Review kamen neue Commits hinzu, daher zeigen die Entwürfe möglicherweise auf falsche Zeilen. Aktualisiere die Review, prüfe die Entwürfe und poste dann."
+        "session_stale": "Nach der Vorbereitung dieser Review kamen neue Commits hinzu, daher zeigen die Entwürfe möglicherweise auf falsche Zeilen. Aktualisiere die Review, prüfe die Entwürfe und poste dann.",
+        "cursor_expired": "Die Änderungen nach diesem Cursor werden nicht mehr aufbewahrt. Erstelle einen neuen Snapshot des Verzeichnisses und folge dem Feed ab der Position, die er meldet."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",
@@ -8115,6 +8150,10 @@
             "title": "Das Board",
             "body": "Services, Module und Aufgaben liegen auf dieser Fläche. Ziehe zum Verschieben, scrolle zum Zoomen und klicke auf eine Karte, um Details zu sehen."
           },
+          "views": {
+            "title": "Zwei Ansichten",
+            "body": "Das Board hat eine zweite Ansicht. Die Warteschlange zeigt, was über alle Services hinweg auf dich wartet. Nach der Tour wechselst du hier zwischen der Warteschlange und dieser Arbeitsfläche. Die App öffnet die Ansicht, die du zuletzt genutzt hast."
+          },
           "sidebar": {
             "title": "Die Seitenleiste",
             "body": "Alles Weitere findest du hier: Pipelines erstellen, Repositories und Integrationen verbinden, Workspace-Einstellungen."
@@ -8734,5 +8773,146 @@
         "unsupportedVersion": "Dieses Design stammt aus einem neueren Editor-Format, als diese App versteht."
       }
     }
+  },
+  "setup": {
+    "title": "Einrichtung",
+    "progress": "{done} von {total} erledigt",
+    "intro": "Was dieser Workspace braucht, damit eine Aufgabe laufen und gemergt werden kann.",
+    "required": "erforderlich",
+    "optional": "optional",
+    "action": {
+      "change": "Ändern",
+      "connect": "Einrichten",
+      "fix": "Beheben",
+      "review": "Prüfen",
+      "retry": "Erneut versuchen"
+    },
+    "rows": {
+      "checking": "Wird geprüft…",
+      "notNeeded": "Diese Bereitstellung nutzt das nicht.",
+      "model": {
+        "title": "Modell",
+        "done": "Ein Modell ist verfügbar.",
+        "missing": "Kein Modell verfügbar. Kein Agent kann laufen, bis du einen Anbieter verbindest."
+      },
+      "sourceControl": {
+        "title": "Quellcodeverwaltung",
+        "done": "Verbunden. Agenten können Branches pushen und Pull Requests öffnen.",
+        "missing": "Nicht verbunden. Agenten können keine Pull Requests öffnen."
+      },
+      "agentExecutor": {
+        "title": "Wo Agenten laufen",
+        "done": "Ein Runner ist konfiguriert.",
+        "missing": "Kein Runner konfiguriert. Nichts kann laufen, bis du einen verbindest.",
+        "notNeeded": "Diese Bereitstellung führt Agenten ohne Runner aus."
+      },
+      "ephemeralEnvironments": {
+        "title": "Testumgebungen",
+        "done": "Konfiguriert. Tester können eine Live-Vorschau nutzen.",
+        "missing": "Nicht eingerichtet. Tester, die eine Live-Vorschau brauchen, laufen nicht. Alle anderen Agenten laufen."
+      },
+      "binaryStorage": {
+        "title": "Screenshot-Speicher",
+        "done": "Konfiguriert. Visuelle Prüfungen sind aktiv.",
+        "missing": "Nicht eingerichtet. Visuelle Prüfungen sind aus."
+      }
+    },
+    "causes": {
+      "unreachable": "Eingerichtet, aber gerade nicht erreichbar.",
+      "incomplete": "Verbunden, aber eine erforderliche Einstellung fehlt.",
+      "rejected": "GitHub hat den Zugriffstoken abgelehnt.",
+      "underscoped": "Der Zugriffstoken kann weder pushen noch Pull Requests öffnen.",
+      "presetBroken": "Das Standard-Modell-Preset nennt ein Modell, das nicht verfügbar ist.",
+      "probeFailed": "Die Prüfung hat nicht geantwortet.",
+      "notReported": "Diese Bereitstellung meldet es nicht."
+    },
+    "also": {
+      "title": "Außerdem hier",
+      "pipelines": "Pipelines",
+      "riskPolicies": "Merge-Richtlinien",
+      "modelPresets": "Modell-Presets",
+      "counts": {
+        "repair": "Zu reparieren: {count}",
+        "outdated": "Veraltet: {count}",
+        "new": "Neu: {count}"
+      },
+      "settings": "Einstellungen und Verbindungen",
+      "workspaceSettings": "Workspace-Einstellungen",
+      "integrations": "Integrationen"
+    }
+  },
+  "queue": {
+    "title": "Warteschlange",
+    "summary": "{needsYou} warten auf dich · {ready} bereit zum Mergen",
+    "filter": {
+      "allServices": "Alle Services",
+      "service": "Nach Service filtern"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Wartet auf dich",
+        "empty": "Nichts wartet auf dich."
+      },
+      "inFlight": {
+        "label": "In Arbeit",
+        "empty": "Derzeit arbeitet kein Agent."
+      },
+      "readyToMerge": {
+        "label": "Bereit zum Mergen",
+        "empty": "Kein Pull Request wartet auf den Merge."
+      }
+    },
+    "waiting": {
+      "label": "Nicht begonnen ({count})",
+      "empty": "Nichts wartet auf den Start."
+    },
+    "done": {
+      "count": "Seit {date} gemergt: {count}",
+      "countAll": "Gemergt: {count}",
+      "show": "Anzeigen",
+      "hide": "Ausblenden",
+      "capped": "Zeigt die neuesten {shown} von {total}."
+    },
+    "card": {
+      "waited": "wartete {duration}",
+      "active": "vor {duration} aktiv",
+      "merged": "vor {duration} gemergt",
+      "step": "Schritt {current} von {total}",
+      "showOnBoard": "Auf dem Board zeigen",
+      "answer": "Antworten",
+      "budgetPaused": "Das Ausgabenlimit hat diesen Durchlauf angehalten. Er läuft weiter, sobald das Limit erhöht wird.",
+      "parked": "Der Durchlauf wartet auf einen Menschen. Öffne die Aufgabe, um zu sehen, was fehlt.",
+      "waitingOn": "Wartet auf {deps}",
+      "pr": "Pull Request #{number}"
+    },
+    "describeWork": "Neue Arbeit beschreiben"
+  },
+  "views": {
+    "title": "Ansichten",
+    "queue": "Warteschlange",
+    "board": "Board",
+    "openQueue": "Warteschlangen-Ansicht öffnen"
+  },
+  "describeWork": {
+    "title": "Neue Arbeit beschreiben",
+    "textLabel": "Was zu tun ist",
+    "textHint": "Ein Satz reicht. Füge mehr Details hinzu, wenn du welche hast.",
+    "textPlaceholder": "Füge ein Audit-Log für Anmeldeereignisse hinzu. Erfasse jede Anmeldung mit Zeit, Benutzer und Ergebnis.",
+    "savedAs": "Aufgabentitel: {title}",
+    "serviceLabel": "Service",
+    "servicePlaceholder": "Service auswählen",
+    "kindLabel": "Art",
+    "kind": {
+      "feature": "Feature",
+      "bug": "Bug"
+    },
+    "moreKinds": "Weitere Arten…",
+    "changeHowItRuns": "Ablauf ändern",
+    "workspaceDefault": "Workspace-Standard",
+    "defaultPipelineHint": "Der Workspace-Standard: {name}. Eine hier gewählte Pipeline ersetzt ihn für diese Aufgabe.",
+    "attachContext": "Kontext anhängen (öffnet das vollständige Formular)",
+    "add": "Zur Warteschlange hinzufügen",
+    "addAndStart": "Hinzufügen und starten",
+    "addedToast": "„{title}“ zur Warteschlange hinzugefügt"
   }
 }

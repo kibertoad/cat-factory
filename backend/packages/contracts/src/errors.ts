@@ -321,6 +321,10 @@ export const CONFLICT_REASONS = [
   // The pull request moved past the commit a guided review was computed against, so draft anchors
   // may point at the wrong lines. Refreshing the review is the remedy.
   'session_stale',
+  // A directory change-feed cursor older than the feed's retention: the changes after it were
+  // pruned, so replaying cannot bring the consumer's copy up to date. Reconciling from a snapshot
+  // is the remedy, which is what the directory-sync client does on its own.
+  'cursor_expired',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

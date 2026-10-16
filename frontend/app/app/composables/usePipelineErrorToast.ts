@@ -183,6 +183,10 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.session_stale',
     descriptionKey: 'errors.conflict.description.session_stale',
   },
+  cursor_expired: {
+    titleKey: 'errors.conflict.title.cursor_expired',
+    descriptionKey: 'errors.conflict.description.cursor_expired',
+  },
   task_limit_reached: {
     titleKey: 'errors.conflict.title.task_limit_reached',
     descriptionKey: 'errors.conflict.description.task_limit_reached',

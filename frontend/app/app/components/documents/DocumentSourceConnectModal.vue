@@ -13,6 +13,7 @@
 // remedy belongs to an admin in a different surface and a dead control states nothing.
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -109,7 +110,11 @@ async function disconnect() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="descriptor?.label ?? t('documents.connect.title')">
+  <AppModal
+    size="form"
+    v-model:open="open"
+    :title="descriptor?.label ?? t('documents.connect.title')"
+  >
     <template #title>
       <IntegrationBackTitle
         :title="descriptor?.label ?? t('documents.connect.title')"
@@ -170,5 +175,5 @@ async function disconnect() {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

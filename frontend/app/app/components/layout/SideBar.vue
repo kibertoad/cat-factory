@@ -21,6 +21,7 @@ import UserMenu from '~/components/auth/UserMenu.vue'
 import { useViewport } from '~/composables/useViewport'
 import type { NavContribution } from '~/modular/nav-contributions'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import WorkViewSwitcher from '~/components/layout/WorkViewSwitcher.vue'
 
 const { t } = useI18n()
 
@@ -227,6 +228,10 @@ watch(
     </div>
 
     <div class="contents" @click="onNavAction">
+      <!-- The two views of the board (issue #2258), first because they decide what the main
+           area shows. -->
+      <WorkViewSwitcher :collapsed="railed" />
+
       <!-- Command bar launcher (⌘K) — the primary way to create blocks / pipelines
          and reach every action below. -->
       <UButton

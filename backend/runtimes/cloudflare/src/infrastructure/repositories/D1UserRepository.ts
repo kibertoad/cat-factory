@@ -1,11 +1,12 @@
-import type {
-  IdentityProvider,
-  UserIdentityRecord,
-  UserRecord,
-  UserRepository,
+import {
+  type IdentityProvider,
+  isDirectoryAccountProvider,
+  type UserIdentityRecord,
+  type UserRecord,
+  type UserRepository,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
-import { appendDirectoryChanges, userSource } from './directoryFeed'
+import { appendDirectoryChanges, identityOwnerSource, userSource } from './directoryFeed'
 
 interface UserRow {
   id: string
@@ -132,7 +133,7 @@ export class D1UserRepository implements UserRepository {
   }
 
   async linkIdentity(identity: UserIdentityRecord): Promise<void> {
-    await this.db
+    const upsert = this.db
       .prepare(
         `INSERT INTO user_identities (user_id, provider, subject, secret, metadata, created_at)
            VALUES (?, ?, ?, ?, ?, ?)
@@ -147,7 +148,22 @@ export class D1UserRepository implements UserRepository {
         identity.metadata,
         identity.createdAt,
       )
-      .run()
+    if (!isDirectoryAccountProvider(identity.provider)) {
+      await upsert.run()
+      return
+    }
+    // A host identity is one of the user's directory accounts, so linking it changes the `user`
+    // entity of the new owner and, when it moves, of the user it is taken from.
+    const now = Date.now()
+    await this.db.batch([
+      appendDirectoryChanges(
+        this.db,
+        identityOwnerSource(identity.provider, identity.subject, identity.userId),
+        now,
+      ),
+      upsert,
+      appendDirectoryChanges(this.db, userSource(identity.userId), now),
+    ])
   }
 
   async listIdentities(userId: string): Promise<UserIdentityRecord[]> {

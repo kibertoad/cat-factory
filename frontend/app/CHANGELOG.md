@@ -1,5 +1,168 @@
 # @cat-factory/app
 
+## 0.317.1
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+
+## 0.317.0
+
+### Minor Changes
+
+- b3a13d3: An integration can now send a person to add a service for a repository. `GET /api/v1/deployment`
+  (`client.deployment.get`) answers where the deployment serves its web app, to any `read` key with
+  no workspace named. The app opens the add-service window with the repository searched for and
+  selected from `?addRepo=<owner>/<name>`, with optional `provider` and `ws` to name the host and
+  pin the board. Signing in first keeps the link.
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+
+## 0.316.0
+
+### Minor Changes
+
+- 6f574e9: API keys gain a `webhooks` scope between `read` and `write`: everything `read` can do, plus
+  registering and removing push endpoints. The directory webhooks (`/api/v1/directory/webhooks`,
+  still for a key reaching every workspace) and the notification webhooks
+  (`/api/v1/notification-webhook[s]`) now need `webhooks` instead of `admin`, so a sync integration
+  can follow changes with a key that cannot author or delete work. Every key that could manage
+  webhooks before still can. OpenAPI 1.86.0.
+  
+  The API token form names each scope by its API name (`read`, `webhooks`, `write`, `decide`,
+  `admin`), so the screen, the docs and the refusal messages agree. "Full access" is now "Admin".
+  
+  The token form always shows the Workspaces picker, in basic and advanced mode. It is disabled for
+  anyone who is not an account admin, with a line saying so, because only an account admin may mint
+  a key that reaches other workspaces.
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+
+## 0.315.9
+
+### Patch Changes
+
+- 8749655: The API token scope picker now says what each level includes. Each label names the level it builds on (Write includes Read, Decide includes Write, Full access includes Decide), and the help text lists what every level adds, including Decide, which it previously left out: answering a run's human decisions, which a token also needs to start a pipeline that can stop for one. Updated in every locale.
+
+## 0.315.8
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+
+## 0.315.7
+
+### Patch Changes
+
+- 85050fe: Render every full-bleed takeover inside one shared `TakeoverShell`, so focus stays inside an open takeover and Escape closes only the top overlay. The step reader, the model configuration takeover, the observability, reports, operator dashboard and Kaizen panels, and the artifact lightbox now use it. The safe-area guard also refuses a full-screen root class named outside its owning shell. Every Nuxt UI menu, select, popover and modal now holds a place on the shared overlay stack while it is open, so Escape in an open dropdown inside a takeover closes the dropdown, not the takeover. The block focus view no longer closes on the Escape that closes a window or takeover opened over it.
+
+## 0.315.6
+
+### Patch Changes
+
+- f3e31b4: The model configuration opened from the pipeline builder now takes clicks. It shows once the builder has closed, and the builder comes back with its draft when the model configuration closes. Before, the builder stayed open under it and took every click.
+
+## 0.315.5
+
+### Patch Changes
+
+- df137d3: Selecting a service frame no longer reads the GitHub repos, pull requests and issues twice. The inspector asks for the projection when the frame opens, and concurrent callers share one read. A connected workspace with no linked repos counts as loaded, so the inspector does not read it again on every open. The store records what the projection was loaded for (the workspace and its connection), so a failed load, a board reset, a disconnect and a reinstalled App each make the next request read again. One generation counter decides whether a read may land: an older read that finishes last, a read for a board you left, a read that finishes after a disconnect, and a read that started before a direct write (saving linked repos, opening or merging a pull request) no longer overwrite newer rows. The loading flag clears as soon as the projection is cleared. The add-service-from-repo, bootstrap and GitHub panel surfaces still re-read on open, and share a read that is already running. A failed read on frame open now shows the standard error toast.
+
+## 0.315.4
+
+### Patch Changes
+
+- 9fd2cd4: Modals open at one of three named widths instead of a width picked per dialog.
+  
+  A new `AppModal` wraps `UModal` with a required `size` from `utils/overlaySize.ts`: `prompt` (448px)
+  for confirmations, decisions and one- or two-field dialogs, `form` (576px) for forms, lists and
+  hubs, and `wide` (672px) for card lists with an action beside each paragraph, tabbed forms and three
+  pickers in a row. 46 modals move onto it. 13 keep their width, 31 move by one Tailwind step, and two
+  short dialogs (review friction, AI preset mismatch) narrow from 576px to 448px. The nine workbench
+  surfaces keep their own widths until #2359 decides their shell, each with a `workbench-width-ok:`
+  comment. `scripts/check-frontend-geometry.mjs` refuses a raw `UModal` without that waiver, and an
+  `AppModal` that names its own width utility or reads its classes from a variable. An `AppModal`
+  bound `:fullscreen` drops its width while fullscreen.
+
+## 0.315.3
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/contracts@0.368.0
+
+## 0.315.2
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/contracts@0.367.0
+
+## 0.315.1
+
+### Patch Changes
+
+- 4c0eac3: An inbox card that asks a person for something now carries its verb as the primary button ("Answer" for a parked decision, "Review", "Test", "Triage" and so on), and "Mark read" becomes a secondary button. Cards whose own action is already the verb (Merge, Retry run, Acknowledge) are unchanged. A parked agent question now opens the decision window from the inbox, where it can be answered, instead of the read-only step detail; an approval gate still opens the step to approve. Any verb whose window cannot open (its run is not loaded or not parked, as after a Ralph loop or a gate that gave up) says "Open", because it only opens the task. "Mark read" is an outline button beside the verb, so it no longer looks like "Dismiss". The inbox closes when a card opens something. Each type's verb and destination now sit in one route table (`utils/notificationRoutes.ts`), which the title link uses too.
+
+## 0.315.0
+
+### Minor Changes
+
+- 04c1587: Public-API keys belong to an account and reach every workspace in it or a chosen list. A
+  workspace-scoped `/api/v1` call names its workspace in the `x-cat-factory-workspace` header, which a
+  key reaching one workspace may omit, so every existing key keeps working unchanged. `PublicApiKey`
+  and `GET /api/v1/me` gain `workspaceIds`; both mint bodies accept it. Widening a key past the board
+  it is minted from takes an account admin, and a key can never mint or revoke one reaching further
+  than itself. The header is on the CORS allow-list, so a browser client can send it. The four SDK
+  clients take a workspace option. OpenAPI 1.80.0.
+  
+  Storage break (internal): `public_api_keys.workspace_id` is replaced by `all_workspaces` plus the
+  `public_api_key_workspaces` grant table (D1 `0108`, Drizzle `20261009143721` and `20261009143724`),
+  backfilled from the old column. The account cap is 200 live keys, where it was 50 per workspace,
+  and a key left with no workspace after its boards were deleted holds no slot.
+
+### Patch Changes
+
+- f1b6c9a: `/api/v1/directory/*`: an account's workspaces, users, account memberships, workspace memberships
+  and linked repositories as keyset-paged snapshots, plus an ordered change feed whose changes carry
+  each entity's current state (or `null` once it is gone), for an integration keeping its own copy in
+  sync. A feed cursor older than the new `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30) is refused
+  with the new `cursor_expired` conflict reason. OpenAPI 1.81.0.
+  
+  Internal: the change-row mapping both facades share moves to kernel's `directoryChangeFromRow`.
+  The slice 1 `DirectoryChangeRepository` port becomes `DirectoryRepository` and joins
+  `CoreDependencies` as a required member, with its reads on the mothership allow-list.
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+
+## 0.314.0
+
+### Minor Changes
+
+- 66b7fed: Add "Describe new work" (Create → Describe new work, the palette, and the queue view's header): a one-sentence intake that files a feature or a bug from a sentence and a service. The title comes from the first sentence and is shown before submit; the full text is the description. The overrides sit behind one "Change how this runs" disclosure that names the defaults it would use: the pipeline in every tier, and the merge policy and model preset in the advanced tier only, as in the full form. Closing the dialog with typed text asks first. "Add and start" starts through the card's own Start, with the same started, sandboxed and no-pipeline messages. "More kinds" and "Attach context" carry the kind and the overrides into the full form along with the text. The review-debt dialog's "Go review" closes whichever form raised it. Every other kind of task, and context attachments, hand the text to the full "Add a task" form, prefilled. Both forms now share one review-debt friction builder.
+
+## 0.313.0
+
+### Minor Changes
+
+- dc08534: Add a setup checklist (Configuration → Setup checklist, or the palette) for people who can change the workspace setup. It lists every prerequisite for "a task can run and merge" (model, source control, where agents run, test environments, screenshot storage) with its state and one action per row, composed from the probes the setup banners and startup dialogs already read. A row that needs attention says why (unreachable, a missing setting, a rejected or under-scoped token, a broken default preset, or a check that did not answer), and its action opens what the matching banner opens for that cause. A row follows the banners' rule for who may act on it: someone who cannot save the fix sees who can instead of a button. A probe that has not answered shows as checking, never as missing or done, and a failed probe offers "Try again". The banners and dialogs are unchanged. The GitHub store now records why the integration is unavailable (switched off, or the probe failed). The setup banners and the checklist open each fix through one shared map (`useSetupRemedies`), so a row and its banner cannot point at different screens. A token row says whose token it is, and a missing local token says to set `GITHUB_PAT`. A backend that does not report its infrastructure gets a row that says so instead of a spinner.
+
+## 0.312.0
+
+### Minor Changes
+
+- 1f02937: Add a queue view beside the board (issue #2258). The queue lists every task across every service in the column that says what it needs (Needs you, In flight, Ready to merge), and each card carries the one action its state implies. The sidebar's new Views switcher, the palette and a `?view=queue` link move between the queue and the canvas. The SPA opens on the view each person used last; a person who has not chosen lands on the queue. The canvas's decision counter now opens the queue view instead of a dropdown, on every service, and the queue lists a decision or approval on an initiative or a frame too. The queue's Done list follows the workspace's Done-lane settings, as each frame's Done lane does. A click anywhere on a queue card opens the task, and on a wide screen the queue's columns make room for the inspector instead of sitting under it. Starting a tour moves to the canvas, which every tour walks, and the Board basics tour gains a step on the two views. A Board basics tour broken off before this change resumes one step early. The board card and the frame swimlanes share their action and classification code with the queue (`useTaskActions`, `useTaskLaneClassifier`), so a member without `runs.execute` now sees the board card's Start and Merge disabled with the reason, as Retry already was.
+
 ## 0.311.3
 
 ### Patch Changes

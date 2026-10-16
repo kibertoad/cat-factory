@@ -55,6 +55,7 @@ import {
 import { DrizzleNotificationRepository } from '../src/repositories/notifications.js'
 import { DrizzleDocumentRepository } from '../src/repositories/documents.js'
 import { DrizzleTaskRepository } from '../src/repositories/tasks.js'
+import { DrizzlePublicApiKeyRepository } from '../src/repositories/publicApiKey.js'
 import { DrizzleGitHubInstallationRepository } from '../src/repositories/containerExecution.js'
 import { DrizzleRepoProjectionRepository } from '../src/repositories/github.js'
 import { createApp } from '../src/server.js'
@@ -558,6 +559,7 @@ export function makeConformanceApp(
     blockRepository: () => createDrizzleRepositories(db, { now: () => Date.now() }).blockRepository,
     workspaceRepository: () => new DrizzleWorkspaceRepository(db),
     workspaceMemberRepository: () => new DrizzleWorkspaceMemberRepository(db),
+    publicApiKeyRepository: () => new DrizzlePublicApiKeyRepository(db),
     initiativeRepository: () =>
       createDrizzleRepositories(db, { now: () => Date.now() }).initiativeRepository,
     notificationRepository: () => new DrizzleNotificationRepository(db),

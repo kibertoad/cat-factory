@@ -177,7 +177,7 @@ export const emailConnections = pgTable('email_connections', {
   deleted_at: bigint('deleted_at', { mode: 'number' }),
 })
 
-// The ACCOUNT's runner pool (mirror of D1 migration 0108): the same columns as
+// The ACCOUNT's runner pool (mirror of D1 migration 0110): the same columns as
 // `runner_pool_connections`, keyed by account. One row per account; the primary key is the
 // arbiter a conflict-targeted insert-if-absent relies on, so two concurrent seeders cannot both
 // insert. No tombstone and no FK, like the other per-account rows beside it.
@@ -289,7 +289,7 @@ export const machineNodes = pgTable(
   ],
 )
 
-// The directory change feed (docs/initiatives/directory-sync.md): which directory entity changed,
+// The directory change feed (backend/docs/adr/0067-directory-sync.md): which directory entity changed,
 // ordered per account. Rows are appended by the repositories that write users, memberships,
 // workspaces and the repo projection, inside the same transaction and after a per-account advisory
 // lock, so commit order equals `seq` order. No foreign keys: a row must outlive the entity it
@@ -309,4 +309,23 @@ export const directoryChanges = pgTable(
     // The retention sweep prunes on `at < ?`; same TTL-index convention as the tables above.
     index('idx_directory_changes_at').on(t.at),
   ],
+)
+
+// Account-level endpoints that receive the directory change feed as signed pushes. The delivery
+// sweep owns `delivered_seq` and the lease (`lease_token` until `lease_until`) that guards each
+// push. Mirrors D1 0109.
+export const directoryWebhooks = pgTable(
+  'directory_webhooks',
+  {
+    account_id: text('account_id').notNull(),
+    id: text('id').notNull(),
+    url: text('url').notNull(),
+    enabled: integer('enabled').notNull().default(1),
+    secret_sealed: text('secret_sealed'),
+    delivered_seq: bigint('delivered_seq', { mode: 'number' }).notNull().default(0),
+    lease_token: text('lease_token'),
+    lease_until: bigint('lease_until', { mode: 'number' }),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.account_id, t.id] })],
 )
