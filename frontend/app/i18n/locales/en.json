@@ -3920,7 +3920,7 @@
         "labelHelp": "A name to recognize this token by later.",
         "labelPlaceholder": "e.g. CI pipeline",
         "scope": "Scope",
-        "scopeHelp": "What this token can do: read-only, read and write, or full access (which also allows deleting).",
+        "scopeHelp": "Each level includes everything the one before it allows. Read: view tasks, runs and their results. Write: also create, edit, start, stop and retry tasks, and run reviews and assessments. Decide: also answer a run's human decisions (approvals, review findings, interview and clarifying questions, human tests); a token also needs this level to start a pipeline that can stop for one. Full access: also add, configure and delete services, delete tasks, link repositories, manage environment connections and webhooks, and act on notifications.",
         "create": "Create token",
         "identity": "Runs as",
         "identitySystem": "This workspace (system token)",
@@ -3935,10 +3935,10 @@
         "reachPick": "Choose workspaces"
       },
       "scopes": {
-        "read": "Read only",
-        "write": "Read and write",
-        "decide": "Answer decisions",
-        "admin": "Full access"
+        "read": "Read",
+        "write": "Write (includes Read)",
+        "decide": "Decide (includes Write)",
+        "admin": "Full access (includes Decide)"
       },
       "toast": {
         "loadFailed": "Could not load API tokens",
