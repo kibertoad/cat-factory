@@ -149,6 +149,7 @@ const SURFACE = {
 
   // ---- Key introspection (`read` scope; the startup self-check) --------------------------
   getPublicIdentity: { group: 'me', method: 'get' },
+  getPublicDeployment: { group: 'deployment', method: 'get' },
 
   // ---- Parked human decisions -----------------------------------------------------------
   listPublicRunDecisions: { group: 'decisions', method: 'list' },
@@ -213,6 +214,7 @@ const SURFACE = {
   // ---- Kaizen entries (`read` to consume the backlog, `write` to acknowledge one) ----------
   listPublicKaizenEntries: { group: 'kaizen', method: 'listEntries', paginates: 'entries' },
   // ---- Directory (`read`; account-scoped, for keeping an external copy in sync) ------------
+  getDirectoryReach: { group: 'directory', method: 'getReach' },
   listDirectoryChanges: { group: 'directory', method: 'listChanges' },
   listDirectoryWorkspaces: { group: 'directory', method: 'listWorkspaces', paginates: 'items' },
   listDirectoryUsers: { group: 'directory', method: 'listUsers', paginates: 'items' },
@@ -416,6 +418,8 @@ export const GROUP_DOCS = {
   usage:
     "The workspace's money, two ways: the billing period's metered budget position with the per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept against (a repository, a tracker ticket, one run).",
   me: 'What the calling key is and what it may do — the self-check an integration runs at startup.',
+  deployment:
+    "Where the deployment serves its web app, for sending a person to one of the app's deep links (the prefilled add-service screen, say). Any key may ask, with no workspace named.",
   decisions:
     'Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates.',
   debug:

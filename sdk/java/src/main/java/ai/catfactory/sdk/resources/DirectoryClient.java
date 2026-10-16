@@ -37,6 +37,20 @@ public final class DirectoryClient {
     }
 
     /**
+     * Read the key's directory reach
+     * The calling key’s account and the workspaces it reaches, `null` for every workspace in the
+     * account (later ones included). Account-scoped like the rest of the directory: no
+     * `x-cat-factory-workspace` header is read, so a key reaching several workspaces gets an
+     * answer where `GET /api/v1/me` asks it to name one. A mirror reads this to filter what a
+     * directory push may write, and to tell an account-wide key from one limited to some
+     * workspaces.
+     * {@code GET /api/v1/directory/reach} (operation {@code getDirectoryReach}).
+     */
+    public DirectoryReach getReach() {
+        return transport.request("GET", "/api/v1/directory/reach", null, Map.of(), new TypeReference<DirectoryReach>() {});
+    }
+
+    /**
      * List the account's memberships (no query parameters).
      */
     public DirectoryAccountMembershipPage listAccountMemberships() {

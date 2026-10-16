@@ -2140,6 +2140,31 @@ func (s *MeService) Get(ctx context.Context) (*PublicIdentity, error) {
 	return &out, nil
 }
 
+// DeploymentService where the deployment serves its web app, for sending a person to one of the app's deep links
+// (the prefilled add-service screen, say). Any key may ask, with no workspace named.
+type DeploymentService struct {
+	client *Client
+}
+
+// Get describe the deployment
+// Report where this deployment serves its web app (`appUrl`): `APP_BASE_URL` when the operator
+// set one, otherwise the origin this API was reached on. An integration uses it to send a person
+// to one of the app’s deep links, such as the prefilled add-service screen
+// (`?addRepo=<owner>/<name>`). Account-level, so a key reaching several workspaces calls it
+// without naming one. `read` scope.
+// GET /api/v1/deployment (operation getPublicDeployment).
+func (s *DeploymentService) Get(ctx context.Context) (*PublicDeployment, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/deployment",
+	}
+	var out PublicDeployment
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // DecisionsService every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge
 // verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview
 // gates.
@@ -3596,6 +3621,25 @@ func (s *DirectoryService) DeleteWebhook(ctx context.Context, webhookID string) 
 		Path:   fmt.Sprintf("/api/v1/directory/webhooks/%s", pathEscape(webhookID)),
 	}
 	return s.client.requestNoContent(ctx, req)
+}
+
+// GetReach read the key's directory reach
+// The calling key’s account and the workspaces it reaches, `null` for every workspace in the
+// account (later ones included). Account-scoped like the rest of the directory: no
+// `x-cat-factory-workspace` header is read, so a key reaching several workspaces gets an answer
+// where `GET /api/v1/me` asks it to name one. A mirror reads this to filter what a directory push
+// may write, and to tell an account-wide key from one limited to some workspaces.
+// GET /api/v1/directory/reach (operation getDirectoryReach).
+func (s *DirectoryService) GetReach(ctx context.Context) (*DirectoryReach, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/directory/reach",
+	}
+	var out DirectoryReach
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // ListAccountMemberships list the account's memberships

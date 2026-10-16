@@ -30,6 +30,7 @@ import type {
   DetachPublicTaskDocumentRequest,
   DirectoryAccountMembershipPage,
   DirectoryChangePage,
+  DirectoryReach,
   DirectoryRepoPage,
   DirectoryUserPage,
   DirectoryWebhook,
@@ -93,6 +94,7 @@ import type {
   PublicChallengePrReviewFinding,
   PublicChooseFork,
   PublicDecisionList,
+  PublicDeployment,
   PublicGuidedReviewList,
   PublicIdentity,
   PublicIncorporate,
@@ -1330,6 +1332,28 @@ export class MeResource {
   }
 }
 
+/** Where the deployment serves its web app, for sending a person to one of the app's deep links (the prefilled add-service screen, say). Any key may ask, with no workspace named. */
+export class DeploymentResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Describe the deployment
+   * Report where this deployment serves its web app (`appUrl`): `APP_BASE_URL` when the operator set one, otherwise the origin this API was reached on. An integration uses it to send a person to one of the app’s deep links, such as the prefilled add-service screen (`?addRepo=<owner>/<name>`). Account-level, so a key reaching several workspaces calls it without naming one. `read` scope.
+   * `GET /api/v1/deployment` — operation `getPublicDeployment`.
+   */
+  get(options: RequestOptions = {}): Promise<PublicDeployment> {
+    return this.#transport.request<PublicDeployment>({
+      method: 'GET',
+      path: `/api/v1/deployment`,
+      options,
+    })
+  }
+}
+
 /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates. */
 export class DecisionsResource {
   readonly #transport: Transport
@@ -2353,6 +2377,19 @@ export class DirectoryResource {
   }
 
   /**
+   * Read the key's directory reach
+   * The calling key’s account and the workspaces it reaches, `null` for every workspace in the account (later ones included). Account-scoped like the rest of the directory: no `x-cat-factory-workspace` header is read, so a key reaching several workspaces gets an answer where `GET /api/v1/me` asks it to name one. A mirror reads this to filter what a directory push may write, and to tell an account-wide key from one limited to some workspaces.
+   * `GET /api/v1/directory/reach` — operation `getDirectoryReach`.
+   */
+  getReach(options: RequestOptions = {}): Promise<DirectoryReach> {
+    return this.#transport.request<DirectoryReach>({
+      method: 'GET',
+      path: `/api/v1/directory/reach`,
+      options,
+    })
+  }
+
+  /**
    * List the account's memberships
    * A keyset-paged snapshot of the account’s memberships, each with the member’s account roles. Account-wide, so a key limited to some workspaces is refused with `403` and `reason: "account_scope_required"`.
    * `GET /api/v1/directory/account-memberships` — operation `listDirectoryAccountMemberships`.
@@ -2917,6 +2954,8 @@ export abstract class CatFactoryResources {
   readonly usage: UsageResource
   /** What the calling key is and what it may do — the self-check an integration runs at startup. */
   readonly me: MeResource
+  /** Where the deployment serves its web app, for sending a person to one of the app's deep links (the prefilled add-service screen, say). Any key may ask, with no workspace named. */
+  readonly deployment: DeploymentResource
   /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates. */
   readonly decisions: DecisionsResource
   /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs, and the whole model-activity bundle as one document. */
@@ -2956,6 +2995,7 @@ export abstract class CatFactoryResources {
     this.webhook = new WebhookResource(transport)
     this.usage = new UsageResource(transport)
     this.me = new MeResource(transport)
+    this.deployment = new DeploymentResource(transport)
     this.decisions = new DecisionsResource(transport)
     this.debug = new DebugResource(transport)
     this.evidence = new EvidenceResource(transport)

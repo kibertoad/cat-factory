@@ -1,5 +1,80 @@
 # @cat-factory/orchestration
 
+## 0.322.6
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/contracts@0.373.0
+  - @cat-factory/kernel@0.361.0
+  - @cat-factory/integrations@0.177.0
+  - @cat-factory/agents@0.172.6
+  - @cat-factory/prompt-fragments@1.1.71
+  - @cat-factory/sandbox@0.12.85
+  - @cat-factory/spend@0.23.20
+  - @cat-factory/workspaces@0.30.7
+  - @cat-factory/caching@0.20.109
+
+## 0.322.5
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+  - @cat-factory/agents@0.172.5
+  - @cat-factory/integrations@0.176.6
+  - @cat-factory/kernel@0.360.4
+  - @cat-factory/prompt-fragments@1.1.70
+  - @cat-factory/sandbox@0.12.84
+  - @cat-factory/spend@0.23.19
+  - @cat-factory/workspaces@0.30.6
+  - @cat-factory/caching@0.20.108
+
+## 0.322.4
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+  - @cat-factory/agents@0.172.4
+  - @cat-factory/integrations@0.176.5
+  - @cat-factory/kernel@0.360.3
+  - @cat-factory/prompt-fragments@1.1.69
+  - @cat-factory/sandbox@0.12.83
+  - @cat-factory/spend@0.23.18
+  - @cat-factory/workspaces@0.30.5
+  - @cat-factory/caching@0.20.107
+
+## 0.322.3
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+  - @cat-factory/integrations@0.176.4
+  - @cat-factory/kernel@0.360.2
+  - @cat-factory/agents@0.172.3
+  - @cat-factory/prompt-fragments@1.1.68
+  - @cat-factory/sandbox@0.12.82
+  - @cat-factory/spend@0.23.17
+  - @cat-factory/workspaces@0.30.4
+  - @cat-factory/caching@0.20.106
+
+## 0.322.2
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+  - @cat-factory/integrations@0.176.3
+  - @cat-factory/agents@0.172.2
+  - @cat-factory/kernel@0.360.1
+  - @cat-factory/prompt-fragments@1.1.67
+  - @cat-factory/sandbox@0.12.81
+  - @cat-factory/spend@0.23.16
+  - @cat-factory/workspaces@0.30.3
+  - @cat-factory/caching@0.20.105
+
 ## 0.322.1
 
 ### Patch Changes

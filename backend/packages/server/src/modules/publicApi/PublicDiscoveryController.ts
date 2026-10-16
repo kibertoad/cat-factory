@@ -1,10 +1,15 @@
-import { getPublicIdentityContract, listPublicTaskTypesContract } from '@cat-factory/contracts'
+import {
+  getPublicDeploymentContract,
+  getPublicIdentityContract,
+  listPublicTaskTypesContract,
+} from '@cat-factory/contracts'
 import { suppressedTaskTypeIds } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
+import { appBaseUrlFor } from '../../http/appBaseUrl.js'
 import type { AppEnv } from '../../http/env.js'
 import { OPENAPI_JSON } from './openapiDocument.generated.js'
-import { authorize, refuse } from './publicApiAuth.js'
+import { authorize, authorizeAccount, refuse } from './publicApiAuth.js'
 import { publicTaskTypeCatalog } from './taskTypeFields.js'
 
 // DISCOVERY: the two calls an integration makes before it does anything — what am I, and what is
@@ -34,6 +39,7 @@ export function publicDiscoveryController(): Hono<AppEnv> {
       accountId,
       workspaceId,
       workspaceIds,
+      followsMemberships,
       scope,
       label,
       externalIdentity,
@@ -42,9 +48,27 @@ export function publicDiscoveryController(): Hono<AppEnv> {
     // Straight off the auth result: `authenticate` already loaded the row, so self-description
     // costs no read of its own.
     return c.json(
-      { keyId, accountId, workspaceId, workspaceIds, scope, label, externalIdentity, createdAt },
+      {
+        keyId,
+        accountId,
+        workspaceId,
+        workspaceIds,
+        followsMemberships,
+        scope,
+        label,
+        externalIdentity,
+        createdAt,
+      },
       200,
     )
+  })
+
+  buildHonoRoute(app, getPublicDeploymentContract, async (c) => {
+    // Account-level: a fact about the deployment, so no workspace is resolved and a key reaching
+    // several needs no header to ask.
+    const gate = await authorizeAccount(c, getPublicDeploymentContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    return c.json({ appUrl: appBaseUrlFor(c) }, 200)
   })
 
   buildHonoRoute(app, listPublicTaskTypesContract, async (c) => {

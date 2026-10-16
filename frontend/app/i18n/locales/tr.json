@@ -2910,19 +2910,23 @@
     "scopeHint": "Her düzey kendisinden öncekileri de kapsar.",
     "scope": {
       "read": {
-        "label": "Yalnızca okuma",
+        "label": "Okuma · read",
         "description": "Servisleri, görevleri, hatları ve çalışmaları görüntüler."
       },
+      "webhooks": {
+        "label": "Webhooklar · webhooks",
+        "description": "Ayrıca değişiklikleri başka bir sisteme gönderen webhooklar kaydeder."
+      },
       "write": {
-        "label": "Okuma ve yazma",
+        "label": "Yazma · write",
         "description": "Ayrıca görev oluşturur ve başlatır."
       },
       "decide": {
-        "label": "Okuma, yazma ve karar",
+        "label": "Karar · decide",
         "description": "Ayrıca duraklatılmış bir çalışmanın beklediği soruları yanıtlar."
       },
       "admin": {
-        "label": "Tam erişim",
+        "label": "Tam erişim · admin",
         "description": "Ayrıca görev siler ve bildirimlere işlem uygular; bu bir pull request'i birleştirebilir."
       }
     },
@@ -3745,6 +3749,7 @@
         "boundToYou": "Aboneliğiniz",
         "boundToOther": "{user} kullanıcısının aboneliği",
         "reachAll": "Tüm çalışma alanları",
+        "reachMemberships": "Sahibinin çalışma alanlarını izler",
         "reachCount": "{count} çalışma alanı"
       },
       "add": {
@@ -3753,7 +3758,7 @@
         "labelHelp": "Bu belirteci daha sonra tanımak için bir ad.",
         "labelPlaceholder": "örn. CI hattı",
         "scope": "Kapsam",
-        "scopeHelp": "Bu belirtecin yapabilecekleri: yalnızca okuma, okuma ve yazma ya da tam erişim (silmeye de izin verir).",
+        "scopeHelp": "Her seviye, bir öncekinin izin verdiği her şeyi içerir. Okuma: görevleri, çalıştırmaları ve sonuçlarını görüntüleme. Webhooklar: ayrıca değişiklikleri başka bir sisteme gönderen webhookları (dizin ve bildirim webhookları gibi) kaydetme ve kaldırma. Yazma: ayrıca görev oluşturma, düzenleme, başlatma, durdurma ve yeniden deneme, inceleme ve değerlendirme başlatma. Karar: ayrıca bir çalıştırmanın insan kararlarını yanıtlama (onaylar, inceleme bulguları, görüşme ve netleştirme soruları, manuel testler); bir belirtecin, bunlardan birinde durabilecek bir işlem hattını başlatmak için de bu seviyeye ihtiyacı vardır. Tam erişim (admin): ayrıca hizmet ekleme, yapılandırma ve silme, görev silme, depo bağlama, ortam bağlantılarını yönetme ve bildirimler üzerinde işlem yapma.",
         "create": "Belirteç oluştur",
         "identity": "Şu kimlikle çalışır",
         "identitySystem": "Bu çalışma alanı (sistem belirteci)",
@@ -3762,16 +3767,20 @@
         "identitySelfHelp": "Bu belirteçle başlatılan çalıştırmalar size ait sayılır ve kişisel Claude / Codex / GLM aboneliğinizi kullanabilir. Bu tür her çağrının ayrıca kişisel parolanızı X-Personal-Password başlığında göndermesi gerekir; parola hiçbir zaman saklanmaz. Kendi headless çalıştırmalarınız için bunu kullanın.",
         "reach": "Çalışma alanları",
         "reachHelp": "Bu belirtecin hangi çalışma alanlarında işlem yapabileceği. Birden fazla çalışma alanına erişen bir belirteç, her çağrıda çalışma alanını x-cat-factory-workspace başlığında belirtir.",
+        "reachAdminOnly": "Diğer çalışma alanlarına erişen bir belirteci yalnızca bir hesap yöneticisi oluşturabilir; dizin webhookları buna ihtiyaç duyar. Bir hesap yöneticisinden isteyin.",
         "reachThis": "Yalnızca bu çalışma alanı",
         "reachAll": "Hesaptaki tüm çalışma alanları",
         "reachSelected": "Seçili çalışma alanları",
+        "reachMemberships": "Çalışma alanlarım (üyeliklerimi izler)",
+        "reachMembershipsHelp": "Her çağrıda işlem yapabildiğiniz her çalışma alanına ulaşır: birine katılmak ya da ayrılmak bunu değiştirir, yeniden oluşturmak gerekmez. Her birinde oradaki rolünüzün izin verdiğinden fazlasını yapamaz.",
         "reachPick": "Çalışma alanlarını seçin"
       },
       "scopes": {
-        "read": "Yalnızca okuma",
-        "write": "Okuma ve yazma",
-        "decide": "Kararları yanıtlama",
-        "admin": "Tam erişim"
+        "read": "Okuma · read",
+        "webhooks": "Webhooklar · webhooks (Okuma dahil)",
+        "write": "Yazma · write (Webhooklar dahil)",
+        "decide": "Karar · decide (Yazma dahil)",
+        "admin": "Tam erişim · admin (Karar dahil)"
       },
       "toast": {
         "loadFailed": "API belirteçleri yüklenemedi",
@@ -4639,7 +4648,8 @@
         "frontendWiringFailedNote": "Frontend ayarları kaydedilmedi. Alt dizinini ve backend servislerini ayarlamak için her frontend uygulamasının inspector’ını açın."
       },
       "repoType": "Depo türü",
-      "repoTypeHint": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike)."
+      "repoTypeHint": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike).",
+      "prefillProviderMismatch": "Bağlantı başka bir sağlayıcıdaki {repo} deposunu istiyordu, bu pano ise {connected} ile bağlı. Depoyu elle arayın veya bağlantıyı onun sağlayıcısına bağlı bir panoda açın."
     },
     "repoTree": {
       "root": "kök",
