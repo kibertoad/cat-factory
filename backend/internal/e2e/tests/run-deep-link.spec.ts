@@ -17,36 +17,55 @@ import {
 
 const TASK = 'task_login'
 
-/** The camera's zoom, read off the transform Vue Flow puts on the board's pane. */
-async function viewportZoom(page: Page): Promise<number> {
-  return page
-    .getByTestId('board-canvas')
-    .locator('.vue-flow__transformationpane')
-    .evaluate((el) => new DOMMatrixReadOnly(getComputedStyle(el).transform).a)
-}
-
 /**
- * Whether the task's card sits inside the canvas, and how far its centre is from the canvas's, in
- * screen pixels. The card is read inside its frame's node, as the board draws it.
+ * Where the camera is relative to the task, read in ONE snapshot. The camera moves in two animated
+ * steps (centre at the new zoom, then centre again once the card has grown at that level), so the
+ * zoom and the card's placement have to be read together: checked one after the other, either can
+ * pass mid-move and the next read land somewhere else.
  */
-async function taskPlacement(
+async function cameraOnTask(
   page: Page,
   frameId: string,
-): Promise<{ inside: boolean; offCentre: number }> {
-  const canvas = await page.getByTestId('board-canvas').boundingBox()
-  const card = await page
-    .locator(`.vue-flow__node[data-id="${frameId}"] [data-block-id="${TASK}"]`)
-    .boundingBox()
-  if (!canvas || !card) return { inside: false, offCentre: Number.POSITIVE_INFINITY }
-  const inside =
-    card.x >= canvas.x &&
-    card.y >= canvas.y &&
-    card.x + card.width <= canvas.x + canvas.width &&
-    card.y + card.height <= canvas.y + canvas.height
-  const dx = card.x + card.width / 2 - (canvas.x + canvas.width / 2)
-  const dy = card.y + card.height / 2 - (canvas.y + canvas.height / 2)
-  return { inside, offCentre: Math.hypot(dx, dy) }
+): Promise<{ zoomedIn: boolean; inside: boolean; centred: boolean }> {
+  const reading = await page.evaluate(
+    ({ frameId, task }) => {
+      const canvas = document.querySelector('[data-testid="board-canvas"]')
+      // Vue Flow puts the camera's transform on the pane, not on its viewport element.
+      const pane = canvas?.querySelector('.vue-flow__transformationpane')
+      const card = canvas?.querySelector(
+        `.vue-flow__node[data-id="${frameId}"] [data-block-id="${task}"]`,
+      )
+      if (!canvas || !pane || !card) return null
+      const area = canvas.getBoundingClientRect()
+      const box = card.getBoundingClientRect()
+      return {
+        zoom: new DOMMatrixReadOnly(getComputedStyle(pane).transform).a,
+        inside:
+          box.left >= area.left &&
+          box.top >= area.top &&
+          box.right <= area.right &&
+          box.bottom <= area.bottom,
+        offCentre: Math.hypot(
+          box.left + box.width / 2 - (area.left + area.width / 2),
+          box.top + box.height / 2 - (area.top + area.height / 2),
+        ),
+      }
+    },
+    { frameId, task: TASK },
+  )
+  if (reading === null) return { zoomedIn: false, inside: false, centred: false }
+  return {
+    zoomedIn: reading.zoom >= STEPS_ZOOM,
+    inside: reading.inside,
+    centred: reading.offCentre < CENTRED_WITHIN_PX,
+  }
 }
+
+/** The camera at rest on the task: zoomed in, the card on screen and centred. */
+const LANDED = { zoomedIn: true, inside: true, centred: true }
+
+/** How close to the canvas's centre counts as centred, in screen pixels. */
+const CENTRED_WITHIN_PX = 40
 
 /** The zoom where the board renders a task's pipeline steps (`LOD_MIN_ZOOM.steps` in the SPA). */
 const STEPS_ZOOM = 1.8
@@ -79,15 +98,9 @@ test.describe('run deep link', () => {
     await expect(focus.getByTestId('pipeline-step').first()).toBeVisible({ timeout: LIVE_TIMEOUT })
 
     // The camera zoomed in past the board's default to where a task's steps render, with the
-    // task's card inside the canvas and centred on it.
+    // task's card inside the canvas and centred on it, once it has finished moving.
     expect(STEPS_ZOOM).toBeGreaterThan(DEFAULT_ZOOM)
-    await expect
-      .poll(() => viewportZoom(page), { timeout: LIVE_TIMEOUT })
-      .toBeGreaterThanOrEqual(STEPS_ZOOM)
-    await expect
-      .poll(() => taskPlacement(page, frameId), { timeout: LIVE_TIMEOUT })
-      .toMatchObject({ inside: true })
-    expect((await taskPlacement(page, frameId)).offCentre).toBeLessThan(40)
+    await expect.poll(() => cameraOnTask(page, frameId), { timeout: LIVE_TIMEOUT }).toEqual(LANDED)
     // The link's own parameters are consumed, so a reload does not reopen it.
     expect(new URL(page.url()).searchParams.get('run')).toBeNull()
   })
@@ -111,13 +124,10 @@ test.describe('run deep link', () => {
     await expect(page.getByTestId('observability-panel')).toBeVisible({ timeout: BOOT_TIMEOUT })
     await expect(page.getByTestId('block-focus-view')).toHaveCount(0)
     await expect
-      .poll(() => viewportZoom(page), { timeout: LIVE_TIMEOUT })
-      .toBeGreaterThanOrEqual(STEPS_ZOOM)
-    await expect
-      .poll(() => taskPlacement(page, serviceFrameOf(snapshot.blocks, TASK)), {
+      .poll(() => cameraOnTask(page, serviceFrameOf(snapshot.blocks, TASK)), {
         timeout: LIVE_TIMEOUT,
       })
-      .toMatchObject({ inside: true })
+      .toEqual(LANDED)
   })
 })
 

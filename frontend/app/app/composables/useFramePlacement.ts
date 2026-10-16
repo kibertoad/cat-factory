@@ -28,7 +28,7 @@ const MIN_FOCUS_ZOOM = 0.6
 
 export function useFramePlacement() {
   const board = useBoardStore()
-  const { viewport, setCenter, screenToFlowCoordinate, findNode, onNodesInitialized } =
+  const { viewport, setCenter, screenToFlowCoordinate, findNode, onNodesInitialized, onMoveStart } =
     useVueFlow(BOARD_FLOW_ID)
 
   /**
@@ -121,17 +121,38 @@ export function useFramePlacement() {
     if (!board.getBlock(frameId)) return
     await whenRendered(frameId)
     await nextTick()
+    const frameSelector = `.vue-flow__node[data-id="${CSS.escape(frameId)}"]`
     // The card inside the frame's own node, not another surface that names the same task.
-    const selector = `.vue-flow__node[data-id="${CSS.escape(frameId)}"] [data-block-id="${CSS.escape(taskId)}"]`
-    if (!document.querySelector(selector)) {
+    const cardSelector = `${frameSelector} [data-block-id="${CSS.escape(taskId)}"]`
+    if (!document.querySelector(cardSelector)) {
       await focusFrame(frameId)
       return
     }
     const zoom = Math.max(viewport.value.zoom, LOD_MIN_ZOOM.steps)
-    await centreOn(selector, zoom, 400)
-    // The card renders larger at the `steps` level it was zoomed to, so it is measured again there.
-    await nextTick()
-    await centreOn(selector, zoom, 200)
+    await centreOn(cardSelector, zoom, 400)
+    keepCentred(frameSelector, cardSelector, zoom)
+  }
+
+  /**
+   * Keep the card centred while the board settles around it, until the person moves the camera.
+   * At the `steps` level a frame lays its swimlanes out again as each card renders its steps, so
+   * the card moves inside its frame after the camera has landed on it. Each change of the frame's
+   * or the card's size re-centres on it; the first pan or zoom the person makes ends the follow.
+   */
+  function keepCentred(frameSelector: string, cardSelector: string, zoom: number): void {
+    const frame = document.querySelector(frameSelector)
+    const card = document.querySelector(cardSelector)
+    if (!frame || !card) return
+    const observer = new ResizeObserver(() => void centreOn(cardSelector, zoom, 0))
+    observer.observe(frame)
+    observer.observe(card)
+    const { off } = onMoveStart(({ event }) => {
+      // A programmatic move (this follow's own) carries no input event; a person's does.
+      const byPerson = 'sourceEvent' in event ? event.sourceEvent != null : true
+      if (!byPerson) return
+      observer.disconnect()
+      off()
+    })
   }
 
   /** Centre the camera on an element of the board at `zoom`, resolving when the move lands. */
