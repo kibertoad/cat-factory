@@ -11,7 +11,12 @@ import {
   reviewPipeline,
   standardBuild,
 } from './pipelines.stories.mocks'
-import { manualReviewPolicy, modelPreset, riskPolicy } from './policies.stories.mocks'
+import {
+  manualReviewPolicy,
+  modelPreset,
+  modelPresetLibrary,
+  riskPolicy,
+} from './policies.stories.mocks'
 import { snapshot } from './snapshot.stories.mocks'
 
 export function taskFormSnapshot(overrides: Partial<WorkspaceSnapshot> = {}): WorkspaceSnapshot {
@@ -28,13 +33,7 @@ export function taskFormSnapshot(overrides: Partial<WorkspaceSnapshot> = {}): Wo
     riskPolicies: [riskPolicy(), manualReviewPolicy],
     modelPresets: [
       modelPreset(),
-      modelPreset({
-        id: 'mdp_claude',
-        name: 'Claude Opus 5',
-        baseModelId: 'claude-opus-5',
-        isDefault: false,
-        version: 2,
-      }),
+      ...modelPresetLibrary.filter((preset) => preset.id === 'mdp_claude'),
     ],
     ...overrides,
   })

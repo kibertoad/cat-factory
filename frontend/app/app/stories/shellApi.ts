@@ -2,8 +2,8 @@
 // the command bar each time it opens. Each probe decides whether a destination or a command shows,
 // so a story that leaves one unanswered both warns and renders less than the app would. The board
 // connects GitHub, Slack, Confluence, Figma and Jira, keeps no fragments of its own, and has both
-// infrastructure providers set up. Pass `false` to turn an integration off: its probe then answers
-// 503, as a deployment that does not offer it does.
+// infrastructure providers set up. Pass `false` to turn an integration off: every read of it then
+// answers 503, as a deployment that does not offer it does.
 import {
   describeEnvironmentProviderContract,
   describeRunnerPoolProviderContract,
@@ -49,20 +49,24 @@ const runnersOff = 'Runner pool integration is not configured'
 
 /**
  * The documents store's probe: the sources the deployment offers and the ones the board
- * connected. With `offered: false` the source list answers 503, as a deployment without the
- * integration does.
+ * connected. With `offered: false` both reads answer 503, as a deployment without the
+ * integration does: every documents route goes through the same `requireCapability`.
  */
 export function documentProbeApi({
   offered = true,
   connections = documentConnections,
 }: { offered?: boolean; connections?: DocumentConnection[] } = {}): HttpHandler[] {
+  if (!offered) {
+    return [
+      notOffered(listDocumentSourcesContract, documentsOff),
+      notOffered(listDocumentConnectionsContract, documentsOff),
+    ]
+  }
   return [
-    offered
-      ? apiResponse(listDocumentSourcesContract, {
-          pathPrefix,
-          body: { sources: documentSources, oauthSources: [] },
-        })
-      : notOffered(listDocumentSourcesContract, documentsOff),
+    apiResponse(listDocumentSourcesContract, {
+      pathPrefix,
+      body: { sources: documentSources, oauthSources: [] },
+    }),
     apiResponse(listDocumentConnectionsContract, { pathPrefix, body: { connections } }),
   ]
 }
@@ -80,14 +84,19 @@ export function shellProbeApi({
 } = {}): HttpHandler[] {
   return [
     ...githubProbeApi(),
-    ...documentProbeApi({ offered: documents, connections: documents ? documentConnections : [] }),
-    tasks
-      ? apiResponse(listTaskSourcesContract, { pathPrefix, body: { sources: taskSources } })
-      : notOffered(listTaskSourcesContract, tasksOff),
-    apiResponse(listTaskConnectionsContract, {
-      pathPrefix,
-      body: { connections: tasks ? taskConnections : [] },
-    }),
+    ...documentProbeApi({ offered: documents }),
+    ...(tasks
+      ? [
+          apiResponse(listTaskSourcesContract, { pathPrefix, body: { sources: taskSources } }),
+          apiResponse(listTaskConnectionsContract, {
+            pathPrefix,
+            body: { connections: taskConnections },
+          }),
+        ]
+      : [
+          notOffered(listTaskSourcesContract, tasksOff),
+          notOffered(listTaskConnectionsContract, tasksOff),
+        ]),
     slack
       ? apiResponse(getSlackConnectionContract, {
           pathPrefix,

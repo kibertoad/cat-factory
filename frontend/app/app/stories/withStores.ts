@@ -24,6 +24,7 @@ import type {
   ModelOption,
   ResolvedFoundationalService,
   ServiceCatalogConnection,
+  TaskSourceState,
   WorkspaceSnapshot,
 } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
@@ -37,6 +38,7 @@ import { useGitHubStore } from '~/stores/github'
 import { useLaneViewStore } from '~/stores/laneView'
 import { useModelsStore } from '~/stores/models'
 import { useServicesStore } from '~/stores/services'
+import { useTasksStore } from '~/stores/tasks'
 import { useUiStore } from '~/stores/ui'
 import { useUiModeStore } from '~/stores/uiMode'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -171,6 +173,16 @@ export function seedDocumentSources(
   documents.sources = sources
   documents.connections = connections
   documents.oauthSources = oauthSources
+}
+
+/**
+ * The issue trackers the deployment offers, as the tasks store's probe reads them. Marks the
+ * integration available, so the surfaces that hide behind the probe render.
+ */
+export function seedTaskSources(sources: TaskSourceState[]): void {
+  const tasks = useTasksStore()
+  tasks.available = true
+  tasks.sources = sources
 }
 
 /**
