@@ -19,7 +19,7 @@
 //     when it wants to be a story inside its stem rather than a sibling of it.
 //
 // What is NOT checked, and stays review's: whether the domain is the right one, whether a story
-// earns its place, and whether the names after `Default` / `Empty` / `Loading` / `Error` describe
+// earns its place, and whether the names after `Default` / `Empty` / `Loading` / `Failed` describe
 // states a reader cares about. A guard can keep the shelf tidy; it cannot tell you what to shelve.
 //
 // Adding a domain is deliberate: add it below, and expect to justify it, because every new one is
