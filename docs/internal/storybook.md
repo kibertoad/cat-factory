@@ -110,7 +110,7 @@ Pick the layer first: it decides what mounts, what fakes the data, and who the s
 ### Titles are product language
 
 ```
-<Domain>/<Kind>/<Component>        Pipeline/Components/GateFailingCheckList
+<Domain>/<Kind>/<Component>        Review/Components/GateFailingCheckList
 ```
 
 A title names the surface a user recognises, not the component tree.
@@ -178,7 +178,7 @@ Data a component LOADS is answered over HTTP (`app/stories/api.ts`). A story lis
 
 - `apiResponse(contract, { pathPrefix, pathParams, body })` builds the response from the route
   contract the app's client uses, and validates `body` against the contract's success schema. A
-  workspace route takes `pathPrefix: storyWorkspacePrefix`.
+  workspace route takes `pathPrefix: storyWorkspacePrefix`, from `app/stories/workspace.ts`.
 - `apiPending` never answers (a `Loading` story); `apiFailure` sends the backend's 500 envelope (an
   `Error` story); `apiRefusal` sends a refusal with the status, code and message copied from the
   handler that refuses; `apiNoContent` answers a 204; `apiHandler` computes the response from the
