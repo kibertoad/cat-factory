@@ -51,10 +51,7 @@ export const PassedOnLastAttempt: Story = {
   },
 }
 
-/**
- * No checks ran. It renders "All 0 checks passed on attempt 1", the same as a green suite. A
- * finding, not filed.
- */
+/** No checks ran. It renders "All 0 checks passed on attempt 1", the same as a green suite. */
 export const NoChecks: Story = {
   args: { report: { passed: true, attempts: 1, maxAttempts: 3, outcomes: [] } },
 }

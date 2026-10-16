@@ -18,11 +18,9 @@ import BinaryOutputStepPicker from './BinaryOutputStepPicker.vue'
 // is a line of its own. The storage list is the service catalog's `asset-storage` entries; the
 // integrations come from the snapshot.
 //
-// The pipelines store's `setDraftBinaryOutput` keeps only the storage, context, integrations and
-// content types, and drops `mediaTypes`, `generation` and `comparison`. Every control below the
-// content types writes through it, so none of them is kept: the GenerationControls and
-// Comparison stories seed those options and the picker shows them empty, which is what the app
-// does after a click or an edit.
+// The stories seed `draftStepOptions` directly, the state a pipeline loaded for edit carries. The
+// store's `setDraftBinaryOutput` keeps only the storage, context, integrations and content types,
+// so a click on a control below the content types drops the generation and comparison options.
 //
 // The platform storage and Nano Banana are copies of the shipped ones (`platform-asset-service.ts`
 // in kernel, `nano-banana.ts` in `binary-generators`), with their contracts left out. The brand
@@ -78,7 +76,9 @@ function picking(
       options.generatorsUnavailable ? [] : [nanoBanana, spriteRenderer],
       options.generatorsUnavailable ?? false,
     )
-    usePipelinesStore().setDraftBinaryOutput(0, config)
+    // Seeded as a pipeline loaded for edit carries it. `setDraftBinaryOutput` would drop the
+    // generation and comparison options.
+    usePipelinesStore().draftStepOptions[0] = config ? { binaryOutput: config } : {}
   })
 }
 
@@ -106,10 +106,7 @@ export const Default: Story = {}
 /** Nothing picked: only the storage select. */
 export const Empty: Story = { decorators: [picking(undefined)] }
 
-/**
- * The sprite renderer offers an exact size, a seed, transparency and tiling. The seeded 96×96 and
- * transparent background do not show, because the store dropped them (see above).
- */
+/** The sprite renderer offers an exact size, a seed, transparency and tiling, seeded 96×96 and transparent. */
 export const GenerationControls: Story = {
   decorators: [
     picking({
@@ -120,10 +117,7 @@ export const GenerationControls: Story = {
   ],
 }
 
-/**
- * Three candidates per integration, more than one kept: seeded, and dropped by the store, so the
- * comparison box shows unticked and its two controls do not show.
- */
+/** Three candidates per integration, and more than one kept. */
 export const Comparison: Story = {
   decorators: [picking({ ...selected, comparison: { perGenerator: 3, multiSelect: true } })],
 }

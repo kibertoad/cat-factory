@@ -228,7 +228,7 @@ export const Fishing: Story = story(
 export const Empty: Story = story(expedition({ findings: [] }))
 
 /** The read when the window opens failed: the error line over the findings from the board. */
-export const LoadError: Story = {
+export const Error: Story = {
   decorators: [opened(expedition())],
   parameters: { api: [apiFailure(getBugFishingContract, read)] },
 }

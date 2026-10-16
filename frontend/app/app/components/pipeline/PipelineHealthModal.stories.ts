@@ -22,9 +22,9 @@ import PipelineHealthModal from './PipelineHealthModal.vue'
 // `repro-test` kind is registered, so the snapshot carries it. The custom pipeline with an
 // unknown kind is made up.
 const current = {
-  [standardBuild.id]: 3,
-  [adaptiveBuild.id]: 8,
-  [bugfixPipeline.id]: bugfixPipeline.version ?? 1,
+  [standardBuild.id]: standardBuild.version,
+  [adaptiveBuild.id]: adaptiveBuild.version,
+  [bugfixPipeline.id]: bugfixPipeline.version,
 }
 const names = {
   [standardBuild.id]: standardBuild.name,

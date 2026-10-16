@@ -82,14 +82,10 @@ export const Loading: Story = {
   },
 }
 
-/** Never edited: the built-in prompt, and Revert disabled. The history has the one revert. */
+/** Never edited: the built-in prompt, and Revert disabled. The history is empty. */
 export const UsingBuiltin: Story = {
   parameters: {
-    api: [
-      promptIs(
-        detail({ effectiveText: builtinText, customized: false, revisions: [revision(1, null)] }),
-      ),
-    ],
+    api: [promptIs(detail({ effectiveText: builtinText, customized: false, revisions: [] }))],
   },
 }
 

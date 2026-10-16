@@ -61,7 +61,7 @@ const redChecks = [
   { name: 'test-db', conclusion: 'timed_out', url: 'https://example.invalid/runs/2' },
 ]
 
-const ciRounds: GateStepState['attemptLog'] = [
+const ciRounds: NonNullable<GateStepState['attemptLog']> = [
   {
     attempt: 1,
     at,
@@ -105,7 +105,7 @@ export const GaveUp: Story = opened(
       attempts: 3,
       failingChecks: [redChecks[1]!],
       attemptLog: [
-        ...ciRounds!,
+        ...ciRounds,
         {
           attempt: 2,
           at: at + 15 * 60_000,

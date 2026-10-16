@@ -161,7 +161,7 @@ export const Failed: Story = {
  * The read failed. The store drops every load error, so the window shows the empty state, the
  * same as a task with no session.
  */
-export const LoadFailed: Story = {
+export const Error: Story = {
   parameters: {
     api: [
       apiFailure(getConsensusSessionContract, {
