@@ -1,5 +1,46 @@
 # @cat-factory/worker
 
+## 0.227.0
+
+### Minor Changes
+
+- 83f6b0c: A personal API key can follow its person's workspaces. Minted with `followsMemberships: true`
+  (beside `actsAsSelf: true`, and no `workspaceIds`), it reaches every workspace that person can act
+  in, resolved on each call: joining a workspace grants it on the next call and leaving takes it
+  away, with nothing to re-mint. In each workspace its scope is lowered to what the person's role
+  there allows (`read` for a viewer, `decide` for a member, `admin` for an admin), and on account-level
+  routes it acts with `read`, so it can never do more over `/api/v1` than its person can in the app.
+  That is also why anyone with `runs.execute` may mint one, list it and revoke it; an account admin
+  manages anyone's.
+  
+  `followsMemberships` is new on a listed or minted key (whose `workspaceIds` is then `[]`), on
+  `GET /api/v1/me` and on `GET /api/v1/directory/reach`, which answer the reach as of the call.
+  OpenAPI 1.89.0. The API tokens window offers "My workspaces (follows my memberships)", the default
+  for a personal token, and `?newApiKey` takes `reach=memberships`. New migrations: D1
+  `0110_public_api_key_follows_memberships.sql`, Drizzle
+  `20261016160143_public_api_key_follows_memberships`.
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/contracts@0.373.0
+  - @cat-factory/kernel@0.361.0
+  - @cat-factory/integrations@0.177.0
+  - @cat-factory/server@0.340.0
+  - @cat-factory/agents@0.172.6
+  - @cat-factory/binary-generators@0.3.75
+  - @cat-factory/consensus@0.19.23
+  - @cat-factory/eks@0.1.414
+  - @cat-factory/gates@0.12.11
+  - @cat-factory/gitlab@0.24.11
+  - @cat-factory/observability-otel@0.23.68
+  - @cat-factory/orchestration@0.322.6
+  - @cat-factory/prompt-fragments@1.1.71
+  - @cat-factory/spend@0.23.20
+  - @cat-factory/caching@0.20.109
+  - @cat-factory/observability-langfuse@0.11.75
+  - @cat-factory/provider-cloudflare@0.7.569
+
 ## 0.226.4
 
 ### Patch Changes
