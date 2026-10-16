@@ -134,15 +134,6 @@ function navAnchoredSteps(): {
   )
 }
 
-/** The fields of a gate set, in a stable order. */
-const GATE_KEYS = Object.keys(ALL_GATES) as (keyof NavGates)[]
-
-/** Every gate field `true`: the base each searched assignment starts from. */
-const ALL_TRUE = Object.fromEntries(GATE_KEYS.map((key) => [key, true])) as Record<
-  keyof NavGates,
-  boolean
->
-
 /** The gate fields a witness has turned OFF — the interesting half of a failure message. */
 function absentGates(gates: NavGates): readonly string[] {
   return Object.entries(gates)
@@ -157,10 +148,16 @@ function drifts(pair: ReturnType<typeof navAnchoredSteps>[number], gates: NavGat
   return !navItemVisible(pair.item, gates)
 }
 
+/** Thrown by the gate proxy on the first read of a field the current branch has not assigned. */
+class UnassignedGate {
+  constructor(readonly key: keyof NavGates) {}
+}
+
 /**
  * For one pair, a gate set that OFFERS its tour while the entry its step clicks is NOT
  * rendered, or `undefined` when no such set exists (what the guard wants). A step the gate set
- * DROPS (`when`) needs no anchor, so it cannot be a counterexample.
+ * DROPS (`when`) needs no anchor, so it cannot be a counterexample. Also returns the gate
+ * fields the search branched on, so the test can see that it varied something.
  *
  * Of the many counterexamples one break produces, the one reported is the SMALLEST: the gate
  * set closest to fully-permitted, so its absent fields are exactly the ones that matter. The
@@ -168,52 +165,67 @@ function drifts(pair: ReturnType<typeof navAnchoredSteps>[number], gates: NavGat
  * is the difference between a failure that says "declare `advancedMode`" and one that says
  * "something about fourteen gates".
  *
- * The search covers only the fields the pair's predicates READ, recorded through a proxy, so
- * its cost follows what one tour and one entry depend on, not the size of `NavGates` (walking
- * all `2 ** n` gate sets per pair crossed vitest's timeout on a loaded CI runner). It assumes
- * nothing about how either predicate is spelled. Start with no field in the search and every
- * field `true`; enumerate every assignment of the searched fields, the rest held `true`; when an
- * evaluation reads a field outside the search, add that field and enumerate again. At the
- * fixpoint no assignment reads a field outside the search, and a pure predicate that never
- * reads a field cannot depend on it, so the searched fields decide the verdict for EVERY gate
- * set. Holding the rest `true` also keeps each witness as small as one can be.
+ * The search branches lazily on the fields the pair's predicates read. It evaluates the pair
+ * through a proxy; the first read of a field this branch has not assigned stops the
+ * evaluation, and the search tries that field `false` and then `true`. A branch whose
+ * evaluation completes has a verdict for every gate set that agrees with its assignments, and
+ * its witness holds every unassigned field `true`, which keeps it as small as one can be. So
+ * the cost follows what one tour and one entry read, not the size of `NavGates`.
+ *
+ * This is sound only if the predicates (the tour's `requires`, the step's `when` and
+ * `navItemVisible`) are PURE and read each gate as a plain property (`g.field`). A read the
+ * proxy cannot see would let a field the verdict depends on stay held `true`, so the proxy
+ * refuses `in`, the key list and property descriptors loudly.
  */
-function navRequirementDrift(
-  pair: ReturnType<typeof navAnchoredSteps>[number],
-): NavGates | undefined {
-  const searched: (keyof NavGates)[] = []
-  for (;;) {
-    let smallest: NavGates | undefined
-    let fewestAbsent = Number.POSITIVE_INFINITY
-    let unsearched: keyof NavGates | undefined
-    for (let mask = 0; mask < 2 ** searched.length && unsearched === undefined; mask++) {
-      const gates = { ...ALL_TRUE }
-      for (const [bit, key] of searched.entries()) gates[key] = (mask & (1 << bit)) !== 0
-      const recorded = new Proxy(gates, {
-        get(target, key) {
-          if (typeof key === 'string' && key in target && !searched.includes(key as keyof NavGates))
-            unsearched ??= key as keyof NavGates
-          return Reflect.get(target, key)
-        },
-        // A read through `in` or the key list is invisible to `get`, so the search could stop
-        // before it reaches the field and pass with the drift unreported. Refuse it loudly.
-        has() {
-          throw new Error('a nav predicate read the gates with `in`; read each field directly')
-        },
-        ownKeys() {
-          throw new Error('a nav predicate listed the gate keys; read each field directly')
-        },
-      }) as NavGates
-      if (!drifts(pair, recorded) || unsearched !== undefined) continue
-      const absent = absentGates(gates).length
-      if (absent < fewestAbsent) {
-        fewestAbsent = absent
-        smallest = gates
-      }
-    }
-    if (unsearched === undefined) return smallest
-    searched.push(unsearched)
+function navRequirementDrift(pair: ReturnType<typeof navAnchoredSteps>[number]): {
+  witness: NavGates | undefined
+  branched: ReadonlySet<keyof NavGates>
+} {
+  const assigned: Partial<Record<keyof NavGates, boolean>> = {}
+  const branched = new Set<keyof NavGates>()
+  const refuse = (how: string) => () => {
+    throw new Error(`a nav predicate read the gates through ${how}; read each field directly`)
   }
+  const gates = new Proxy(
+    { ...ALL_GATES },
+    {
+      get(target, key) {
+        if (typeof key !== 'string' || !Object.hasOwn(target, key)) return Reflect.get(target, key)
+        const value = assigned[key as keyof NavGates]
+        if (value === undefined) throw new UnassignedGate(key as keyof NavGates)
+        return value
+      },
+      has: refuse('`in`'),
+      ownKeys: refuse('the key list'),
+      getOwnPropertyDescriptor: refuse('a property descriptor'),
+    },
+  ) as NavGates
+
+  let witness: NavGates | undefined
+  let fewestAbsent = Number.POSITIVE_INFINITY
+  const explore = (): void => {
+    let verdict: boolean
+    try {
+      verdict = drifts(pair, gates)
+    } catch (error) {
+      if (!(error instanceof UnassignedGate)) throw error
+      branched.add(error.key)
+      for (const value of [false, true]) {
+        assigned[error.key] = value
+        explore()
+      }
+      delete assigned[error.key]
+      return
+    }
+    if (!verdict) return
+    const absent = Object.values(assigned).filter((value) => value === false).length
+    if (absent < fewestAbsent) {
+      fewestAbsent = absent
+      witness = { ...ALL_GATES, ...assigned }
+    }
+  }
+  explore()
+  return { witness, branched }
 }
 
 /** Every static test id this layer actually renders. */
@@ -326,14 +338,14 @@ describe('the built-in tutorial tour catalog', () => {
     const pairs = navAnchoredSteps()
     // Guard the guard, twice over. A pairing that matched nothing would pass vacuously, and
     // there is one per tour that opens a sidebar surface: `add-service` plus every platform
-    // tour. And a gate field that is not a boolean would silently never vary across the
-    // matrix, leaving whatever it gates unexercised.
+    // tour. And a search that branched on no field would pass without varying anything:
+    // `navItemVisible` always reads `advancedMode` or `fullSurface`, so every pair must branch.
     expect(pairs.length).toBeGreaterThanOrEqual(8)
-    expect(Object.values(ALL_GATES).every((value) => typeof value === 'boolean')).toBe(true)
+    const results = pairs.map(navRequirementDrift)
+    expect(results.filter((result) => result.branched.size === 0)).toEqual([])
 
-    const witnesses = pairs.map(navRequirementDrift)
     const drifted = pairs.flatMap((pair, index) => {
-      const witness = witnesses[index]
+      const witness = results[index]!.witness
       if (witness === undefined) return []
       return [`${pair.label} is offered without ${absentGates(witness).join(' / ')}`]
     })
