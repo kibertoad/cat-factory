@@ -38,17 +38,17 @@ an answered request).
 Each domain PR brings its stories, the shared fixtures and request helpers they need, and their
 rows in `fixtures.spec.ts`.
 
-| PR  | Scope                                                                  | Story files | Stories   | Link      |
-| --- | ---------------------------------------------------------------------- | ----------- | --------- | --------- |
-| 1   | Infrastructure, the patch, the guard, the nightly lane, three examples | 3           | 12        | (this PR) |
-| 2   | Primitives and Shell                                                   | 36          | 130       |           |
-| 3   | Board                                                                  | 43          | 205       |           |
-| 4   | Inspector                                                              | 35          | 149       |           |
-| 5   | Pipeline                                                               | 47          | 241       |           |
-| 6   | Review and Run telemetry                                               | 31          | 167       |           |
-| 7   | Documents and Setup                                                    | 36          | 164       |           |
-| 8   | Settings, first half                                                   | 40          | about 180 |           |
-| 9   | Settings, second half                                                  | 41          | about 180 |           |
+| PR  | Scope                                                                  | Story files | Stories   | Link                                                        |
+| --- | ---------------------------------------------------------------------- | ----------- | --------- | ----------------------------------------------------------- |
+| 1   | Infrastructure, the patch, the guard, the nightly lane, three examples | 3           | 12        | (this PR)                                                   |
+| 2   | Primitives and Shell                                                   | 36          | 130       | [#2384](https://github.com/kibertoad/cat-factory/pull/2384) |
+| 3   | Board                                                                  | 43          | 205       |                                                             |
+| 4   | Inspector                                                              | 35          | 149       |                                                             |
+| 5   | Pipeline                                                               | 47          | 241       |                                                             |
+| 6   | Review and Run telemetry                                               | 31          | 167       |                                                             |
+| 7   | Documents and Setup                                                    | 36          | 164       |                                                             |
+| 8   | Settings, first half                                                   | 40          | about 180 |                                                             |
+| 9   | Settings, second half                                                  | 41          | about 180 |                                                             |
 
 The domain counts include the examples in PR 1 (one each in Review, Board and Pipeline).
 
