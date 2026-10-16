@@ -57,7 +57,7 @@ export const Loading: Story = {
 }
 
 /** The sealed request expired: the screen says so and offers the way back to the app. */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: {
     api: [
       apiRefusal(describeMcpAuthorizationContract, {

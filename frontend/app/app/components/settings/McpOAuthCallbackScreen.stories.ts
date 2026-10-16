@@ -47,7 +47,7 @@ export const Loading: Story = {
  * reads the message from a field the API error does not have, so it shows its generic line
  * instead of the reason (#2396).
  */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: {
     api: [
       apiRefusal(completeToolServerOAuthContract, {

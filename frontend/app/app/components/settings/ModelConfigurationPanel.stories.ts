@@ -74,7 +74,7 @@ export const Loading: Story = {
 }
 
 /** The model catalog read failed: the alert with Retry, and the failure toast. */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: {
     api: [
       apiFailure(listWorkspaceModelsContract, { pathParams: { workspaceId: STORY_WORKSPACE_ID } }),

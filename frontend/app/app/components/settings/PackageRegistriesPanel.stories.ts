@@ -37,7 +37,7 @@ export const Default: Story = {}
 export const Empty: Story = { parameters: { api: [entriesAre([])] } }
 
 /** The list request failed: the failure toast, and the add form alone. */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: {
     api: [apiFailure(listPackageRegistriesContract, { pathPrefix: storyWorkspacePrefix })],
   },

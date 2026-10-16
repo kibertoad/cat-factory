@@ -85,7 +85,7 @@ export const Loading: Story = {
 }
 
 /** The report request failed: the error line. */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: {
     api: [apiFailure(getWorkspaceUsageContract, { pathPrefix: storyWorkspacePrefix })],
   },

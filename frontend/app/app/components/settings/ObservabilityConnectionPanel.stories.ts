@@ -88,6 +88,6 @@ export const IncidentUnavailable: Story = {
  * The connection read failed. The store reads any failure as the feature being off and does not
  * throw, so there is no toast: the window shows Not connected and the connect form.
  */
-export const LoadFailed: Story = {
+export const Failed: Story = {
   parameters: { api: answers({ connectionFails: true }) },
 }
