@@ -1,5 +1,6 @@
 import {
   definePublicDirectorySuite,
+  definePublicKeyMembershipReachSuite,
   definePublicKeyReachSuite,
   defineWorkspaceAccessSuite,
   defineWorkspaceRbacSuite,
@@ -15,5 +16,6 @@ defineWorkspaceRbacSuite(harness)
 // Directory sync (ADR 0067): account-level public-API keys, their workspace reach and the per-request
 // workspace resolution, over the real grant rows and the real auth gate.
 definePublicKeyReachSuite(harness)
+definePublicKeyMembershipReachSuite(harness)
 // Directory sync (ADR 0067): the public directory snapshots and change feed, over HTTP.
 definePublicDirectorySuite(harness)

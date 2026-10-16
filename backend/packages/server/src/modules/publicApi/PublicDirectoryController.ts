@@ -1,5 +1,6 @@
 import {
   deleteDirectoryWebhookContract,
+  getDirectoryReachContract,
   listDirectoryAccountMembershipsContract,
   listDirectoryChangesContract,
   listDirectoryReposContract,
@@ -25,6 +26,13 @@ import { authorizeAccount, refuse } from './publicApiAuth.js'
 
 export function publicDirectoryController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+
+  buildHonoRoute(app, getDirectoryReachContract, async (c) => {
+    const gate = await authorizeAccount(c, getDirectoryReachContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const { accountId, workspaceIds, followsMemberships } = gate.auth
+    return c.json({ accountId, workspaceIds, followsMemberships }, 200)
+  })
 
   buildHonoRoute(app, listDirectoryChangesContract, async (c) => {
     const gate = await authorizeAccount(c, listDirectoryChangesContract.minScope)
@@ -79,8 +87,9 @@ export function publicDirectoryController(): Hono<AppEnv> {
   })
 
   // ---- Directory webhooks: account-level push endpoints --------------------------------------
-  // `admin` and account-wide only: an endpoint receives every directory change in the account, so
-  // a key limited to some workspaces could otherwise read the rest through a push it registered.
+  // `webhooks` and account-wide only: an endpoint receives every directory change in the account,
+  // so a key limited to some workspaces could otherwise read the rest through a push it registered.
+  // The reach check is what protects the data; the scope only keeps a plain `read` key passive.
 
   buildHonoRoute(app, listDirectoryWebhooksContract, async (c) => {
     const gate = await authorizeAccount(c, listDirectoryWebhooksContract.minScope)

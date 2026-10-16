@@ -16,6 +16,7 @@ import org.jspecify.annotations.Nullable;
  * @param createdByKeyId Always present; {@code null} when the server has no value for it.
  * @param createdByUserId Always present; {@code null} when the server has no value for it.
  * @param externalIdentity Always present; {@code null} when the server has no value for it.
+ * @param followsMemberships the {@code followsMemberships} field.
  * @param id the {@code id} field.
  * @param label the {@code label} field.
  * @param lastUsedAt Always present; {@code null} when the server has no value for it.
@@ -41,6 +42,8 @@ public record PublicApiKey(
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("externalIdentity") @Nullable String externalIdentity,
+
+    @JsonProperty("followsMemberships") Boolean followsMemberships,
 
     @JsonProperty("id") String id,
 
@@ -78,6 +81,7 @@ public record PublicApiKey(
         private @Nullable String createdByKeyId;
         private @Nullable String createdByUserId;
         private @Nullable String externalIdentity;
+        private @Nullable Boolean followsMemberships;
         private @Nullable String id;
         private @Nullable String label;
         private @Nullable Double lastUsedAt;
@@ -119,6 +123,12 @@ public record PublicApiKey(
         /** Set {@code externalIdentity}. */
         public Builder externalIdentity(@Nullable String externalIdentity) {
             this.externalIdentity = externalIdentity;
+            return this;
+        }
+
+        /** Set {@code followsMemberships}. */
+        public Builder followsMemberships(@Nullable Boolean followsMemberships) {
+            this.followsMemberships = followsMemberships;
             return this;
         }
 
@@ -166,7 +176,7 @@ public record PublicApiKey(
 
         /** Build the {@link PublicApiKey}. */
         public PublicApiKey build() {
-            return new PublicApiKey(accountId, actsAsUserId, createdAt, createdByKeyId, createdByUserId, externalIdentity, id, label, lastUsedAt, revokedAt, scope, workspaceId, workspaceIds);
+            return new PublicApiKey(accountId, actsAsUserId, createdAt, createdByKeyId, createdByUserId, externalIdentity, followsMemberships, id, label, lastUsedAt, revokedAt, scope, workspaceId, workspaceIds);
         }
     }
 }
