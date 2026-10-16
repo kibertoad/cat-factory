@@ -1,0 +1,32 @@
+{
+  "name": "@cat-factory/storybook",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Component stories for the @cat-factory/app SPA. Internal to this repository; not a deployment template.",
+  "type": "module",
+  "scripts": {
+    "postinstall": "nuxt prepare",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.storybook.json",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "test:stories": "vitest run --config vitest.stories.config.ts"
+  },
+  "dependencies": {
+    "@cat-factory/app": "workspace:*",
+    "nuxt": "^4.6.1"
+  },
+  "devDependencies": {
+    "@nuxt/ui": "^4.11.3",
+    "@storybook-vue/nuxt": "10.0.1",
+    "@storybook/addon-a11y": "10.6.1",
+    "@storybook/addon-vitest": "10.6.1",
+    "@storybook/vue3": "10.6.1",
+    "@vitest/browser": "4.1.11",
+    "@vitest/browser-playwright": "4.1.11",
+    "storybook": "10.6.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11",
+    "vue": "3.5.43",
+    "vue-tsc": "^3.3.12"
+  }
+}

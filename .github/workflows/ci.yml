@@ -560,6 +560,14 @@ jobs:
       - name: Guard SPA safe-area overlays
         run: node scripts/check-frontend-safe-area.mjs
 
+      # The mechanical half of the story conventions (docs/internal/storybook.md): a title is
+      # `<Domain>/<Kind>/<Component>` from closed vocabularies, its last segment is the file's stem,
+      # no two files claim one title, a stories file sits beside its component, and `Default` comes
+      # first. Rendering the stories is the nightly `stories.yml`. Its fixtures run in the
+      # `node --test` step below. Pure node; no install.
+      - name: Guard story titles
+        run: node scripts/check-story-titles.mjs
+
       # Holds every SPA modal to a named width: `<AppModal size="prompt|form|wide">`, never a raw
       # `UModal` / `USlideover` or a `max-w-*` on the call site (#2251). A workbench surface waiting
       # on #2359 says why in a `workbench-width-ok:` comment above its tag. Its fixtures run in the
