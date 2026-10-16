@@ -5,7 +5,7 @@ import type { DrizzleDb } from '../db/client.js'
 import { publicApiKeyWorkspaces, publicApiKeys } from '../db/schema.js'
 
 // Postgres-backed store of the inbound public-API keys and their workspace grants (mirror of D1
-// migrations 0034 + 0053 + 0054 + 0081 + 0086 + 0089 + 0108 / D1PublicApiKeyRepository). The
+// migrations 0034 + 0053 + 0054 + 0081 + 0086 + 0089 + 0108 + 0110 / D1PublicApiKeyRepository). The
 // secret is stored ONLY as a one-way peppered hash: this repo never sees the raw key.
 
 type Row = typeof publicApiKeys.$inferSelect
@@ -15,6 +15,7 @@ function rowToRecord(row: Row, grants: string[]): PublicApiKeyRecord {
     id: row.id,
     accountId: row.account_id,
     workspaceIds: row.all_workspaces === 1 ? null : [...grants].sort(),
+    followsMemberships: row.follows_memberships === 1,
     label: row.label,
     scope: row.scope as PublicApiScope,
     secretHash: row.secret_hash,
@@ -37,6 +38,7 @@ export class DrizzlePublicApiKeyRepository implements PublicApiKeyRepository {
         id: record.id,
         account_id: record.accountId,
         all_workspaces: record.workspaceIds === null ? 1 : 0,
+        follows_memberships: record.followsMemberships ? 1 : 0,
         label: record.label,
         scope: record.scope,
         secret_hash: record.secretHash,
@@ -60,8 +62,9 @@ export class DrizzlePublicApiKeyRepository implements PublicApiKeyRepository {
     const rows = await this.db.select().from(publicApiKeys).where(eq(publicApiKeys.id, id)).limit(1)
     const row = rows[0]
     if (!row) return null
-    // An unrestricted key has no grant rows, so the authentication hot path skips the second read.
-    if (row.all_workspaces === 1) return rowToRecord(row, [])
+    // An unrestricted key, or one following its person's memberships, has no grant rows, so the
+    // authentication hot path skips the second read.
+    if (row.all_workspaces === 1 || row.follows_memberships === 1) return rowToRecord(row, [])
     const grants = await this.grantsOf([row.id])
     return rowToRecord(row, grants.get(row.id) ?? [])
   }
@@ -86,6 +89,7 @@ export class DrizzlePublicApiKeyRepository implements PublicApiKeyRepository {
           isNull(publicApiKeys.revoked_at),
           or(
             eq(publicApiKeys.all_workspaces, 1),
+            eq(publicApiKeys.follows_memberships, 1),
             exists(
               this.db
                 .select({ one: sql`1` })

@@ -1,6 +1,7 @@
 import { PUBLIC_API_WORKSPACE_HEADER, type PublicApiScope } from '@cat-factory/contracts'
 import {
   keyReaches,
+  scopeInWorkspace,
   scopeSatisfies,
   type PublicApiKeyAuth,
   type PublicApiKeyIdentity,
@@ -14,6 +15,8 @@ import {
 } from '@cat-factory/kernel'
 import type { Context, TypedResponse } from 'hono'
 import type { AppEnv } from '../../http/env.js'
+import { loadWorkspaceAccess } from '../../http/workspaceAccess.js'
+import { membershipReachOf } from './membershipReach.js'
 
 // The in-controller bearer-key gate shared by every `/api/v1` controller. The public surface is
 // NOT behind the SPA's session gate (its `/api` prefix is in the authGate bypass list), so each
@@ -74,6 +77,14 @@ export function refuse<E extends AppEnv>(
   return c.json({ error: { code: fail.code, message: fail.message, ...details } }, fail.status)
 }
 
+/** Absent, foreign and out of reach all answer this, so a key cannot probe for workspaces. */
+const WORKSPACE_NOT_FOUND: KeyFailure = {
+  status: 404,
+  code: 'not_found',
+  message: 'Workspace not found',
+  details: { reason: 'workspace_not_found' },
+}
+
 /** Resolve the caller's public-API key to a workspace scope, or the error to emit. */
 async function resolveKey<E extends AppEnv>(c: Context<E>): Promise<IdentityResult> {
   const svc = c.get('container').publicApiKeys
@@ -84,12 +95,26 @@ async function resolveKey<E extends AppEnv>(c: Context<E>): Promise<IdentityResu
   if (!auth) {
     return { fail: { status: 401, code: 'unauthorized', message: 'Invalid or missing API key' } }
   }
-  return { auth }
+  if (!auth.followsMemberships) return { auth }
+  // Resolved here, once per call, so every reader below (the workspace header, `/me`, the
+  // directory filters, a mint's reach check) sees the same answer as the app would give now.
+  const workspaceIds = await membershipReachOf(c.get('container'), auth)
+  if (workspaceIds.length === 0) {
+    return {
+      fail: {
+        status: 401,
+        code: 'unauthorized',
+        message:
+          "This key follows its person's workspaces, and they can act in none of this account's",
+      },
+    }
+  }
+  return { auth: { ...auth, workspaceIds } }
 }
 
 /**
  * Authenticate the caller AND require a minimum permission scope. The scope ladder is inclusive
- * (read ⊂ write ⊂ decide ⊂ admin), so a `write` key satisfies a `read` requirement and an `admin`
+ * (read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin), so a `write` key satisfies a `read` requirement and an `admin`
  * key satisfies any. A valid key whose scope is too low is a 403 `insufficient_scope` (distinct
  * from the 401 an unknown/absent key gets) — the caller can tell "wrong key" from "key can't do
  * this". Every `/api/v1` handler gates through this, naming the least scope it needs.
@@ -98,11 +123,39 @@ export async function authorize<E extends AppEnv>(
   c: Context<E>,
   need: PublicApiScope,
 ): Promise<KeyResult> {
-  const result = await authorizeAccount(c, need)
+  const result = await authorizeKey(c, need)
   if ('fail' in result) return result
   const workspace = await resolveWorkspace(c, result.auth)
   if ('fail' in workspace) return workspace
-  return { auth: { ...result.auth, workspaceId: workspace.workspaceId } }
+  const { workspaceId } = workspace
+  if (!result.auth.followsMemberships) return { auth: { ...result.auth, workspaceId } }
+  const scope = await membershipScopeIn(c, result.auth, workspaceId)
+  if (scope === null) return { fail: WORKSPACE_NOT_FOUND }
+  if (!scopeSatisfies(scope, need)) {
+    return {
+      fail: {
+        status: 403,
+        code: 'insufficient_scope',
+        message: `This action requires a '${need}'-scope key; this key follows its person's workspaces, and their role in this one allows '${scope}'`,
+      },
+    }
+  }
+  return { auth: { ...result.auth, scope, workspaceId } }
+}
+
+/**
+ * The scope a membership-following key acts with in `workspaceId`: its own, lowered to what its
+ * person's role there allows. Null when that person can no longer act there at all. Read through
+ * the same cached access resolution the app's own gate uses.
+ */
+async function membershipScopeIn<E extends AppEnv>(
+  c: Context<E>,
+  auth: PublicApiKeyIdentity,
+  workspaceId: string,
+): Promise<PublicApiScope | null> {
+  if (auth.actsAsUserId === null) return null
+  const access = await loadWorkspaceAccess(c.get('container'), workspaceId, auth.actsAsUserId)
+  return access?.allowed ? scopeInWorkspace(auth.scope, access.role) : null
 }
 
 /**
@@ -111,6 +164,30 @@ export async function authorize<E extends AppEnv>(
  * workspace reach itself, because what a restricted key may see there is a filter, not a refusal.
  */
 export async function authorizeAccount<E extends AppEnv>(
+  c: Context<E>,
+  need: PublicApiScope,
+): Promise<{ auth: PublicApiKeyIdentity } | { fail: KeyFailure }> {
+  const result = await authorizeKey(c, need)
+  if ('fail' in result || !result.auth.followsMemberships) return result
+  // A membership-following key reads the account and does nothing more there: its person's power
+  // is per workspace, and every account route past `read` already needs an account-wide key.
+  if (!scopeSatisfies(ACCOUNT_SCOPE_OF_MEMBERSHIP_KEY, need)) {
+    return {
+      fail: {
+        status: 403,
+        code: 'insufficient_scope',
+        message: `This action requires a '${need}'-scope key; a key that follows its person's workspaces reads the account and no more`,
+      },
+    }
+  }
+  return { auth: { ...result.auth, scope: ACCOUNT_SCOPE_OF_MEMBERSHIP_KEY } }
+}
+
+/** What a membership-following key may do on an account-scoped route. */
+const ACCOUNT_SCOPE_OF_MEMBERSHIP_KEY = 'read' satisfies PublicApiScope
+
+/** The key and its own scope, before any workspace or membership narrows it. */
+async function authorizeKey<E extends AppEnv>(
   c: Context<E>,
   need: PublicApiScope,
 ): Promise<{ auth: PublicApiKeyIdentity } | { fail: KeyFailure }> {
@@ -153,14 +230,7 @@ async function resolveWorkspace<E extends AppEnv>(
       },
     }
   }
-  const notFound: { fail: KeyFailure } = {
-    fail: {
-      status: 404,
-      code: 'not_found',
-      message: 'Workspace not found',
-      details: { reason: 'workspace_not_found' },
-    },
-  }
+  const notFound = { fail: WORKSPACE_NOT_FOUND }
   if (!keyReaches(key.workspaceIds, workspaceId)) return notFound
   if (key.workspaceIds !== null) return { workspaceId }
   const accountId = await c.get('container').workspaceService.accountOf(workspaceId)

@@ -27,6 +27,7 @@ import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import { appInstallationManageUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
+import { prefilledRepoMatch, prefillProviderMismatch } from '~/composables/useAddRepoDeepLink'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import AppModal from '~/components/common/AppModal.vue'
@@ -309,6 +310,36 @@ watch(
   { immediate: true },
 )
 
+// A deep link's repository is typed into the search once the picker's menu has MOUNTED, and after
+// the tick it mounted in: Nuxt UI's InputMenu clears its own search term on that tick, so a term set
+// on open is wiped (the picker mounts with the window, or later behind the connect prompt). The
+// prefill is spent once its repository is selected below, so nothing is typed after that.
+const repoMenu = ref<unknown>(null)
+watch(
+  repoMenu,
+  async (menu) => {
+    if (menu === null || !ui.addServicePrefill) return
+    await nextTick()
+    if (ui.addServicePrefill) repoSearch.value = ui.addServicePrefill.repo
+  },
+  { flush: 'post' },
+)
+
+// A deep link names one repository: select it as soon as the search lists it, once. A repository
+// the connection cannot reach never lists, which leaves the search's own empty state (and its
+// grant-access remedy) in front of the person.
+const prefillMismatch = computed(() =>
+  prefillProviderMismatch(ui.addServicePrefill, github.connected ? github.provider : null),
+)
+watch(repoResults, (repos) => {
+  const prefill = ui.addServicePrefill
+  if (!prefill || prefillMismatch.value || selectedRepoId.value !== undefined) return
+  const match = prefilledRepoMatch(prefill, repos)
+  if (!match || toRepoItem(match).disabled) return
+  selectedRepoId.value = match.githubId
+  ui.addServicePrefill = null
+})
+
 // A whole-repo service is added once (then configured inline). A monorepo instead
 // multi-selects directories and adds them together via `addServices`.
 const canAdd = computed(
@@ -480,6 +511,7 @@ function done() {
                  to forward the attribute to. -->
             <div class="space-y-1.5" data-testid="add-service-repo-search">
               <UInputMenu
+                ref="repoMenu"
                 v-model="selectedRepoId"
                 v-model:search-term="repoSearch"
                 :items="repoMenuItems"
@@ -510,6 +542,19 @@ function done() {
               </UInputMenu>
             </div>
           </UFormField>
+
+          <p
+            v-if="prefillMismatch"
+            class="text-sm text-app-warning-200/90"
+            data-testid="add-service-prefill-mismatch"
+          >
+            {{
+              t('github.addService.prefillProviderMismatch', {
+                repo: ui.addServicePrefill?.repo,
+                connected: providerLabel,
+              })
+            }}
+          </p>
 
           <UFormField
             :label="t('github.addService.repoType')"

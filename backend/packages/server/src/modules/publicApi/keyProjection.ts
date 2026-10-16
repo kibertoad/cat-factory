@@ -17,6 +17,7 @@ export function publicApiKeyToWire(record: PublicApiKeyRecord, workspaceId: stri
     accountId: record.accountId,
     workspaceId,
     workspaceIds: record.workspaceIds,
+    followsMemberships: record.followsMemberships,
     label: record.label,
     scope: record.scope,
     createdByUserId: record.createdByUserId,
@@ -43,6 +44,29 @@ export async function assertWorkspacesInAccount(
   const foreign = workspaceIds.find((id) => owners[id] !== accountId)
   if (foreign !== undefined) {
     throw new NotFoundError('Workspace', foreign, { reason: 'workspace_not_found' })
+  }
+}
+
+/**
+ * Refuse revoking a key the caller's reach does not cover. A key that follows its person's
+ * memberships reaches no stored list (its `workspaceIds` is `[]`, which any reach "covers"), so
+ * only that person's own key or an account-wide one may retire it.
+ */
+export function assertMayRevoke(
+  holder: { workspaceIds: string[] | null; actsAsUserId: string | null },
+  target: PublicApiKeyRecord,
+): void {
+  if (!target.followsMemberships) {
+    assertReachCovers(holder.workspaceIds, target.workspaceIds, 'revoke that key')
+    return
+  }
+  const own = holder.actsAsUserId !== null && holder.actsAsUserId === target.actsAsUserId
+  if (!own && holder.workspaceIds !== null) {
+    throw new ForbiddenError(
+      "This key cannot revoke that key: it follows a person's workspaces, so only that person's " +
+        'own key or one reaching the whole account may',
+      { reason: PUBLIC_API_KEY_REACH_EXCEEDED_REASON },
+    )
   }
 }
 

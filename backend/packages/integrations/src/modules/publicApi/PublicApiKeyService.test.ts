@@ -3,9 +3,13 @@ import { describe, expect, it } from 'vitest'
 import {
   PublicApiKeyService,
   keyReaches,
+  managesMembershipKey,
   reachCovers,
   scopeSatisfies,
 } from './PublicApiKeyService.js'
+
+/** A panel viewer who is neither a key's person nor an account admin. */
+const NOBODY = { userId: null, accountAdmin: false }
 
 // In-memory repository — the service's hashing/auth logic is what's under test, not persistence.
 class FakeRepo implements PublicApiKeyRepository {
@@ -25,7 +29,9 @@ class FakeRepo implements PublicApiKeyRepository {
   }
   async countLiveByAccount(accountId: string) {
     const live = await this.listByAccount(accountId)
-    return live.filter((r) => r.workspaceIds === null || r.workspaceIds.length > 0).length
+    return live.filter(
+      (r) => r.followsMemberships || r.workspaceIds === null || r.workspaceIds.length > 0,
+    ).length
   }
   markUsedCalls = 0
   markUsed(id: string, at: number) {
@@ -85,6 +91,7 @@ describe('PublicApiKeyService', () => {
       keyId: record.id,
       accountId: 'acc_1',
       workspaceIds: ['ws_1'],
+      followsMemberships: false,
       scope: 'write',
       label: 'external system',
       externalIdentity: null,
@@ -223,7 +230,7 @@ describe('PublicApiKeyService', () => {
     await service.revoke('a', record.id)
     expect(await service.authenticate(secret)).toBeNull()
     // A revoked key drops out of the management list.
-    expect(await service.listReaching('a', 'w')).toHaveLength(0)
+    expect(await service.listReaching('a', 'w', NOBODY)).toHaveLength(0)
   })
 
   it('throttles the lastUsedAt write so a polling caller does not drive one UPDATE per call', async () => {
@@ -279,7 +286,7 @@ describe('scopeSatisfies (the /api/v1 scope ladder)', () => {
     await service.issue({ accountId: 'a', workspaceIds: ['elsewhere'] }, 'elsewhere')
     await service.issue({ accountId: 'other', workspaceIds: null }, 'other account')
 
-    const ids = (await service.listReaching('a', 'w')).map((k) => k.id).sort()
+    const ids = (await service.listReaching('a', 'w', NOBODY)).map((k) => k.id).sort()
     expect(ids).toEqual([here.record.id, everywhere.record.id].sort())
   })
 
@@ -317,5 +324,57 @@ describe('key reach', () => {
     expect(reachCovers(['w'], ['w', 'x'])).toBe(false)
     // A restricted key can never hand out or retire an unrestricted one.
     expect(reachCovers(['w'], null)).toBe(false)
+  })
+
+  describe("a key that follows its person's memberships", () => {
+    const follows = {
+      accountId: 'a',
+      workspaceIds: [],
+      actsAsUserId: 'usr_1',
+      followsMemberships: true,
+    }
+
+    it('is stored with no grants, and still authenticates, saying so', async () => {
+      const { service, repo } = makeService()
+      const { record, secret } = await service.issue(follows, 'mine')
+      expect(repo.rows.get(record.id)).toMatchObject({ workspaceIds: [], followsMemberships: true })
+      expect(await service.authenticate(secret)).toMatchObject({
+        workspaceIds: [],
+        followsMemberships: true,
+        actsAsUserId: 'usr_1',
+      })
+    })
+
+    it('refuses to follow anyone when the key is bound to nobody', async () => {
+      const { service } = makeService()
+      await expect(
+        service.issue({ ...follows, actsAsUserId: null }, 'nobody'),
+      ).rejects.toMatchObject({ details: { reason: 'follows_memberships_requires_person' } })
+    })
+
+    it('holds a slot against the account cap like any live key', async () => {
+      const { service, repo } = makeService()
+      await service.issue(follows, 'mine')
+      expect(await repo.countLiveByAccount('a')).toBe(1)
+    })
+
+    it("is listed in a workspace's panel only to its person and to account admins", async () => {
+      const { service } = makeService()
+      const { record } = await service.issue(follows, 'mine')
+      const listed = async (viewer: { userId: string | null; accountAdmin: boolean }) =>
+        (await service.listReaching('a', 'w', viewer)).map((key) => key.id)
+      expect(await listed({ userId: 'usr_1', accountAdmin: false })).toEqual([record.id])
+      expect(await listed({ userId: 'usr_2', accountAdmin: true })).toEqual([record.id])
+      expect(await listed({ userId: 'usr_2', accountAdmin: false })).toEqual([])
+      expect(await listed(NOBODY)).toEqual([])
+    })
+
+    it('is managed by its person or an account admin and nobody else', () => {
+      const key = { actsAsUserId: 'usr_1' }
+      expect(managesMembershipKey({ userId: 'usr_1', accountAdmin: false }, key)).toBe(true)
+      expect(managesMembershipKey({ userId: 'usr_2', accountAdmin: true }, key)).toBe(true)
+      expect(managesMembershipKey({ userId: 'usr_2', accountAdmin: false }, key)).toBe(false)
+      expect(managesMembershipKey(NOBODY, { actsAsUserId: null })).toBe(false)
+    })
   })
 })

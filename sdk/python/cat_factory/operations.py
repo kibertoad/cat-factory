@@ -38,6 +38,7 @@ from .models import (
     DetachPublicTaskDocumentRequest,
     DirectoryAccountMembershipPage,
     DirectoryChangePage,
+    DirectoryReach,
     DirectoryRepoPage,
     DirectoryUserPage,
     DirectoryWebhook,
@@ -101,6 +102,7 @@ from .models import (
     PublicChallengePrReviewFinding,
     PublicChooseFork,
     PublicDecisionList,
+    PublicDeployment,
     PublicGuidedReviewList,
     PublicIdentity,
     PublicIncorporate,
@@ -1529,6 +1531,32 @@ class MeResource:
         return PublicIdentity.from_dict(raw)
 
 
+class DeploymentResource:
+    """Where the deployment serves its web app, for sending a person to one of the app's deep
+    links (the prefilled add-service screen, say). Any key may ask, with no workspace named.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def get(self, *, timeout: float | None = None) -> PublicDeployment:
+        """Describe the deployment
+        Report where this deployment serves its web app (`appUrl`): `APP_BASE_URL` when the
+        operator set one, otherwise the origin this API was reached on. An integration uses
+        it to send a person to one of the app’s deep links, such as the prefilled
+        add-service screen (`?addRepo=<owner>/<name>`). Account-level, so a key reaching
+        several workspaces calls it without naming one. `read` scope.
+        `GET /api/v1/deployment` (operation `getPublicDeployment`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/deployment",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDeployment.from_dict(raw)
+
+
 class DecisionsResource:
     """Every way a run stops for a person: approval gates, review and brainstorm loops, forks,
     judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the
@@ -2781,6 +2809,24 @@ class DirectoryResource:
             timeout=timeout,
         )
 
+    def get_reach(self, *, timeout: float | None = None) -> DirectoryReach:
+        """Read the key's directory reach
+        The calling key’s account and the workspaces it reaches, `null` for every workspace
+        in the account (later ones included). Account-scoped like the rest of the directory:
+        no `x-cat-factory-workspace` header is read, so a key reaching several workspaces
+        gets an answer where `GET /api/v1/me` asks it to name one. A mirror reads this to
+        filter what a directory push may write, and to tell an account-wide key from one
+        limited to some workspaces.
+        `GET /api/v1/directory/reach` (operation `getDirectoryReach`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/reach",
+            query=None,
+            timeout=timeout,
+        )
+        return DirectoryReach.from_dict(raw)
+
     def list_account_memberships(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryAccountMembershipPage:
         """List the account's memberships
         A keyset-paged snapshot of the account’s memberships, each with the member’s account
@@ -3488,6 +3534,7 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "webhook": WebhookResource(transport),
         "usage": UsageResource(transport),
         "me": MeResource(transport),
+        "deployment": DeploymentResource(transport),
         "decisions": DecisionsResource(transport),
         "debug": DebugResource(transport),
         "evidence": EvidenceResource(transport),

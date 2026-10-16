@@ -2,6 +2,7 @@ import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import {
   directoryAccountMembershipPageSchema,
   directoryChangePageSchema,
+  directoryReachSchema,
   directoryRepoPageSchema,
   directoryUserPageSchema,
   directoryWebhookListSchema,
@@ -24,6 +25,16 @@ import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 // are account-wide facts, so a key limited to some workspaces is refused them; the other three are
 // filtered to the key's workspaces.
 // ---------------------------------------------------------------------------
+
+/** The calling key's account and workspace reach, with no workspace header needed. */
+export const getDirectoryReachContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/directory/reach',
+    responsesByStatusCode: { 200: directoryReachSchema, ...errorResponses },
+  }),
+)
 
 /** The ordered change feed after a cursor. */
 export const listDirectoryChangesContract = withMinScope(
@@ -86,12 +97,12 @@ export const listDirectoryReposContract = withMinScope(
   }),
 )
 
-// ---- Directory webhooks: account-level push endpoints (`admin`, account-wide keys only) --------
+// ---- Directory webhooks: account-level push endpoints (`webhooks`, account-wide keys only) --------
 
 const webhookIdParams = singleStringParam('webhookId')
 
 export const listDirectoryWebhooksContract = withMinScope(
-  'admin',
+  'webhooks',
   defineApiContract({
     method: 'get',
     pathResolver: () => '/api/v1/directory/webhooks',
@@ -100,7 +111,7 @@ export const listDirectoryWebhooksContract = withMinScope(
 )
 
 export const putDirectoryWebhookContract = withMinScope(
-  'admin',
+  'webhooks',
   defineApiContract({
     method: 'put',
     requestPathParamsSchema: webhookIdParams,
@@ -111,7 +122,7 @@ export const putDirectoryWebhookContract = withMinScope(
 )
 
 export const deleteDirectoryWebhookContract = withMinScope(
-  'admin',
+  'webhooks',
   defineApiContract({
     method: 'delete',
     requestPathParamsSchema: webhookIdParams,
