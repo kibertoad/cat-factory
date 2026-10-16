@@ -42,7 +42,7 @@ export const Default: Story = {
   ],
 }
 
-/** Deleting a board's merge policy: the icon and the confirm button in the error colour. */
+/** Deleting a board's risk policy: the icon and the confirm button in the error colour. */
 export const Destructive: Story = {
   decorators: [
     asking((t) => ({

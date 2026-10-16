@@ -50,7 +50,9 @@ export const Default: Story = {
 export const SignUp: Story = {
   decorators: [passwordAndOAuth],
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Sign up' }))
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getByRole('button', { name: 'Sign up' }))
+    await canvas.findByPlaceholderText('Name (optional)')
   },
 }
 
@@ -58,7 +60,9 @@ export const SignUp: Story = {
 export const ForgotPassword: Story = {
   decorators: [passwordAndOAuth],
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Forgot password?' }))
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getByRole('button', { name: 'Forgot password?' }))
+    await canvas.findByText('Reset your password.')
   },
 }
 

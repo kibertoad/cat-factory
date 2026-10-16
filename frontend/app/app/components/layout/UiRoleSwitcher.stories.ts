@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import { withSeed } from '~/stories/withStores'
 import { useUiRoleStore } from '~/stores/uiRole'
 import UiRoleSwitcher from './UiRoleSwitcher.vue'
@@ -51,6 +51,7 @@ export const Open: Story = {
   render: withMenuRoom,
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Your role' }))
+    await screen.findByText('Product manager')
   },
 }
 

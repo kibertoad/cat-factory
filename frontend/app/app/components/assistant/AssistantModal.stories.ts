@@ -49,6 +49,7 @@ async function ask() {
   await screen.findByText('What you can ask')
   await userEvent.type(screen.getByRole('textbox'), 'the API gateway depends on auth')
   await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+  await screen.findByTestId('assistant-outcome')
 }
 
 /** The box, with one example per action the deployment offers. */
@@ -91,6 +92,7 @@ export const TooLong: Story = {
     await userEvent.paste(
       'the checkout service depends on the payments service, '.repeat(40).trim(),
     )
+    await screen.findByText(/and the assistant reads up to/)
   },
 }
 

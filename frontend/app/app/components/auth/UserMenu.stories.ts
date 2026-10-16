@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import { signedInUser } from '~/stories/accounts.stories.mocks'
 import { withSeed } from '~/stories/withStores'
 import { useAuthStore } from '~/stores/auth'
@@ -52,5 +52,6 @@ export const Open: Story = {
   render: withMenuRoom,
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByTestId('user-menu'))
+    await screen.findByText('Sign out')
   },
 }

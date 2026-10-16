@@ -29,14 +29,13 @@ const meta = {
   title: 'Shell/Components/TutorialOverlay',
   component: TutorialOverlay,
   parameters: { layout: 'fullscreen' },
-  decorators: [atStep('board-basics', 'welcome')],
 } satisfies Meta<typeof TutorialOverlay>
 export default meta
 
 type Story = StoryObj<typeof meta>
 
 /** The board tour's first step names no control: the card alone, in the middle of the frame. */
-export const Default: Story = {}
+export const Default: Story = { decorators: [atStep('board-basics', 'welcome')] }
 
 /** The step that names the command bar launcher: the ring round it, and the card beside it. */
 export const Highlighted: Story = {
@@ -60,6 +59,8 @@ export const Highlighted: Story = {
 /**
  * The step inside the add-service modal, which is not open: the waiting note under the copy. Its
  * wait is eight seconds; then the tour skips it, and the next one too, and ends on the last step.
+ * The wait comes from the tour step, and a story cannot set it, so take a capture in the first
+ * eight seconds.
  */
 export const Searching: Story = { decorators: [atStep('add-service', 'search')] }
 

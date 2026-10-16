@@ -43,10 +43,20 @@ async function search(query: string) {
 export const Default: Story = {}
 
 /** "jira" typed: the commands whose label, group or keywords match. */
-export const Filtered: Story = { play: () => search('jira') }
+export const Filtered: Story = {
+  play: async () => {
+    await search('jira')
+    await screen.findAllByRole('button', { name: /Jira/ })
+  },
+}
 
 /** A query nothing matches: the empty state. */
-export const NoResults: Story = { play: () => search('kubernetes cluster') }
+export const NoResults: Story = {
+  play: async () => {
+    await search('kubernetes cluster')
+    await screen.findByText('No matching commands.')
+  },
+}
 
 /**
  * The designer role, which brings work in and does not configure the platform: the integration

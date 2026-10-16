@@ -40,6 +40,7 @@ function seedBoards() {
 
 async function openBoardMenu(canvasElement: HTMLElement) {
   await userEvent.click(within(canvasElement).getByTestId('board-switcher'))
+  await screen.findByTestId('board-new')
 }
 
 /** The account row above the board button, both closed. */

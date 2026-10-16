@@ -22,7 +22,9 @@ export const Default: Story = { args: { modelValue: 'sk-live-0000000000000000' }
 export const Revealed: Story = {
   args: { modelValue: 'sk-live-0000000000000000' },
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Reveal' }))
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getByRole('button', { name: 'Reveal' }))
+    await canvas.findByRole('button', { name: 'Hide' })
   },
 }
 

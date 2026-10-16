@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import LanguageSwitcher from './LanguageSwitcher.vue'
 
 // The language picker at the foot of the sidebar. The list comes from the locales in
@@ -44,5 +44,6 @@ export const Open: Story = {
   render: withMenuRoom,
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Language' }))
+    await screen.findByText('Español')
   },
 }

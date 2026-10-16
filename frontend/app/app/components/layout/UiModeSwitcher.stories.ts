@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { seedUiMode, withSeed } from '~/stories/withStores'
 import { getActivePinia } from 'pinia'
+import { h, onUnmounted } from 'vue'
 import UiModeSwitcher from './UiModeSwitcher.vue'
 
 // The interface tier picker at the top of the sidebar: both tiers side by side, so the user can
@@ -39,15 +40,30 @@ export const Collapsed: Story = {
  * The deployment pins the tier (`NUXT_PUBLIC_UI_MODE`), so the row only states it, with a lock.
  * The store reads the pin once, when it is created, and the app's plugins create it before any
  * seed runs. So the seed sets the pin, then drops the store, and the switcher creates a new one
- * that reads it.
+ * that reads it. The preset shares `public` across stories, so the story puts the old value back
+ * and drops the store again when it unmounts. Else the stories after it stay pinned.
  */
 export const Pinned: Story = {
   decorators: [
-    withSeed(() => {
-      useRuntimeConfig().public.uiMode = 'advanced'
-      useUiModeStore().$dispose()
-      const pinia = getActivePinia()
-      if (pinia) delete pinia.state.value.uiMode
+    (story) => ({
+      setup() {
+        const config = useRuntimeConfig().public
+        const previous = config.uiMode
+        const resetStore = () => {
+          useUiModeStore().$dispose()
+          const pinia = getActivePinia()
+          if (pinia) delete pinia.state.value.uiMode
+        }
+        config.uiMode = 'advanced'
+        resetStore()
+        onUnmounted(() => {
+          config.uiMode = previous
+          resetStore()
+        })
+        // Called once, here: a call per render would remount the story (docs/internal/storybook.md).
+        const Story = story()
+        return () => h(Story)
+      },
     }),
   ],
 }

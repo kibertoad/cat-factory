@@ -32,5 +32,6 @@ export const Error: Story = {
 export const NameTaken: Story = {
   play: async () => {
     await userEvent.type(await screen.findByPlaceholderText('My theme'), 'Mono')
+    await screen.findByText(/already exists. This one will be saved as/)
   },
 }

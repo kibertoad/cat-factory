@@ -18,9 +18,12 @@ export const Default: Story = { args: {} }
 /** A caller's label, which names what is copied. Hovered, so the tooltip shows it. */
 export const Labelled: Story = {
   args: { label: 'Copy the request id' },
+  // The hover opens the tooltip in the Storybook UI. The test runner's hover does not open it,
+  // so the play waits for what the label sets in both: the button's accessible name.
   play: async ({ canvasElement }) => {
-    await userEvent.hover(
-      within(canvasElement).getByRole('button', { name: 'Copy the request id' }),
-    )
+    const button = await within(canvasElement).findByRole('button', {
+      name: 'Copy the request id',
+    })
+    await userEvent.hover(button)
   },
 }

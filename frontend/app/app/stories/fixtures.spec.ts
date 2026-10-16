@@ -68,6 +68,7 @@ import { block, estimate } from './block.stories.mocks'
 import { authInitiative } from './board.stories.mocks'
 import {
   accountFragments,
+  fragmentCatalog,
   handbookSource,
   layeredCatalog,
   platformStandardsSource,
@@ -150,7 +151,7 @@ const cases: [string, v.GenericSchema, unknown[]][] = [
   ['board list item', workspaceListItemSchema, accountBoards],
   ['prompt fragment', promptFragmentSchema, [...workspaceFragments, ...accountFragments]],
   ['fragment source', fragmentSourceSchema, [handbookSource, platformStandardsSource]],
-  ['resolved fragment', resolvedFragmentSchema, layeredCatalog],
+  ['resolved fragment', resolvedFragmentSchema, [...layeredCatalog, ...fragmentCatalog]],
   ['task source', taskSourceStateSchema, taskSources],
   ['task connection', taskConnectionSchema, taskConnections],
   ['source task', sourceTaskSchema, [...sourceTasks, ...authServiceIssues]],

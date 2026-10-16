@@ -5,11 +5,7 @@ import { apiFailure, apiPending } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { step } from '~/stories/pipelineStep.stories.mocks'
 import { execution, snapshot } from '~/stories/snapshot.stories.mocks'
-import {
-  effortReport,
-  reproductionReport,
-  validationFailed,
-} from '~/stories/stepReports.stories.mocks'
+import { effortReport } from '~/stories/stepReports.stories.mocks'
 import { seedResultView, seedSnapshot, withSeed } from '~/stories/withStores'
 import ResultWindowShell from './ResultWindowShell.vue'
 
@@ -18,16 +14,18 @@ import ResultWindowShell from './ResultWindowShell.vue'
 // pre-PR validation and the reproduction proof). The footer reads the open window's step, so a
 // story that shows it opens a result view on a seeded run. The body here is a placeholder
 // paragraph; each window's own stories show a real one. `stretch` fills the height and `centered`
-// fits the content; the width is a bucket from 3xl to the whole viewport. The fourth footer
-// section, the binary outputs, is not shown here.
+// fits the content; the width is a bucket from 3xl to the whole viewport. Only the effort rating
+// is shown: the validation and the reproduction proof are the coder step's, and a coder step
+// opens a window only when it is parked (a fork decision, follow-ups or binary candidates). The
+// binary outputs are not shown either.
 const meta = {
   title: 'Primitives/Components/ResultWindowShell',
   component: ResultWindowShell,
   args: {
     open: true,
-    icon: 'i-lucide-git-merge',
+    icon: 'i-lucide-clipboard-check',
     iconClass: 'bg-primary/15 text-primary',
-    title: 'Merge verdict',
+    title: 'PR review',
     subtitle: 'Login endpoint',
   },
   render: (args) => ({
@@ -48,11 +46,15 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-/** Open on the coder step (index 1) of the login run in `run`. */
+/**
+ * Open the PR review window on the pr-reviewer step (index 2) of the login run in `run`. The app
+ * opens a window from the step's agent kind, and the pr-reviewer is the build pipeline's step
+ * with a window of its own; the coder step has none.
+ */
 function onStep(run: ExecutionInstance) {
   return withSeed(() => {
     seedSnapshot(snapshot({ executions: [run] }))
-    seedResultView({ view: 'merger', blockId: run.blockId, instanceId: run.id, stepIndex: 1 })
+    seedResultView({ view: 'pr-review', blockId: run.blockId, instanceId: run.id, stepIndex: 2 })
   })
 }
 
@@ -67,31 +69,27 @@ export const FullWidth: Story = { args: { width: 'full' } }
 
 /** Opened on a step: Restart from here sits before close. */
 export const WithRestart: Story = {
-  args: { stepRef: { instanceId: 'exec_login', stepIndex: 1 } },
+  args: { stepRef: { instanceId: 'exec_login', stepIndex: 2 } },
   decorators: [onStep(execution())],
 }
 
-/**
- * The coder step carries all three reports: the effort rating and the reproduction proof stay
- * collapsed to one line, and the failed validation opens, because a failed check is what a
- * reader opened the window for.
- */
+/** The finished review step's effort rating, collapsed to one line. */
 export const WithStepReports: Story = {
   decorators: [
     onStep(
       execution({
         steps: [
           step({ agentKind: 'architect', state: 'done', progress: 1 }),
+          step({ agentKind: 'coder', state: 'done', progress: 1 }),
           step({
-            agentKind: 'coder',
+            agentKind: 'pr-reviewer',
             state: 'done',
             progress: 1,
             effortReport,
-            validation: validationFailed,
-            reproduction: reproductionReport(),
           }),
-          step({ agentKind: 'pr-reviewer', state: 'pending', progress: 0 }),
         ],
+        currentStep: 2,
+        status: 'done',
       }),
     ),
   ],

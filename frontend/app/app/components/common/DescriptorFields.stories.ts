@@ -8,7 +8,8 @@ import DescriptorFields from './DescriptorFields.vue'
 // descriptors: one input per field type, optional section captions, and fields that show only
 // when another field has a value. Labels and help are the deployment's own words, shown as
 // written. The fields are made up, as a dependency bump operation might declare them. The render
-// keeps the values, so typing changes what the story shows.
+// keeps the values, so typing changes what the story shows. No story for zero fields: the
+// component then draws nothing.
 const fields: DescriptorField[] = [
   { key: 'package', label: 'Package', required: true, placeholder: 'e.g. react' },
   { key: 'version', label: 'Target version', required: true, placeholder: 'e.g. 19.2.0' },
@@ -84,9 +85,6 @@ type Story = StoryObj<typeof meta>
 /** One field of every type, filled in. */
 export const Default: Story = {}
 
-/** No fields: nothing renders. */
-export const Empty: Story = { args: { fields: [], modelValue: {} } }
-
 /** The same fields under two section captions. */
 export const Sections: Story = {
   args: {
@@ -113,7 +111,9 @@ export const ShowWhenRevealed: Story = {
     modelValue: { package: 'react' },
   },
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByRole('switch'))
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getByRole('switch'))
+    await canvas.findByText('Why a major upgrade is safe')
   },
 }
 

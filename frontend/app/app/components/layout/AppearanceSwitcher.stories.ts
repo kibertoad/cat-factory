@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import { withSeed } from '~/stories/withStores'
 import { useThemeStore } from '~/stores/theme'
 import { BUILTIN_THEMES, DEFAULT_THEME_ID } from '~/utils/theme/builtins'
@@ -30,7 +30,7 @@ const withMenuRoom: Story['render'] = (args) => ({
   template: '<div class="pt-80"><AppearanceSwitcher v-bind="args" /></div>',
 })
 
-const openMenu: Story['play'] = async ({ canvasElement }) => {
+async function openMenu(canvasElement: HTMLElement) {
   await userEvent.click(within(canvasElement).getByRole('button', { name: 'Appearance' }))
 }
 
@@ -50,7 +50,10 @@ export const Collapsed: Story = {
 /** The three modes, the built-in themes and Import a theme. */
 export const Open: Story = {
   render: withMenuRoom,
-  play: openMenu,
+  play: async ({ canvasElement }) => {
+    await openMenu(canvasElement)
+    await screen.findByText('Import a Nuxt UI theme…')
+  },
 }
 
 /**
@@ -67,5 +70,8 @@ export const CustomTheme: Story = {
       theme.select('custom-acme')
     }),
   ],
-  play: openMenu,
+  play: async ({ canvasElement }) => {
+    await openMenu(canvasElement)
+    await screen.findByText('Remove this theme')
+  },
 }
