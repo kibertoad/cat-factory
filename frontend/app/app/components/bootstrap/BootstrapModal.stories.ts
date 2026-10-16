@@ -82,6 +82,7 @@ export const IntoMonorepo: Story = {
     // The picker shows once the repositories have loaded.
     await userEvent.click(await screen.findByRole('combobox', { name: /Monorepo/ }))
     await userEvent.click(await screen.findByRole('option', { name: 'acme/platform' }))
+    await screen.findByTestId('bootstrap-directory-browse')
   },
 }
 
@@ -89,6 +90,7 @@ export const IntoMonorepo: Story = {
 export const FromScratch: Story = {
   play: async () => {
     await userEvent.click(await screen.findByText('From scratch'))
+    await screen.findByText('What should the bootstrapper build?')
   },
 }
 
@@ -102,6 +104,10 @@ export const NoArchitectures: Story = {
 export const ArchitectureForm: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add' }))
+    // The repository picker shows only once the repositories have loaded.
+    await screen.findByText(
+      'Choose a repo you can access to fill in its owner and name, or enter them manually below.',
+    )
   },
 }
 

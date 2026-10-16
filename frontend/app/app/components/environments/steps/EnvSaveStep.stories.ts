@@ -68,7 +68,9 @@ export const Error: Story = {
     api: [apiFailure(registerEnvironmentHandlerContract, { pathPrefix: storyWorkspacePrefix })],
   },
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByTestId('env-setup-save'))
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getByTestId('env-setup-save'))
+    await canvas.findByTestId('env-setup-save-error')
   },
 }
 

@@ -76,8 +76,11 @@ function onFrame(declared: StackRecipe) {
   })
 }
 
-async function runChecks(canvasElement: HTMLElement) {
-  await userEvent.click(within(canvasElement).getByTestId('env-setup-preflight-run'))
+/** Runs the checks, then waits for the block that the answer draws. */
+async function runChecks(canvasElement: HTMLElement, outcome: string) {
+  const canvas = within(canvasElement)
+  await userEvent.click(canvas.getByTestId('env-setup-preflight-run'))
+  await canvas.findByTestId(outcome)
 }
 
 const meta = {
@@ -99,7 +102,7 @@ export const Default: Story = {
   parameters: {
     api: [apiResponse(runPreflightsContract, { pathPrefix: storyWorkspacePrefix, body: results })],
   },
-  play: async ({ canvasElement }) => runChecks(canvasElement),
+  play: async ({ canvasElement }) => runChecks(canvasElement, 'env-setup-preflight-results'),
 }
 
 /** The recipe declares no checks. */
@@ -119,11 +122,11 @@ export const Unavailable: Story = {
       }),
     ],
   },
-  play: async ({ canvasElement }) => runChecks(canvasElement),
+  play: async ({ canvasElement }) => runChecks(canvasElement, 'env-setup-preflight-unavailable'),
 }
 
 /** The request failed: the step shows the backend's message as it came. */
 export const Error: Story = {
   parameters: { api: [apiFailure(runPreflightsContract, { pathPrefix: storyWorkspacePrefix })] },
-  play: async ({ canvasElement }) => runChecks(canvasElement),
+  play: async ({ canvasElement }) => runChecks(canvasElement, 'env-setup-preflight-error'),
 }

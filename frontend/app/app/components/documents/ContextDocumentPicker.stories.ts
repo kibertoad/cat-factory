@@ -8,7 +8,7 @@ import {
 } from '@cat-factory/contracts'
 import type { HttpHandler } from 'msw'
 import { ref } from 'vue'
-import { screen, userEvent, within } from 'storybook/test'
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 import { contextKey, type PendingContext } from '~/composables/useContextLinking'
 import { apiFailure, apiHandler, apiPending, apiRefusal, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
@@ -174,6 +174,9 @@ export const Searching: Story = {
   parameters: { api: answers(apiPending(searchDocumentsContract, confluence)) },
   play: async ({ canvasElement }) => {
     await userEvent.type(within(canvasElement).getByRole('textbox'), 'session')
+    // The search starts 300 ms after the last key; the box then shows its loading icon, which
+    // has no text or role to find it by.
+    await waitFor(() => expect(canvasElement.querySelector('.animate-spin')).not.toBeNull())
   },
 }
 
@@ -302,5 +305,6 @@ export const RepoSource: Story = {
   },
   play: async ({ canvasElement }) => {
     await switchSource(canvasElement, 'GitHub Docs')
+    await within(canvasElement).findByPlaceholderText('Search repositories…')
   },
 }

@@ -141,7 +141,6 @@ export const Loading: Story = {
 /** A Figma frame: the service picker, and a line that a service is needed before a plan. */
 export const DesignNeedsTarget: Story = {
   decorators: [opened('figma', figmaFrame.externalId)],
-  parameters: { api: [planned('figma', designPlan)] },
 }
 
 /** The Auth Service picked: the plan of what goes inside it. */

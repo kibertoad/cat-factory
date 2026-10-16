@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { DocumentFreshness, SourceDocument } from '@cat-factory/contracts'
 import { refreshDocumentContract } from '@cat-factory/contracts'
-import { userEvent, within } from 'storybook/test'
+import { expect, userEvent, waitFor, within } from 'storybook/test'
 import { apiPending, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { sourceDocument, sourceDocuments } from '~/stories/integrations.stories.mocks'
@@ -39,6 +39,12 @@ async function clickRefresh(canvasElement: HTMLElement) {
   await userEvent.click(within(canvasElement).getByRole('button', { name: 'Check for changes' }))
 }
 
+/** Clicks the check, then waits for the verdict line that the answer draws. */
+async function clickAndFind(canvasElement: HTMLElement, verdict: string) {
+  await clickRefresh(canvasElement)
+  await within(canvasElement).findByText(verdict)
+}
+
 /** A Confluence page nobody has checked: when it was written, and the check button. */
 export const Default: Story = {}
 
@@ -69,7 +75,12 @@ export const Refreshing: Story = {
   parameters: {
     api: [apiPending(refreshDocumentContract, { pathPrefix: storyWorkspacePrefix })],
   },
-  play: async ({ canvasElement }) => clickRefresh(canvasElement),
+  play: async ({ canvasElement }) => {
+    await clickRefresh(canvasElement)
+    // A loading button is disabled until the answer comes.
+    const button = within(canvasElement).getByRole('button', { name: 'Check for changes' })
+    await waitFor(() => expect(button).toBeDisabled())
+  },
 }
 
 /** The page is still at version 14: a check that the copy matches the source. */
@@ -77,7 +88,7 @@ export const Confirmed: Story = {
   parameters: {
     api: [refreshed(sourceDocument(), { status: 'confirmed', version: '14', change: 'unchanged' })],
   },
-  play: async ({ canvasElement }) => clickRefresh(canvasElement),
+  play: async ({ canvasElement }) => clickAndFind(canvasElement, 'Matches the source'),
 }
 
 /**
@@ -95,7 +106,8 @@ export const RevisionOnly: Story = {
       }),
     ],
   },
-  play: async ({ canvasElement }) => clickRefresh(canvasElement),
+  play: async ({ canvasElement }) =>
+    clickAndFind(canvasElement, 'The source moved on, but this copy is unchanged'),
 }
 
 /** The source could not be reached: a warning that the stored copy stands unconfirmed. */
@@ -103,5 +115,6 @@ export const Unconfirmed: Story = {
   parameters: {
     api: [refreshed(sourceDocument(), { status: 'unconfirmed', reason: 'source_unreachable' })],
   },
-  play: async ({ canvasElement }) => clickRefresh(canvasElement),
+  play: async ({ canvasElement }) =>
+    clickAndFind(canvasElement, 'Not checked: the source could not be reached.'),
 }

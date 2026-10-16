@@ -90,7 +90,9 @@ export const Error: Story = {
     ],
   },
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByTestId('env-setup-detect'))
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getByTestId('env-setup-detect'))
+    await canvas.findByTestId('env-setup-detect-error')
   },
 }
 
@@ -120,7 +122,9 @@ export const AnalysisFailed: Story = {
 /** The raw recipe editor, open on the working recipe as JSON. */
 export const RawEditor: Story = {
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByTestId('env-setup-raw-toggle'))
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getByTestId('env-setup-raw-toggle'))
+    await canvas.findByTestId('env-setup-raw-text')
   },
 }
 
@@ -134,5 +138,6 @@ export const RawEditorInvalid: Story = {
     await userEvent.clear(text)
     await userEvent.type(text, '{{"composeFiles": [[]}')
     await userEvent.click(canvas.getByTestId('env-setup-raw-apply'))
+    await canvas.findByTestId('env-setup-raw-error')
   },
 }

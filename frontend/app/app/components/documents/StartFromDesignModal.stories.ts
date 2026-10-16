@@ -75,7 +75,10 @@ export const NoSource: Story = {
 export const Checking: Story = {
   decorators: [opened()],
   parameters: { api: [apiPending(resolveDocumentRefContract, figma)] },
-  play: () => paste(FRAME_SHARE_LINK),
+  play: async () => {
+    await paste(FRAME_SHARE_LINK)
+    await screen.findByText('Checking the link…')
+  },
 }
 
 /** A frame share link: the frame's URL, and a line that says the link was trimmed. */

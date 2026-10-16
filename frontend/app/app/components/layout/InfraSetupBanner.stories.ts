@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import type { InfraSetup } from '@cat-factory/contracts'
+import { INFRA_SETUP_DISMISSED_STORAGE_KEY, type InfraSetup } from '@cat-factory/contracts'
 import { screen, userEvent, within } from 'storybook/test'
 import { seedWorkspace, withSeed } from '~/stories/withStores'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -13,7 +13,8 @@ import InfraSetupBanner from './InfraSetupBanner.vue'
 // again for a setup gap.
 //
 // The status is the snapshot's `infraSetup`, seeded here. "Never again" is stored in the
-// browser, so no story picks it. The outage reason is made up.
+// browser, so the meta clears it before each story: a pick in `DismissMenu` would otherwise hide
+// the cards in every other story. The outage reason is made up.
 const configured: InfraSetup = {
   agentExecutor: 'configured',
   ephemeralEnvironments: 'configured',
@@ -30,7 +31,16 @@ function withStatus(status: InfraSetup) {
 const meta = {
   title: 'Setup/Components/InfraSetupBanner',
   component: InfraSetupBanner,
-  decorators: [withStatus({ ...configured, ephemeralEnvironments: 'not_defined' })],
+  decorators: [
+    withSeed(() => {
+      try {
+        window.localStorage.removeItem(INFRA_SETUP_DISMISSED_STORAGE_KEY)
+      } catch {
+        // Blocked storage keeps no dismissal either.
+      }
+    }),
+    withStatus({ ...configured, ephemeralEnvironments: 'not_defined' }),
+  ],
 } satisfies Meta<typeof InfraSetupBanner>
 export default meta
 

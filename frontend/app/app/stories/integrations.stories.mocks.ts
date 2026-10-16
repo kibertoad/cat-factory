@@ -112,7 +112,7 @@ export const taskSources: TaskSourceState[] = [
  * the site as the backend labels it. GitHub Issues rides the VCS connection and has no row.
  */
 export const taskConnections: TaskConnection[] = [
-  { source: 'jira', label: 'acme.atlassian.net', connectedAt: Date.UTC(2026, 8, 4) },
+  { source: 'jira', label: 'https://acme.atlassian.net', connectedAt: Date.UTC(2026, 8, 4) },
 ]
 
 /** One issue pulled from a tracker; `linkedBlockId` is null until a task is made from it. */

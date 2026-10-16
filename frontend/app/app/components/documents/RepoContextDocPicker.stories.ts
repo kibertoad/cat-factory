@@ -85,7 +85,10 @@ export const Default: Story = {}
 
 /** `acme/platform` picked: the clear button, the two tabs, and the hint to type a path. */
 export const RepoSelected: Story = {
-  play: async ({ canvasElement }) => pickPlatform(canvasElement),
+  play: async ({ canvasElement }) => {
+    await pickPlatform(canvasElement)
+    await within(canvasElement).findByText('Type to search files in this repository.')
+  },
 }
 
 /**

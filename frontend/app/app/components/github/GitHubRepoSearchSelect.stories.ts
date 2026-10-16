@@ -52,7 +52,10 @@ export const Default: Story = {}
 
 /** Two characters: the menu asks for one more. */
 export const BelowMinChars: Story = {
-  play: async ({ canvasElement }) => search(canvasElement, 'ac'),
+  play: async ({ canvasElement }) => {
+    await search(canvasElement, 'ac')
+    await screen.findByText('Type at least 3 characters to search.')
+  },
 }
 
 /** "acme": the three repos the App can reach, private ones marked. */
@@ -68,7 +71,7 @@ export const NoMatches: Story = {
   parameters: { api: [reposAre([])] },
   play: async ({ canvasElement }) => {
     await search(canvasElement, 'billing')
-    await screen.findByText(/billing/)
+    await screen.findByText('No repositories found for billing.')
   },
 }
 
@@ -77,5 +80,6 @@ export const Selected: Story = {
   play: async ({ canvasElement }) => {
     await search(canvasElement, 'acme')
     await userEvent.click(await screen.findByRole('option', { name: /api-gateway/ }))
+    await within(canvasElement).findByRole('button', { name: 'Clear selection' })
   },
 }

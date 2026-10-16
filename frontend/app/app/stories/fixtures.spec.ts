@@ -109,6 +109,7 @@ import {
 } from './pipelines.stories.mocks'
 import { billingMigrations, platformFiles } from './repoFiles.stories.mocks'
 import {
+  accountStrictPolicy,
   manualReviewPolicy,
   modelPreset,
   modelPresetLibrary,
@@ -213,7 +214,11 @@ const cases: [string, v.GenericSchema, unknown[]][] = [
     [resolvedDocumentRef, resolvedDocumentRefWithDroppedScope, resolvedFigmaFrameRef],
   ],
   ['slack connection', slackConnectionSchema, [slackConnection]],
-  ['risk policy', riskPolicyLibraryEntrySchema, [riskPolicy(), manualReviewPolicy]],
+  [
+    'risk policy',
+    riskPolicyLibraryEntrySchema,
+    [riskPolicy(), manualReviewPolicy, accountStrictPolicy],
+  ],
   ['model preset', modelPresetSchema, [modelPreset(), ...modelPresetLibrary]],
   [
     'pipeline',

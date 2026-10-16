@@ -164,14 +164,14 @@ const features: ServiceSpecView['features'] = spec.modules.flatMap((module) =>
       (r.acceptance ?? []).flatMap((a, i, all) => {
         const tags = [
           ...(r.priority === 'must' ? ['@must'] : []),
-          ...(r.state !== 'established' ? ['@aspirational'] : []),
+          ...((r.state ?? 'aspirational') !== 'established' ? ['@aspirational'] : []),
         ]
         return [
           `  # requirement: ${r.id}`,
           ...(tags.length ? [`  ${tags.join(' ')}`] : []),
           `  Scenario: ${all.length > 1 ? `${r.title} (#${i + 1})` : r.title}`,
-          `    Given ${a.given}`,
-          `    When ${a.when}`,
+          ...(a.given ? [`    Given ${a.given}`] : []),
+          ...(a.when ? [`    When ${a.when}`] : []),
           `    Then ${a.outcome}`,
           '',
         ]
@@ -293,6 +293,7 @@ export const AnchorReadFailed: Story = {
 export const Overview: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Overview' }))
+    await screen.findByTestId('spec-state-rollup')
   },
 }
 
@@ -301,6 +302,7 @@ export const FilteredToNone: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: /Sign-out/ }))
     await userEvent.click(await screen.findByTestId('spec-state-filter-established'))
+    await screen.findByTestId('spec-state-filter-empty')
   },
 }
 
@@ -308,5 +310,6 @@ export const FilteredToNone: Story = {
 export const Gherkin: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Gherkin' }))
+    await screen.findByText(/Feature: Sessions — Refresh tokens/)
   },
 }
