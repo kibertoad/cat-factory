@@ -17,7 +17,7 @@ type Story = StoryObj<typeof meta>
 export const Default: Story = {}
 
 /** A pasted text that is not an editor link, after Import: the error under the link. */
-export const Error: Story = {
+export const Failed: Story = {
   play: async () => {
     await userEvent.type(
       await screen.findByPlaceholderText('https://ui.nuxt.com/theme?doc=…'),

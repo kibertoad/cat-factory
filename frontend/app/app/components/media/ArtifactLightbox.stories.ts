@@ -66,7 +66,7 @@ export const Loading: Story = {
 }
 
 /** The image failed to load: the failure line and Retry. */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: { api: [artifactBlobFailure('art_signin'), ...neighbours] },
   play: async () => {
     await screen.findByText('Failed to load image.')

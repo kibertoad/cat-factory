@@ -64,7 +64,7 @@ export const Loading: Story = {
 }
 
 /** The capability read failed: a panel with Retry in place of the box. */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: {
     api: [apiFailure(getAssistantCapabilityContract, { pathPrefix: storyWorkspacePrefix })],
   },
