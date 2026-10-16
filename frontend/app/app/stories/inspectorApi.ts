@@ -13,9 +13,6 @@ import {
   getServiceTestSecretsContract,
   listDocumentsContract,
   listEnvironmentHandlersContract,
-  listGitHubIssuesContract,
-  listGitHubPullsContract,
-  listGitHubReposContract,
   listReleaseHealthConfigsContract,
   listServiceValidationConfigsContract,
   listTasksContract,
@@ -25,8 +22,7 @@ import type { HttpHandler } from 'msw'
 import { apiHandler, apiResponse } from './api'
 import { storyWorkspacePrefix } from './workspace'
 import { fragmentCatalog } from './fragments.stories.mocks'
-import { githubProbeApi } from './githubApi'
-import { authRepo } from './vcs.stories.mocks'
+import { githubLoadApi } from './githubApi'
 
 const pathPrefix = storyWorkspacePrefix
 /** The per-block reads answer for whichever block is selected. */
@@ -36,10 +32,7 @@ export function inspectorApi(): HttpHandler[] {
   return [
     // The panel's own loads.
     apiResponse(resolvedFragmentsContract, { pathPrefix, body: fragmentCatalog }),
-    ...githubProbeApi(),
-    apiResponse(listGitHubReposContract, { pathPrefix, body: [authRepo] }),
-    apiResponse(listGitHubPullsContract, { pathPrefix, body: [] }),
-    apiResponse(listGitHubIssuesContract, { pathPrefix, body: [] }),
+    ...githubLoadApi(),
     // A task's sections.
     apiResponse(listDocumentsContract, { pathPrefix, body: [] }),
     apiResponse(listTasksContract, { pathPrefix, body: [] }),

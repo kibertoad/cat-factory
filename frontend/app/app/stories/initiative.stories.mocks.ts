@@ -23,12 +23,18 @@ export const planningPipeline: Pipeline = {
   id: 'pl_initiative',
   name: 'Plan initiative',
   purpose: 'planning',
+  description:
+    'Explore the codebase, interview you on what the code cannot answer, and draft a multi-phase plan for approval before committing it.',
   agentKinds: [
     'initiative-analyst',
     'initiative-interviewer',
     'initiative-planner',
     'initiative-committer',
   ],
+  // The seed gates the planner: a human approves the plan before the committer stores it.
+  gates: [false, false, true, false],
+  builtin: true,
+  version: 5,
 }
 
 const PLANNING_RUN = 'exec_identity_plan'
