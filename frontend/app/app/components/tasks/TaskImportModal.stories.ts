@@ -5,8 +5,7 @@ import { apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { boardBlocks, gatewayService } from '~/stories/board.stories.mocks'
 import { sourceTask, taskSources } from '~/stories/integrations.stories.mocks'
-import { seedBoard, seedWorkspace, withSeed } from '~/stories/withStores'
-import { useTasksStore } from '~/stores/tasks'
+import { seedBoard, seedTaskSources, seedWorkspace, withSeed } from '~/stories/withStores'
 import { useUiStore } from '~/stores/ui'
 import TaskImportModal from './TaskImportModal.vue'
 
@@ -51,9 +50,7 @@ function withImport(
   return withSeed(() => {
     seedWorkspace()
     seedBoard(options.board ?? boardBlocks)
-    const tasks = useTasksStore()
-    tasks.available = true
-    tasks.sources = options.sources ?? taskSources
+    seedTaskSources(options.sources ?? taskSources)
     useUiStore().openTaskImport(null, containerId)
   })
 }

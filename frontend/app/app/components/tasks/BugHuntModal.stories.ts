@@ -14,8 +14,7 @@ import { storyWorkspacePrefix } from '~/stories/workspace'
 import { authService, boardBlocks, gatewayService } from '~/stories/board.stories.mocks'
 import { githubLoadApi } from '~/stories/githubApi'
 import { taskSources } from '~/stories/integrations.stories.mocks'
-import { seedBoard, seedVcs, seedWorkspace, withSeed } from '~/stories/withStores'
-import { useTasksStore } from '~/stores/tasks'
+import { seedBoard, seedTaskSources, seedVcs, seedWorkspace, withSeed } from '~/stories/withStores'
 import { useUiStore } from '~/stores/ui'
 import BugHuntModal from './BugHuntModal.vue'
 
@@ -143,9 +142,7 @@ function opened({
     seedBoard(boardBlocks)
     seedWorkspace()
     seedVcs()
-    const tasks = useTasksStore()
-    tasks.available = true
-    tasks.sources = sources
+    seedTaskSources(sources)
     useUiStore().openBugHunt(source, containerId)
   })
 }

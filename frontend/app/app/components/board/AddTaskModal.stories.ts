@@ -4,14 +4,12 @@ import type {
   WorkspaceSnapshot,
 } from '@cat-factory/contracts'
 import { screen, userEvent } from 'storybook/test'
-import type { PendingContext } from '~/composables/useContextLinking'
 import { authService, boardBlocks } from '~/stories/board.stories.mocks'
 import { block } from '~/stories/block.stories.mocks'
-import { jiraDescriptor, sourceTask, taskSources } from '~/stories/integrations.stories.mocks'
+import { linkedIssue, sourceTask, taskSources } from '~/stories/integrations.stories.mocks'
 import { taskFormSnapshot } from '~/stories/taskForm.stories.mocks'
 import { taskFormApi } from '~/stories/taskFormApi'
-import { seedSnapshot, seedUiMode, withSeed } from '~/stories/withStores'
-import { useTasksStore } from '~/stores/tasks'
+import { seedSnapshot, seedTaskSources, seedUiMode, withSeed } from '~/stories/withStores'
 import { useUiStore } from '~/stores/ui'
 import type { UiMode } from '~/utils/uiMode'
 import AddTaskModal from './AddTaskModal.vue'
@@ -45,9 +43,7 @@ function opened({
     seedSnapshot(board)
     seedUiMode(mode)
     if (trackers) {
-      const tasks = useTasksStore()
-      tasks.available = true
-      tasks.sources = taskSources
+      seedTaskSources(taskSources)
     }
     useUiStore().openAddTask(containerId, prefill)
   })
@@ -139,17 +135,6 @@ export const DocumentRepository: Story = {
       containerId: handbook.id,
     }),
   ],
-}
-
-const linkedIssue: PendingContext = {
-  kind: 'task',
-  source: 'jira',
-  externalId: issue.externalId,
-  title: `${issue.externalId} · ${issue.title}`,
-  subtitle: issue.status,
-  icon: jiraDescriptor.icon,
-  description: issue.description,
-  needsImport: false,
 }
 
 /**

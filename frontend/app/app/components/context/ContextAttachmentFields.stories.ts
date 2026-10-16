@@ -11,15 +11,19 @@ import {
   documentConnections,
   documentSources,
   figmaDescriptor,
-  jiraDescriptor,
+  linkedIssue,
   resolvedFigmaFrameRef,
   sourceDocument,
   sourceDocuments,
-  sourceTask,
   taskSources,
 } from '~/stories/integrations.stories.mocks'
-import { seedBoard, seedDocumentSources, seedWorkspace, withSeed } from '~/stories/withStores'
-import { useTasksStore } from '~/stores/tasks'
+import {
+  seedBoard,
+  seedDocumentSources,
+  seedTaskSources,
+  seedWorkspace,
+  withSeed,
+} from '~/stories/withStores'
 import ContextAttachmentFields from './ContextAttachmentFields.vue'
 
 // The context half of the add-task form (and of the initiative form): documents and tracker
@@ -29,7 +33,6 @@ import ContextAttachmentFields from './ContextAttachmentFields.vue'
 // attachment when a connected source recognises it. The hints are the add-task form's. The
 // sources are the shared ones: Confluence, Figma and GitHub Docs, and GitHub Issues and Jira.
 const pathPrefix = storyWorkspacePrefix
-const issue = sourceTask()
 
 const sessionLifecycle: PendingContext = {
   kind: 'document',
@@ -52,25 +55,13 @@ const signInFrame: PendingContext = {
   needsImport: true,
 }
 
-const linkedIssue: PendingContext = {
-  kind: 'task',
-  source: 'jira',
-  externalId: issue.externalId,
-  title: `${issue.externalId} · ${issue.title}`,
-  subtitle: issue.status,
-  icon: jiraDescriptor.icon,
-  needsImport: false,
-}
-
 /** The shared sources, connected as the shell's probes find them; `false` connects nothing. */
 function sources(connected = true) {
   return withSeed(() => {
     seedWorkspace()
     seedBoard(boardBlocks)
     seedDocumentSources(documentSources, connected ? documentConnections : [])
-    const tasks = useTasksStore()
-    tasks.available = true
-    tasks.sources = connected ? taskSources : taskSources.map((s) => ({ ...s, available: false }))
+    seedTaskSources(connected ? taskSources : taskSources.map((s) => ({ ...s, available: false })))
   })
 }
 

@@ -10,8 +10,7 @@ import {
   sessionSearchHits,
   taskSources,
 } from '~/stories/integrations.stories.mocks'
-import { seedWorkspace, withSeed } from '~/stories/withStores'
-import { useTasksStore } from '~/stores/tasks'
+import { seedTaskSources, seedWorkspace, withSeed } from '~/stories/withStores'
 import ContextIssuePicker from './ContextIssuePicker.vue'
 
 // The inline picker that attaches a tracker issue to a task or an initiative. It lists the issues
@@ -36,9 +35,7 @@ type Story = StoryObj<typeof meta>
 function withTrackers(sources: TaskSourceState[]) {
   return withSeed(() => {
     seedWorkspace()
-    const tasks = useTasksStore()
-    tasks.available = true
-    tasks.sources = sources
+    seedTaskSources(sources)
   })
 }
 

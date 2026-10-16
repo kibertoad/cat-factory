@@ -43,7 +43,7 @@ const running = taskFormSnapshot({
 })
 
 const meta = {
-  title: 'Board/Components/BlockFocusView',
+  title: 'Board/Pages/BlockFocusView',
   component: BlockFocusView,
   render: () => ({
     components: { BlockFocusView },
