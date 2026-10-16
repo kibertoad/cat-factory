@@ -10,6 +10,7 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
 import {
+  assertMayRevoke,
   assertReachCovers,
   assertWorkspacesInAccount,
   publicApiKeyToWire,
@@ -66,8 +67,11 @@ export function publicKeyController(): Hono<AppEnv> {
   buildHonoRoute(app, listPublicKeysContract, async (c) => {
     const gate = await authorize(c, listPublicKeysContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
-    const { accountId, workspaceId } = gate.auth
-    const keys = await keyStore(c).listReaching(accountId, workspaceId)
+    const { accountId, workspaceId, workspaceIds, actsAsUserId } = gate.auth
+    // A key reaching the whole account stands where an account admin does; any other key sees the
+    // membership keys of the person it is bound to, if any.
+    const viewer = { userId: actsAsUserId, accountAdmin: workspaceIds === null }
+    const keys = await keyStore(c).listReaching(accountId, workspaceId, viewer)
     return c.json(
       { keys: keys.map((key: PublicApiKeyRecord) => publicApiKeyToWire(key, workspaceId)) },
       200,
@@ -127,7 +131,7 @@ export function publicKeyController(): Hono<AppEnv> {
     const keys = keyStore(c)
     const target = await keys.getLive(gate.auth.accountId, c.req.valid('param').keyId)
     if (target) {
-      assertReachCovers(gate.auth.workspaceIds, target.workspaceIds, 'revoke that key')
+      assertMayRevoke(gate.auth, target)
       await keys.revoke(gate.auth.accountId, target.id)
     }
     return c.body(null, 204)

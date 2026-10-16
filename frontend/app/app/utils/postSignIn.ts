@@ -27,3 +27,23 @@ export function postSignInUrl(location: { pathname: string; search: string }): s
   const query = params.toString()
   return query ? `${location.pathname}?${query}` : location.pathname
 }
+
+/** The part of `window.location` a sign-in reads and reloads through. */
+type SignInLocation = Pick<Location, 'pathname' | 'search' | 'assign'>
+
+/**
+ * Run a sign-in, then reload to where the person was.
+ *
+ * The destination is read BEFORE the call. A sign-in that succeeds mounts the board in place, and
+ * the board's deep-link handlers strip the query they act on (`?addRepo=` among them) as they
+ * consume it, so a destination read after the call is the stripped URL and the reload lands on a
+ * board that no longer knows what the link asked for.
+ */
+export async function signInThenReload(
+  signIn: () => Promise<unknown>,
+  location: SignInLocation | null = typeof window === 'undefined' ? null : window.location,
+): Promise<void> {
+  const destination = location === null ? null : postSignInUrl(location)
+  await signIn()
+  if (location !== null && destination !== null) location.assign(destination)
+}

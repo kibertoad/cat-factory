@@ -2910,19 +2910,23 @@
     "scopeHint": "Chaque niveau inclut les précédents.",
     "scope": {
       "read": {
-        "label": "Lecture seule",
+        "label": "Lecture · read",
         "description": "Voir les services, les tâches, les pipelines et les exécutions."
       },
+      "webhooks": {
+        "label": "Webhooks",
+        "description": "Et aussi enregistrer des webhooks qui envoient les changements à un autre système."
+      },
       "write": {
-        "label": "Lecture et écriture",
+        "label": "Écriture · write",
         "description": "Et aussi créer et lancer des tâches."
       },
       "decide": {
-        "label": "Lecture, écriture et décision",
+        "label": "Décision · decide",
         "description": "Et aussi répondre aux questions qu'attend une exécution en pause."
       },
       "admin": {
-        "label": "Accès complet",
+        "label": "Accès complet · admin",
         "description": "Et aussi supprimer des tâches et agir sur les notifications, ce qui peut fusionner une pull request."
       }
     },
@@ -3604,6 +3608,7 @@
         "boundToYou": "Votre abonnement",
         "boundToOther": "Abonnement de {user}",
         "reachAll": "Tous les espaces de travail",
+        "reachMemberships": "Suit les espaces de travail de sa personne",
         "reachCount": "{count} espaces de travail"
       },
       "add": {
@@ -3612,7 +3617,7 @@
         "labelHelp": "Un nom pour reconnaître ce jeton plus tard.",
         "labelPlaceholder": "ex. pipeline CI",
         "scope": "Portée",
-        "scopeHelp": "Ce que ce jeton peut faire : lecture seule, lecture et écriture, ou accès complet (qui autorise aussi la suppression).",
+        "scopeHelp": "Chaque niveau inclut tout ce que permet le précédent. Lecture : consulter les tâches, les exécutions et leurs résultats. Webhooks : en plus, enregistrer et supprimer les webhooks qui envoient les changements à un autre système, comme les webhooks d'annuaire et de notification. Écriture : en plus, créer, modifier, démarrer, arrêter et relancer des tâches, et lancer des revues et des évaluations. Décision : en plus, répondre aux décisions humaines d'une exécution (approbations, constats de revue, questions d'entretien et de clarification, tests manuels) ; un jeton a aussi besoin de ce niveau pour démarrer un pipeline qui peut s'arrêter sur l'une d'elles. Accès complet (admin) : en plus, ajouter, configurer et supprimer des services, supprimer des tâches, lier des dépôts, gérer les connexions d'environnement, et agir sur les notifications.",
         "create": "Créer le jeton",
         "identity": "S'exécute en tant que",
         "identitySystem": "Cet espace de travail (jeton système)",
@@ -3621,16 +3626,20 @@
         "identitySelfHelp": "Les exécutions lancées avec ce jeton vous sont attribuées et peuvent utiliser votre abonnement personnel Claude / Codex / GLM. Chaque appel doit aussi envoyer votre mot de passe personnel dans l'en-tête X-Personal-Password ; il n'est jamais conservé. À utiliser pour vos propres exécutions headless.",
         "reach": "Espaces de travail",
         "reachHelp": "Les espaces de travail sur lesquels ce jeton peut agir. Un jeton qui en couvre plusieurs indique l’espace de travail à chaque appel dans l’en-tête x-cat-factory-workspace.",
+        "reachAdminOnly": "Seul un administrateur du compte peut créer un jeton qui couvre d'autres espaces de travail, ce dont les webhooks d'annuaire ont besoin. Demandez-le à l'un d'eux.",
         "reachThis": "Cet espace de travail uniquement",
         "reachAll": "Tous les espaces de travail du compte",
         "reachSelected": "Espaces de travail sélectionnés",
+        "reachMemberships": "Mes espaces de travail (suit mes adhésions)",
+        "reachMembershipsHelp": "Atteint à chaque appel chaque espace de travail où vous pouvez agir : en rejoindre ou en quitter un le change, sans rien recréer. Dans chacun, il ne peut pas faire plus que votre rôle ne le permet.",
         "reachPick": "Choisir des espaces de travail"
       },
       "scopes": {
-        "read": "Lecture seule",
-        "write": "Lecture et écriture",
-        "decide": "Répondre aux décisions",
-        "admin": "Accès complet"
+        "read": "Lecture · read",
+        "webhooks": "Webhooks (inclut Lecture)",
+        "write": "Écriture · write (inclut Webhooks)",
+        "decide": "Décision · decide (inclut Écriture)",
+        "admin": "Accès complet · admin (inclut Décision)"
       },
       "toast": {
         "loadFailed": "Impossible de charger les jetons d'API",
@@ -4639,7 +4648,8 @@
         "frontendWiringFailedNote": "Les réglages du frontend n'ont pas été enregistrés. Ouvrez l'inspecteur de chaque application frontend pour définir son sous-répertoire et ses services backend."
       },
       "repoType": "Type de dépôt",
-      "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement)."
+      "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement).",
+      "prefillProviderMismatch": "Le lien visait {repo} chez un autre hébergeur, et ce tableau est connecté à {connected}. Cherchez le dépôt à la main, ou ouvrez le lien sur un tableau connecté à son hébergeur."
     },
     "repoTree": {
       "root": "racine",

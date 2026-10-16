@@ -7,7 +7,7 @@
 // yields no usable keys. The raw key is shown exactly once, on issue.
 //
 // A key is scoped to one account + workspace; every call it authenticates is bound to
-// that workspace. It also carries a permission `scope` (read ⊂ write ⊂ admin) the public
+// that workspace. It also carries a permission `scope` (read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin) the public
 // surface gates each endpoint on. Both runtimes implement this (Cloudflare D1 + Node/local
 // Postgres) so behaviour is identical everywhere.
 
@@ -24,8 +24,16 @@ export interface PublicApiKeyRecord {
    * an empty list and no longer authenticates.
    */
   workspaceIds: string[] | null
+  /**
+   * The key's reach is its bound person's: every workspace {@link PublicApiKeyRecord.actsAsUserId}
+   * can act in at the moment a call is made, never a stored list. Joining a workspace grants it on
+   * the next call and leaving takes it away, with nothing to re-mint. Only a bound key has a person
+   * to follow, so it is set only with `actsAsUserId`, and its `workspaceIds` is always `[]`: a
+   * reader that missed this flag sees a key that reaches nothing, never one that reaches more.
+   */
+  followsMemberships: boolean
   label: string
-  /** What the key may do on `/api/v1` (read ⊂ write ⊂ admin). */
+  /** What the key may do on `/api/v1` (read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin). */
   scope: PublicApiScope
   /** Hex `HMAC-SHA256(secret, ENCRYPTION_KEY)` of the key's secret portion. */
   secretHash: string

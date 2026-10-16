@@ -15,6 +15,7 @@ import org.jspecify.annotations.Nullable;
  */
 public enum CreateHeadlessPublicApiKeyScope {
     READ("read"),
+    WEBHOOKS("webhooks"),
     WRITE("write"),
     DECIDE("decide"),
 

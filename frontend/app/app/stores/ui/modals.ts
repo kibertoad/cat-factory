@@ -10,6 +10,8 @@ import type {
   InfrastructureTab,
   ProviderConnectionKind,
 } from '~/types/providerConnections'
+import type { AddServicePrefill } from '~/composables/useAddRepoDeepLink'
+import type { NewApiKeyPrefill } from '~/composables/useNewApiKeyDeepLink'
 import type { PendingContext } from '~/composables/useContextLinking'
 import {
   infraSetupDismissalKey,
@@ -523,6 +525,8 @@ function createOverlayModals() {
   const bootstrapOpen = ref(false)
   // "Add a service from an existing GitHub repo" modal (no bootstrap run).
   const addServiceOpen = ref(false)
+  // The repository an add-repository deep link opened the window for, consumed on open.
+  const addServicePrefill = ref<AddServicePrefill | null>(null)
   // Prompt-fragment library panel (manage the board's best-practice catalog +
   // linked guideline repos; ADR 0006).
   const fragmentLibraryOpen = ref(false)
@@ -546,11 +550,13 @@ function createOverlayModals() {
   function closeBootstrap() {
     bootstrapOpen.value = false
   }
-  function openAddService() {
+  function openAddService(prefill: AddServicePrefill | null = null) {
+    addServicePrefill.value = prefill
     addServiceOpen.value = true
   }
   function closeAddService() {
     addServiceOpen.value = false
+    addServicePrefill.value = null
   }
   function openFragmentLibrary() {
     fragmentLibraryOpen.value = true
@@ -601,6 +607,7 @@ function createOverlayModals() {
   return {
     bootstrapOpen,
     addServiceOpen,
+    addServicePrefill,
     fragmentLibraryOpen,
     foundationalServicesOpen,
     commandBarOpen,
@@ -661,6 +668,8 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   // API access tokens: the workspace's inbound public-API keys external systems present to
   // the `/api/v1` surface. Opened from the Integrations hub.
   const apiTokensOpen = ref(false)
+  // The create form a new-API-key deep link opened the window with, consumed on open.
+  const apiTokensPrefill = ref<NewApiKeyPrefill | null>(null)
   // Opened and closed by `createBuilderModelConfigHandoff`, which hands the pipeline builder over.
   const modelConfigOpen = ref(false)
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
@@ -716,12 +725,14 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   function closeReports() {
     reportsOpen.value = false
   }
-  function openApiTokens() {
+  function openApiTokens(prefill: NewApiKeyPrefill | null = null) {
     resetHubReturn()
+    apiTokensPrefill.value = prefill
     apiTokensOpen.value = true
   }
   function closeApiTokens() {
     apiTokensOpen.value = false
+    apiTokensPrefill.value = null
   }
   function openVendorCredentials(tab = 'pool') {
     resetHubReturn()
@@ -764,6 +775,7 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
     operatorDashboardOpen,
     reportsOpen,
     apiTokensOpen,
+    apiTokensPrefill,
     modelConfigOpen,
     vendorCredentialsOpen,
     vendorCredentialsTab,
