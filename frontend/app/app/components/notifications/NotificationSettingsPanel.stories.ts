@@ -67,7 +67,7 @@ export const Unavailable: Story = {
 }
 
 /** The read failed: a warning with Retry, and no Save that would write the defaults over it. */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: { api: [apiFailure(getNotificationSettingsContract, { pathPrefix })] },
 }
 

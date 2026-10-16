@@ -120,7 +120,7 @@ export const Omitted: Story = {
 }
 
 /** The check failed: a translated line, with the backend's words and the request id behind Show detail. */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: {
     api: [apiFailure(checkGitHubBranchProtectionContract, { pathPrefix: storyWorkspacePrefix })],
   },

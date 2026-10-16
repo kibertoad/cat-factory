@@ -100,7 +100,7 @@ export const Unavailable: Story = {
 }
 
 /** The overview read failed: the error, with Retry. */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: { api: [apiFailure(sandboxOverviewContract, { pathPrefix }), modelCatalog] },
 }
 

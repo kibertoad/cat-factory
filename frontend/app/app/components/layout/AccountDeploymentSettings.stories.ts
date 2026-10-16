@@ -161,7 +161,7 @@ export const UnregisteredStore: Story = {
  * The load failed: a toast, and every section says Not set with no storage section, which reads
  * like an account with nothing configured.
  */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: {
     api: [apiFailure(getAccountSettingsContract, { pathParams: { accountId: orgAccount.id } })],
   },

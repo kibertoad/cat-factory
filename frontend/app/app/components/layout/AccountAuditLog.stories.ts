@@ -58,7 +58,7 @@ export const Loading: Story = {
 }
 
 /** The read failed: a message with the reason in place of the list, and no Load older entries. */
-export const Error: Story = {
+export const Failed: Story = {
   parameters: {
     api: [apiFailure(listAuditEventsContract, { pathParams: { accountId: orgAccount.id } })],
   },
