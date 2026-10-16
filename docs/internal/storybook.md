@@ -107,6 +107,10 @@ second Vite server in the same process. The framework preset is what renders the
 
 Pick the layer first: it decides what mounts, what fakes the data, and who the story is for.
 
+A result window or a full-screen overlay that mounts alone over a seeded snapshot is a Page, even
+when it fakes no request: it is a whole surface the user opens, not a part of one. A piece of such
+a surface (a section, a card, a list) is a Component.
+
 ### Titles are product language
 
 ```

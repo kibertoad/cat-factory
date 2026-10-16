@@ -3065,19 +3065,23 @@
     "scopeHint": "Each level includes the ones above it.",
     "scope": {
       "read": {
-        "label": "Read only",
+        "label": "Read",
         "description": "See services, tasks, pipelines and runs."
       },
+      "webhooks": {
+        "label": "Webhooks",
+        "description": "Also register webhooks that push changes to another system."
+      },
       "write": {
-        "label": "Read and write",
+        "label": "Write",
         "description": "Also create and start tasks."
       },
       "decide": {
-        "label": "Read, write and decide",
+        "label": "Decide",
         "description": "Also answer the questions a parked run is waiting on."
       },
       "admin": {
-        "label": "Full access",
+        "label": "Admin",
         "description": "Also delete tasks and act on notifications, which can merge a pull request."
       }
     },
@@ -3912,6 +3916,7 @@
         "boundToYou": "Your subscription",
         "boundToOther": "{user}'s subscription",
         "reachAll": "All workspaces",
+        "reachMemberships": "Follows its owner's workspaces",
         "reachCount": "{count} workspaces"
       },
       "add": {
@@ -3920,7 +3925,7 @@
         "labelHelp": "A name to recognize this token by later.",
         "labelPlaceholder": "e.g. CI pipeline",
         "scope": "Scope",
-        "scopeHelp": "What this token can do: read-only, read and write, or full access (which also allows deleting).",
+        "scopeHelp": "Each level includes everything the one before it allows. Read: view tasks, runs and their results. Webhooks: also register and remove webhooks that push changes to another system, such as directory and notification webhooks. Write: also create, edit, start, stop and retry tasks, and run reviews and assessments. Decide: also answer a run's human decisions (approvals, review findings, interview and clarifying questions, human tests); a token also needs this level to start a pipeline that can stop for one. Admin: also add, configure and delete services, delete tasks, link repositories, manage environment connections, and act on notifications.",
         "create": "Create token",
         "identity": "Runs as",
         "identitySystem": "This workspace (system token)",
@@ -3929,16 +3934,20 @@
         "identitySelfHelp": "Runs started with this token count as yours and can use your personal Claude / Codex / GLM subscription. Every such call must also send your personal password in the X-Personal-Password header; it is never stored. Use this to drive your own headless runs.",
         "reach": "Workspaces",
         "reachHelp": "Which workspaces this token can act on. A token reaching more than one names the workspace on each call in the x-cat-factory-workspace header.",
+        "reachAdminOnly": "Only an account admin can create a token that reaches other workspaces, which directory webhooks need. Ask one to create it.",
         "reachThis": "This workspace only",
         "reachAll": "Every workspace in the account",
         "reachSelected": "Selected workspaces",
+        "reachMemberships": "My workspaces (follows my memberships)",
+        "reachMembershipsHelp": "Reaches every workspace you can act in, on each call: joining or leaving one changes it, with nothing to re-create. In each workspace it can do no more than your role there allows.",
         "reachPick": "Choose workspaces"
       },
       "scopes": {
-        "read": "Read only",
-        "write": "Read and write",
-        "decide": "Answer decisions",
-        "admin": "Full access"
+        "read": "Read",
+        "webhooks": "Webhooks (includes Read)",
+        "write": "Write (includes Webhooks)",
+        "decide": "Decide (includes Write)",
+        "admin": "Admin (includes Decide)"
       },
       "toast": {
         "loadFailed": "Could not load API tokens",
@@ -4824,7 +4833,8 @@
         },
         "frontendLinkedNote": "{directory} was added as the frontend and linked to the others. Name its backend URL environment variables in its inspector.",
         "frontendWiringFailedNote": "The frontend settings did not save. Open each frontend app's inspector to set its subdirectory and its backend services."
-      }
+      },
+      "prefillProviderMismatch": "The link asked for {repo} on a different host, and this board is connected to {connected}. Search for the repository by hand, or open the link on a board connected to its host."
     },
     "repoTree": {
       "root": "root",

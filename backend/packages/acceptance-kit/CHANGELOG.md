@@ -1,5 +1,50 @@
 # @cat-factory/acceptance-kit
 
+## 0.7.44
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/contracts@0.373.0
+  - @cat-factory/kernel@0.361.0
+  - @cat-factory/sdk@0.63.0
+
+## 0.7.43
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+  - @cat-factory/sdk@0.62.0
+  - @cat-factory/kernel@0.360.4
+
+## 0.7.42
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+  - @cat-factory/sdk@0.61.0
+  - @cat-factory/kernel@0.360.3
+
+## 0.7.41
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+  - @cat-factory/kernel@0.360.2
+  - @cat-factory/sdk@0.60.0
+
+## 0.7.40
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+  - @cat-factory/sdk@0.59.1
+  - @cat-factory/kernel@0.360.1
+
 ## 0.7.39
 
 ### Patch Changes

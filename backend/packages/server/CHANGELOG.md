@@ -1,5 +1,124 @@
 # @cat-factory/server
 
+## 0.340.0
+
+### Minor Changes
+
+- 83f6b0c: A personal API key can follow its person's workspaces. Minted with `followsMemberships: true`
+  (beside `actsAsSelf: true`, and no `workspaceIds`), it reaches every workspace that person can act
+  in, resolved on each call: joining a workspace grants it on the next call and leaving takes it
+  away, with nothing to re-mint. In each workspace its scope is lowered to what the person's role
+  there allows (`read` for a viewer, `decide` for a member, `admin` for an admin), and on account-level
+  routes it acts with `read`, so it can never do more over `/api/v1` than its person can in the app.
+  That is also why anyone with `runs.execute` may mint one, list it and revoke it; an account admin
+  manages anyone's.
+  
+  `followsMemberships` is new on a listed or minted key (whose `workspaceIds` is then `[]`), on
+  `GET /api/v1/me` and on `GET /api/v1/directory/reach`, which answer the reach as of the call.
+  OpenAPI 1.89.0. The API tokens window offers "My workspaces (follows my memberships)", the default
+  for a personal token, and `?newApiKey` takes `reach=memberships`. New migrations: D1
+  `0110_public_api_key_follows_memberships.sql`, Drizzle
+  `20261016160143_public_api_key_follows_memberships`.
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/contracts@0.373.0
+  - @cat-factory/kernel@0.361.0
+  - @cat-factory/integrations@0.177.0
+  - @cat-factory/mcp-server@0.59.0
+  - @cat-factory/agents@0.172.6
+  - @cat-factory/orchestration@0.322.6
+  - @cat-factory/spend@0.23.20
+
+## 0.339.0
+
+### Minor Changes
+
+- f702a8e: `GET /api/v1/directory/reach` (`client.directory.getReach`) answers the calling key's account and
+  workspace reach without an `x-cat-factory-workspace` header. `GET /api/v1/me` names one workspace,
+  so it refused a key reaching several that sent no header, and that is every key a directory webhook
+  accepts.
+  
+  `DirectorySyncer.handleDelivery` read the key's reach from `/me`, so every push to a directory
+  webhook failed with `422 workspace_required`. It now reads `/api/v1/directory/reach`, and falls back
+  to `/me` against a deployment without that route or with an SDK that predates `getReach`. OpenAPI
+  1.88.0.
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+  - @cat-factory/mcp-server@0.58.1
+  - @cat-factory/agents@0.172.5
+  - @cat-factory/integrations@0.176.6
+  - @cat-factory/kernel@0.360.4
+  - @cat-factory/orchestration@0.322.5
+  - @cat-factory/spend@0.23.19
+
+## 0.338.0
+
+### Minor Changes
+
+- b3a13d3: An integration can now send a person to add a service for a repository. `GET /api/v1/deployment`
+  (`client.deployment.get`) answers where the deployment serves its web app, to any `read` key with
+  no workspace named. The app opens the add-service window with the repository searched for and
+  selected from `?addRepo=<owner>/<name>`, with optional `provider` and `ws` to name the host and
+  pin the board. Signing in first keeps the link.
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+  - @cat-factory/mcp-server@0.58.0
+  - @cat-factory/agents@0.172.4
+  - @cat-factory/integrations@0.176.5
+  - @cat-factory/kernel@0.360.3
+  - @cat-factory/orchestration@0.322.4
+  - @cat-factory/spend@0.23.18
+
+## 0.337.0
+
+### Minor Changes
+
+- 6f574e9: API keys gain a `webhooks` scope between `read` and `write`: everything `read` can do, plus
+  registering and removing push endpoints. The directory webhooks (`/api/v1/directory/webhooks`,
+  still for a key reaching every workspace) and the notification webhooks
+  (`/api/v1/notification-webhook[s]`) now need `webhooks` instead of `admin`, so a sync integration
+  can follow changes with a key that cannot author or delete work. Every key that could manage
+  webhooks before still can. OpenAPI 1.86.0.
+  
+  The API token form names each scope by its API name (`read`, `webhooks`, `write`, `decide`,
+  `admin`), so the screen, the docs and the refusal messages agree. "Full access" is now "Admin".
+  
+  The token form always shows the Workspaces picker, in basic and advanced mode. It is disabled for
+  anyone who is not an account admin, with a line saying so, because only an account admin may mint
+  a key that reaches other workspaces.
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+  - @cat-factory/integrations@0.176.4
+  - @cat-factory/kernel@0.360.2
+  - @cat-factory/mcp-server@0.57.2
+  - @cat-factory/agents@0.172.3
+  - @cat-factory/orchestration@0.322.3
+  - @cat-factory/spend@0.23.17
+
+## 0.336.1
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+  - @cat-factory/integrations@0.176.3
+  - @cat-factory/mcp-server@0.57.1
+  - @cat-factory/agents@0.172.2
+  - @cat-factory/kernel@0.360.1
+  - @cat-factory/orchestration@0.322.2
+  - @cat-factory/spend@0.23.16
+
 ## 0.336.0
 
 ### Minor Changes

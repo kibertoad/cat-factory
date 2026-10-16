@@ -80,6 +80,18 @@ export function definePublicKeyReachSuite(harness: ConformanceHarness): void {
       expect(unnamed.status).toBe(422)
       expect(unnamed.body.error.details?.reason).toBe('workspace_required')
 
+      // A fact about the deployment, so the same key asks it without naming a board.
+      const deployment = await app.call<{ appUrl: string }>(
+        'GET',
+        '/api/v1/deployment',
+        undefined,
+        key,
+      )
+      expect(deployment.status).toBe(200)
+      // No trailing slash, so a client appends `/?addRepo=…` without doubling it.
+      expect(deployment.body.appUrl).toMatch(/^https?:\/\/\S+[^/]$/u)
+      expect((await app.call('GET', '/api/v1/deployment')).status).toBe(401)
+
       const named = await app.call<Me>('GET', '/api/v1/me', undefined, {
         ...key,
         [WORKSPACE_HEADER]: w2,
