@@ -1,5 +1,21 @@
 # @cat-factory/mcp-server
 
+## 0.58.1
+
+### Patch Changes
+
+- f702a8e: `GET /api/v1/directory/reach` (`client.directory.getReach`) answers the calling key's account and
+  workspace reach without an `x-cat-factory-workspace` header. `GET /api/v1/me` names one workspace,
+  so it refused a key reaching several that sent no header, and that is every key a directory webhook
+  accepts.
+  
+  `DirectorySyncer.handleDelivery` read the key's reach from `/me`, so every push to a directory
+  webhook failed with `422 workspace_required`. It now reads `/api/v1/directory/reach`, and falls back
+  to `/me` against a deployment without that route or with an SDK that predates `getReach`. OpenAPI
+  1.88.0.
+- Updated dependencies [f702a8e]
+  - @cat-factory/sdk@0.62.0
+
 ## 0.58.0
 
 ### Minor Changes

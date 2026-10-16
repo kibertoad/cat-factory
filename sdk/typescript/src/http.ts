@@ -67,7 +67,7 @@ export interface RequestSpec {
 }
 
 /** SDK version, stamped into `User-Agent`. Kept in step with package.json by `check:sdk`. */
-export const SDK_VERSION = '0.61.0'
+export const SDK_VERSION = '0.62.0'
 
 /**
  * Percent-encode a path parameter.
