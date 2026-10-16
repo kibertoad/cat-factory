@@ -215,7 +215,7 @@ function specIs(body: ServiceSpecView) {
 }
 
 const meta = {
-  title: 'Documents/Components/ServiceSpecWindow',
+  title: 'Documents/Pages/ServiceSpecWindow',
   component: ServiceSpecWindow,
   decorators: [
     withSeed(() => {
@@ -225,6 +225,7 @@ const meta = {
     }),
   ],
   parameters: {
+    layout: 'fullscreen',
     api: [
       specIs({
         present: true,

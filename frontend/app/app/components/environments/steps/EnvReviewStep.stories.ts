@@ -127,7 +127,7 @@ export const AnalysisFailed: Story = {
         analystRun({
           status: 'failed',
           steps: [
-            step({ agentKind: ENVIRONMENT_ANALYST_AGENT_KIND, state: 'failed', progress: 0.3 }),
+            step({ agentKind: ENVIRONMENT_ANALYST_AGENT_KIND, state: 'working', progress: 0.3 }),
           ],
           failure: failure({
             message: 'The environment analyst could not read the repository.',
