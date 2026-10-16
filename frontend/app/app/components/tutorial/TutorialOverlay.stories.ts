@@ -3,7 +3,7 @@ import { snapshot } from '~/stories/snapshot.stories.mocks'
 import { seedSnapshot, withSeed } from '~/stories/withStores'
 import { useGitHubStore } from '~/stores/github'
 import { useTutorialStore } from '~/stores/tutorial'
-import { TUTORIAL_TOURS } from '~/modular/tutorial-tours'
+import { useTutorialTours } from '~/composables/useTutorialTours'
 import TutorialOverlay from './TutorialOverlay.vue'
 
 // The coach mark of a running tour: a card with the step's copy, its place in the tour, and Skip,
@@ -11,14 +11,16 @@ import TutorialOverlay from './TutorialOverlay.vue'
 // runs, so each story starts a tour at a step. A step that names a control looks for it on the
 // page, and a component story renders none of the app's shell, so the Highlighted story draws a
 // stand-in with the same test id. A step whose control does not come is skipped when its wait
-// runs out, so the Searching story moves on by itself.
+// runs out, so the Searching story moves on by itself. The step index comes from the tour as
+// this board resolves it, the same list the overlay walks, because a step's `when` can drop it.
 function atStep(tourId: string, stepId: string) {
   return withSeed(() => {
     seedSnapshot(snapshot())
     useGitHubStore().available = true
-    const tour = TUTORIAL_TOURS.find((entry) => entry.id === tourId)
-    const index = tour?.steps.findIndex((entry) => entry.id === stepId) ?? -1
-    if (index < 0) throw new Error(`No step ${stepId} in tour ${tourId}`)
+    const tour = useTutorialTours().tours.value.find((entry) => entry.id === tourId)
+    if (!tour) throw new Error(`Tour ${tourId} is not available on this board`)
+    const index = tour.steps.findIndex((entry) => entry.id === stepId)
+    if (index < 0) throw new Error(`No step ${stepId} in tour ${tourId} on this board`)
     const tutorial = useTutorialStore()
     tutorial.startTour(tourId)
     tutorial.setStepIndex(index)

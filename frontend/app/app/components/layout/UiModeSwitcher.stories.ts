@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { seedUiMode, withSeed } from '~/stories/withStores'
 import { getActivePinia } from 'pinia'
 import { h, onUnmounted } from 'vue'
+import { seedUiMode, withSeed } from '~/stories/withStores'
+import { useUiModeStore } from '~/stores/uiMode'
 import UiModeSwitcher from './UiModeSwitcher.vue'
 
 // The interface tier picker at the top of the sidebar: both tiers side by side, so the user can
@@ -41,7 +42,9 @@ export const Collapsed: Story = {
  * The store reads the pin once, when it is created, and the app's plugins create it before any
  * seed runs. So the seed sets the pin, then drops the store, and the switcher creates a new one
  * that reads it. The preset shares `public` across stories, so the story puts the old value back
- * and drops the store again when it unmounts. Else the stories after it stay pinned.
+ * and drops the store again when it unmounts. Else the stories after it stay pinned. The cleanup
+ * runs outside setup, where the active Pinia can be the next story's, so it uses the one setup
+ * found.
  */
 export const Pinned: Story = {
   decorators: [
@@ -49,10 +52,11 @@ export const Pinned: Story = {
       setup() {
         const config = useRuntimeConfig().public
         const previous = config.uiMode
+        const pinia = getActivePinia()
+        if (!pinia) throw new Error('The Pinned story needs the story app to have a Pinia')
         const resetStore = () => {
-          useUiModeStore().$dispose()
-          const pinia = getActivePinia()
-          if (pinia) delete pinia.state.value.uiMode
+          useUiModeStore(pinia).$dispose()
+          delete pinia.state.value.uiMode
         }
         config.uiMode = 'advanced'
         resetStore()

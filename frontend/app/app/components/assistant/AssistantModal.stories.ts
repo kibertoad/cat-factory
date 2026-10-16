@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import {
   ASSISTANT_ACTION_IDS,
+  ASSISTANT_PROMPT_MAX,
   getAssistantCapabilityContract,
   runAssistantTurnContract,
   type AssistantActionId,
@@ -67,6 +68,9 @@ export const Error: Story = {
   parameters: {
     api: [apiFailure(getAssistantCapabilityContract, { pathPrefix: storyWorkspacePrefix })],
   },
+  play: async () => {
+    await screen.findByText(/Could not check what the assistant can do here/)
+  },
 }
 
 /** No model on the deployment: a panel that says so. */
@@ -79,18 +83,27 @@ export const Unwired: Story = {
       }),
     ],
   },
+  play: async () => {
+    await screen.findByText(/No model is configured on this deployment/)
+  },
 }
 
 /** A model and no actions: a panel that says so. */
-export const NoActions: Story = { parameters: { api: [capability([])] } }
+export const NoActions: Story = {
+  parameters: { api: [capability([])] },
+  play: async () => {
+    await screen.findByText(/This deployment's assistant has no actions configured/)
+  },
+}
 
 /** A request over the limit: Run is off, and the line beside it gives both lengths. */
 export const TooLong: Story = {
   play: async () => {
     await screen.findByText('What you can ask')
     await userEvent.click(screen.getByRole('textbox'))
+    const sentence = 'the checkout service depends on the payments service, '
     await userEvent.paste(
-      'the checkout service depends on the payments service, '.repeat(40).trim(),
+      sentence.repeat(Math.ceil((ASSISTANT_PROMPT_MAX + 1) / sentence.length) + 1).trim(),
     )
     await screen.findByText(/and the assistant reads up to/)
   },

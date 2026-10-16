@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { onBeforeUnmount } from 'vue'
-import { fn } from 'storybook/test'
+import { fn, screen } from 'storybook/test'
 import { artifactBlobFailure, artifactBlobPending, artifactBlobResponse } from '~/stories/api'
 import { referencePng, screenshotPng } from '~/stories/artifact.stories.mocks'
 import { seedWorkspace, withSeed } from '~/stories/withStores'
@@ -16,15 +16,17 @@ const items = [
   { artifactId: 'art_reset', label: 'Password reset', alt: 'The password reset page' },
 ]
 
+// The bytes for every image but the first. A story's `api` replaces the meta's, so a story that
+// changes the first image spreads these after its own handler.
+const neighbours = [
+  artifactBlobResponse(referencePng, { artifactId: 'art_signin_ref' }),
+  artifactBlobResponse(screenshotPng),
+]
+
 const meta = {
   title: 'Primitives/Components/ArtifactLightbox',
   component: ArtifactLightbox,
-  parameters: {
-    api: [
-      artifactBlobResponse(referencePng, { artifactId: 'art_signin_ref' }),
-      artifactBlobResponse(screenshotPng),
-    ],
-  },
+  parameters: { api: neighbours },
   decorators: [withSeed(seedWorkspace)],
   args: {
     open: true,
@@ -57,10 +59,16 @@ export const Single: Story = { args: { items: items.slice(0, 1) } }
 
 /** The image has not arrived: the loading line. */
 export const Loading: Story = {
-  parameters: { api: [artifactBlobPending('art_signin'), artifactBlobResponse(screenshotPng)] },
+  parameters: { api: [artifactBlobPending('art_signin'), ...neighbours] },
+  play: async () => {
+    await screen.findByText('Loading…')
+  },
 }
 
 /** The image failed to load: the failure line and Retry. */
 export const Error: Story = {
-  parameters: { api: [artifactBlobFailure('art_signin'), artifactBlobResponse(screenshotPng)] },
+  parameters: { api: [artifactBlobFailure('art_signin'), ...neighbours] },
+  play: async () => {
+    await screen.findByText('Failed to load image.')
+  },
 }

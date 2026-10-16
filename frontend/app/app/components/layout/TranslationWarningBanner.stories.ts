@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { screen } from 'storybook/test'
 import { withSeed } from '~/stories/withStores'
 import TranslationWarningBanner from './TranslationWarningBanner.vue'
 
@@ -28,4 +29,9 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 /** Spanish: the warning, the repository link and the dismiss button. */
-export const Default: Story = {}
+export const Default: Story = {
+  // The Spanish catalog loads on demand, after the seed asks for it, so the wait is long.
+  play: async () => {
+    await screen.findByText('Traducción no oficial', {}, { timeout: 5000 })
+  },
+}

@@ -15,8 +15,6 @@ import type {
   TaskSourceState,
 } from '@cat-factory/contracts'
 
-// ---- Issue trackers ---------------------------------------------------------
-
 export const jiraDescriptor: TaskSourceDescriptor = {
   source: 'jira',
   label: 'Jira',
@@ -217,8 +215,6 @@ export const sessionSearchHits: TaskSearchResult[] = [
   },
 ]
 
-// ---- Document sources -------------------------------------------------------
-
 export const confluenceDescriptor: DocumentSourceDescriptor = {
   source: 'confluence',
   label: 'Confluence',
@@ -391,8 +387,6 @@ export const resolvedDocumentRefWithDroppedScope: ResolvedDocumentRef = {
   canonicalUrl: 'https://www.figma.com/design/Xq3hT9mPa2Lk',
   droppedScope: 'I2649:14930;2649:14746',
 }
-
-// ---- Slack ------------------------------------------------------------------
 
 export const slackConnection: SlackConnection = {
   teamId: 'T04ACME123',

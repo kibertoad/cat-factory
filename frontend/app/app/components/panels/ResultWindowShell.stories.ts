@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { ExecutionInstance } from '@cat-factory/contracts'
 import { getExecutionContract } from '@cat-factory/contracts'
+import { screen } from 'storybook/test'
 import { apiFailure, apiPending } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { step } from '~/stories/pipelineStep.stories.mocks'
@@ -121,5 +122,8 @@ export const RunLoadFailed: Story = {
         pathParams: { executionId: 'exec_login' },
       }),
     ],
+  },
+  play: async () => {
+    await screen.findByText(/Couldn't load the full run/)
   },
 }
