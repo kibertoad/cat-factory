@@ -5,6 +5,7 @@ import {
   accountSettingsViewSchema,
   agentFailureSchema,
   analystRecipeDraftSchema,
+  agentEffortReportSchema,
   apiKeySchema,
   blockSchema,
   bootstrapJobSchema,
@@ -16,6 +17,7 @@ import {
   documentSourceDescriptorSchema,
   emailConnectionSchema,
   environmentConnectionSchema,
+  fragmentSourceSchema,
   githubAvailableRepoSchema,
   githubBranchSchema,
   githubConnectionSchema,
@@ -37,6 +39,9 @@ import {
   repoTreeEntrySchema,
   resolvedDocumentRefSchema,
   riskPolicyLibraryEntrySchema,
+  promptFragmentSchema,
+  reproductionReportSchema,
+  resolvedFragmentSchema,
   runInputGateSchema,
   runnerPoolConnectionSchema,
   runnerPoolManifestSchema,
@@ -50,6 +55,7 @@ import {
   taskEstimateSchema,
   taskSearchResultSchema,
   taskSourceStateSchema,
+  validationReportSchema,
   vcsConnectOptionSchema,
   vendorCredentialSchema,
   workspaceListItemSchema,
@@ -137,6 +143,14 @@ import {
 import { block, estimate } from './block.stories.mocks'
 import { authInitiative } from './board.stories.mocks'
 import {
+  accountFragments,
+  fragmentCatalog,
+  handbookSource,
+  layeredCatalog,
+  platformStandardsSource,
+  workspaceFragments,
+} from './fragments.stories.mocks'
+import {
   approval,
   blockedInputGate,
   companionVerdicts,
@@ -146,6 +160,12 @@ import {
   prReview,
 } from './pipelineStep.stories.mocks'
 import { execution, parkedExecution, snapshot } from './snapshot.stories.mocks'
+import {
+  effortReport,
+  reproductionReport,
+  validationFailed,
+  validationPassed,
+} from './stepReports.stories.mocks'
 import {
   authBranches,
   authRepo,
@@ -164,6 +184,57 @@ import {
 // typecheck already holds them to the TYPE; this also holds them to what the type cannot say (an
 // id pattern, a minimum, a non-empty list), so a story never renders a row the API would refuse.
 const cases: [string, v.GenericSchema, unknown[]][] = [
+  ['account', accountSchema, accounts],
+  ['account settings', accountSettingsViewSchema, [accountSettingsView]],
+  ['workspace member', workspaceMemberSchema, workspaceMembers],
+  ['account member', accountMemberSchema, accountMembers],
+  ['account invitation', accountInvitationSchema, invitations],
+  ['email connection', emailConnectionSchema, [resendConnection]],
+  ['board list item', workspaceListItemSchema, accountBoards],
+  ['prompt fragment', promptFragmentSchema, [...workspaceFragments, ...accountFragments]],
+  ['fragment source', fragmentSourceSchema, [handbookSource, platformStandardsSource]],
+  ['resolved fragment', resolvedFragmentSchema, [...layeredCatalog, ...fragmentCatalog]],
+  ['task source', taskSourceStateSchema, taskSources],
+  ['task connection', taskConnectionSchema, taskConnections],
+  ['source task', sourceTaskSchema, [...sourceTasks, ...authServiceIssues]],
+  ['task search result', taskSearchResultSchema, sessionSearchHits],
+  ['document source', documentSourceDescriptorSchema, [...documentSources, zeplinDescriptor]],
+  ['document connection', documentConnectionSchema, documentConnections],
+  ['source document', sourceDocumentSchema, sourceDocuments],
+  [
+    'resolved document ref',
+    resolvedDocumentRefSchema,
+    [resolvedDocumentRef, resolvedDocumentRefWithDroppedScope, resolvedFigmaFrameRef],
+  ],
+  ['slack connection', slackConnectionSchema, [slackConnection]],
+  ['environment connection', environmentConnectionSchema, [environmentConnection]],
+  [
+    'runner pool connection',
+    runnerPoolConnectionSchema,
+    [runnerPoolConnection, kubernetesRunnerConnection],
+  ],
+  ['runner pool manifest', runnerPoolManifestSchema, [runnerPoolManifest]],
+  [
+    'provider descriptor',
+    providerDescriptorSchema,
+    [
+      providerDescriptor(environmentConnection),
+      manifestRunnerDescriptor,
+      kubernetesRunnerDescriptor(true),
+      kubernetesRunnerDescriptor(false),
+      kubernetesEnvironmentDescriptor,
+    ],
+  ],
+  ['connection test', connectionTestResultSchema, [connectionTestWithWarnings]],
+  ['local model endpoint', localModelEndpointSchema, [localModelEndpoint()]],
+  ['personal subscription', personalSubscriptionStatusSchema, [personalSubscription()]],
+  ['vendor credential', vendorCredentialSchema, [vendorCredential()]],
+  ['API key', apiKeySchema, [apiKey(), ...accountApiKeys]],
+  ['spend status', spendStatusSchema, [spendStatus()]],
+  ['model option', modelOptionSchema, [...claudeOnlyCatalog, ...presetModelCatalog]],
+  ['effort report', agentEffortReportSchema, [effortReport]],
+  ['validation report', validationReportSchema, [validationPassed, validationFailed]],
+  ['reproduction report', reproductionReportSchema, [reproductionReport()]],
   ['block', blockSchema, [block(), authInitiative]],
   ['task estimate', taskEstimateSchema, [estimate()]],
   ['GitHub connection', githubConnectionSchema, [githubConnection]],
