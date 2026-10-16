@@ -3598,6 +3598,25 @@ func (s *DirectoryService) DeleteWebhook(ctx context.Context, webhookID string) 
 	return s.client.requestNoContent(ctx, req)
 }
 
+// GetReach read the key's directory reach
+// The calling key’s account and the workspaces it reaches, `null` for every workspace in the
+// account (later ones included). Account-scoped like the rest of the directory: no
+// `x-cat-factory-workspace` header is read, so a key reaching several workspaces gets an answer
+// where `GET /api/v1/me` asks it to name one. A mirror reads this to filter what a directory push
+// may write, and to tell an account-wide key from one limited to some workspaces.
+// GET /api/v1/directory/reach (operation getDirectoryReach).
+func (s *DirectoryService) GetReach(ctx context.Context) (*DirectoryReach, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/directory/reach",
+	}
+	var out DirectoryReach
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ListAccountMemberships list the account's memberships
 // A keyset-paged snapshot of the account’s memberships, each with the member’s account roles.
 // Account-wide, so a key limited to some workspaces is refused with `403` and `reason:

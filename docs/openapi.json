@@ -596,6 +596,34 @@
         ],
         "type": "object"
       },
+      "DirectoryReach": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "workspaceIds": {
+            "anyOf": [
+              {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "accountId",
+          "workspaceIds"
+        ],
+        "type": "object"
+      },
       "DirectoryRepo": {
         "properties": {
           "defaultBranch": {
@@ -9491,7 +9519,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.85.0"
+    "version": "1.86.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -14115,6 +14143,49 @@
           }
         },
         "summary": "List directory changes",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/reach": {
+      "get": {
+        "description": "The calling key’s account and the workspaces it reaches, `null` for every workspace in the account (later ones included). Account-scoped like the rest of the directory: no `x-cat-factory-workspace` header is read, so a key reaching several workspaces gets an answer where `GET /api/v1/me` asks it to name one. A mirror reads this to filter what a directory push may write, and to tell an account-wide key from one limited to some workspaces.",
+        "operationId": "getDirectoryReach",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryReach"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Read the key's directory reach",
         "tags": [
           "Directory"
         ],
