@@ -105,7 +105,7 @@ export const Error: Story = {
 }
 
 /**
- * The finished experiment opened, with the candidate's cell on Claude selected: four cells, one
+ * The finished experiment opened, with the candidate's cell on Claude selected: eight cells, one
  * failed, and the judge's scores for the selected one.
  */
 export const ExperimentDetail: Story = {
