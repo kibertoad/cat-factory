@@ -110,7 +110,7 @@ async function showChat() {
 }
 
 const meta = {
-  title: 'Pipeline/Components/ForkDecisionWindow',
+  title: 'Pipeline/Pages/ForkDecisionWindow',
   component: ForkDecisionWindow,
 } satisfies Meta<typeof ForkDecisionWindow>
 export default meta

@@ -85,7 +85,7 @@ function sessionIs(body: ConsensusSession | null) {
 }
 
 const meta = {
-  title: 'Pipeline/Components/ConsensusSessionWindow',
+  title: 'Pipeline/Pages/ConsensusSessionWindow',
   component: ConsensusSessionWindow,
   parameters: { api: [sessionIs(session())] },
   decorators: [

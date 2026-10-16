@@ -51,7 +51,7 @@ function opened(output: string | undefined, custom: unknown) {
 }
 
 const meta = {
-  title: 'Pipeline/Components/GenericStructuredResultView',
+  title: 'Pipeline/Pages/GenericStructuredResultView',
   component: GenericStructuredResultView,
   decorators: [opened(summary, findings)],
 } satisfies Meta<typeof GenericStructuredResultView>

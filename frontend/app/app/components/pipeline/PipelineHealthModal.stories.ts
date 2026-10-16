@@ -21,10 +21,14 @@ import PipelineHealthModal from './PipelineHealthModal.vue'
 // built-in, replaced by `pl_build` (`buildRetiredPipelines` in kernel). The bugfix pipeline's
 // `repro-test` kind is registered, so the snapshot carries it. The custom pipeline with an
 // unknown kind is made up.
-const current = {
-  [standardBuild.id]: standardBuild.version,
-  [adaptiveBuild.id]: adaptiveBuild.version,
-  [bugfixPipeline.id]: bugfixPipeline.version,
+function catalogVersion(pipeline: Pipeline): number {
+  if (pipeline.version === undefined) throw new Error(`${pipeline.id} has no version`)
+  return pipeline.version
+}
+const current: Record<string, number> = {
+  [standardBuild.id]: catalogVersion(standardBuild),
+  [adaptiveBuild.id]: catalogVersion(adaptiveBuild),
+  [bugfixPipeline.id]: catalogVersion(bugfixPipeline),
 }
 const names = {
   [standardBuild.id]: standardBuild.name,

@@ -95,7 +95,7 @@ function opened(judge: JudgeStepState | undefined) {
 }
 
 const meta = {
-  title: 'Pipeline/Components/JudgeResultView',
+  title: 'Pipeline/Pages/JudgeResultView',
   component: JudgeResultView,
   decorators: [
     opened(

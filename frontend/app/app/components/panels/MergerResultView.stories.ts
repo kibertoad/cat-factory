@@ -54,7 +54,7 @@ function opened(merger: { custom?: unknown; output?: string }) {
 }
 
 const meta = {
-  title: 'Pipeline/Components/MergerResultView',
+  title: 'Pipeline/Pages/MergerResultView',
   component: MergerResultView,
   decorators: [opened({ custom: verdict() })],
 } satisfies Meta<typeof MergerResultView>
