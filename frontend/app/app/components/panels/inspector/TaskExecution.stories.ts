@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import type { ExecutionInstance, RunInputGate } from '@cat-factory/contracts'
+import type { ExecutionInstance, Pipeline, RunInputGate } from '@cat-factory/contracts'
 import { listMergeClassRollupsContract } from '@cat-factory/contracts'
 import { apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
@@ -7,7 +7,12 @@ import { boardWith, loginTask } from '~/stories/board.stories.mocks'
 import { mergeClassRollups } from '~/stories/mergeTrackRecord.stories.mocks'
 import { approval, decision, failure, step, subtasks } from '~/stories/pipelineStep.stories.mocks'
 import { claudeOnlyCatalog } from '~/stories/providers.stories.mocks'
-import { execution, parkedExecution, snapshot } from '~/stories/snapshot.stories.mocks'
+import {
+  buildPipeline,
+  execution,
+  parkedExecution,
+  snapshot,
+} from '~/stories/snapshot.stories.mocks'
 import { seedModelCatalog, seedSnapshot, withSeed } from '~/stories/withStores'
 import type { Block } from '~/types/domain'
 import TaskExecution from './TaskExecution.vue'
@@ -19,10 +24,14 @@ import TaskExecution from './TaskExecution.vue'
 const minute = 60_000
 
 /** The login task, linked to its run and with the board's other blocks around it. */
-function withRun(run: ExecutionInstance | null, changes: Partial<Block> = {}) {
+function withRun(
+  run: ExecutionInstance | null,
+  changes: Partial<Block> = {},
+  pipelines: Pipeline[] = [buildPipeline],
+) {
   return withSeed(() => {
     const task = { ...loginTask, executionId: run?.id ?? null, ...changes }
-    seedSnapshot(snapshot({ blocks: boardWith(task), executions: run ? [run] : [] }))
+    seedSnapshot(snapshot({ blocks: boardWith(task), executions: run ? [run] : [], pipelines }))
     seedModelCatalog(claudeOnlyCatalog)
   })
 }
@@ -154,12 +163,23 @@ export const InputGateParked: Story = {
   ],
 }
 
+/** The build pipeline with a merger step at its end, so a run of it can reach the merge. */
+const mergingPipeline: Pipeline = {
+  ...buildPipeline,
+  id: 'pl_build_merge',
+  name: 'Build and merge',
+  agentKinds: [...buildPipeline.agentKinds, 'merger'],
+  isDefault: false,
+}
+
 /** The run done and its pull request open: Read the result, the PR, the effort tags and Merge. */
 export const AwaitingMerge: Story = {
   args: { block: { ...loginTask, executionId: 'exec_login', status: 'pr_ready', pullRequest } },
   decorators: [
     withRun(
       execution({
+        pipelineId: mergingPipeline.id,
+        pipelineName: mergingPipeline.name,
         steps: [
           step({ agentKind: 'architect', state: 'done', progress: 1 }),
           step({ agentKind: 'coder', state: 'done', progress: 1 }),
@@ -175,6 +195,7 @@ export const AwaitingMerge: Story = {
         status: 'done',
       }),
       { status: 'pr_ready', pullRequest },
+      [buildPipeline, mergingPipeline],
     ),
   ],
   parameters: {

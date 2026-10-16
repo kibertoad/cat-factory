@@ -30,27 +30,42 @@ const meta = {
       }),
     ],
   },
-  play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByTestId('inspector-section-toggle'))
-  },
 } satisfies Meta<typeof ServiceFragments>
 export default meta
 
 type Story = StoryObj<typeof meta>
+
+/**
+ * `InspectorSection` opens closed, so each play opens it first and then waits for what the story
+ * shows.
+ */
+function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
+    await shown(within(canvasElement))
+  }
+}
 
 /** Two fragments chosen. */
 export const Default: Story = {
   args: {
     block: { ...authService, serviceFragmentIds: ['node.performance', 'node.best-practices'] },
   },
+  play: opensTo((c) => c.findByText('Node.js performance')),
 }
 
 /** None chosen: the empty line. */
-export const Empty: Story = { args: { block: authService } }
+export const Empty: Story = {
+  args: { block: authService },
+  play: opensTo((c) =>
+    c.findByText('None. Code-aware agents on this service follow their default guidance.'),
+  ),
+}
 
 /** A chosen id the catalog no longer has: it shows by its raw id, still removable. */
 export const UnknownFragment: Story = {
   args: {
     block: { ...authService, serviceFragmentIds: ['node.performance', 'acme.retired-rule'] },
   },
+  play: opensTo((c) => c.findByText('acme.retired-rule')),
 }

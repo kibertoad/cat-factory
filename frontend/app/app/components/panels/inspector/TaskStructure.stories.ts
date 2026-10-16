@@ -31,21 +31,36 @@ const meta = {
       }),
     ],
   },
-  play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByTestId('inspector-section-toggle'))
-  },
 } satisfies Meta<typeof TaskStructure>
 export default meta
 
 type Story = StoryObj<typeof meta>
 
+/**
+ * `InspectorSection` opens closed, so each play opens it first and then waits for what the story
+ * shows.
+ */
+function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
+    await shown(within(canvasElement))
+  }
+}
+
 /** In the Sessions module, with one fragment of its own. */
 export const Default: Story = {
   args: { block: { ...loginTask, moduleName: 'Sessions', fragmentIds: ['node.performance'] } },
+  play: opensTo((c) => c.findByText('Node.js performance')),
 }
 
 /** Directly under its service, with no fragments. */
-export const NoModule: Story = { args: { block: logoutTask } }
+export const NoModule: Story = {
+  args: { block: logoutTask },
+  play: opensTo((c) => c.findByText('None. Agents follow their default guidance.')),
+}
 
 /** A declared module with no block yet: the picker still offers and shows it. */
-export const UndeclaredModule: Story = { args: { block: { ...logoutTask, moduleName: 'Audit' } } }
+export const UndeclaredModule: Story = {
+  args: { block: { ...logoutTask, moduleName: 'Audit' } },
+  play: opensTo((c) => c.findByText('Audit')),
+}

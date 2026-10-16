@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { resolvedFragmentsContract } from '@cat-factory/contracts'
 import { ref } from 'vue'
-import { userEvent, within } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import { accounts } from '~/stories/accounts.stories.mocks'
 import { apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
@@ -49,6 +49,14 @@ async function openPicker(canvasElement: HTMLElement) {
   await userEvent.click(within(canvasElement).getByTestId('fragment-add'))
 }
 
+/** Open the picker, then wait for what the story shows. The popover is teleported to `body`. */
+function opensTo(shown: () => Promise<unknown>) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await openPicker(canvasElement)
+    await shown()
+  }
+}
+
 /** Two fragments chosen, as badges under the label. */
 export const Default: Story = {}
 
@@ -60,13 +68,13 @@ export const Empty: Story = { args: { modelValue: [] } }
  * board's fragment library. With no accounts there is no account link.
  */
 export const Open: Story = {
-  play: async ({ canvasElement }) => openPicker(canvasElement),
+  play: opensTo(() => screen.findByTestId('fragment-option-node.performance')),
 }
 
 /** An empty pool: the picker says there are no fragments, and still links to the library. */
 export const OpenEmptyPool: Story = {
   args: { modelValue: [], pool: [] },
-  play: async ({ canvasElement }) => openPicker(canvasElement),
+  play: opensTo(() => screen.findByText('No fragments available.')),
 }
 
 /** A chosen id the catalog no longer has: the badge shows the raw id, and it is still removable. */
@@ -81,5 +89,5 @@ export const WithAccountLink: Story = {
       useAccountsStore().accounts = accounts
     }),
   ],
-  play: async ({ canvasElement }) => openPicker(canvasElement),
+  play: opensTo(() => screen.findByText('Manage account fragments…')),
 }

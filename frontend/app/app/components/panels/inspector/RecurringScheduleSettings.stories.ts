@@ -36,8 +36,8 @@ const weekly: PipelineSchedule = {
   },
   onDemand: false,
   enabled: true,
-  lastRunAt: Date.UTC(2026, 9, 5, 6, 0, 0),
-  nextRunAt: Date.UTC(2026, 9, 12, 6, 0, 0),
+  lastRunAt: Date.UTC(2026, 8, 28, 6, 0, 0),
+  nextRunAt: Date.UTC(2026, 9, 5, 6, 0, 0),
   createdAt: Date.UTC(2026, 8, 1),
 }
 

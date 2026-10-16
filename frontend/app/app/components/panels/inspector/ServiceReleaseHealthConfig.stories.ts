@@ -44,13 +44,21 @@ const meta = {
   args: { block: authService },
   decorators: [withService('advanced')],
   parameters: { width: 'panel', api: answers(datadog, [authMapping]) },
-  play: async ({ canvasElement }) => {
-    await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
-  },
 } satisfies Meta<typeof ServiceReleaseHealthConfig>
 export default meta
 
 type Story = StoryObj<typeof meta>
+
+/**
+ * `InspectorSection` opens closed, so each play opens it first and then waits for what the story
+ * shows.
+ */
+function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
+    await shown(within(canvasElement))
+  }
+}
 
 function withService(mode: UiMode) {
   return withSeed(() => {
@@ -77,16 +85,24 @@ function answers(connection: ObservabilityConnectionView, configs: ReleaseHealth
  * Datadog is connected and the service is mapped: the ids in the form, and Clear beside the
  * title. The SLO id is longer than its field.
  */
-export const Default: Story = {}
+export const Default: Story = { play: opensTo((c) => c.findByDisplayValue('prod')) }
 
 /** Connected, nothing mapped yet: the empty form, and no Clear. */
 export const Empty: Story = {
   parameters: { api: answers(datadog, []) },
+  play: opensTo((c) =>
+    c.findByText(
+      'The monitors and SLOs the gate watches after this service ships. Comma-separate ids.',
+    ),
+  ),
 }
 
 /** No observability connection: one line and a Connect button. */
 export const NotConnected: Story = {
   parameters: { api: answers(notConnected, []) },
+  play: opensTo((c) =>
+    c.findByText('Connect an observability integration to watch this service after releases.'),
+  ),
 }
 
 /**
@@ -95,4 +111,5 @@ export const NotConnected: Story = {
  */
 export const BasicModeWithMapping: Story = {
   decorators: [withService('basic')],
+  play: opensTo((c) => c.findByDisplayValue('prod')),
 }

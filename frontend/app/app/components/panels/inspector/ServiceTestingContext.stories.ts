@@ -13,6 +13,14 @@ const open = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
   await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
 }
 
+/** Open the section, then wait for what the story shows. */
+function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
+  return async (context: { canvasElement: HTMLElement }) => {
+    await open(context)
+    await shown(within(context.canvasElement))
+  }
+}
+
 const briefed = {
   ...authService,
   testingContext:
@@ -29,17 +37,22 @@ const meta = {
       seedUiMode('advanced')
     }),
   ],
-  play: open,
 } satisfies Meta<typeof ServiceTestingContext>
 export default meta
 
 type Story = StoryObj<typeof meta>
 
 /** A briefed service. */
-export const Default: Story = { args: { block: briefed } }
+export const Default: Story = {
+  args: { block: briefed },
+  play: opensTo((c) => c.findByDisplayValue(briefed.testingContext)),
+}
 
 /** Not briefed yet, in the advanced tier: the empty box. */
-export const Empty: Story = { args: { block: authService } }
+export const Empty: Story = {
+  args: { block: authService },
+  play: opensTo((c) => c.findByTestId('testing-context-input')),
+}
 
 /** Edited and not saved. At panel width the counter and both buttons wrap onto two lines. */
 export const Edited: Story = {
@@ -50,6 +63,7 @@ export const Edited: Story = {
       within(context.canvasElement).getByTestId('testing-context-input'),
       ' Use the EU region.',
     )
+    await within(context.canvasElement).findByTestId('testing-context-revert')
   },
 }
 
@@ -62,4 +76,5 @@ export const BasicTier: Story = {
       seedUiMode('basic')
     }),
   ],
+  play: opensTo((c) => c.findByDisplayValue(briefed.testingContext)),
 }

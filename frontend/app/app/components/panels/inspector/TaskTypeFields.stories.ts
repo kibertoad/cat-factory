@@ -43,13 +43,21 @@ const meta = {
       useTaskTypesStore().registerConsumerTaskTypes([securityReview])
     }),
   ],
-  play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByTestId('inspector-section-toggle'))
-  },
 } satisfies Meta<typeof TaskTypeFields>
 export default meta
 
 type Story = StoryObj<typeof meta>
+
+/**
+ * `InspectorSection` opens closed, so each play opens it first and then waits for what the story
+ * shows.
+ */
+function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
+    await shown(within(canvasElement))
+  }
+}
 
 /** Both fields answered. */
 export const Default: Story = {
@@ -62,9 +70,11 @@ export const Default: Story = {
       },
     },
   },
+  play: opensTo((c) => c.findByDisplayValue('Session fixation after the refresh change.')),
 }
 
 /** Nothing answered yet, which is how a task created through the API arrives. */
 export const Unanswered: Story = {
   args: { block: { ...loginTask, taskType: 'acme:security-review' } },
+  play: opensTo((c) => c.findByTestId('task-type-field-notes')),
 }

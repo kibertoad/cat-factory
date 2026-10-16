@@ -63,6 +63,14 @@ async function detect(canvasElement: HTMLElement) {
   await userEvent.click(within(canvasElement).getByRole('button', { name: 'Detect from repo' }))
 }
 
+/** Open the section, then wait for what the story shows. */
+function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await openSection(canvasElement)
+    await shown(within(canvasElement))
+  }
+}
+
 const compose: ServiceProvisioning = {
   type: 'docker-compose',
   composePath: 'deploy/docker-compose.test.yml',
@@ -74,19 +82,19 @@ const meta = {
   args: { block: service(compose) },
   decorators: [seeded(compose)],
   parameters: { width: 'panel', api: [handlers()] },
-  play: async ({ canvasElement }) => openSection(canvasElement),
 } satisfies Meta<typeof ServiceTestConfig>
 export default meta
 
 type Story = StoryObj<typeof meta>
 
 /** Docker Compose with its file: the nudge into the setup wizard, and Detect from repo. */
-export const Default: Story = {}
+export const Default: Story = { play: opensTo((c) => c.findByTestId('env-setup-nudge')) }
 
 /** Nothing declared: the service reads as needing no infrastructure. */
 export const Infraless: Story = {
   args: { block: service() },
   decorators: [seeded()],
+  play: opensTo((c) => c.findByText('No infrastructure')),
 }
 
 const kubernetes: ServiceProvisioning = {
@@ -104,6 +112,7 @@ const kubernetes: ServiceProvisioning = {
 export const Kubernetes: Story = {
   args: { block: service(kubernetes) },
   decorators: [seeded(kubernetes)],
+  play: opensTo((c) => c.findByDisplayValue('acme/platform-deploy')),
 }
 
 const custom: ServiceProvisioning = {
@@ -116,6 +125,7 @@ const custom: ServiceProvisioning = {
 export const Custom: Story = {
   args: { block: service(custom) },
   decorators: [seeded(custom)],
+  play: opensTo((c) => c.findByDisplayValue('infra/preview')),
 }
 
 /** Custom, on a deployment and workspace with no manifest types: the warning in place of a picker. */
@@ -123,6 +133,9 @@ export const CustomNoTypes: Story = {
   args: { block: service({ type: 'custom' }) },
   decorators: [seeded({ type: 'custom' })],
   parameters: { api: [handlers([])] },
+  play: opensTo((c) =>
+    c.findByText('No custom manifest types are defined yet. Add one in the Infrastructure window.'),
+  ),
 }
 
 const kubernetesRecommendation: ProvisioningRecommendation = {
@@ -182,7 +195,12 @@ export const DetectProposal: Story = {
     },
     template: '<ServiceTestConfig v-if="live" :block="live" />',
   }),
-  play: async ({ canvasElement }) => detect(canvasElement),
+  play: async ({ canvasElement }) => {
+    await detect(canvasElement)
+    await within(canvasElement).findByText(
+      'Manifests pin namespace "auth-preview"; recommend honoring it on the workspace handler.',
+    )
+  },
 }
 
 /** The repository could not be read: the backend's message under the button, as it came. */
@@ -204,12 +222,17 @@ export const DetectError: Story = {
       }),
     ],
   },
-  play: async ({ canvasElement }) => detect(canvasElement),
+  play: async ({ canvasElement }) => {
+    await detect(canvasElement)
+    await within(canvasElement).findByText(/Underlying error: Not Found/)
+  },
 }
 
 /** Open from the start, as the add-service modal renders it. */
 export const OpenByDefault: Story = {
   args: { defaultOpen: true },
   // No click: the section is already open, and a click would close it.
-  play: async () => {},
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findByTestId('env-setup-nudge')
+  },
 }

@@ -43,6 +43,8 @@ const meta = {
   }),
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByTestId('risk-policy-picker-trigger'))
+    // The list is teleported to `body`; the pane opens on the workspace default.
+    await screen.findByText('Applied because this task picks no policy of its own.')
   },
 } satisfies Meta<typeof RiskPolicyPicker>
 export default meta
@@ -72,8 +74,13 @@ export const Refused: Story = {
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByTestId('risk-policy-picker-trigger'))
     await userEvent.hover(await screen.findByTestId('risk-policy-option-mp_unattended'))
+    await screen.findByTestId('risk-policy-refusal')
   },
 }
 
 /** Closed: the button with the chosen policy's name. */
-export const Closed: Story = { play: async () => {} }
+export const Closed: Story = {
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findByText('Manual review only')
+  },
+}

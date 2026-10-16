@@ -43,7 +43,7 @@ type Story = StoryObj<typeof meta>
  * A task with a run of the build pipeline at the coder step. Its details are locked because the
  * run started, and Run becomes Re-run.
  */
-export const Task: Story = { decorators: [selecting(loginTask.id)] }
+export const Default: Story = { decorators: [selecting(loginTask.id)] }
 
 /**
  * A service frame with its repo linked: the repo link, View requirements, Map service, its

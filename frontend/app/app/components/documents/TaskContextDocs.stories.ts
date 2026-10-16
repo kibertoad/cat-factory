@@ -5,7 +5,7 @@ import type {
   SourceDocument,
 } from '@cat-factory/contracts'
 import { listDocumentsContract } from '@cat-factory/contracts'
-import { userEvent, within } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import { apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { authInitiative, boardWithInitiative, loginTask } from '~/stories/board.stories.mocks'
@@ -38,7 +38,6 @@ const meta = {
   args: { block: loginTask },
   decorators: [withSources(documentSources, documentConnections)],
   parameters: { width: 'panel', api: [documentsAre(linkedToLogin)] },
-  play: async ({ canvasElement }) => openSection(canvasElement),
 } satisfies Meta<typeof TaskContextDocs>
 export default meta
 
@@ -61,12 +60,23 @@ async function openSection(canvasElement: HTMLElement) {
   await userEvent.click(within(canvasElement).getByTestId('inspector-section-toggle'))
 }
 
+/** Open the section, then wait for what the story shows. */
+function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await openSection(canvasElement)
+    await shown(within(canvasElement))
+  }
+}
+
 /** Two documents, each with its source icon and when it was last synced. */
-export const Default: Story = {}
+export const Default: Story = { play: opensTo((c) => c.findByText('Session lifecycle')) }
 
 /** Nothing attached: the empty state says what to attach. */
 export const Empty: Story = {
   parameters: { api: [documentsAre(sourceDocuments)] },
+  play: opensTo((c) =>
+    c.findByText('Attach a requirement, RFC or PRD so agents see it while implementing this task.'),
+  ),
 }
 
 /** On an initiative the hint and the empty state name the planning agents instead. */
@@ -85,6 +95,11 @@ export const Initiative: Story = {
       ]),
     ],
   },
+  play: opensTo((c) =>
+    c.findByText(
+      'Documents attached to this initiative as context. Their content is given to the planning agents that shape it.',
+    ),
+  ),
 }
 
 /**
@@ -95,6 +110,7 @@ export const PickerOpen: Story = {
   play: async ({ canvasElement }) => {
     await openSection(canvasElement)
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Attach' }))
+    await within(canvasElement).findByText('Service PRD template')
   },
 }
 
@@ -105,6 +121,7 @@ export const PickerOpen: Story = {
 export const ConnectOneSource: Story = {
   decorators: [withSources([confluenceDescriptor], [])],
   parameters: { api: [documentsAre([])] },
+  play: opensTo((c) => c.findByRole('button', { name: 'Connect Confluence' })),
 }
 
 /** No source connected, and two on offer: a menu. */
@@ -114,5 +131,7 @@ export const ConnectManySources: Story = {
   play: async ({ canvasElement }) => {
     await openSection(canvasElement)
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Connect a source' }))
+    // The menu is teleported to `body`.
+    await screen.findByRole('menuitem', { name: 'Figma' })
   },
 }

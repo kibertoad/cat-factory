@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+import { expect, userEvent, within } from 'storybook/test'
 import { block } from '~/stories/block.stories.mocks'
+import { gatewayService } from '~/stories/board.stories.mocks'
 import { withBoard } from '~/stories/withStores'
 import ServiceConnections from './ServiceConnections.vue'
 
@@ -17,7 +18,7 @@ const auth = block({
 })
 
 const others = [
-  block({ id: 'svc_api', title: 'API Gateway', type: 'service', level: 'frame', parentId: null }),
+  gatewayService,
   block({ id: 'svc_db', title: 'Core Database', type: 'service', level: 'frame', parentId: null }),
   block({
     id: 'svc_queue',
@@ -47,12 +48,24 @@ const meta = {
   // a story: every one would be a titled bar. Opening it is a play rather than a prop because the
   // section owns its own `open` model and a caller cannot set it.
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByTestId('inspector-section-toggle'))
+    await open(canvasElement)
   },
 } satisfies Meta<typeof ServiceConnections>
 export default meta
 
 type Story = StoryObj<typeof meta>
+
+async function open(canvasElement: HTMLElement) {
+  await userEvent.click(within(canvasElement).getByTestId('inspector-section-toggle'))
+}
+
+/** Open the section, then wait for the empty state. */
+async function opensEmpty({ canvasElement }: { canvasElement: HTMLElement }) {
+  await open(canvasElement)
+  await within(canvasElement).findByText(
+    'No connections. Add one to link this service to another service it uses.',
+  )
+}
 
 /** Two providers named, one consumer naming this service back. */
 export const Default: Story = {
@@ -65,10 +78,14 @@ export const Default: Story = {
       ],
     }),
   },
+  play: async ({ canvasElement }) => {
+    await open(canvasElement)
+    await within(canvasElement).findByTestId('service-connections-used-by')
+  },
 }
 
 /** No connections yet: the empty state, with the add button enabled. */
-export const Empty: Story = { args: { block: auth } }
+export const Empty: Story = { args: { block: auth }, play: opensEmpty }
 
 /** Every other frame is already named, so the add button is disabled. */
 export const AllTaken: Story = {
@@ -76,12 +93,18 @@ export const AllTaken: Story = {
     block: block({
       ...auth,
       serviceConnections: [
-        { serviceBlockId: 'svc_api' },
+        { serviceBlockId: gatewayService.id },
         { serviceBlockId: 'svc_db' },
         { serviceBlockId: 'svc_queue' },
         { serviceBlockId: 'svc_web' },
       ],
     }),
+  },
+  play: async ({ canvasElement }) => {
+    await open(canvasElement)
+    const canvas = within(canvasElement)
+    await canvas.findByTestId('service-connections-used-by')
+    await expect(canvas.getByTestId('service-connection-add')).toBeDisabled()
   },
 }
 
@@ -89,4 +112,5 @@ export const AllTaken: Story = {
 export const Alone: Story = {
   args: { block: auth },
   decorators: [withBoard([auth])],
+  play: opensEmpty,
 }

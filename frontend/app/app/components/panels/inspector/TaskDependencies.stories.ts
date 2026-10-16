@@ -13,16 +13,27 @@ const meta = {
   component: TaskDependencies,
   parameters: { width: 'panel' },
   decorators: [withBoard(boardBlocks)],
-  play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByTestId('inspector-section-toggle'))
-  },
 } satisfies Meta<typeof TaskDependencies>
 export default meta
 
 type Story = StoryObj<typeof meta>
 
+/**
+ * `InspectorSection` opens closed, so each play opens it first and then waits for what the story
+ * shows.
+ */
+function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
+    await shown(within(canvasElement))
+  }
+}
+
 /** Two dependencies in the Sessions module, one merged and one not: blocked. */
-export const Default: Story = { args: { block: logoutTask } }
+export const Default: Story = {
+  args: { block: logoutTask },
+  play: opensTo((c) => c.findByText('Blocked until dependencies merge.')),
+}
 
 const unblocked = { ...logoutTask, dependsOn: ['task_refresh'] }
 
@@ -30,10 +41,19 @@ const unblocked = { ...logoutTask, dependsOn: ['task_refresh'] }
 export const Runnable: Story = {
   args: { block: unblocked },
   decorators: [withBoard(boardWith(unblocked))],
+  play: opensTo((c) => c.findByTitle('Merged')),
 }
 
 /** No dependencies: the empty state. */
-export const Empty: Story = { args: { block: rateLimitTask } }
+export const Empty: Story = {
+  args: { block: rateLimitTask },
+  play: opensTo((c) => c.findByText('No dependencies. Can run any time.')),
+}
 
 /** Closed, as the inspector first shows it: the count and the warning stay in the header. */
-export const Closed: Story = { args: { block: logoutTask }, play: async () => {} }
+export const Closed: Story = {
+  args: { block: logoutTask },
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findByText('(2)')
+  },
+}

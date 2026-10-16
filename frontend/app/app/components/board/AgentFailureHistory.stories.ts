@@ -20,7 +20,9 @@ export const Default: Story = { args: { failures: [failure()] } }
 /** Opened, with three attempts that failed the same way. */
 export const Open: Story = {
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: /previous error/ }))
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getByRole('button', { name: /previous error/ }))
+    await canvas.findAllByTestId('agent-failure-history-entry')
   },
   args: {
     failures: [

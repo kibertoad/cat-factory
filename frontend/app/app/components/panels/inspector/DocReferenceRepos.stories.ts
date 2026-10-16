@@ -1,6 +1,6 @@
 import { listGitHubAvailableReposContract } from '@cat-factory/contracts'
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { userEvent, within } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import { apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { boardBlocks, logoutTask } from '~/stories/board.stories.mocks'
@@ -77,6 +77,8 @@ export const Searching: Story = {
   args: { block: { ...docTask, referenceRepos: [authReference] } },
   play: async ({ canvasElement }) => {
     await userEvent.type(within(canvasElement).getByPlaceholderText(/search/i), 'auth')
+    // The results list is teleported to `body`.
+    await screen.findByRole('option', { name: 'acme/auth-docs' })
   },
 }
 

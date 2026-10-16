@@ -45,16 +45,29 @@ const meta = {
       ]),
     ],
   },
-  play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByTestId('inspector-section-toggle'))
-  },
 } satisfies Meta<typeof ServiceValidationConfig>
 export default meta
 
 type Story = StoryObj<typeof meta>
 
+/**
+ * `InspectorSection` opens closed, so each play opens it first and then waits for what the story
+ * shows.
+ */
+function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
+    await shown(within(canvasElement))
+  }
+}
+
 /** An install command and three checks. */
-export const Default: Story = {}
+export const Default: Story = {
+  play: opensTo((c) => c.findByDisplayValue('pnpm install --frozen-lockfile')),
+}
 
 /** Nothing configured for this service: the empty state. */
-export const Empty: Story = { parameters: { api: [configsAre([])] } }
+export const Empty: Story = {
+  parameters: { api: [configsAre([])] },
+  play: opensTo((c) => c.findByTestId('validation-empty')),
+}

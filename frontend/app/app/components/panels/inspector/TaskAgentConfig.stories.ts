@@ -16,13 +16,21 @@ const meta = {
   title: 'Inspector/Components/TaskAgentConfig',
   component: TaskAgentConfig,
   parameters: { width: 'panel' },
-  play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByTestId('inspector-section-toggle'))
-  },
 } satisfies Meta<typeof TaskAgentConfig>
 export default meta
 
 type Story = StoryObj<typeof meta>
+
+/**
+ * `InspectorSection` opens closed, so each play opens it first and then waits for what the story
+ * shows.
+ */
+function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await userEvent.click(await within(canvasElement).findByTestId('inspector-section-toggle'))
+    await shown(within(canvasElement))
+  }
+}
 
 const forkDecision: AgentConfigDescriptor = {
   id: 'coder.forkDecision',
@@ -130,12 +138,14 @@ const buildTask = task(buildPipeline.id, { 'coder.forkDecision': 'always' })
 export const Default: Story = {
   args: { block: buildTask },
   decorators: [withTask(buildTask)],
+  play: opensTo((c) => c.findByText('Implementation-fork decision')),
 }
 
 /** The run is at the coder step, so both of its options are locked. */
 export const Frozen: Story = {
   args: { block: buildTask },
   decorators: [withTask(buildTask, [execution()])],
+  play: opensTo((c) => c.findAllByTitle('Frozen: the agent has started')),
 }
 
 const staleTask = task(buildPipeline.id, { 'playwright.e2eTarget': 'ephemeral' })
@@ -147,6 +157,7 @@ const staleTask = task(buildPipeline.id, { 'playwright.e2eTarget': 'ephemeral' }
 export const StaleValue: Story = {
   args: { block: staleTask },
   decorators: [withTask(staleTask)],
+  play: opensTo((c) => c.findByText('E2E execution target')),
 }
 
 const ralphTask = task(ralphPipeline.id, { 'ralph.validationCommand': 'pnpm test' })
@@ -159,4 +170,5 @@ const ralphTask = task(ralphPipeline.id, { 'ralph.validationCommand': 'pnpm test
 export const TextAndNumberOptions: Story = {
   args: { block: ralphTask },
   decorators: [withTask(ralphTask)],
+  play: opensTo((c) => c.findByText('Max iterations')),
 }

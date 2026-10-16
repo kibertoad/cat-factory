@@ -128,14 +128,22 @@ type Story = StoryObj<typeof meta>
  * payments variable to the mock.
  */
 export const Default: Story = {
-  play: async ({ canvasElement }) => open(canvasElement, 'Backend bindings'),
+  play: async ({ canvasElement }) => {
+    await open(canvasElement, 'Backend bindings')
+    await within(canvasElement).findByDisplayValue('VITE_AUTH_URL')
+  },
 }
 
 /** Nothing set yet: the bindings group's empty state. */
 export const Empty: Story = {
   args: { block: webFrame() },
   decorators: [seeded(webFrame())],
-  play: async ({ canvasElement }) => open(canvasElement, 'Backend bindings'),
+  play: async ({ canvasElement }) => {
+    await open(canvasElement, 'Backend bindings')
+    await within(canvasElement).findByText(
+      'No backend bindings. Add one to point an env var at a service or a mock.',
+    )
+  },
 }
 
 /** What Detect proposes: the notes with their confidence, then Apply and Dismiss. */
@@ -148,7 +156,10 @@ export const DetectProposal: Story = {
       apiResponse(detectFrontendConfigContract, { pathPrefix, body: recommendation }),
     ],
   },
-  play: async ({ canvasElement }) => detect(canvasElement),
+  play: async ({ canvasElement }) => {
+    await detect(canvasElement)
+    await within(canvasElement).findByText('pnpm-lock.yaml present ⇒ pnpm')
+  },
 }
 
 /** Nothing found: the hint to set the frontend's directory, with the Build group opened for it. */
@@ -164,7 +175,12 @@ export const DetectNothingFound: Story = {
       }),
     ],
   },
-  play: async ({ canvasElement }) => detect(canvasElement),
+  play: async ({ canvasElement }) => {
+    await detect(canvasElement)
+    await within(canvasElement).findByText(
+      'Nothing frontend-shaped was detected. Set the frontend directory (for a monorepo) or fill the fields in manually.',
+    )
+  },
 }
 
 /** The repository could not be read: the backend's message under the button, as it came. */
@@ -188,7 +204,10 @@ export const DetectError: Story = {
       }),
     ],
   },
-  play: async ({ canvasElement }) => detect(canvasElement),
+  play: async ({ canvasElement }) => {
+    await detect(canvasElement)
+    await within(canvasElement).findByText(/Underlying error: Not Found/)
+  },
 }
 
 const withPreview = webFrame({ ...configured, previewEnabled: true })
@@ -212,7 +231,10 @@ export const PreviewReady: Story = {
       }),
     ],
   },
-  play: async ({ canvasElement }) => open(canvasElement, 'Preview'),
+  play: async ({ canvasElement }) => {
+    await open(canvasElement, 'Preview')
+    await within(canvasElement).findByTestId('preview-url')
+  },
 }
 
 /** The preview build broke: the error, and Start to try again. The error is made up. */
@@ -234,11 +256,17 @@ export const PreviewFailed: Story = {
       }),
     ],
   },
-  play: async ({ canvasElement }) => open(canvasElement, 'Preview'),
+  play: async ({ canvasElement }) => {
+    await open(canvasElement, 'Preview')
+    await within(canvasElement).findByTestId('preview-error')
+  },
 }
 
 /** A deployment that cannot host a preview (the Worker): the switch is off, with the reason. */
 export const PreviewUnsupported: Story = {
   decorators: [seeded(webFrame(configured), { previewSupported: false })],
-  play: async ({ canvasElement }) => open(canvasElement, 'Preview'),
+  play: async ({ canvasElement }) => {
+    await open(canvasElement, 'Preview')
+    await within(canvasElement).findByText(/can't host a browsable preview/)
+  },
 }

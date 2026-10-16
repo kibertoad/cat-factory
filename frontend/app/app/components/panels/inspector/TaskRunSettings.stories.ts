@@ -82,46 +82,58 @@ const meta = {
       }),
     ],
   },
-  play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: /Run settings/ }))
-  },
 } satisfies Meta<typeof TaskRunSettings>
 export default meta
 
 type Story = StoryObj<typeof meta>
 
+/** Open the section, then wait for what the story shows. */
+function opensTo(shown: (canvas: ReturnType<typeof within>) => Promise<unknown>) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: /Run settings/ }))
+    await shown(within(canvasElement))
+  }
+}
+
 /**
  * Advanced tier: the build pipeline, the manual review policy, the Claude Opus preset, API
  * Gateway involved, a branch to read, and Priya responsible.
  */
-export const Default: Story = {}
+export const Default: Story = { play: opensTo((c) => c.findByText('Priya Natarajan')) }
 
 /** Basic tier and nothing overridden: the override groups are gone. */
 export const BasicMode: Story = {
   args: { block: loginTask },
   decorators: [seeded(loginTask, { advanced: false })],
+  play: opensTo((c) => c.findByTestId('involved-services')),
 }
 
 /** Basic tier, and the task carries a merge policy: that group stays, so it can be seen. */
 export const BasicModeWithOverride: Story = {
   args: { block: { ...loginTask, riskPolicyId: manualReviewPolicy.id } },
   decorators: [seeded({ ...loginTask, riskPolicyId: manualReviewPolicy.id }, { advanced: false })],
+  play: opensTo((c) => c.findByTestId('risk-policy-picker-trigger')),
 }
 
 /** The Kimi preset on a deployment with no Workers AI: the warning names the model it lacks. */
 export const UnavailablePresetModels: Story = {
   args: { block: { ...configured, modelPresetId: 'mdp_kimi' } },
   decorators: [seeded({ ...configured, modelPresetId: 'mdp_kimi' }, { models: claudeOnlyCatalog })],
+  play: opensTo((c) => c.findByText(/Not available under the current configuration/)),
 }
 
 /** A service the task involved is no longer connected: it shows as a stale badge. */
 export const StaleInvolvedService: Story = {
   args: { block: { ...configured, involvedServiceIds: [gatewayService.id, 'svc_billing'] } },
   decorators: [seeded({ ...configured, involvedServiceIds: [gatewayService.id, 'svc_billing'] })],
+  play: opensTo((c) =>
+    c.findByTitle("No longer connected to this task's service; it is dropped on the next change."),
+  ),
 }
 
 /** A document task: the repositories its writer may read join the section. */
 export const DocumentTask: Story = {
   args: { block: { ...configured, taskType: 'document', pipelineId: undefined } },
   decorators: [seeded({ ...configured, taskType: 'document', pipelineId: undefined })],
+  play: opensTo((c) => c.findByTestId('doc-reference-repos')),
 }
