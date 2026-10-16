@@ -6,6 +6,7 @@
 // required; a story adds what its surface reads.
 import type { ExecutionInstance, Pipeline, WorkspaceSnapshot } from '@cat-factory/contracts'
 import { STORY_WORKSPACE_ID } from './workspace'
+import { accountBoards } from './accounts.stories.mocks'
 import { boardBlocks } from './board.stories.mocks'
 import { approval, step } from './pipelineStep.stories.mocks'
 
@@ -58,14 +59,18 @@ export function parkedExecution(): ExecutionInstance {
   })
 }
 
+// The story workspace as the workspaces list names it, so the board switcher and the snapshot
+// agree on its name and its account.
+const storyBoard = accountBoards.find((board) => board.id === STORY_WORKSPACE_ID)!
+
 export function snapshot(overrides: Partial<WorkspaceSnapshot> = {}): WorkspaceSnapshot {
   return {
     workspace: {
       id: STORY_WORKSPACE_ID,
-      name: 'Acme',
-      description: null,
-      createdAt: Date.UTC(2026, 8, 1),
-      accountId: null,
+      name: storyBoard.name,
+      description: storyBoard.description,
+      createdAt: storyBoard.createdAt,
+      accountId: storyBoard.accountId,
     },
     blocks: boardBlocks,
     pipelines: [buildPipeline],
