@@ -4,6 +4,7 @@ import {
   accountSchema,
   accountSettingsViewSchema,
   accountSkillSchema,
+  agentEffortReportSchema,
   agentFailureSchema,
   apiKeySchema,
   blockSchema,
@@ -43,6 +44,7 @@ import {
   resolvedDocumentRefSchema,
   resolvedFragmentSchema,
   riskPolicyLibraryEntrySchema,
+  reproductionReportSchema,
   runInputGateSchema,
   runnerPoolConnectionSchema,
   runnerPoolManifestSchema,
@@ -58,6 +60,7 @@ import {
   taskEstimateSchema,
   taskSearchResultSchema,
   taskSourceStateSchema,
+  validationReportSchema,
   vcsConnectOptionSchema,
   vendorCredentialSchema,
   workspaceListItemSchema,
@@ -161,6 +164,12 @@ import {
 } from './pipelineStep.stories.mocks'
 import { execution, parkedExecution, snapshot } from './snapshot.stories.mocks'
 import {
+  effortReport,
+  reproductionReport,
+  validationFailed,
+  validationPassed,
+} from './stepReports.stories.mocks'
+import {
   authBranches,
   authRepo,
   authServiceRow,
@@ -248,6 +257,9 @@ const cases: [string, v.GenericSchema, unknown[]][] = [
   ['skill summary', skillSummarySchema, skillCatalog],
   ['account skill', accountSkillSchema, accountSkills],
   ['skill source', skillSourceSchema, [skillSource]],
+  ['effort report', agentEffortReportSchema, [effortReport]],
+  ['validation report', validationReportSchema, [validationPassed, validationFailed]],
+  ['reproduction report', reproductionReportSchema, [reproductionReport()]],
   ['block', blockSchema, [block(), authInitiative]],
   ['task estimate', taskEstimateSchema, [estimate()]],
   ['GitHub connection', githubConnectionSchema, [githubConnection]],
