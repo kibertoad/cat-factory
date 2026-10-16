@@ -188,12 +188,25 @@ export const Empty: Story = panel(
   },
 )
 
+const runningLogin = loginRun()
 const failedRun = loginRun({
   status: 'failed',
   failure: failure({
-    message: 'The coder stopped after the model provider refused five calls in a row.',
+    message: 'The coder stopped after the model provider refused a call.',
     stepIndex: 1,
   }),
+  steps: runningLogin.steps.map((s) =>
+    s.agentKind === 'coder'
+      ? {
+          ...s,
+          state: 'failed',
+          metrics: stepMetrics({
+            calls: 4,
+            byPhase: [{ ...loginPhases[0]!, errors: 1 }, loginPhases[1]!],
+          }),
+        }
+      : s,
+  ),
 })
 const failedSinks: Sinks = {
   calls: [rateLimitedCall, ...loginCalls],

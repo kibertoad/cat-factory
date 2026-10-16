@@ -23,7 +23,7 @@ import RalphLoopResultView from './RalphLoopResultView.vue'
 // most 20 iterations (`MAX_RALPH_ATTEMPT_LOG` in orchestration). The task and its test output are
 // made up.
 const meta = {
-  title: 'Run telemetry/Components/RalphLoopResultView',
+  title: 'Run telemetry/Pages/RalphLoopResultView',
   component: RalphLoopResultView,
 } satisfies Meta<typeof RalphLoopResultView>
 export default meta

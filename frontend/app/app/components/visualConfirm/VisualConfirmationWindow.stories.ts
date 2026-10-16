@@ -74,7 +74,7 @@ function opened(state: VisualConfirmStepState | null) {
 }
 
 const meta = {
-  title: 'Review/Components/VisualConfirmationWindow',
+  title: 'Review/Pages/VisualConfirmationWindow',
   component: VisualConfirmationWindow,
   parameters: {
     api: [

@@ -133,7 +133,7 @@ function opened(stage: BrainstormStage) {
 }
 
 const meta = {
-  title: 'Review/Components/BrainstormWindow',
+  title: 'Review/Pages/BrainstormWindow',
   component: BrainstormWindow,
   decorators: [opened('requirements')],
   parameters: { api: [sessionIs(session())] },

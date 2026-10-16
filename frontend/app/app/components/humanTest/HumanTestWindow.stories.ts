@@ -60,7 +60,7 @@ function opened(state: HumanTestStepState | null) {
 }
 
 const meta = {
-  title: 'Review/Components/HumanTestWindow',
+  title: 'Review/Pages/HumanTestWindow',
   component: HumanTestWindow,
 } satisfies Meta<typeof HumanTestWindow>
 export default meta

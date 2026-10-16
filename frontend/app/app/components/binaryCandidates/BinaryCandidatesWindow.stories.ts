@@ -60,7 +60,7 @@ function answers(state: BinaryCandidateStepState | null): HttpHandler[] {
 }
 
 const meta = {
-  title: 'Review/Components/BinaryCandidatesWindow',
+  title: 'Review/Pages/BinaryCandidatesWindow',
   component: BinaryCandidatesWindow,
 } satisfies Meta<typeof BinaryCandidatesWindow>
 export default meta

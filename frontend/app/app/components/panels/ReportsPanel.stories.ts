@@ -38,7 +38,7 @@ const byModel = [
 ]
 
 const meta = {
-  title: 'Run telemetry/Components/ReportsPanel',
+  title: 'Run telemetry/Pages/ReportsPanel',
   component: ReportsPanel,
   decorators: [withReports('7d')],
   parameters: { api: [reportIs(report())] },
@@ -268,39 +268,110 @@ export const Empty: Story = {
   },
 }
 
+type Amounts = Pick<
+  ReportSpendRow,
+  'inputTokens' | 'outputTokens' | 'calls' | 'meteredCost' | 'subscriptionCost'
+>
+const AMOUNT_FIELDS = [
+  'inputTokens',
+  'outputTokens',
+  'calls',
+  'meteredCost',
+  'subscriptionCost',
+] as const
+
+/** The account's totals for the seven-day report: what every full breakdown adds up to. */
+const accountTotals = totalOf(byModel)
+
+/** The sum of some rows' amounts, each field rounded to cents. */
+function sumOf(rows: Amounts[]): Amounts {
+  return totalOf(rows as ReportSpendRow[])
+}
+
+/**
+ * The rows scaled down or up to `target`, so they add up to it. Each field is rounded, and the
+ * first row takes the rounding rest.
+ */
+function scaleTo<T extends Amounts>(rows: T[], target: Amounts): T[] {
+  const all = sumOf(rows)
+  const out = rows.map((r) => ({ ...r }))
+  for (const f of AMOUNT_FIELDS) {
+    const cents = f === 'meteredCost' || f === 'subscriptionCost' ? 100 : 1
+    const share = all[f] === 0 ? 0 : target[f] / all[f]
+    for (const r of out) r[f] = Math.round(r[f] * share * cents) / cents
+    const rest = target[f] - out.reduce((n, r) => n + r[f], 0)
+    out[0]![f] = Math.round((out[0]![f] + rest) * cents) / cents
+  }
+  return out
+}
+
+/** The ticket and run rows cover only part of the spend, so they scale by the share alone. */
+function scaleBySpendShare(rows: ReportSpendRow[], target: Amounts): ReportSpendRow[] {
+  const share =
+    (target.meteredCost + target.subscriptionCost) /
+    (accountTotals.meteredCost + accountTotals.subscriptionCost)
+  return rows.map((r) =>
+    spend(
+      r.key,
+      r.label,
+      Math.round(r.meteredCost * share * 100) / 100,
+      Math.round(r.subscriptionCost * share * 100) / 100,
+    ),
+  )
+}
+
+/** The seven-day report's spend breakdowns, scaled to a new window's totals. */
+function spendScaledTo(target: Amounts): ReportsView['spend'] {
+  const base = report().spend
+  return {
+    byModel: scaleTo(base.byModel, target),
+    byAgentKind: scaleTo(base.byAgentKind, target),
+    byWorkspace: scaleTo(base.byWorkspace, target),
+    byService: scaleTo(base.byService, target),
+    byRepo: scaleTo(base.byRepo, target),
+    byTaskType: scaleTo(base.byTaskType, target),
+    byTicket: scaleBySpendShare(base.byTicket, target),
+    byRun: scaleBySpendShare(base.byRun, target),
+  }
+}
+
 const staleThrough = Date.UTC(2026, 9, 6)
 
 /**
  * Thirty days from the durable cost rollup, which reaches only 6 October: a warning names the
- * date, so the empty days after it read as missing data, not as a cheap week.
+ * date, so the empty days after it read as missing data, not as a cheap week. The totals are the
+ * sum of the trend's points, and the breakdowns are scaled to them.
  */
 export const RollupStale: Story = {
   decorators: [withReports('30d')],
   parameters: {
     api: [
-      reportIs(
-        report({
-          window: '30d',
-          since: NOW - 30 * DAY,
-          source: 'daily-rollup',
-          rolledUpThrough: staleThrough,
-          trend: {
-            bucketMs: DAY,
-            points: dailyTrend(30).map((p) =>
-              p.start > staleThrough
-                ? {
-                    ...p,
-                    meteredCost: 0,
-                    subscriptionCost: 0,
-                    calls: 0,
-                    inputTokens: 0,
-                    outputTokens: 0,
-                  }
-                : p,
-            ),
-          },
-        }),
-      ),
+      (() => {
+        const points = dailyTrend(30).map((p) =>
+          p.start > staleThrough
+            ? {
+                ...p,
+                meteredCost: 0,
+                subscriptionCost: 0,
+                calls: 0,
+                inputTokens: 0,
+                outputTokens: 0,
+              }
+            : p,
+        )
+        const totals = sumOf(points)
+        return reportIs(
+          report({
+            window: '30d',
+            since: NOW - 30 * DAY,
+            source: 'daily-rollup',
+            rolledUpThrough: staleThrough,
+            totals: totals as ReportsView['totals'],
+            spend: spendScaledTo(totals),
+            trend: { bucketMs: DAY, points },
+          }),
+        )
+      })(),
     ],
   },
 }
@@ -308,47 +379,9 @@ export const RollupStale: Story = {
 const board = spend(STORY_WORKSPACE_ID, 'Core services', 112.8, 41.3)
 
 /**
- * The rows scaled down to the board's share, so they add up to the board's own row. Each field
- * is rounded, and the first row takes the rounding rest.
- */
-function narrowToBoard(rows: ReportSpendRow[]): ReportSpendRow[] {
-  const all = totalOf(rows)
-  const fields = [
-    'inputTokens',
-    'outputTokens',
-    'calls',
-    'meteredCost',
-    'subscriptionCost',
-  ] as const
-  const out = rows.map((r) => ({ ...r }))
-  for (const f of fields) {
-    const cents = f === 'meteredCost' || f === 'subscriptionCost' ? 100 : 1
-    const share = all[f] === 0 ? 0 : board[f] / all[f]
-    for (const r of out) r[f] = Math.round(r[f] * share * cents) / cents
-    const rest = board[f] - out.reduce((n, r) => n + r[f], 0)
-    out[0]![f] = Math.round((out[0]![f] + rest) * cents) / cents
-  }
-  return out
-}
-
-const boardShare = (board.meteredCost + board.subscriptionCost) / (174.2 + 52.6)
-
-/** The ticket and run rows cover only part of the spend, so they scale by the share alone. */
-function scaleToBoard(rows: ReportSpendRow[]): ReportSpendRow[] {
-  return rows.map((r) =>
-    spend(
-      r.key,
-      r.label,
-      Math.round(r.meteredCost * boardShare * 100) / 100,
-      Math.round(r.subscriptionCost * boardShare * 100) / 100,
-    ),
-  )
-}
-
-/**
  * Narrowed to Core services: the board filter names it, and every section is that board's. The
- * model, agent kind, task type, ticket and run rows are the account's rows scaled to the board's
- * share, so each full breakdown adds up to the totals.
+ * trend, the model, agent kind, task type, ticket and run rows are the account's rows scaled to
+ * the board's share, so each full breakdown and the trend add up to the totals.
  */
 export const FilteredToBoard: Story = {
   decorators: [withReports('7d', STORY_WORKSPACE_ID)],
@@ -358,24 +391,17 @@ export const FilteredToBoard: Story = {
         report({
           workspaceId: STORY_WORKSPACE_ID,
           totals: totalOf([board]),
-          trend: {
-            bucketMs: DAY,
-            points: dailyTrend(7).map((p) => ({
-              ...p,
-              meteredCost: Math.round(p.meteredCost * boardShare * 100) / 100,
-              subscriptionCost: Math.round(p.subscriptionCost * boardShare * 100) / 100,
-            })),
-          },
+          trend: { bucketMs: DAY, points: scaleTo(dailyTrend(7), board) },
           spend: {
             ...report().spend,
-            byModel: narrowToBoard(report().spend.byModel),
-            byAgentKind: narrowToBoard(report().spend.byAgentKind),
+            byModel: scaleTo(report().spend.byModel, board),
+            byAgentKind: scaleTo(report().spend.byAgentKind, board),
             byWorkspace: [board],
             byService: report().spend.byService.slice(0, 2),
             byRepo: report().spend.byRepo.slice(0, 2),
-            byTaskType: narrowToBoard(report().spend.byTaskType),
-            byTicket: scaleToBoard(report().spend.byTicket),
-            byRun: scaleToBoard(report().spend.byRun),
+            byTaskType: scaleTo(report().spend.byTaskType, board),
+            byTicket: scaleBySpendShare(report().spend.byTicket, board),
+            byRun: scaleBySpendShare(report().spend.byRun, board),
           },
           activity: {
             ...report().activity,

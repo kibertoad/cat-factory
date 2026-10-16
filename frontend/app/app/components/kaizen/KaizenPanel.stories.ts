@@ -12,7 +12,7 @@ import KaizenPanel from './KaizenPanel.vue'
 // recommendations. It is read-only; the engine schedules the gradings and a background sweep runs
 // them. The screen loads the overview when it opens, so each story opens it and answers that read.
 const meta = {
-  title: 'Run telemetry/Components/KaizenPanel',
+  title: 'Run telemetry/Pages/KaizenPanel',
   component: KaizenPanel,
   decorators: [
     withSeed(() => {

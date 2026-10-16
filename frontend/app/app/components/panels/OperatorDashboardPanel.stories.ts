@@ -25,7 +25,7 @@ const DAY = 24 * HOUR
 const NOW = Date.UTC(2026, 9, 11, 12, 0)
 
 const meta = {
-  title: 'Run telemetry/Components/OperatorDashboardPanel',
+  title: 'Run telemetry/Pages/OperatorDashboardPanel',
   component: OperatorDashboardPanel,
   decorators: [withDashboard('24h')],
   parameters: { api: [figuresAre(platform())] },

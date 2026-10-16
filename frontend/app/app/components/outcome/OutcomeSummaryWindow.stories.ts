@@ -62,7 +62,7 @@ function answers(...own: HttpHandler[]): HttpHandler[] {
 }
 
 const meta = {
-  title: 'Run telemetry/Components/OutcomeSummaryWindow',
+  title: 'Run telemetry/Pages/OutcomeSummaryWindow',
   component: OutcomeSummaryWindow,
   parameters: { api: answers() },
 } satisfies Meta<typeof OutcomeSummaryWindow>
