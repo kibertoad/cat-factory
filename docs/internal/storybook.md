@@ -14,8 +14,8 @@ Stories cover what a component draws for a given state. Whether the backend agre
 UI shows is the e2e suite's job ([`backend/internal/e2e/README.md`](../../backend/internal/e2e/README.md)):
 a story fakes the data, and a fake cannot prove the two sides agree.
 
-The work that adds stories domain by domain is tracked in
-[`docs/initiatives/component-stories.md`](../initiatives/component-stories.md).
+The design record for the stories is
+[ADR 0068](../../backend/docs/adr/0068-component-stories.md).
 
 ## The patch
 
