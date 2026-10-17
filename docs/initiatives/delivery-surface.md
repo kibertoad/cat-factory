@@ -55,7 +55,7 @@ The pilot is slice 1, the queue view. The rules it sets for every later slice:
 | 5   | Decide whether the setup checklist replaces the setup banners and startup dialogs       | ⬜ todo      |                                                             |
 | 6   | Decide the role prompt at first launch (two of its three answers map to one surface)    | ⬜ todo      |                                                             |
 | 7   | Deep links to a task, so the queue can be shared (needs `global-search-and-deep-links`) | ⬜ todo      |                                                             |
-| 8   | One failure block per task view: a one-line cause, one action, details behind a toggle  | 🟡 in review |                                                             |
+| 8   | One failure block per task view: a one-line cause, one action, details behind a toggle  | 🟡 in review | [#2432](https://github.com/kibertoad/cat-factory/pull/2432) |
 | 9   | Vocabulary by surface: outcome words on the delivery surface, engine names elsewhere    | ⬜ todo      |                                                             |
 | 10  | Settings grouped by decision, label plus one line, operator settings in one place       | ⬜ todo      |                                                             |
 
