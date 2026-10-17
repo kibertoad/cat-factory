@@ -1,74 +1,130 @@
 import type { ParsedConflict } from '~/composables/usePipelineErrorToast'
+import type { InfraSetupOwners } from '~/types/domain'
+import {
+  SETUP_REMEDY_KEYS,
+  setupRemedyFor,
+  type SetupActor,
+  type SetupRemedy,
+} from '~/utils/setupAudience'
+
+type SetupRemedies = Pick<
+  ReturnType<typeof useSetupRemedies>,
+  'openInfraArea' | 'openModelSetup' | 'openServiceEnvironment'
+>
+
+/** Who is asking and who owns each gap, read when a toast is raised (never at store setup). */
+export interface ConflictAudience {
+  actor: SetupActor
+  owners: InfraSetupOwners | null
+}
+
+/**
+ * The owner of a fix any member can save, such as a block edit: no owner gate, so everyone on the
+ * full surface gets the fix, and the designer surface gets the line that says to switch.
+ */
+const NO_OWNER_GATE = Symbol('no owner gate')
+
+/** One bespoke conflict toast, before the audience decides whether it carries the fix. */
+interface SetupConflictToast {
+  titleKey: string
+  description: string
+  icon: string
+  actionKey: string
+  /**
+   * Who closes the gap, as `canActOnSetup` reads it (`effectiveOwner` covers an unknown value), or
+   * {@link NO_OWNER_GATE}.
+   */
+  owner: unknown
+  fix: () => void
+}
 
 /**
  * The bespoke conflict toasts: the five 409 reasons whose copy interpolates runtime detail and
  * whose remedy is a one-click jump into the panel that fixes them. Split out of
- * {@link usePipelineErrorToast} purely for size — it closes over the SAME toast / ui / i18n
- * handles, so behaviour is identical to the former in-composable functions.
+ * {@link usePipelineErrorToast} for size; it closes over the SAME toast and i18n handles.
+ *
+ * Each one is a setup gap, so it follows the setup cards' audience rule (`utils/setupAudience.ts`):
+ * only a caller who can act gets the fix button, opened through `useSetupRemedies`. Everyone else
+ * gets the same toast with one more sentence naming who can fix it, because a button that opens a
+ * screen their save is refused on is worse than no button.
  */
 export function createBespokeConflictToasts(deps: {
   toast: ReturnType<typeof useToast>
-  ui: ReturnType<typeof useUiStore>
   t: ReturnType<typeof useI18n>['t']
   te: ReturnType<typeof useI18n>['te']
+  audience: () => ConflictAudience
+  remedies: () => SetupRemedies
 }): (conflict: ParsedConflict) => boolean {
-  const { toast, ui, t, te } = deps
-  // The headline case: a pipeline step's model has no usable provider. Name the
-  // offending model(s), explain no provider is available, and offer the one-click jump
-  // to the AI setup — the same remedy the startup "No AI model configured" banner gives.
-  function presentProvidersUnconfigured(conflict: ParsedConflict): void {
-    const models = Array.isArray(conflict.details.models) ? conflict.details.models : []
-    const list = models.join(', ')
+  const { toast, t, te } = deps
+
+  function raise(spec: SetupConflictToast): void {
+    const { actor } = deps.audience()
+    const remedy: SetupRemedy | null =
+      spec.owner === NO_OWNER_GATE
+        ? actor.fullSurface
+          ? null
+          : 'full_surface'
+        : setupRemedyFor(spec.owner, actor)
     toast.add({
-      title: t('errors.conflict.providersUnconfigured.title'),
-      description: list
-        ? t('errors.conflict.providersUnconfigured.body', { models: list })
-        : (conflict.message ?? t('errors.conflict.fallbackMessage')),
+      title: t(spec.titleKey),
+      description: remedy
+        ? `${spec.description} ${t(SETUP_REMEDY_KEYS[remedy])}`
+        : spec.description,
       color: 'error',
-      icon: 'i-lucide-cpu',
+      icon: spec.icon,
       // Stay until dismissed: an actionable toast whose remedy button vanishes on the ~5s
-      // auto-dismiss takes the one-click fix with it before the user can reach it.
+      // auto-dismiss takes the one-click fix with it, and the line naming who can fix it is the
+      // one thing a caller without the button has to read.
       duration: 0,
-      actions: [
-        {
-          label: t('errors.conflict.providersUnconfigured.action'),
-          icon: 'i-lucide-settings',
-          onClick: () => ui.openAiProviderSetup(),
-        },
-      ],
+      actions: remedy
+        ? []
+        : [{ label: t(spec.actionKey), icon: 'i-lucide-settings', onClick: spec.fix }],
     })
   }
 
-  // A pipeline step relies on binary-artifact storage (the UI Tester uploads screenshots)
-  // but the account has none configured. Explain it and offer the jump to the content-storage
-  // settings — the same shape as the providers-unconfigured case above. Prefer the localized
-  // body (it carries no runtime interpolation) so non-English users see translated copy; the
-  // raw backend prose is only the last-resort fallback when the locale lacks the key.
+  /** The backend prose, else the generic line: what a toast says when its own body cannot render. */
+  function fallback(conflict: ParsedConflict): string {
+    return conflict.message ?? t('errors.conflict.fallbackMessage')
+  }
+
+  const owners = () => deps.audience().owners
+
+  // The headline case: a pipeline step's model has no usable provider. Name the offending
+  // model(s) and offer the AI setup, the same remedy the "No AI model configured" banner gives.
+  function presentProvidersUnconfigured(conflict: ParsedConflict): void {
+    const models = Array.isArray(conflict.details.models) ? conflict.details.models : []
+    const list = models.join(', ')
+    raise({
+      titleKey: 'errors.conflict.providersUnconfigured.title',
+      description: list
+        ? t('errors.conflict.providersUnconfigured.body', { models: list })
+        : fallback(conflict),
+      icon: 'i-lucide-cpu',
+      actionKey: 'errors.conflict.providersUnconfigured.action',
+      // A model is a workspace setting, as the setup checklist's model row says.
+      owner: 'workspace_admin',
+      fix: () => deps.remedies().openModelSetup(),
+    })
+  }
+
+  // A pipeline step relies on binary-artifact storage (the UI Tester uploads screenshots) but the
+  // account has none configured. Prefer the localized body (it carries no runtime interpolation);
+  // the raw backend prose is only the fallback when the locale lacks the key.
   function presentBinaryStorageUnconfigured(conflict: ParsedConflict): void {
-    toast.add({
-      title: t('errors.conflict.binaryStorageUnconfigured.title'),
+    raise({
+      titleKey: 'errors.conflict.binaryStorageUnconfigured.title',
       description: te('errors.conflict.binaryStorageUnconfigured.body')
         ? t('errors.conflict.binaryStorageUnconfigured.body')
-        : (conflict.message ?? t('errors.conflict.fallbackMessage')),
-      color: 'error',
+        : fallback(conflict),
       icon: 'i-lucide-image',
-      // Sticky, like the providers-unconfigured toast above: keep the "Configure storage"
-      // remedy reachable instead of letting it auto-dismiss.
-      duration: 0,
-      actions: [
-        {
-          label: t('errors.conflict.binaryStorageUnconfigured.action'),
-          icon: 'i-lucide-settings',
-          onClick: () => ui.openContentStorageSettings(),
-        },
-      ],
+      actionKey: 'errors.conflict.binaryStorageUnconfigured.action',
+      owner: owners()?.binaryStorage,
+      fix: () => deps.remedies().openInfraArea('binaryStorage'),
     })
   }
 
   // A pipeline includes a Deployer, but the SERVICE's ephemeral-environment config (the in-repo
-  // "what/where") is incomplete for its declared type. Steer the user straight to THAT service's
-  // environment config — the compose wizard for docker-compose, the service inspector otherwise —
-  // falling back to the workspace infrastructure window if the frame id wasn't carried.
+  // "what/where") is incomplete for its declared type. Steer to THAT service's environment config.
   function presentDeployerServiceConfig(conflict: ParsedConflict): void {
     const frameId =
       typeof conflict.details.frameId === 'string' ? conflict.details.frameId : undefined
@@ -79,81 +135,64 @@ export function createBespokeConflictToasts(deps: {
     const missing = Array.isArray(conflict.details.missing)
       ? conflict.details.missing.join(', ')
       : ''
-    toast.add({
-      title: t('errors.conflict.deployerServiceConfig.title'),
+    raise({
+      titleKey: 'errors.conflict.deployerServiceConfig.title',
       description: missing
         ? t('errors.conflict.deployerServiceConfig.body', { missing })
-        : (conflict.message ?? t('errors.conflict.fallbackMessage')),
-      color: 'error',
+        : fallback(conflict),
       icon: 'i-lucide-server',
-      // Sticky, like the other actionable conflicts: keep the "Fix configuration" jump reachable.
-      duration: 0,
-      actions: [
-        {
-          label: t('errors.conflict.deployerServiceConfig.action'),
-          icon: 'i-lucide-settings',
-          onClick: () => {
-            if (frameId && provisionType === 'docker-compose') ui.openEnvironmentSetup(frameId)
-            else if (frameId) ui.select(frameId)
-            else ui.openProviderConnection('environment')
-          },
-        },
-      ],
+      actionKey: 'errors.conflict.deployerServiceConfig.action',
+      // The owner follows where the fix opens. The compose wizard's save registers a workspace
+      // handler (`integrations.manage`), so a board admin owns it. Any other type is fixed in the
+      // service inspector, a block edit any member can save. With no frame, the fix is the
+      // workspace's test-environment settings, owned like the rest of that area.
+      owner: frameId
+        ? provisionType === 'docker-compose'
+          ? 'workspace_admin'
+          : NO_OWNER_GATE
+        : owners()?.ephemeralEnvironments,
+      fix: () => deps.remedies().openServiceEnvironment(frameId, provisionType),
     })
   }
 
   // A pipeline includes a Deployer and the service config is sound, but no WORKSPACE handler
-  // resolves for the service's provision type (missing or ambiguous). Steer to the Infrastructure
-  // window's Test-environments tab. (Also raised by the Tester start gate — same fix applies.)
+  // resolves for the service's provision type (missing or ambiguous). Also raised by the Tester
+  // start gate, where the same fix applies.
   function presentProvisionTypeUnhandled(conflict: ParsedConflict): void {
     const type =
       typeof conflict.details.provisionType === 'string' ? conflict.details.provisionType : ''
-    toast.add({
-      title: t('errors.conflict.provisionTypeUnhandled.title'),
+    raise({
+      titleKey: 'errors.conflict.provisionTypeUnhandled.title',
       description: type
         ? t('errors.conflict.provisionTypeUnhandled.body', { type })
-        : (conflict.message ?? t('errors.conflict.fallbackMessage')),
-      color: 'error',
+        : fallback(conflict),
       icon: 'i-lucide-server-cog',
-      duration: 0,
-      actions: [
-        {
-          label: t('errors.conflict.provisionTypeUnhandled.action'),
-          icon: 'i-lucide-settings',
-          onClick: () => ui.openProviderConnection('environment'),
-        },
-      ],
+      actionKey: 'errors.conflict.provisionTypeUnhandled.action',
+      owner: owners()?.ephemeralEnvironments,
+      fix: () => deps.remedies().openInfraArea('ephemeralEnvironments'),
     })
   }
 
   // A pipeline includes a Deployer, the config is structurally complete, but the live connection
-  // probe of the resolved deployment integration failed (unreachable endpoint / apiserver, bad
-  // token). Surface the provider's failure detail and steer to the handler to fix + re-test it.
+  // probe of the resolved deployment integration failed (unreachable endpoint, bad token).
   function presentDeployerConnectionFailed(conflict: ParsedConflict): void {
-    const detail = typeof conflict.details.detail === 'string' ? conflict.details.detail : undefined
-    toast.add({
-      title: t('errors.conflict.deployerConnectionFailed.title'),
+    const detail = typeof conflict.details.detail === 'string' ? conflict.details.detail : ''
+    raise({
+      titleKey: 'errors.conflict.deployerConnectionFailed.title',
       description: detail
         ? t('errors.conflict.deployerConnectionFailed.body', { detail })
-        : (conflict.message ?? t('errors.conflict.fallbackMessage')),
-      color: 'error',
+        : fallback(conflict),
       icon: 'i-lucide-plug',
-      duration: 0,
-      actions: [
-        {
-          label: t('errors.conflict.deployerConnectionFailed.action'),
-          icon: 'i-lucide-settings',
-          onClick: () => ui.openProviderConnection('environment'),
-        },
-      ],
+      actionKey: 'errors.conflict.deployerConnectionFailed.action',
+      owner: owners()?.ephemeralEnvironments,
+      fix: () => deps.remedies().openInfraArea('ephemeralEnvironments'),
     })
   }
 
   /**
-   * Dispatch the bespoke conflict reasons (a runtime-interpolated body + a "configure X" action,
-   * each with its own key namespace — the ones excluded from `CONFLICT_INFO`). Returns `true` when
-   * the reason was one of them (and the toast was raised), `false` to fall through to the generic
-   * map. The reason values are mutually exclusive, so dispatch order is irrelevant.
+   * Dispatch the bespoke conflict reasons (the ones excluded from `CONFLICT_INFO`). Returns `true`
+   * when the reason was one of them (and the toast was raised), `false` to fall through to the
+   * generic map. The reason values are mutually exclusive, so dispatch order is irrelevant.
    */
   function presentBespokeConflict(conflict: ParsedConflict): boolean {
     switch (conflict.reason) {

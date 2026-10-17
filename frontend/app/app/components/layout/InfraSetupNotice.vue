@@ -5,7 +5,7 @@
 // purpose: the caller has nothing to do here, so it must not cover the board the way an actionable
 // card may.
 import type { DropdownMenuItem } from '@nuxt/ui'
-import type { BlockingInfraArea, SetupNotice, SetupRemedy } from '~/utils/setupAudience'
+import { SETUP_REMEDY_KEYS, type BlockingInfraArea, type SetupNotice } from '~/utils/setupAudience'
 
 defineProps<{
   notice: SetupNotice
@@ -15,19 +15,13 @@ defineProps<{
 
 const { t } = useI18n()
 
-// Exhaustive over the blocking areas and the remedies, so a new member of either fails typecheck
-// here rather than rendering a raw key.
+// Exhaustive over the blocking areas, so a new one fails typecheck here rather than rendering a raw
+// key. The remedy line comes from `SETUP_REMEDY_KEYS`, shared with the run-start conflict toasts.
 const STATE_KEYS: Record<BlockingInfraArea, Record<SetupNotice['kind'], string>> = {
   agentExecutor: {
     setup: 'layout.infraSetupNotice.agentExecutor.setup',
     outage: 'layout.infraSetupNotice.agentExecutor.outage',
   },
-}
-const REMEDY_KEYS: Record<SetupRemedy, string> = {
-  workspace_admin: 'layout.infraSetupNotice.owner.workspace_admin',
-  account_admin: 'layout.infraSetupNotice.owner.account_admin',
-  operator: 'layout.infraSetupNotice.owner.operator',
-  full_surface: 'layout.infraSetupNotice.fullSurface',
 }
 </script>
 
@@ -52,7 +46,7 @@ const REMEDY_KEYS: Record<SetupRemedy, string> = {
       :class="notice.kind === 'outage' ? 'text-app-error-100' : 'text-app-warning-100'"
     >
       {{ t(STATE_KEYS[notice.area][notice.kind]) }}
-      <span class="opacity-80">{{ t(REMEDY_KEYS[notice.remedy]) }}</span>
+      <span class="opacity-80">{{ t(SETUP_REMEDY_KEYS[notice.remedy]) }}</span>
     </p>
     <UDropdownMenu :items="dismissMenu" :content="{ align: 'end' }">
       <UButton

@@ -576,9 +576,19 @@ export function usePipelineErrorToast() {
   const { copyAction } = useCopyToClipboard()
 
   // The five bespoke conflict reasons (a runtime-interpolated body + a "configure X" jump each)
-  // live in a sibling factory over the same toast/ui/i18n handles, so this composable stays
-  // within the per-function line budget.
-  const presentBespokeConflict = createBespokeConflictToasts({ toast, ui, t, te })
+  // live in a sibling factory over the same toast/i18n handles, so this composable stays within
+  // the per-function line budget. Who is asking, and where a fix opens, are read when a toast is
+  // raised rather than here: this runs in store setup, before the stores they read may exist.
+  const presentBespokeConflict = createBespokeConflictToasts({
+    toast,
+    t,
+    te,
+    audience: () => ({
+      actor: useSetupActor().actor.value,
+      owners: useWorkspaceStore().infraSetupOwners,
+    }),
+    remedies: () => useSetupRemedies(),
+  })
 
   /**
    * Per-reason copy from the exhaustive map: a translated title + description, and a jump

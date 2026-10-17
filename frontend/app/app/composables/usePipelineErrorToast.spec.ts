@@ -51,6 +51,7 @@ let add: ReturnType<typeof vi.fn>
 let update: ReturnType<typeof vi.fn>
 let t: ReturnType<typeof vi.fn>
 let ui: Record<string, ReturnType<typeof vi.fn>>
+let remedies: Record<string, ReturnType<typeof vi.fn>>
 
 beforeEach(() => {
   // `add` returns the created toast (Nuxt UI hands back the generated id synchronously), which
@@ -69,6 +70,23 @@ beforeEach(() => {
   }
   vi.stubGlobal('useToast', () => ({ add, update }))
   vi.stubGlobal('useUiStore', () => ui)
+  // The bespoke setup conflicts gate their fix on who is asking (covered in
+  // `pipelineErrorToast/bespokeConflicts.spec.ts`); here the caller is a board admin, so the fix
+  // opens, through the setup remedies.
+  remedies = { openInfraArea: vi.fn(), openModelSetup: vi.fn(), openServiceEnvironment: vi.fn() }
+  vi.stubGlobal('useSetupActor', () => ({
+    actor: {
+      value: {
+        fullSurface: true,
+        canManageIntegrations: true,
+        canExecuteRuns: true,
+        isAccountAdmin: true,
+        accountsEnabled: true,
+      },
+    },
+  }))
+  vi.stubGlobal('useWorkspaceStore', () => ({ infraSetupOwners: null }))
+  vi.stubGlobal('useSetupRemedies', () => remedies)
   // Stubbed on the Nuxt app's GLOBAL i18n instance, which is what this composable resolves
   // (never `useI18n()`): it is called from store setup, where no component instance exists.
   // See `frontend/app/README.md` — "A store must be instantiable outside a component setup".
@@ -172,7 +190,7 @@ describe('usePipelineErrorToast', () => {
       models: 'gpt-x, claude-y',
     })
     arg.actions[0].onClick()
-    expect(ui.openAiProviderSetup).toHaveBeenCalledOnce()
+    expect(remedies.openModelSetup).toHaveBeenCalledOnce()
   })
 
   it('uses the fallback title key + a TRANSLATED description for a non-conflict error', () => {
