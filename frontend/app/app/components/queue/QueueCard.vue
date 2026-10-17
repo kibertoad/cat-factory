@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { agentKindMeta } from '~/utils/catalog'
 import { formatDuration, useNowTick } from '~/composables/useStepTimer'
-import { useFramePlacement } from '~/composables/useFramePlacement'
+import { useTaskReveal } from '~/composables/useTaskReveal'
 import { LANE_REASON_LABEL_KEYS } from '~/utils/swimlanes'
 import type { QueueEntry } from '~/utils/queueSections'
 import IconButton from '~/components/common/IconButton.vue'
@@ -25,8 +25,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const execution = useExecutionStore()
 const agentRuns = useAgentRunsStore()
-const views = useWorkViewStore()
-const { focusFrame } = useFramePlacement()
+const { revealTask } = useTaskReveal()
 // A shared 30s clock, so "waited 4m" advances on a quiet board instead of freezing until some
 // unrelated event re-evaluates the card.
 const nowTick = useNowTick(30_000)
@@ -125,13 +124,10 @@ function openTask() {
 /**
  * Leave the queue for the canvas, with this task selected and its service in view. The canvas
  * kept its own camera while the queue covered it, so without the pan the task is usually off
- * screen. A task has no position of its own (it lives in its frame's swimlanes), so the camera
- * centres on the frame.
+ * screen.
  */
 function showOnBoard() {
-  views.show('board')
-  ui.select(props.entry.task.id)
-  void focusFrame(props.entry.service?.id ?? props.entry.task.id)
+  revealTask(props.entry.task.id)
 }
 </script>
 
