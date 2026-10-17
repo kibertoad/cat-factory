@@ -1,6 +1,6 @@
 # Initiative: one overlay shell per job (the SPA macro layer)
 
-**Status:** items 1 and 2 in review · **Owner:** frontend · **Started:** 2026-10-12
+**Status:** items 1 and 2 done, item 3 todo, item 4 waiting on a decision · **Owner:** frontend · **Started:** 2026-10-12
 
 > Tracker for a multi-PR initiative. Read it before you start an item, and update the checklist at
 > the end of each PR. This is the "Later phase" of
@@ -51,7 +51,7 @@ Pilot: item 1, `common/TakeoverShell.vue`
 
 ### 1. Full-bleed takeovers on one shell
 
-- [ ] `common/TakeoverShell.vue` on `useModalBehavior`, and all seven takeovers inside it: the step
+- [x] `common/TakeoverShell.vue` on `useModalBehavior`, and all seven takeovers inside it: the step
       reader, the model configuration takeover, the observability, reports, operator dashboard and
       Kaizen panels, and the artifact lightbox. Guard extended. E2e `takeover-shell.spec.ts`.
       [#2354](https://github.com/kibertoad/cat-factory/pull/2354).
@@ -67,7 +67,7 @@ by its mount in `pages/index.vue`, which a portal inside `UModal` would break.
 
 ### 2. Named overlay widths
 
-- [ ] `common/AppModal.vue` and three named widths in `utils/overlaySize.ts`, grouped by content:
+- [x] `common/AppModal.vue` and three named widths in `utils/overlaySize.ts`, grouped by content:
       prompt 448px (11 modals), form 576px (31), wide 672px (4). The ten workbench surfaces keep their
       widths behind a `workbench-width-ok:` comment until item 4. Guard
       `scripts/check-frontend-geometry.mjs`.
@@ -94,7 +94,8 @@ per size and a guard), not a visible change.
       `TakeoverShell`, detail as a slideover, routed workbench pages) and suggests settings in a
       slideover plus one workbench shell. It also records a bug that needs a fix whatever the
       answer: the model configuration opened from the pipeline builder (a Reka slideover) cannot be
-      clicked, because the slideover sets `pointer-events: none` on `<body>`.
+      clicked, because the slideover sets `pointer-events: none` on `<body>`. That bug is fixed in
+      [#2360](https://github.com/kibertoad/cat-factory/pull/2360).
 
 ### Not in scope: `ResultWindowShell` stays as it is
 
