@@ -9,13 +9,17 @@
 // probably work.
 //
 // `FAILURE_CAUSE_KEYS` is an exhaustive `Record<AgentFailureKind, …>`, so a kind added to the
-// contract fails the typecheck here instead of showing no cause.
+// contract fails the typecheck here instead of showing no cause. A kind that a release retired
+// can still arrive on a stored run, so the lookup narrows through `isAgentFailureKind` and names
+// such a kind as `unknown`.
 // ---------------------------------------------------------------------------
 
+import { isAgentFailureKind } from '@cat-factory/contracts'
 import type { ConflictReason, EnvironmentFailureReason } from '@cat-factory/contracts'
 import type { AgentFailure, AgentFailureKind } from '~/types/execution'
+import type { AgentRunSummary } from '~/stores/agentRuns'
 
-/** i18n key of the one-line cause, per failure kind. */
+/** i18n key of the one-line cause, per failure kind, for a task run. */
 export const FAILURE_CAUSE_KEYS: Record<AgentFailureKind, string> = {
   preflight: 'board.failure.cause.preflight',
   dispatch: 'board.failure.cause.dispatch',
@@ -34,8 +38,23 @@ export const FAILURE_CAUSE_KEYS: Record<AgentFailureKind, string> = {
   unknown: 'board.failure.cause.unknown',
 }
 
+/**
+ * The kinds whose meaning is different for a single-job run (a service bootstrap, an environment
+ * config repair). Such a run is one job with no steps and no automatic restarts: an eviction is
+ * one loss, its watchdog also fires on inactivity, and its `agent` failure can be the git push.
+ * The other kinds read the same for every run.
+ */
+const SINGLE_JOB_CAUSE_KEYS: Partial<Record<AgentFailureKind, string>> = {
+  evicted: 'board.failure.cause.singleJob.evicted',
+  timeout: 'board.failure.cause.singleJob.timeout',
+  agent: 'board.failure.cause.singleJob.agent',
+}
+
 const GITHUB_NOT_CONNECTED: ConflictReason = 'github_not_connected'
 const DEPLOY_RUNNER_UNWIRED: EnvironmentFailureReason = 'deploy_runner_unwired'
+
+/** Which run failed: a task run (`execution`) or a single-job run. */
+export type FailureRunKind = AgentRunSummary['kind']
 
 /**
  * The one action the failure block offers.
@@ -45,10 +64,17 @@ const DEPLOY_RUNNER_UNWIRED: EnvironmentFailureReason = 'deploy_runner_unwired'
  *   fails again until it is connected, so the block opens the connection instead.
  * - `environmentSetup` / `runnerPoolSetup`: the test environment could not be made. The fix is
  *   a setting, so the block opens the settings tab for that cause.
+ * - `newRun`: the run's saved state cannot be read, so a retry reads the same broken state. The
+ *   block starts the task again as a new run.
  *
  * For every action other than `retry`, Retry stays available inside the Details toggle.
  */
-export type FailureAction = 'retry' | 'connectRepoHost' | 'environmentSetup' | 'runnerPoolSetup'
+export type FailureAction =
+  | 'retry'
+  | 'connectRepoHost'
+  | 'environmentSetup'
+  | 'runnerPoolSetup'
+  | 'newRun'
 
 /** The cause line and the action for one failure. */
 export interface FailurePresentation {
@@ -56,30 +82,58 @@ export interface FailurePresentation {
   action: FailureAction
 }
 
-/**
- * The i18n key of a failure's one-line cause. The lists of earlier failures show this line
- * without an action, so it is a function of its own.
- */
-export function failureCauseKey(failure: Pick<AgentFailure, 'kind' | 'reason'>): string {
-  return failure.reason === GITHUB_NOT_CONNECTED
-    ? 'errors.conflict.description.github_not_connected'
-    : FAILURE_CAUSE_KEYS[failure.kind]
+/** What decides the cause line and the action, besides the failure itself. */
+export interface FailureContext {
+  runKind: FailureRunKind
+  /**
+   * A local node. There a `deploy_runner_unwired` cause is fixed by an environment variable,
+   * not by a settings tab, so it gets its own cause line and Retry.
+   */
+  localMode: boolean
 }
 
-/**
- * The cause line and the action for a failure.
- *
- * `localMode` changes one case only: a `deploy_runner_unwired` cause on a local node is fixed
- * by an environment variable, not by the runner-pool tab, so that case opens the environment
- * tab, and the block shows the variable names in Details.
- */
+/** The i18n key of a failure's one-line cause. */
+export function failureCauseKey(
+  failure: Pick<AgentFailure, 'kind' | 'reason'>,
+  context: FailureContext,
+): string {
+  if (failure.reason === GITHUB_NOT_CONNECTED) {
+    return 'errors.conflict.description.github_not_connected'
+  }
+  if (isLocalDeployRunnerUnwired(failure, context)) {
+    return 'board.failure.cause.deployRunnerUnwiredLocal'
+  }
+  const kind: AgentFailureKind = isAgentFailureKind(failure.kind) ? failure.kind : 'unknown'
+  const singleJobKey = context.runKind === 'execution' ? undefined : SINGLE_JOB_CAUSE_KEYS[kind]
+  return singleJobKey ?? FAILURE_CAUSE_KEYS[kind]
+}
+
+/** The cause line and the action for a failure. */
 export function presentFailure(
   failure: Pick<AgentFailure, 'kind' | 'reason'>,
-  options: { localMode: boolean },
+  context: FailureContext,
 ): FailurePresentation {
-  const causeKey = failureCauseKey(failure)
-  if (failure.reason === GITHUB_NOT_CONNECTED) return { causeKey, action: 'connectRepoHost' }
-  if (failure.kind !== 'environment') return { causeKey, action: 'retry' }
-  const toRunnerPool = failure.reason === DEPLOY_RUNNER_UNWIRED && !options.localMode
-  return { causeKey, action: toRunnerPool ? 'runnerPoolSetup' : 'environmentSetup' }
+  const causeKey = failureCauseKey(failure, context)
+  return { causeKey, action: failureAction(failure, context) }
+}
+
+function failureAction(
+  failure: Pick<AgentFailure, 'kind' | 'reason'>,
+  context: FailureContext,
+): FailureAction {
+  if (failure.reason === GITHUB_NOT_CONNECTED) return 'connectRepoHost'
+  if (failure.kind === 'state_unreadable' && context.runKind === 'execution') return 'newRun'
+  if (failure.kind !== 'environment') return 'retry'
+  if (failure.reason !== DEPLOY_RUNNER_UNWIRED) return 'environmentSetup'
+  // On a local node the fix is a variable in `.env`; after it is set, Retry is the next step.
+  return context.localMode ? 'retry' : 'runnerPoolSetup'
+}
+
+function isLocalDeployRunnerUnwired(
+  failure: Pick<AgentFailure, 'kind' | 'reason'>,
+  context: FailureContext,
+): boolean {
+  return (
+    context.localMode && failure.kind === 'environment' && failure.reason === DEPLOY_RUNNER_UNWIRED
+  )
 }

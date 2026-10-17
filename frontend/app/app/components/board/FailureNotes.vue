@@ -5,7 +5,7 @@
 // shows the backend's English text. Used by the failure block (`AgentFailureCard`) and by the two
 // failure lists (`FailureHistoryList`, `StepExecutionHistory`). The host owns the toggle, so the
 // block can put it in its action row. The default slot holds extra controls (Retry when it is not
-// the block's action, Model activity, the local-mode environment variables).
+// the block's action, Model activity).
 import type { AgentFailure } from '~/types/domain'
 import CopyButton from '~/components/common/CopyButton.vue'
 

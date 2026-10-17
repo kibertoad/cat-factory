@@ -13,6 +13,7 @@
 import type { EnvironmentFailureReason } from '@cat-factory/contracts'
 import type { AgentRunSummary } from '~/stores/agentRuns'
 import { presentFailure } from '~/utils/failureCause'
+import { conflictInfo } from '~/composables/usePipelineErrorToast'
 import FailureNotes from '~/components/board/FailureNotes.vue'
 import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 
@@ -32,11 +33,16 @@ const compact = computed(() => props.variant === 'compact')
 const failure = computed(() => props.run.failure)
 const localMode = computed(() => auth.localMode?.enabled === true)
 const presented = computed(() =>
-  failure.value ? presentFailure(failure.value, { localMode: localMode.value }) : null,
+  failure.value
+    ? presentFailure(failure.value, { runKind: props.run.kind, localMode: localMode.value })
+    : null,
 )
 const action = computed(() => presented.value?.action ?? 'retry')
 
 const DEPLOY_RUNNER_UNWIRED: EnvironmentFailureReason = 'deploy_runner_unwired'
+// The toast's entry for a missing repository host: the block's title and Connect button read it,
+// so the two surfaces cannot drift.
+const GITHUB_NOT_CONNECTED = conflictInfo('github_not_connected')
 
 // The provision type of the failed run's SERVICE frame (walk up to the frame, mirroring the
 // backend's `resolveServiceProvisioning`). Drives the Kubernetes-specific hint below.
@@ -46,7 +52,8 @@ const provisionType = computed(() => {
 })
 
 // The environment-variable hint is for Kubernetes on a local node only: there the deploy runtime
-// is an environment variable, not a settings tab the action could open. Only for the
+// is an environment variable, not a settings tab the action could open, so the hint is the fix
+// and shows under the cause line, not in Details. Only for the
 // machine-readable `deploy_runner_unwired` cause (not a helm/apply error or a temporary fault),
 // and only for a `kubernetes` provision, so a later provider with the same cause never shows
 // kubectl/kustomize/helm guidance.
@@ -60,7 +67,7 @@ const showEnvironmentLocalHint = computed(
 
 const title = computed(() => {
   // No repository host connected: the same translated title the 409 toast uses.
-  if (action.value === 'connectRepoHost') return t('errors.conflict.title.github_not_connected')
+  if (action.value === 'connectRepoHost') return t(GITHUB_NOT_CONNECTED.titleKey)
   if (failure.value?.kind === 'dispatch') return t('board.failure.containerFailedToStart')
   if (failure.value?.kind === 'environment') return t('board.failure.environmentFailed')
   // The run's durable driver was lost: name it, so it does not read as an agent bug.
@@ -94,31 +101,75 @@ function inspectRun() {
   ui.openObservability(props.run.runId)
 }
 
-// The action when a setting, not a retry, fixes the cause. Retry then moves into Details.
-const setupAction = computed(() => {
+// The block's action when it is not Retry: the setting that fixes the cause, or a new run when
+// a retry cannot work. Retry then moves into Details.
+const { startTask } = useStartWithFeedback()
+const startingNewRun = ref(false)
+async function startNewRun() {
+  const block = board.getBlock(props.run.blockId)
+  if (!block || startingNewRun.value) return
+  startingNewRun.value = true
+  try {
+    // `startTask` says why in a toast when the start fails.
+    await startTask(block)
+  } finally {
+    startingNewRun.value = false
+  }
+}
+
+interface OtherAction {
+  label: string
+  icon: string
+  testId: string
+  run: () => void
+  /** Starting a run needs `runs.execute`, as Retry does; opening a setting does not. */
+  executes: boolean
+}
+const otherAction = computed((): OtherAction | null => {
   switch (action.value) {
-    case 'connectRepoHost':
-      return {
-        label: t('errors.conflict.action.connectGitHub'),
-        icon: 'i-lucide-github',
-        run: () => ui.openGitHub(),
-      }
+    case 'connectRepoHost': {
+      const fix = GITHUB_NOT_CONNECTED.action
+      return fix
+        ? {
+            label: t(fix.labelKey),
+            icon: fix.icon,
+            testId: 'agent-failure-setup',
+            run: () => fix.run(ui),
+            executes: false,
+          }
+        : null
+    }
     case 'runnerPoolSetup':
       return {
         label: t('board.failure.deployRunnerSetup'),
         icon: 'i-lucide-settings',
+        testId: 'agent-failure-setup',
         run: () => ui.openProviderConnection('runner-pool'),
+        executes: false,
       }
     case 'environmentSetup':
       return {
         label: t('board.failure.environmentSetup'),
         icon: 'i-lucide-settings',
+        testId: 'agent-failure-setup',
         run: () => ui.openProviderConnection('environment'),
+        executes: false,
+      }
+    case 'newRun':
+      return {
+        label: t('board.failure.startNewRun'),
+        icon: 'i-lucide-play',
+        testId: 'agent-failure-new-run',
+        run: () => void startNewRun(),
+        executes: true,
       }
     case 'retry':
       return null
   }
 })
+const otherActionDenied = computed(
+  () => !!otherAction.value?.executes && !access.canExecuteRuns.value,
+)
 
 const detailsOpen = ref(false)
 
@@ -161,6 +212,22 @@ async function retry() {
       {{ t(presented.causeKey) }}
     </p>
 
+    <!-- Local mode, Kubernetes: the deploy runtime is an environment variable, not a settings tab,
+         so the variables to set are the fix and show here, not in Details. -->
+    <p
+      v-if="!compact && showEnvironmentLocalHint"
+      class="mt-1 text-2xs leading-snug text-app-error-200/90"
+      data-testid="agent-failure-environment-local-hint"
+    >
+      {{
+        t('board.failure.environmentLocalHint', {
+          runtime: 'LOCAL_DEPLOY_RUNTIME',
+          native: 'LOCAL_DEPLOY_HARNESS_ENTRY',
+          container: 'LOCAL_DEPLOY_IMAGE',
+        })
+      }}
+    </p>
+
     <!-- Which of the run's steps it got to. Renders for a multi-step (monorepo) bootstrap only;
          see BootstrapRunSteps. -->
     <BootstrapRunSteps
@@ -171,16 +238,19 @@ async function retry() {
 
     <div class="flex flex-wrap items-center gap-2" :class="compact ? 'mt-1.5' : 'mt-2'">
       <UButton
-        v-if="setupAction"
+        v-if="otherAction"
         color="error"
         variant="soft"
         size="xs"
         class="nodrag"
-        :icon="setupAction.icon"
-        data-testid="agent-failure-setup"
-        @click.stop="setupAction.run"
+        :icon="otherAction.icon"
+        :loading="otherAction.executes && startingNewRun"
+        :disabled="otherActionDenied"
+        :title="otherActionDenied ? t('access.noRunExecute') : undefined"
+        :data-testid="otherAction.testId"
+        @click.stop="otherAction.run"
       >
-        {{ setupAction.label }}
+        {{ otherAction.label }}
       </UButton>
       <UButton
         v-else
@@ -214,27 +284,11 @@ async function retry() {
     </div>
 
     <FailureNotes v-if="!compact && failure && detailsOpen" :failure="failure" tone="error">
-      <!-- Local mode only: the deploy runtime is an environment variable, not a settings tab, so
-           name the variables to set. -->
-      <p
-        v-if="showEnvironmentLocalHint"
-        class="text-app-error-200/90"
-        data-testid="agent-failure-environment-local-hint"
-      >
-        {{
-          t('board.failure.environmentLocalHint', {
-            runtime: 'LOCAL_DEPLOY_RUNTIME',
-            native: 'LOCAL_DEPLOY_HARNESS_ENTRY',
-            container: 'LOCAL_DEPLOY_IMAGE',
-          })
-        }}
-      </p>
-
-      <div v-if="setupAction || run.kind === 'bootstrap'" class="flex flex-wrap items-center gap-2">
-        <!-- Retry is the block's action unless a setting fixes the cause; then it waits here,
-             for after the setting is fixed. -->
+      <div v-if="otherAction || run.kind === 'bootstrap'" class="flex flex-wrap items-center gap-2">
+        <!-- Retry is the block's action unless a setting fixes the cause or the run must start
+             again; then it waits here. -->
         <UButton
-          v-if="setupAction"
+          v-if="otherAction"
           color="neutral"
           variant="ghost"
           size="xs"

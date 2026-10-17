@@ -549,7 +549,11 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
         // therefore describes retrying rather than instructing it. (A retry also spends model
         // budget, so handing the decision back is right on both counts.)
         id: 'retry',
+        // The block's one action: Retry, or the setting that fixes the cause. For a cause a
+        // setting fixes, or for a run that must start again, Retry is inside the closed Details,
+        // so the other action is the anchor.
         target: 'agent-failure-retry',
+        altTargets: ['agent-failure-setup', 'agent-failure-new-run'],
         placement: 'right',
         titleKey: 'tutorial.tours.diagnoseFailure.steps.retry.title',
         bodyKey: 'tutorial.tours.diagnoseFailure.steps.retry.body',

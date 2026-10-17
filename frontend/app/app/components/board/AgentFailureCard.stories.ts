@@ -121,6 +121,13 @@ export const DispatchFailure: Story = {
  * and Retry moves into Details.
  */
 export const EnvironmentFailure: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByTestId('agent-failure-setup')).toBeVisible()
+    await expect(canvas.queryByTestId('agent-failure-retry')).toBeNull()
+    await userEvent.click(canvas.getByRole('button', { name: 'Details' }))
+    await expect(await canvas.findByTestId('agent-failure-retry')).toBeEnabled()
+  },
   args: {
     run: taskRun(
       failure({
@@ -134,14 +141,16 @@ export const EnvironmentFailure: Story = {
 }
 
 /**
- * Local mode, and the service deploys to Kubernetes with no deploy runner wired: Details names the
- * environment variables to set.
+ * Local mode, and the service deploys to Kubernetes with no deploy runner wired: no settings tab
+ * fixes it, so the cause line names the .env fix, the variables show under it, and the action is
+ * Retry, for after they are set.
  */
 export const DeployRunnerUnwiredLocal: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.click(canvas.getByRole('button', { name: 'Details' }))
-    await canvas.findByTestId('agent-failure-environment-local-hint')
+    await expect(canvas.getByTestId('agent-failure-environment-local-hint')).toBeVisible()
+    await expect(canvas.getByTestId('agent-failure-retry')).toBeVisible()
+    await expect(canvas.queryByTestId('agent-failure-setup')).toBeNull()
   },
   args: {
     run: taskRun(
@@ -184,6 +193,12 @@ export const Stalled: Story = {
  * host, because a retry fails again until it is connected.
  */
 export const GithubNotConnected: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByTestId('agent-failure-setup')).toHaveTextContent('Connect')
+    await userEvent.click(canvas.getByRole('button', { name: 'Details' }))
+    await expect(await canvas.findByTestId('agent-failure-retry')).toBeEnabled()
+  },
   args: {
     run: taskRun(
       failure({
@@ -267,4 +282,44 @@ export const BootstrapResume: Story = {
 /** A board viewer: Retry is disabled, and its tooltip says why. */
 export const ReadOnly: Story = {
   decorators: [withSeed(() => seedViewer())],
+}
+
+/**
+ * The run's saved state cannot be read, so a retry reads the same broken state: the action starts
+ * a new run, and Retry waits in Details.
+ */
+export const StateUnreadable: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByTestId('agent-failure-new-run')).toBeEnabled()
+    await expect(canvas.queryByTestId('agent-failure-retry')).toBeNull()
+  },
+  args: {
+    run: taskRun(
+      failure({
+        kind: 'state_unreadable',
+        message: 'The run row exec_login could not be decoded.',
+        detail: null,
+        hint:
+          'This run’s stored state could not be read, so nothing can resume it: retrying would ' +
+          're-read the same row. The run has been closed so it stops being re-driven; start the ' +
+          'work again as a new run, and report the run id to whoever operates this deployment.',
+      }),
+    ),
+  },
+}
+
+/**
+ * A board viewer on a failure a setting fixes: the setup button stays usable, and the Retry in
+ * Details is disabled, as the main Retry is.
+ */
+export const ReadOnlySetupAction: Story = {
+  args: EnvironmentFailure.args,
+  decorators: [withSeed(() => seedViewer())],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByTestId('agent-failure-setup')).toBeEnabled()
+    await userEvent.click(canvas.getByRole('button', { name: 'Details' }))
+    await expect(await canvas.findByTestId('agent-failure-retry')).toBeDisabled()
+  },
 }

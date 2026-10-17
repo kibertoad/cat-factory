@@ -408,6 +408,7 @@
       "stalled": "L’exécution est bloquée",
       "retryBootstrap": "Relancer l’initialisation",
       "retryRun": "Relancer l’exécution",
+      "startNewRun": "Démarrer une nouvelle exécution",
       "environmentSetup": "Configurer les environnements",
       "deployRunnerSetup": "Configurer le pool de runners",
       "environmentLocalHint": "Les environnements éphémères locaux nécessitent un runtime de déploiement pour exécuter kubectl/kustomize/helm. Définissez {runtime} dans votre .env : le mode natif exécute ces outils sur votre hôte ({native}), le mode conteneur les exécute dans l'image de déploiement ({container}).",
@@ -420,7 +421,7 @@
         "preflight": "Une vérification avant le démarrage a échoué, aucun travail n’a donc été fait. Ouvrez Détails pour voir quoi corriger, puis réessayez.",
         "dispatch": "Le conteneur de l’agent n’a pas démarré, aucun travail n’a donc été fait. C’est en général temporaire.",
         "environment": "L’environnement de test n’a pas pu être créé. Vérifiez les paramètres de l’environnement, puis réessayez.",
-        "evicted": "Le conteneur s’est arrêté plusieurs fois pendant l’exécution. Cela arrive en général pendant un déploiement : réessayez quand le déploiement est terminé.",
+        "evicted": "Le conteneur s’est arrêté plusieurs fois pendant l’exécution. Cela arrive en général pendant une mise à jour de la plateforme : réessayez quand la mise à jour est terminée.",
         "harness_shutdown": "Quelque chose a arrêté le conteneur pendant cette étape. Cherchez la cause dans Détails avant de réessayer, car une nouvelle tentative peut s’arrêter de nouveau.",
         "timeout": "L’exécution a dépassé sa limite de temps. Une nouvelle tentative la relance.",
         "agent": "Une étape d’agent a échoué. Consultez la cause sur l’étape en échec, puis réessayez.",
@@ -429,9 +430,15 @@
         "rejected": "Vous avez rejeté une étape, l’exécution s’est donc arrêtée. Une nouvelle tentative reprend à cette étape.",
         "companion_rejected": "Un agent compagnon n’a pas donné de résultat utilisable. Une nouvelle tentative le relance.",
         "stalled": "La plateforme a perdu le contact avec cette exécution. Une nouvelle tentative démarre une nouvelle exécution.",
-        "state_unreadable": "L’état enregistré de cette exécution est illisible, une nouvelle tentative peut donc échouer de nouveau. Relancez la tâche comme une nouvelle exécution.",
+        "state_unreadable": "L’état enregistré de cette exécution est illisible, une nouvelle tentative relit donc le même état endommagé. Démarrez une nouvelle exécution.",
         "cancelled": "Vous avez arrêté cette exécution. Une nouvelle tentative la relance.",
-        "unknown": "L’exécution a échoué pour une cause inconnue. Consultez Détails, puis réessayez."
+        "unknown": "L’exécution a échoué pour une cause inconnue. Consultez Détails, puis réessayez.",
+        "deployRunnerUnwiredLocal": "Cet ordinateur n’a pas de runtime de déploiement pour créer l’environnement de test. Définissez le runtime de déploiement dans votre fichier .env, puis réessayez.",
+        "singleJob": {
+          "evicted": "Le conteneur s’est arrêté avant la fin de la tâche. Une nouvelle tentative démarre un nouveau conteneur.",
+          "timeout": "La tâche est restée trop longtemps sans activité, ou elle a dépassé sa limite de temps. Une nouvelle tentative la relance.",
+          "agent": "L’agent ou le git push a échoué. Consultez la cause dans Détails, puis réessayez."
+        }
       },
       "retrying": "Nouvelle tentative…",
       "history": {
@@ -8456,11 +8463,11 @@
           },
           "banner": {
             "title": "Ce qui s’est mal passé",
-            "body": "La carte remplace sa barre de progression par ce bandeau. Il nomme la cause, les détails contiennent la sortie brute, et certaines causes proposent un bouton menant droit au réglage qui les corrige."
+            "body": "La carte remplace sa barre de progression par ce bandeau. Il indique ce qui a échoué et propose une action. Ouvrez la tâche pour lire la cause en une ligne, avec la sortie brute dans Détails."
           },
           "retry": {
-            "title": "Relancer",
-            "body": "Réessayer relance le travail. Les erreurs précédentes restent sur la tâche, sous « Erreurs précédentes », pour comparer les tentatives au lieu de perdre la trace."
+            "title": "L’étape suivante",
+            "body": "Ce bouton est l’étape suivante. En général c’est Réessayer, qui relance le travail. Quand un paramètre cause l’échec, il ouvre ce paramètre. Les erreurs précédentes restent sur la tâche, sous Erreurs précédentes, pour comparer les tentatives."
           },
           "finish": {
             "title": "Un échec est une information",

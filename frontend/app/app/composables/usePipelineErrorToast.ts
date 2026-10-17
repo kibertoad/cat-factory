@@ -44,7 +44,7 @@ interface ConflictDetails {
 }
 
 /** An optional one-click "jump to the panel that fixes it" affordance on a conflict toast. */
-interface ConflictAction {
+export interface ConflictAction {
   /** i18n message key for the button label (a static literal so tier-1 typed keys see it). */
   labelKey: string
   icon: string
@@ -53,7 +53,7 @@ interface ConflictAction {
 }
 
 /** Per-reason toast copy: a translated title + description, and optionally a jump action. */
-interface ConflictInfo {
+export interface ConflictInfo {
   titleKey: string
   descriptionKey: string
   action?: ConflictAction
@@ -76,7 +76,7 @@ interface ConflictInfo {
  * (remedy prose), and the ones a UI panel can fix carry a `run` deep-link — the same shape as the
  * bespoke conflicts above, but data-driven instead of one `if` per reason.
  */
-type BespokeConflictReason =
+export type BespokeConflictReason =
   | 'providers_unconfigured'
   | 'binary_storage_unconfigured'
   | 'provision_type_unhandled'
@@ -402,6 +402,15 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
  * `message` is the raw backend prose (may be absent); the translated fallback is applied at
  * the call site where the i18n `t` is available.
  */
+/**
+ * The copy and the fix for one conflict reason, for a surface other than the toast that states the
+ * same refusal. The failure block reads the `github_not_connected` entry here, so its title, cause
+ * line and Connect button cannot drift from the toast's.
+ */
+export function conflictInfo(reason: Exclude<ConflictReason, BespokeConflictReason>): ConflictInfo {
+  return CONFLICT_INFO[reason]
+}
+
 export function parseConflict(
   error: unknown,
 ): { reason?: string; message?: string; details: ConflictDetails } | null {

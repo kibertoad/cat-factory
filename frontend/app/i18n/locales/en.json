@@ -453,6 +453,7 @@
       "stalled": "Run stalled",
       "retryBootstrap": "Retry bootstrap",
       "retryRun": "Retry run",
+      "startNewRun": "Start a new run",
       "environmentSetup": "Set up environments",
       "deployRunnerSetup": "Set up runner pool",
       "environmentLocalHint": "Local ephemeral environments need a deploy runtime to run kubectl/kustomize/helm. Set {runtime} in your .env: native mode runs those tools on your host ({native}), container mode runs them in the deploy image ({container}).",
@@ -468,7 +469,7 @@
         "preflight": "A check before the start failed, so no work was done. Open Details to see what to fix, then retry.",
         "dispatch": "The agent's container did not start, so no work was done. This is usually temporary.",
         "environment": "The test environment could not be made. Check the environment settings, then retry.",
-        "evicted": "The container stopped many times during the run. This usually occurs during a deployment, so retry when the deployment is complete.",
+        "evicted": "The container stopped many times during the run. This usually occurs while the platform is updated, so retry when the update is complete.",
         "harness_shutdown": "Something stopped the container during this step. Find the cause in Details before you retry, because a retry can stop again.",
         "timeout": "The run took more time than its limit. A retry starts it again.",
         "agent": "An agent step failed. See the failed step for the cause, then retry.",
@@ -477,9 +478,15 @@
         "rejected": "You rejected a step, so the run stopped. A retry starts again from that step.",
         "companion_rejected": "A companion agent did not give a usable result. A retry runs it again.",
         "stalled": "The platform lost contact with this run. A retry starts a new run.",
-        "state_unreadable": "The saved state of this run cannot be read, so a retry can fail again. Start the task again as a new run.",
+        "state_unreadable": "The saved state of this run cannot be read, so a retry reads the same broken state. Start a new run.",
         "cancelled": "You stopped this run. A retry starts it again.",
-        "unknown": "The run failed for an unknown cause. See Details, then retry."
+        "unknown": "The run failed for an unknown cause. See Details, then retry.",
+        "deployRunnerUnwiredLocal": "This computer has no deploy runtime to make the test environment. Set the deploy runtime in your .env file, then retry.",
+        "singleJob": {
+          "evicted": "The container stopped before the job was complete. A retry starts a new container.",
+          "timeout": "The job had no activity for too long, or it took more time than its limit. A retry starts it again.",
+          "agent": "The agent or the git push failed. See Details for the cause, then retry."
+        }
       },
       "retrying": "Retrying…",
       "history": {
@@ -8778,11 +8785,11 @@
           },
           "banner": {
             "title": "What went wrong",
-            "body": "The card swaps its progress bar for this banner. It names the cause, the details hold the raw output, and some causes offer a button straight to the setting that fixes them."
+            "body": "The card swaps its progress bar for this banner. It names what failed and gives one action. Open the task to read the cause in one line, with the raw output behind Details."
           },
           "retry": {
-            "title": "Run it again",
-            "body": "Retry re-runs the work. Earlier errors stay on the task under Previous errors, so you can compare attempts instead of losing the trail."
+            "title": "The next step",
+            "body": "This button is the next step. Usually it is Retry, which runs the work again. When a setting causes the failure, it opens that setting. Earlier errors stay on the task under Previous errors, so you can compare attempts."
           },
           "finish": {
             "title": "A failure is information",

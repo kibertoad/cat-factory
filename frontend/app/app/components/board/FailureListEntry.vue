@@ -8,9 +8,18 @@ import type { AgentFailure } from '~/types/domain'
 import { failureCauseKey } from '~/utils/failureCause'
 import FailureNotes from '~/components/board/FailureNotes.vue'
 
-defineProps<{ failure: AgentFailure }>()
+const props = defineProps<{ failure: AgentFailure }>()
 
 const { t, d } = useI18n()
+const auth = useAuthStore()
+
+// Both lists hold the earlier failures of a task run, never of a bootstrap.
+const causeKey = computed(() =>
+  failureCauseKey(props.failure, {
+    runKind: 'execution',
+    localMode: auth.localMode?.enabled === true,
+  }),
+)
 </script>
 
 <template>
@@ -20,7 +29,7 @@ const { t, d } = useI18n()
   </div>
 
   <p class="mt-1 text-2xs leading-snug text-toned" data-testid="failure-entry-cause">
-    {{ t(failureCauseKey(failure)) }}
+    {{ t(causeKey) }}
   </p>
 
   <UCollapsible class="mt-1">

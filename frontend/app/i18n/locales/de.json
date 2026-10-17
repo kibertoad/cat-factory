@@ -3297,6 +3297,7 @@
       "stalled": "Lauf ins Stocken geraten",
       "retryBootstrap": "Bootstrap wiederholen",
       "retryRun": "Lauf wiederholen",
+      "startNewRun": "Neuen Lauf starten",
       "environmentSetup": "Umgebungen einrichten",
       "deployRunnerSetup": "Runner-Pool einrichten",
       "environmentLocalHint": "Lokale ephemere Umgebungen benötigen eine Deploy-Runtime, um kubectl/kustomize/helm auszuführen. Setzen Sie {runtime} in Ihrer .env: der Native-Modus führt diese Tools auf Ihrem Host aus ({native}), der Container-Modus führt sie im Deploy-Image aus ({container}).",
@@ -3309,7 +3310,7 @@
         "preflight": "Eine Prüfung vor dem Start ist fehlgeschlagen, daher wurde keine Arbeit erledigt. Öffnen Sie Details, um zu sehen, was zu beheben ist, und wiederholen Sie dann.",
         "dispatch": "Der Container des Agenten ist nicht gestartet, daher wurde keine Arbeit erledigt. Das ist meist vorübergehend.",
         "environment": "Die Testumgebung konnte nicht erstellt werden. Prüfen Sie die Umgebungseinstellungen und wiederholen Sie dann.",
-        "evicted": "Der Container hat während des Laufs mehrmals angehalten. Das geschieht meist während eines Deployments. Wiederholen Sie, wenn das Deployment abgeschlossen ist.",
+        "evicted": "Der Container hat während des Laufs mehrmals angehalten. Das geschieht meist während eines Plattform-Updates. Wiederholen Sie, wenn das Update abgeschlossen ist.",
         "harness_shutdown": "Etwas hat den Container während dieses Schritts angehalten. Suchen Sie die Ursache in Details, bevor Sie wiederholen, denn eine Wiederholung kann erneut anhalten.",
         "timeout": "Der Lauf hat sein Zeitlimit überschritten. Eine Wiederholung startet ihn erneut.",
         "agent": "Ein Agentenschritt ist fehlgeschlagen. Die Ursache steht beim fehlgeschlagenen Schritt. Wiederholen Sie dann.",
@@ -3318,9 +3319,15 @@
         "rejected": "Sie haben einen Schritt abgelehnt, daher wurde der Lauf angehalten. Eine Wiederholung beginnt erneut bei diesem Schritt.",
         "companion_rejected": "Ein Begleitagent hat kein verwendbares Ergebnis geliefert. Eine Wiederholung führt ihn erneut aus.",
         "stalled": "Die Plattform hat den Kontakt zu diesem Lauf verloren. Eine Wiederholung startet einen neuen Lauf.",
-        "state_unreadable": "Der gespeicherte Zustand dieses Laufs ist nicht lesbar, daher kann eine Wiederholung erneut fehlschlagen. Starten Sie die Aufgabe als neuen Lauf.",
+        "state_unreadable": "Der gespeicherte Zustand dieses Laufs ist nicht lesbar, daher liest eine Wiederholung denselben defekten Zustand. Starten Sie einen neuen Lauf.",
         "cancelled": "Sie haben diesen Lauf angehalten. Eine Wiederholung startet ihn erneut.",
-        "unknown": "Der Lauf ist aus unbekanntem Grund fehlgeschlagen. Sehen Sie sich Details an und wiederholen Sie dann."
+        "unknown": "Der Lauf ist aus unbekanntem Grund fehlgeschlagen. Sehen Sie sich Details an und wiederholen Sie dann.",
+        "deployRunnerUnwiredLocal": "Dieser Computer hat keine Deploy-Runtime, um die Testumgebung zu erstellen. Legen Sie die Deploy-Runtime in Ihrer .env-Datei fest und wiederholen Sie dann.",
+        "singleJob": {
+          "evicted": "Der Container hat angehalten, bevor der Job abgeschlossen war. Eine Wiederholung startet einen neuen Container.",
+          "timeout": "Der Job war zu lange ohne Aktivität oder hat sein Zeitlimit überschritten. Eine Wiederholung startet ihn erneut.",
+          "agent": "Der Agent oder der Git-Push ist fehlgeschlagen. Die Ursache steht in Details. Wiederholen Sie dann."
+        }
       },
       "retrying": "Wird wiederholt…",
       "history": {
@@ -8456,11 +8463,11 @@
           },
           "banner": {
             "title": "Was schiefgegangen ist",
-            "body": "Die Karte tauscht ihren Fortschrittsbalken gegen dieses Banner. Es nennt die Ursache, die Details enthalten die Rohausgabe, und manche Ursachen bieten einen Knopf direkt zu der Einstellung, die sie behebt."
+            "body": "Die Karte ersetzt ihren Fortschrittsbalken durch dieses Banner. Es nennt, was fehlgeschlagen ist, und bietet eine Aktion. Öffnen Sie die Aufgabe, um die Ursache in einer Zeile zu lesen, mit der Rohausgabe unter Details."
           },
           "retry": {
-            "title": "Noch einmal ausführen",
-            "body": "Wiederholen führt die Arbeit erneut aus. Frühere Fehler bleiben unter „Frühere Fehler“ an der Aufgabe, du kannst Versuche also vergleichen, statt die Spur zu verlieren."
+            "title": "Der nächste Schritt",
+            "body": "Diese Schaltfläche ist der nächste Schritt. Meist ist es „Erneut versuchen“, das die Arbeit noch einmal ausführt. Wenn eine Einstellung den Fehler verursacht, öffnet sie diese Einstellung. Vorherige Fehler bleiben an der Aufgabe, damit Sie Versuche vergleichen können."
           },
           "finish": {
             "title": "Ein Fehler ist eine Information",
