@@ -1,28 +1,16 @@
 import type { ParsedConflict } from '~/composables/usePipelineErrorToast'
-import type { InfraSetupOwners } from '~/types/domain'
 import {
+  ENVIRONMENTS_FIX,
+  gateSetupFix,
+  type SetupConflictDeps,
+  type SetupFix,
+} from '~/composables/pipelineErrorToast/setupConflictGate'
+import {
+  BOARD_MEMBER_SETUP_OWNER,
+  MODEL_SETUP_OWNER,
   SETUP_REMEDY_KEYS,
-  setupRemedyFor,
-  type SetupActor,
-  type SetupRemedy,
+  canActOnSetup,
 } from '~/utils/setupAudience'
-
-type SetupRemedies = Pick<
-  ReturnType<typeof useSetupRemedies>,
-  'openInfraArea' | 'openModelSetup' | 'openServiceEnvironment'
->
-
-/** Who is asking and who owns each gap, read when a toast is raised (never at store setup). */
-export interface ConflictAudience {
-  actor: SetupActor
-  owners: InfraSetupOwners | null
-}
-
-/**
- * The owner of a fix any member can save, such as a block edit: no owner gate, so everyone on the
- * full surface gets the fix, and the designer surface gets the line that says to switch.
- */
-const NO_OWNER_GATE = Symbol('no owner gate')
 
 /** One bespoke conflict toast, before the audience decides whether it carries the fix. */
 interface SetupConflictToast {
@@ -30,55 +18,52 @@ interface SetupConflictToast {
   description: string
   icon: string
   actionKey: string
-  /**
-   * Who closes the gap, as `canActOnSetup` reads it (`effectiveOwner` covers an unknown value), or
-   * {@link NO_OWNER_GATE}.
-   */
-  owner: unknown
-  fix: () => void
+  fix: SetupFix
 }
 
 /**
  * The bespoke conflict toasts: the five 409 reasons whose copy interpolates runtime detail and
  * whose remedy is a one-click jump into the panel that fixes them. Split out of
- * {@link usePipelineErrorToast} for size; it closes over the SAME toast and i18n handles.
+ * {@link usePipelineErrorToast} for size; it closes over the SAME toast, i18n and copy handles.
  *
- * Each one is a setup gap, so it follows the setup cards' audience rule (`utils/setupAudience.ts`):
- * only a caller who can act gets the fix button, opened through `useSetupRemedies`. Everyone else
- * gets the same toast with one more sentence naming who can fix it, because a button that opens a
- * screen their save is refused on is worse than no button.
+ * Each one is a setup gap, so its fix goes through {@link gateSetupFix}: only a caller who can act
+ * gets the button. Everyone else gets the same toast with one more sentence naming who can fix it.
+ * Either way the toast is a failure through the funnel, so it is copyable with the `requestId`,
+ * which is what a member hands to the admin it names.
  */
-export function createBespokeConflictToasts(deps: {
-  toast: ReturnType<typeof useToast>
-  t: ReturnType<typeof useI18n>['t']
-  te: ReturnType<typeof useI18n>['te']
-  audience: () => ConflictAudience
-  remedies: () => SetupRemedies
-}): (conflict: ParsedConflict) => boolean {
+export function createBespokeConflictToasts(
+  deps: SetupConflictDeps & {
+    toast: ReturnType<typeof useToast>
+    t: ReturnType<typeof useI18n>['t']
+    te: ReturnType<typeof useI18n>['te']
+    copyAction: ReturnType<typeof useCopyToClipboard>['copyAction']
+    report: (conflict: ParsedConflict, title: string, description: string) => string
+  },
+): (conflict: ParsedConflict) => boolean {
   const { toast, t, te } = deps
 
-  function raise(spec: SetupConflictToast): void {
-    const { actor } = deps.audience()
-    const remedy: SetupRemedy | null =
-      spec.owner === NO_OWNER_GATE
-        ? actor.fullSurface
-          ? null
-          : 'full_surface'
-        : setupRemedyFor(spec.owner, actor)
+  function raise(conflict: ParsedConflict, spec: SetupConflictToast): void {
+    const fix = gateSetupFix(spec.fix, deps.audience(), deps)
+    const title = t(spec.titleKey)
+    const description = fix.remedy
+      ? `${spec.description} ${t(SETUP_REMEDY_KEYS[fix.remedy])}`
+      : spec.description
     toast.add({
-      title: t(spec.titleKey),
-      description: remedy
-        ? `${spec.description} ${t(SETUP_REMEDY_KEYS[remedy])}`
-        : spec.description,
+      title,
+      description,
       color: 'error',
       icon: spec.icon,
       // Stay until dismissed: an actionable toast whose remedy button vanishes on the ~5s
       // auto-dismiss takes the one-click fix with it, and the line naming who can fix it is the
       // one thing a caller without the button has to read.
       duration: 0,
-      actions: remedy
-        ? []
-        : [{ label: t(spec.actionKey), icon: 'i-lucide-settings', onClick: spec.fix }],
+      ui: { description: 'select-text' },
+      actions: [
+        ...(fix.remedy
+          ? []
+          : [{ label: t(spec.actionKey), icon: 'i-lucide-settings', onClick: fix.run }]),
+        deps.copyAction(deps.report(conflict, title, description)),
+      ],
     })
   }
 
@@ -87,23 +72,19 @@ export function createBespokeConflictToasts(deps: {
     return conflict.message ?? t('errors.conflict.fallbackMessage')
   }
 
-  const owners = () => deps.audience().owners
-
   // The headline case: a pipeline step's model has no usable provider. Name the offending
   // model(s) and offer the AI setup, the same remedy the "No AI model configured" banner gives.
   function presentProvidersUnconfigured(conflict: ParsedConflict): void {
     const models = Array.isArray(conflict.details.models) ? conflict.details.models : []
     const list = models.join(', ')
-    raise({
+    raise(conflict, {
       titleKey: 'errors.conflict.providersUnconfigured.title',
       description: list
         ? t('errors.conflict.providersUnconfigured.body', { models: list })
         : fallback(conflict),
       icon: 'i-lucide-cpu',
       actionKey: 'errors.conflict.providersUnconfigured.action',
-      // A model is a workspace setting, as the setup checklist's model row says.
-      owner: 'workspace_admin',
-      fix: () => deps.remedies().openModelSetup(),
+      fix: { owner: () => MODEL_SETUP_OWNER, open: (remedies) => remedies.openModelSetup() },
     })
   }
 
@@ -111,15 +92,17 @@ export function createBespokeConflictToasts(deps: {
   // account has none configured. Prefer the localized body (it carries no runtime interpolation);
   // the raw backend prose is only the fallback when the locale lacks the key.
   function presentBinaryStorageUnconfigured(conflict: ParsedConflict): void {
-    raise({
+    raise(conflict, {
       titleKey: 'errors.conflict.binaryStorageUnconfigured.title',
       description: te('errors.conflict.binaryStorageUnconfigured.body')
         ? t('errors.conflict.binaryStorageUnconfigured.body')
         : fallback(conflict),
       icon: 'i-lucide-image',
       actionKey: 'errors.conflict.binaryStorageUnconfigured.action',
-      owner: owners()?.binaryStorage,
-      fix: () => deps.remedies().openInfraArea('binaryStorage'),
+      fix: {
+        owner: (owners) => owners?.binaryStorage,
+        open: (remedies) => remedies.openInfraArea('binaryStorage'),
+      },
     })
   }
 
@@ -135,23 +118,27 @@ export function createBespokeConflictToasts(deps: {
     const missing = Array.isArray(conflict.details.missing)
       ? conflict.details.missing.join(', ')
       : ''
-    raise({
+    raise(conflict, {
       titleKey: 'errors.conflict.deployerServiceConfig.title',
       description: missing
         ? t('errors.conflict.deployerServiceConfig.body', { missing })
         : fallback(conflict),
       icon: 'i-lucide-server',
       actionKey: 'errors.conflict.deployerServiceConfig.action',
-      // The owner follows where the fix opens. The compose wizard's save registers a workspace
-      // handler (`integrations.manage`), so a board admin owns it. Any other type is fixed in the
-      // service inspector, a block edit any member can save. With no frame, the fix is the
-      // workspace's test-environment settings, owned like the rest of that area.
-      owner: frameId
-        ? provisionType === 'docker-compose'
-          ? 'workspace_admin'
-          : NO_OWNER_GATE
-        : owners()?.ephemeralEnvironments,
-      fix: () => deps.remedies().openServiceEnvironment(frameId, provisionType),
+      fix: {
+        // The missing fields are the service's own provisioning, a block edit any caller with
+        // `board.write` saves in the service inspector. With no frame there is no inspector to
+        // open, only the workspace's test-environment settings, which a board admin saves.
+        owner: () => (frameId ? BOARD_MEMBER_SETUP_OWNER : 'workspace_admin'),
+        // The compose wizard is the better screen for docker-compose, but its save registers a
+        // workspace handler (`integrations.manage`), so only a caller who holds that gets it.
+        open: (remedies, actor) =>
+          remedies.openServiceEnvironment(
+            frameId,
+            provisionType,
+            canActOnSetup('workspace_admin', actor),
+          ),
+      },
     })
   }
 
@@ -161,15 +148,14 @@ export function createBespokeConflictToasts(deps: {
   function presentProvisionTypeUnhandled(conflict: ParsedConflict): void {
     const type =
       typeof conflict.details.provisionType === 'string' ? conflict.details.provisionType : ''
-    raise({
+    raise(conflict, {
       titleKey: 'errors.conflict.provisionTypeUnhandled.title',
       description: type
         ? t('errors.conflict.provisionTypeUnhandled.body', { type })
         : fallback(conflict),
       icon: 'i-lucide-server-cog',
       actionKey: 'errors.conflict.provisionTypeUnhandled.action',
-      owner: owners()?.ephemeralEnvironments,
-      fix: () => deps.remedies().openInfraArea('ephemeralEnvironments'),
+      fix: ENVIRONMENTS_FIX,
     })
   }
 
@@ -177,15 +163,14 @@ export function createBespokeConflictToasts(deps: {
   // probe of the resolved deployment integration failed (unreachable endpoint, bad token).
   function presentDeployerConnectionFailed(conflict: ParsedConflict): void {
     const detail = typeof conflict.details.detail === 'string' ? conflict.details.detail : ''
-    raise({
+    raise(conflict, {
       titleKey: 'errors.conflict.deployerConnectionFailed.title',
       description: detail
         ? t('errors.conflict.deployerConnectionFailed.body', { detail })
         : fallback(conflict),
       icon: 'i-lucide-plug',
       actionKey: 'errors.conflict.deployerConnectionFailed.action',
-      owner: owners()?.ephemeralEnvironments,
-      fix: () => deps.remedies().openInfraArea('ephemeralEnvironments'),
+      fix: ENVIRONMENTS_FIX,
     })
   }
 

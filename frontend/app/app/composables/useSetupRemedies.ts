@@ -28,19 +28,35 @@ export function useSetupRemedies() {
   }
 
   /**
-   * A Deployer's service environment config is incomplete: that service's own config, the compose
-   * wizard for docker-compose and the service inspector otherwise. Without the frame, the
-   * workspace's test-environment settings.
+   * A Deployer's service environment config is incomplete: that service's own config. The compose
+   * wizard for docker-compose when the caller can save the workspace handler it registers
+   * (`canRegisterHandler`, which is `integrations.manage`), else the service inspector, a block
+   * edit. Without the frame, the workspace's test-environment settings.
    */
-  function openServiceEnvironment(frameId?: string, provisionType?: string) {
-    if (frameId && provisionType === 'docker-compose') ui.openEnvironmentSetup(frameId)
-    else if (frameId) ui.select(frameId)
+  function openServiceEnvironment(
+    frameId: string | undefined,
+    provisionType: string | undefined,
+    canRegisterHandler: boolean,
+  ) {
+    if (frameId && provisionType === 'docker-compose' && canRegisterHandler) {
+      ui.openEnvironmentSetup(frameId)
+    } else if (frameId) ui.select(frameId)
     else openInfraArea('ephemeralEnvironments')
   }
 
   /** No usable model: the AI onboarding dialog. */
   function openModelSetup() {
     ui.openAiProviderSetup()
+  }
+
+  /** A model a run needs is not allowed or cannot satisfy the preset: the model settings. */
+  function openModelConfig() {
+    ui.openModelConfig()
+  }
+
+  /** No source-control connection: the GitHub (or GitLab) connection screen. */
+  function openSourceControl() {
+    ui.openGitHub()
   }
 
   /** Usable models, but the default preset names one that is not: the preset-mismatch dialog. */
@@ -75,6 +91,8 @@ export function useSetupRemedies() {
     openInfraArea,
     openServiceEnvironment,
     openModelSetup,
+    openModelConfig,
+    openSourceControl,
     openPresetMismatch,
     patSetupUrl,
     patKind,

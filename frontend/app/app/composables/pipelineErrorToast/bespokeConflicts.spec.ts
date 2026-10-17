@@ -15,11 +15,12 @@ const admin: SetupActor = {
   fullSurface: true,
   canManageIntegrations: true,
   canExecuteRuns: true,
+  canWriteBoard: true,
   isAccountAdmin: false,
   accountsEnabled: true,
 }
 const member: SetupActor = { ...admin, canManageIntegrations: false }
-const viewer: SetupActor = { ...member, canExecuteRuns: false }
+const viewer: SetupActor = { ...member, canExecuteRuns: false, canWriteBoard: false }
 const designerAdmin: SetupActor = { ...admin, fullSurface: false }
 
 const owners: InfraSetupOwners = {
@@ -33,15 +34,26 @@ function fakeRemedies() {
   return {
     openInfraArea: vi.fn<(area: InfraSetupArea) => void>(),
     openModelSetup: vi.fn<() => void>(),
-    openServiceEnvironment: vi.fn<(frameId?: string, provisionType?: string) => void>(),
+    openModelConfig: vi.fn<() => void>(),
+    openSourceControl: vi.fn<() => void>(),
+    openServiceEnvironment:
+      vi.fn<(frameId: string | undefined, type: string | undefined, wizard: boolean) => void>(),
   }
 }
 let remedies: ReturnType<typeof fakeRemedies>
+const copied: string[] = []
+const COPY = 'common.copyDetails'
 
 beforeEach(() => {
   add = vi.fn()
   remedies = fakeRemedies()
+  copied.length = 0
 })
+
+/** The action labels, so a test reads "fix plus copy" or "copy alone". */
+function labels(toast: { actions: { label: string }[] }): string[] {
+  return toast.actions.map((action) => action.label)
+}
 
 function present(
   actor: SetupActor,
@@ -55,8 +67,14 @@ function present(
     te: (() => true) as ReturnType<typeof useI18n>['te'],
     audience: () => ({ actor, owners: setupOwners }),
     remedies: () => remedies,
+    copyAction: (text: string) => ({
+      label: COPY,
+      icon: 'i-lucide-clipboard',
+      onClick: () => void copied.push(text),
+    }),
+    report: (_conflict, title, description) => `${title}\n${description}\nreq-1`,
   })
-  const conflict: ParsedConflict = { reason, details: { reason, ...details } }
+  const conflict: ParsedConflict = { reason, requestId: 'req-1', details: { reason, ...details } }
   const handled = presentBespoke(conflict)
   return { handled, toast: add.mock.calls[0]?.[0] }
 }
@@ -66,36 +84,40 @@ describe('bespoke setup conflict toasts', () => {
     const { handled, toast } = present(admin, 'providers_unconfigured', { models: ['gpt-x'] })
     expect(handled).toBe(true)
     expect(toast.description).toBe('errors.conflict.providersUnconfigured.body')
-    expect(toast.actions).toHaveLength(1)
+    expect(labels(toast)).toHaveLength(2)
     toast.actions[0].onClick()
     expect(remedies.openModelSetup).toHaveBeenCalledOnce()
   })
 
   it('gives a member no fix and names the board admin', () => {
     const { toast } = present(member, 'providers_unconfigured', { models: ['gpt-x'] })
-    expect(toast.actions).toEqual([])
+    expect(labels(toast)).toEqual([COPY])
     expect(toast.description).toBe(
       'errors.conflict.providersUnconfigured.body layout.infraSetupNotice.owner.workspace_admin',
     )
     // Still sticky: the line naming who can fix it is the thing to read.
     expect(toast.duration).toBe(0)
+    // And copyable, with the request id, so the member can hand it to that admin.
+    toast.actions[0].onClick()
+    expect(copied.at(-1)).toContain('layout.infraSetupNotice.owner.workspace_admin')
+    expect(copied.at(-1)).toContain('req-1')
   })
 
   it('gives a viewer the same named owner, never the fix', () => {
     const { toast } = present(viewer, 'provision_type_unhandled', { provisionType: 'kubernetes' })
-    expect(toast.actions).toEqual([])
+    expect(labels(toast)).toEqual([COPY])
     expect(toast.description).toContain('layout.infraSetupNotice.owner.workspace_admin')
   })
 
   it('tells an admin on the designer surface to switch surface instead of finding an admin', () => {
     const { toast } = present(designerAdmin, 'deployer_connection_test_failed', { detail: 'x' })
-    expect(toast.actions).toEqual([])
+    expect(labels(toast)).toEqual([COPY])
     expect(toast.description).toContain('layout.infraSetupNotice.fullSurface')
   })
 
   it('follows the reported owner: account-owned storage is not the board admin to fix', () => {
     const asBoardAdmin = present(admin, 'binary_storage_unconfigured').toast
-    expect(asBoardAdmin.actions).toEqual([])
+    expect(labels(asBoardAdmin)).toEqual([COPY])
     expect(asBoardAdmin.description).toContain('layout.infraSetupNotice.owner.account_admin')
 
     add.mockClear()
@@ -103,7 +125,7 @@ describe('bespoke setup conflict toasts', () => {
       { ...member, isAccountAdmin: true },
       'binary_storage_unconfigured',
     ).toast
-    expect(asAccountAdmin.actions).toHaveLength(1)
+    expect(labels(asAccountAdmin)).toHaveLength(2)
     asAccountAdmin.actions[0].onClick()
     expect(remedies.openInfraArea).toHaveBeenCalledWith('binaryStorage')
   })
@@ -118,7 +140,7 @@ describe('bespoke setup conflict toasts', () => {
         ephemeralEnvironments: 'operator',
       },
     )
-    expect(toast.actions).toEqual([])
+    expect(labels(toast)).toEqual([COPY])
     expect(toast.description).toContain('layout.infraSetupNotice.owner.operator')
   })
 
@@ -132,55 +154,76 @@ describe('bespoke setup conflict toasts', () => {
     expect(remedies.openInfraArea).toHaveBeenCalledWith('ephemeralEnvironments')
   })
 
-  it('opens the service environment config through the remedies for a board admin', () => {
+  it('opens the compose wizard for a board admin', () => {
     const { toast } = present(admin, 'deployer_service_provisioning_incomplete', {
       frameId: 'frame-1',
       provisionType: 'docker-compose',
-      missing: ['recipe'],
+      missing: ['composePath'],
     })
     toast.actions[0].onClick()
-    expect(remedies.openServiceEnvironment).toHaveBeenCalledWith('frame-1', 'docker-compose')
+    expect(remedies.openServiceEnvironment).toHaveBeenCalledWith('frame-1', 'docker-compose', true)
   })
 
-  it('gives a member the fix for a non-compose service, which the inspector saves', () => {
+  it('gives a member the inspector fix for a docker-compose service, a block edit', () => {
+    const { toast } = present(member, 'deployer_service_provisioning_incomplete', {
+      frameId: 'frame-1',
+      provisionType: 'docker-compose',
+      missing: ['composePath'],
+    })
+    expect(toast.description).toBe('errors.conflict.deployerServiceConfig.body')
+    expect(labels(toast)).toHaveLength(2)
+    toast.actions[0].onClick()
+    expect(remedies.openServiceEnvironment).toHaveBeenCalledWith('frame-1', 'docker-compose', false)
+  })
+
+  it('gives a member the inspector fix for a non-compose service', () => {
     const { toast } = present(member, 'deployer_service_provisioning_incomplete', {
       frameId: 'frame-1',
       provisionType: 'kubernetes',
       missing: ['namespace'],
     })
-    expect(toast.description).toBe('errors.conflict.deployerServiceConfig.body')
-    expect(toast.actions).toHaveLength(1)
     toast.actions[0].onClick()
-    expect(remedies.openServiceEnvironment).toHaveBeenCalledWith('frame-1', 'kubernetes')
+    expect(remedies.openServiceEnvironment).toHaveBeenCalledWith('frame-1', 'kubernetes', false)
   })
 
-  it('tells the designer surface to switch for a non-compose service', () => {
+  it('names the board admin to a viewer, who cannot save a block edit', () => {
+    const { toast } = present(viewer, 'deployer_service_provisioning_incomplete', {
+      frameId: 'frame-1',
+      provisionType: 'kubernetes',
+    })
+    expect(labels(toast)).toEqual([COPY])
+    expect(toast.description).toContain('layout.infraSetupNotice.owner.workspace_admin')
+  })
+
+  it('tells the designer surface to switch for a service config gap', () => {
     const { toast } = present(designerAdmin, 'deployer_service_provisioning_incomplete', {
       frameId: 'frame-1',
       provisionType: 'kubernetes',
     })
-    expect(toast.actions).toEqual([])
+    expect(labels(toast)).toEqual([COPY])
     expect(toast.description).toContain('layout.infraSetupNotice.fullSurface')
   })
 
-  it('keeps the docker-compose fix from a member: the wizard registers a workspace handler', () => {
-    const { toast } = present(member, 'deployer_service_provisioning_incomplete', {
-      frameId: 'frame-1',
-      provisionType: 'docker-compose',
-    })
-    expect(toast.actions).toEqual([])
-    expect(toast.description).toContain('layout.infraSetupNotice.owner.workspace_admin')
-  })
+  it('keeps a service config gap with no frame on the board admin, whatever owns environments', () => {
+    const operatorEnvironments = { ...owners, ephemeralEnvironments: 'operator' as const }
+    const asMember = present(
+      member,
+      'deployer_service_provisioning_incomplete',
+      { provisionType: 'kubernetes' },
+      operatorEnvironments,
+    ).toast
+    expect(labels(asMember)).toEqual([COPY])
+    expect(asMember.description).toContain('layout.infraSetupNotice.owner.workspace_admin')
 
-  it('names the operator for a service config with no frame and operator-owned environments', () => {
-    const { toast } = present(
+    add.mockClear()
+    const asAdmin = present(
       admin,
       'deployer_service_provisioning_incomplete',
       { provisionType: 'kubernetes' },
-      { ...owners, ephemeralEnvironments: 'operator' },
-    )
-    expect(toast.actions).toEqual([])
-    expect(toast.description).toContain('layout.infraSetupNotice.owner.operator')
+      operatorEnvironments,
+    ).toast
+    asAdmin.actions[0].onClick()
+    expect(remedies.openServiceEnvironment).toHaveBeenCalledWith(undefined, 'kubernetes', true)
   })
 
   it('leaves a reason that is not a setup gap to the generic map', () => {

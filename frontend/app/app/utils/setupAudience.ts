@@ -14,6 +14,8 @@ export interface SetupActor {
   canManageIntegrations: boolean
   /** `runs.execute` on the active board: whether a gap that stops runs stops THEIR work. */
   canExecuteRuns: boolean
+  /** `board.write` on the active board: whether a fix that is a block edit saves for them. */
+  canWriteBoard: boolean
   /** An admin of the board's account. */
   isAccountAdmin: boolean
   /** Whether this deployment has accounts at all (auth on). */
@@ -29,12 +31,31 @@ export const BLOCKING_INFRA_AREAS = ['agentExecutor'] as const satisfies readonl
 export type BlockingInfraArea = (typeof BLOCKING_INFRA_AREAS)[number]
 
 /**
+ * The owner of a gap whose fix is a block edit, such as a service's own provisioning fields: any
+ * caller with `board.write` saves it. The server never reports it; a prompt names it for a gap
+ * that is not an infrastructure area.
+ */
+export const BOARD_MEMBER_SETUP_OWNER = 'board_member'
+
+/** Who closes a gap: an owner the server reports, or {@link BOARD_MEMBER_SETUP_OWNER}. */
+export type SetupOwner = InfraSetupOwner | typeof BOARD_MEMBER_SETUP_OWNER
+
+/**
+ * The owner of the model gaps. The model row of the setup checklist and the model conflict toasts
+ * both read it, so a change to who saves a model lands in one place.
+ */
+export const MODEL_SETUP_OWNER: SetupOwner = 'workspace_admin'
+
+/** The owner of a missing or broken source-control connection (not a personal access token). */
+export const SOURCE_CONTROL_SETUP_OWNER: SetupOwner = 'workspace_admin'
+
+/**
  * The owner to act on: the reported one when this build knows it, else the workspace admin, which
  * is who the cards assumed before the owner was reported. An older backend sends none; a newer one
  * may send an owner this bundle has never seen, and neither may break the board's render.
  */
-export function effectiveOwner(owner: unknown): InfraSetupOwner {
-  return isInfraSetupOwner(owner) ? owner : 'workspace_admin'
+export function effectiveOwner(owner: unknown): SetupOwner {
+  return isInfraSetupOwner(owner) || owner === BOARD_MEMBER_SETUP_OWNER ? owner : 'workspace_admin'
 }
 
 /** Whether the caller can close a gap owned by `owner` (any value; see {@link effectiveOwner}). */
@@ -50,6 +71,8 @@ export function canActOnSetup(owner: unknown, actor: SetupActor): boolean {
       return actor.accountsEnabled ? actor.isAccountAdmin : actor.canManageIntegrations
     case 'operator':
       return false
+    case BOARD_MEMBER_SETUP_OWNER:
+      return actor.canWriteBoard
     default: {
       // Compile-time exhaustiveness only: `effectiveOwner` already narrowed the runtime value.
       const unreachable: never = known
@@ -81,9 +104,10 @@ export const SETUP_REMEDY_KEYS: Record<SetupRemedy, string> = {
  */
 export function setupRemedyFor(owner: unknown, actor: SetupActor): SetupRemedy | null {
   if (canActOnSetup(owner, actor)) return null
-  return canActOnSetup(owner, { ...actor, fullSurface: true })
-    ? 'full_surface'
-    : effectiveOwner(owner)
+  if (canActOnSetup(owner, { ...actor, fullSurface: true })) return 'full_surface'
+  const known = effectiveOwner(owner)
+  // A caller who cannot write the board (a viewer) asks a board admin, who always can.
+  return known === BOARD_MEMBER_SETUP_OWNER ? 'workspace_admin' : known
 }
 
 /** The line a caller who cannot act sees for a blocking gap. */

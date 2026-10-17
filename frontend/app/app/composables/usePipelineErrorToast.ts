@@ -25,6 +25,16 @@
  */
 
 import { createBespokeConflictToasts } from '~/composables/pipelineErrorToast/bespokeConflicts'
+import {
+  ENVIRONMENTS_FIX,
+  MODEL_CONFIG_FIX,
+  RUNNER_POOL_FIX,
+  SOURCE_CONTROL_FIX,
+  gateSetupFix,
+  type SetupConflictDeps,
+  type SetupFix,
+  type SetupRemedies,
+} from '~/composables/pipelineErrorToast/setupConflictGate'
 // Imported by path rather than left to Nuxt's auto-import: this module is also loaded directly by
 // unit tests (and from store setup), where the auto-import globals are not installed.
 import { useCopyToClipboard } from '~/composables/useCopyToClipboard'
@@ -34,6 +44,7 @@ import type {
   ConflictReason,
   UnavailableReason,
 } from '@cat-factory/contracts'
+import { SETUP_REMEDY_KEYS } from '~/utils/setupAudience'
 import { apiErrorEnvelope, apiErrorReason, apiErrorStatus } from './api/errors'
 
 /** The parsed shape of a backend conflict (`{ error: { code: 'conflict', details } }`). */
@@ -43,13 +54,16 @@ interface ConflictDetails {
   [key: string]: unknown
 }
 
-/** An optional one-click "jump to the panel that fixes it" affordance on a conflict toast. */
+/**
+ * An optional one-click "jump to the panel that fixes it" affordance on a conflict toast. Every
+ * one is a setup gap, so it carries the gap's owner and goes through `gateSetupFix`, like the
+ * bespoke conflicts: only a caller who can act gets the button.
+ */
 interface ConflictAction {
   /** i18n message key for the button label (a static literal so tier-1 typed keys see it). */
   labelKey: string
   icon: string
-  /** Where the button navigates — a `ui` store deep-link; run with the store passed in. */
-  run: (ui: ReturnType<typeof useUiStore>) => void
+  fix: SetupFix
 }
 
 /** Per-reason toast copy: a translated title + description, and optionally a jump action. */
@@ -205,7 +219,7 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     action: {
       labelKey: 'errors.conflict.action.configureRunnerPool',
       icon: 'i-lucide-server',
-      run: (ui) => ui.openInfrastructure('runner-pool'),
+      fix: RUNNER_POOL_FIX,
     },
   },
   run_not_retryable: {
@@ -230,7 +244,7 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     action: {
       labelKey: 'errors.conflict.action.connectGitHub',
       icon: 'i-lucide-github',
-      run: (ui) => ui.openGitHub(),
+      fix: SOURCE_CONTROL_FIX,
     },
   },
   bootstrap_not_retryable: {
@@ -247,7 +261,7 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     action: {
       labelKey: 'errors.conflict.action.chooseModel',
       icon: 'i-lucide-cpu',
-      run: (ui) => ui.openModelConfig(),
+      fix: MODEL_CONFIG_FIX,
     },
   },
   visual_pipeline_no_frontend: {
@@ -260,7 +274,7 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     action: {
       labelKey: 'errors.conflict.action.chooseModel',
       icon: 'i-lucide-cpu',
-      run: (ui) => ui.openModelConfig(),
+      fix: MODEL_CONFIG_FIX,
     },
   },
   model_policy_unsupported: {
@@ -285,7 +299,7 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     action: {
       labelKey: 'errors.conflict.action.configureInfrastructure',
       icon: 'i-lucide-settings',
-      run: (ui) => ui.openProviderConnection('environment'),
+      fix: ENVIRONMENTS_FIX,
     },
   },
   env_test_no_vcs: {
@@ -294,7 +308,7 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     action: {
       labelKey: 'errors.conflict.action.connectGitHub',
       icon: 'i-lucide-github',
-      run: (ui) => ui.openGitHub(),
+      fix: SOURCE_CONTROL_FIX,
     },
   },
   env_test_connection_failed: {
@@ -303,7 +317,7 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     action: {
       labelKey: 'errors.conflict.action.configureInfrastructure',
       icon: 'i-lucide-settings',
-      run: (ui) => ui.openProviderConnection('environment'),
+      fix: ENVIRONMENTS_FIX,
     },
   },
   // An agent dry run on a deployment that cannot drive one. No ACTION: the gap is a container
@@ -404,13 +418,14 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
  */
 export function parseConflict(
   error: unknown,
-): { reason?: string; message?: string; details: ConflictDetails } | null {
+): { reason?: string; message?: string; requestId?: string; details: ConflictDetails } | null {
   const body = apiErrorEnvelope(error)
   if (body?.code !== 'conflict') return null
   const details = (body.details as ConflictDetails | undefined) ?? {}
   return {
     reason: typeof details.reason === 'string' ? details.reason : undefined,
     message: typeof body.message === 'string' ? body.message : undefined,
+    requestId: typeof body.requestId === 'string' ? body.requestId : undefined,
     details,
   }
 }
@@ -552,7 +567,6 @@ export function describeGenericFailure(error: unknown): GenericFailure {
 
 export function usePipelineErrorToast() {
   const toast = useToast()
-  const ui = useUiStore()
   // Resolved through the Nuxt app's global i18n instance rather than `useI18n()`, which
   // requires an active component instance — the same pattern (and the same reason) as the
   // board / recurring-pipelines stores.
@@ -575,19 +589,40 @@ export function usePipelineErrorToast() {
   // copy affordance in the product instead of silently failing where the API is unavailable.
   const { copyAction } = useCopyToClipboard()
 
-  // The five bespoke conflict reasons (a runtime-interpolated body + a "configure X" jump each)
-  // live in a sibling factory over the same toast/i18n handles, so this composable stays within
-  // the per-function line budget. Who is asking, and where a fix opens, are read when a toast is
-  // raised rather than here: this runs in store setup, before the stores they read may exist.
-  const presentBespokeConflict = createBespokeConflictToasts({
-    toast,
-    t,
-    te,
+  // Who is asking, and where a fix opens, are read when a toast is raised rather than here: this
+  // runs in store setup, before the stores they read may exist. The remedies are built once, on
+  // the first click that needs them.
+  let setupRemedies: SetupRemedies | undefined
+  const setup: SetupConflictDeps = {
     audience: () => ({
       actor: useSetupActor().actor.value,
       owners: useWorkspaceStore().infraSetupOwners,
     }),
-    remedies: () => useSetupRemedies(),
+    remedies: () => (setupRemedies ??= useSetupRemedies()),
+  }
+
+  /** What "Copy details" puts on the clipboard for a conflict: the toast, the prose, the id. */
+  function conflictReport(conflict: ParsedConflict, title: string, description: string): string {
+    return [
+      title,
+      description,
+      conflict.message && !description.includes(conflict.message) ? conflict.message : '',
+      conflict.requestId ? t('errors.generic.requestId', { id: conflict.requestId }) : '',
+    ]
+      .filter((part) => part.length > 0)
+      .join('\n')
+  }
+
+  // The five bespoke conflict reasons (a runtime-interpolated body + a "configure X" jump each)
+  // live in a sibling factory over the same toast/i18n handles, so this composable stays within
+  // the per-function line budget.
+  const presentBespokeConflict = createBespokeConflictToasts({
+    ...setup,
+    toast,
+    t,
+    te,
+    copyAction,
+    report: conflictReport,
   })
 
   /**
@@ -613,13 +648,18 @@ export function usePipelineErrorToast() {
       : undefined
     const title =
       info && te(info.titleKey) ? t(info.titleKey) : t(fallbackTitleKey, titleParams ?? {})
-    const description =
+    const translated =
       info && te(info.descriptionKey)
         ? t(info.descriptionKey)
         : t('errors.conflict.fallbackMessage')
+    const fix = info?.action ? gateSetupFix(info.action.fix, setup.audience(), setup) : undefined
+    // A caller who cannot act gets no button and one more sentence naming who can.
+    const description = fix?.remedy
+      ? `${translated} ${t(SETUP_REMEDY_KEYS[fix.remedy])}`
+      : translated
     // The backend's prose, kept only when it adds something the translated line doesn't already say.
-    const detail = conflict.message && conflict.message !== description ? conflict.message : ''
-    const report = [title, description, detail].filter((part) => part.length > 0).join('\n')
+    const detail = conflict.message && conflict.message !== translated ? conflict.message : ''
+    const report = conflictReport(conflict, title, description)
     const added = toast.add({
       title,
       description,
@@ -630,14 +670,8 @@ export function usePipelineErrorToast() {
       actions: [
         // A reason with a jump action leads with its one-click remedy; the detail reveal and the
         // copy follow it, so the primary affordance stays first in the row.
-        ...(info?.action
-          ? [
-              {
-                label: t(info.action.labelKey),
-                icon: info.action.icon,
-                onClick: () => info.action?.run(ui),
-              },
-            ]
+        ...(info?.action && fix && !fix.remedy
+          ? [{ label: t(info.action.labelKey), icon: info.action.icon, onClick: fix.run }]
           : []),
         ...(detail
           ? [

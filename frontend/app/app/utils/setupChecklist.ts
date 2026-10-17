@@ -1,7 +1,13 @@
 import type { InfraSetup, InfraSetupOwners, InfraSetupStatus } from '@cat-factory/contracts'
 import { isInfraSetupHealthStatus } from '@cat-factory/contracts'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
-import { setupRemedyFor, type SetupActor, type SetupRemedy } from '~/utils/setupAudience'
+import {
+  MODEL_SETUP_OWNER,
+  SOURCE_CONTROL_SETUP_OWNER,
+  setupRemedyFor,
+  type SetupActor,
+  type SetupRemedy,
+} from '~/utils/setupAudience'
 
 // ---------------------------------------------------------------------------
 // The setup checklist: what this workspace needs before a task can run and merge, as ONE list.
@@ -172,11 +178,11 @@ function rowOwner(id: SetupRowId, input: SetupProbeInput): unknown {
     case 'binaryStorage':
       return input.infraOwners?.binaryStorage
     case 'model':
-      return 'workspace_admin'
+      return MODEL_SETUP_OWNER
     case 'sourceControl':
       return input.sourceControl.patMissing || input.sourceControl.patProblem
         ? null
-        : 'workspace_admin'
+        : SOURCE_CONTROL_SETUP_OWNER
     default: {
       const unreachable: never = id
       return unreachable

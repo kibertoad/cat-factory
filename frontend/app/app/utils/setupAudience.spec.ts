@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { InfraSetup, InfraSetupOwners } from '~/types/domain'
 import {
+  BOARD_MEMBER_SETUP_OWNER,
   blockingSetupNotice,
   canActOnSetup,
   setupRemedyFor,
@@ -11,11 +12,12 @@ const admin: SetupActor = {
   fullSurface: true,
   canManageIntegrations: true,
   canExecuteRuns: true,
+  canWriteBoard: true,
   isAccountAdmin: false,
   accountsEnabled: true,
 }
 const member: SetupActor = { ...admin, canManageIntegrations: false }
-const viewer: SetupActor = { ...member, canExecuteRuns: false }
+const viewer: SetupActor = { ...member, canExecuteRuns: false, canWriteBoard: false }
 const designerAdmin: SetupActor = { ...admin, fullSurface: false }
 const designerMember: SetupActor = { ...member, fullSurface: false }
 
@@ -84,6 +86,12 @@ describe('setupRemedyFor', () => {
   it('tells an admin on the designer surface to switch surface, not to find an admin', () => {
     expect(setupRemedyFor('workspace_admin', designerAdmin)).toBe('full_surface')
     expect(setupRemedyFor('workspace_admin', designerMember)).toBe('workspace_admin')
+  })
+
+  it('gives a board-member gap to anyone who can write the board, and a viewer the admin', () => {
+    expect(setupRemedyFor(BOARD_MEMBER_SETUP_OWNER, member)).toBeNull()
+    expect(setupRemedyFor(BOARD_MEMBER_SETUP_OWNER, designerMember)).toBe('full_surface')
+    expect(setupRemedyFor(BOARD_MEMBER_SETUP_OWNER, viewer)).toBe('workspace_admin')
   })
 
   it('falls back to the workspace admin for an owner this build does not know', () => {
