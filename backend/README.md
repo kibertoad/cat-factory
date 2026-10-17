@@ -852,7 +852,7 @@ Register a GitHub App, then:
 # wrangler.toml [vars]
 GITHUB_APP_ID = "…"
 GITHUB_APP_SLUG = "your-app-slug"
-GITHUB_SETUP_REDIRECT_URL = "https://<your-spa>"   # where to land the browser after install
+GITHUB_SETUP_REDIRECT_URL = "https://<your-spa>" # where to land the browser after install
 ```
 
 ```sh
@@ -926,5 +926,5 @@ The **prompt-fragment library** is the one opt-in feature that needs **no** key
 
 ```toml
 PROMPT_LIBRARY_ENABLED = "true"
-PROMPT_LIBRARY_SELECTOR = "deterministic"   # or "llm" to pick relevant fragments per run
+PROMPT_LIBRARY_SELECTOR = "deterministic" # or "llm" to pick relevant fragments per run
 ```
