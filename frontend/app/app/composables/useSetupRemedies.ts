@@ -4,9 +4,9 @@ import type { GitHubPatKind, InfraSetupArea } from '~/types/domain'
 import { githubPatRemintUrl } from '~/utils/vcs'
 
 /**
- * Where each setup gap is fixed: the ONE map the setup banners and the setup checklist both open
- * through, so "the row opens what its banner opens" holds because there is one place that says
- * it, never two copies kept in step by hand.
+ * Where each setup gap is fixed: the ONE map the setup banners, the setup checklist and the
+ * run-start conflict toasts all open through, so "the row opens what its banner opens" holds
+ * because there is one place that says it, never two copies kept in step by hand.
  *
  * Keyed by `InfraSetupArea` for the infrastructure, the vocabulary the server reports in, plus the
  * model and source-control remedies, which have no area of their own.
@@ -25,6 +25,17 @@ export function useSetupRemedies() {
   /** Open the screen that configures an infrastructure area. */
   function openInfraArea(area: InfraSetupArea) {
     INFRA[area]()
+  }
+
+  /**
+   * A Deployer's service environment config is incomplete: that service's own config, the compose
+   * wizard for docker-compose and the service inspector otherwise. Without the frame, the
+   * workspace's test-environment settings.
+   */
+  function openServiceEnvironment(frameId?: string, provisionType?: string) {
+    if (frameId && provisionType === 'docker-compose') ui.openEnvironmentSetup(frameId)
+    else if (frameId) ui.select(frameId)
+    else openInfraArea('ephemeralEnvironments')
   }
 
   /** No usable model: the AI onboarding dialog. */
@@ -62,6 +73,7 @@ export function useSetupRemedies() {
 
   return {
     openInfraArea,
+    openServiceEnvironment,
     openModelSetup,
     openPresetMismatch,
     patSetupUrl,

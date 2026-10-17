@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { InfraSetup, InfraSetupOwners } from '~/types/domain'
-import { blockingSetupNotice, canActOnSetup, type SetupActor } from './setupAudience'
+import {
+  blockingSetupNotice,
+  canActOnSetup,
+  setupRemedyFor,
+  type SetupActor,
+} from './setupAudience'
 
 const admin: SetupActor = {
   fullSurface: true,
@@ -62,6 +67,28 @@ describe('canActOnSetup', () => {
       expect(canActOnSetup(owner, admin)).toBe(true)
       expect(canActOnSetup(owner, member)).toBe(false)
     }
+  })
+})
+
+describe('setupRemedyFor', () => {
+  it('returns null for a caller who can act, so they get the fix', () => {
+    expect(setupRemedyFor('workspace_admin', admin)).toBeNull()
+  })
+
+  it('names the owner for a caller who cannot act', () => {
+    expect(setupRemedyFor('workspace_admin', member)).toBe('workspace_admin')
+    expect(setupRemedyFor('account_admin', admin)).toBe('account_admin')
+    expect(setupRemedyFor('operator', admin)).toBe('operator')
+  })
+
+  it('tells an admin on the designer surface to switch surface, not to find an admin', () => {
+    expect(setupRemedyFor('workspace_admin', designerAdmin)).toBe('full_surface')
+    expect(setupRemedyFor('workspace_admin', designerMember)).toBe('workspace_admin')
+  })
+
+  it('falls back to the workspace admin for an owner this build does not know', () => {
+    expect(setupRemedyFor('board_owner', member)).toBe('workspace_admin')
+    expect(setupRemedyFor(undefined, admin)).toBeNull()
   })
 })
 

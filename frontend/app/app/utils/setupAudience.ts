@@ -66,6 +66,26 @@ export function canActOnSetup(owner: unknown, actor: SetupActor): boolean {
  */
 export type SetupRemedy = InfraSetupOwner | 'full_surface'
 
+/** The line that tells a caller who cannot act how a gap gets fixed, by {@link SetupRemedy}. */
+export const SETUP_REMEDY_KEYS: Record<SetupRemedy, string> = {
+  workspace_admin: 'layout.infraSetupNotice.owner.workspace_admin',
+  account_admin: 'layout.infraSetupNotice.owner.account_admin',
+  operator: 'layout.infraSetupNotice.owner.operator',
+  full_surface: 'layout.infraSetupNotice.fullSurface',
+}
+
+/**
+ * How the caller gets a gap owned by `owner` fixed, or null when they can fix it from where they
+ * are. Every setup prompt (a card, the checklist, a run-start conflict toast) asks this one
+ * question, so they cannot disagree about who gets the fix button.
+ */
+export function setupRemedyFor(owner: unknown, actor: SetupActor): SetupRemedy | null {
+  if (canActOnSetup(owner, actor)) return null
+  return canActOnSetup(owner, { ...actor, fullSurface: true })
+    ? 'full_surface'
+    : effectiveOwner(owner)
+}
+
 /** The line a caller who cannot act sees for a blocking gap. */
 export interface SetupNotice {
   area: BlockingInfraArea
@@ -93,9 +113,8 @@ export function blockingSetupNotice(
         ? 'setup'
         : null
     if (!kind) continue
-    const owner = effectiveOwner(owners?.[area])
-    if (canActOnSetup(owner, actor)) continue
-    const remedy = canActOnSetup(owner, { ...actor, fullSurface: true }) ? 'full_surface' : owner
+    const remedy = setupRemedyFor(owners?.[area], actor)
+    if (!remedy) continue
     return { area, kind, remedy }
   }
   return null

@@ -1,12 +1,7 @@
 import type { InfraSetup, InfraSetupOwners, InfraSetupStatus } from '@cat-factory/contracts'
 import { isInfraSetupHealthStatus } from '@cat-factory/contracts'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
-import {
-  canActOnSetup,
-  effectiveOwner,
-  type SetupActor,
-  type SetupRemedy,
-} from '~/utils/setupAudience'
+import { setupRemedyFor, type SetupActor, type SetupRemedy } from '~/utils/setupAudience'
 
 // ---------------------------------------------------------------------------
 // The setup checklist: what this workspace needs before a task can run and merge, as ONE list.
@@ -190,11 +185,7 @@ function rowOwner(id: SetupRowId, input: SetupProbeInput): unknown {
 }
 
 function remedyFor(owner: unknown, actor: SetupActor): SetupRemedy | null {
-  if (owner === null) return null
-  if (canActOnSetup(owner, actor)) return null
-  return canActOnSetup(owner, { ...actor, fullSurface: true })
-    ? 'full_surface'
-    : effectiveOwner(owner)
+  return owner === null ? null : setupRemedyFor(owner, actor)
 }
 
 export function deriveSetupChecklist(input: SetupProbeInput): SetupChecklist {
