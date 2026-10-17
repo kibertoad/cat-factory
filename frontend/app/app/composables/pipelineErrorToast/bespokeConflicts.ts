@@ -1,6 +1,11 @@
 import type { ParsedConflict } from '~/composables/usePipelineErrorToast'
 import type { InfraSetupOwners } from '~/types/domain'
-import { SETUP_REMEDY_KEYS, setupRemedyFor, type SetupActor } from '~/utils/setupAudience'
+import {
+  SETUP_REMEDY_KEYS,
+  setupRemedyFor,
+  type SetupActor,
+  type SetupRemedy,
+} from '~/utils/setupAudience'
 
 type SetupRemedies = Pick<
   ReturnType<typeof useSetupRemedies>,
@@ -13,13 +18,22 @@ export interface ConflictAudience {
   owners: InfraSetupOwners | null
 }
 
+/**
+ * The owner of a fix any member can save, such as a block edit: no owner gate, so everyone on the
+ * full surface gets the fix, and the designer surface gets the line that says to switch.
+ */
+const NO_OWNER_GATE = Symbol('no owner gate')
+
 /** One bespoke conflict toast, before the audience decides whether it carries the fix. */
 interface SetupConflictToast {
   titleKey: string
   description: string
   icon: string
   actionKey: string
-  /** Who closes the gap, as `canActOnSetup` reads it (`effectiveOwner` covers an unknown value). */
+  /**
+   * Who closes the gap, as `canActOnSetup` reads it (`effectiveOwner` covers an unknown value), or
+   * {@link NO_OWNER_GATE}.
+   */
   owner: unknown
   fix: () => void
 }
@@ -44,7 +58,13 @@ export function createBespokeConflictToasts(deps: {
   const { toast, t, te } = deps
 
   function raise(spec: SetupConflictToast): void {
-    const remedy = setupRemedyFor(spec.owner, deps.audience().actor)
+    const { actor } = deps.audience()
+    const remedy: SetupRemedy | null =
+      spec.owner === NO_OWNER_GATE
+        ? actor.fullSurface
+          ? null
+          : 'full_surface'
+        : setupRemedyFor(spec.owner, actor)
     toast.add({
       title: t(spec.titleKey),
       description: remedy
@@ -122,9 +142,15 @@ export function createBespokeConflictToasts(deps: {
         : fallback(conflict),
       icon: 'i-lucide-server',
       actionKey: 'errors.conflict.deployerServiceConfig.action',
-      // The compose wizard's save registers a workspace handler (`integrations.manage`), so the
-      // board admin owns this, like the rest of the test-environment setup.
-      owner: 'workspace_admin',
+      // The owner follows where the fix opens. The compose wizard's save registers a workspace
+      // handler (`integrations.manage`), so a board admin owns it. Any other type is fixed in the
+      // service inspector, a block edit any member can save. With no frame, the fix is the
+      // workspace's test-environment settings, owned like the rest of that area.
+      owner: frameId
+        ? provisionType === 'docker-compose'
+          ? 'workspace_admin'
+          : NO_OWNER_GATE
+        : owners()?.ephemeralEnvironments,
       fix: () => deps.remedies().openServiceEnvironment(frameId, provisionType),
     })
   }

@@ -142,6 +142,47 @@ describe('bespoke setup conflict toasts', () => {
     expect(remedies.openServiceEnvironment).toHaveBeenCalledWith('frame-1', 'docker-compose')
   })
 
+  it('gives a member the fix for a non-compose service, which the inspector saves', () => {
+    const { toast } = present(member, 'deployer_service_provisioning_incomplete', {
+      frameId: 'frame-1',
+      provisionType: 'kubernetes',
+      missing: ['namespace'],
+    })
+    expect(toast.description).toBe('errors.conflict.deployerServiceConfig.body')
+    expect(toast.actions).toHaveLength(1)
+    toast.actions[0].onClick()
+    expect(remedies.openServiceEnvironment).toHaveBeenCalledWith('frame-1', 'kubernetes')
+  })
+
+  it('tells the designer surface to switch for a non-compose service', () => {
+    const { toast } = present(designerAdmin, 'deployer_service_provisioning_incomplete', {
+      frameId: 'frame-1',
+      provisionType: 'kubernetes',
+    })
+    expect(toast.actions).toEqual([])
+    expect(toast.description).toContain('layout.infraSetupNotice.fullSurface')
+  })
+
+  it('keeps the docker-compose fix from a member: the wizard registers a workspace handler', () => {
+    const { toast } = present(member, 'deployer_service_provisioning_incomplete', {
+      frameId: 'frame-1',
+      provisionType: 'docker-compose',
+    })
+    expect(toast.actions).toEqual([])
+    expect(toast.description).toContain('layout.infraSetupNotice.owner.workspace_admin')
+  })
+
+  it('names the operator for a service config with no frame and operator-owned environments', () => {
+    const { toast } = present(
+      admin,
+      'deployer_service_provisioning_incomplete',
+      { provisionType: 'kubernetes' },
+      { ...owners, ephemeralEnvironments: 'operator' },
+    )
+    expect(toast.actions).toEqual([])
+    expect(toast.description).toContain('layout.infraSetupNotice.owner.operator')
+  })
+
   it('leaves a reason that is not a setup gap to the generic map', () => {
     expect(present(admin, 'dependencies_unmet').handled).toBe(false)
     expect(add).not.toHaveBeenCalled()
