@@ -23,7 +23,7 @@ overlays. It does not move surfaces to routed `UDashboardGroup` pages.
 
 Inventory on `origin/main`, 2026-10-12, under `frontend/app/app/components/`:
 
-| Shell                          | Count      | Behaviour today                                                                                                                                    |
+| Shell                          | Count      | Behaviour on 2026-10-12                                                                                                                            |
 | ------------------------------ | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Centered modal (`UModal`)      | 56 files   | Reka dialog: own focus trap and layer stack. 1 fullscreen (`guidedReview/GuidedReviewModal.vue`)                                                   |
 | `panels/ResultWindowShell.vue` | 23 windows | `useModalBehavior` (`@modular-vue/core`): focus trap, focus return, body lock, shared overlay stack                                                |
@@ -73,9 +73,8 @@ by its mount in `pages/index.vue`, which a portal inside `UModal` would break.
       `scripts/check-frontend-geometry.mjs`.
       [#2361](https://github.com/kibertoad/cat-factory/pull/2361).
 
-Decision: group by content, not by the old width. The first grouping (prompt 512px, form 672px) kept
-each modal near its old width and was too wide for the content. The value is maintenance (one name
-per size and a guard), not a visible change.
+Decision: group by content, not by the old width. The value is maintenance (one name per size and a
+guard), not a visible change.
 
 ### 3. One sub-navigation pattern
 
@@ -92,10 +91,10 @@ per size and a guard), not a visible change.
       settings and detail in a `USlideover`; the SPA is single-route, so routed pages are out. The
       issue lists the options (keep the shells, settings in a right slideover, one workbench shell on
       `TakeoverShell`, detail as a slideover, routed workbench pages) and suggests settings in a
-      slideover plus one workbench shell. It also records a bug that needs a fix whatever the
-      answer: the model configuration opened from the pipeline builder (a Reka slideover) cannot be
-      clicked, because the slideover sets `pointer-events: none` on `<body>`. That bug is fixed in
-      [#2360](https://github.com/kibertoad/cat-factory/pull/2360).
+      slideover plus one workbench shell. It also records a bug that needed a fix whatever the
+      answer, fixed in [#2360](https://github.com/kibertoad/cat-factory/pull/2360): the model
+      configuration opened from the pipeline builder (a Reka slideover) could not be clicked,
+      because the slideover sets `pointer-events: none` on `<body>`.
 
 ### Not in scope: `ResultWindowShell` stays as it is
 
@@ -130,7 +129,7 @@ until item 4 decides what a detail surface is.
   `BlockFocusView` holds a ticket on the shared stack while mounted and takes Escape only when it is
   the top one. A step reader opened from it closed on the same key press as the focus view when the
   focus view listened in the bubble phase, because by then the reader's unmount could already have
-  released its ticket. Its listener is now registered in the capture phase at setup, so it runs
+  released its ticket. Its listener is registered in the capture phase at setup, so it runs
   before the listener of any overlay opened later. `result-window-shell.spec.ts` asserts it stays
   open under a window's Escape. Whether it should be a shell surface at all belongs with item 4.
 - **Stack order and paint order must be the same order.** Every takeover paints at `z-50` inside
