@@ -5,7 +5,7 @@
 - **Context layer:** `frontend/storybook` (`@cat-factory/storybook`, the Storybook config and its
   vitest story lane), `frontend/app/app/stories/` (the shared fixtures and request helpers), the
   `*.stories.ts` files beside the SPA's components, `scripts/check-story-titles.mjs`, and the
-  nightly story workflow. Authoring guide: [`docs/internal/storybook.md`](../../../docs/internal/storybook.md).
+  nightly story workflow `.github/workflows/stories.yml`. Authoring guide: [`docs/internal/storybook.md`](../../../docs/internal/storybook.md).
 
 ## Context
 
@@ -16,8 +16,9 @@ or an agent open a given state, look at it in light and dark, and check it.
 
 ## Decision
 
-Every component and page in `frontend/app` has a `Foo.stories.ts` beside its `Foo.vue`, with one
-story per state the code can reach. 308 story files with 1403 stories landed in nine PRs, one for
+Every component and page in `frontend/app` that draws something of its own has a `Foo.stories.ts`
+beside its `Foo.vue`, with one story per state the code can reach. The files that have none are
+listed under Consequences. 308 story files with 1404 stories landed in nine PRs, one for
 the infrastructure (#2367) and one per domain (#2384 to #2391).
 
 - **Titles come from closed vocabularies.** `<Domain>/<Kind>/<Component>`, with `Default` first
@@ -45,24 +46,25 @@ the infrastructure (#2367) and one per domain (#2384 to #2391).
   vocabulary keeps the sidebar a map of the product, not of the component tree.
 - Fixtures typed and parsed against the contracts mean a story cannot show a row the API would
   refuse, and a contract change breaks the story that depends on it.
-- Domain-sized PRs kept each review readable. A shared fixture is byte-identical on every branch,
-  which made merges mechanical except for the rows of `fixtures.spec.ts`.
 
 ## Consequences
 
 - **The preset is patched.** `@storybook-vue/nuxt@10.0.1` carries a pnpm patch for two upstream
-  bugs: nuxt-modules/storybook#1138 (Nuxt 4.6, fixed by #1139, merged on 2026-10-16) and #1140
+  bugs: nuxt-modules/storybook#1138 (Nuxt 4.6, fixed by #1139 and released in `10.0.2`) and #1140
   (the empty canvas id under addon-vitest, still open). The internal doc and
   `pnpm-workspace.yaml` link them. A bump of the preset fails the install until the patch is
-  rebased or removed, and it can be removed only when a release fixes both.
+  rebased or removed. A bump to `10.0.2` can drop the #1138 half, and the patch goes when a
+  release fixes #1140 too.
 - **Stories must not ship.** `@cat-factory/app` publishes `app/`, so its `files` excludes
   `app/stories` and `app/**/*.stories.ts`.
 - **State can survive a story.** Cookies and the modular registry reset in `beforeEach`, and the
   confirm dialog is cancelled by `withConfirmDialog`. Local storage is not cleared.
-- **Some states have no story.** Nine files draw nothing of their own: `pages/index.vue`, the
-  route wrappers `pages/mcp-authorize.vue`, `pages/reset-password.vue` and
+- **Some states have no story.** Ten files draw nothing of their own: `app.vue`, `pages/index.vue`,
+  the route wrappers `pages/mcp-authorize.vue`, `pages/reset-password.vue` and
   `pages/mcp-oauth-callback.vue`, the renderless hosts `AppOverlayHost` and `StepResultViewHost`,
-  `AuthGate`, `DependencyConnectOverlay` and `TaskDependencyEdges`. `AccountPlatformAlertSettings`
+  `AuthGate`, `DependencyConnectOverlay` and `TaskDependencyEdges`. The shells `AppModal` and
+  `TakeoverShell` draw only around the content a consumer gives them, so the stories of the modals
+  and takeovers inside them show them. `AccountPlatformAlertSettings`
   has no stories until #2393 is fixed, and other stories leave out the states that hit the same
   bug.
 - **The stories found product defects.** Writing them surfaced wrong states, swallowed errors,

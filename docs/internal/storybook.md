@@ -28,8 +28,8 @@ of applying a stale fix. Remove the patch when a release fixes both.
    the story's Nuxt app to the `unctx` registry, so `useNuxtApp()` finds nothing and the first
    plugin to run throws. It fails with no Nuxt modules at all. Upstream:
    [nuxt-modules/storybook#1138](https://github.com/nuxt-modules/storybook/issues/1138), fixed
-   by the open [#1139](https://github.com/nuxt-modules/storybook/pull/1139) on the `10.x` branch.
-   The patch writes to the registry Nuxt 4.6 reads.
+   by [#1139](https://github.com/nuxt-modules/storybook/pull/1139), released in `10.0.2`. The
+   patch writes to the registry Nuxt 4.6 reads, and a bump to `10.0.2` can drop this half.
 2. **Every story test throws "StoryContext is not provided".** `setup()` takes its key from
    `storyContext.canvasElement.id`, and under `@storybook/addon-vitest` the canvas is a `div` with
    an empty `id`. Upstream:
