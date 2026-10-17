@@ -1,5 +1,13 @@
 # @cat-factory/app
 
+## 0.319.1
+
+### Patch Changes
+
+- 76176b8: The package no longer ships component stories or their shared fixtures: `files` excludes
+  `app/stories` and `app/**/*.stories.ts`, which the private `@cat-factory/storybook` package
+  in `frontend/storybook` renders.
+
 ## 0.319.0
 
 ### Minor Changes
