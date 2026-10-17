@@ -8,15 +8,19 @@ import {
   agentFailureSchema,
   apiKeySchema,
   blockSchema,
-  bootstrapJobSchema,
+  capabilityCredentialStatusSchema,
   companionVerdictSchema,
   connectionTestResultSchema,
+  customManifestTypeSchema,
+  bootstrapJobSchema,
   customAgentKindSchema,
   decisionSchema,
   documentConnectionSchema,
   documentSourceDescriptorSchema,
   emailConnectionSchema,
   environmentConnectionSchema,
+  environmentHandlerViewSchema,
+  environmentProbeReportSchema,
   fragmentSourceSchema,
   githubAvailableRepoSchema,
   githubBranchSchema,
@@ -25,10 +29,14 @@ import {
   githubIssueSchema,
   githubPullRequestSchema,
   githubRepoSchema,
+  infraSetupSchema,
+  infrastructureCapabilitiesSchema,
   localModelEndpointSchema,
+  localSettingsSchema,
   mergeClassRollupSchema,
   modelOptionSchema,
   modelPresetSchema,
+  packageRegistryEntryViewSchema,
   notificationSchema,
   personalSubscriptionStatusSchema,
   pipelineSchema,
@@ -67,6 +75,7 @@ import {
 } from '@cat-factory/contracts'
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
+import { partialProbeReport } from './envProbe.stories.mocks'
 import {
   accountBoards,
   accountMembers,
@@ -76,8 +85,6 @@ import {
   resendConnection,
   workspaceMembers,
 } from './accounts.stories.mocks'
-import { block, estimate } from './block.stories.mocks'
-import { authInitiative } from './board.stories.mocks'
 import {
   adoptionDecisions,
   applyingJob,
@@ -97,12 +104,23 @@ import {
   workspaceFragments,
 } from './fragments.stories.mocks'
 import {
+  declaredCapabilityCredentials,
+  infrastructureCapabilities,
+  infraSetupDone,
+  infraSetupNeedsWork,
+  kubernetesHandler,
+  localSettings,
+  packageRegistryEntries,
+  registeredManifestType,
+  workspaceManifestType,
+} from './infra.stories.mocks'
+import {
   awaitingAnswersSnapshot,
   initiative,
   initiativeItems,
   initiativeSnapshot,
-  interviewQuestions,
   interviewingSnapshot,
+  interviewQuestions,
   planGateSnapshot,
   trackedInitiative,
 } from './initiative.stories.mocks'
@@ -121,8 +139,37 @@ import {
   taskSources,
   zeplinDescriptor,
 } from './integrations.stories.mocks'
-import { laneSnapshot, queueSnapshot } from './lanes.stories.mocks'
 import { mergeClassRollups } from './mergeTrackRecord.stories.mocks'
+import {
+  accountStrictPolicy,
+  manualReviewPolicy,
+  modelPreset,
+  modelPresetLibrary,
+  riskPolicy,
+} from './policies.stories.mocks'
+import {
+  accountApiKeys,
+  apiKey,
+  claudeOnlyCatalog,
+  presetModelCatalog,
+  connectionTestWithWarnings,
+  environmentConnection,
+  kubernetesEnvironmentDescriptor,
+  kubernetesRunnerConnection,
+  kubernetesRunnerDescriptor,
+  manifestRunnerDescriptor,
+  providerDescriptor,
+  localModelEndpoint,
+  personalSubscription,
+  runnerPoolConnection,
+  runnerPoolManifest,
+  spendStatus,
+  vendorCredential,
+} from './providers.stories.mocks'
+import { accountSkills, skillCatalog, skillSource } from './skills.stories.mocks'
+import { block, estimate } from './block.stories.mocks'
+import { authInitiative } from './board.stories.mocks'
+import { laneSnapshot, queueSnapshot } from './lanes.stories.mocks'
 import {
   ciFailedCard,
   mergeReviewCard,
@@ -148,34 +195,7 @@ import {
   reviewPipeline,
   standardBuild,
 } from './pipelines.stories.mocks'
-import {
-  accountStrictPolicy,
-  manualReviewPolicy,
-  modelPreset,
-  modelPresetLibrary,
-  riskPolicy,
-} from './policies.stories.mocks'
-import {
-  accountApiKeys,
-  apiKey,
-  claudeOnlyCatalog,
-  connectionTestWithWarnings,
-  environmentConnection,
-  kubernetesEnvironmentDescriptor,
-  kubernetesRunnerConnection,
-  kubernetesRunnerDescriptor,
-  localModelEndpoint,
-  manifestRunnerDescriptor,
-  personalSubscription,
-  presetModelCatalog,
-  providerDescriptor,
-  runnerPoolConnection,
-  runnerPoolManifest,
-  spendStatus,
-  vendorCredential,
-} from './providers.stories.mocks'
 import { billingMigrations, platformFiles } from './repoFiles.stories.mocks'
-import { accountSkills, skillCatalog, skillSource } from './skills.stories.mocks'
 import { execution, parkedExecution, snapshot } from './snapshot.stories.mocks'
 import { taskFormSnapshot } from './taskForm.stories.mocks'
 import {
@@ -202,6 +222,7 @@ import {
 // typecheck already holds them to the TYPE; this also holds them to what the type cannot say (an
 // id pattern, a minimum, a non-empty list), so a story never renders a row the API would refuse.
 const cases: [string, v.GenericSchema, unknown[]][] = [
+  ['probe report', environmentProbeReportSchema, [partialProbeReport]],
   ['account', accountSchema, accounts],
   ['account settings', accountSettingsViewSchema, [accountSettingsView]],
   ['workspace member', workspaceMemberSchema, workspaceMembers],
@@ -212,6 +233,17 @@ const cases: [string, v.GenericSchema, unknown[]][] = [
   ['fragment source', fragmentSourceSchema, [handbookSource, platformStandardsSource]],
   ['resolved fragment', resolvedFragmentSchema, [...layeredCatalog, ...fragmentCatalog]],
   ['board list item', workspaceListItemSchema, accountBoards],
+  ['infra setup', infraSetupSchema, [infraSetupNeedsWork, infraSetupDone]],
+  ['infrastructure capabilities', infrastructureCapabilitiesSchema, [infrastructureCapabilities()]],
+  ['local settings', localSettingsSchema, [localSettings]],
+  ['package registry entry', packageRegistryEntryViewSchema, packageRegistryEntries],
+  ['capability credential', capabilityCredentialStatusSchema, declaredCapabilityCredentials],
+  ['environment handler', environmentHandlerViewSchema, [kubernetesHandler]],
+  [
+    'custom manifest type',
+    customManifestTypeSchema,
+    [registeredManifestType, workspaceManifestType],
+  ],
   ['task source', taskSourceStateSchema, taskSources],
   ['task connection', taskConnectionSchema, taskConnections],
   ['source task', sourceTaskSchema, [...sourceTasks, ...authServiceIssues]],
@@ -225,6 +257,13 @@ const cases: [string, v.GenericSchema, unknown[]][] = [
     [resolvedDocumentRef, resolvedDocumentRefWithDroppedScope, resolvedFigmaFrameRef],
   ],
   ['slack connection', slackConnectionSchema, [slackConnection]],
+  ['merge class rollup', mergeClassRollupSchema, mergeClassRollups],
+  [
+    'risk policy',
+    riskPolicyLibraryEntrySchema,
+    [riskPolicy(), manualReviewPolicy, accountStrictPolicy],
+  ],
+  ['model preset', modelPresetSchema, [modelPreset(), ...modelPresetLibrary]],
   ['environment connection', environmentConnectionSchema, [environmentConnection]],
   [
     'runner pool connection',
@@ -250,6 +289,9 @@ const cases: [string, v.GenericSchema, unknown[]][] = [
   ['API key', apiKeySchema, [apiKey(), ...accountApiKeys]],
   ['spend status', spendStatusSchema, [spendStatus()]],
   ['model option', modelOptionSchema, [...claudeOnlyCatalog, ...presetModelCatalog]],
+  ['skill summary', skillSummarySchema, skillCatalog],
+  ['account skill', accountSkillSchema, accountSkills],
+  ['skill source', skillSourceSchema, [skillSource]],
   ['effort report', agentEffortReportSchema, [effortReport]],
   ['validation report', validationReportSchema, [validationPassed, validationFailed]],
   ['reproduction report', reproductionReportSchema, [reproductionReport()]],
