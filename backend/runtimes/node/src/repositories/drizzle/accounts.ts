@@ -89,6 +89,11 @@ export class DrizzleAccountRepository implements AccountRepository {
     return row ? rowToAccount(row) : null
   }
 
+  async listAll(): Promise<AccountRecord[]> {
+    const rows = await this.db.select().from(accounts)
+    return rows.map(rowToAccount)
+  }
+
   async listByIds(ids: string[]): Promise<AccountRecord[]> {
     if (ids.length === 0) return []
     const out: AccountRecord[] = []

@@ -24,6 +24,7 @@ interface WorkspaceSettingsRow {
   done_lane_retention_days: number | null
   kaizen_enabled: number
   delegate_agents_to_runner_pool: number
+  inherit_account_runner_pool: number
   input_gate_mode: string
   review_friction_mode: string
   review_friction_warn_count: number
@@ -60,6 +61,7 @@ function rowToSettings(row: WorkspaceSettingsRow): WorkspaceSettings {
     doneLaneRetentionDays: row.done_lane_retention_days,
     kaizenEnabled: row.kaizen_enabled === 1,
     delegateAgentsToRunnerPool: row.delegate_agents_to_runner_pool === 1,
+    inheritAccountRunnerPool: row.inherit_account_runner_pool === 1,
     inputGateMode: row.input_gate_mode as InputGateMode,
     reviewFrictionMode: row.review_friction_mode as ReviewFrictionMode,
     reviewFrictionWarnCount: row.review_friction_warn_count,
@@ -120,12 +122,12 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
             task_limit_per_type, store_agent_context, publish_pr_verification_report,
             artifact_retention_days, done_lane_max_items, done_lane_retention_days,
             kaizen_enabled,
-            delegate_agents_to_runner_pool, input_gate_mode, review_friction_mode,
+            delegate_agents_to_runner_pool, inherit_account_runner_pool, input_gate_mode, review_friction_mode,
             review_friction_warn_count,
             review_friction_block_count, review_friction_block_stuck_minutes, spend_currency,
             spend_monthly_limit, default_provision_type, default_provision_manifest_id,
             allow_initiator_pat, bug_fishing_fix_pipeline_id, metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id) DO UPDATE SET
            waiting_escalation_minutes = excluded.waiting_escalation_minutes,
            task_limit_mode = excluded.task_limit_mode,
@@ -138,6 +140,7 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
            done_lane_retention_days = excluded.done_lane_retention_days,
            kaizen_enabled = excluded.kaizen_enabled,
            delegate_agents_to_runner_pool = excluded.delegate_agents_to_runner_pool,
+           inherit_account_runner_pool = excluded.inherit_account_runner_pool,
            input_gate_mode = excluded.input_gate_mode,
            review_friction_mode = excluded.review_friction_mode,
            review_friction_warn_count = excluded.review_friction_warn_count,
@@ -164,6 +167,7 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         settings.doneLaneRetentionDays,
         settings.kaizenEnabled ? 1 : 0,
         settings.delegateAgentsToRunnerPool ? 1 : 0,
+        settings.inheritAccountRunnerPool ? 1 : 0,
         settings.inputGateMode,
         settings.reviewFrictionMode,
         settings.reviewFrictionWarnCount,

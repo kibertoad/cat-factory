@@ -78,7 +78,7 @@ const BASE = 'https://cat-factory.test'
 // Test env: open the auth gate (dev-open) exactly as the Worker pool does, and pin a
 // non-production ENVIRONMENT so `devOpen` is honoured. The integration toggles stay off
 // (this MVP wires only the runtime-neutral core), matching the Node config defaults.
-const TEST_ENV: NodeJS.ProcessEnv = {
+export const TEST_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   AUTH_DEV_OPEN: 'true',
   ENVIRONMENT: 'test',
