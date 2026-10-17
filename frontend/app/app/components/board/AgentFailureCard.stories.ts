@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { expect, userEvent, within } from 'storybook/test'
 import type { AgentFailure } from '@cat-factory/contracts'
 import { BILLING_FRAME_ID, bootstrapJob, failedApplyJob } from '~/stories/bootstrap.stories.mocks'
 import { authService, boardBlocks, boardWith, loginTask } from '~/stories/board.stories.mocks'
@@ -8,13 +9,14 @@ import { useAgentRunsStore, type AgentRunSummary } from '~/stores/agentRuns'
 import { useAuthStore } from '~/stores/auth'
 import AgentFailureCard from './AgentFailureCard.vue'
 
-// The failure banner on a card, the inspector and the task panel, for a failed task run or a
-// failed bootstrap. The title follows the failure kind, and an environment failure adds a button
-// to where environments are set up. The messages and hints are the backend's own wording for each
-// kind (`EXECUTION_FAILURE_HINTS` in `RunStateMachine.ts`, `classifyDispatchFailure` in
-// `job.logic.ts`, `FAILURE_HINTS` in `BootstrapService.ts`). The provider errors in the details,
-// and the provider message in the environment story, are made up. Retry calls the unified retry,
-// which no story answers.
+// The one failure block of a task view (board card, queue card, inspector, focus view) and of a
+// service frame, for a failed task run or a failed bootstrap. The title follows the failure kind,
+// the cause line is the SPA's own translated copy (`presentFailure`), and the block offers one
+// action: Retry, or the settings that fix the cause. The backend's message, its hint and the full
+// output are behind Details. The hints are the backend's own wording for each kind
+// (`EXECUTION_FAILURE_HINTS` in `RunStateMachine.ts`, `FAILURE_HINTS` in `BootstrapService.ts`).
+// The provider errors and messages are made up. Retry calls the unified retry, which no story
+// answers.
 const meta = {
   title: 'Board/Components/AgentFailureCard',
   component: AgentFailureCard,
@@ -81,22 +83,26 @@ const deployRunnerUnwired =
   'Or use an environment config that provisions without a deploy container (raw manifests, or ' +
   'an infraless service).'
 
-/**
- * An evicted container: the title, the message, the hint, the detail behind a disclosure, and
- * Retry run.
- */
+/** An evicted container: the title, the cause line, Retry run, and Details closed. */
 export const Default: Story = {}
 
-/**
- * The compact variant: the message is cut to two lines, Retry is short, and there is no detail.
- * The hint is not cut, so a long hint still fills the card.
- */
+/** Details open: the backend's message, its notes for the operator, and the full output. */
+export const DetailsOpen: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getByRole('button', { name: 'Details' }))
+    await canvas.findByText(/killed: out of memory/)
+    await expect(canvas.getByText('Notes for the operator')).toBeVisible()
+  },
+}
+
+/** The compact variant, on the board card and the queue card: the title and Retry only. */
 export const Compact: Story = {
   args: { variant: 'compact' },
   parameters: { width: 'narrow' },
 }
 
-/** The container never started: titled as such, with the runner's answer in the detail. */
+/** The container never started: a temporary cause, so the action is Retry run. */
 export const DispatchFailure: Story = {
   args: {
     run: taskRun(
@@ -110,7 +116,10 @@ export const DispatchFailure: Story = {
   },
 }
 
-/** The environment provider failed: a second button opens the environment setup. */
+/**
+ * The environment provider failed: a setting fixes it, so the action opens the environment setup
+ * and Retry moves into Details.
+ */
 export const EnvironmentFailure: Story = {
   args: {
     run: taskRun(
@@ -125,10 +134,15 @@ export const EnvironmentFailure: Story = {
 }
 
 /**
- * Local mode, and the service deploys to Kubernetes with no deploy runner wired: the env var hint
- * shows under the backend's message.
+ * Local mode, and the service deploys to Kubernetes with no deploy runner wired: Details names the
+ * environment variables to set.
  */
 export const DeployRunnerUnwiredLocal: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getByRole('button', { name: 'Details' }))
+    await canvas.findByTestId('agent-failure-environment-local-hint')
+  },
   args: {
     run: taskRun(
       failure({
@@ -165,7 +179,10 @@ export const Stalled: Story = {
   },
 }
 
-/** No repository linked: the run was refused before it started, under the conflict title. */
+/**
+ * No repository host connected: the run was refused before it started. The action connects the
+ * host, because a retry fails again until it is connected.
+ */
 export const GithubNotConnected: Story = {
   args: {
     run: taskRun(
@@ -189,8 +206,8 @@ export const GithubNotConnected: Story = {
 }
 
 /**
- * A new-repository bootstrap refused before it started: Retry bootstrap, and Model activity,
- * because a bootstrap has no steps to reach its model calls from.
+ * A new-repository bootstrap refused before it started: Retry bootstrap, and Model activity in
+ * Details, because a bootstrap has no steps to reach its model calls from.
  */
 export const BootstrapFailure: Story = {
   args: {

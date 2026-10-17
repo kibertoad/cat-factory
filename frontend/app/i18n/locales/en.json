@@ -460,6 +460,27 @@
         "description": "Shown only in local mode. The {runtime}/{native}/{container} placeholders are injected literal environment-variable names (LOCAL_DEPLOY_RUNTIME etc.) — keep them as placeholders, do not translate. '.env' is a filename, keep it verbatim."
       },
       "showDetail": "Show detail",
+      "details": "Details",
+      "detailsMessage": "Message",
+      "detailsHint": "Notes for the operator",
+      "detailsFull": "Full output",
+      "cause": {
+        "preflight": "A check before the start failed, so no work was done. Open Details to see what to fix, then retry.",
+        "dispatch": "The agent's container did not start, so no work was done. This is usually temporary.",
+        "environment": "The test environment could not be made. Check the environment settings, then retry.",
+        "evicted": "The container stopped many times during the run. This usually occurs during a deployment, so retry when the deployment is complete.",
+        "harness_shutdown": "Something stopped the container during this step. Find the cause in Details before you retry, because a retry can stop again.",
+        "timeout": "The run took more time than its limit. A retry starts it again.",
+        "agent": "An agent step failed. See the failed step for the cause, then retry.",
+        "job_failed": "The agent's container reported a failure. A retry starts a new container.",
+        "delegated_failed": "The external system that ran this step reported a failure. The link on the step opens its run, which shows the cause.",
+        "rejected": "You rejected a step, so the run stopped. A retry starts again from that step.",
+        "companion_rejected": "A companion agent did not give a usable result. A retry runs it again.",
+        "stalled": "The platform lost contact with this run. A retry starts a new run.",
+        "state_unreadable": "The saved state of this run cannot be read, so a retry can fail again. Start the task again as a new run.",
+        "cancelled": "You stopped this run. A retry starts it again.",
+        "unknown": "The run failed for an unknown cause. See Details, then retry."
+      },
       "retrying": "Retrying…",
       "history": {
         "previousErrors": "{count} previous error | {count} previous errors",

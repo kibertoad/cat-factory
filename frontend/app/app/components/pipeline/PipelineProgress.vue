@@ -307,6 +307,9 @@ const ITEM_ICON: Record<string, string> = {
       </div>
     </div>
 
+    <!-- What the host shows between the summary and the steps (the focus view's failure block). -->
+    <slot name="after-summary" />
+
     <!-- agent chain as a vertical timeline -->
     <ol class="flex flex-col">
       <li v-for="(s, i) in steps" :key="i" class="relative flex gap-4 pb-5 last:pb-0">

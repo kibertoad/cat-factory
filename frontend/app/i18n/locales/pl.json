@@ -412,6 +412,27 @@
       "deployRunnerSetup": "Skonfiguruj pulę runnerów",
       "environmentLocalHint": "Lokalne środowiska tymczasowe wymagają środowiska uruchomieniowego wdrożenia do uruchomienia kubectl/kustomize/helm. Ustaw {runtime} w pliku .env: tryb natywny uruchamia te narzędzia na twoim hoście ({native}), tryb kontenerowy uruchamia je w obrazie wdrożeniowym ({container}).",
       "showDetail": "Pokaż szczegóły",
+      "details": "Szczegóły",
+      "detailsMessage": "Komunikat",
+      "detailsHint": "Uwagi dla operatora",
+      "detailsFull": "Pełne wyjście",
+      "cause": {
+        "preflight": "Kontrola przed startem nie powiodła się, więc żadna praca nie została wykonana. Otwórz Szczegóły, aby zobaczyć, co poprawić, a potem ponów.",
+        "dispatch": "Kontener agenta nie uruchomił się, więc żadna praca nie została wykonana. Zwykle jest to problem chwilowy.",
+        "environment": "Nie udało się utworzyć środowiska testowego. Sprawdź ustawienia środowiska, a potem ponów.",
+        "evicted": "Kontener zatrzymał się kilka razy podczas uruchomienia. Zwykle dzieje się tak podczas wdrożenia, więc ponów po jego zakończeniu.",
+        "harness_shutdown": "Coś zatrzymało kontener podczas tego kroku. Znajdź przyczynę w Szczegółach, zanim ponowisz, bo ponowienie może znów się zatrzymać.",
+        "timeout": "Uruchomienie przekroczyło swój limit czasu. Ponowienie uruchamia je jeszcze raz.",
+        "agent": "Krok agenta nie powiódł się. Sprawdź przyczynę przy nieudanym kroku, a potem ponów.",
+        "job_failed": "Kontener agenta zgłosił błąd. Ponowienie uruchamia nowy kontener.",
+        "delegated_failed": "Zewnętrzny system, który wykonał ten krok, zgłosił błąd. Link przy kroku otwiera jego uruchomienie z przyczyną.",
+        "rejected": "Krok został odrzucony, więc uruchomienie zostało zatrzymane. Ponowienie zaczyna od tego kroku.",
+        "companion_rejected": "Agent towarzyszący nie zwrócił użytecznego wyniku. Ponowienie uruchamia go jeszcze raz.",
+        "stalled": "Platforma straciła kontakt z tym uruchomieniem. Ponowienie rozpoczyna nowe uruchomienie.",
+        "state_unreadable": "Nie można odczytać zapisanego stanu tego uruchomienia, więc ponowienie może znów się nie powieść. Uruchom zadanie od nowa jako nowe uruchomienie.",
+        "cancelled": "To uruchomienie zostało zatrzymane ręcznie. Ponowienie uruchamia je jeszcze raz.",
+        "unknown": "Uruchomienie nie powiodło się z nieznanej przyczyny. Sprawdź Szczegóły, a potem ponów."
+      },
       "retrying": "Ponawianie…",
       "history": {
         "previousErrors": "{count} poprzedni błąd | {count} poprzednie błędy | {count} poprzednich błędów"

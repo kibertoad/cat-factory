@@ -412,6 +412,27 @@
       "deployRunnerSetup": "Runner havuzunu yapılandır",
       "environmentLocalHint": "Yerel geçici ortamlar, kubectl/kustomize/helm çalıştırmak için bir dağıtım çalışma zamanı gerektirir. .env dosyanızda {runtime} değerini ayarlayın: yerel mod bu araçları ana makinenizde çalıştırır ({native}), konteyner modu bunları dağıtım imajında çalıştırır ({container}).",
       "showDetail": "Ayrıntıyı göster",
+      "details": "Ayrıntılar",
+      "detailsMessage": "İleti",
+      "detailsHint": "Operatör için notlar",
+      "detailsFull": "Tam çıktı",
+      "cause": {
+        "preflight": "Başlangıçtan önceki bir denetim başarısız oldu, bu yüzden hiçbir iş yapılmadı. Neyi düzelteceğinizi görmek için Ayrıntılar'ı açın, sonra yeniden deneyin.",
+        "dispatch": "Ajanın konteyneri başlamadı, bu yüzden hiçbir iş yapılmadı. Bu genellikle geçicidir.",
+        "environment": "Test ortamı oluşturulamadı. Ortam ayarlarını denetleyin, sonra yeniden deneyin.",
+        "evicted": "Konteyner çalıştırma sırasında birçok kez durdu. Bu genellikle bir dağıtım sırasında olur, bu yüzden dağıtım bitince yeniden deneyin.",
+        "harness_shutdown": "Bu adım sırasında bir şey konteyneri durdurdu. Yeniden denemeden önce nedeni Ayrıntılar'da bulun, çünkü yeni deneme de durabilir.",
+        "timeout": "Çalıştırma süre sınırını aştı. Yeniden deneme onu tekrar başlatır.",
+        "agent": "Bir ajan adımı başarısız oldu. Nedeni başarısız adımda görün, sonra yeniden deneyin.",
+        "job_failed": "Ajanın konteyneri bir hata bildirdi. Yeniden deneme yeni bir konteyner başlatır.",
+        "delegated_failed": "Bu adımı çalıştıran dış sistem bir hata bildirdi. Adımdaki bağlantı, nedeni gösteren çalıştırmasını açar.",
+        "rejected": "Bir adımı reddettiniz, bu yüzden çalıştırma durdu. Yeniden deneme o adımdan tekrar başlar.",
+        "companion_rejected": "Bir yardımcı ajan kullanılabilir bir sonuç vermedi. Yeniden deneme onu tekrar çalıştırır.",
+        "stalled": "Platform bu çalıştırmayla bağlantısını kaybetti. Yeniden deneme yeni bir çalıştırma başlatır.",
+        "state_unreadable": "Bu çalıştırmanın kayıtlı durumu okunamıyor, bu yüzden yeniden deneme tekrar başarısız olabilir. Görevi yeni bir çalıştırma olarak yeniden başlatın.",
+        "cancelled": "Bu çalıştırmayı durdurdunuz. Yeniden deneme onu tekrar başlatır.",
+        "unknown": "Çalıştırma bilinmeyen bir nedenle başarısız oldu. Ayrıntılar'a bakın, sonra yeniden deneyin."
+      },
       "retrying": "Yeniden deneniyor…",
       "history": {
         "previousErrors": "{count} önceki hata | {count} önceki hata"

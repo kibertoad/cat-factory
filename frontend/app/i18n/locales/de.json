@@ -3301,6 +3301,27 @@
       "deployRunnerSetup": "Runner-Pool einrichten",
       "environmentLocalHint": "Lokale ephemere Umgebungen benötigen eine Deploy-Runtime, um kubectl/kustomize/helm auszuführen. Setzen Sie {runtime} in Ihrer .env: der Native-Modus führt diese Tools auf Ihrem Host aus ({native}), der Container-Modus führt sie im Deploy-Image aus ({container}).",
       "showDetail": "Details anzeigen",
+      "details": "Details",
+      "detailsMessage": "Meldung",
+      "detailsHint": "Hinweise für den Betrieb",
+      "detailsFull": "Vollständige Ausgabe",
+      "cause": {
+        "preflight": "Eine Prüfung vor dem Start ist fehlgeschlagen, daher wurde keine Arbeit erledigt. Öffnen Sie Details, um zu sehen, was zu beheben ist, und wiederholen Sie dann.",
+        "dispatch": "Der Container des Agenten ist nicht gestartet, daher wurde keine Arbeit erledigt. Das ist meist vorübergehend.",
+        "environment": "Die Testumgebung konnte nicht erstellt werden. Prüfen Sie die Umgebungseinstellungen und wiederholen Sie dann.",
+        "evicted": "Der Container hat während des Laufs mehrmals angehalten. Das geschieht meist während eines Deployments. Wiederholen Sie, wenn das Deployment abgeschlossen ist.",
+        "harness_shutdown": "Etwas hat den Container während dieses Schritts angehalten. Suchen Sie die Ursache in Details, bevor Sie wiederholen, denn eine Wiederholung kann erneut anhalten.",
+        "timeout": "Der Lauf hat sein Zeitlimit überschritten. Eine Wiederholung startet ihn erneut.",
+        "agent": "Ein Agentenschritt ist fehlgeschlagen. Die Ursache steht beim fehlgeschlagenen Schritt. Wiederholen Sie dann.",
+        "job_failed": "Der Container des Agenten hat einen Fehler gemeldet. Eine Wiederholung startet einen neuen Container.",
+        "delegated_failed": "Das externe System, das diesen Schritt ausgeführt hat, hat einen Fehler gemeldet. Der Link am Schritt öffnet dessen Lauf mit der Ursache.",
+        "rejected": "Sie haben einen Schritt abgelehnt, daher wurde der Lauf angehalten. Eine Wiederholung beginnt erneut bei diesem Schritt.",
+        "companion_rejected": "Ein Begleitagent hat kein verwendbares Ergebnis geliefert. Eine Wiederholung führt ihn erneut aus.",
+        "stalled": "Die Plattform hat den Kontakt zu diesem Lauf verloren. Eine Wiederholung startet einen neuen Lauf.",
+        "state_unreadable": "Der gespeicherte Zustand dieses Laufs ist nicht lesbar, daher kann eine Wiederholung erneut fehlschlagen. Starten Sie die Aufgabe als neuen Lauf.",
+        "cancelled": "Sie haben diesen Lauf angehalten. Eine Wiederholung startet ihn erneut.",
+        "unknown": "Der Lauf ist aus unbekanntem Grund fehlgeschlagen. Sehen Sie sich Details an und wiederholen Sie dann."
+      },
       "retrying": "Wird wiederholt…",
       "history": {
         "previousErrors": "{count} vorheriger Fehler | {count} vorherige Fehler"

@@ -10,10 +10,12 @@ import IconButton from '~/components/common/IconButton.vue'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
+const agentRuns = useAgentRunsStore()
 const ui = useUiStore()
 const models = useModelsStore()
 const workspace = useWorkspaceStore()
@@ -26,6 +28,11 @@ const block = computed<Block | undefined>(() =>
   ui.focusBlockId ? board.getBlock(ui.focusBlockId) : undefined,
 )
 const instance = computed(() => execution.getInstance(block.value?.executionId))
+// The block's failed run, read off the same per-block index the inspector and the cards read.
+const failedRun = computed(() => {
+  const run = block.value ? agentRuns.byBlock[block.value.id] : undefined
+  return run && run.status === 'failed' ? run : null
+})
 const statusMeta = computed(() => (block.value ? STATUS_META[block.value.status] : null))
 const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
 
@@ -234,7 +241,12 @@ function openApprovalFor(approvalId: string) {
           :instance="instance"
           @open-decision="openDecisionFor"
           @open-approval="openApprovalFor"
-        />
+        >
+          <!-- A failed run: the same failure block the inspector shows, with its action. -->
+          <template v-if="failedRun" #after-summary>
+            <AgentFailureCard :run="failedRun" />
+          </template>
+        </PipelineProgress>
 
         <EmptyState
           v-else

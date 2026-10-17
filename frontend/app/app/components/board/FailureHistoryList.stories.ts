@@ -3,7 +3,8 @@ import { failure } from '~/stories/pipelineStep.stories.mocks'
 import FailureHistoryList from './FailureHistoryList.vue'
 
 // The list inside `AgentFailureHistory`, newest first: it reverses what it is given. Each entry
-// shows the time, the message, the hint and the detail. The failure kind is not shown.
+// shows the time and the cause line for its kind, with the message, the hint and the detail behind
+// Details (`FailureListEntry`).
 const meta = {
   title: 'Inspector/Components/FailureHistoryList',
   component: FailureHistoryList,
@@ -36,7 +37,7 @@ export const Default: Story = {
   },
 }
 
-/** A failure with no detail and no hint: the message is all there is. */
+/** A failure with no detail and no hint: Details holds the message only. */
 export const Bare: Story = {
   args: {
     failures: [
