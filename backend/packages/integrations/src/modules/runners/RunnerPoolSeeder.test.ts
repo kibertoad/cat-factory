@@ -38,11 +38,13 @@ function setup(opts: {
   seeded?: string[]
   seedSource?: Parameters<typeof createRunnerPoolSeeder>[0]['seedSource']
   seedAccount?: (accountId: string) => Promise<boolean>
+  reseedAccount?: (current: AccountRunnerPoolRecord) => Promise<boolean>
 }) {
   const accounts = opts.accounts ?? [account('acc-a'), account('acc-b', 'personal')]
   const seeded = new Set(opts.seeded ?? [])
   const connectionService = {
     seedAccount: vi.fn(opts.seedAccount ?? (async () => true)),
+    reseedAccount: vi.fn(opts.reseedAccount ?? (async () => false)),
   }
   const accountRepository = {
     get: vi.fn(async (id: string) => accounts.find((a) => a.id === id) ?? null),
@@ -90,6 +92,8 @@ describe('createRunnerPoolSeeder.ensureForAccount', () => {
 
     expect(seedSource).not.toHaveBeenCalled()
     expect(connectionService.seedAccount).not.toHaveBeenCalled()
+    // Board creation never replaces: a replica on the previous seed would write it back.
+    expect(connectionService.reseedAccount).not.toHaveBeenCalled()
   })
 
   it('does nothing for a legacy board with no account', async () => {
@@ -163,7 +167,7 @@ describe('createRunnerPoolSeeder bad seeds are loud', () => {
 })
 
 describe('createRunnerPoolSeeder.ensureForAllAccounts', () => {
-  it('seeds only the accounts without a pool, over ONE account read and ONE pool read', async () => {
+  it('inserts for accounts without a pool and reconciles the rest, over ONE account read and ONE pool read', async () => {
     const accounts = [account('acc-a'), account('acc-b', 'personal'), account('acc-c')]
     const { seeder, connectionService, accountRepository, accountRunnerPoolRepository } = setup({
       accounts,
@@ -173,9 +177,53 @@ describe('createRunnerPoolSeeder.ensureForAllAccounts', () => {
     await seeder.ensureForAllAccounts()
 
     expect(connectionService.seedAccount.mock.calls.map(([id]) => id)).toEqual(['acc-a', 'acc-c'])
+    expect(connectionService.reseedAccount.mock.calls).toEqual([[{ accountId: 'acc-b' }, seed]])
     expect(accountRepository.listAll).toHaveBeenCalledTimes(1)
     expect(accountRunnerPoolRepository.listByAccounts).toHaveBeenCalledTimes(1)
     expect(accountRunnerPoolRepository.getByAccount).not.toHaveBeenCalled()
+  })
+
+  it('logs a replaced pool, and stays quiet when the stored pool already matches', async () => {
+    const { seeder, logger } = setup({
+      accounts: [account('acc-a'), account('acc-b')],
+      seeded: ['acc-a', 'acc-b'],
+      reseedAccount: async (current) => current.accountId === 'acc-a',
+    })
+
+    await seeder.ensureForAllAccounts()
+
+    const infos = logger.lines.filter((l) => l.level === 'info')
+    expect(infos.map((l) => [l.msg, l.fields?.accountId])).toEqual([
+      ['replaced account runner pool with the changed seed', 'acc-a'],
+    ])
+  })
+
+  it('leaves an existing pool in place when the callback no longer declares one', async () => {
+    const { seeder, connectionService } = setup({
+      accounts: [account('acc-a')],
+      seeded: ['acc-a'],
+      seedSource: () => undefined,
+    })
+
+    await seeder.ensureForAllAccounts()
+
+    expect(connectionService.reseedAccount).not.toHaveBeenCalled()
+  })
+
+  it('reports a refused reseed at error, naming the account', async () => {
+    const { seeder, logger } = setup({
+      accounts: [account('acc-a')],
+      seeded: ['acc-a'],
+      reseedAccount: async () => {
+        throw new ValidationError('Missing secret values for: apiToken')
+      },
+    })
+
+    await seeder.ensureForAllAccounts()
+
+    expect(logger.lines.find((l) => l.level === 'error')?.fields).toMatchObject({
+      accountId: 'acc-a',
+    })
   })
 
   it('keeps going past one bad account and reports it', async () => {

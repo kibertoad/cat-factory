@@ -592,9 +592,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // crosses the machine API — the same precedent as the observability / environment connections.
   runnerPoolConnectionRepository: {},
   // The account tier of the runner pool: both reads are remote (account / accountList scope, sealed
-  // credentials). `insertIfAbsent` is the declared seed's write, which runs where the deployment
-  // declares it, so it stays mothership-internal.
-  accountRunnerPoolRepository: { insertIfAbsent: 'sweeper' },
+  // credentials). `insertIfAbsent` and `replace` are the declared seed's writes, which run where the
+  // deployment declares it, so they stay mothership-internal.
+  accountRunnerPoolRepository: { insertIfAbsent: 'sweeper', replace: 'sweeper' },
   // The whole documents surface is now remote: the run-path context reads, the import/link WRITE
   // path and its batched siblings, and the WS1 role-link management surface.
   documentRepository: {},

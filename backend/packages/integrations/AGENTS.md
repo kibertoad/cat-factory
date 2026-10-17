@@ -71,8 +71,9 @@ prerequisites are configured.
 - `runners/RunnerPoolSeeder.ts`: the deployment-declared runner pool (Node's
   `seedAccountRunnerPool` callback), the third seeder beside the handler and shared-stack ones but
   keyed by ACCOUNT: it inserts the account's pool when it has none (`seedAccount`, validated by the
-  same `RunnerPoolConnectionService.validate` as an admin registration) and never replaces one. A bad
-  seed is an `error` log, a failed read a `warn`. Dispatch reads go through the service's single
+  same `RunnerPoolConnectionService.validate` as an admin registration), and the boot backfill alone
+  replaces one whose seed changed (`reseedAccount`, compared by content). A bad seed is an `error`
+  log, a failed read a `warn`. Dispatch reads go through the service's single
   `effective` resolver (board row, else account row, unless the board opted out).
 - `serviceCatalog/`: the workspace's DEVELOPER PORTAL connection (Backstage), whose services are
   imported into the foundational-services catalog as `workspace`-tier rows.

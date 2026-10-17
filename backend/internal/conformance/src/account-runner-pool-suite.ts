@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest'
 // primary key on `account_id`, reached through `ON CONFLICT DO NOTHING` on both), whether it reports
 // truthfully that THIS call inserted, and whether concurrent writers leave one row. A sequential
 // test passes on a store that read-then-inserts; the concurrent case is the one that catches it.
+// `replace` is the reseed's write: it must overwrite in place, keep `createdAt`, and never insert.
 
 /** The two repositories the suite drives, over the runtime's real store. */
 export interface AccountRunnerPoolSuiteRepos {
@@ -77,6 +78,27 @@ export function defineAccountRunnerPoolSuite(
 
       expect(results.filter(Boolean)).toHaveLength(1)
       expect(await pools.listByAccounts([id])).toHaveLength(1)
+    })
+
+    it('replaces an existing pool in place, keeping when it was first created', async () => {
+      const { pools } = makeRepos()
+      const id = nextId()
+      await pools.insertIfAbsent(row(id, 'First'))
+
+      const changed = { ...row(id, 'Second'), configJson: '{"kind":"manifest"}', createdAt: 9_999 }
+      expect(await pools.replace(changed)).toBe(true)
+
+      expect(await pools.getByAccount(id)).toEqual({ ...changed, createdAt: 1_000 })
+      expect(await pools.listByAccounts([id])).toHaveLength(1)
+    })
+
+    it('never inserts through replace, and reports that it replaced nothing', async () => {
+      const { pools } = makeRepos()
+      const id = nextId()
+
+      expect(await pools.replace(row(id))).toBe(false)
+
+      expect(await pools.getByAccount(id)).toBeNull()
     })
 
     it('lists the pools of the named accounts in one call, omitting accounts without one', async () => {

@@ -398,8 +398,12 @@ run on your pool; unregister to revert.
 
 **Or declare it once per account (Platform):** a deployment can pass `seedAccountRunnerPool` to the
 Node `start()`: a callback `(account) => { config, secrets } | undefined` (the same payload as the
-form). The server stores the result as the ACCOUNT's pool, for every existing account that has none
-at boot and for the account of each new board, and never replaces a row the account already has.
+form). The server stores the result as the ACCOUNT's pool: at boot for every account, and for the
+account of each new board when it has none. At boot it also compares each stored pool with what the
+callback answers now (config, and the secrets decrypted) and replaces it when they differ, so a
+rotated token or a new image reaches every account on the next boot. Board creation never replaces a
+pool, because a replica still on the previous seed during a rolling deploy would write it back.
+A callback that stops declaring a pool for an account leaves the stored one in place.
 Personal and org accounts both inherit. A legacy board (no account) gets nothing and keeps
 registering per workspace. On stock Node, where a pool is the only executor, this is what lets a new
 board run an agent with no step above. The Worker, `startLocal()` and mothership mode do not take it.

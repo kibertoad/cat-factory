@@ -50,8 +50,9 @@ export interface RunnerPoolConnectionRepository {
  * An ACCOUNT's runner pool: the same shape as {@link RunnerPoolConnectionRecord}, keyed by account
  * instead of workspace. Every board of the account that has no live pool of its own (and has not
  * opted out through its `inheritAccountRunnerPool` setting) dispatches to it. One row per account,
- * with no tombstone: nothing unregisters it through the API, and a deployment's seed only ever
- * inserts it, so a deleted-but-present row would only add a state nobody reads.
+ * with no tombstone: nothing unregisters it through the API, and only a deployment's seed writes it
+ * (inserts it, or replaces it when the seed changed), so a deleted-but-present row would only add a
+ * state nobody reads.
  */
 export interface AccountRunnerPoolRecord {
   accountId: string
@@ -76,14 +77,20 @@ export interface AccountRunnerPoolRepository {
    * whether THIS call inserted. An existing row is left untouched, whatever it holds.
    */
   insertIfAbsent(record: AccountRunnerPoolRecord): Promise<boolean>
+  /**
+   * Overwrite the account's existing row with `record`, keeping its `createdAt`. Never inserts:
+   * returns whether a row was there to replace.
+   */
+  replace(record: AccountRunnerPoolRecord): Promise<boolean>
 }
 
 /**
  * Ensures a deployment's DECLARED runner pool exists for an account: the runner-pool sibling of
  * `EnvironmentHandlerSeeder` and `SharedStackSeeder`, with the same two wiring sites (a boot
  * backfill, and `WorkspaceService.create`'s on-create hook), but keyed by ACCOUNT because that is
- * the scope a pool is inherited at. A seed never replaces a row the account already has, so a
- * second boot is a no-op.
+ * the scope a pool is inherited at. The boot backfill compares each account's row with what the
+ * deployment declares now and replaces it when they differ, so a rotated token or a new image
+ * reaches every account; a second boot with the same seed writes nothing.
  *
  * Kept free of integrations knowledge: the port speaks only ids; the concrete seeder (built over
  * `RunnerPoolConnectionService` and the deployment's seed callback) lives in
@@ -92,6 +99,9 @@ export interface AccountRunnerPoolRepository {
 export interface RunnerPoolSeeder {
   /** Seed the account's pool when it has none. A legacy board's `null` account is a no-op. */
   ensureForAccount(accountId: string | null): Promise<void>
-  /** Seed every existing account that has no pool, over batch reads. */
+  /**
+   * Seed every existing account that has no pool, and replace the pool of every account whose
+   * declared seed changed, over batch reads.
+   */
   ensureForAllAccounts(): Promise<void>
 }

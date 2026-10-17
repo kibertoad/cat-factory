@@ -76,4 +76,24 @@ export class D1AccountRunnerPoolRepository implements AccountRunnerPoolRepositor
       .run()
     return (result.meta?.changes ?? 0) > 0
   }
+
+  async replace(record: AccountRunnerPoolRecord): Promise<boolean> {
+    const result = await this.db
+      .prepare(
+        `UPDATE account_runner_pools
+            SET kind = ?, provider_id = ?, label = ?, base_url = ?, config_json = ?, secrets_cipher = ?
+          WHERE account_id = ?`,
+      )
+      .bind(
+        record.kind,
+        record.providerId,
+        record.label,
+        record.baseUrl,
+        record.configJson,
+        record.secretsCipher,
+        record.accountId,
+      )
+      .run()
+    return (result.meta?.changes ?? 0) > 0
+  }
 }

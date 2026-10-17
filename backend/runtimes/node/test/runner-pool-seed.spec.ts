@@ -182,7 +182,7 @@ describeDb('declared account runner pool (seedAccountRunnerPool)', () => {
     expect(rows).toHaveLength(1)
   })
 
-  it('backfills every existing account that has no pool, and keeps one that already has one', async () => {
+  it('backfills every existing account that has no pool, and leaves one holding the same seed untouched', async () => {
     const { container, pools, makeOrg } = await appWith(() => SEED)
     const a = await makeOrg('org-h')
     const b = await makeOrg('org-i')
@@ -193,5 +193,26 @@ describeDb('declared account runner pool (seedAccountRunnerPool)', () => {
 
     expect(await pools.getByAccount(b.accountId)).not.toBeNull()
     expect(await pools.getByAccount(a.accountId)).toEqual(before)
+  })
+
+  it('replaces a pool at boot once the seed is rotated, but never on board creation', async () => {
+    let declared = SEED
+    const { container, pools, makeOrg } = await appWith(() => declared)
+    const { accountId } = await makeOrg('org-j')
+    await container.runnerPoolSeeder!.ensureForAccount(accountId)
+    const before = (await pools.getByAccount(accountId))!
+
+    declared = {
+      config: { ...SEED.config, kubernetes: { ...SEED.config.kubernetes, label: 'Rotated pool' } },
+      secrets: { apiToken: 'rotated-token' },
+    }
+    await container.runnerPoolSeeder!.ensureForAccount(accountId)
+    expect(await pools.getByAccount(accountId)).toEqual(before)
+
+    await container.runnerPoolSeeder!.ensureForAllAccounts()
+
+    const after = (await pools.getByAccount(accountId))!
+    expect(after).toMatchObject({ label: 'Rotated pool', createdAt: before.createdAt })
+    expect(after.secretsCipher).not.toBe(before.secretsCipher)
   })
 })

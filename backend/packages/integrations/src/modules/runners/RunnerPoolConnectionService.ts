@@ -1,6 +1,7 @@
 import {
   ConflictError,
   DEFAULT_WORKSPACE_SETTINGS,
+  describeError,
   noopLogger,
   requireWorkspace,
   ValidationError,
@@ -81,6 +82,19 @@ export interface ResolvedRunnerBackend {
   providerId: string
 }
 
+/** JSON with object keys sorted, so two values that differ only in key order compare equal. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) =>
+    item && typeof item === 'object' && !Array.isArray(item)
+      ? Object.fromEntries(
+          Object.entries(item as Record<string, unknown>).sort(([a], [b]) =>
+            a < b ? -1 : a > b ? 1 : 0,
+          ),
+        )
+      : item,
+  )
+}
+
 export class RunnerPoolConnectionService {
   private readonly log: Logger
 
@@ -135,15 +149,43 @@ export class RunnerPoolConnectionService {
    * Register an ACCOUNT's runner pool unless it already has one: the write a deployment's seed
    * makes. Validated like any registration, sealed under the same cipher, and inserted in one
    * conflict-targeted statement, so two seeders racing on the same account leave exactly one row
-   * and an existing row (an earlier seed, or one a future admin surface wrote) is never replaced.
-   * Returns whether this call inserted.
+   * and an existing row is never replaced here ({@link reseedAccount} is the write that updates
+   * one). Returns whether this call inserted.
    */
   async seedAccount(accountId: string, input: RunnerPoolInput): Promise<boolean> {
+    const repository = this.requireAccountPoolRepository()
+    return repository.insertIfAbsent(await this.sealAccountRecord(accountId, input))
+  }
+
+  /**
+   * Bring an account's existing pool in line with what the deployment declares now: the write a
+   * seed's boot backfill makes, so a rotated token or a new image reaches accounts seeded on earlier
+   * boots. Compared by CONTENT (the stored config, and the secrets decrypted), because the cipher
+   * seals the same secrets differently each time; an equal row is left alone. A stored bundle that
+   * no longer decrypts counts as different, since the seed is the only thing that can repair it.
+   * Validated like any registration first. Returns whether this call replaced the row.
+   */
+  async reseedAccount(current: AccountRunnerPoolRecord, input: RunnerPoolInput): Promise<boolean> {
+    const repository = this.requireAccountPoolRepository()
+    const record = await this.sealAccountRecord(current.accountId, input)
+    if (await this.holdsSeed(current, input)) return false
+    return repository.replace(record)
+  }
+
+  private requireAccountPoolRepository(): AccountRunnerPoolRepository {
     const accountPool = this.deps.accountRunnerPool
     if (!accountPool) throw new ConflictError('The account runner pool is not wired')
+    return accountPool.repository
+  }
+
+  /** Validate a declared pool and seal it into the account's row shape. */
+  private async sealAccountRecord(
+    accountId: string,
+    input: RunnerPoolInput,
+  ): Promise<AccountRunnerPoolRecord> {
     const provider = this.validate(input)
     const meta = provider.connectionMeta(input.config)
-    const record: AccountRunnerPoolRecord = {
+    return {
       accountId,
       kind: input.config.kind,
       providerId: meta.providerId,
@@ -153,7 +195,29 @@ export class RunnerPoolConnectionService {
       secretsCipher: await this.deps.secretCipher.encrypt(JSON.stringify(input.secrets)),
       createdAt: this.deps.clock.now(),
     }
-    return accountPool.repository.insertIfAbsent(record)
+  }
+
+  /** Whether the account's stored row already holds exactly this config and these secrets. */
+  private async holdsSeed(
+    current: AccountRunnerPoolRecord,
+    input: RunnerPoolInput,
+  ): Promise<boolean> {
+    let storedConfig: unknown
+    let storedSecrets: unknown
+    try {
+      storedConfig = JSON.parse(current.configJson)
+      storedSecrets = JSON.parse(await this.deps.secretCipher.decrypt(current.secretsCipher))
+    } catch (error) {
+      this.log.warn('stored account runner pool could not be read; the declared seed replaces it', {
+        accountId: current.accountId,
+        ...describeError(error),
+      })
+      return false
+    }
+    return (
+      canonicalJson(storedConfig) === canonicalJson(input.config) &&
+      canonicalJson(storedSecrets) === canonicalJson(input.secrets)
+    )
   }
 
   /**

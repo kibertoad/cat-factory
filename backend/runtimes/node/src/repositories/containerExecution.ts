@@ -142,6 +142,22 @@ export class DrizzleAccountRunnerPoolRepository implements AccountRunnerPoolRepo
       .returning({ accountId: accountRunnerPools.account_id })
     return inserted.length > 0
   }
+
+  async replace(record: AccountRunnerPoolRecord): Promise<boolean> {
+    const replaced = await this.db
+      .update(accountRunnerPools)
+      .set({
+        kind: record.kind,
+        provider_id: record.providerId,
+        label: record.label,
+        base_url: record.baseUrl,
+        config_json: record.configJson,
+        secrets_cipher: record.secretsCipher,
+      })
+      .where(eq(accountRunnerPools.account_id, record.accountId))
+      .returning({ accountId: accountRunnerPools.account_id })
+    return replaced.length > 0
+  }
 }
 
 function rowToInstallation(row: typeof githubInstallations.$inferSelect): GitHubInstallation {

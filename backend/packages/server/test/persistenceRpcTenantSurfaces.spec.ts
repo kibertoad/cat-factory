@@ -561,10 +561,10 @@ describe('account runner pool surface', () => {
     })
   })
 
-  it('refuses insertIfAbsent (the seed write stays mothership-internal)', async () => {
-    await expect(
-      remoteRegistry().accountRunnerPoolRepository!.insertIfAbsent!({ accountId: ACCOUNT }),
-    ).rejects.toThrow(/not callable/)
+  it('refuses insertIfAbsent and replace (the seed writes stay mothership-internal)', async () => {
+    const repo = remoteRegistry().accountRunnerPoolRepository!
+    await expect(repo.insertIfAbsent!({ accountId: ACCOUNT })).rejects.toThrow(/not callable/)
+    await expect(repo.replace!({ accountId: ACCOUNT })).rejects.toThrow(/not callable/)
   })
 })
 

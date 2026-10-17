@@ -1,4 +1,5 @@
 import {
+  createRecordingLogger,
   DEFAULT_WORKSPACE_SETTINGS,
   type AccountRunnerPoolRecord,
   type AccountRunnerPoolRepository,
@@ -53,7 +54,10 @@ function setup(opts: {
   wired?: boolean
 }) {
   const inserted: AccountRunnerPoolRecord[] = []
+  const replaced: AccountRunnerPoolRecord[] = []
+  const logger = createRecordingLogger()
   const service = new RunnerPoolConnectionService({
+    logger,
     runnerPoolConnectionRepository: {
       getByWorkspace: async () => opts.own ?? null,
     } as unknown as RunnerPoolConnectionRepository,
@@ -77,6 +81,10 @@ function setup(opts: {
                 inserted.push(record)
                 return true
               },
+              replace: async (record: AccountRunnerPoolRecord) => {
+                replaced.push(record)
+                return true
+              },
             } as unknown as AccountRunnerPoolRepository,
             workspaceSettingsRepository: {
               get: async (): Promise<WorkspaceSettings | null> =>
@@ -87,7 +95,7 @@ function setup(opts: {
           },
         }),
   })
-  return { service, inserted }
+  return { service, inserted, replaced, logger }
 }
 
 describe('RunnerPoolConnectionService account tier', () => {
@@ -176,5 +184,85 @@ describe('RunnerPoolConnectionService seeding an account', () => {
 
     expect(inserted).toHaveLength(1)
     expect(inserted[0]).toMatchObject({ accountId: 'acc_1', kind: 'kubernetes', createdAt: 1_000 })
+  })
+})
+
+describe('RunnerPoolConnectionService reseeding an account', () => {
+  // The fake cipher is the identity, so a stored row's `secretsCipher` is the plaintext JSON.
+  const stored = (secrets: Record<string, string>, config: unknown = CONFIG) => ({
+    ...accountRow('acc_1'),
+    configJson: JSON.stringify(config),
+    secretsCipher: JSON.stringify(secrets),
+  })
+
+  it('leaves a row alone when config and secrets match, whatever the key order', async () => {
+    const { service, replaced } = setup({})
+    const reordered = { kubernetes: CONFIG.kubernetes, kind: CONFIG.kind }
+
+    expect(
+      await service.reseedAccount(stored({ apiToken: 't' }, reordered), {
+        config: CONFIG,
+        secrets: { apiToken: 't' },
+      }),
+    ).toBe(false)
+
+    expect(replaced).toEqual([])
+  })
+
+  it('replaces the row when a secret was rotated', async () => {
+    const { service, replaced } = setup({})
+
+    expect(
+      await service.reseedAccount(stored({ apiToken: 'old' }), {
+        config: CONFIG,
+        secrets: { apiToken: 'new' },
+      }),
+    ).toBe(true)
+
+    expect(replaced).toHaveLength(1)
+    expect(JSON.parse(replaced[0]!.secretsCipher)).toEqual({ apiToken: 'new' })
+  })
+
+  it('replaces the row when the config changed', async () => {
+    const { service, replaced } = setup({})
+    const newImage = {
+      ...CONFIG,
+      kubernetes: { ...CONFIG.kubernetes, image: 'ghcr.io/acme/executor:2' },
+    }
+
+    await service.reseedAccount(stored({ apiToken: 't' }), {
+      config: newImage,
+      secrets: { apiToken: 't' },
+    })
+
+    expect(JSON.parse(replaced[0]!.configJson)).toEqual(newImage)
+  })
+
+  it('replaces a row whose stored secrets no longer decrypt, and says so at warn', async () => {
+    const { service, replaced, logger } = setup({})
+
+    expect(
+      await service.reseedAccount(
+        { ...stored({}), secretsCipher: 'not json' },
+        {
+          config: CONFIG,
+          secrets: { apiToken: 't' },
+        },
+      ),
+    ).toBe(true)
+
+    expect(replaced).toHaveLength(1)
+    expect(logger.lines.find((l) => l.level === 'warn')?.fields).toMatchObject({
+      accountId: 'acc_1',
+    })
+  })
+
+  it('validates the seed before touching the row', async () => {
+    const { service, replaced } = setup({})
+
+    await expect(
+      service.reseedAccount(stored({ apiToken: 'old' }), { config: CONFIG, secrets: {} }),
+    ).rejects.toThrow(/Missing secret values/)
+    expect(replaced).toEqual([])
   })
 })

@@ -1248,9 +1248,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // account-scoped (`getByAccount` by arg0 under the `account` rule, `listByAccounts` by the
   // `accountList` rule, so every requested id must be in scope) and return the credentials as a
   // SEALED `secretsCipher` blob, exactly like `runnerPoolConnectionRepository` above, so no
-  // plaintext crosses the machine API. `insertIfAbsent` is NOT exposed: it is the deployment
-  // seed's write, which runs where the deployment declares it (a node never seeds), classified
-  // `sweeper` in the drift guard.
+  // plaintext crosses the machine API. `insertIfAbsent` and `replace` are NOT exposed: they are the
+  // deployment seed's writes, which run where the deployment declares it (a node never seeds),
+  // classified `sweeper` in the drift guard.
   accountRunnerPoolRepository: {
     getByAccount: { scope: { kind: 'account', arg: 0 } },
     listByAccounts: { scope: { kind: 'accountList', arg: 0 } },
