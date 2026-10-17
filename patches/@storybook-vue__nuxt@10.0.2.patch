@@ -1,0 +1,25 @@
+diff --git a/dist/preview.mjs b/dist/preview.mjs
+index 625dd98..d62571d 100644
+--- a/dist/preview.mjs
++++ b/dist/preview.mjs
+@@ -7,13 +7,16 @@ export { applyDecorators, argTypesEnhancers, mount, parameters, render, renderTo
+ import '#build/css';
+ import plugins from '#build/plugins';
+ 
++// PATCH: under `@storybook/addon-vitest` the story's canvas is a div with an EMPTY id, so every
++// story threw "StoryContext is not provided" before a single assertion ran (upstream: nuxt-modules/
++// storybook#1140). The key is only a NAME: it labels this story's Nuxt app and its context entry.
++// When the canvas gives no id, count.
++let fallbackKey = 0;
++
+ const pluginsTyped = plugins;
+ setup(async (_vueApp, storyContext) => {
+   const vueApp = _vueApp;
+-  const key = storyContext?.canvasElement.id;
+-  if (!key) {
+-    throw new Error("StoryContext is not provided");
+-  }
++  const key = storyContext?.canvasElement?.id || `portable-${++fallbackKey}`;
+   const storyNuxtAppId = `nuxt-app-${key}`;
+   const storyNuxtCtx = getNuxtAppCtx(storyNuxtAppId);
+   window.__NUXT__ = createNuxtPayload();
