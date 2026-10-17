@@ -54,6 +54,10 @@ standalone routes (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-passwor
   solid siblings), and quiet chrome says `color="neutral" variant="ghost" size="xs"`.
   [Rule](./README.md#buttons-and-badges-follow-one-variant-policy), guarded by
   `scripts/check-frontend-variants.mjs`.
+- **A component keeps its `Foo.stories.ts` current**: one story per state it can draw (`Default`
+  first, then `Empty`, `Loading`, `Failed`, then its own), so a new component or a new state adds
+  its story. [Conventions](../../docs/internal/storybook.md), guarded by
+  `scripts/check-story-titles.mjs`.
 
 **Nuxt UI guidance:** the vendored [`nuxt-ui` skill](../../.claude/skills/nuxt-ui/SKILL.md) teaches
 WHEN to use which component and HOW to build well; the [`nuxt-ui` MCP server](../../.mcp.json)
@@ -78,7 +82,8 @@ is whole-tree from the root (AGENTS.md). Run these where stated:
   `node scripts/check-frontend-type-scale.mjs`, `node scripts/check-frontend-radius.mjs`,
   `node scripts/check-frontend-primitives.mjs`, `node scripts/check-frontend-variants.mjs`,
   `node scripts/check-frontend-feedback.mjs`, `node scripts/check-frontend-geometry.mjs`,
-  `node scripts/check-file-size.mjs` from the repo root (install-free guards CI runs).
+  `node scripts/check-story-titles.mjs`, `node scripts/check-file-size.mjs` from the repo root
+  (install-free guards CI runs).
 
 **See also:** [`README.md`](./README.md), [`app/docs/architecture.md`](./app/docs/architecture.md),
 [`@cat-factory/contracts`](../../backend/packages/contracts/AGENTS.md) (the shared wire types).
