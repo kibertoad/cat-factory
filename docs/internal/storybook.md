@@ -232,9 +232,9 @@ every later story in the session.
 2 of 4 runs timed out on stories that pass alone, and no story failed twice.
 
 The config caps the lane at 4 workers. Without a cap, Vitest runs one Chromium page per core (at
-most 12), and each page boots its own Nuxt app. On a 14-core Mac a full run held the whole CPU, and
-when the machine was already busy the first story of each file passed its 15s timeout. One run each
-of the same 40 files, all passing:
+most 12). Each page loads its story files from the one Vite server and renders them. On a 14-core
+Mac a full run held the whole CPU, and when the machine was already busy the first story of each
+file passed its 15s timeout. One run each of the same 40 files, all passing:
 
 | Workers          | Wall time | Peak load | Peak RSS (Chromium + node) |
 | ---------------- | --------- | --------- | -------------------------- |

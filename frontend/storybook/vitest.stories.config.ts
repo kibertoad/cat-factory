@@ -17,11 +17,10 @@ const dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   test: {
-    // Vitest's default is every core, capped at 12 in browser mode. Each worker is a Chromium page
-    // that boots its own Nuxt app, so on a large machine the lane took the whole CPU, and under load
-    // the first story of each file passed its 15s timeout. On a 40-file batch, 4 workers ran as fast
-    // as 7 or 12 with less load; CI's 4-vCPU runner already gets about 4. Pass `--maxWorkers` to
-    // override it for one run.
+    // Vitest's default is every core, capped at 12 in browser mode, and each worker is a Chromium
+    // page. On a large machine the lane took the whole CPU, and under load the first story of each
+    // file passed its 15s timeout. On a 40-file batch, 4 workers ran as fast as 7 or 12 with less
+    // load; CI's 4-vCPU runner already gets about 4. Pass `--maxWorkers` to override it for a run.
     maxWorkers: 4,
     projects: [
       {
