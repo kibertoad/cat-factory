@@ -1,10 +1,9 @@
 <script setup lang="ts">
-// Shared collapsible "Show detail" disclosure for a failure's extended `detail`, used by
-// both the failure banner (`AgentFailureCard`) and the prior-errors history
-// (`AgentFailureHistory`). Renders nothing when there is no detail or it merely repeats the
-// message. Tone (summary/pre classes) is passed by the host so it blends into each surface
-// (rose banner vs slate history) while the guard + the `showDetail` key + the whitespace-
-// preserving `<pre>` structure live in one place.
+// Collapsible "Show detail" disclosure for a failure's extended `detail`, used by the run
+// telemetry's failure summary (`RunFailureSummary`), which shows the message and hint itself.
+// The task surfaces use `FailureNotes` instead, which puts the message, the hint and the detail
+// behind one Details toggle. Renders nothing when there is no detail or it only repeats the
+// message. The host passes the summary and pre classes, to match the surface it sits on.
 import CopyButton from '~/components/common/CopyButton.vue'
 
 defineProps<{

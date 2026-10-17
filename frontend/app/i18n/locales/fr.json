@@ -412,6 +412,27 @@
       "deployRunnerSetup": "Configurer le pool de runners",
       "environmentLocalHint": "Les environnements éphémères locaux nécessitent un runtime de déploiement pour exécuter kubectl/kustomize/helm. Définissez {runtime} dans votre .env : le mode natif exécute ces outils sur votre hôte ({native}), le mode conteneur les exécute dans l'image de déploiement ({container}).",
       "showDetail": "Afficher le détail",
+      "details": "Détails",
+      "detailsMessage": "Message",
+      "detailsHint": "Notes pour l’exploitant",
+      "detailsFull": "Sortie complète",
+      "cause": {
+        "preflight": "Une vérification avant le démarrage a échoué, aucun travail n’a donc été fait. Ouvrez Détails pour voir quoi corriger, puis réessayez.",
+        "dispatch": "Le conteneur de l’agent n’a pas démarré, aucun travail n’a donc été fait. C’est en général temporaire.",
+        "environment": "L’environnement de test n’a pas pu être créé. Vérifiez les paramètres de l’environnement, puis réessayez.",
+        "evicted": "Le conteneur s’est arrêté plusieurs fois pendant l’exécution. Cela arrive en général pendant un déploiement : réessayez quand le déploiement est terminé.",
+        "harness_shutdown": "Quelque chose a arrêté le conteneur pendant cette étape. Cherchez la cause dans Détails avant de réessayer, car une nouvelle tentative peut s’arrêter de nouveau.",
+        "timeout": "L’exécution a dépassé sa limite de temps. Une nouvelle tentative la relance.",
+        "agent": "Une étape d’agent a échoué. Consultez la cause sur l’étape en échec, puis réessayez.",
+        "job_failed": "Le conteneur de l’agent a signalé un échec. Une nouvelle tentative démarre un nouveau conteneur.",
+        "delegated_failed": "Le système externe qui a exécuté cette étape a signalé un échec. Le lien de l’étape ouvre son exécution, qui montre la cause.",
+        "rejected": "Vous avez rejeté une étape, l’exécution s’est donc arrêtée. Une nouvelle tentative reprend à cette étape.",
+        "companion_rejected": "Un agent compagnon n’a pas donné de résultat utilisable. Une nouvelle tentative le relance.",
+        "stalled": "La plateforme a perdu le contact avec cette exécution. Une nouvelle tentative démarre une nouvelle exécution.",
+        "state_unreadable": "L’état enregistré de cette exécution est illisible, une nouvelle tentative peut donc échouer de nouveau. Relancez la tâche comme une nouvelle exécution.",
+        "cancelled": "Vous avez arrêté cette exécution. Une nouvelle tentative la relance.",
+        "unknown": "L’exécution a échoué pour une cause inconnue. Consultez Détails, puis réessayez."
+      },
       "retrying": "Nouvelle tentative…",
       "history": {
         "previousErrors": "{count} erreur précédente | {count} erreurs précédentes"

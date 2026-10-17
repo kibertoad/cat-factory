@@ -55,7 +55,7 @@ The pilot is slice 1, the queue view. The rules it sets for every later slice:
 | 5   | Decide whether the setup checklist replaces the setup banners and startup dialogs       | ⬜ todo      |                                                             |
 | 6   | Decide the role prompt at first launch (two of its three answers map to one surface)    | ⬜ todo      |                                                             |
 | 7   | Deep links to a task, so the queue can be shared (needs `global-search-and-deep-links`) | ⬜ todo      |                                                             |
-| 8   | One failure block per task view: a one-line cause, one action, details behind a toggle  | ⬜ todo      |                                                             |
+| 8   | One failure block per task view: a one-line cause, one action, details behind a toggle  | 🟡 in review |                                                             |
 | 9   | Vocabulary by surface: outcome words on the delivery surface, engine names elsewhere    | ⬜ todo      |                                                             |
 | 10  | Settings grouped by decision, label plus one line, operator settings in one place       | ⬜ todo      |                                                             |
 
@@ -104,5 +104,10 @@ Slice 4 (#2343) is stacked on slice 1 (#2325), because it reuses `useStartPipeli
   approvals, failures and parks, so the number changes after the click. Kept on purpose for now:
   the counter names its subset ("1 decision"), and the e2e suite reads it as the "a decision is
   pending" signal. One count for both is an open question for a later slice.
+- **The failure cause line is SPA copy; the backend's hint is operator text.** The backend's
+  per-kind `hint` (`EXECUTION_FAILURE_HINTS`) is part of the `run.failed` webhook contract, so it
+  stays as it is and the failure block shows it only behind Details. The cause line comes from
+  `presentFailure` (`utils/failureCause.ts`), an exhaustive map over the failure kinds. A new kind
+  needs a line there, in every locale.
 - **The demo backend reports no runner.** On the e2e backend the setup checklist truthfully says
   that no runner is configured, though runs work, because the agents are faked.

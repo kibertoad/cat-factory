@@ -412,6 +412,27 @@
       "deployRunnerSetup": "Configurar pool de runners",
       "environmentLocalHint": "Los entornos efímeros locales necesitan un runtime de despliegue para ejecutar kubectl/kustomize/helm. Define {runtime} en tu .env: el modo nativo ejecuta esas herramientas en tu host ({native}), el modo contenedor las ejecuta en la imagen de despliegue ({container}).",
       "showDetail": "Mostrar detalle",
+      "details": "Detalles",
+      "detailsMessage": "Mensaje",
+      "detailsHint": "Notas para el operador",
+      "detailsFull": "Salida completa",
+      "cause": {
+        "preflight": "Una comprobación previa al inicio falló, así que no se hizo ningún trabajo. Abre Detalles para ver qué corregir y luego reintenta.",
+        "dispatch": "El contenedor del agente no se inició, así que no se hizo ningún trabajo. Esto suele ser temporal.",
+        "environment": "No se pudo crear el entorno de pruebas. Revisa la configuración del entorno y luego reintenta.",
+        "evicted": "El contenedor se detuvo varias veces durante la ejecución. Esto suele ocurrir durante un despliegue, así que reintenta cuando el despliegue termine.",
+        "harness_shutdown": "Algo detuvo el contenedor durante este paso. Busca la causa en Detalles antes de reintentar, porque un reintento puede detenerse otra vez.",
+        "timeout": "La ejecución superó su límite de tiempo. Un reintento la inicia de nuevo.",
+        "agent": "Falló un paso de un agente. Consulta la causa en el paso fallido y luego reintenta.",
+        "job_failed": "El contenedor del agente informó de un fallo. Un reintento inicia un contenedor nuevo.",
+        "delegated_failed": "El sistema externo que ejecutó este paso informó de un fallo. El enlace del paso abre su ejecución, que muestra la causa.",
+        "rejected": "Rechazaste un paso, así que la ejecución se detuvo. Un reintento empieza de nuevo desde ese paso.",
+        "companion_rejected": "Un agente acompañante no dio un resultado utilizable. Un reintento lo ejecuta de nuevo.",
+        "stalled": "La plataforma perdió el contacto con esta ejecución. Un reintento inicia una ejecución nueva.",
+        "state_unreadable": "No se puede leer el estado guardado de esta ejecución, así que un reintento puede fallar otra vez. Inicia la tarea de nuevo como una ejecución nueva.",
+        "cancelled": "Detuviste esta ejecución. Un reintento la inicia de nuevo.",
+        "unknown": "La ejecución falló por una causa desconocida. Consulta Detalles y luego reintenta."
+      },
       "retrying": "Reintentando…",
       "history": {
         "previousErrors": "{count} error anterior | {count} errores anteriores"
