@@ -231,6 +231,26 @@ every later story in the session.
 `--browser.isolate=false` cut that to about 2 minutes, and was rejected: with the files shuffled,
 2 of 4 runs timed out on stories that pass alone, and no story failed twice.
 
+The config caps the lane at 4 workers. Without a cap, Vitest runs one Chromium page per core (at
+most 12), and each page boots its own Nuxt app. On a 14-core Mac a full run held the whole CPU, and
+when the machine was already busy the first story of each file passed its 15s timeout. One run each
+of the same 40 files, all passing:
+
+| Workers          | Wall time | Peak load | Peak RSS (Chromium + node) |
+| ---------------- | --------- | --------- | -------------------------- |
+| 12 (the default) | 46s       | 10.7      | about 16.7 GB              |
+| 7 (`'50%'`)      | 41s       | 9.2       | about 15.1 GB              |
+| 4                | 42s       | 6.8       | 14.6 GB                    |
+| 2                | 50s       | 8.0       | 10.5 GB                    |
+
+More than 4 workers added load and no speed. The node side (the Vite server and the runner) holds
+about 3 GB at any worker count, and only the Chromium part shrinks with fewer workers. The node
+column also counts about 1.8 GB of unrelated node processes, and the RSS sum counts shared Chromium
+memory more than once, so compare the rows, not the totals. Each start load was about 4.5, and the
+1-minute average lags on a short run, so the load column is approximate. CI's
+`ubuntu-latest` runner has 4 vCPUs, so the cap changes nothing there. Pass `--maxWorkers=2` on the
+command line to trade about 20% more time for about 4 GB less memory.
+
 `parameters.a11y.test` is `todo`: axe violations are REPORTED, not failed on, because `main` has
 real ones (the `text-dimmed` token at 2.63:1, an unlabelled `SecretInput`). Change it to `error`
 when that baseline is clean.
