@@ -20,7 +20,9 @@ on:
   # Until the fix lands it runs only on manual dispatch, which also serves the fix's evidence runs.
   # https://github.com/kibertoad/cat-factory/pull/2422#issuecomment-6243475982
   # Restore the nightly `schedule` (cron '50 2 * * *') and the `pull_request` paths filter by
-  # reverting the commit that paused them.
+  # reverting the commit that paused them. When restoring, skip release PRs with
+  # `if: github.head_ref != 'changeset-release/main'` on the job: they change only package versions,
+  # which match the paths filter, and run the same code the nightly already checks.
   workflow_dispatch:
 
 concurrency:
