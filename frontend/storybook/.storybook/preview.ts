@@ -2,7 +2,7 @@ import { h } from 'vue'
 import { useColorMode } from '#imports'
 import UApp from '@nuxt/ui/components/App.vue'
 import { __resetConsumerModulesForTest } from '../../app/app/modular/registry'
-import { installApiResponses, startApiWorker } from '../../app/app/stories/api'
+import { installApiResponses, releasePendingResponses, startApiWorker } from '../../app/app/stories/api'
 import type { Preview } from '@storybook/vue3'
 
 // Every story renders inside `UApp`, exactly as `app.vue` does.
@@ -98,6 +98,8 @@ const preview: Preview = {
   beforeEach: () => {
     __resetConsumerModulesForTest()
     clearCookies()
+    // The cleanup runs when the story ends, while its page can still answer the worker.
+    return releasePendingResponses
   },
 
   // One msw worker for the whole preview: registering a service worker per story would be slow

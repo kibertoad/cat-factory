@@ -12,6 +12,12 @@ const INTEGRITY_CHECKSUM = '5cd5cf8b54c3a90f82960cedcd637772'
 const IS_MOCKED_RESPONSE = Symbol('isMockedResponse')
 
 const activeClientIds = new Set()
+// DEBUG ONLY: boots and failed passthrough fetches, posted to the story lane's /__mswlog.
+const BOOT = Math.random().toString(36).slice(2, 8)
+function dbg(kind, data) {
+  fetch('/__mswlog', { method: 'POST', body: JSON.stringify({ t: Date.now(), boot: BOOT, kind, ...data }) }).catch(() => {})
+}
+dbg('boot', {})
 /**
  * @type {Map<string, Set<Promise<Response>>>}
  */
@@ -168,6 +174,7 @@ async function handleRequest(event, requestId) {
   try {
     response = await responsePromise
   } catch (error) {
+    dbg('err', { from: event.clientId, dest: event.request.destination, url: event.request.url.slice(0, 160), error: String(error) })
     // The request has settled without a response (e.g. a passthrough
     // request failed with a network error). Notify the client so it
     // can release the resources associated with this request.

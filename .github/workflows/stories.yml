@@ -85,6 +85,7 @@ jobs:
       - name: Render every story
         env:
           DEBUG: 'vitest:browser:playwright,vitest:browser:api'
+          MSWLOG: ${{ runner.temp }}/mswlog.ndjson
         run: |
           ( while true; do echo "$(date +%T) mem_used_avail_MB=$(free -m | awk 'NR==2{print $3"/"$7}') chrome_rss_MB=$(ps -eo rss,comm | awk '/chrom|headless/{s+=$1} END{print int(s/1024)}') chrome_procs=$(pgrep -c -f 'chrom|headless_shell') top_renderer_MB=$(ps -eo rss,args | grep -E 'type=renderer' | grep -v grep | sort -rn | head -1 | awk '{print int($1/1024)}')"; sleep 10; done ) > ${{ runner.temp }}/disk.log 2>&1 &
           rc=0; pnpm --filter @cat-factory/storybook run test:stories > ${{ runner.temp }}/stories.log 2>&1 || rc=$?
@@ -100,3 +101,4 @@ jobs:
             ${{ runner.temp }}/stories.log
             ${{ runner.temp }}/disk.log
             ${{ runner.temp }}/oom.log
+            ${{ runner.temp }}/mswlog.ndjson

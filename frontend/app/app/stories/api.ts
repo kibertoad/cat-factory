@@ -9,7 +9,7 @@
 // validated against the contract's 200 schema when the story loads. So a fixture that drifts from
 // the API fails loudly instead of rendering a shape the backend would never send.
 import type { ApiContract } from '@toad-contracts/core'
-import { delay, http, HttpResponse, type HttpHandler } from 'msw'
+import { http, HttpResponse, type HttpHandler } from 'msw'
 import { setupWorker, type SetupWorker } from 'msw/browser'
 import type { SuccessBodyOf } from '~/composables/api/client'
 import { storyWorkspacePrefix } from './workspace'
@@ -37,6 +37,31 @@ export async function startApiWorker(): Promise<void> {
       if (origin !== window.location.origin && !STORYBOOK_HOSTS.has(hostname)) defaults.warn()
     },
   })
+}
+
+// A request a story keeps pending holds a `fetch` event open in the service worker, and Chromium
+// stops a worker whose event stays open for about five minutes, failing every request it was
+// proxying. So a pending response waits for the story to END, not forever: `preview.ts` releases
+// it in the story's cleanup, while the page is still there to answer the worker.
+let release = Promise.withResolvers<void>()
+
+/** Settle every response the finished story kept pending. */
+export function releasePendingResponses(): void {
+  release.resolve()
+  release = Promise.withResolvers<void>()
+}
+
+/**
+ * A response that never arrives while the story runs. Once the story has ended it is the backend's
+ * 500 envelope, which the app handles as it does in a `Failed` story; a network error would land in
+ * the next story as an unhandled rejection.
+ */
+async function pendingUntilStoryEnds(): Promise<Response> {
+  await release.promise
+  return HttpResponse.json(
+    { error: { code: 'internal', message: 'Internal server error' } },
+    { status: 500 },
+  )
 }
 
 /** Replace the installed responses with the story's own. */
@@ -110,10 +135,7 @@ export function apiPending<T extends ApiContract>(
   params: { pathPrefix?: string; pathParams?: Parameters<T['pathResolver']>[0] } = {},
 ): HttpHandler {
   const path = `${params.pathPrefix ?? ''}${contract.pathResolver(params.pathParams)}`
-  return http[contract.method](`*${path}`, async () => {
-    await delay('infinite')
-    return new HttpResponse(null)
-  })
+  return http[contract.method](`*${path}`, pendingUntilStoryEnds)
 }
 
 /**
@@ -222,10 +244,7 @@ export function artifactBlobResponse(
 
 /** One artifact's bytes that never arrive, for a component's loading state. */
 export function artifactBlobPending(artifactId: string): HttpHandler {
-  return http.get(`*${storyWorkspacePrefix}/artifacts/${artifactId}/blob`, async () => {
-    await delay('infinite')
-    return new HttpResponse(null)
-  })
+  return http.get(`*${storyWorkspacePrefix}/artifacts/${artifactId}/blob`, pendingUntilStoryEnds)
 }
 
 /** One artifact's bytes refused with the backend's 500, for a component's error state. */
