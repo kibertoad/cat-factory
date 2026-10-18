@@ -27,15 +27,14 @@ of applying a stale fix. Remove the patch when a release fixes the bug.
 `storyContext.canvasElement.id`, and under `@storybook/addon-vitest` the canvas is a `div` with an
 empty `id`. Upstream:
 [nuxt-modules/storybook#1140](https://github.com/nuxt-modules/storybook/issues/1140). The key only
-names the story's Nuxt app, so the patch counts when the id is empty.
+names the story's Nuxt app, so the patch uses a constant name when the id is empty, and each story
+overwrites it the way the canvas id does in Storybook itself. A missing canvas still throws. The
+patch covers both entry points, `dist/preview.mjs` and `dist/preview.cjs`.
 
-Until 10.0.2 the patch also fixed `NUXT_E1001` on Nuxt 4.6, where every story died because the
-preset wrote the story's Nuxt app to the `unctx` registry and Nuxt 4.6 reads
-`globalThis.__nuxt_app_ctx__`
-([nuxt-modules/storybook#1138](https://github.com/nuxt-modules/storybook/issues/1138)). 10.0.2
-ships that fix ([#1139](https://github.com/nuxt-modules/storybook/pull/1139)): the preset now
-writes through Nuxt's own `getNuxtAppCtx`. Any story whose component reads `useAppConfig()`
-(`Spinner` does) throws `NUXT_E1001` if that regresses.
+The preset writes each story's Nuxt app through Nuxt's own `getNuxtAppCtx`
+([nuxt-modules/storybook#1139](https://github.com/nuxt-modules/storybook/pull/1139)). Any story
+whose component reads `useAppConfig()` (`Spinner` does) throws `NUXT_E1001` if that write breaks,
+in the preset or in Nuxt.
 
 ## Traps this setup already paid for
 
