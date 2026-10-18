@@ -1,6 +1,6 @@
 # Initiative: a delivery surface shaped like the job
 
-**Status:** in progress, slice 1 in review · **Owner:** frontend · **Started:** 2026-10-11 ·
+**Status:** in progress, slices 1 to 4 landed · **Owner:** frontend · **Started:** 2026-10-11 ·
 **Decision:** [#2258](https://github.com/kibertoad/cat-factory/issues/2258)
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the next
@@ -48,19 +48,16 @@ The pilot is slice 1, the queue view. The rules it sets for every later slice:
 
 | #   | Slice                                                                                   | Status       | PR                                                          |
 | --- | --------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------- |
-| 1   | Queue view beside the board, last-used view remembered, queue for a new person          | 🟡 in review | [#2325](https://github.com/kibertoad/cat-factory/pull/2325) |
-| 2   | Inbox cards carry their verb ("Answer", "Review", ...), "Mark read" secondary           | 🟡 in review | [#2341](https://github.com/kibertoad/cat-factory/pull/2341) |
-| 3   | Setup checklist: every prerequisite for "a task can run and merge" in one list          | 🟡 in review | [#2342](https://github.com/kibertoad/cat-factory/pull/2342) |
-| 4   | Describe new work: one sentence, a service, feature or bug; overrides behind one toggle | 🟡 in review | [#2343](https://github.com/kibertoad/cat-factory/pull/2343) |
+| 1   | Queue view beside the board, last-used view remembered, queue for a new person          | ✅ done      | [#2325](https://github.com/kibertoad/cat-factory/pull/2325) |
+| 2   | Inbox cards carry their verb ("Answer", "Review", ...), "Mark read" secondary           | ✅ done      | [#2341](https://github.com/kibertoad/cat-factory/pull/2341) |
+| 3   | Setup checklist: every prerequisite for "a task can run and merge" in one list          | ✅ done      | [#2342](https://github.com/kibertoad/cat-factory/pull/2342) |
+| 4   | Describe new work: one sentence, a service, feature or bug; overrides behind one toggle | ✅ done      | [#2343](https://github.com/kibertoad/cat-factory/pull/2343) |
 | 5   | Decide whether the setup checklist replaces the setup banners and startup dialogs       | ⬜ todo      |                                                             |
 | 6   | Decide the role prompt at first launch (two of its three answers map to one surface)    | ⬜ todo      |                                                             |
 | 7   | Deep links to a task, so the queue can be shared (needs `global-search-and-deep-links`) | ⬜ todo      |                                                             |
-| 8   | One failure block per task view: a one-line cause, one action, details behind a toggle  | ⬜ todo      |                                                             |
+| 8   | One failure block per task view: a one-line cause, one action, details behind a toggle  | 🟡 in review | [#2432](https://github.com/kibertoad/cat-factory/pull/2432) |
 | 9   | Vocabulary by surface: outcome words on the delivery surface, engine names elsewhere    | ⬜ todo      |                                                             |
 | 10  | Settings grouped by decision, label plus one line, operator settings in one place       | ⬜ todo      |                                                             |
-
-Slice 4 (#2343) is stacked on slice 1 (#2325), because it reuses `useStartPipelineResolver` from
-`useTaskActions`. Retarget it to `main` before slice 1's branch is deleted.
 
 ## Withdrawn approaches
 
@@ -104,5 +101,10 @@ Slice 4 (#2343) is stacked on slice 1 (#2325), because it reuses `useStartPipeli
   approvals, failures and parks, so the number changes after the click. Kept on purpose for now:
   the counter names its subset ("1 decision"), and the e2e suite reads it as the "a decision is
   pending" signal. One count for both is an open question for a later slice.
+- **The failure cause line is SPA copy; the backend's hint is operator text.** The backend's
+  per-kind `hint` (`EXECUTION_FAILURE_HINTS`) is part of the `run.failed` webhook contract, so it
+  stays as it is and the failure block shows it only behind Details. The cause line comes from
+  `presentFailure` (`utils/failureCause.ts`), an exhaustive map over the failure kinds. A new kind
+  needs a line there, in every locale.
 - **The demo backend reports no runner.** On the e2e backend the setup checklist truthfully says
   that no runner is configured, though runs work, because the agents are faked.

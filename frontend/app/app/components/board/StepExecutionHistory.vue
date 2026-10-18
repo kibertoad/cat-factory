@@ -4,7 +4,7 @@
 // the history surfaces what superseded attempts PRODUCED, not only the errors. Presentational
 // only: the caller passes both trails already narrowed to the step (by `stepIndex`).
 import type { AgentFailure, PriorStepOutput } from '~/types/domain'
-import FailureDetail from '~/components/board/FailureDetail.vue'
+import FailureListEntry from '~/components/board/FailureListEntry.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 
 const props = defineProps<{ failures: AgentFailure[]; outputs: PriorStepOutput[] }>()
@@ -71,25 +71,8 @@ const entries = computed<Entry[]>(() =>
         </p>
       </template>
 
-      <!-- a FAILED attempt: mirrors FailureHistoryList's entry markup -->
-      <template v-else>
-        <div class="flex items-center gap-1.5 text-3xs text-dimmed">
-          <UIcon name="i-lucide-alert-triangle" class="h-3 w-3 shrink-0 text-app-error-400/70" />
-          <time>{{ d(new Date(entry.occurredAt), 'long') }}</time>
-        </div>
-        <p class="mt-1 text-2xs leading-snug text-toned" :title="entry.failure.message">
-          {{ entry.failure.message }}
-        </p>
-        <p v-if="entry.failure.hint" class="mt-1 text-3xs leading-snug text-dimmed">
-          {{ entry.failure.hint }}
-        </p>
-        <FailureDetail
-          :detail="entry.failure.detail"
-          :message="entry.failure.message"
-          summary-class="text-3xs text-dimmed hover:text-toned"
-          pre-class="bg-app-950/80 text-3xs text-muted"
-        />
-      </template>
+      <!-- a FAILED attempt: the same entry FailureHistoryList shows -->
+      <FailureListEntry v-else :failure="entry.failure" />
     </li>
   </ol>
 </template>
