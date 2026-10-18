@@ -2,6 +2,6 @@
 '@cat-factory/storybook': patch
 ---
 
-Cap the story lane at 4 workers. Without a cap, Vitest opened one Chromium page per core (at most
-12), which held the whole CPU on a large machine and made the first story of each file time out
-under load. 4 workers ran as fast as 12 on a 40-file batch. Pass `--maxWorkers` to override it.
+Cap the story lane at 3 workers, the count Vitest gives CI's 4-vCPU runner. Without a cap, Vitest
+opened one Chromium page per core but one (at most 12), which held the whole CPU on a large machine.
+Pass `--maxWorkers` to override it.

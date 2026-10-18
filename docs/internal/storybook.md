@@ -229,12 +229,15 @@ every later story in the session.
 
 `test:stories` takes about 10 minutes for the whole tree, so no PR waits on it.
 `--browser.isolate=false` cut that to about 2 minutes, and was rejected: with the files shuffled,
-2 of 4 runs timed out on stories that pass alone, and no story failed twice.
+2 of 4 runs timed out on stories that pass alone, and no story failed twice. Those runs used
+Vitest's default worker count, before the cap below, so contention may explain the timeouts; the
+trade-off is worth measuring again at the cap. Vitest 5 replaces `browser.isolate` with the
+top-level `isolate` option.
 
-The config caps the lane at 4 workers. Without a cap, Vitest runs one Chromium page per core (at
-most 12). Each page loads its story files from the one Vite server and renders them. On a 14-core
-Mac a full run held the whole CPU, and when the machine was already busy the first story of each
-file passed its 15s timeout. One run each of the same 40 files, all passing:
+The config caps the lane at 3 workers. Without a cap, Vitest's run mode uses every core but one
+(at most 12 in browser mode), so CI's 4-vCPU `ubuntu-latest` runner gets 3, and a 14-core Mac gets 12. Each worker is a Chromium page that loads its story files from the one Vite server and renders
+them. On the 14-core Mac a full run held the whole CPU. The cap gives a local run CI's worker count.
+One run each of the same 40 files on that Mac, all passing:
 
 | Workers          | Wall time | Peak load | Peak RSS (Chromium + node) |
 | ---------------- | --------- | --------- | -------------------------- |
@@ -243,13 +246,25 @@ file passed its 15s timeout. One run each of the same 40 files, all passing:
 | 4                | 42s       | 6.8       | 14.6 GB                    |
 | 2                | 50s       | 8.0       | 10.5 GB                    |
 
-More than 4 workers added load and no speed. The node side (the Vite server and the runner) holds
+More than 4 workers added load and no speed; 3 was not measured, and is chosen to match CI. The
+node side (the Vite server and the runner) holds
 about 3 GB at any worker count, and only the Chromium part shrinks with fewer workers. The node
 column also counts about 1.8 GB of unrelated node processes, and the RSS sum counts shared Chromium
 memory more than once, so compare the rows, not the totals. Each start load was about 4.5, and the
-1-minute average lags on a short run, so the load column is approximate. CI's
-`ubuntu-latest` runner has 4 vCPUs, so the cap changes nothing there. Pass `--maxWorkers=2` on the
-command line to trade about 20% more time for about 4 GB less memory.
+1-minute average lags on a short run, so the load column is approximate. Pass `--maxWorkers=2` on
+the command line to trade about 20% more time for less memory: at most about 4 GB, an upper bound,
+since the RSS difference between two rows still counts shared memory more than once.
+
+The cap reduces the lane's own contention. It does not fix the first story of a file timing out
+under load: that story also pays the file's cold setup inside the 15s test timeout, whatever the
+worker count.
+
+To re-derive the cap on another machine, run Vitest's `doctor`. It measures half the configured
+worker count and halves again, so give it the uncapped count:
+
+```sh
+pnpm --filter @cat-factory/storybook exec vitest doctor --config vitest.stories.config.ts --maxWorkers=12
+```
 
 `parameters.a11y.test` is `todo`: axe violations are REPORTED, not failed on, because `main` has
 real ones (the `text-dimmed` token at 2.63:1, an unlabelled `SecretInput`). Change it to `error`

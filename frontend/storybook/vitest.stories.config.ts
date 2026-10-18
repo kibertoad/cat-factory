@@ -17,11 +17,9 @@ const dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   test: {
-    // Vitest's default is every core, capped at 12 in browser mode, and each worker is a Chromium
-    // page. On a large machine the lane took the whole CPU, and under load the first story of each
-    // file passed its 15s timeout. On a 40-file batch, 4 workers ran as fast as 7 or 12 with less
-    // load; CI's 4-vCPU runner already gets about 4. Pass `--maxWorkers` to override it for a run.
-    maxWorkers: 4,
+    // Each worker is a Chromium page, and past a few they add contention, not speed. 3 is what
+    // Vitest gives CI's 4-vCPU runner. Why, and how to re-check it: docs/internal/storybook.md.
+    maxWorkers: 3,
     projects: [
       {
         extends: true,
