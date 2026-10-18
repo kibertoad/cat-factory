@@ -471,17 +471,20 @@
         "environment": "The test environment could not be made. Check the environment settings, then retry.",
         "evicted": "The container stopped many times during the run. This usually occurs while the platform is updated, so retry when the update is complete.",
         "harness_shutdown": "Something stopped the container during this step. Find the cause in Details before you retry, because a retry can stop again.",
-        "timeout": "The run took more time than its limit. A retry starts it again.",
+        "timeout": "The run stopped responding, or it took more time than its limit. See Details for which, then retry.",
         "agent": "An agent step failed. See the failed step for the cause, then retry.",
         "job_failed": "The agent's container reported a failure. A retry starts a new container.",
         "delegated_failed": "The external system that ran this step reported a failure. The link on the step opens its run, which shows the cause.",
-        "rejected": "You rejected a step, so the run stopped. A retry starts again from that step.",
+        "rejected": "A step was rejected, so the run stopped. A retry starts again from that step.",
         "companion_rejected": "A companion agent did not give a usable result. A retry runs it again.",
         "stalled": "The platform lost contact with this run. A retry starts a new run.",
         "state_unreadable": "The saved state of this run cannot be read, so a retry reads the same broken state. Start a new run.",
-        "cancelled": "You stopped this run. A retry starts it again.",
+        "cancelled": "This run was stopped. A retry starts it again.",
         "unknown": "The run failed for an unknown cause. See Details, then retry.",
-        "deployRunnerUnwiredLocal": "This computer has no deploy runtime to make the test environment. Set the deploy runtime in your .env file, then retry.",
+        "deployRunnerUnwiredLocal": "This computer has no deploy runtime to make the test environment. Set {variable} in your .env file, then retry.",
+        "@deployRunnerUnwiredLocal": {
+          "description": "{variable} is an environment variable name (LOCAL_DEPLOY_RUNTIME). Keep the placeholder; do not translate it."
+        },
         "singleJob": {
           "evicted": "The container stopped before the job was complete. A retry starts a new container.",
           "timeout": "The job had no activity for too long, or it took more time than its limit. A retry starts it again.",
@@ -915,6 +918,7 @@
       "providersUnconfigured": {
         "title": "No AI provider for this model",
         "body": "No provider is configured for {models}. Add a provider key, connect a subscription, or enable Cloudflare AI to run it.",
+        "cause": "No provider is configured for a model in this pipeline. Add a provider key, connect a subscription, or enable Cloudflare AI, then retry.",
         "@body": {
           "description": "Keep the named placeholder for the model list intact (a comma-separated list of model ids is injected at runtime)."
         },

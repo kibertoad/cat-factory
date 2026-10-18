@@ -7,7 +7,8 @@
 // block can put it in its action row. The default slot holds extra controls (Retry when it is not
 // the block's action, Model activity).
 import type { AgentFailure } from '~/types/domain'
-import CopyButton from '~/components/common/CopyButton.vue'
+import FailureOutput from '~/components/board/FailureOutput.vue'
+import { failureOutput } from '~/utils/failureCause'
 
 const props = defineProps<{
   failure: Pick<AgentFailure, 'message' | 'hint' | 'detail'>
@@ -17,12 +18,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 
-// The detail often repeats the message word for word; show it once.
-const fullOutput = computed(() =>
-  props.failure.detail && props.failure.detail !== props.failure.message
-    ? props.failure.detail
-    : null,
-)
+const fullOutput = computed(() => failureOutput(props.failure))
 const labelClass = computed(() =>
   props.tone === 'error' ? 'text-app-error-400/80' : 'text-dimmed',
 )
@@ -48,13 +44,7 @@ const preClass = computed(() =>
 
     <section v-if="fullOutput">
       <p class="font-medium" :class="labelClass">{{ t('board.failure.detailsFull') }}</p>
-      <div class="relative mt-0.5">
-        <CopyButton :text="fullOutput" class="absolute end-1 top-1 z-10" />
-        <pre
-          class="max-h-32 overflow-auto whitespace-pre-wrap rounded-sm p-1.5 pe-9"
-          :class="preClass"
-          >{{ fullOutput }}</pre>
-      </div>
+      <FailureOutput :text="fullOutput" :pre-class="preClass" />
     </section>
 
     <slot />

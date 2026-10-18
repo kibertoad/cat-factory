@@ -423,7 +423,7 @@
         "environment": "Nie udało się utworzyć środowiska testowego. Sprawdź ustawienia środowiska, a potem ponów.",
         "evicted": "Kontener zatrzymał się kilka razy podczas uruchomienia. Zwykle dzieje się tak podczas aktualizacji platformy, więc ponów po jej zakończeniu.",
         "harness_shutdown": "Coś zatrzymało kontener podczas tego kroku. Znajdź przyczynę w Szczegółach, zanim ponowisz, bo ponowienie może znów się zatrzymać.",
-        "timeout": "Uruchomienie przekroczyło swój limit czasu. Ponowienie uruchamia je jeszcze raz.",
+        "timeout": "Uruchomienie przestało odpowiadać lub przekroczyło swój limit czasu. Sprawdź w Szczegółach, które z nich, a potem ponów.",
         "agent": "Krok agenta nie powiódł się. Sprawdź przyczynę przy nieudanym kroku, a potem ponów.",
         "job_failed": "Kontener agenta zgłosił błąd. Ponowienie uruchamia nowy kontener.",
         "delegated_failed": "Zewnętrzny system, który wykonał ten krok, zgłosił błąd. Link przy kroku otwiera jego uruchomienie z przyczyną.",
@@ -431,9 +431,9 @@
         "companion_rejected": "Agent towarzyszący nie zwrócił użytecznego wyniku. Ponowienie uruchamia go jeszcze raz.",
         "stalled": "Platforma straciła kontakt z tym uruchomieniem. Ponowienie rozpoczyna nowe uruchomienie.",
         "state_unreadable": "Nie można odczytać zapisanego stanu tego uruchomienia, więc ponowienie odczyta ten sam uszkodzony stan. Rozpocznij nowe uruchomienie.",
-        "cancelled": "To uruchomienie zostało zatrzymane ręcznie. Ponowienie uruchamia je jeszcze raz.",
+        "cancelled": "To uruchomienie zostało zatrzymane. Ponowienie uruchamia je jeszcze raz.",
         "unknown": "Uruchomienie nie powiodło się z nieznanej przyczyny. Sprawdź Szczegóły, a potem ponów.",
-        "deployRunnerUnwiredLocal": "Ten komputer nie ma środowiska wdrożeniowego do utworzenia środowiska testowego. Ustaw je w pliku .env, a potem ponów.",
+        "deployRunnerUnwiredLocal": "Ten komputer nie ma środowiska wdrożeniowego do utworzenia środowiska testowego. Ustaw {variable} w pliku .env, a potem ponów.",
         "singleJob": {
           "evicted": "Kontener zatrzymał się przed zakończeniem zadania. Ponowienie uruchamia nowy kontener.",
           "timeout": "Zadanie zbyt długo nie wykazywało aktywności lub przekroczyło swój limit czasu. Ponowienie uruchamia je jeszcze raz.",
@@ -834,6 +834,7 @@
       "providersUnconfigured": {
         "title": "Brak dostawcy AI dla tego modelu",
         "body": "Dla {models} nie skonfigurowano żadnego dostawcy. Dodaj klucz dostawcy, połącz subskrypcję lub włącz Cloudflare AI, aby go uruchomić.",
+        "cause": "Dla modelu w tym potoku nie skonfigurowano dostawcy. Dodaj klucz dostawcy, połącz subskrypcję lub włącz Cloudflare AI, a potem ponów.",
         "action": "Skonfiguruj AI"
       },
       "binaryStorageUnconfigured": {

@@ -1,4 +1,5 @@
 import type { ParsedConflict } from '~/composables/usePipelineErrorToast'
+import { BESPOKE_CONFLICT_FIXES, type ConflictAction } from '~/utils/conflictCopy'
 
 /**
  * The bespoke conflict toasts: the five 409 reasons whose copy interpolates runtime detail and
@@ -13,6 +14,10 @@ export function createBespokeConflictToasts(deps: {
   te: ReturnType<typeof useI18n>['te']
 }): (conflict: ParsedConflict) => boolean {
   const { toast, ui, t, te } = deps
+  // The toast button for a fix the failure block also offers (`BESPOKE_CONFLICT_FIXES`).
+  function fixAction(fix: ConflictAction) {
+    return { label: t(fix.labelKey), icon: fix.icon, onClick: () => fix.run(ui) }
+  }
   // The headline case: a pipeline step's model has no usable provider. Name the
   // offending model(s), explain no provider is available, and offer the one-click jump
   // to the AI setup — the same remedy the startup "No AI model configured" banner gives.
@@ -29,13 +34,7 @@ export function createBespokeConflictToasts(deps: {
       // Stay until dismissed: an actionable toast whose remedy button vanishes on the ~5s
       // auto-dismiss takes the one-click fix with it before the user can reach it.
       duration: 0,
-      actions: [
-        {
-          label: t('errors.conflict.providersUnconfigured.action'),
-          icon: 'i-lucide-settings',
-          onClick: () => ui.openAiProviderSetup(),
-        },
-      ],
+      actions: [fixAction(BESPOKE_CONFLICT_FIXES.providers_unconfigured.action)],
     })
   }
 
@@ -55,13 +54,7 @@ export function createBespokeConflictToasts(deps: {
       // Sticky, like the providers-unconfigured toast above: keep the "Configure storage"
       // remedy reachable instead of letting it auto-dismiss.
       duration: 0,
-      actions: [
-        {
-          label: t('errors.conflict.binaryStorageUnconfigured.action'),
-          icon: 'i-lucide-settings',
-          onClick: () => ui.openContentStorageSettings(),
-        },
-      ],
+      actions: [fixAction(BESPOKE_CONFLICT_FIXES.binary_storage_unconfigured.action)],
     })
   }
 

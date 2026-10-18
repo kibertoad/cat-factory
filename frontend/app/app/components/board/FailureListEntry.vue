@@ -5,7 +5,7 @@
 // earlier failure reads the same as the failure block (`AgentFailureCard`) above it. The host
 // owns the list item and its frame.
 import type { AgentFailure } from '~/types/domain'
-import { failureCauseKey } from '~/utils/failureCause'
+import { presentFailure } from '~/utils/failureCause'
 import FailureNotes from '~/components/board/FailureNotes.vue'
 
 const props = defineProps<{ failure: AgentFailure }>()
@@ -14,8 +14,8 @@ const { t, d } = useI18n()
 const auth = useAuthStore()
 
 // Both lists hold the earlier failures of a task run, never of a bootstrap.
-const causeKey = computed(() =>
-  failureCauseKey(props.failure, {
+const presented = computed(() =>
+  presentFailure(props.failure, {
     runKind: 'execution',
     localMode: auth.localMode?.enabled === true,
   }),
@@ -29,7 +29,7 @@ const causeKey = computed(() =>
   </div>
 
   <p class="mt-1 text-2xs leading-snug text-toned" data-testid="failure-entry-cause">
-    {{ t(causeKey) }}
+    {{ t(presented.causeKey, presented.causeParams) }}
   </p>
 
   <UCollapsible class="mt-1">

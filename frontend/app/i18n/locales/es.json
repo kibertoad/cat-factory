@@ -423,17 +423,17 @@
         "environment": "No se pudo crear el entorno de pruebas. Revisa la configuración del entorno y luego reintenta.",
         "evicted": "El contenedor se detuvo varias veces durante la ejecución. Esto suele ocurrir mientras se actualiza la plataforma, así que reintenta cuando la actualización termine.",
         "harness_shutdown": "Algo detuvo el contenedor durante este paso. Busca la causa en Detalles antes de reintentar, porque un reintento puede detenerse otra vez.",
-        "timeout": "La ejecución superó su límite de tiempo. Un reintento la inicia de nuevo.",
+        "timeout": "La ejecución dejó de responder o superó su límite de tiempo. Consulta en Detalles cuál de las dos y luego reintenta.",
         "agent": "Falló un paso de un agente. Consulta la causa en el paso fallido y luego reintenta.",
         "job_failed": "El contenedor del agente informó de un fallo. Un reintento inicia un contenedor nuevo.",
         "delegated_failed": "El sistema externo que ejecutó este paso informó de un fallo. El enlace del paso abre su ejecución, que muestra la causa.",
-        "rejected": "Rechazaste un paso, así que la ejecución se detuvo. Un reintento empieza de nuevo desde ese paso.",
+        "rejected": "Se rechazó un paso, así que la ejecución se detuvo. Un reintento empieza de nuevo desde ese paso.",
         "companion_rejected": "Un agente acompañante no dio un resultado utilizable. Un reintento lo ejecuta de nuevo.",
         "stalled": "La plataforma perdió el contacto con esta ejecución. Un reintento inicia una ejecución nueva.",
         "state_unreadable": "No se puede leer el estado guardado de esta ejecución, así que un reintento lee el mismo estado dañado. Inicia una ejecución nueva.",
-        "cancelled": "Detuviste esta ejecución. Un reintento la inicia de nuevo.",
+        "cancelled": "Esta ejecución se detuvo. Un reintento la inicia de nuevo.",
         "unknown": "La ejecución falló por una causa desconocida. Consulta Detalles y luego reintenta.",
-        "deployRunnerUnwiredLocal": "Este equipo no tiene un runtime de despliegue para crear el entorno de pruebas. Configura el runtime de despliegue en tu archivo .env y luego reintenta.",
+        "deployRunnerUnwiredLocal": "Este equipo no tiene un runtime de despliegue para crear el entorno de pruebas. Configura {variable} en tu archivo .env y luego reintenta.",
         "singleJob": {
           "evicted": "El contenedor se detuvo antes de que el trabajo terminara. Un reintento inicia un contenedor nuevo.",
           "timeout": "El trabajo estuvo sin actividad demasiado tiempo o superó su límite de tiempo. Un reintento lo inicia de nuevo.",
@@ -834,6 +834,7 @@
       "providersUnconfigured": {
         "title": "No hay proveedor de IA para este modelo",
         "body": "No hay ningún proveedor configurado para {models}. Añade una clave de proveedor, conecta una suscripción o activa Cloudflare AI para ejecutarlo.",
+        "cause": "No hay ningún proveedor configurado para un modelo de este pipeline. Añade una clave de proveedor, conecta una suscripción o activa Cloudflare AI, y luego reintenta.",
         "action": "Configurar IA"
       },
       "binaryStorageUnconfigured": {

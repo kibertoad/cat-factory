@@ -1,12 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { expect, userEvent, within } from 'storybook/test'
+import { expect, spyOn, userEvent, within } from 'storybook/test'
 import type { AgentFailure } from '@cat-factory/contracts'
 import { BILLING_FRAME_ID, bootstrapJob, failedApplyJob } from '~/stories/bootstrap.stories.mocks'
-import { authService, boardBlocks, boardWith, loginTask } from '~/stories/board.stories.mocks'
+import {
+  authService,
+  boardBlocks,
+  boardWith,
+  loginTask,
+  logoutTask,
+} from '~/stories/board.stories.mocks'
+import { execution } from '~/stories/snapshot.stories.mocks'
 import { failure } from '~/stories/pipelineStep.stories.mocks'
 import { seedBoard, seedViewer, withSeed } from '~/stories/withStores'
 import { useAgentRunsStore, type AgentRunSummary } from '~/stores/agentRuns'
 import { useAuthStore } from '~/stores/auth'
+import { useExecutionStore } from '~/stores/execution'
 import AgentFailureCard from './AgentFailureCard.vue'
 
 // The one failure block of a task view (board card, queue card, inspector, focus view) and of a
@@ -117,16 +125,14 @@ export const DispatchFailure: Story = {
 }
 
 /**
- * The environment provider failed: a setting fixes it, so the action opens the environment setup
- * and Retry moves into Details.
+ * The environment provider failed. That is most often a temporary provider fault, so Retry run
+ * leads, and the environment setup is beside it for the case where a setting is the cause.
  */
 export const EnvironmentFailure: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
+    await expect(canvas.getByTestId('agent-failure-retry')).toBeEnabled()
     await expect(canvas.getByTestId('agent-failure-setup')).toBeVisible()
-    await expect(canvas.queryByTestId('agent-failure-retry')).toBeNull()
-    await userEvent.click(canvas.getByRole('button', { name: 'Details' }))
-    await expect(await canvas.findByTestId('agent-failure-retry')).toBeEnabled()
   },
   args: {
     run: taskRun(
@@ -284,15 +290,29 @@ export const ReadOnly: Story = {
   decorators: [withSeed(() => seedViewer())],
 }
 
+/** A run of the login task, on a pipeline that is not the task's default. */
+const plannedRun = execution({ pipelineId: 'pl_story_plan', pipelineName: 'Story planning' })
+
 /**
  * The run's saved state cannot be read, so a retry reads the same broken state: the action starts
- * a new run, and Retry waits in Details.
+ * a new run of the FAILED run's pipeline, not the task's default, and Retry waits in Details.
  */
 export const StateUnreadable: Story = {
+  decorators: [
+    withSeed(() => {
+      seedBoard(boardBlocks)
+      useExecutionStore().instances = [plannedRun]
+    }),
+  ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await expect(canvas.getByTestId('agent-failure-new-run')).toBeEnabled()
     await expect(canvas.queryByTestId('agent-failure-retry')).toBeNull()
+    const start = spyOn(useExecutionStore(), 'start').mockResolvedValue(true)
+    await userEvent.click(canvas.getByTestId('agent-failure-new-run'))
+    await expect(start).toHaveBeenCalledWith(loginTask.id, {
+      id: 'pl_story_plan',
+      name: 'Story planning',
+    })
   },
   args: {
     run: taskRun(
@@ -310,11 +330,59 @@ export const StateUnreadable: Story = {
 }
 
 /**
+ * The same failure on a task whose dependencies have not merged: a new run is refused in the
+ * browser, as the card's Start is, and nothing is started.
+ */
+export const StateUnreadableBlocked: Story = {
+  decorators: [
+    withSeed(() => {
+      seedBoard(boardBlocks)
+      useExecutionStore().instances = [{ ...plannedRun, id: 'exec_logout', blockId: logoutTask.id }]
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const start = spyOn(useExecutionStore(), 'start').mockResolvedValue(true)
+    await userEvent.click(canvas.getByTestId('agent-failure-new-run'))
+    await expect(start).not.toHaveBeenCalled()
+  },
+  args: {
+    run: {
+      ...taskRun(failure({ kind: 'state_unreadable', detail: null, hint: null })),
+      blockId: logoutTask.id,
+      runId: 'exec_logout',
+    },
+  },
+}
+
+/**
+ * A run refused because no AI provider can serve a model in its pipeline: the action opens the AI
+ * setup, with the same label and fix as the refusal's toast.
+ */
+export const ProvidersUnconfigured: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByTestId('agent-failure-setup')).toHaveTextContent('Configure AI')
+  },
+  args: {
+    run: taskRun(
+      failure({
+        kind: 'preflight',
+        reason: 'providers_unconfigured',
+        message: 'No provider is configured for claude-sonnet-5-5.',
+        detail: null,
+        hint: null,
+      }),
+    ),
+  },
+}
+
+/**
  * A board viewer on a failure a setting fixes: the setup button stays usable, and the Retry in
  * Details is disabled, as the main Retry is.
  */
 export const ReadOnlySetupAction: Story = {
-  args: EnvironmentFailure.args,
+  args: GithubNotConnected.args,
   decorators: [withSeed(() => seedViewer())],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)

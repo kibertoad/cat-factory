@@ -10,10 +10,8 @@
 // runtime to the person who operates the deployment, so they are in Details only.
 //
 // The compact variant (board card, queue card) shows the title and the action only.
-import type { EnvironmentFailureReason } from '@cat-factory/contracts'
 import type { AgentRunSummary } from '~/stores/agentRuns'
-import { presentFailure } from '~/utils/failureCause'
-import { conflictInfo } from '~/composables/usePipelineErrorToast'
+import { isLocalDeployRunnerUnwired, presentFailure } from '~/utils/failureCause'
 import FailureNotes from '~/components/board/FailureNotes.vue'
 import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 
@@ -24,6 +22,7 @@ const props = withDefaults(
 
 const { t } = useI18n()
 const agentRuns = useAgentRunsStore()
+const execution = useExecutionStore()
 const access = useWorkspaceAccess()
 const ui = useUiStore()
 const auth = useAuthStore()
@@ -31,18 +30,14 @@ const board = useBoardStore()
 
 const compact = computed(() => props.variant === 'compact')
 const failure = computed(() => props.run.failure)
-const localMode = computed(() => auth.localMode?.enabled === true)
+const context = computed(() => ({
+  runKind: props.run.kind,
+  localMode: auth.localMode?.enabled === true,
+}))
 const presented = computed(() =>
-  failure.value
-    ? presentFailure(failure.value, { runKind: props.run.kind, localMode: localMode.value })
-    : null,
+  failure.value ? presentFailure(failure.value, context.value) : null,
 )
 const action = computed(() => presented.value?.action ?? 'retry')
-
-const DEPLOY_RUNNER_UNWIRED: EnvironmentFailureReason = 'deploy_runner_unwired'
-// The toast's entry for a missing repository host: the block's title and Connect button read it,
-// so the two surfaces cannot drift.
-const GITHUB_NOT_CONNECTED = conflictInfo('github_not_connected')
 
 // The provision type of the failed run's SERVICE frame (walk up to the frame, mirroring the
 // backend's `resolveServiceProvisioning`). Drives the Kubernetes-specific hint below.
@@ -51,23 +46,20 @@ const provisionType = computed(() => {
   return block ? board.serviceOf(block)?.provisioning?.type : undefined
 })
 
-// The environment-variable hint is for Kubernetes on a local node only: there the deploy runtime
-// is an environment variable, not a settings tab the action could open, so the hint is the fix
-// and shows under the cause line, not in Details. Only for the
-// machine-readable `deploy_runner_unwired` cause (not a helm/apply error or a temporary fault),
-// and only for a `kubernetes` provision, so a later provider with the same cause never shows
+// On a local node with no deploy runner, the cause line names the variable to set
+// (`isLocalDeployRunnerUnwired`, the same rule). For a `kubernetes` provision this hint adds the
+// other variables and the tools they run, so a later provider with the same cause never shows
 // kubectl/kustomize/helm guidance.
 const showEnvironmentLocalHint = computed(
   () =>
-    localMode.value &&
-    failure.value?.kind === 'environment' &&
-    failure.value.reason === DEPLOY_RUNNER_UNWIRED &&
+    !!failure.value &&
+    isLocalDeployRunnerUnwired(failure.value, context.value) &&
     provisionType.value === 'kubernetes',
 )
 
 const title = computed(() => {
-  // No repository host connected: the same translated title the 409 toast uses.
-  if (action.value === 'connectRepoHost') return t(GITHUB_NOT_CONNECTED.titleKey)
+  // A refusal names its own title, the same translated title its toast uses.
+  if (presented.value?.titleKey) return t(presented.value.titleKey)
   if (failure.value?.kind === 'dispatch') return t('board.failure.containerFailedToStart')
   if (failure.value?.kind === 'environment') return t('board.failure.environmentFailed')
   // The run's durable driver was lost: name it, so it does not read as an agent bug.
@@ -101,75 +93,33 @@ function inspectRun() {
   ui.openObservability(props.run.runId)
 }
 
-// The block's action when it is not Retry: the setting that fixes the cause, or a new run when
-// a retry cannot work. Retry then moves into Details.
+// A new run replaces the failed one, so it runs the failed run's pipeline: an initiative's
+// planning pipeline, or a pipeline picked by hand, and not the task's default build. `startTask`
+// also refuses a task with unmet dependencies and says why in a toast.
 const { startTask } = useStartWithFeedback()
 const startingNewRun = ref(false)
 async function startNewRun() {
   const block = board.getBlock(props.run.blockId)
   if (!block || startingNewRun.value) return
+  const failed = execution.getInstance(props.run.runId)
   startingNewRun.value = true
   try {
-    // `startTask` says why in a toast when the start fails.
-    await startTask(block)
+    await startTask(
+      block,
+      failed ? { id: failed.pipelineId, name: failed.pipelineName } : undefined,
+    )
   } finally {
     startingNewRun.value = false
   }
 }
 
-interface OtherAction {
-  label: string
-  icon: string
-  testId: string
-  run: () => void
-  /** Starting a run needs `runs.execute`, as Retry does; opening a setting does not. */
-  executes: boolean
-}
-const otherAction = computed((): OtherAction | null => {
-  switch (action.value) {
-    case 'connectRepoHost': {
-      const fix = GITHUB_NOT_CONNECTED.action
-      return fix
-        ? {
-            label: t(fix.labelKey),
-            icon: fix.icon,
-            testId: 'agent-failure-setup',
-            run: () => fix.run(ui),
-            executes: false,
-          }
-        : null
-    }
-    case 'runnerPoolSetup':
-      return {
-        label: t('board.failure.deployRunnerSetup'),
-        icon: 'i-lucide-settings',
-        testId: 'agent-failure-setup',
-        run: () => ui.openProviderConnection('runner-pool'),
-        executes: false,
-      }
-    case 'environmentSetup':
-      return {
-        label: t('board.failure.environmentSetup'),
-        icon: 'i-lucide-settings',
-        testId: 'agent-failure-setup',
-        run: () => ui.openProviderConnection('environment'),
-        executes: false,
-      }
-    case 'newRun':
-      return {
-        label: t('board.failure.startNewRun'),
-        icon: 'i-lucide-play',
-        testId: 'agent-failure-new-run',
-        run: () => void startNewRun(),
-        executes: true,
-      }
-    case 'retry':
-      return null
-  }
+// The setting that fixes the cause: the block's action for `fix`, a second button beside Retry
+// for `retry` (an environment failure, which is most often temporary but can be a setting).
+const fix = computed(() => {
+  const f = presented.value?.fix
+  return f ? { label: t(f.labelKey), icon: f.icon, run: () => f.run(ui) } : null
 })
-const otherActionDenied = computed(
-  () => !!otherAction.value?.executes && !access.canExecuteRuns.value,
-)
+const newRunDenied = computed(() => action.value === 'newRun' && !access.canExecuteRuns.value)
 
 const detailsOpen = ref(false)
 
@@ -209,11 +159,11 @@ async function retry() {
       class="mt-1 text-2xs leading-snug text-app-error-200/90"
       data-testid="agent-failure-cause"
     >
-      {{ t(presented.causeKey) }}
+      {{ t(presented.causeKey, presented.causeParams) }}
     </p>
 
-    <!-- Local mode, Kubernetes: the deploy runtime is an environment variable, not a settings tab,
-         so the variables to set are the fix and show here, not in Details. -->
+    <!-- Local mode, Kubernetes: the other variables the deploy runtime needs. They are the fix, so
+         they show here, not in Details. -->
     <p
       v-if="!compact && showEnvironmentLocalHint"
       class="mt-1 text-2xs leading-snug text-app-error-200/90"
@@ -237,35 +187,66 @@ async function retry() {
     />
 
     <div class="flex flex-wrap items-center gap-2" :class="compact ? 'mt-1.5' : 'mt-2'">
+      <!-- The block's one action. The "Read a failure" tour's next-step card anchors on this
+           wrapper, so it points at the same block as its banner card, whatever the action is. -->
+      <span class="inline-flex" data-testid="agent-failure-action">
+        <UButton
+          v-if="action === 'fix' && fix"
+          color="error"
+          variant="soft"
+          size="xs"
+          class="nodrag"
+          :icon="fix.icon"
+          data-testid="agent-failure-setup"
+          @click.stop="fix.run"
+        >
+          {{ fix.label }}
+        </UButton>
+        <UButton
+          v-else-if="action === 'newRun'"
+          color="error"
+          variant="soft"
+          size="xs"
+          class="nodrag"
+          icon="i-lucide-play"
+          :loading="startingNewRun"
+          :disabled="newRunDenied"
+          :title="newRunDenied ? t('access.noRunExecute') : undefined"
+          data-testid="agent-failure-new-run"
+          @click.stop="startNewRun"
+        >
+          {{ t('board.failure.startNewRun') }}
+        </UButton>
+        <UButton
+          v-else
+          color="error"
+          variant="soft"
+          size="xs"
+          class="nodrag"
+          icon="i-lucide-rotate-ccw"
+          :loading="retrying"
+          :disabled="!access.canExecuteRuns.value"
+          :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+          data-testid="agent-failure-retry"
+          @click.stop="retry"
+        >
+          {{ retrying ? t('board.failure.retrying') : compact ? t('common.retry') : retryLabel }}
+        </UButton>
+      </span>
+
+      <!-- A cause that is most often temporary but can be a setting (an environment failure):
+           Retry leads, and the setting is beside it. -->
       <UButton
-        v-if="otherAction"
-        color="error"
-        variant="soft"
+        v-if="!compact && action === 'retry' && fix"
+        color="neutral"
+        variant="ghost"
         size="xs"
         class="nodrag"
-        :icon="otherAction.icon"
-        :loading="otherAction.executes && startingNewRun"
-        :disabled="otherActionDenied"
-        :title="otherActionDenied ? t('access.noRunExecute') : undefined"
-        :data-testid="otherAction.testId"
-        @click.stop="otherAction.run"
+        :icon="fix.icon"
+        data-testid="agent-failure-setup"
+        @click.stop="fix.run"
       >
-        {{ otherAction.label }}
-      </UButton>
-      <UButton
-        v-else
-        color="error"
-        variant="soft"
-        size="xs"
-        class="nodrag"
-        icon="i-lucide-rotate-ccw"
-        :loading="retrying"
-        :disabled="!access.canExecuteRuns.value"
-        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
-        data-testid="agent-failure-retry"
-        @click.stop="retry"
-      >
-        {{ retrying ? t('board.failure.retrying') : compact ? t('common.retry') : retryLabel }}
+        {{ fix.label }}
       </UButton>
 
       <UButton
@@ -284,11 +265,14 @@ async function retry() {
     </div>
 
     <FailureNotes v-if="!compact && failure && detailsOpen" :failure="failure" tone="error">
-      <div v-if="otherAction || run.kind === 'bootstrap'" class="flex flex-wrap items-center gap-2">
+      <div
+        v-if="action !== 'retry' || run.kind === 'bootstrap'"
+        class="flex flex-wrap items-center gap-2"
+      >
         <!-- Retry is the block's action unless a setting fixes the cause or the run must start
              again; then it waits here. -->
         <UButton
-          v-if="otherAction"
+          v-if="action !== 'retry'"
           color="neutral"
           variant="ghost"
           size="xs"

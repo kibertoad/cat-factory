@@ -423,17 +423,17 @@
         "environment": "Test ortamı oluşturulamadı. Ortam ayarlarını denetleyin, sonra yeniden deneyin.",
         "evicted": "Konteyner çalıştırma sırasında birçok kez durdu. Bu genellikle platform güncellenirken olur, bu yüzden güncelleme bitince yeniden deneyin.",
         "harness_shutdown": "Bu adım sırasında bir şey konteyneri durdurdu. Yeniden denemeden önce nedeni Ayrıntılar'da bulun, çünkü yeni deneme de durabilir.",
-        "timeout": "Çalıştırma süre sınırını aştı. Yeniden deneme onu tekrar başlatır.",
+        "timeout": "Çalıştırma yanıt vermeyi bıraktı veya süre sınırını aştı. Hangisi olduğunu Ayrıntılar'da görün, sonra yeniden deneyin.",
         "agent": "Bir ajan adımı başarısız oldu. Nedeni başarısız adımda görün, sonra yeniden deneyin.",
         "job_failed": "Ajanın konteyneri bir hata bildirdi. Yeniden deneme yeni bir konteyner başlatır.",
         "delegated_failed": "Bu adımı çalıştıran dış sistem bir hata bildirdi. Adımdaki bağlantı, nedeni gösteren çalıştırmasını açar.",
-        "rejected": "Bir adımı reddettiniz, bu yüzden çalıştırma durdu. Yeniden deneme o adımdan tekrar başlar.",
+        "rejected": "Bir adım reddedildi, bu yüzden çalıştırma durdu. Yeniden deneme o adımdan tekrar başlar.",
         "companion_rejected": "Bir yardımcı ajan kullanılabilir bir sonuç vermedi. Yeniden deneme onu tekrar çalıştırır.",
         "stalled": "Platform bu çalıştırmayla bağlantısını kaybetti. Yeniden deneme yeni bir çalıştırma başlatır.",
         "state_unreadable": "Bu çalıştırmanın kayıtlı durumu okunamıyor, bu yüzden yeniden deneme aynı bozuk durumu okur. Yeni bir çalıştırma başlatın.",
-        "cancelled": "Bu çalıştırmayı durdurdunuz. Yeniden deneme onu tekrar başlatır.",
+        "cancelled": "Bu çalıştırma durduruldu. Yeniden deneme onu tekrar başlatır.",
         "unknown": "Çalıştırma bilinmeyen bir nedenle başarısız oldu. Ayrıntılar'a bakın, sonra yeniden deneyin.",
-        "deployRunnerUnwiredLocal": "Bu bilgisayarda test ortamını oluşturacak bir dağıtım çalışma zamanı yok. Dağıtım çalışma zamanını .env dosyanızda ayarlayın, sonra yeniden deneyin.",
+        "deployRunnerUnwiredLocal": "Bu bilgisayarda test ortamını oluşturacak bir dağıtım çalışma zamanı yok. {variable} değerini .env dosyanızda ayarlayın, sonra yeniden deneyin.",
         "singleJob": {
           "evicted": "Konteyner iş tamamlanmadan durdu. Yeniden deneme yeni bir konteyner başlatır.",
           "timeout": "İş çok uzun süre etkinlik göstermedi veya süre sınırını aştı. Yeniden deneme onu tekrar başlatır.",
@@ -834,6 +834,7 @@
       "providersUnconfigured": {
         "title": "Bu model için AI sağlayıcısı yok",
         "body": "{models} için yapılandırılmış sağlayıcı yok. Çalıştırmak için bir sağlayıcı anahtarı ekleyin, bir abonelik bağlayın veya Cloudflare AI'yı etkinleştirin.",
+        "cause": "Bu işlem hattındaki bir model için yapılandırılmış sağlayıcı yok. Bir sağlayıcı anahtarı ekleyin, bir abonelik bağlayın veya Cloudflare AI'yı etkinleştirin, sonra yeniden deneyin.",
         "action": "AI'yı yapılandır"
       },
       "binaryStorageUnconfigured": {
