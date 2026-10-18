@@ -12,6 +12,12 @@ const INTEGRITY_CHECKSUM = '5cd5cf8b54c3a90f82960cedcd637772'
 const IS_MOCKED_RESPONSE = Symbol('isMockedResponse')
 
 const activeClientIds = new Set()
+const BOOT = Math.random().toString(36).slice(2, 8)
+let SEQ = 0
+function dbg(kind, data) {
+  fetch('/__mswlog', { method: 'POST', body: JSON.stringify({ t: Date.now(), boot: BOOT, kind, ...data }) }).catch(() => {})
+}
+dbg('boot', {})
 /**
  * @type {Map<string, Set<Promise<Response>>>}
  */
@@ -34,6 +40,7 @@ addEventListener('message', function (event) {
 
   event.waitUntil(
     (async () => {
+      dbg('msg', { clientId, data: String(event.data) })
       if (event.data === 'CLIENT_CLOSE') {
         const allClients = await self.clients.matchAll({
           type: 'window',
@@ -145,7 +152,11 @@ addEventListener('fetch', function (event) {
  * @param {string} requestId
  */
 async function handleRequest(event, requestId) {
+  const seq = ++SEQ
+  const started = Date.now()
   const client = await resolveMainClient(event)
+  const info = { seq, from: event.clientId, to: client?.id, mode: event.request.mode, dest: event.request.destination, url: event.request.url.slice(0, 200), active: activeClientIds.size }
+  dbg('req', info)
   const requestCloneForEvents = event.request.clone()
 
   const responsePromise = getResponse(event, client, requestId)
@@ -167,7 +178,9 @@ async function handleRequest(event, requestId) {
 
   try {
     response = await responsePromise
+    dbg('res', { seq, status: response.status, type: response.type, ms: Date.now() - started })
   } catch (error) {
+    dbg('err', { ...info, ms: Date.now() - started, error: String(error && error.stack || error) })
     // The request has settled without a response (e.g. a passthrough
     // request failed with a network error). Notify the client so it
     // can release the resources associated with this request.
