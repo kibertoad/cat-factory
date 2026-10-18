@@ -3,6 +3,7 @@ import { useColorMode } from '#imports'
 import UApp from '@nuxt/ui/components/App.vue'
 import { __resetConsumerModulesForTest } from '../../app/app/modular/registry'
 import { installApiResponses, startApiWorker } from '../../app/app/stories/api'
+import { waitOnRequests } from '../../app/app/stories/settle'
 import type { Preview } from '@storybook/vue3'
 
 // Every story renders inside `UApp`, exactly as `app.vue` does.
@@ -103,6 +104,8 @@ const preview: Preview = {
   // One msw worker for the whole preview: registering a service worker per story would be slow
   // and race the first request.
   beforeAll: async () => {
+    // Before anything renders, so every request a story sends is counted.
+    waitOnRequests()
     await startApiWorker()
   },
 

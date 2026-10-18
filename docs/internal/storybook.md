@@ -233,6 +233,12 @@ A `play` that opens a menu, popover or modal queries `screen`, not `within(canva
 UI teleports overlays to `body`. A play that types into a debounced field needs no sleep:
 `findBy*` retries for up to a second.
 
+A play never waits on the clock for data. Every `findBy*`, `waitFor` and user-event action first
+waits until the page has no request in flight (`waitOnRequests()` in `app/stories/settle.ts`, set
+up by `preview.ts`), and only then starts its second of retries. In CI a story's answer can take
+longer than a second, and plays that went straight to `findBy*` failed now and then. Never raise
+the timeout instead: a longer guess fails the same way under more load.
+
 A story that changes the runtime config (`useRuntimeConfig().public`) puts the old value back when
 it unmounts. The preset shares that object between stories, so a value one story sets stays for
 every later story in the session.
@@ -246,7 +252,8 @@ every later story in the session.
 | `node scripts/check-story-titles.mjs` (titles, one file per component, `Default` first) | CI's guard steps, every PR      |
 | `test:stories`: every story renders in headless Chromium, with an axe check             | nightly, and on request         |
 
-`test:stories` takes about 10 minutes for the whole tree, so no PR waits on it.
+`test:stories` takes about 10 minutes for the whole tree, so no PR waits on it. It also runs on a
+PR that changes the lane itself, except a release PR, which changes only package versions.
 `--browser.isolate=false` cut that to about 2 minutes, and was rejected: with the files shuffled,
 2 of 4 runs timed out on stories that pass alone, and no story failed twice.
 
