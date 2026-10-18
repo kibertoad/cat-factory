@@ -26,15 +26,11 @@ export async function startApiWorker(): Promise<void> {
   await worker.start({
     quiet: true,
     serviceWorker: { url: './mockServiceWorker.js' },
-    onUnhandledFrame({ frame, defaults }) {
-      // msw 3 routes WebSocket frames here too. Vite's HMR socket is one, and no story mocks a
-      // socket, so only an HTTP frame can be an unanswered API call.
-      if (frame.protocol !== 'http') return
+    onUnhandledRequest(request, print) {
       // Every request goes through the worker, Vite's modules and the icon and font CDNs
       // included. Anything else is an API call no story answered.
-      const { request } = frame.data as { request: Request }
       const { origin, hostname } = new URL(request.url)
-      if (origin !== window.location.origin && !STORYBOOK_HOSTS.has(hostname)) defaults.warn()
+      if (origin !== window.location.origin && !STORYBOOK_HOSTS.has(hostname)) print.warning()
     },
   })
 }
@@ -102,6 +98,22 @@ export function apiResponse<T extends ApiContract>(
 }
 
 /**
+ * A response that never finishes: the status and headers arrive at once, the body never ends.
+ *
+ * The app reads the body before it uses a response, so the request stays pending and the component
+ * stays on its loading state. A handler that never returned (`delay('infinite')`) would keep the
+ * service worker's `fetch` event open instead: Chromium stops a worker whose event stays open for
+ * about five minutes, and every request the worker was passing on fails with it. Settling the event
+ * with a later error is no better, because the app would act on that error after its story ended.
+ */
+function neverEndingResponse(status: number, contentType: string): Response {
+  return new HttpResponse(new ReadableStream<Uint8Array>(), {
+    status,
+    headers: { 'content-type': contentType },
+  })
+}
+
+/**
  * A request that never answers, for a `Loading` story: the component stays on its pending state
  * for as long as the story is open.
  */
@@ -110,10 +122,9 @@ export function apiPending<T extends ApiContract>(
   params: { pathPrefix?: string; pathParams?: Parameters<T['pathResolver']>[0] } = {},
 ): HttpHandler {
   const path = `${params.pathPrefix ?? ''}${contract.pathResolver(params.pathParams)}`
-  return http[contract.method](`*${path}`, async () => {
-    await delay('infinite')
-    return new HttpResponse(null)
-  })
+  return http[contract.method](`*${path}`, () =>
+    neverEndingResponse(successStatus(contract), 'application/json'),
+  )
 }
 
 /**
@@ -222,10 +233,9 @@ export function artifactBlobResponse(
 
 /** One artifact's bytes that never arrive, for a component's loading state. */
 export function artifactBlobPending(artifactId: string): HttpHandler {
-  return http.get(`*${storyWorkspacePrefix}/artifacts/${artifactId}/blob`, async () => {
-    await delay('infinite')
-    return new HttpResponse(null)
-  })
+  return http.get(`*${storyWorkspacePrefix}/artifacts/${artifactId}/blob`, () =>
+    neverEndingResponse(200, 'image/png'),
+  )
 }
 
 /** One artifact's bytes refused with the backend's 500, for a component's error state. */

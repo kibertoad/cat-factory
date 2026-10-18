@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin'
@@ -15,7 +16,28 @@ import { defineConfig } from 'vitest/config'
 //   pnpm --filter @cat-factory/storybook run test:stories
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// DEBUG ONLY (branch debug/story-lane-msw2-check): the worker's boot and error lines, to $MSWLOG.
+const mswlog = process.env.MSWLOG
+
 export default defineConfig({
+  plugins: mswlog
+    ? [
+        {
+          name: 'debug:mswlog',
+          configureServer(server) {
+            server.middlewares.use('/__mswlog', (req, res) => {
+              let body = ''
+              req.on('data', (c) => (body += c))
+              req.on('end', () => {
+                appendFileSync(mswlog, body + '\n')
+                res.statusCode = 204
+                res.end()
+              })
+            })
+          },
+        },
+      ]
+    : [],
   test: {
     projects: [
       {
