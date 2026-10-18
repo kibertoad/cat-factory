@@ -453,6 +453,7 @@
       "stalled": "Run stalled",
       "retryBootstrap": "Retry bootstrap",
       "retryRun": "Retry run",
+      "startNewRun": "Start a new run",
       "environmentSetup": "Set up environments",
       "deployRunnerSetup": "Set up runner pool",
       "environmentLocalHint": "Local ephemeral environments need a deploy runtime to run kubectl/kustomize/helm. Set {runtime} in your .env: native mode runs those tools on your host ({native}), container mode runs them in the deploy image ({container}).",
@@ -460,6 +461,36 @@
         "description": "Shown only in local mode. The {runtime}/{native}/{container} placeholders are injected literal environment-variable names (LOCAL_DEPLOY_RUNTIME etc.) — keep them as placeholders, do not translate. '.env' is a filename, keep it verbatim."
       },
       "showDetail": "Show detail",
+      "details": "Details",
+      "detailsMessage": "Message",
+      "detailsHint": "Notes for the operator",
+      "detailsFull": "Full output",
+      "cause": {
+        "preflight": "A check before the start failed, so no work was done. Open Details to see what to fix, then retry.",
+        "dispatch": "The agent's container did not start, so no work was done. This is usually temporary.",
+        "environment": "The test environment could not be made. Check the environment settings, then retry.",
+        "evicted": "The container stopped many times during the run. This usually occurs while the platform is updated, so retry when the update is complete.",
+        "harness_shutdown": "Something stopped the container during this step. Find the cause in Details before you retry, because a retry can stop again.",
+        "timeout": "The run stopped responding, or it took more time than its limit. See Details for which, then retry.",
+        "agent": "An agent step failed. See the failed step for the cause, then retry.",
+        "job_failed": "The agent's container reported a failure. A retry starts a new container.",
+        "delegated_failed": "The external system that ran this step reported a failure. The link on the step opens its run, which shows the cause.",
+        "rejected": "A step was rejected, so the run stopped. A retry starts again from that step.",
+        "companion_rejected": "A companion agent did not give a usable result. A retry runs it again.",
+        "stalled": "The platform lost contact with this run. A retry starts a new run.",
+        "state_unreadable": "The saved state of this run cannot be read, so a retry reads the same broken state. Start a new run.",
+        "cancelled": "This run was stopped. A retry starts it again.",
+        "unknown": "The run failed for an unknown cause. See Details, then retry.",
+        "deployRunnerUnwiredLocal": "This computer has no deploy runtime to make the test environment. Set {variable} in your .env file, then retry.",
+        "@deployRunnerUnwiredLocal": {
+          "description": "{variable} is an environment variable name (LOCAL_DEPLOY_RUNTIME). Keep the placeholder; do not translate it."
+        },
+        "singleJob": {
+          "evicted": "The container stopped before the job was complete. A retry starts a new container.",
+          "timeout": "The job had no activity for too long, or it took more time than its limit. A retry starts it again.",
+          "agent": "The agent or the git push failed. See Details for the cause, then retry."
+        }
+      },
       "retrying": "Retrying…",
       "history": {
         "previousErrors": "{count} previous error | {count} previous errors",
@@ -887,6 +918,7 @@
       "providersUnconfigured": {
         "title": "No AI provider for this model",
         "body": "No provider is configured for {models}. Add a provider key, connect a subscription, or enable Cloudflare AI to run it.",
+        "cause": "No provider is configured for a model in this pipeline. Add a provider key, connect a subscription, or enable Cloudflare AI, then retry.",
         "@body": {
           "description": "Keep the named placeholder for the model list intact (a comma-separated list of model ids is injected at runtime)."
         },
@@ -8757,11 +8789,11 @@
           },
           "banner": {
             "title": "What went wrong",
-            "body": "The card swaps its progress bar for this banner. It names the cause, the details hold the raw output, and some causes offer a button straight to the setting that fixes them."
+            "body": "The card swaps its progress bar for this banner. It names what failed and gives one action. Open the task to read the cause in one line, with the raw output behind Details."
           },
           "retry": {
-            "title": "Run it again",
-            "body": "Retry re-runs the work. Earlier errors stay on the task under Previous errors, so you can compare attempts instead of losing the trail."
+            "title": "The next step",
+            "body": "This button is the next step. Usually it is Retry, which runs the work again. When a setting causes the failure, it opens that setting. Earlier errors stay on the task under Previous errors, so you can compare attempts."
           },
           "finish": {
             "title": "A failure is information",
