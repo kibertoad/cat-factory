@@ -9,7 +9,7 @@
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import AppModal from '~/components/common/AppModal.vue'
-import { sourceCommandLabelKey } from './CommandBar.logic'
+import { documentSourceKind, sourceCommandLabelKey } from './CommandBar.logic'
 
 interface Command {
   id: string
@@ -96,9 +96,10 @@ const dynamicIntegrationCommands = computed<Command[]>(() => {
     for (const src of documents.sources) {
       list.push({
         id: `doc-connect-${src.source}`,
-        label: t(sourceCommandLabelKey('document', documents.isConnected(src.source)), {
-          source: src.label,
-        }),
+        label: t(
+          sourceCommandLabelKey(documentSourceKind(src.source), documents.isConnected(src.source)),
+          { source: src.label },
+        ),
         group: groupIntegrations,
         icon: src.icon,
         keywords: t('layout.commandBar.keywords.documentSource'),
