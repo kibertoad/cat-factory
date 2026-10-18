@@ -19,6 +19,7 @@ import {
   buildPrReviewPostReport,
   computeCommentableLines,
   isPrReviewPostComplete,
+  prReviewFixerFindings,
   renderChallengeInvestigatorFeedback,
   renderPrReviewFixerFeedback,
 } from './prReview.logic.js'
@@ -71,7 +72,8 @@ export class PrReviewResolutionController {
    *   which re-parks the review).
    * - `fixing`: dispatch the Fixer against the reviewed PR's head branch with the selected
    *   findings folded in (parks on the job; its completion marks the review `done`).
-   * - `posting`: publish the selected findings as inline PR review comments, then finish the step.
+   * - `posting`: publish the selected findings as inline PR review comments, then finish the step,
+   *   or move it to `fixing` when the resolution queued findings for the Fixer behind the post.
    */
   handle(ctx: StepHandlerContext): Promise<AdvanceResult> {
     if (ctx.step.prReview?.status === 'challenging') return this.dispatchChallenge(ctx)
@@ -126,16 +128,15 @@ export class PrReviewResolutionController {
    * `RepoFiles`) and point the Fixer's clone/push at it: fold a synthetic `pullRequest` + an
    * apriori WORKING branch into the dispatch context so the shared `container-coding` +
    * `clone:{branch:'pr'}` fixer body clones + pushes that branch (no new PR), and hand it the
-   * selected findings as a prior output (the same injection point the gate helpers use). Fails
-   * the run loudly when the PR branch can't be resolved (nothing to push to) rather than pushing
-   * blind. On a replay (jobId already set) it re-attaches without re-resolving.
+   * findings to fix as a prior output (the same injection point the gate helpers use): the
+   * selection on a `fix`, the queued `fixFindingIds` on a `post` (see {@link prReviewFixerFindings}).
+   * Fails the run loudly when the PR branch can't be resolved (nothing to push to) rather than
+   * pushing blind. On a replay (jobId already set) it re-attaches without re-resolving.
    */
   private async dispatchFixer(ctx: StepHandlerContext): Promise<AdvanceResult> {
     const { workspaceId, instance, step, block } = ctx
     const review = step.prReview!
-    const selected = (review.findings ?? []).filter((f) =>
-      review.selectedFindingIds?.includes(f.id),
-    )
+    const toFix = prReviewFixerFindings(review)
     let headRef: string | null = null
     let prNumber: number | null = null
     if (!step.jobId) {
@@ -176,7 +177,7 @@ export class PrReviewResolutionController {
       }
       context.priorOutputs = [
         ...context.priorOutputs,
-        { agentKind: FIXER_AGENT_KIND, output: renderPrReviewFixerFeedback(selected) },
+        { agentKind: FIXER_AGENT_KIND, output: renderPrReviewFixerFeedback(toFix) },
       ]
     })
   }
@@ -206,9 +207,13 @@ export class PrReviewResolutionController {
    *
    * When no VCS review write is wired (tests / no GitHub) the findings are recorded and the step
    * finishes — the review pipeline never reaches this without GitHub in practice.
+   *
+   * Every path that counts the post as landed goes through {@link settleLandedPost}, which hands
+   * the step to the Fixer when the resolution queued `fixFindingIds`. A partial post clears that
+   * queue as it re-parks: the curator re-resolves with both lists.
    */
   private async post(ctx: StepHandlerContext): Promise<AdvanceResult> {
-    const { workspaceId, instance, step, block, isFinalStep } = ctx
+    const { workspaceId, instance, step, block } = ctx
     const review = step.prReview!
     const alreadyPosted = new Set(review.postedFindingIds ?? [])
     // The findings to post THIS attempt: selected, minus any that already landed on a prior try.
@@ -216,13 +221,14 @@ export class PrReviewResolutionController {
       (f) => review.selectedFindingIds?.includes(f.id) && !alreadyPosted.has(f.id),
     )
 
-    // A replay after the marker was consumed (no marker) just completes idempotently — the post
-    // already ran on the winning attempt; do not re-post.
+    // A replay after the marker was consumed (no marker) settles idempotently: the post already
+    // ran on the winning attempt, so do not re-post. It still continues to the Fixer when one is
+    // queued, or a crash between the post and the `fixing` write would drop the fix silently.
     if (!step.pendingPrReviewPost) {
-      step.prReview = { ...review, status: 'done' }
-      return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, {
-        output: `Posted ${alreadyPosted.size} review comment${alreadyPosted.size === 1 ? '' : 's'} to the pull request.`,
-      })
+      return this.settleLandedPost(
+        ctx,
+        `Posted ${alreadyPosted.size} review comment${alreadyPosted.size === 1 ? '' : 's'} to the pull request.`,
+      )
     }
     step.pendingPrReviewPost = null
     await this.deps.runStateMachine.casPersist(workspaceId, instance)
@@ -232,11 +238,12 @@ export class PrReviewResolutionController {
       prNumber != null ? await this.deps.resolveRunRepoContext?.(workspaceId, block.id) : null
     const repo = runRepo?.repo
     if (prNumber == null || !repo?.createReview) {
-      // No VCS write wired: record the selection and finish (no real post; tests / no GitHub).
-      step.prReview = { ...review, status: 'done', postReport: null }
-      return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, {
-        output: `Recorded ${selected.length} selected finding${selected.length === 1 ? '' : 's'}.`,
-      })
+      // No VCS write wired: record the selection and settle (no real post; tests / no GitHub).
+      step.prReview = { ...review, postReport: null }
+      return this.settleLandedPost(
+        ctx,
+        `Recorded ${selected.length} selected finding${selected.length === 1 ? '' : 's'}.`,
+      )
     }
 
     // Detect branch DRIFT: if the PR head moved since the review started, the findings' frozen
@@ -298,7 +305,6 @@ export class PrReviewResolutionController {
     step.prReview = { ...review, postReport: report, postedFindingIds, postedBody }
 
     if (isPrReviewPostComplete(report)) {
-      step.prReview = { ...step.prReview, status: 'done' }
       const total = postedFindingIds.length
       const foldedReason = staleHead
         ? 'the branch was updated after the review started'
@@ -307,15 +313,45 @@ export class PrReviewResolutionController {
         report.folded > 0
           ? ` (${report.folded} finding${report.folded === 1 ? '' : 's'} added to the summary — ${foldedReason})`
           : ''
-      return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, {
-        output: `Posted ${total} review comment${total === 1 ? '' : 's'} to the pull request${foldedNote}.`,
-      })
+      return this.settleLandedPost(
+        ctx,
+        `Posted ${total} review comment${total === 1 ? '' : 's'} to the pull request${foldedNote}.`,
+      )
     }
 
     // Partial or failed: re-park at `awaiting_selection` carrying the report so the window shows
-    // what posted / what failed and the human can retry only the posting (re-`post`).
-    step.prReview = { ...step.prReview, status: 'awaiting_selection', resolution: null }
+    // what posted / what failed and the human can retry only the posting (re-`post`). The fix
+    // queue is dropped with the resolution: it was conditional on this post landing, and keeping
+    // it would let a later pass fire a fix the curator never re-confirmed.
+    step.prReview = {
+      ...step.prReview,
+      status: 'awaiting_selection',
+      resolution: null,
+      fixFindingIds: [],
+    }
     return this.deps.runStateMachine.parkStepOnDecision(workspaceId, instance, step)
+  }
+
+  /**
+   * Settle a `post` that has landed: finish the step, or, when the resolution queued findings for
+   * the Fixer behind the post, hand the SAME step to the Fixer.
+   *
+   * The `fixing` status is persisted BEFORE the dispatch. A Workflows replay of this driver step
+   * then routes through {@link handle}'s status switch straight to {@link dispatchFixer} (which
+   * re-attaches once the job id is stamped) and never re-enters the post path, so the comments
+   * stay at-most-once and the fix is not lost. The post's own outcome stays on the review
+   * (`postReport`, `postedFindingIds`); the step's output becomes the Fixer's.
+   */
+  private async settleLandedPost(ctx: StepHandlerContext, output: string): Promise<AdvanceResult> {
+    const { workspaceId, instance, step, isFinalStep } = ctx
+    const review = step.prReview!
+    if ((review.fixFindingIds ?? []).length === 0) {
+      step.prReview = { ...review, status: 'done' }
+      return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, { output })
+    }
+    step.prReview = { ...review, status: 'fixing' }
+    await this.deps.runStateMachine.casPersist(workspaceId, instance)
+    return this.dispatchFixer(ctx)
   }
 
   /**

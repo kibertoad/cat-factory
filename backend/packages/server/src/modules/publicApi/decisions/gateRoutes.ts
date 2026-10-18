@@ -46,13 +46,14 @@ export function registerPrReviewDecisionRoutes(app: Hono<AppEnv>): void {
     // The public body leaves both fields plainly optional (a schema `default` on a REQUEST field
     // emits four SDKs whose types insist on a value the API does not require), so the same
     // fallbacks the internal schema declares are applied here.
-    const { action, findingIds } = c.req.valid('json')
+    const { action, findingIds, fixFindingIds } = c.req.valid('json')
     await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
       c
         .get('container')
         .executionService.decisions.resolvePrReview(workspaceId, scoped.execution.id, {
           action: action ?? 'finish',
           findingIds: findingIds ?? [],
+          fixFindingIds: fixFindingIds ?? [],
         }),
     )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)

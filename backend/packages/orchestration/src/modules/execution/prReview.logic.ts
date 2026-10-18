@@ -68,6 +68,7 @@ export function initialPrReviewState(
     resumeAttempts: 0,
     findings: [],
     selectedFindingIds: [],
+    fixFindingIds: [],
     resolution: null,
     prUrl,
     model,
@@ -404,6 +405,18 @@ export function isPrReviewPostComplete(report: PrReviewPostReport): boolean {
   return report.failures.length === 0 && report.bodyPosted !== false
 }
 
+/**
+ * The findings the Fixer addresses on this review. A `fix` resolution fixes its selection; a
+ * `post` resolution fixes the separate list it queued behind the post (`fixFindingIds`), since its
+ * selection is what was posted as comments. Ordered as the findings are (most severe first).
+ */
+export function prReviewFixerFindings(state: PrReviewStepState): PrReviewFinding[] {
+  const ids = new Set(
+    state.resolution === 'fix' ? (state.selectedFindingIds ?? []) : (state.fixFindingIds ?? []),
+  )
+  return (state.findings ?? []).filter((f) => ids.has(f.id))
+}
+
 // ---------------------------------------------------------------------------
 // Per-finding DISMISS + CHALLENGE (this PR): a human can drop a finding entirely, or dispatch the
 // read-only Challenge Investigator to re-examine one finding (strengthen or retract it). Both are
@@ -429,6 +442,7 @@ export function dismissFinding(state: PrReviewStepState, findingId: string): PrR
     ...state,
     findings: (state.findings ?? []).filter((f) => f.id !== findingId),
     selectedFindingIds: (state.selectedFindingIds ?? []).filter((id) => id !== findingId),
+    fixFindingIds: (state.fixFindingIds ?? []).filter((id) => id !== findingId),
     postedFindingIds: (state.postedFindingIds ?? []).filter((id) => id !== findingId),
     ...(report
       ? {

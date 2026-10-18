@@ -7216,6 +7216,12 @@
             },
             "type": "array"
           },
+          "fixFindingIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "kind": {
             "const": "pr-review"
           },
@@ -7419,6 +7425,7 @@
           "slices",
           "findings",
           "selectedFindingIds",
+          "fixFindingIds",
           "postReport",
           "postedFindingIds",
           "postedBody",
@@ -7689,6 +7696,12 @@
             "type": "string"
           },
           "findingIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "fixFindingIds": {
             "items": {
               "type": "string"
             },
@@ -9542,7 +9555,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.89.0"
+    "version": "1.90.0"
   },
   "openapi": "3.1.0",
   "paths": {

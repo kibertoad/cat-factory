@@ -219,6 +219,7 @@ function toPrReviewDecision(state: PrReviewStepState, step: PipelineStep): Publi
     slices: (state.slices ?? []).map(toPrReviewSlice),
     findings: (state.findings ?? []).map(toPrReviewFinding),
     selectedFindingIds: state.selectedFindingIds ?? [],
+    fixFindingIds: state.fixFindingIds ?? [],
     postReport: state.postReport ? toPrReviewPostReport(state.postReport) : null,
     postedFindingIds: state.postedFindingIds ?? [],
     postedBody: state.postedBody === true,

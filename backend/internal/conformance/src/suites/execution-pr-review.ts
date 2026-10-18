@@ -135,6 +135,7 @@ type PublicReviewDecision = {
     suggestedFix: string | null
   }[]
   selectedFindingIds: string[]
+  fixFindingIds: string[]
   postReport: {
     attempted: number
     posted: number
@@ -178,6 +179,7 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
     registerReviewResolutionTests(harness)
     registerPublicReviewApiTests(harness)
     registerPublicReviewLoopTests(harness)
+    registerPostThenFixTests(harness)
   })
 }
 
@@ -778,6 +780,8 @@ function registerPublicReviewApiTests(harness: ConformanceHarness): void {
     // run" and "a post ran and landed nothing" are opposite facts a caller has to tell apart.
     expect(parked.postReport).toBeNull()
     expect(parked.postedFindingIds).toEqual([])
+    // Always emitted, so a caller can feature-detect post-then-fix by its presence.
+    expect(parked.fixFindingIds).toEqual([])
 
     // Drop the nit through the public curation route; the run stays parked with one finding left.
     const dismissed = await app.call<{ decisions: PublicReviewDecision[] }>(
@@ -995,5 +999,117 @@ function registerPublicReviewLoopTests(harness: ConformanceHarness): void {
     const reparked = (await app.drive(wsId)).find((e) => e.blockId === taskId)!
     expect(reparked.status).toBe('blocked')
     expect(reparked.id).not.toBe(executionId)
+  })
+}
+
+/**
+ * One resolution that comments on some findings and fixes others: `post` carrying
+ * `fixFindingIds`. The comments land first (they anchor to the reviewed head), then the same step
+ * is handed to the Fixer, and only the fixer's completion settles the review.
+ *
+ * Registered as its own function purely to keep each within the per-function line budget.
+ */
+function registerPostThenFixTests(harness: ConformanceHarness): void {
+  const makeApp = (recorder: {
+    headRefFor?: number
+    posted?: { number: number; input: CreateReviewInput }[]
+    failPaths?: string[]
+  }) =>
+    harness.makeApp(
+      { customResult: reviewerOutput },
+      {
+        resolveRunRepoContext: async () => ({
+          repo: makeReviewRepo(recorder),
+          baseBranch: 'main',
+          repoId: 'repo_1',
+        }),
+      },
+    )
+
+  it('posts the selected findings, then hands the queued ones to a Fixer on the PR head', async () => {
+    const recorder: {
+      headRefFor?: number
+      posted?: { number: number; input: CreateReviewInput }[]
+    } = {}
+    const { call, createWorkspace, drive } = makeApp(recorder)
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+    const { taskId, executionId, findings } = await seedReviewTask(call, drive, wsId)
+
+    const resolved = await call<PrReviewStepState>(
+      'POST',
+      `/workspaces/${wsId}/executions/${executionId}/pr-review/resolve`,
+      { action: 'post', findingIds: [findings[0]!.id], fixFindingIds: [findings[1]!.id] },
+    )
+    expect(resolved.status).toBe(200)
+    expect(resolved.body.status).toBe('posting')
+    expect(resolved.body.fixFindingIds).toEqual([findings[1]!.id])
+
+    const done = (await drive(wsId)).find((e) => e.blockId === taskId)!
+    expect(done.status).toBe('done')
+    const step = done.steps.find((s) => s.agentKind === 'pr-reviewer')!
+    expect(step.prReview?.status).toBe('done')
+    expect(step.prReview?.resolution).toBe('post')
+    // The comment landed, carrying only the finding selected for posting.
+    expect(step.prReview?.postedFindingIds).toEqual([findings[0]!.id])
+    expect(recorder.posted).toHaveLength(1)
+    expect(recorder.posted![0]!.input.comments.map((c) => c.path)).toEqual(['src/auth.ts'])
+    // ...and the Fixer then resolved PR #42's head branch to push to.
+    expect(recorder.headRefFor).toBe(42)
+  })
+
+  it('refuses a fix list on any action but `post`, over /api/v1 as a 409', async () => {
+    const app = makeApp({})
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const { executionId, findings } = await seedReviewTask(app.call, app.drive, wsId)
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'pr-review-fix-list')
+
+    for (const action of ['fix', 'finish'] as const) {
+      const refused = await app.call<{ error: { code: string; message: string } }>(
+        'POST',
+        `/api/v1/runs/${executionId}/decisions/pr-review/resolve`,
+        { action, findingIds: [findings[0]!.id], fixFindingIds: [findings[1]!.id] },
+        decideAuth,
+      )
+      expect(refused.status).toBe(409)
+      expect(refused.body.error.code).toBe('conflict')
+      expect(refused.body.error.message).toMatch(/only with the 'post' action/)
+    }
+    // Nothing was resolved: the review is still parked for curation.
+    expect((await readReview(app, executionId, decideAuth))!.status).toBe('awaiting_selection')
+  })
+
+  it('re-parks a partial post with the fixer queue cleared, so no fix fires later', async () => {
+    const recorder: {
+      headRefFor?: number
+      posted?: { number: number; input: CreateReviewInput }[]
+      failPaths?: string[]
+    } = { failPaths: ['src/auth.ts'] }
+    const app = makeApp(recorder)
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const { taskId, executionId, findings } = await seedReviewTask(app.call, app.drive, wsId)
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'pr-review-partial-fix')
+
+    const resolved = await app.call<{ decisions: PublicReviewDecision[] }>(
+      'POST',
+      `/api/v1/runs/${executionId}/decisions/pr-review/resolve`,
+      { action: 'post', findingIds: [findings[0]!.id], fixFindingIds: [findings[1]!.id] },
+      decideAuth,
+    )
+    expect(resolved.status).toBe(200)
+    const posting = resolved.body.decisions.find((d) => d.kind === 'pr-review')!
+    expect(posting.status).toBe('posting')
+    expect(posting.fixFindingIds).toEqual([findings[1]!.id])
+
+    const reparked = (await app.drive(wsId)).find((e) => e.blockId === taskId)!
+    expect(reparked.status).toBe('blocked')
+    const review = (await readReview(app, executionId, decideAuth))!
+    expect(review.status).toBe('awaiting_selection')
+    expect(review.postReport!.posted).toBe(0)
+    expect(review.fixFindingIds).toEqual([])
+    // The Fixer never ran: it never asked for the PR head branch.
+    expect(recorder.headRefFor).toBeUndefined()
   })
 }

@@ -556,3 +556,12 @@ its reach is not a list.
 
 Additive: a new boolean on three shapes. A listed key's `workspaceIds` may now be an empty list,
 which it never was before, and only ever for a key with `followsMemberships: true`.
+
+## 1.90.0
+
+`POST /api/v1/runs/{runId}/decisions/pr-review/resolve` accepts `fixFindingIds` beside
+`findingIds`, with `action: "post"` only: post `findingIds` as comments, then hand `fixFindingIds`
+to a fixer once the post has landed. Any other action carrying a non-empty list answers `409`. The
+`pr-review` decision gains `fixFindingIds`, always present, listing what is queued for the fixer.
+
+Additive: an optional request field and an always-present response field.

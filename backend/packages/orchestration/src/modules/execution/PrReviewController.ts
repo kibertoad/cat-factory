@@ -93,10 +93,10 @@ export class PrReviewController {
       if (step.prReview.status === 'awaiting_selection') {
         return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
       }
-      // This completion is the FIXER the `fix` resolution re-dispatched on this step (it pushed
-      // its fixes onto the PR branch): mark the review resolved, then fall through so the normal
-      // finish/advance spine completes the step. Any other terminal status (done / posting /
-      // skipped) already settled — leave it alone.
+      // This completion is the FIXER a `fix` resolution (or a `post` with a fix queue, once its
+      // comments landed) dispatched on this step (it pushed its fixes onto the PR branch): mark
+      // the review resolved, then fall through so the normal finish/advance spine completes the
+      // step. Any other terminal status (done / posting / skipped) already settled, so leave it alone.
       if (step.prReview.status === 'fixing') {
         step.prReview = { ...step.prReview, status: 'done' }
       }
@@ -143,6 +143,7 @@ export class PrReviewController {
         resumeAttempts,
         findings: [],
         selectedFindingIds: [],
+        fixFindingIds: [],
         resolution: 'finish',
         prUrl: prUrl ?? null,
         model: model ?? null,
@@ -163,6 +164,7 @@ export class PrReviewController {
       resumeAttempts,
       findings,
       selectedFindingIds: [],
+      fixFindingIds: [],
       resolution: null,
       prUrl: prUrl ?? null,
       model: model ?? null,
@@ -272,6 +274,9 @@ export class PrReviewController {
    *   findings as inline PR comments (`post` → `status: 'posting'` + the `pendingPrReviewPost`
    *   at-most-once marker). Both require ≥1 selected finding. `prReview` survives
    *   `resetStepForRerun`, exactly like `forkDecision`.
+   * - `post` may also carry `fixFindingIds`, recorded on the review as the Fixer's queue: once
+   *   the post has fully landed the driver moves the review to `fixing` on the same step instead
+   *   of finishing it. Any other action carrying a fix list is refused.
    */
   async resolve(
     workspaceId: string,
@@ -297,15 +302,25 @@ export class PrReviewController {
             .map((f) => f.id),
         )
         const selectedFindingIds = (input.findingIds ?? []).filter((id) => known.has(id))
+        // Judged on what the caller SENT, before the filter: a fix list on another action is a
+        // request the engine cannot honour, even when every id in it happens to be stale.
+        if (action !== 'post' && (input.fixFindingIds ?? []).length > 0) {
+          throw new ConflictError(
+            `Findings to fix after posting are accepted only with the 'post' action (got '${action}').`,
+          )
+        }
         if ((action === 'fix' || action === 'post') && selectedFindingIds.length === 0) {
           throw new ConflictError(`Select at least one finding to ${action}.`)
         }
+        const fixFindingIds =
+          action === 'post' ? (input.fixFindingIds ?? []).filter((id) => known.has(id)) : []
         if (action === 'finish') {
           step.prReview = {
             ...step.prReview!,
             status: 'done',
             resolution: 'finish',
             selectedFindingIds,
+            fixFindingIds,
           }
           step.approval!.status = 'approved'
           this.deps.stateMachine.advanceRunPastGate(inst, stepIndex)
@@ -321,6 +336,7 @@ export class PrReviewController {
           status: action === 'fix' ? 'fixing' : 'posting',
           resolution: action,
           selectedFindingIds,
+          fixFindingIds,
           // Counted at the RESOLUTION rather than where the pass records its report, because the
           // number has to exist before the pass runs: it is what the report is stamped with, and
           // what a caller polling a retry compares its own request against. A `fix` leaves it

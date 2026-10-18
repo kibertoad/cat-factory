@@ -590,6 +590,12 @@ export const publicPrReviewDecisionSchema = v.object({
   /** The finding ids currently selected to act on (empty until a caller curates). */
   selectedFindingIds: v.array(v.string()),
   /**
+   * The finding ids queued for the fixer once the in-flight `post` has landed (a `post`
+   * resolution carrying `fixFindingIds`). Empty otherwise, including on a plain `fix`, whose
+   * fixer works from `selectedFindingIds`. A partial post re-parks with this cleared.
+   */
+  fixFindingIds: v.array(v.string()),
+  /**
    * What the most recent `post` resolution did, or null when none has run. See
    * {@link publicPrReviewPostReportSchema}: this is how a re-parked review says whether it is
    * parked because nobody has curated it yet, or because the comments failed to land.
@@ -1329,6 +1335,14 @@ export const publicResolvePrReviewSchema = v.object({
   action: v.optional(prReviewResolutionSchema),
   /** Omitted reads as an empty selection, which only `finish` accepts. */
   findingIds: v.optional(v.array(v.string())),
+  /**
+   * Findings to hand to the fixer AFTER the `post` lands, so one resolution can comment on some
+   * findings and fix others. Accepted only with `action: 'post'`; any other action with a
+   * non-empty list answers `409`. Unknown or retracted ids are dropped like `findingIds`. A
+   * partial post re-parks the review with the queue cleared, so re-send both lists on the retry.
+   * Omitted reads as empty.
+   */
+  fixFindingIds: v.optional(v.array(v.string())),
 })
 export type PublicResolvePrReviewInput = v.InferOutput<typeof publicResolvePrReviewSchema>
 

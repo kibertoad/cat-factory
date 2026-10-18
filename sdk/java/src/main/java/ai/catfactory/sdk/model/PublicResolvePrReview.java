@@ -13,6 +13,7 @@ import org.jspecify.annotations.Nullable;
  * The {@code PublicResolvePrReview} wire model.
  * @param action May be absent entirely.
  * @param findingIds May be absent entirely.
+ * @param fixFindingIds May be absent entirely.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicResolvePrReview(
@@ -20,7 +21,10 @@ public record PublicResolvePrReview(
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("action") @Nullable PublicResolvePrReviewAction action,
 
     /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("findingIds") @Nullable List<String> findingIds
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("findingIds") @Nullable List<String> findingIds,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("fixFindingIds") @Nullable List<String> fixFindingIds
 ) {
 
     /** A new builder for {@link PublicResolvePrReview}. */
@@ -37,6 +41,7 @@ public record PublicResolvePrReview(
     public static final class Builder {
         private @Nullable PublicResolvePrReviewAction action;
         private @Nullable List<String> findingIds;
+        private @Nullable List<String> fixFindingIds;
 
         /** Set {@code action}. */
         public Builder action(@Nullable PublicResolvePrReviewAction action) {
@@ -50,9 +55,15 @@ public record PublicResolvePrReview(
             return this;
         }
 
+        /** Set {@code fixFindingIds}. */
+        public Builder fixFindingIds(@Nullable List<String> fixFindingIds) {
+            this.fixFindingIds = fixFindingIds;
+            return this;
+        }
+
         /** Build the {@link PublicResolvePrReview}. */
         public PublicResolvePrReview build() {
-            return new PublicResolvePrReview(action, findingIds);
+            return new PublicResolvePrReview(action, findingIds, fixFindingIds);
         }
     }
 }

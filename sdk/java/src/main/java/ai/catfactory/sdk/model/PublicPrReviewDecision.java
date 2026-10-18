@@ -11,6 +11,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code PublicPrReviewDecision} wire model.
  * @param findings the {@code findings} field.
+ * @param fixFindingIds the {@code fixFindingIds} field.
  * @param kind the {@code kind} field.
  * @param lastActivityAt Always present; {@code null} when the server has no value for it.
  * @param maxResumeAttempts the {@code maxResumeAttempts} field.
@@ -29,6 +30,8 @@ import org.jspecify.annotations.Nullable;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicPrReviewDecision(
     @JsonProperty("findings") List<PublicPrReviewDecisionFinding> findings,
+
+    @JsonProperty("fixFindingIds") List<String> fixFindingIds,
 
     @JsonProperty("kind") String kind,
 
@@ -76,6 +79,7 @@ public record PublicPrReviewDecision(
      */
     public static final class Builder {
         private @Nullable List<PublicPrReviewDecisionFinding> findings;
+        private @Nullable List<String> fixFindingIds;
         private @Nullable String kind;
         private @Nullable Double lastActivityAt;
         private @Nullable Double maxResumeAttempts;
@@ -94,6 +98,12 @@ public record PublicPrReviewDecision(
         /** Set {@code findings}. */
         public Builder findings(@Nullable List<PublicPrReviewDecisionFinding> findings) {
             this.findings = findings;
+            return this;
+        }
+
+        /** Set {@code fixFindingIds}. */
+        public Builder fixFindingIds(@Nullable List<String> fixFindingIds) {
+            this.fixFindingIds = fixFindingIds;
             return this;
         }
 
@@ -183,7 +193,7 @@ public record PublicPrReviewDecision(
 
         /** Build the {@link PublicPrReviewDecision}. */
         public PublicPrReviewDecision build() {
-            return new PublicPrReviewDecision(findings, kind, lastActivityAt, maxResumeAttempts, postAttempts, postReport, postedBody, postedFindingIds, prUrl, reportedSlices, resumeAttempts, selectedFindingIds, slices, status, summary);
+            return new PublicPrReviewDecision(findings, fixFindingIds, kind, lastActivityAt, maxResumeAttempts, postAttempts, postReport, postedBody, postedFindingIds, prUrl, reportedSlices, resumeAttempts, selectedFindingIds, slices, status, summary);
         }
     }
 }

@@ -1933,7 +1933,7 @@ The same blind spot applies one step earlier, at admission; see [Pick the right 
 | `POST …/fork/choose`                                  | `decide` | Choose the implementation approach: exactly one of a listed fork or a custom one, plus an optional note.                                                                                                           |
 | `POST …/judge/resolve`                                | `decide` | Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run (same body the SPA sends).                                                                                                       |
 | `POST …/input-gate/resolve`                           | `decide` | Body `{ choice: "recheck" \| "proceed" }`; answer the task's input check. `recheck` re-evaluates the task as it now stands, `proceed` waives the findings.                                                         |
-| `POST …/pr-review/resolve`                            | `decide` | Body `{ action?: "finish" \| "fix" \| "post", findingIds?: string[] }`; record the curated selection. `fix`/`post` need ≥1 finding and **act on the real pull request**.                                           |
+| `POST …/pr-review/resolve`                            | `decide` | Body `{ action?, findingIds?, fixFindingIds? }`, `action` is `finish`/`fix`/`post`; record the curated selection. `fix`/`post` need ≥1 finding, **act on the real pull request**. `fixFindingIds`: `post` only.    |
 | `POST …/pr-review/resume`                             | `decide` | Re-dispatch a review wedged mid-`reviewing` for only the slices that never reported. `409` unless the review is still in progress, or once the review has spent `maxResumeAttempts`.                               |
 | `POST …/pr-review/findings/:findingId/dismiss`        | `decide` | Drop one finding from the review. Curation, not a resolution: the run stays parked.                                                                                                                                |
 | `POST …/pr-review/findings/:findingId/challenge`      | `decide` | Dispatch a read-only investigator to uphold, strengthen or retract the finding.                                                                                                                                    |
@@ -2036,6 +2036,15 @@ Fourteen decision kinds appear in `decisions[]`, discriminated by `kind`:
   comment itself. Retrying is "resolve with `post` again, same selection": `postedFindingIds` and
   the summary comment are both at-most-once, so nothing double-posts. A review that settles instead
   of re-parking posted everything it attempted, and leaves the decision list.
+
+  **Comment on some findings and fix others with one `post`.** Add `fixFindingIds` to a `post`
+  resolution and, once every comment has landed, the review moves to `fixing` and a fixer commits
+  onto the PR's branch for exactly those findings; the fixer's completion settles it. The post goes
+  first because its comments anchor to the reviewed commit, which the fixer's pushes would move.
+  The decision's `fixFindingIds` shows the queue while it is pending and is always present (empty
+  by default), so its presence is how a caller detects support. A partial post re-parks with the
+  queue cleared: re-send both lists on the retry. `fixFindingIds` on any other action answers
+  `409`.
 
   **Two fields keep a retry legible.** `postAttempts` counts the `post` passes requested (the one
   in flight included) and `postReport.attempt` names the pass the report in hand describes, so a
@@ -2194,6 +2203,7 @@ Then curate, with one call per decision you make:
 | Push back on one              | `POST …/pr-review/findings/:findingId/challenge` with an optional `question`; poll for the `challenge` verdict (`upheld` / `amended` / `retracted` / `failed`) |
 | Post the keepers inline       | `POST …/pr-review/resolve` with `{"action":"post","findingIds":[…]}`                                                                                           |
 | Hand them to a fixer instead  | `…/resolve` with `{"action":"fix","findingIds":[…]}`; commits onto the PR's own branch, opens no new PR                                                        |
+| Post some, fix others         | `…/resolve` with `{"action":"post","findingIds":[…],"fixFindingIds":[…]}`; the fixer runs once the comments have landed                                        |
 | Record the selection and stop | `…/resolve` with `{"action":"finish"}`; no side effect on the PR                                                                                               |
 | Nudge a wedged review         | `POST …/pr-review/resume`, valid only while `reviewing`, and bounded (see below)                                                                               |
 

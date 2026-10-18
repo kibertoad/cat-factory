@@ -48,6 +48,7 @@ export function prReview(status: PrReviewStatus): PrReviewStepState {
     resumeAttempts: 0,
     findings: [],
     selectedFindingIds: [],
+    fixFindingIds: [],
     postedFindingIds: [],
     postedBody: false,
     postAttempts: 0,

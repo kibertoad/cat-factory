@@ -312,6 +312,14 @@ export const prReviewStepStateSchema = v.object({
   findings: v.optional(v.array(prReviewFindingSchema), []),
   /** The finding ids the human selected to act on (curated in the window). */
   selectedFindingIds: v.optional(v.array(v.string()), []),
+  /**
+   * The finding ids queued for the Fixer once a `post` resolution has landed: the curator asked
+   * for some findings as comments (`selectedFindingIds`) and others fixed. Empty unless the
+   * review was resolved with `post` plus a fix list. A plain `fix` resolution leaves this empty
+   * and hands the Fixer `selectedFindingIds` instead. A partial or failed post clears it when the
+   * review re-parks, so a stale queue never fires on a later pass.
+   */
+  fixFindingIds: v.optional(v.array(v.string()), []),
   /** How the human resolved the review; null while awaiting selection. */
   resolution: v.optional(v.nullable(prReviewResolutionSchema)),
   /** Web URL of the reviewed pull request, when known. */
@@ -459,10 +467,16 @@ export type PrReviewChallengeOutput = v.InferOutput<typeof prReviewChallengeOutp
  * it (`action`). `finish` records the selection and completes the read-only review; `fix` feeds
  * the selected findings to a Fixer (which commits fixes onto the reviewed PR's branch); `post`
  * publishes them as inline PR review comments. `fix`/`post` require ≥1 selected finding.
+ *
+ * `fixFindingIds` is accepted only with `post`: post `findingIds` as comments, then hand
+ * `fixFindingIds` to the Fixer once every comment has landed. The post runs first because the
+ * comments anchor to the reviewed head, which the Fixer's pushes would move. Any other action
+ * with a non-empty `fixFindingIds` is refused.
  */
 export const resolvePrReviewSchema = v.object({
   action: v.optional(prReviewResolutionSchema, 'finish'),
   findingIds: v.optional(v.array(v.string()), []),
+  fixFindingIds: v.optional(v.array(v.string()), []),
 })
 export type ResolvePrReviewInput = v.InferOutput<typeof resolvePrReviewSchema>
 

@@ -36,6 +36,7 @@ function review(over: Partial<PrReviewStepState> = {}): PrReviewStepState {
     resumeAttempts: 0,
     findings: [],
     selectedFindingIds: [],
+    fixFindingIds: [],
     resolution: null,
     prUrl: null,
     model: null,

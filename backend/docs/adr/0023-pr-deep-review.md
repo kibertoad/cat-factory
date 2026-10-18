@@ -53,6 +53,15 @@ result-view window. The human then resolves the parked review one of three ways
   RE-PARKS the run at `awaiting_selection` carrying the report, so the human sees what happened and
   can retry ONLY the posting (re-`post`, which skips findings already in `postedFindingIds`) or
   switch to `fix`/`finish`: never a stuck spinner or an opaque whole-run failure.
+- **`post` with `fixFindingIds`**: comment on some findings and fix others in one resolution. The
+  resolution records the fix list on `step.prReview.fixFindingIds` (refused with a `409` on any
+  other action). The post runs exactly as above, FIRST, because its comments anchor to the
+  reviewed head and the Fixer's pushes would move it (the drift check would then fold every
+  comment into the summary). Once the post is complete the driver persists `status: 'fixing'`
+  and dispatches the Fixer on the same step with the queued findings
+  (`prReviewFixerFindings`: the selection on a `fix`, the queue on a `post`); its completion
+  settles the review `done` as for a plain `fix`. A partial post re-parks with the queue
+  cleared, so the curator re-resolves with both lists and a stale queue never fires later.
 
 All review state rides `step.prReview` (**no side table**), so it is runtime-symmetric by
 construction, exactly like `forkDecision`/`followUps`. The two VCS reads/writes the resolutions

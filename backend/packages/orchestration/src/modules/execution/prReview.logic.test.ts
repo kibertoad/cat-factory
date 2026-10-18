@@ -13,6 +13,7 @@ import {
   GENERIC_CHALLENGE_PROMPT,
   initialPrReviewState,
   isPrReviewPostComplete,
+  prReviewFixerFindings,
   renderChallengeInvestigatorFeedback,
   renderPrReviewFixerFeedback,
   severityRank,
@@ -55,6 +56,7 @@ describe('initialPrReviewState', () => {
       resumeAttempts: 0,
       findings: [],
       selectedFindingIds: [],
+      fixFindingIds: [],
       resolution: null,
       prUrl: 'https://github.com/o/r/pull/42',
       model: 'anthropic:claude',
@@ -383,6 +385,7 @@ const parkedState = (findings: PrReviewFinding[]): PrReviewStepState => ({
   resumeAttempts: 0,
   findings,
   selectedFindingIds: findings.map((f) => f.id),
+  fixFindingIds: [],
   resolution: null,
   prUrl: 'https://github.com/o/r/pull/42',
   model: 'fake',
@@ -430,6 +433,13 @@ describe('dismissFinding', () => {
     expect(next.postReport?.attempt).toBe(1)
   })
 
+  it('drops the finding from the fixer queue too', () => {
+    const a = finding({ id: 'prf_a' })
+    const b = finding({ id: 'prf_b' })
+    const state = { ...parkedState([a, b]), fixFindingIds: ['prf_a', 'prf_b'] }
+    expect(dismissFinding(state, 'prf_a').fixFindingIds).toEqual(['prf_b'])
+  })
+
   it('leaves a review with no post report alone', () => {
     const a = finding({ id: 'prf_a' })
     expect(dismissFinding(parkedState([a]), 'prf_a').postReport).toBeNull()
@@ -438,6 +448,40 @@ describe('dismissFinding', () => {
   it('is a no-op for an unknown id', () => {
     const a = finding({ id: 'prf_a' })
     expect(dismissFinding(parkedState([a]), 'prf_missing').findings).toHaveLength(1)
+  })
+})
+
+describe('prReviewFixerFindings', () => {
+  const a = finding({ id: 'prf_a' })
+  const b = finding({ id: 'prf_b' })
+  const c = finding({ id: 'prf_c' })
+
+  it('hands a `fix` resolution its selection', () => {
+    const state: PrReviewStepState = {
+      ...parkedState([a, b, c]),
+      resolution: 'fix',
+      selectedFindingIds: ['prf_a', 'prf_c'],
+    }
+    expect(prReviewFixerFindings(state).map((f) => f.id)).toEqual(['prf_a', 'prf_c'])
+  })
+
+  it('hands a `post` resolution its queue, never the findings it posted', () => {
+    const state: PrReviewStepState = {
+      ...parkedState([a, b, c]),
+      resolution: 'post',
+      selectedFindingIds: ['prf_a'],
+      fixFindingIds: ['prf_b', 'prf_c'],
+    }
+    expect(prReviewFixerFindings(state).map((f) => f.id)).toEqual(['prf_b', 'prf_c'])
+  })
+
+  it('keeps the review order and skips ids no finding resolves', () => {
+    const state: PrReviewStepState = {
+      ...parkedState([a, b, c]),
+      resolution: 'post',
+      fixFindingIds: ['prf_c', 'prf_gone', 'prf_a'],
+    }
+    expect(prReviewFixerFindings(state).map((f) => f.id)).toEqual(['prf_a', 'prf_c'])
   })
 })
 
