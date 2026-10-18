@@ -14,7 +14,7 @@ export interface ConflictAction {
   /** i18n message key for the button label (a static literal so tier-1 typed keys see it). */
   labelKey: string
   icon: string
-  /** Where the button navigates — a `ui` store deep-link; run with the store passed in. */
+  /** Where the button navigates: a `ui` store deep-link, run with the store passed in. */
   run: (ui: ReturnType<typeof useUiStore>) => void
 }
 
@@ -30,7 +30,7 @@ export interface ConflictInfo {
  * `Record` over the union is the real drift guard: a new backend conflict reason fails THIS
  * typecheck until it is mapped here (title + description). (The typed-message-keys feature can't
  * see the `t()` lookup because the key is resolved at runtime via this map, not written as a
- * literal — so the exhaustiveness of the map, not `t()`, is what makes a missing reason a build
+ * literal, so the exhaustiveness of the map, not `t()`, is what makes a missing reason a build
  * error.) The reasons with BESPOKE handling in `composables/pipelineErrorToast/bespokeConflicts.ts` (a runtime-interpolated body + a "configure X"
  * action + their own key namespace) are excluded, since none reaches this generic lookup:
  * `providers_unconfigured`, `binary_storage_unconfigured`, and the deployment-environment trio
@@ -39,7 +39,7 @@ export interface ConflictInfo {
  *
  * G1 (error-message coverage): before this, only a title was mapped and the description fell back
  * to the raw, untranslated backend `message`. Every reason now carries a translated `description`
- * (remedy prose), and the ones a UI panel can fix carry a `run` deep-link — the same shape as the
+ * (remedy prose), and the ones a UI panel can fix carry a `run` deep-link: the same shape as the
  * bespoke conflicts, but data-driven instead of one `if` per reason.
  */
 export type BespokeConflictReason =
@@ -302,7 +302,7 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
   },
   // Opt-in review-debt friction. In the normal task-create flow AddTaskModal intercepts these
   // 409s and opens the friction dialog (which can retry with an acknowledgement), so these entries
-  // are the last-resort toast fallback for any OTHER caller — a generic, param-free title +
+  // are the last-resort toast fallback for any OTHER caller: a generic, param-free title +
   // description reusing the dialog's own `errors.reviewFriction.*` namespace.
   review_debt_warn: {
     titleKey: 'errors.reviewFriction.warnTitle',
@@ -314,7 +314,7 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
   },
   // Reachable from this generic lookup only if a prompt save is ever driven from a run-start
   // path; the prompt editor words it itself (it also has to re-seed its textarea from what
-  // landed). Mapped regardless — the exhaustive Record is the drift guard, not a hint that
+  // landed). Mapped regardless: the exhaustive Record is the drift guard, not a hint that
   // every reason arrives here.
   prompt_revision_conflict: {
     titleKey: 'errors.conflict.title.prompt_revision_conflict',
@@ -322,7 +322,7 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
   },
   // The three ways a recurring SCHEDULE blocks a pipeline edit (delete / make one-off / enable
   // bug-intake). No jump action: a schedule is reached through its own frame's inspector, not from
-  // a workspace-level route, so there is no single target to deep-link to — the description names
+  // a workspace-level route, so there is no single target to deep-link to, so the description names
   // the remedy instead. What each one must convey is that the fix is on the SCHEDULE and not on the
   // pipeline the user is looking at, which is the part the refusal alone doesn't make obvious.
   pipeline_schedule_attached: {
