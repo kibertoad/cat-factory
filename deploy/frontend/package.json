@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "typescript": "^6.0.3",
-    "vue-tsc": "^3.3.12",
-    "wrangler": "4.148.0"
+    "vue-tsc": "^3.3.13",
+    "wrangler": "4.151.1"
   }
 }

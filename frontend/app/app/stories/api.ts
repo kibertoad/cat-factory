@@ -26,11 +26,15 @@ export async function startApiWorker(): Promise<void> {
   await worker.start({
     quiet: true,
     serviceWorker: { url: './mockServiceWorker.js' },
-    onUnhandledRequest(request, print) {
+    onUnhandledFrame({ frame, defaults }) {
+      // msw 3 routes WebSocket frames here too. Vite's HMR socket is one, and no story mocks a
+      // socket, so only an HTTP frame can be an unanswered API call.
+      if (frame.protocol !== 'http') return
       // Every request goes through the worker, Vite's modules and the icon and font CDNs
       // included. Anything else is an API call no story answered.
+      const { request } = frame.data as { request: Request }
       const { origin, hostname } = new URL(request.url)
-      if (origin !== window.location.origin && !STORYBOOK_HOSTS.has(hostname)) print.warning()
+      if (origin !== window.location.origin && !STORYBOOK_HOSTS.has(hostname)) defaults.warn()
     },
   })
 }

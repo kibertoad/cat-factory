@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/acceptance",
-  "version": "0.4.103",
+  "version": "0.4.104",
   "private": true,
   "description": "Acceptance suite against a LIVE local deployment: drives the published TypeScript SDK over the real /api/v1 to bootstrap two empty repos, ship a cross-service feature onto a real k3s ephemeral environment, and then investigate and fix the defect that feature leaves behind. Real agents, real LLM spend, real pull requests. Never run in CI. Not published.",
   "type": "module",
@@ -21,9 +21,9 @@
     "@cat-factory/sdk": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "typescript": "7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.5"
   },
   "engines": {
     "node": ">=24"

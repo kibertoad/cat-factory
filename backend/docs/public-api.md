@@ -146,6 +146,14 @@ and `ws=<id>` pins the board. Nothing is minted until the person clicks create, 
 keeps the link. Its sibling, `?addRepo=<owner>/<name>&provider=<host>`, opens the add-service window
 on a repository the same way.
 
+To send a person to a task's run, link `<appUrl>/?ws=<workspaceId>&block=<taskId>&run=<runId>`, where
+`taskId` is the task's public id (its board block) and `runId` the run's. The app opens that board,
+selects the task and centres the camera on its card, zoomed in to where the board shows a task's
+pipeline steps, then opens the task's focus view, which follows its run step by step. Add
+`view=<name>` to open something else on the same run: `run` (the focus view, also what no `view`
+gets), `outcome` (what the run changed), `observability` (its model activity and context) or
+`test-evidence` (the Tester's captured evidence). An unknown `view` still lands on the task.
+
 An operator with no browser can do the same over `/api/v1` itself: see
 [Key provisioning](#key-provisioning-apiv1keys). The two surfaces share one store, so a key minted
 either way is listed and revoked by both.
