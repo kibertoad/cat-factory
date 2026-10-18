@@ -91,6 +91,21 @@ story's Nuxt app starts. A store that reads something once, at creation, has alr
 seed that sets the deployment's tier pin changes nothing. Call `$dispose()` on the store and delete
 its state, so the component creates a fresh one.
 
+**Every page of the app is empty in Storybook.** A story frame's URL is `/?sessionId=…&iframeId=…`,
+which is the app's `/` route, and Nuxt's router resolves it each time the preset builds a story's
+Nuxt app. So the first story of every stories file loaded `pages/index.vue` and the whole app it
+imports, about 170 modules. `nuxt.config.ts` keeps every route and its path, and gives each one
+`.storybook/EmptyPage.vue`. `useRoute()` reads the same route as before. No story renders a page.
+
+**A frame's first story is slower than the next ones.** The first Nuxt app a frame builds loads
+the modules its plugins import on demand (the locale messages among them), `UApp` loads its
+toaster, and the a11y check loads axe-core. In a loaded CI runner this took longer than a story's
+15 s, so the first story of a file failed by timeout, and its app kept booting into the next
+story's (`Cannot read properties of undefined (reading 'beforeResolve')`). In the test lane,
+`preview.ts` runs an empty story in `beforeAll` (`runEmptyStory`), so this time counts against the
+hook's 30 s, not against a story. Do not raise either timeout: if the empty story gets near 30 s,
+find what it loads.
+
 **Storybook runs standalone.** `@nuxtjs/storybook` is NOT in `nuxt.config`. Adding it boots
 Storybook inside `nuxt dev` at `/_storybook`, which changes the dev server for everyone and runs a
 second Vite server in the same process. The framework preset is what renders the stories.
