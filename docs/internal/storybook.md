@@ -19,25 +19,22 @@ The work that adds stories domain by domain is tracked in
 
 ## The patch
 
-`patches/@storybook-vue__nuxt@10.0.1.patch` fixes two upstream bugs in the Storybook preset, and
+`patches/@storybook-vue__nuxt@10.0.2.patch` fixes one upstream bug in the Storybook preset, and
 `pnpm-workspace.yaml` applies it. It pins the exact version, so a bump fails the install instead
-of applying a stale fix. Remove the patch when a release fixes both.
+of applying a stale fix. Remove the patch when a release fixes the bug.
 
-1. **Every story dies with `NUXT_E1001` on Nuxt 4.6.** Nuxt 4.6 keeps the client app context in
-   `globalThis.__nuxt_app_ctx__` (`nuxt/dist/app/internal/context.js`). The preset still writes
-   the story's Nuxt app to the `unctx` registry, so `useNuxtApp()` finds nothing and the first
-   plugin to run throws. It fails with no Nuxt modules at all. Upstream:
-   [nuxt-modules/storybook#1138](https://github.com/nuxt-modules/storybook/issues/1138), fixed
-   by the open [#1139](https://github.com/nuxt-modules/storybook/pull/1139) on the `10.x` branch.
-   The patch writes to the registry Nuxt 4.6 reads.
-2. **Every story test throws "StoryContext is not provided".** `setup()` takes its key from
-   `storyContext.canvasElement.id`, and under `@storybook/addon-vitest` the canvas is a `div` with
-   an empty `id`. Upstream:
-   [nuxt-modules/storybook#1140](https://github.com/nuxt-modules/storybook/issues/1140). The key
-   only names the story's Nuxt app, so the patch counts when the id is empty.
+**Every story test throws "StoryContext is not provided".** `setup()` takes its key from
+`storyContext.canvasElement.id`, and under `@storybook/addon-vitest` the canvas is a `div` with an
+empty `id`. Upstream:
+[nuxt-modules/storybook#1140](https://github.com/nuxt-modules/storybook/issues/1140). The key only
+names the story's Nuxt app, so the patch uses a constant name when the id is empty, and each story
+overwrites it the way the canvas id does in Storybook itself. A missing canvas still throws. The
+patch covers both entry points, `dist/preview.mjs` and `dist/preview.cjs`.
 
-Any story whose component reads `useAppConfig()` (`Spinner` does) throws
-`NUXT_E1001` if the first fix comes unstuck.
+The preset writes each story's Nuxt app through Nuxt's own `getNuxtAppCtx`
+([nuxt-modules/storybook#1139](https://github.com/nuxt-modules/storybook/pull/1139)). Any story
+whose component reads `useAppConfig()` (`Spinner` does) throws `NUXT_E1001` if that write breaks,
+in the preset or in Nuxt.
 
 ## Traps this setup already paid for
 
