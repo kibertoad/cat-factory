@@ -42,8 +42,12 @@ permissions: {}
 
 jobs:
   stories:
-    name: Render every story
+    name: Render every story (${{ matrix.attempt }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: [1, 2, 3]
     # About 10 minutes on a developer laptop; bounded so a story that hangs the browser cannot burn
     # the runner for hours.
     timeout-minutes: 45
@@ -80,14 +84,18 @@ jobs:
 
       - name: Render every story
         env:
-          MSWLOG: ${{ runner.temp }}/mswlog.ndjson
-        run: pnpm --filter @cat-factory/storybook run test:stories 2>&1 | tee ${{ runner.temp }}/stories.log; exit ${PIPESTATUS[0]}
+          DEBUG: 'vitest:browser:gc,vitest:browser:playwright,vitest:browser:api'
+          VITEST_PW_DEBUG: '1'
+        run: |
+          ( while true; do echo "$(date +%T) $(df -B1M --output=avail,used /tmp | tail -1) shm=$(du -sm /tmp 2>/dev/null | cut -f1)M"; sleep 10; done ) > ${{ runner.temp }}/disk.log 2>&1 &
+          rc=0; pnpm --filter @cat-factory/storybook run test:stories > ${{ runner.temp }}/stories.log 2>&1 || rc=$?
+          tail -40 ${{ runner.temp }}/stories.log; exit $rc
 
-      - name: Upload the worker trace
+      - name: Upload the run log
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: story-lane-trace
+          name: stories-log-${{ matrix.attempt }}
           path: |
-            ${{ runner.temp }}/mswlog.ndjson
             ${{ runner.temp }}/stories.log
+            ${{ runner.temp }}/disk.log
