@@ -43,9 +43,6 @@ permissions: {}
 jobs:
   stories:
     name: Render every story
-    # A release PR changes only package versions, which match the paths filter above, and runs the
-    # same code the nightly already checks.
-    if: github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
     # About 10 minutes on a developer laptop; bounded so a story that hangs the browser cannot burn
     # the runner for hours.

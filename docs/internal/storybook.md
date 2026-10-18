@@ -269,8 +269,7 @@ every later story in the session.
 | `node scripts/check-story-titles.mjs` (titles, one file per component, `Default` first) | CI's guard steps, every PR      |
 | `test:stories`: every story renders in headless Chromium, with an axe check             | nightly, and on request         |
 
-`test:stories` takes about 10 minutes for the whole tree, so no PR waits on it. It also runs on a
-PR that changes the lane itself, except a release PR, which changes only package versions.
+`test:stories` takes about 10 minutes for the whole tree, so no PR waits on it.
 `--browser.isolate=false` cut that to about 2 minutes, and was rejected: with the files shuffled,
 2 of 4 runs timed out on stories that pass alone, and no story failed twice.
 
