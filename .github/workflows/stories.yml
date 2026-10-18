@@ -5,24 +5,18 @@ name: Stories
 #
 # The whole tree takes about 10 minutes: each stories file boots the story's Nuxt app in a fresh
 # browser page, and that setup is most of the time. That is the wrong shape for a per-PR gate, so
-# it runs here, nightly plus on manual dispatch, and it is NON-BLOCKING by construction: a separate
-# workflow contributes no check to `ci.yml`'s aggregated gates. What every PR does get, in
-# `ci.yml`, is the cheap half: the stories typecheck with the app, `fixtures.spec.ts` parses every
-# shared fixture in the app's unit tests, and `check-story-titles.mjs` runs with the guards.
+# it runs here, on manual dispatch only while its triggers are paused (#2442), and it is
+# NON-BLOCKING by construction: a separate workflow contributes no check to `ci.yml`'s aggregated
+# gates. What every PR does get, in `ci.yml`, is the cheap half: the stories typecheck with the
+# app, `fixtures.spec.ts` parses every shared fixture in the app's unit tests, and
+# `check-story-titles.mjs` runs with the guards.
 #
 # Running without browser isolation took about 2 minutes and was rejected: with the files
 # shuffled, 2 of 4 runs timed out on stories that pass alone. Setup, conventions and helpers:
 # docs/internal/storybook.md.
 
 on:
-  # PAUSED: the lane is flaky in CI. msw's service worker answers Vite's module requests for every
-  # stories file's iframe, and some of those fail, so random files fail to import before they run.
-  # Until the fix lands it runs only on manual dispatch, which also serves the fix's evidence runs.
-  # https://github.com/kibertoad/cat-factory/pull/2422#issuecomment-6243475982
-  # Restore the nightly `schedule` (cron '50 2 * * *') and the `pull_request` paths filter by
-  # reverting the commit that paused them. When restoring, skip release PRs with
-  # `if: github.head_ref != 'changeset-release/main'` on the job: they change only package versions,
-  # which match the paths filter, and run the same code the nightly already checks.
+  # PAUSED to manual dispatch until #2442, which holds the triggers to restore.
   workflow_dispatch:
 
 concurrency:

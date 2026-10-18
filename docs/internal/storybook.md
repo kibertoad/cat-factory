@@ -224,9 +224,9 @@ every later story in the session.
 | `node scripts/check-story-titles.mjs` (titles, one file per component, `Default` first) | CI's guard steps, every PR      |
 | `test:stories`: every story renders in headless Chromium, with an axe check             | paused: on request only         |
 
-The nightly and per-PR runs of `test:stories` are paused while a CI flake is fixed: msw's service
-worker answers Vite's module requests for every stories file's iframe, and some of those fail.
-`stories.yml` says how to restore them. Run the lane by hand with the workflow's manual dispatch.
+The nightly and per-PR runs of `test:stories` are paused until
+[#2442](https://github.com/kibertoad/cat-factory/issues/2442). Run the lane by hand with the
+workflow's manual dispatch.
 
 `test:stories` takes about 10 minutes for the whole tree, so no PR waits on it.
 `--browser.isolate=false` cut that to about 2 minutes, and was rejected: with the files shuffled,
