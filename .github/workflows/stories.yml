@@ -42,11 +42,15 @@ permissions: {}
 
 jobs:
   stories:
-    name: Render every story
+    name: Render every story (${{ matrix.attempt }})
     # A release PR changes only package versions, which match the paths filter above, and runs the
     # same code the nightly already checks.
     if: github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: [1, 2, 3, 4, 5, 6]
     # About 10 minutes on a developer laptop; bounded so a story that hangs the browser cannot burn
     # the runner for hours.
     timeout-minutes: 45
@@ -101,4 +105,27 @@ jobs:
         # Chromium only), so a size larger than any disk runs it after every file.
         env:
           VITEST_CHROMIUM_GC_DISK_THRESHOLD_GB: '100000'
-        run: pnpm --filter @cat-factory/storybook run test:stories
+          DEBUG: vitest:browser:gc
+          MSWLOG: ${{ runner.temp }}/beacons.jsonl
+        run: |
+          ( while true; do
+              m=$(free -m | awk '/Mem:/{print $3"/"$7} /Swap:/{print "swap="$3}' | tr '\n' ' ')
+              r=$(ps -eo rss,args | grep -- '--type=renderer' | grep -v grep | awk '{printf "%d ", $1/1024}')
+              v=$(vmstat 1 2 | tail -1 | awk '{print "si="$7" so="$8}')
+              echo "$(date +%s%3N) used/avail=$m $v renderers=[$r]"
+              sleep 4
+            done ) > ${{ runner.temp }}/mem.log 2>&1 &
+          rc=0
+          (cd frontend/storybook && pnpm exec vitest run --config vitest.stories.config.ts --reporter=default --reporter=json --outputFile.json=${{ runner.temp }}/run.json) > ${{ runner.temp }}/stories.log 2>&1 || rc=$?
+          sed 's/\x1b\[[0-9;]*m//g' ${{ runner.temp }}/stories.log | grep -vE 'vitest:browser:gc' | tail -40; exit $rc
+
+      - name: Upload the run logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stories-gc-${{ matrix.attempt }}
+          path: |
+            ${{ runner.temp }}/stories.log
+            ${{ runner.temp }}/mem.log
+            ${{ runner.temp }}/run.json
+            ${{ runner.temp }}/beacons.jsonl
