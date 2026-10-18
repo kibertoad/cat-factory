@@ -1,5 +1,13 @@
 # @cat-factory/storybook
 
+## 0.0.5
+
+### Patch Changes
+
+- 6a3500f: Pause the story lane's nightly and per-PR runs until #2442 restores them. It still runs on manual dispatch.
+- Updated dependencies [3438f7f]
+  - @cat-factory/app@0.320.1
+
 ## 0.0.4
 
 ### Patch Changes
