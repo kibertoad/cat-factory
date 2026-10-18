@@ -160,13 +160,9 @@ minimumReleaseAgeExclude:
   - layered-loader
   - toad-scheduler
 
-# Two upstream bugs in the Storybook preset, patched until a release fixes them. Remove the
-# patch when one does. (1) Nuxt 4.6 keeps the client app context in
-# `globalThis.__nuxt_app_ctx__`, not in the `unctx` registry the preset writes to, so every
-# story dies with NUXT_E1001: https://github.com/nuxt-modules/storybook/issues/1138 (fix in
-# review: https://github.com/nuxt-modules/storybook/pull/1139).
-# (2) Under `@storybook/addon-vitest` the story's canvas has an empty `id`, which the preset uses
-# as its key, so every story test throws "StoryContext is not provided":
+# An upstream bug in the Storybook preset, patched until a release fixes it. Remove the patch
+# when one does. Under `@storybook/addon-vitest` the story's canvas has an empty `id`, which the
+# preset uses as its key, so every story test throws "StoryContext is not provided":
 # https://github.com/nuxt-modules/storybook/issues/1140.
 patchedDependencies:
-  '@storybook-vue/nuxt@10.0.1': patches/@storybook-vue__nuxt@10.0.1.patch
+  '@storybook-vue/nuxt@10.0.2': patches/@storybook-vue__nuxt@10.0.2.patch

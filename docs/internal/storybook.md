@@ -19,25 +19,22 @@ The work that adds stories domain by domain is tracked in
 
 ## The patch
 
-`patches/@storybook-vue__nuxt@10.0.1.patch` fixes two upstream bugs in the Storybook preset, and
+`patches/@storybook-vue__nuxt@10.0.2.patch` fixes one upstream bug in the Storybook preset, and
 `pnpm-workspace.yaml` applies it. It pins the exact version, so a bump fails the install instead
-of applying a stale fix. Remove the patch when a release fixes both.
+of applying a stale fix. Remove the patch when a release fixes the bug.
 
-1. **Every story dies with `NUXT_E1001` on Nuxt 4.6.** Nuxt 4.6 keeps the client app context in
-   `globalThis.__nuxt_app_ctx__` (`nuxt/dist/app/internal/context.js`). The preset still writes
-   the story's Nuxt app to the `unctx` registry, so `useNuxtApp()` finds nothing and the first
-   plugin to run throws. It fails with no Nuxt modules at all. Upstream:
-   [nuxt-modules/storybook#1138](https://github.com/nuxt-modules/storybook/issues/1138), fixed
-   by the open [#1139](https://github.com/nuxt-modules/storybook/pull/1139) on the `10.x` branch.
-   The patch writes to the registry Nuxt 4.6 reads.
-2. **Every story test throws "StoryContext is not provided".** `setup()` takes its key from
-   `storyContext.canvasElement.id`, and under `@storybook/addon-vitest` the canvas is a `div` with
-   an empty `id`. Upstream:
-   [nuxt-modules/storybook#1140](https://github.com/nuxt-modules/storybook/issues/1140). The key
-   only names the story's Nuxt app, so the patch counts when the id is empty.
+**Every story test throws "StoryContext is not provided".** `setup()` takes its key from
+`storyContext.canvasElement.id`, and under `@storybook/addon-vitest` the canvas is a `div` with an
+empty `id`. Upstream:
+[nuxt-modules/storybook#1140](https://github.com/nuxt-modules/storybook/issues/1140). The key only
+names the story's Nuxt app, so the patch uses a constant name when the id is empty, and each story
+overwrites it the way the canvas id does in Storybook itself. A missing canvas still throws. The
+patch covers both entry points, `dist/preview.mjs` and `dist/preview.cjs`.
 
-Any story whose component reads `useAppConfig()` (`Spinner` does) throws
-`NUXT_E1001` if the first fix comes unstuck.
+The preset writes each story's Nuxt app through Nuxt's own `getNuxtAppCtx`
+([nuxt-modules/storybook#1139](https://github.com/nuxt-modules/storybook/pull/1139)). Any story
+whose component reads `useAppConfig()` (`Spinner` does) throws `NUXT_E1001` if that write breaks,
+in the preset or in Nuxt.
 
 ## Traps this setup already paid for
 
@@ -271,7 +268,42 @@ every later story in the session.
 
 `test:stories` takes about 10 minutes for the whole tree, so no PR waits on it.
 `--browser.isolate=false` cut that to about 2 minutes, and was rejected: with the files shuffled,
-2 of 4 runs timed out on stories that pass alone, and no story failed twice.
+2 of 4 runs timed out on stories that pass alone, and no story failed twice. Those runs used
+Vitest's default worker count, before the cap below, so contention may explain the timeouts; the
+trade-off is worth measuring again at the cap. Vitest 5 replaces `browser.isolate` with the
+top-level `isolate` option.
+
+The config caps the lane at 3 workers. Without a cap, Vitest's run mode uses every core but one
+(at most 12 in browser mode), so CI's 4-vCPU `ubuntu-latest` runner gets 3, and a 14-core Mac gets 12. Each worker is a Chromium page that loads its story files from the one Vite server and renders
+them. On the 14-core Mac a full run held the whole CPU. The cap gives a local run CI's worker count.
+One run each of the same 40 files on that Mac, all passing:
+
+| Workers          | Wall time | Peak load | Peak RSS (Chromium + node) |
+| ---------------- | --------- | --------- | -------------------------- |
+| 12 (the default) | 46s       | 10.7      | about 16.7 GB              |
+| 7 (`'50%'`)      | 41s       | 9.2       | about 15.1 GB              |
+| 4                | 42s       | 6.8       | 14.6 GB                    |
+| 2                | 50s       | 8.0       | 10.5 GB                    |
+
+More than 4 workers added load and no speed; 3 was not measured, and is chosen to match CI. The
+node side (the Vite server and the runner) holds
+about 3 GB at any worker count, and only the Chromium part shrinks with fewer workers. The node
+column also counts about 1.8 GB of unrelated node processes, and the RSS sum counts shared Chromium
+memory more than once, so compare the rows, not the totals. Each start load was about 4.5, and the
+1-minute average lags on a short run, so the load column is approximate. Pass `--maxWorkers=2` on
+the command line to trade about 20% more time for less memory: at most about 4 GB, an upper bound,
+since the RSS difference between two rows still counts shared memory more than once.
+
+The cap reduces the lane's own contention. It does not fix the first story of a file timing out
+under load: that story also pays the file's cold setup inside the 15s test timeout, whatever the
+worker count.
+
+To re-derive the cap on another machine, run Vitest's `doctor`. It measures half the configured
+worker count and halves again, so give it the uncapped count:
+
+```sh
+pnpm --filter @cat-factory/storybook exec vitest doctor --config vitest.stories.config.ts --maxWorkers=12
+```
 
 `parameters.a11y.test` is `todo`: axe violations are REPORTED, not failed on, because `main` has
 real ones (the `text-dimmed` token at 2.63:1, an unlabelled `SecretInput`). Change it to `error`

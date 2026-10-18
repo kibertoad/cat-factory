@@ -17,6 +17,9 @@ const dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   test: {
+    // Each worker is a Chromium page, and past a few they add contention, not speed. 3 is what
+    // Vitest gives CI's 4-vCPU runner. Why, and how to re-check it: docs/internal/storybook.md.
+    maxWorkers: 3,
     projects: [
       {
         extends: true,
