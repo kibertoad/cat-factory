@@ -88,9 +88,10 @@ jobs:
           VITEST_PW_DEBUG: '1'
           NAVLOG: ${{ runner.temp }}/navlog.ndjson
         run: |
-          ( while true; do echo "$(date +%T) $(df -B1M --output=avail,used /tmp | tail -1) shm=$(du -sm /tmp 2>/dev/null | cut -f1)M"; sleep 10; done ) > ${{ runner.temp }}/disk.log 2>&1 &
+          ( while true; do echo "$(date +%T) mem_used_avail_MB=$(free -m | awk 'NR==2{print $3"/"$7}') chrome_rss_MB=$(ps -eo rss,comm | awk '/chrom|headless/{s+=$1} END{print int(s/1024)}') chrome_procs=$(pgrep -c -f 'chrom|headless_shell') top_renderer_MB=$(ps -eo rss,args | grep -E 'type=renderer' | grep -v grep | sort -rn | head -1 | awk '{print int($1/1024)}')"; sleep 10; done ) > ${{ runner.temp }}/disk.log 2>&1 &
           rc=0; pnpm --filter @cat-factory/storybook run test:stories > ${{ runner.temp }}/stories.log 2>&1 || rc=$?
-          tail -40 ${{ runner.temp }}/stories.log; exit $rc
+          sudo dmesg -T | grep -iE 'oom|killed process|out of memory' > ${{ runner.temp }}/oom.log || true
+          tail -40 ${{ runner.temp }}/stories.log; cat ${{ runner.temp }}/oom.log; exit $rc
 
       - name: Upload the run log
         if: always()
@@ -100,4 +101,5 @@ jobs:
           path: |
             ${{ runner.temp }}/stories.log
             ${{ runner.temp }}/disk.log
+            ${{ runner.temp }}/oom.log
             ${{ runner.temp }}/navlog.ndjson
