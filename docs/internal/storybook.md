@@ -233,11 +233,13 @@ A `play` that opens a menu, popover or modal queries `screen`, not `within(canva
 UI teleports overlays to `body`. A play that types into a debounced field needs no sleep:
 `findBy*` retries for up to a second.
 
-A play never waits on the clock for data. Every `findBy*`, `waitFor` and user-event action first
-waits until the page has no request in flight (`waitOnRequests()` in `app/stories/settle.ts`, set
-up by `preview.ts`), and only then starts its second of retries. In CI a story's answer can take
-longer than a second, and plays that went straight to `findBy*` failed now and then. Never raise
-the timeout instead: a longer guess fails the same way under more load.
+A play never waits on the clock for data. A `findBy*` or `waitFor` counts only the time the page is
+idle against its second of retries (`waitOnRequests()` in `app/stories/settle.ts`, set up by
+`preview.ts`): it starts once the page has no request in flight, and one that runs out while a
+request is on its way (a debounced search sends it after the wait began) waits for it and looks
+again. In CI a story's answer can take longer than a second, and plays that went straight to
+`findBy*` failed now and then. Never raise the timeout instead: a longer guess fails the same way
+under more load.
 
 A story that changes the runtime config (`useRuntimeConfig().public`) puts the old value back when
 it unmounts. The preset shares that object between stories, so a value one story sets stays for
