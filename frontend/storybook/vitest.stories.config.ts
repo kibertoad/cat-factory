@@ -7,7 +7,7 @@ import { defineConfig } from 'vitest/config'
 // Runs every story as a test in a real Chromium, with the a11y check turned on, so the axe sweep
 // is a command rather than something someone remembers to do.
 //
-// ON REQUEST, and nightly once #2442 restores the schedule. The file is named `vitest.stories.config.ts` and the script
+// NIGHTLY AND ON REQUEST. The file is named `vitest.stories.config.ts` and the script
 // `test:stories`, so neither Turbo's `test:run` lane nor `test:quick` nor `ci.yml` picks it up;
 // `.github/workflows/stories.yml` runs it. It boots a browser and the whole Nuxt Vite graph, about
 // 10 minutes for the tree, so it does not belong in a lane a PR waits on.

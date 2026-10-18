@@ -5,18 +5,33 @@ name: Stories
 #
 # The whole tree takes about 10 minutes: each stories file boots the story's Nuxt app in a fresh
 # browser page, and that setup is most of the time. That is the wrong shape for a per-PR gate, so
-# it runs here, on manual dispatch only while its triggers are paused (#2442), and it is
-# NON-BLOCKING by construction: a separate workflow contributes no check to `ci.yml`'s aggregated
-# gates. What every PR does get, in `ci.yml`, is the cheap half: the stories typecheck with the
-# app, `fixtures.spec.ts` parses every shared fixture in the app's unit tests, and
-# `check-story-titles.mjs` runs with the guards.
+# it runs here, nightly plus on manual dispatch, and it is NON-BLOCKING by construction: a separate
+# workflow contributes no check to `ci.yml`'s aggregated gates. What every PR does get, in
+# `ci.yml`, is the cheap half: the stories typecheck with the app, `fixtures.spec.ts` parses every
+# shared fixture in the app's unit tests, and `check-story-titles.mjs` runs with the guards.
 #
 # Running without browser isolation took about 2 minutes and was rejected: with the files
 # shuffled, 2 of 4 runs timed out on stories that pass alone. Setup, conventions and helpers:
 # docs/internal/storybook.md.
 
 on:
-  # PAUSED to manual dispatch until #2442, which holds the triggers to restore.
+  # Nightly, off-peak, and away from the mutation run's slot. Scheduled runs only fire on the
+  # default branch.
+  schedule:
+    - cron: '50 2 * * *'
+  # A change to the story lane ITSELF runs it on the PR making the change, so a broken config is
+  # found before it merges rather than as a red nightly on main: the Storybook package and its
+  # dependencies, the shared story helpers, the patch and where it is registered, and the lockfile
+  # (a dependency sweep changes only that and the package files). An ordinary PR pays nothing.
+  pull_request:
+    paths:
+      - '.github/workflows/stories.yml'
+      - 'frontend/storybook/**'
+      - 'frontend/app/app/stories/**'
+      - 'frontend/app/package.json'
+      - 'patches/@storybook-vue__nuxt@*.patch'
+      - 'pnpm-workspace.yaml'
+      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 concurrency:

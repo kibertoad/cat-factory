@@ -69,9 +69,9 @@ states that hit the same bug, and cite the issue in their header.
   `pnpm-workspace.yaml`: nuxt-modules/storybook#1140, the empty canvas id under addon-vitest.
   Remove the patch when a release fixes #1140; until then a bump of `@storybook-vue/nuxt` fails
   the install.
-- **The story lane is not per PR.** Its nightly is paused until #2442. The whole tree takes
-  about 10 minutes. Running it without browser isolation took about 2 and was rejected:
-  shuffled, 2 of 4 runs timed out on stories that pass alone.
+- **The story lane is nightly, not per PR.** The whole tree takes about 10 minutes. Running it
+  without browser isolation took about 2 and was rejected: shuffled, 2 of 4 runs timed out on
+  stories that pass alone.
 - **Stories must not ship.** `@cat-factory/app` publishes `app/`, so its `files` excludes
   `app/stories` and `app/**/*.stories.ts`. Before that, the package carried 362 story files.
 - **State that survives a story:** cookies (cleared in `beforeEach`), the modular registry (reset
