@@ -5,6 +5,7 @@ import { __resetConsumerModulesForTest } from '../../app/app/modular/registry'
 import { installApiResponses, startApiWorker } from '../../app/app/stories/api'
 import { waitOnRequests } from '../../app/app/stories/settle'
 import { composeStory, type Preview } from '@storybook/vue3'
+const dbg = (kind: string, id?: string) => navigator.sendBeacon('/__mswlog', JSON.stringify({ t: Date.now(), kind, id, iframe: new URLSearchParams(location.search).get('iframeId')?.split('/').pop() }))
 
 // Every story renders inside `UApp`, exactly as `app.vue` does.
 //
@@ -112,7 +113,8 @@ const preview: Preview = {
   // The reset has to run BEFORE the plugins do. Storybook's `beforeEach` is in the prepare
   // phase, ahead of `renderToCanvas` where the preset's `setup()` callback lives; a decorator
   // would be too late. The helper is named for tests because tests were its first caller.
-  beforeEach: () => {
+  beforeEach: (context) => {
+    dbg('story-begin', context.id)
     __resetConsumerModulesForTest()
     clearCookies()
   },
@@ -124,7 +126,13 @@ const preview: Preview = {
     // Before anything renders, so every request a story sends is counted.
     waitOnRequests()
     await startApiWorker()
+    dbg('boot-begin')
     await runEmptyStory()
+    dbg('boot-end')
+  },
+
+  afterEach: (context) => {
+    dbg('story-afterEach', context.id)
   },
 
   // Storybook runs the loaders BEFORE `beforeEach`, so what a story's own loaders need is set up
@@ -151,6 +159,7 @@ const preview: Preview = {
   // the board canvas remounted the canvas three times.
   decorators: [
     (story, context) => {
+      dbg('story-render', context.id)
       // The story's own colour-mode state. Its Nuxt app outlives a toolbar change, so the state
       // it was seeded with at the start would still say the old mode. Setting the preference
       // lets the colour-mode plugin update the value and the class, as it does in the app.

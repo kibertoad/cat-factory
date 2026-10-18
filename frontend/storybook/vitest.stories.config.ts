@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin'
@@ -15,7 +16,9 @@ import { defineConfig } from 'vitest/config'
 //   pnpm --filter @cat-factory/storybook run test:stories
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
+const mswlog = process.env.MSWLOG
 export default defineConfig({
+  plugins: mswlog ? [{ name: 'debug:mswlog', configureServer(server) { server.middlewares.use('/__mswlog', (req, res) => { let b = ''; req.on('data', (c) => (b += c)); req.on('end', () => { appendFileSync(mswlog, b + '\n'); res.statusCode = 204; res.end() }) }) } }] : [],
   test: {
     // Each worker is a Chromium page, and past a few they add contention, not speed. 3 is what
     // Vitest gives CI's 4-vCPU runner. Why, and how to re-check it: docs/internal/storybook.md.
@@ -26,12 +29,13 @@ export default defineConfig({
         plugins: [storybookTest({ configDir: path.join(dirname, '.storybook') })],
         test: {
           name: 'stories',
+          setupFiles: ['./debug-beacons.ts'],
           // Read by `.storybook/preview.ts`, which runs an empty story first only in this lane.
           env: { STORY_TEST_LANE: 'true' },
           browser: {
             enabled: true,
             headless: true,
-            provider: playwright({}),
+            provider: playwright({ launchOptions: { args: [...(process.env.EXPOSE_GC ? ['--js-flags=--expose-gc'] : []), ...(process.env.CDP ? ['--remote-debugging-port=9333'] : [])] } }),
             instances: [{ browser: 'chromium' }],
           },
         },
