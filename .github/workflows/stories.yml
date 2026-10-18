@@ -42,11 +42,15 @@ permissions: {}
 
 jobs:
   stories:
-    name: Render every story
+    name: Render every story (${{ matrix.attempt }})
     # A release PR changes only package versions, which match the paths filter above, and runs the
     # same code the nightly already checks.
     if: github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: [1, 2, 3, 4, 5, 6]
     # About 10 minutes on a developer laptop; bounded so a story that hangs the browser cannot burn
     # the runner for hours.
     timeout-minutes: 45
@@ -82,4 +86,13 @@ jobs:
         run: pnpm --filter @cat-factory/e2e exec playwright install --with-deps chromium
 
       - name: Render every story
-        run: pnpm --filter @cat-factory/storybook run test:stories
+        run: |
+          rc=0; pnpm --filter @cat-factory/storybook run test:stories > ${{ runner.temp }}/stories.log 2>&1 || rc=$?
+          tail -40 ${{ runner.temp }}/stories.log; exit $rc
+
+      - name: Upload the run log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stories-log-${{ matrix.attempt }}
+          path: ${{ runner.temp }}/stories.log
