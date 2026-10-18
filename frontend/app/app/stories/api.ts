@@ -22,6 +22,11 @@ let worker: SetupWorker | undefined
 /** Start the worker once per preview. Requests nothing answers pass through and are logged. */
 export async function startApiWorker(): Promise<void> {
   if (worker) return
+  // DEBUG ONLY: when this frame's worker start begins and ends.
+  const iframe = new URLSearchParams(location.search).get('iframeId')?.split('/').pop()
+  const beacon = (kind: string) =>
+    navigator.sendBeacon('/__mswlog', JSON.stringify({ t: Date.now(), kind, iframe }))
+  beacon('start-begin')
   worker = setupWorker()
   await worker.start({
     quiet: true,
@@ -33,6 +38,7 @@ export async function startApiWorker(): Promise<void> {
       if (origin !== window.location.origin && !STORYBOOK_HOSTS.has(hostname)) print.warning()
     },
   })
+  beacon('start-end')
 }
 
 /** Replace the installed responses with the story's own. */

@@ -11,6 +11,12 @@ const PACKAGE_VERSION = '2.15.0'
 const INTEGRITY_CHECKSUM = '03cb67ac84128e63d7cd722a6e5b7f1e'
 const IS_MOCKED_RESPONSE = Symbol('isMockedResponse')
 const activeClientIds = new Set()
+// DEBUG ONLY: boots and every message, posted to the story lane's /__mswlog.
+const BOOT = Math.random().toString(36).slice(2, 8)
+function dbg(kind, data) {
+  fetch('/__mswlog', { method: 'POST', body: JSON.stringify({ t: Date.now(), boot: BOOT, kind, ...data }) }).catch(() => {})
+}
+dbg('boot', {})
 
 addEventListener('install', function () {
   self.skipWaiting()
@@ -28,6 +34,7 @@ addEventListener('message', async function (event) {
   }
 
   const client = await self.clients.get(clientId)
+  dbg('msg', { data: String(event.data), clientId, found: !!client })
 
   if (!client) {
     return

@@ -86,6 +86,8 @@ jobs:
         run: pnpm --filter @cat-factory/e2e exec playwright install --with-deps chromium
 
       - name: Render every story
+        env:
+          MSWLOG: ${{ runner.temp }}/mswlog.ndjson
         run: |
           rc=0; pnpm --filter @cat-factory/storybook run test:stories > ${{ runner.temp }}/stories.log 2>&1 || rc=$?
           tail -40 ${{ runner.temp }}/stories.log; exit $rc
@@ -95,4 +97,6 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: stories-log-${{ matrix.attempt }}
-          path: ${{ runner.temp }}/stories.log
+          path: |
+            ${{ runner.temp }}/stories.log
+            ${{ runner.temp }}/mswlog.ndjson
