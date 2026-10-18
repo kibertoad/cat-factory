@@ -284,9 +284,8 @@ const isServiceFrame = computed(
 )
 
 // ---- failed agent run (bootstrap or execution) ------------------------------
-// A block whose current run failed surfaces the shared failure banner + retry,
-// keyed by block id — covering a failed "bootstrap repo" frame and (for tasks) a
-// failed pipeline execution alike.
+// A block whose current run failed shows the failure block, keyed by block id. The header shows
+// it for a failed "bootstrap repo" frame only: a block with runs shows it in TaskExecution.
 const failedRun = computed(() => {
   const run = block.value ? agentRuns.byBlock[block.value.id] : undefined
   return run && run.status === 'failed' ? run : null
@@ -496,8 +495,9 @@ const showOriginalDescription = ref(false)
         </template>
       </div>
 
-      <!-- failed run (bootstrap or execution): shared failure banner + retry -->
-      <AgentFailureCard v-if="failedRun" :run="failedRun" />
+      <!-- A failed bootstrap on a service frame: the failure block. A task or an initiative shows
+           its failure block once, in its Execution section (TaskExecution), not here as well. -->
+      <AgentFailureCard v-if="failedRun && !hasRuns" :run="failedRun" />
 
       <!-- running bootstrap: show the steps, let the user inspect it, let them stop it -->
       <div

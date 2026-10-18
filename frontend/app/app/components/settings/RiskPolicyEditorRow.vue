@@ -156,7 +156,7 @@ const deleteBlocked = computed(
       />
     </div>
 
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-4">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <label v-for="axis in RISK_POLICY_AXES" :key="axis" class="block">
         <SectionLabel as="span" class="mb-1 block">
           {{ t(CEILING_LABEL_KEYS[axis]) }}
@@ -245,7 +245,10 @@ const deleteBlocked = computed(
         :label="t('settings.riskPolicy.forkDecision.label')"
         :description="t('settings.riskPolicy.forkDecision.hint')"
       />
-      <div v-if="draft.forkEnabled" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <div
+        v-if="draft.forkEnabled"
+        class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      >
         <label v-for="axis in RISK_POLICY_AXES" :key="axis" class="block">
           <SectionLabel as="span" class="mb-1 block">
             {{ t(FORK_FLOOR_LABEL_KEYS[axis]) }}

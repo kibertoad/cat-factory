@@ -1,16 +1,11 @@
 import type { ParsedConflict } from '~/composables/usePipelineErrorToast'
 import {
-  ENVIRONMENTS_FIX,
   gateSetupFix,
   type SetupConflictDeps,
-  type SetupFix,
 } from '~/composables/pipelineErrorToast/setupConflictGate'
-import {
-  BOARD_MEMBER_SETUP_OWNER,
-  MODEL_SETUP_OWNER,
-  SETUP_REMEDY_KEYS,
-  canActOnSetup,
-} from '~/utils/setupAudience'
+import { BESPOKE_CONFLICT_FIXES } from '~/utils/conflictCopy'
+import { BOARD_MEMBER_SETUP_OWNER, SETUP_REMEDY_KEYS, canActOnSetup } from '~/utils/setupAudience'
+import { ENVIRONMENTS_FIX, type SetupFix } from '~/utils/setupFixes'
 
 /** One bespoke conflict toast, before the audience decides whether it carries the fix. */
 interface SetupConflictToast {
@@ -83,8 +78,9 @@ export function createBespokeConflictToasts(
         ? t('errors.conflict.providersUnconfigured.body', { models: list })
         : fallback(conflict),
       icon: 'i-lucide-cpu',
-      actionKey: 'errors.conflict.providersUnconfigured.action',
-      fix: { owner: () => MODEL_SETUP_OWNER, open: (remedies) => remedies.openModelSetup() },
+      // The failure block offers the same fix (`BESPOKE_CONFLICT_FIXES`).
+      actionKey: BESPOKE_CONFLICT_FIXES.providers_unconfigured.action.labelKey,
+      fix: BESPOKE_CONFLICT_FIXES.providers_unconfigured.action.fix,
     })
   }
 
@@ -98,11 +94,8 @@ export function createBespokeConflictToasts(
         ? t('errors.conflict.binaryStorageUnconfigured.body')
         : fallback(conflict),
       icon: 'i-lucide-image',
-      actionKey: 'errors.conflict.binaryStorageUnconfigured.action',
-      fix: {
-        owner: (owners) => owners?.binaryStorage,
-        open: (remedies) => remedies.openInfraArea('binaryStorage'),
-      },
+      actionKey: BESPOKE_CONFLICT_FIXES.binary_storage_unconfigured.action.labelKey,
+      fix: BESPOKE_CONFLICT_FIXES.binary_storage_unconfigured.action.fix,
     })
   }
 
