@@ -2,46 +2,63 @@
 //
 // Some components call a store loader on mount, and a loader sends a request. In Storybook no
 // backend answers it, so the story fails with "Failed to fetch". A story declares the responses
-// it needs as `parameters.api`, and `preview.ts` installs them on an msw worker before the story
-// renders.
+// it needs as `parameters.api`, and `preview.ts` installs them before the story renders.
 //
 // A response is built from the route CONTRACT the app's own client uses, and its body is
 // validated against the contract's 200 schema when the story loads. So a fixture that drifts from
 // the API fails loudly instead of rendering a shape the backend would never send.
+//
+// The requests are intercepted IN THE PAGE, with msw's own interceptors for `fetch` and XHR, and
+// answered by msw's `getResponse` over the story's handlers. msw's service worker is not used: a
+// service worker serves every frame of its origin, so once one frame activated it, it answered ALL
+// requests of the origin, Vite's modules and the other frames' documents included. `test:stories`
+// runs each stories file in its own iframe, so from the second file on every module went through
+// the worker, and random files failed in CI with "Failed to fetch dynamically imported module"
+// before they collected a test. In-page interception sees only the requests the page's own code
+// sends, and each frame has its own.
 import type { ApiContract } from '@toad-contracts/core'
-import { delay, http, HttpResponse, type HttpHandler } from 'msw'
-import { setupWorker, type SetupWorker } from 'msw/browser'
+import { BatchInterceptor } from '@mswjs/interceptors'
+import { FetchInterceptor } from '@mswjs/interceptors/fetch'
+import { XMLHttpRequestInterceptor } from '@mswjs/interceptors/XMLHttpRequest'
+import { delay, getResponse, http, HttpResponse, type HttpHandler } from 'msw'
 import type { SuccessBodyOf } from '~/composables/api/client'
 import { storyWorkspacePrefix } from './workspace'
 
 /** Hosts Storybook itself fetches from: Iconify's icon API, and the fonts in `preview-head.html`. */
 const STORYBOOK_HOSTS = new Set(['api.iconify.design', 'fonts.googleapis.com', 'fonts.gstatic.com'])
 
-let worker: SetupWorker | undefined
+let handlers: HttpHandler[] = []
+let interceptor: BatchInterceptor<[FetchInterceptor, XMLHttpRequestInterceptor]> | undefined
 
-/** Start the worker once per preview. Requests nothing answers pass through and are logged. */
-export async function startApiWorker(): Promise<void> {
-  if (worker) return
-  worker = setupWorker()
-  await worker.start({
-    quiet: true,
-    serviceWorker: { url: './mockServiceWorker.js' },
-    onUnhandledFrame({ frame, defaults }) {
-      // msw 3 routes WebSocket frames here too. Vite's HMR socket is one, and no story mocks a
-      // socket, so only an HTTP frame can be an unanswered API call.
-      if (frame.protocol !== 'http') return
-      // Every request goes through the worker, Vite's modules and the icon and font CDNs
-      // included. Anything else is an API call no story answered.
-      const { request } = frame.data as { request: Request }
-      const { origin, hostname } = new URL(request.url)
-      if (origin !== window.location.origin && !STORYBOOK_HOSTS.has(hostname)) defaults.warn()
-    },
+/**
+ * Start intercepting once per preview. A request no handler answers passes through, and one that
+ * leaves for another origin is logged: it is an API call no story answered.
+ */
+export function startApiInterception(): void {
+  if (interceptor) return
+  interceptor = new BatchInterceptor({
+    name: 'story-api',
+    interceptors: [new FetchInterceptor(), new XMLHttpRequestInterceptor()],
   })
+  interceptor.on('request', async ({ request, controller }) => {
+    const response = await getResponse(handlers, request)
+    if (response) {
+      controller.respondWith(response)
+      return
+    }
+    const { origin, hostname } = new URL(request.url)
+    if (origin !== window.location.origin && !STORYBOOK_HOSTS.has(hostname)) {
+      console.warn(
+        `No story response for ${request.method} ${request.url}: add it to parameters.api`,
+      )
+    }
+  })
+  interceptor.apply()
 }
 
 /** Replace the installed responses with the story's own. */
-export function installApiResponses(handlers: readonly HttpHandler[]): void {
-  worker?.resetHandlers(...handlers)
+export function installApiResponses(next: readonly HttpHandler[]): void {
+  handlers = [...next]
 }
 
 /** The part of the Standard Schema interface this file uses. */

@@ -1587,6 +1587,9 @@ importers:
         specifier: ^3.0.9
         version: 3.0.9
     devDependencies:
+      '@mswjs/interceptors':
+        specifier: ^0.45.8
+        version: 0.45.8(supports-color@10.2.2)
       '@storybook/vue3':
         specifier: 10.6.2
         version: 10.6.2(storybook@10.6.2(react@19.3.1))(typescript@6.0.3)(vue@3.5.44(typescript@6.0.3))

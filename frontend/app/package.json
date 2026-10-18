@@ -54,6 +54,7 @@
     "wretch": "^3.0.9"
   },
   "devDependencies": {
+    "@mswjs/interceptors": "^0.45.8",
     "@storybook/vue3": "10.6.2",
     "@toad-contracts/testing": "1.0.0",
     "happy-dom": "^21.0.3",

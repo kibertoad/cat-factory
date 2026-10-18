@@ -2,7 +2,7 @@ import { h } from 'vue'
 import { useColorMode } from '#imports'
 import UApp from '@nuxt/ui/components/App.vue'
 import { __resetConsumerModulesForTest } from '../../app/app/modular/registry'
-import { installApiResponses, startApiWorker } from '../../app/app/stories/api'
+import { installApiResponses, startApiInterception } from '../../app/app/stories/api'
 import type { Preview } from '@storybook/vue3'
 
 // Every story renders inside `UApp`, exactly as `app.vue` does.
@@ -100,10 +100,10 @@ const preview: Preview = {
     clearCookies()
   },
 
-  // One msw worker for the whole preview: registering a service worker per story would be slow
-  // and race the first request.
-  beforeAll: async () => {
-    await startApiWorker()
+  // One interception for the whole preview. The handlers change per story, in the first loader
+  // below; the interception does not.
+  beforeAll: () => {
+    startApiInterception()
   },
 
   // Storybook runs the loaders BEFORE `beforeEach`, so what a story's own loaders need is set up
