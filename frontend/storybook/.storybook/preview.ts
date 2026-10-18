@@ -74,14 +74,12 @@ function clearCookies(): void {
 /**
  * Run one empty story before the first story of the stories file, in the story test lane.
  *
- * A frame's first story is much slower than the next ones: the preset builds the frame's first
- * Nuxt app, loading the modules its plugins import on demand (the locale messages among them),
- * `UApp` loads its toaster, and the a11y check loads axe-core, and each runs its code for the first
- * time. In a loaded CI runner that took longer than the 15 s a story may take, so the first story
- * of a file failed by timeout, and its app kept booting into the next story's. Run here, in
- * `beforeAll`, that time counts against the hook's timeout. The empty story goes through the same
- * steps as every story (loaders, decorators, render, a11y check), so nothing is warmed by a copy;
- * the first real story unmounts it, as it would the story before it.
+ * A frame's first story pays for work the next ones do not: the preset builds the frame's first
+ * Nuxt app and loads the modules its plugins import on demand (the locale messages among them),
+ * `UApp` loads its toaster, the a11y check loads axe-core, and each runs its code for the first
+ * time. A story has 15 s and the hook 30 s, so that work belongs here, in `beforeAll`. The empty
+ * story goes through the same steps as every story (loaders, decorators, render, a11y check), so
+ * nothing is warmed by a copy; the first real story unmounts it, as it would the story before it.
  */
 async function runEmptyStory(): Promise<void> {
   // The Storybook page itself has no timeout to protect, and nothing there would unmount it.
