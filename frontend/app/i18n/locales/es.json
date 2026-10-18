@@ -408,10 +408,38 @@
       "stalled": "La ejecución se estancó",
       "retryBootstrap": "Reintentar arranque",
       "retryRun": "Reintentar ejecución",
+      "startNewRun": "Iniciar una ejecución nueva",
       "environmentSetup": "Configurar entornos",
       "deployRunnerSetup": "Configurar pool de runners",
       "environmentLocalHint": "Los entornos efímeros locales necesitan un runtime de despliegue para ejecutar kubectl/kustomize/helm. Define {runtime} en tu .env: el modo nativo ejecuta esas herramientas en tu host ({native}), el modo contenedor las ejecuta en la imagen de despliegue ({container}).",
       "showDetail": "Mostrar detalle",
+      "details": "Detalles",
+      "detailsMessage": "Mensaje",
+      "detailsHint": "Notas para el operador",
+      "detailsFull": "Salida completa",
+      "cause": {
+        "preflight": "Una comprobación previa al inicio falló, así que no se hizo ningún trabajo. Abre Detalles para ver qué corregir y luego reintenta.",
+        "dispatch": "El contenedor del agente no se inició, así que no se hizo ningún trabajo. Esto suele ser temporal.",
+        "environment": "No se pudo crear el entorno de pruebas. Revisa la configuración del entorno y luego reintenta.",
+        "evicted": "El contenedor se detuvo varias veces durante la ejecución. Esto suele ocurrir mientras se actualiza la plataforma, así que reintenta cuando la actualización termine.",
+        "harness_shutdown": "Algo detuvo el contenedor durante este paso. Busca la causa en Detalles antes de reintentar, porque un reintento puede detenerse otra vez.",
+        "timeout": "La ejecución dejó de responder o superó su límite de tiempo. Consulta en Detalles cuál de las dos y luego reintenta.",
+        "agent": "Falló un paso de un agente. Consulta la causa en el paso fallido y luego reintenta.",
+        "job_failed": "El contenedor del agente informó de un fallo. Un reintento inicia un contenedor nuevo.",
+        "delegated_failed": "El sistema externo que ejecutó este paso informó de un fallo. El enlace del paso abre su ejecución, que muestra la causa.",
+        "rejected": "Se rechazó un paso, así que la ejecución se detuvo. Un reintento empieza de nuevo desde ese paso.",
+        "companion_rejected": "Un agente acompañante no dio un resultado utilizable. Un reintento lo ejecuta de nuevo.",
+        "stalled": "La plataforma perdió el contacto con esta ejecución. Un reintento inicia una ejecución nueva.",
+        "state_unreadable": "No se puede leer el estado guardado de esta ejecución, así que un reintento lee el mismo estado dañado. Inicia una ejecución nueva.",
+        "cancelled": "Esta ejecución se detuvo. Un reintento la inicia de nuevo.",
+        "unknown": "La ejecución falló por una causa desconocida. Consulta Detalles y luego reintenta.",
+        "deployRunnerUnwiredLocal": "Este equipo no tiene un runtime de despliegue para crear el entorno de pruebas. Configura {variable} en tu archivo .env y luego reintenta.",
+        "singleJob": {
+          "evicted": "El contenedor se detuvo antes de que el trabajo terminara. Un reintento inicia un contenedor nuevo.",
+          "timeout": "El trabajo estuvo sin actividad demasiado tiempo o superó su límite de tiempo. Un reintento lo inicia de nuevo.",
+          "agent": "Falló el agente o el git push. Consulta la causa en Detalles y luego reintenta."
+        }
+      },
       "retrying": "Reintentando…",
       "history": {
         "previousErrors": "{count} error anterior | {count} errores anteriores"
@@ -806,6 +834,7 @@
       "providersUnconfigured": {
         "title": "No hay proveedor de IA para este modelo",
         "body": "No hay ningún proveedor configurado para {models}. Añade una clave de proveedor, conecta una suscripción o activa Cloudflare AI para ejecutarlo.",
+        "cause": "No hay ningún proveedor configurado para un modelo de este pipeline. Añade una clave de proveedor, conecta una suscripción o activa Cloudflare AI, y luego reintenta.",
         "action": "Configurar IA"
       },
       "binaryStorageUnconfigured": {
@@ -8435,11 +8464,11 @@
           },
           "banner": {
             "title": "Qué ha ido mal",
-            "body": "La tarjeta cambia su barra de progreso por este aviso. Nombra la causa, los detalles guardan la salida en bruto y algunas causas ofrecen un botón directo al ajuste que las corrige."
+            "body": "La tarjeta cambia su barra de progreso por este aviso. Indica qué falló y da una acción. Abre la tarea para leer la causa en una línea, con la salida completa en Detalles."
           },
           "retry": {
-            "title": "Volver a ejecutarla",
-            "body": "Reintentar vuelve a ejecutar el trabajo. Los errores anteriores se quedan en la tarea, bajo «Errores anteriores», para que puedas comparar intentos en vez de perder el rastro."
+            "title": "El siguiente paso",
+            "body": "Este botón es el siguiente paso. Normalmente es Reintentar, que ejecuta el trabajo de nuevo. Cuando una configuración causa el fallo, abre esa configuración. Los errores anteriores quedan en la tarea, en Errores anteriores, para que puedas comparar intentos."
           },
           "finish": {
             "title": "Un fallo es información",

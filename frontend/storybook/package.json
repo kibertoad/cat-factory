@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/storybook",
-  "version": "0.0.3",
+  "version": "0.0.5",
   "private": true,
   "description": "Component stories for the @cat-factory/app SPA. Internal to this repository; not a deployment template.",
   "type": "module",

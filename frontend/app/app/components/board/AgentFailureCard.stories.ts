@@ -1,20 +1,30 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { expect, spyOn, userEvent, within } from 'storybook/test'
 import type { AgentFailure } from '@cat-factory/contracts'
 import { BILLING_FRAME_ID, bootstrapJob, failedApplyJob } from '~/stories/bootstrap.stories.mocks'
-import { authService, boardBlocks, boardWith, loginTask } from '~/stories/board.stories.mocks'
+import {
+  authService,
+  boardBlocks,
+  boardWith,
+  loginTask,
+  logoutTask,
+} from '~/stories/board.stories.mocks'
+import { execution } from '~/stories/snapshot.stories.mocks'
 import { failure } from '~/stories/pipelineStep.stories.mocks'
 import { seedBoard, seedViewer, withSeed } from '~/stories/withStores'
 import { useAgentRunsStore, type AgentRunSummary } from '~/stores/agentRuns'
 import { useAuthStore } from '~/stores/auth'
+import { useExecutionStore } from '~/stores/execution'
 import AgentFailureCard from './AgentFailureCard.vue'
 
-// The failure banner on a card, the inspector and the task panel, for a failed task run or a
-// failed bootstrap. The title follows the failure kind, and an environment failure adds a button
-// to where environments are set up. The messages and hints are the backend's own wording for each
-// kind (`EXECUTION_FAILURE_HINTS` in `RunStateMachine.ts`, `classifyDispatchFailure` in
-// `job.logic.ts`, `FAILURE_HINTS` in `BootstrapService.ts`). The provider errors in the details,
-// and the provider message in the environment story, are made up. Retry calls the unified retry,
-// which no story answers.
+// The one failure block of a task view (board card, queue card, inspector, focus view) and of a
+// service frame, for a failed task run or a failed bootstrap. The title follows the failure kind,
+// the cause line is the SPA's own translated copy (`presentFailure`), and the block offers one
+// action: Retry, or the settings that fix the cause. The backend's message, its hint and the full
+// output are behind Details. The hints are the backend's own wording for each kind
+// (`EXECUTION_FAILURE_HINTS` in `RunStateMachine.ts`, `FAILURE_HINTS` in `BootstrapService.ts`).
+// The provider errors and messages are made up. Retry calls the unified retry, which no story
+// answers.
 const meta = {
   title: 'Board/Components/AgentFailureCard',
   component: AgentFailureCard,
@@ -81,22 +91,26 @@ const deployRunnerUnwired =
   'Or use an environment config that provisions without a deploy container (raw manifests, or ' +
   'an infraless service).'
 
-/**
- * An evicted container: the title, the message, the hint, the detail behind a disclosure, and
- * Retry run.
- */
+/** An evicted container: the title, the cause line, Retry run, and Details closed. */
 export const Default: Story = {}
 
-/**
- * The compact variant: the message is cut to two lines, Retry is short, and there is no detail.
- * The hint is not cut, so a long hint still fills the card.
- */
+/** Details open: the backend's message, its notes for the operator, and the full output. */
+export const DetailsOpen: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await userEvent.click(canvas.getByRole('button', { name: 'Details' }))
+    await canvas.findByText(/killed: out of memory/)
+    await expect(canvas.getByText('Notes for the operator')).toBeVisible()
+  },
+}
+
+/** The compact variant, on the board card and the queue card: the title and Retry only. */
 export const Compact: Story = {
   args: { variant: 'compact' },
   parameters: { width: 'narrow' },
 }
 
-/** The container never started: titled as such, with the runner's answer in the detail. */
+/** The container never started: a temporary cause, so the action is Retry run. */
 export const DispatchFailure: Story = {
   args: {
     run: taskRun(
@@ -110,8 +124,16 @@ export const DispatchFailure: Story = {
   },
 }
 
-/** The environment provider failed: a second button opens the environment setup. */
+/**
+ * The environment provider failed. That is most often a temporary provider fault, so Retry run
+ * leads, and the environment setup is beside it for the case where a setting is the cause.
+ */
 export const EnvironmentFailure: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByTestId('agent-failure-retry')).toBeEnabled()
+    await expect(canvas.getByTestId('agent-failure-setup')).toBeVisible()
+  },
   args: {
     run: taskRun(
       failure({
@@ -125,10 +147,17 @@ export const EnvironmentFailure: Story = {
 }
 
 /**
- * Local mode, and the service deploys to Kubernetes with no deploy runner wired: the env var hint
- * shows under the backend's message.
+ * Local mode, and the service deploys to Kubernetes with no deploy runner wired: no settings tab
+ * fixes it, so the cause line names the .env fix, the variables show under it, and the action is
+ * Retry, for after they are set.
  */
 export const DeployRunnerUnwiredLocal: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByTestId('agent-failure-environment-local-hint')).toBeVisible()
+    await expect(canvas.getByTestId('agent-failure-retry')).toBeVisible()
+    await expect(canvas.queryByTestId('agent-failure-setup')).toBeNull()
+  },
   args: {
     run: taskRun(
       failure({
@@ -165,8 +194,17 @@ export const Stalled: Story = {
   },
 }
 
-/** No repository linked: the run was refused before it started, under the conflict title. */
+/**
+ * No repository host connected: the run was refused before it started. The action connects the
+ * host, because a retry fails again until it is connected.
+ */
 export const GithubNotConnected: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByTestId('agent-failure-setup')).toHaveTextContent('Connect')
+    await userEvent.click(canvas.getByRole('button', { name: 'Details' }))
+    await expect(await canvas.findByTestId('agent-failure-retry')).toBeEnabled()
+  },
   args: {
     run: taskRun(
       failure({
@@ -189,8 +227,8 @@ export const GithubNotConnected: Story = {
 }
 
 /**
- * A new-repository bootstrap refused before it started: Retry bootstrap, and Model activity,
- * because a bootstrap has no steps to reach its model calls from.
+ * A new-repository bootstrap refused before it started: Retry bootstrap, and Model activity in
+ * Details, because a bootstrap has no steps to reach its model calls from.
  */
 export const BootstrapFailure: Story = {
   args: {
@@ -250,4 +288,106 @@ export const BootstrapResume: Story = {
 /** A board viewer: Retry is disabled, and its tooltip says why. */
 export const ReadOnly: Story = {
   decorators: [withSeed(() => seedViewer())],
+}
+
+/** A run of the login task, on a pipeline that is not the task's default. */
+const plannedRun = execution({ pipelineId: 'pl_story_plan', pipelineName: 'Story planning' })
+
+/**
+ * The run's saved state cannot be read, so a retry reads the same broken state: the action starts
+ * a new run of the FAILED run's pipeline, not the task's default, and Retry waits in Details.
+ */
+export const StateUnreadable: Story = {
+  decorators: [
+    withSeed(() => {
+      seedBoard(boardBlocks)
+      useExecutionStore().instances = [plannedRun]
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.queryByTestId('agent-failure-retry')).toBeNull()
+    const start = spyOn(useExecutionStore(), 'start').mockResolvedValue(true)
+    await userEvent.click(canvas.getByTestId('agent-failure-new-run'))
+    await expect(start).toHaveBeenCalledWith(loginTask.id, {
+      id: 'pl_story_plan',
+      name: 'Story planning',
+    })
+  },
+  args: {
+    run: taskRun(
+      failure({
+        kind: 'state_unreadable',
+        message: 'The run row exec_login could not be decoded.',
+        detail: null,
+        hint:
+          'This run’s stored state could not be read, so nothing can resume it: retrying would ' +
+          're-read the same row. The run has been closed so it stops being re-driven; start the ' +
+          'work again as a new run, and report the run id to whoever operates this deployment.',
+      }),
+    ),
+  },
+}
+
+/**
+ * The same failure on a task whose dependencies have not merged: a new run is refused in the
+ * browser, as the card's Start is, and nothing is started.
+ */
+export const StateUnreadableBlocked: Story = {
+  decorators: [
+    withSeed(() => {
+      seedBoard(boardBlocks)
+      useExecutionStore().instances = [{ ...plannedRun, id: 'exec_logout', blockId: logoutTask.id }]
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const start = spyOn(useExecutionStore(), 'start').mockResolvedValue(true)
+    await userEvent.click(canvas.getByTestId('agent-failure-new-run'))
+    await expect(start).not.toHaveBeenCalled()
+  },
+  args: {
+    run: {
+      ...taskRun(failure({ kind: 'state_unreadable', detail: null, hint: null })),
+      blockId: logoutTask.id,
+      runId: 'exec_logout',
+    },
+  },
+}
+
+/**
+ * A run refused because no AI provider can serve a model in its pipeline: the action opens the AI
+ * setup, with the same label and fix as the refusal's toast.
+ */
+export const ProvidersUnconfigured: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByTestId('agent-failure-setup')).toHaveTextContent('Configure AI')
+  },
+  args: {
+    run: taskRun(
+      failure({
+        kind: 'preflight',
+        reason: 'providers_unconfigured',
+        message: 'No provider is configured for claude-sonnet-5-5.',
+        detail: null,
+        hint: null,
+      }),
+    ),
+  },
+}
+
+/**
+ * A board viewer on a failure a setting fixes: the setup button stays usable, and the Retry in
+ * Details is disabled, as the main Retry is.
+ */
+export const ReadOnlySetupAction: Story = {
+  args: GithubNotConnected.args,
+  decorators: [withSeed(() => seedViewer())],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByTestId('agent-failure-setup')).toBeEnabled()
+    await userEvent.click(canvas.getByRole('button', { name: 'Details' }))
+    await expect(await canvas.findByTestId('agent-failure-retry')).toBeDisabled()
+  },
 }
