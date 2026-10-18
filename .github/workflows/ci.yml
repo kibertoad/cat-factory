@@ -563,8 +563,8 @@ jobs:
       # The mechanical half of the story conventions (docs/internal/storybook.md): a title is
       # `<Domain>/<Kind>/<Component>` from closed vocabularies, its last segment is the file's stem,
       # no two files claim one title, a stories file sits beside its component, and `Default` comes
-      # first. Rendering the stories is the nightly `stories.yml`. Its fixtures run in the
-      # `node --test` step below. Pure node; no install.
+      # first. Rendering the stories is `stories.yml`, on manual dispatch until #2442. Its fixtures
+      # run in the `node --test` step below. Pure node; no install.
       - name: Guard story titles
         run: node scripts/check-story-titles.mjs
 
