@@ -106,6 +106,18 @@ story's (`Cannot read properties of undefined (reading 'beforeResolve')`). In th
 hook's 30 s, not against a story. Do not raise either timeout: if the empty story gets near 30 s,
 find what it loads.
 
+**A session's renderer fills with garbage, not with leaked frames.** Each Vitest session runs all
+its stories files in one renderer process, each file in a new iframe, and each file leaves its
+whole module graph as garbage. V8 sizes a renderer's heap as if it had the machine to itself, so it
+collects that garbage late: in CI the three renderers grew to about 5 GB each, the 16 GB runner
+swapped, and a story's main thread stalled for 42 s. `stories.yml` sets
+`VITEST_CHROMIUM_GC_DISK_THRESHOLD_GB` so Vitest runs a full collection after every file. Vitest
+does not document that variable: `maybeCollectChromiumGarbage` (`src/node/pools/browser.ts`)
+collects after a file when `/tmp` has less free space than that many GB, on Linux with Chromium
+only. The job checks that the installed Vitest still reads it. If an upgrade drops it, find
+another way to collect between files before the lane goes back to swapping; a longer timeout does
+not help.
+
 **Storybook runs standalone.** `@nuxtjs/storybook` is NOT in `nuxt.config`. Adding it boots
 Storybook inside `nuxt dev` at `/_storybook`, which changes the dev server for everyone and runs a
 second Vite server in the same process. The framework preset is what renders the stories.
@@ -269,7 +281,8 @@ every later story in the session.
 | `node scripts/check-story-titles.mjs` (titles, one file per component, `Default` first) | CI's guard steps, every PR      |
 | `test:stories`: every story renders in headless Chromium, with an axe check             | nightly, and on request         |
 
-`test:stories` takes about 10 minutes for the whole tree, so no PR waits on it.
+`test:stories` takes about 10 minutes for the whole tree, so no PR waits on it. It also runs on a
+PR that changes the lane itself, except a release PR, which changes only package versions.
 `--browser.isolate=false` cut that to about 2 minutes, and was rejected: with the files shuffled,
 2 of 4 runs timed out on stories that pass alone, and no story failed twice.
 
