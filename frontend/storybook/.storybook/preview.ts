@@ -96,7 +96,9 @@ const preview: Preview = {
   // The reset has to run BEFORE the plugins do. Storybook's `beforeEach` is in the prepare
   // phase, ahead of `renderToCanvas` where the preset's `setup()` callback lives; a decorator
   // would be too late. The helper is named for tests because tests were its first caller.
-  beforeEach: () => {
+  beforeEach: (context) => {
+    // DEBUG ONLY: when each story begins.
+    navigator.sendBeacon('/__mswlog', JSON.stringify({ t: Date.now(), kind: 'story-begin', id: context.id }))
     __resetConsumerModulesForTest()
     clearCookies()
   },
@@ -133,6 +135,8 @@ const preview: Preview = {
   // the board canvas remounted the canvas three times.
   decorators: [
     (story, context) => {
+      // DEBUG ONLY: when the story's Nuxt app is set up and its decorators run.
+      navigator.sendBeacon('/__mswlog', JSON.stringify({ t: Date.now(), kind: 'story-render', id: context.id }))
       // The story's own colour-mode state. Its Nuxt app outlives a toolbar change, so the state
       // it was seeded with at the start would still say the old mode. Setting the preference
       // lets the colour-mode plugin update the value and the class, as it does in the app.

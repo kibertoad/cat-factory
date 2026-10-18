@@ -120,7 +120,20 @@ addEventListener('fetch', function (event) {
   }
 
   const requestId = crypto.randomUUID()
-  event.respondWith(handleRequest(event, requestId, requestInterceptedAt))
+  // DEBUG ONLY: report a request still unanswered after 3 s, and when it finally settles.
+  const info = { from: event.clientId, dest: event.request.destination, mode: event.request.mode, url: event.request.url.slice(0, 200) }
+  let slow = false
+  const timer = setTimeout(() => {
+    slow = true
+    dbg('slow', info)
+  }, 3000)
+  const settle = (ok) => {
+    clearTimeout(timer)
+    if (slow) dbg('slow-done', { ...info, ok, ms: Date.now() - requestInterceptedAt })
+  }
+  const pending = handleRequest(event, requestId, requestInterceptedAt)
+  pending.then(() => settle(true), () => settle(false))
+  event.respondWith(pending)
 })
 
 /**
