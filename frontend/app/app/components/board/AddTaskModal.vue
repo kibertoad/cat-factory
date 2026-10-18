@@ -1061,7 +1061,7 @@ function createRefusalMessage(error: unknown): string | null {
           </UCheckbox>
 
           <!-- Per-type fields. -->
-          <div v-if="taskType === 'bug'" class="grid grid-cols-2 gap-3">
+          <div v-if="taskType === 'bug'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <UFormField :label="t('board.addTask.severity')">
               <div class="flex flex-wrap gap-1">
                 <UButton
@@ -1081,7 +1081,7 @@ function createRefusalMessage(error: unknown): string | null {
                 </UButton>
               </div>
             </UFormField>
-            <UFormField :label="t('board.addTask.stepsToReproduce')" class="col-span-2">
+            <UFormField :label="t('board.addTask.stepsToReproduce')" class="sm:col-span-2">
               <UTextarea
                 v-model="stepsToReproduce"
                 :rows="2"
@@ -1232,7 +1232,7 @@ function createRefusalMessage(error: unknown): string | null {
                 </UButton>
               </div>
             </UFormField>
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <UFormField :label="t('board.addTask.audience')" :hint="t('board.addTask.optional')">
                 <UInput
                   v-model="docAudience"
@@ -1337,7 +1337,10 @@ function createRefusalMessage(error: unknown): string | null {
 
           <!-- One column in basic mode, where the pipeline picker is the only survivor and a
                two-column grid would leave it stranded beside an empty cell. -->
-          <div class="grid gap-3" :class="uiMode.isAdvanced ? 'grid-cols-2' : 'grid-cols-1'">
+          <div
+            class="grid gap-3"
+            :class="uiMode.isAdvanced ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'"
+          >
             <UFormField :label="t('board.addTask.pipeline')">
               <PipelinePicker
                 :model-value="pipelineId"
