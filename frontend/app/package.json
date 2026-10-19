@@ -57,7 +57,7 @@
     "@storybook/vue3": "10.6.2",
     "@toad-contracts/testing": "1.0.0",
     "happy-dom": "^21.0.3",
-    "msw": "^3.0.3",
+    "msw": "2.15.0",
     "nuxt": "^4.6.1",
     "storybook": "10.6.2",
     "typescript": "^6.0.3",
