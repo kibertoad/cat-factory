@@ -58,18 +58,23 @@ function successStatus(contract: ApiContract): 200 | 201 {
   return isStandardSchema(contract.responsesByStatusCode[200]) ? 200 : 201
 }
 
-/**
- * Validate `body` against the contract's success schema (200, or 201 for a create),
- * synchronously, and return the output.
- */
-function validated(contract: ApiContract, body: unknown): unknown {
+/** The contract's success schema (200, or 201 for a create); a contract with no JSON body throws. */
+function successSchema(contract: ApiContract): StandardValidator {
   const schema: unknown = contract.responsesByStatusCode[successStatus(contract)]
   if (!isStandardSchema(schema)) {
     throw new Error(
       `No 200 or 201 JSON schema on the contract for ${contract.method.toUpperCase()}`,
     )
   }
-  const result = schema['~standard'].validate(body)
+  return schema
+}
+
+/**
+ * Validate `body` against the contract's success schema (200, or 201 for a create),
+ * synchronously, and return the output.
+ */
+function validated(contract: ApiContract, body: unknown): unknown {
+  const result = successSchema(contract)['~standard'].validate(body)
   if (result instanceof Promise) throw new Error('An async response schema is not supported')
   if (result.issues) {
     throw new Error(`Story fixture does not match the contract: ${JSON.stringify(result.issues)}`)
@@ -100,11 +105,15 @@ export function apiResponse<T extends ApiContract>(
 /**
  * A response that never finishes: the status and headers arrive at once, the body never ends.
  *
- * The app reads the body before it uses a response, so the request stays pending and the component
- * stays on its loading state. A handler that never returned (`delay('infinite')`) would keep the
- * service worker's `fetch` event open instead: Chromium stops a worker whose event stays open for
- * about five minutes, and every request the worker was passing on fails with it. Settling the event
- * with a later error is no better, because the app would act on that error after its story ended.
+ * The app reads a JSON or image body before it uses the response, so the request stays pending and
+ * the component stays on its loading state, while the service worker's `fetch` event settles at
+ * once. A handler that never returns keeps that event open, and Chromium stops a worker whose event
+ * stays open for about five minutes, failing every request the worker is passing on. An error
+ * answered later is no better: the app acts on it after its story has ended.
+ *
+ * The event settles at once only where msw can hand the body's stream to its worker, as Chromium,
+ * the story lane's browser, can. Where it cannot (Safari), msw reads the whole body first, so a
+ * pending story there keeps the event open.
  */
 function neverEndingResponse(status: number, contentType: string): Response {
   return new HttpResponse(new ReadableStream<Uint8Array>(), {
@@ -114,13 +123,16 @@ function neverEndingResponse(status: number, contentType: string): Response {
 }
 
 /**
- * A request that never answers, for a `Loading` story: the component stays on its pending state
- * for as long as the story is open.
+ * A request whose answer never finishes, for a `Loading` story: the component stays on its pending
+ * state for as long as the story is open. Only for a contract with a JSON success body: the app's
+ * client acts on a no-content, blob or event-stream answer as soon as its headers arrive.
  */
 export function apiPending<T extends ApiContract>(
   contract: T,
   params: { pathPrefix?: string; pathParams?: Parameters<T['pathResolver']>[0] } = {},
 ): HttpHandler {
+  // Throws for a contract with no JSON success body, whose answer would not stay pending.
+  successSchema(contract)
   const path = `${params.pathPrefix ?? ''}${contract.pathResolver(params.pathParams)}`
   return http[contract.method](`*${path}`, () =>
     neverEndingResponse(successStatus(contract), 'application/json'),
