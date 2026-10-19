@@ -412,7 +412,12 @@ How a board resolves its pool (one resolver, `RunnerPoolConnectionService`): its
 its account's row, else none. A board stops inheriting with the explicit marker
 `inheritAccountRunnerPool: false` in its settings, and removing a board's own pool (`DELETE
 /runner-pool/connection`) sets that marker unless the call carries `fallBackToAccount=true`, so a
-deletion never silently re-routes work to a pool the board did not choose. The seed is validated like
+deletion never silently re-routes work to a pool the board did not choose. With
+`fallBackToAccount=true` it sets the marker to `true`, so the fall-back holds even for a board that
+had opted out before it registered its own pool. `GET /runner-pool/connection` names the tier that
+answered (`connection.source`: `workspace` or `account`) and returns the account's pool beside it
+(`accountPool`), in use or not, so the Infrastructure window can show an inherited pool as the
+account's, hide its remove button, and offer the opt-out, the opt-in and the fall-back. The seed is validated like
 a registration (backend kind registered, URL safe, referenced secrets present). A seed that fails is
 logged at `error` naming the account on every boot; a failed read never fails board creation.
 The account row is `account_runner_pools` (one row per account, a unique key makes the insert race

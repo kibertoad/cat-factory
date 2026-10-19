@@ -3499,6 +3499,17 @@
         "saveFailed": "Could not save the connection",
         "removed": "Connection removed",
         "removeFailed": "Could not remove the connection"
+      },
+      "accountPool": {
+        "badge": "Account pool",
+        "inherited": "This board has no runner pool of its own, so it uses its account's pool, {label}.",
+        "optOut": "Stop using the account pool",
+        "optOutHint": "The board then cannot run agents until you connect a pool of its own below.",
+        "alsoAvailable": "This board uses its own pool. Its account also has a pool: {label}.",
+        "fallBack": "When I remove this board's pool, use the account pool",
+        "optedOut": "This board does not use its account's pool, {label}, and has no pool of its own.",
+        "optIn": "Use the account pool",
+        "ownPoolForm": "Use a different pool for this board"
       }
     },
     "serviceFragmentDefaults": {

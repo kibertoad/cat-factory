@@ -3338,6 +3338,17 @@
         "saveFailed": "Bağlantı kaydedilemedi",
         "removed": "Bağlantı kaldırıldı",
         "removeFailed": "Bağlantı kaldırılamadı"
+      },
+      "accountPool": {
+        "badge": "Hesap havuzu",
+        "inherited": "Bu panonun kendi runner havuzu yok, bu yüzden hesabının havuzunu kullanıyor: {label}.",
+        "optOut": "Hesap havuzunu kullanmayı bırak",
+        "optOutHint": "Bundan sonra aşağıdan panoya kendi havuzunu bağlayana kadar pano ajan çalıştıramaz.",
+        "alsoAvailable": "Bu pano kendi havuzunu kullanıyor. Hesabının da bir havuzu var: {label}.",
+        "fallBack": "Bu panonun havuzunu kaldırdığımda hesap havuzunu kullan",
+        "optedOut": "Bu pano hesabının havuzunu ({label}) kullanmıyor ve kendi havuzu da yok.",
+        "optIn": "Hesap havuzunu kullan",
+        "ownPoolForm": "Bu pano için başka bir havuz kullan"
       }
     },
     "serviceFragmentDefaults": {

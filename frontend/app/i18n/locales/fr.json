@@ -3197,6 +3197,17 @@
         "insecureSkipTlsVerify": "Ignorer la vérification TLS",
         "insecureSkipTlsVerifyHelp": "Fortement déconseillé. Désactive la vérification TLS de l'apiserver ; à utiliser uniquement pour des clusters locaux k3s/kind/dev.",
         "harnessPort": "Port du harness"
+      },
+      "accountPool": {
+        "badge": "Pool du compte",
+        "inherited": "Ce tableau n'a pas de pool d'exécuteurs propre : il utilise donc le pool de son compte, {label}.",
+        "optOut": "Ne plus utiliser le pool du compte",
+        "optOutHint": "Le tableau ne pourra alors plus exécuter d'agents tant que vous ne connectez pas son propre pool ci-dessous.",
+        "alsoAvailable": "Ce tableau utilise son propre pool. Son compte a aussi un pool : {label}.",
+        "fallBack": "Quand je supprime le pool de ce tableau, utiliser le pool du compte",
+        "optedOut": "Ce tableau n'utilise pas le pool de son compte, {label}, et n'a pas de pool propre.",
+        "optIn": "Utiliser le pool du compte",
+        "ownPoolForm": "Utiliser un autre pool pour ce tableau"
       }
     },
     "serviceFragmentDefaults": {
