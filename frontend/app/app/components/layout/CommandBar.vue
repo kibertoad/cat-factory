@@ -9,6 +9,7 @@
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import AppModal from '~/components/common/AppModal.vue'
+import { documentSourceKind, sourceCommandLabelKey } from './CommandBar.logic'
 
 interface Command {
   id: string
@@ -95,9 +96,10 @@ const dynamicIntegrationCommands = computed<Command[]>(() => {
     for (const src of documents.sources) {
       list.push({
         id: `doc-connect-${src.source}`,
-        label: documents.isConnected(src.source)
-          ? t('layout.commandBar.cmd.sourceManage', { source: src.label })
-          : t('layout.commandBar.cmd.sourceConnect', { source: src.label }),
+        label: t(
+          sourceCommandLabelKey(documentSourceKind(src.source), documents.isConnected(src.source)),
+          { source: src.label },
+        ),
         group: groupIntegrations,
         icon: src.icon,
         keywords: t('layout.commandBar.keywords.documentSource'),
@@ -119,9 +121,7 @@ const dynamicIntegrationCommands = computed<Command[]>(() => {
     for (const src of tasks.sources) {
       list.push({
         id: `task-connect-${src.source}`,
-        label: src.available
-          ? t('layout.commandBar.cmd.sourceManage', { source: src.label })
-          : t('layout.commandBar.cmd.sourceConnect', { source: src.label }),
+        label: t(sourceCommandLabelKey('task', src.available), { source: src.label }),
         group: groupIntegrations,
         icon: src.icon,
         keywords: t('layout.commandBar.keywords.taskSource'),

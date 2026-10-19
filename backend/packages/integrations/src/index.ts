@@ -513,8 +513,11 @@ export {
 export {
   PublicApiKeyService,
   keyReaches,
+  managesMembershipKey,
   reachCovers,
+  scopeInWorkspace,
   scopeSatisfies,
+  type KeyViewer,
   type PublicApiKeyServiceDependencies,
   type PublicApiKeyAuth,
   type PublicApiKeyIdentity,

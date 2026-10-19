@@ -13,6 +13,7 @@ import org.jspecify.annotations.Nullable;
  * @param accountId the {@code accountId} field.
  * @param createdAt the {@code createdAt} field.
  * @param externalIdentity Always present; {@code null} when the server has no value for it.
+ * @param followsMemberships the {@code followsMemberships} field.
  * @param keyId the {@code keyId} field.
  * @param label the {@code label} field.
  * @param scope the {@code scope} field.
@@ -27,6 +28,8 @@ public record PublicIdentity(
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("externalIdentity") @Nullable String externalIdentity,
+
+    @JsonProperty("followsMemberships") Boolean followsMemberships,
 
     @JsonProperty("keyId") String keyId,
 
@@ -55,6 +58,7 @@ public record PublicIdentity(
         private @Nullable String accountId;
         private @Nullable Double createdAt;
         private @Nullable String externalIdentity;
+        private @Nullable Boolean followsMemberships;
         private @Nullable String keyId;
         private @Nullable String label;
         private @Nullable PublicApiKeyScope scope;
@@ -76,6 +80,12 @@ public record PublicIdentity(
         /** Set {@code externalIdentity}. */
         public Builder externalIdentity(@Nullable String externalIdentity) {
             this.externalIdentity = externalIdentity;
+            return this;
+        }
+
+        /** Set {@code followsMemberships}. */
+        public Builder followsMemberships(@Nullable Boolean followsMemberships) {
+            this.followsMemberships = followsMemberships;
             return this;
         }
 
@@ -111,7 +121,7 @@ public record PublicIdentity(
 
         /** Build the {@link PublicIdentity}. */
         public PublicIdentity build() {
-            return new PublicIdentity(accountId, createdAt, externalIdentity, keyId, label, scope, workspaceId, workspaceIds);
+            return new PublicIdentity(accountId, createdAt, externalIdentity, followsMemberships, keyId, label, scope, workspaceId, workspaceIds);
         }
     }
 }

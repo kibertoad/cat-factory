@@ -1495,7 +1495,8 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
 
 - **Board canvas** (`components/board`): `BoardCanvas` + `nodes/` (`BlockNode`,
   `FrameSwimlanes` / `TaskLane` / `LaneGroup` / `LaneTask`, `TaskCard`), dependency edges,
-  the per-block `AgentFailureCard` /
+  the per-block `AgentFailureCard` (the ONE failure block per task view: a cause line from
+  `utils/failureCause.ts`, one action, and the backend's text behind Details) /
   `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`. Tasks are laid out in status
   lanes rather than at coordinates (see [Task swimlanes](#task-swimlanes)); the board-level
   order/grouping override is `LaneViewControl` in the toolbar. A running task card expands
@@ -1625,7 +1626,15 @@ pnpm lint                                            # oxlint + oxfmt over the w
 pnpm exec vitest run <file>                          # run the spec your change touched
 pnpm i18n:check                                      # catalog is well-formed
 pnpm i18n:parity                                     # locales are in parity
+
+# Component stories, from the repo root:
+pnpm --filter @cat-factory/storybook run storybook      # http://localhost:6006
+pnpm --filter @cat-factory/storybook run test:stories   # every story in headless Chromium
 ```
+
+A component's stories sit beside it as `Foo.stories.ts`; the fixtures and helpers they share are in
+`app/stories/` (neither ships in the package). Conventions, helpers and the traps the setup already
+paid for: [Component stories](https://github.com/kibertoad/cat-factory/blob/main/docs/internal/storybook.md).
 
 To see the SPA with data while you work on it, run it against the e2e backend: it needs only a
 Postgres, fakes the LLM, the agent runner and GitHub, and can seed boards. See

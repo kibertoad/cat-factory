@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/server",
-  "version": "0.339.0",
+  "version": "0.340.1",
   "description": "Runtime-neutral HTTP layer for the Agent Architecture Board: the Hono controllers, middleware (auth/authz/CORS/error), request helpers and the gateway seams shared by every deployment facade (Cloudflare Worker, Node service).",
   "repository": {
     "type": "git",
@@ -48,10 +48,10 @@
     "valibot": "^1.5.0"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
-    "ai": "^7.0.131",
+    "@types/node": "^26.6.5",
+    "ai": "^7.0.142",
     "typescript": "7.0.2",
-    "undici": "^8.11.2",
-    "vitest": "^4.1.11"
+    "undici": "^8.12.2",
+    "vitest": "^5.0.5"
   }
 }

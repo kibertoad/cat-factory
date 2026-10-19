@@ -306,9 +306,23 @@ watch(
     if (!isOpen) return
     resetSelection()
     void loadRepos()
-    if (ui.addServicePrefill) repoSearch.value = ui.addServicePrefill.repo
   },
   { immediate: true },
+)
+
+// A deep link's repository is typed into the search once the picker's menu has MOUNTED, and after
+// the tick it mounted in: Nuxt UI's InputMenu clears its own search term on that tick, so a term set
+// on open is wiped (the picker mounts with the window, or later behind the connect prompt). The
+// prefill is spent once its repository is selected below, so nothing is typed after that.
+const repoMenu = ref<unknown>(null)
+watch(
+  repoMenu,
+  async (menu) => {
+    if (menu === null || !ui.addServicePrefill) return
+    await nextTick()
+    if (ui.addServicePrefill) repoSearch.value = ui.addServicePrefill.repo
+  },
+  { flush: 'post' },
 )
 
 // A deep link names one repository: select it as soon as the search lists it, once. A repository
@@ -497,6 +511,7 @@ function done() {
                  to forward the attribute to. -->
             <div class="space-y-1.5" data-testid="add-service-repo-search">
               <UInputMenu
+                ref="repoMenu"
                 v-model="selectedRepoId"
                 v-model:search-term="repoSearch"
                 :items="repoMenuItems"

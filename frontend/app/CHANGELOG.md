@@ -1,5 +1,183 @@
 # @cat-factory/app
 
+## 0.321.1
+
+### Patch Changes
+
+- e318526: The command palette names the kind of each source it offers to connect or manage: "Connect Linear
+  (documents)" and "Connect Linear (tracker)" instead of "Connect Linear" twice, and "Connect Figma
+  (designs)" for a design source. Linear is both a document source and a task source, and the two are
+  separate connections that open different dialogs.
+  
+  The palette keys `layout.commandBar.cmd.sourceConnect` and `sourceManage` are removed. A layer that
+  overrides them must move its copy to the six new keys: `documentSourceConnect`,
+  `documentSourceManage`, `designSourceConnect`, `designSourceManage`, `taskSourceConnect` and
+  `taskSourceManage`. The old keys are no longer read, so an override left on them has no effect.
+
+## 0.321.0
+
+### Minor Changes
+
+- 162a89b: A failed run shows one failure block per task view: a title, a one-line cause, one action, and a
+  Details toggle. The cause line is translated SPA copy keyed by the failure's `kind` and `reason`,
+  and it says if a retry will probably work. The action is Retry, the setting a refusal names
+  (the same copy and fix as its toast: connect a repository host, configure AI, configure storage,
+  set up the runner pool), or a new run of the failed run's pipeline when the run's saved state
+  cannot be read; Retry is then inside Details. An environment failure leads with Retry and shows
+  the environment setup beside it. A single-job run (a service bootstrap, an environment config
+  repair) has its own cause lines where a kind means something different. The backend's message, its per-kind hint and the full output are inside Details only.
+  The board card and the queue card show the title and the action only. The "Read a failure" tour
+  follows the block's one action. The inspector no longer
+  repeats the block in its header for a task or an initiative, the focus view now shows it under
+  the run's summary, and the lists of earlier failures show the cause line with the rest behind
+  Details.
+
+## 0.320.1
+
+### Patch Changes
+
+- 3438f7f: Mobile-friendly layout fixes at 375px (initiative slice B): stop the desktop-first layouts
+  that clip, collapse, or hide their content on a phone.
+  
+  Fulfils goal #1 of the mobile-friendly frontend initiative ("nothing broken at 375px") by
+  restacking the fixed-column layouts that had no breakpoint. Every change follows an existing
+  good-citizen pattern (P-1 restack / P-6 reflow); no new responsive system is introduced.
+  
+  - **BlockFocusView (B1).** The full-screen focus overlay used a hard `grid-cols-[1fr_300px]`
+    with no breakpoint, so at 375px the main pipeline column collapsed toward zero width. It now
+    restacks to a single scrolling column below `lg` (`grid-cols-1 … lg:grid-cols-[1fr_300px]`,
+    with the container scrolling vertically on mobile and clamping to the docked two-column form
+    on wide screens). The two panels scroll internally only from `lg` up, so on a phone they size
+    to their content and the page scrolls as one column, and the header wraps instead of pushing
+    the run and close buttons off screen.
+  
+  - **Non-collapsing `grid-cols-2` forms (B2).** Budget, workspace task-limit, risk-policy, and
+    bootstrap-architecture forms hard-coded `grid-cols-2`, cramming two number inputs side by
+    side at 375px. They now start single-column and opt into columns at a breakpoint
+    (`grid-cols-1 sm:grid-cols-2`); the risk-policy 4-up grids collapse fully on phones while
+    keeping their density on wide (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`). The same input
+    pairs in the Add Task modal (bug fields, doc fields, pipeline and merge policy), the
+    environment wizard's review step and the GitHub open-PR form stack on a phone too.
+  
+  - **Kaizen table (B3).** The grading-history table was wrapped in `overflow-hidden`, clipping
+    columns on narrow screens; it now uses `overflow-x-auto` like every other table so it scrolls
+    horizontally instead.
+  
+  - **Side rails that hid instead of restacking (B4).** The Brainstorm window's action rail
+    (which carries the primary proceed / incorporate / re-run controls) and the Test-report
+    window's metadata rail were `hidden lg:flex`, making those actions and the outcome summary
+    unreachable on a phone. Both now restack below the main column below `lg`. The Brainstorm
+    rail is a bottom action bar copying the `RequirementsReviewWindow` reference (informational
+    stats collapse, the actions stay), capped at half the viewport with its own scroll and hidden
+    while the session offers no action. The Test-report window scrolls as one column below `lg`,
+    the metadata following the report, so its tall metadata section cannot squeeze the report to
+    zero height. The `AgentStepDetail` table-of-contents rail was verified redundant on mobile (a
+    jump-nav duplicating headings already in the scrollable prose), so it stays hidden below `lg`;
+    only its stray `md:` breakpoint is normalized to the `lg` cutoff.
+  
+  No user-facing copy added, so no i18n/locale changes.
+
+## 0.320.0
+
+### Minor Changes
+
+- afe22b9: The run deep link (`?ws=…&block=…&run=…`) lands on the run instead of only selecting its task: the
+  canvas switches from the queue if needed, the camera centres on the task's card at the zoom where a
+  task's pipeline steps render, and with no `view` (or `view=run`, new) the task's focus view opens on
+  its running pipeline. `view=outcome`, `observability` and `test-evidence` open those windows as
+  before, now with the task brought into view too. The queue's "Show on board" takes the same path,
+  so it zooms in on the task rather than only centring its service.
+
+## 0.319.2
+
+### Patch Changes
+
+- 5c17395: Dependency refresh, direct and transitive (the lockfile is re-resolved from scratch), held to the
+  24h `minimumReleaseAge` window.
+  
+  Majors, each taken because its whole peer group could move together:
+  
+  - **Vitest 5** (`vitest`, `@vitest/coverage-v8`, `@vitest/browser`, `@vitest/browser-playwright`
+    at `5.0.5`), now that `@cloudflare/vitest-plugin@1.4.4`, `@storybook/addon-vitest`,
+    `@nuxt/test-utils` and `vitest-browser-vue` all accept `^5`. The Worker suite turns Vitest 5's
+    new default `fsModuleCache` off: the Workers pool inlines every warm module into one WebSocket
+    reply, and this suite's graph (~80MB) exceeds workerd's message limit (`1009 Message is too
+    large`).
+  - **msw 3**, for the component stories. `onUnhandledRequest` became `onUnhandledFrame`, which
+    also receives WebSocket frames, and the bundled `mockServiceWorker.js` is regenerated.
+  - **happy-dom 21** for the SPA's unit tests.
+  
+  The Workers test pool moves to `@cloudflare/vitest-plugin@1.4.4`, which pins `wrangler@4.151.1`, so
+  the Cloudflare stack moves with it: workerd `1.20261012.1`, miniflare `5.20261012.1-beta`,
+  `@cloudflare/workers-types` `5.20261012.1` (the resolved workerd's date) and esbuild `0.28.2`
+  (the version wrangler and the plugin now pin, so the scoped esbuild overrides follow).
+  
+  Also the Vercel AI SDK family as one set (`ai@7.0.142`, `@ai-sdk/anthropic@4.0.81`,
+  `@ai-sdk/openai@4.0.95`, `@ai-sdk/openai-compatible@3.0.70`, `@ai-sdk/amazon-bedrock@5.0.117`,
+  `@ai-sdk/provider@4.0.28`), the Vue family at `3.5.44`, `@nuxt/ui@4.12.0`, `pinia@4.1.0`,
+  `storybook@10.6.2`, `undici@8.12.2`, `pg-boss@12.38.0`, `@aws-sdk/client-s3@3.1152.0`,
+  `@hono/node-server@2.1.5`, `@playwright/test@1.64.1`, and the root toolchain (`turbo@2.11.8`,
+  `oxlint@1.88.0`, `oxfmt@0.73.0`, `knip@6.41.0`).
+  
+  Held: the frontend stays on TypeScript 6 (TypeScript 7 ships no classic compiler API for
+  `vue-tsc`); `@nuxt/fonts` stays on 0.14 because `@nuxt/ui@4.12.0` depends on `^0.14.0`; Drizzle
+  stays on `1.0.0-rc.4`, still its `rc` tag; `nuxt@4.6.2` is inside the window.
+- Updated dependencies [5c17395]
+  - @cat-factory/contracts@0.373.1
+
+## 0.319.1
+
+### Patch Changes
+
+- 76176b8: The package no longer ships component stories or their shared fixtures: `files` excludes
+  `app/stories` and `app/**/*.stories.ts`, which the private `@cat-factory/storybook` package
+  in `frontend/storybook` renders.
+
+## 0.319.0
+
+### Minor Changes
+
+- 83f6b0c: A personal API key can follow its person's workspaces. Minted with `followsMemberships: true`
+  (beside `actsAsSelf: true`, and no `workspaceIds`), it reaches every workspace that person can act
+  in, resolved on each call: joining a workspace grants it on the next call and leaving takes it
+  away, with nothing to re-mint. In each workspace its scope is lowered to what the person's role
+  there allows (`read` for a viewer, `decide` for a member, `admin` for an admin), and on account-level
+  routes it acts with `read`, so it can never do more over `/api/v1` than its person can in the app.
+  That is also why anyone with `runs.execute` may mint one, list it and revoke it; an account admin
+  manages anyone's.
+  
+  `followsMemberships` is new on a listed or minted key (whose `workspaceIds` is then `[]`), on
+  `GET /api/v1/me` and on `GET /api/v1/directory/reach`, which answer the reach as of the call.
+  OpenAPI 1.89.0. The API tokens window offers "My workspaces (follows my memberships)", the default
+  for a personal token, and `?newApiKey` takes `reach=memberships`. New migrations: D1
+  `0110_public_api_key_follows_memberships.sql`, Drizzle
+  `20261016160143_public_api_key_follows_memberships`.
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/contracts@0.373.0
+
+## 0.318.0
+
+### Minor Changes
+
+- edd42af: An integration can now send a person to mint their own API key. `?newApiKey=1` opens the API tokens
+  window with the create form filled in from `label`, `scope` and `runsAsSelf=1` (the personal
+  identity, where someone is signed in to bind it to), and `ws` pins the board. Nothing is minted
+  until the person clicks create, and signing in first keeps the link.
+
+## 0.317.2
+
+### Patch Changes
+
+- 5194075: An add-repository link (`?addRepo=<owner>/<name>`) now opens the add-service window with the
+  repository selected. Two things lost it. Signing in from the link reloaded to a bare path, because
+  the board consumed the link as the session landed and the reload read the URL after that: every
+  sign-in form now reads where to return to before it signs in. And the window typed the repository
+  into its picker before the picker mounted, which Nuxt UI's menu clears on mount: it is now typed in
+  once the menu has mounted.
+
 ## 0.317.1
 
 ### Patch Changes

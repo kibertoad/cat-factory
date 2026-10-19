@@ -64,11 +64,11 @@ full token is shown **exactly once**, on creation. Store it immediately, it cann
 Over REST (session-authed, workspace-scoped; this is the one management surface that is _not_ under
 `/api/v1`):
 
-| Method / path                                | Permission                    | Result                                    |
-| -------------------------------------------- | ----------------------------- | ----------------------------------------- |
-| `GET /workspaces/:ws/public-api-keys`        | workspace member (read)       | `{ keys: [...] }` (metadata, no secret)   |
-| `POST /workspaces/:ws/public-api-keys`       | `secrets.manage` (admin tier) | `201 { key, secret }` (secret shown once) |
-| `DELETE /workspaces/:ws/public-api-keys/:id` | `secrets.manage` (admin tier) | `204`; revoked keys never authenticate    |
+| Method / path                                | Permission                                                                                         | Result                                    |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `GET /workspaces/:ws/public-api-keys`        | `secrets.manage` (admin tier); with `runs.execute`, only your own key that follows your workspaces | `{ keys: [...] }` (metadata, no secret)   |
+| `POST /workspaces/:ws/public-api-keys`       | `secrets.manage`; `runs.execute` for a key that follows your workspaces                            | `201 { key, secret }` (secret shown once) |
+| `DELETE /workspaces/:ws/public-api-keys/:id` | `secrets.manage`; a key that follows a person's workspaces is revoked by them or an account admin  | `204`; revoked keys never authenticate    |
 
 Create body: `{ "label": "CI pipeline", "scope": "read" }`. `label` is 1–120 chars; `scope` is
 optional and **defaults to `write`**. An account holds at most **200** live keys (409 past that;
@@ -82,6 +82,26 @@ requires an **account admin** (`403 account_admin_required` otherwise), because 
 one board says nothing about the others. The list route shows every live key that reaches the
 board, account-wide ones included; revoking one that reaches past the board needs an account admin
 too.
+
+#### Keys that follow your workspaces
+
+A personal token (below) can instead take `followsMemberships: true`: its reach is every workspace
+its person can act in, decided on each call rather than stored. Joining a workspace grants it on
+the next call and leaving takes it away, with nothing to re-mint, which is the key for someone who
+works across several workspaces. It takes `actsAsSelf: true` and no `workspaceIds` (`422
+follows_memberships_requires_person` or `follows_memberships_with_workspaces` otherwise).
+
+- **Scope per workspace.** In each workspace the key acts with the lower of its own `scope` and
+  what its person's role there allows: `read` for a viewer, `decide` for a member, `admin` for an
+  admin. So it can never do more over `/api/v1` than its person can do in the app, which is why
+  minting it needs only `runs.execute` and no account admin. On account-level routes (the
+  directory) it acts with `read`.
+- **What it reports.** `GET /api/v1/me` and `GET /api/v1/directory/reach` answer its reach as of
+  the call, with `followsMemberships: true`; a workspace it no longer reaches answers `404
+  workspace_not_found`, like one it never did, and a key whose person can act in none of the
+  account stops authenticating (`401`). A listed key carries `workspaceIds: []`.
+- **Who manages it.** Its person, from any board's panel, and an account admin. A board admin who
+  is neither does not see it there: removing the person from the board is what takes it away.
 
 The create body also takes `actsAsSelf` (optional, default `false`), which picks between the two
 IDENTITIES a key can have. This is a different question from `scope`: scope is what the key may DO,
@@ -115,6 +135,24 @@ scoping existed.
 A key can only ever be bound to the person minting it — the field is a boolean, and the server reads
 the id from the session — so there is no way to mint a key onto someone else's subscription. A mint
 with no signed-in user is refused, and headless provisioning (`POST /api/v1/keys`) never binds.
+
+An integration that needs a person's own key (to run on their subscription for them) cannot mint
+it, so it sends them to mint it: `<appUrl>/?newApiKey=1&label=<label>&scope=<scope>&runsAsSelf=1&reach=memberships`
+opens the API tokens window with the create form filled in, where `appUrl` comes from
+`GET /api/v1/deployment`. Every parameter but `newApiKey` is optional; a `scope` outside the ladder
+is ignored, `runsAsSelf=1` picks the personal identity when someone is signed in to bind it to,
+`reach=memberships` (with `runsAsSelf=1`) picks [following their workspaces](#keys-that-follow-your-workspaces),
+and `ws=<id>` pins the board. Nothing is minted until the person clicks create, and signing in first
+keeps the link. Its sibling, `?addRepo=<owner>/<name>&provider=<host>`, opens the add-service window
+on a repository the same way.
+
+To send a person to a task's run, link `<appUrl>/?ws=<workspaceId>&block=<taskId>&run=<runId>`, where
+`taskId` is the task's public id (its board block) and `runId` the run's. The app opens that board,
+selects the task and centres the camera on its card, zoomed in to where the board shows a task's
+pipeline steps, then opens the task's focus view, which follows its run step by step. Add
+`view=<name>` to open something else on the same run: `run` (the focus view, also what no `view`
+gets), `outcome` (what the run changed), `observability` (its model activity and context) or
+`test-evidence` (the Tester's captured evidence). An unknown `view` still lands on the task.
 
 An operator with no browser can do the same over `/api/v1` itself: see
 [Key provisioning](#key-provisioning-apiv1keys). The two surfaces share one store, so a key minted

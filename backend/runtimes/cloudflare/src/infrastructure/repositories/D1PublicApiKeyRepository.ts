@@ -7,6 +7,7 @@ interface PublicApiKeyRow {
   id: string
   account_id: string
   all_workspaces: number
+  follows_memberships: number
   label: string
   scope: string
   secret_hash: string
@@ -24,6 +25,7 @@ function rowToRecord(row: PublicApiKeyRow, grants: string[]): PublicApiKeyRecord
     id: row.id,
     accountId: row.account_id,
     workspaceIds: row.all_workspaces === 1 ? null : [...grants].sort(),
+    followsMemberships: row.follows_memberships === 1,
     label: row.label,
     scope: row.scope as PublicApiScope,
     secretHash: row.secret_hash,
@@ -39,7 +41,7 @@ function rowToRecord(row: PublicApiKeyRow, grants: string[]): PublicApiKeyRecord
 
 /**
  * D1-backed store of the inbound public-API keys and their workspace grants (migrations 0034,
- * 0053, 0054, 0081, 0086, 0089, 0108). The secret is stored ONLY as a one-way peppered hash: this
+ * 0053, 0054, 0081, 0086, 0089, 0108, 0110). The secret is stored ONLY as a one-way peppered hash: this
  * repo never sees the raw key.
  */
 export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
@@ -59,13 +61,14 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
       this.db
         .prepare(
           `INSERT INTO public_api_keys
-            (id, account_id, all_workspaces, label, scope, secret_hash, created_by_user_id, created_by_key_id, external_identity, acts_as_user_id, created_at, last_used_at, revoked_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, account_id, all_workspaces, follows_memberships, label, scope, secret_hash, created_by_user_id, created_by_key_id, external_identity, acts_as_user_id, created_at, last_used_at, revoked_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           record.id,
           record.accountId,
           record.workspaceIds === null ? 1 : 0,
+          record.followsMemberships ? 1 : 0,
           record.label,
           record.scope,
           record.secretHash,
@@ -87,8 +90,9 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
       .bind(id)
       .first<PublicApiKeyRow>()
     if (!row) return null
-    // An unrestricted key has no grant rows, so the authentication hot path skips the second read.
-    if (row.all_workspaces === 1) return rowToRecord(row, [])
+    // An unrestricted key, or one following its person's memberships, has no grant rows, so the
+    // authentication hot path skips the second read.
+    if (row.all_workspaces === 1 || row.follows_memberships === 1) return rowToRecord(row, [])
     const grants = await this.grantsOf([row.id])
     return rowToRecord(row, grants.get(row.id) ?? [])
   }
@@ -113,6 +117,7 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
         `SELECT COUNT(*) AS n FROM public_api_keys k
           WHERE k.account_id = ? AND k.revoked_at IS NULL
             AND (k.all_workspaces = 1
+              OR k.follows_memberships = 1
               OR EXISTS (SELECT 1 FROM public_api_key_workspaces g WHERE g.key_id = k.id))`,
       )
       .bind(accountId)

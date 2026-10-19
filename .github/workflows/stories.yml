@@ -1,0 +1,67 @@
+name: Stories
+
+# Every component story rendered in headless Chromium, with an axe check, deliberately kept OUT of
+# `ci.yml`.
+#
+# The whole tree takes about 10 minutes: each stories file boots the story's Nuxt app in a fresh
+# browser page, and that setup is most of the time. That is the wrong shape for a per-PR gate, so
+# it runs here, on manual dispatch only while its triggers are paused (#2442), and it is
+# NON-BLOCKING by construction: a separate workflow contributes no check to `ci.yml`'s aggregated
+# gates. What every PR does get, in `ci.yml`, is the cheap half: the stories typecheck with the
+# app, `fixtures.spec.ts` parses every shared fixture in the app's unit tests, and
+# `check-story-titles.mjs` runs with the guards.
+#
+# Running without browser isolation took about 2 minutes and was rejected: with the files
+# shuffled, 2 of 4 runs timed out on stories that pass alone. Setup, conventions and helpers:
+# docs/internal/storybook.md.
+
+on:
+  # PAUSED to manual dispatch until #2442, which holds the triggers to restore.
+  workflow_dispatch:
+
+concurrency:
+  group: stories-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  stories:
+    name: Render every story
+    runs-on: ubuntu-latest
+    # About 10 minutes on a developer laptop; bounded so a story that hangs the browser cannot burn
+    # the runner for hours.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
+        with:
+          turbo-cache: 'true'
+
+      # The stories import the built `dist` of the workspace packages the SPA depends on
+      # (`@cat-factory/contracts` among them), so build exactly those.
+      - name: Build the SPA's workspace dependencies
+        run: pnpm exec turbo run build --filter='@cat-factory/storybook^...'
+
+      # The same cache the e2e lane uses: one Playwright version is pinned in the lockfile for both.
+      - name: Cache Playwright browser
+        id: pw-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      # Through the e2e package, as `ci.yml` does: it declares `@playwright/test`, so the `playwright`
+      # binary is linked there, where `frontend/storybook` only has it transitively.
+      - name: Install Playwright Chromium
+        if: ${{ steps.pw-cache.outputs.cache-hit != 'true' }}
+        run: pnpm --filter @cat-factory/e2e exec playwright install --with-deps chromium
+
+      - name: Render every story
+        run: pnpm --filter @cat-factory/storybook run test:stories

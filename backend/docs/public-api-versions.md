@@ -544,3 +544,15 @@ refuses a key reaching several that sends none, which is every key a directory w
 mirror filtering a push by reach reads this instead.
 
 Additive: one `read` operation and its `DirectoryReach` shape.
+
+## 1.89.0
+
+A key can follow its person's workspaces. `followsMemberships` is new on the key a mint returns or
+`GET /api/v1/keys` lists, on `GET /api/v1/me` and on `GET /api/v1/directory/reach`. Such a key is
+bound to a person (`actsAsUserId`) and reaches every workspace that person can act in, decided on
+each call, with its scope in each lowered to what their role there allows. `/me` and
+`/directory/reach` answer that reach as of the call; a listed key carries `workspaceIds: []`, since
+its reach is not a list.
+
+Additive: a new boolean on three shapes. A listed key's `workspaceIds` may now be an empty list,
+which it never was before, and only ever for a key with `followsMemberships: true`.

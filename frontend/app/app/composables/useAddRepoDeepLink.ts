@@ -10,7 +10,7 @@
  * /api/v1/deployment`; the format is published at
  * https://catfactory.ai/extend/public-api.html#sending-a-person-to-add-a-repository
  *
- * Signing in first keeps the query (`postSignInUrl`), so a signed-out person lands here too.
+ * Signing in first keeps the query (`signInThenReload`), so a signed-out person lands here too.
  */
 import { watch } from 'vue'
 import type { GitHubAvailableRepo } from '~/types/domain'

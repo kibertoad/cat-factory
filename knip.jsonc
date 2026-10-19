@@ -210,5 +210,13 @@
       // Backs `nuxt typecheck` in the deploy consumer.
       "ignoreDependencies": ["vue-tsc"],
     },
+    "frontend/storybook": {
+      // The story test config has its own name so no ordinary vitest lane picks it up, so it is
+      // named here as an entry.
+      "entry": ["vitest.stories.config.ts"],
+      // msw's generated service worker: Storybook serves it from `.storybook/public` and the
+      // preview registers it by URL, so no module imports it.
+      "ignore": [".storybook/public/mockServiceWorker.js"],
+    },
   },
 }
