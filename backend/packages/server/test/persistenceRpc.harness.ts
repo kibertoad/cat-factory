@@ -903,6 +903,16 @@ function buildLibraryAndCommsRepos() {
       softDelete: async () => undefined,
       getByTeam: async (teamId: string) => ({ teamId }),
     },
+    // The account tier of the runner pool: both reads are remote. `getByAccount` echoes the
+    // accountId (arg0, the `account` rule); `listByAccounts` returns one row per requested id (the
+    // `accountList` rule). `insertIfAbsent` and `replace` are wired but absent from the allow-list
+    // (the seed's writes, mothership-internal), so both must be refused.
+    accountRunnerPoolRepository: {
+      getByAccount: async (accountId: string) => ({ accountId }),
+      listByAccounts: async (ids: string[]) => ids.map((accountId) => ({ accountId })),
+      insertIfAbsent: async () => true,
+      replace: async () => true,
+    },
     // Per-workspace routing (no secrets): `getByWorkspace` echoes the workspaceId (arg0); the
     // record-based `upsert` binds on the record's `workspaceId` FIELD.
     slackSettingsRepository: {

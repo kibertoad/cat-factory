@@ -27,7 +27,11 @@ import {
 } from '@cat-factory/workspaces'
 import { EmailConnectionService } from '@cat-factory/integrations'
 import type { SpendService } from '@cat-factory/spend'
-import type { EnvironmentHandlerSeeder, SharedStackSeeder } from '@cat-factory/kernel'
+import type {
+  EnvironmentHandlerSeeder,
+  RunnerPoolSeeder,
+  SharedStackSeeder,
+} from '@cat-factory/kernel'
 import { createNotificationsModule, createWorkspaceSettingsModule } from './modules.js'
 import type { ModuleRegistry } from './module-registry.js'
 import type { resolveCoreRuntime } from './runtime.js'
@@ -61,6 +65,11 @@ export interface CoreFoundationParams {
    * module) so `WorkspaceService.create` seeds a new board's declared shared stacks too.
    */
   getSharedStackSeeder: () => SharedStackSeeder | undefined
+  /**
+   * Late-bound runner-pool-seeder accessor (built after the foundation, beside the runners module)
+   * so `WorkspaceService.create` registers the deployment's declared runner pool on a new board.
+   */
+  getRunnerPoolSeeder: () => RunnerPoolSeeder | undefined
 }
 
 export interface CoreFoundation {
@@ -89,6 +98,7 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     getSpendService,
     getEnvironmentHandlerSeeder,
     getSharedStackSeeder,
+    getRunnerPoolSeeder,
   } = params
 
   // Built up-front (before the board + execution engine) so the board's review-debt friction
@@ -137,6 +147,9 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     // Same late binding, same posture: `create` seeds the board's deployment-declared shared
     // stacks. Absent seeder ⇒ no seeding.
     getSharedStackSeeder,
+    // And the deployment-declared runner pool, so a new board can run an agent with no
+    // Infrastructure step. Absent seeder ⇒ no seeding.
+    getRunnerPoolSeeder,
   })
   // Workspace-RBAC roster + access-mode management (workspace-rbac, slice 5). Present only when
   // the member repository is wired (both facades wire it; tests/no-roster leave it absent, so the

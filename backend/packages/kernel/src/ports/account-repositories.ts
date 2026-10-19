@@ -54,6 +54,8 @@ export interface AccountRepository {
    * empty.
    */
   listByIds(ids: string[]): Promise<AccountRecord[]>
+  /** Every account, in one query: the boot-time "for each account" set (declared seeds). */
+  listAll(): Promise<AccountRecord[]>
   create(account: AccountRecord): Promise<void>
   /**
    * Atomically get-or-create the given user's personal account, returning the surviving

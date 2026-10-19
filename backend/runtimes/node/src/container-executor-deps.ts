@@ -18,6 +18,7 @@ import type {
   EnvironmentBackendRegistry,
   ProvisioningLogRecorder,
   RunnerBackendRegistry,
+  RunnerPoolConnectionServiceDependencies,
 } from '@cat-factory/integrations'
 import {
   composeTraceSinks,
@@ -141,11 +142,16 @@ export function buildNodeResolveTransport(
   clock: Clock,
   // The app-owned runner-backend registry the service resolves a stored `kind` through.
   runnerBackendRegistry: RunnerBackendRegistry,
-  // The shared HTTP provider the built-in `manifest` backend reuses when supplied (e.g.
-  // tests). NOT the custom-kind seam — a bespoke runner backend is registered by reference
-  // into `runnerBackendRegistry`. Absent → the generic manifest-driven HTTP provider.
-  injectedPoolProvider?: RunnerPoolProvider,
+  extras: {
+    // The shared HTTP provider the built-in `manifest` backend reuses when supplied (e.g.
+    // tests). NOT the custom-kind seam — a bespoke runner backend is registered by reference
+    // into `runnerBackendRegistry`. Absent → the generic manifest-driven HTTP provider.
+    injectedPoolProvider?: RunnerPoolProvider
+    // The account tier a board without its own pool falls back to (see the connection service).
+    accountRunnerPool?: RunnerPoolConnectionServiceDependencies['accountRunnerPool']
+  } = {},
 ): ResolveRunnerTransport | null {
+  const { injectedPoolProvider, accountRunnerPool } = extras
   if (!config.runners.enabled || !config.runners.encryptionKey) return null
   const urlPolicy = resolveUrlSafetyPolicy(config.runners)
   const runnerService = new RunnerPoolConnectionService({
@@ -158,6 +164,7 @@ export function buildNodeResolveTransport(
     clock,
     logger,
     runnerBackendRegistry,
+    ...(accountRunnerPool ? { accountRunnerPool } : {}),
     ...(urlPolicy ? { urlPolicy } : {}),
     runnerPoolProvider:
       injectedPoolProvider ?? new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {}),
