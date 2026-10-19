@@ -10,6 +10,20 @@ import { makeConformanceApp, setupTestDb } from './harness.js'
 // handler maps to a 500 with the message suppressed, so the guard checks pool existence
 // itself and throws a ConflictError instead.)
 
+// The pool a deployment declares for every account: the `{ config, secrets }` an admin submits.
+const SEED = {
+  config: {
+    kind: 'kubernetes' as const,
+    kubernetes: {
+      label: 'Seeded pool',
+      apiServerUrl: 'https://k8s.example:6443',
+      namespace: 'cat-factory',
+      image: 'ghcr.io/acme/executor:1',
+    },
+  },
+  secrets: { apiToken: 'seeded-token' },
+}
+
 describe('[local] delegate-agents-to-runner-pool start gate', () => {
   let db: DrizzleDb
 
@@ -47,5 +61,29 @@ describe('[local] delegate-agents-to-runner-pool start gate', () => {
 
     expect(res.status).toBe(409)
     expect(res.body.error?.details?.reason).toBe('agent_backend_unconfigured')
+  })
+
+  it('admits a delegated run on a board that inherits its account pool from the declared seed', async () => {
+    // The guard reads the same EFFECTIVE pool dispatch does. It used to read the board's own row
+    // only, so a board whose account pool came from `startLocal({ seedAccountRunnerPool })` was
+    // refused at start with the very reason above, while dispatch would have found the pool.
+    const app = makeConformanceApp(db, undefined, { seedAccountRunnerPool: () => SEED })
+    const snapshot = await app.createOrgWorkspace({ seed: true })
+    const wsId = snapshot.workspace.id
+    await app.call('PUT', `/workspaces/${wsId}/settings`, { delegateAgentsToRunnerPool: true })
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Code only',
+      purpose: 'build',
+      agentKinds: ['coder'],
+    })
+
+    const res = await app.call<{ error?: { details?: { reason?: string } } }>(
+      'POST',
+      `/workspaces/${wsId}/blocks/task_login/executions`,
+      { pipelineId: pipeline.body.id },
+    )
+
+    expect(res.body.error?.details?.reason).toBeUndefined()
+    expect(res.status).toBe(201)
   })
 })
