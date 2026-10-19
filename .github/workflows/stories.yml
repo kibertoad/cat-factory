@@ -3,8 +3,8 @@ name: Stories
 # Every component story rendered in headless Chromium, with an axe check, deliberately kept OUT of
 # `ci.yml`.
 #
-# The whole tree takes about 10 minutes: each stories file boots the story's Nuxt app in a fresh
-# browser page, and that setup is most of the time. That is the wrong shape for a per-PR gate, so
+# The whole tree takes about 10 minutes on a laptop and about half an hour here: each stories file
+# boots the story's Nuxt app in a fresh browser page, and that setup is most of the time. That is the wrong shape for a per-PR gate, so
 # it runs here, nightly plus on manual dispatch, and it is NON-BLOCKING by construction: a separate
 # workflow contributes no check to `ci.yml`'s aggregated gates. What every PR does get, in
 # `ci.yml`, is the cheap half: the stories typecheck with the app, `fixtures.spec.ts` parses every
@@ -81,24 +81,5 @@ jobs:
         if: ${{ steps.pw-cache.outputs.cache-hit != 'true' }}
         run: pnpm --filter @cat-factory/e2e exec playwright install --with-deps chromium
 
-      # The step below depends on a variable Vitest reads but does not document, so check that the
-      # installed Vitest still reads it. Without it, the lane passes locally and swaps in CI.
-      - name: Check that Vitest still collects garbage between files
-        working-directory: frontend/storybook
-        run: |
-          dist="$(dirname "$(node -p "require.resolve('vitest/package.json')")")/dist"
-          grep -rqF VITEST_CHROMIUM_GC_DISK_THRESHOLD_GB "$dist" || {
-            echo "::error::Vitest no longer reads VITEST_CHROMIUM_GC_DISK_THRESHOLD_GB. See docs/internal/storybook.md."
-            exit 1
-          }
-
       - name: Render every story
-        # A full garbage collection in each session's renderer after every stories file. Each file
-        # runs in a new iframe and leaves its module graph as garbage, which V8 collects late, so the
-        # three renderers grew to about 5 GB each, the 16 GB runner swapped, and a story stalled for
-        # 42 s. Vitest runs this collection after a file when `/tmp` has less free space than this
-        # many GB (`maybeCollectChromiumGarbage` in vitest's `src/node/pools/browser.ts`, Linux and
-        # Chromium only), so a size larger than any disk runs it after every file.
-        env:
-          VITEST_CHROMIUM_GC_DISK_THRESHOLD_GB: '100000'
         run: pnpm --filter @cat-factory/storybook run test:stories

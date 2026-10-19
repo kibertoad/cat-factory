@@ -101,16 +101,13 @@ toaster, and the a11y check loads axe-core. A story has 15 s and a hook 30 s, so
 hook. Do not raise either timeout: if the empty story gets near 30 s, find what it loads.
 
 **A session's renderer fills with garbage, not with leaked frames.** Each Vitest session runs all
-its stories files in one renderer process, each file in a new iframe, and each file leaves its
-whole module graph as garbage. V8 sizes a renderer's heap as if it had the machine to itself, so it
-collects that garbage late: in CI the three renderers grew to about 5 GB each, the 16 GB runner
-swapped, and a story's main thread stalled for 42 s. `stories.yml` sets
-`VITEST_CHROMIUM_GC_DISK_THRESHOLD_GB` so Vitest runs a full collection after every file. Vitest
-does not document that variable: `maybeCollectChromiumGarbage` (`src/node/pools/browser.ts`)
-collects after a file when `/tmp` has less free space than that many GB, on Linux with Chromium
-only. The job checks that the installed Vitest still reads it. If an upgrade drops it, find
-another way to collect between files before the lane goes back to swapping; a longer timeout does
-not help.
+its stories files in one renderer process, each file in a new iframe, and each finished file
+leaves its whole module graph as garbage. V8 sizes a renderer's heap as if it had the machine to
+itself, so it collects that garbage late, and three renderers together can fill CI's 16 GB runner
+until it swaps and a story's main thread stalls. So the lane's setup file
+(`.storybook/collectGarbage.ts`) runs a full collection before each stories file, through Vitest's
+`cdp()` session. That needs Playwright's Chromium: anywhere else the call fails and so does the
+file. It runs whatever the isolation mode. A longer timeout does not help a renderer that swaps.
 
 **Storybook runs standalone.** `@nuxtjs/storybook` is NOT in `nuxt.config`. Adding it boots
 Storybook inside `nuxt dev` at `/_storybook`, which changes the dev server for everyone and runs a
@@ -277,8 +274,10 @@ every later story in the session.
 | `node scripts/check-story-titles.mjs` (titles, one file per component, `Default` first) | CI's guard steps, every PR      |
 | `test:stories`: every story renders in headless Chromium, with an axe check             | nightly, and on request         |
 
-`test:stories` takes about 10 minutes for the whole tree, so no PR waits on it. It also runs on a
-PR that changes the lane itself, except a release PR, which changes only package versions.
+`test:stories` takes about 10 minutes for the whole tree on a laptop and about half an hour on CI's
+runner, where the job's limit is 45 minutes, so no PR waits on it. Each new stories file adds a
+garbage collection to that time. It also runs on a PR that changes the lane itself, except a
+release PR, which changes only package versions.
 `--browser.isolate=false` cut that to about 2 minutes, and was rejected: with the files shuffled,
 2 of 4 runs timed out on stories that pass alone, and no story failed twice. Those runs used
 Vitest's default worker count, before the cap below, so contention may explain the timeouts; the

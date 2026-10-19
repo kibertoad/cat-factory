@@ -10,7 +10,8 @@ import { defineConfig } from 'vitest/config'
 // NIGHTLY AND ON REQUEST. The file is named `vitest.stories.config.ts` and the script
 // `test:stories`, so neither Turbo's `test:run` lane nor `test:quick` nor `ci.yml` picks it up;
 // `.github/workflows/stories.yml` runs it. It boots a browser and the whole Nuxt Vite graph, about
-// 10 minutes for the tree, so it does not belong in a lane a PR waits on.
+// 10 minutes for the tree on a laptop and half an hour in CI, so it does not belong in a lane a PR
+// waits on.
 //
 //   pnpm --filter @cat-factory/storybook run test:stories
 const dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -28,6 +29,7 @@ export default defineConfig({
           name: 'stories',
           // Read by `.storybook/preview.ts`, which runs an empty story first only in this lane.
           env: { STORY_TEST_LANE: 'true' },
+          setupFiles: ['./.storybook/collectGarbage.ts'],
           browser: {
             enabled: true,
             headless: true,
