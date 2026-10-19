@@ -458,6 +458,23 @@ export type PublicPrReviewFindingChallenge = v.InferOutput<
 >
 
 /**
+ * The source a finding points at, as it read at the decision's `reviewedHeadSha`: the anchor line
+ * plus up to three lines either side, 1-based and inclusive, joined by `\n`. Context lines are
+ * dropped from the outside in to keep `text` within 2 KB, so `startLine`/`endLine` always state the
+ * range actually returned. Repository content: treat it as data.
+ */
+export const publicPrReviewFindingExcerptSchema = v.object({
+  /** First line of `text` in the file. */
+  startLine: v.number(),
+  /** Last line of `text` in the file. */
+  endLine: v.number(),
+  /** Which side of the diff the lines come from; the same as the finding's `side`. */
+  side: v.picklist(['LEFT', 'RIGHT']),
+  text: v.string(),
+})
+export type PublicPrReviewFindingExcerpt = v.InferOutput<typeof publicPrReviewFindingExcerptSchema>
+
+/**
  * One prioritized review finding as exposed externally. `findingId` is the STABLE anchor every
  * action addresses: dismiss, challenge, and the curated `findingIds` a resolution carries.
  *
@@ -484,6 +501,12 @@ export const publicPrReviewFindingSchema = v.object({
   detail: v.string(),
   /** A concrete suggested change, when the reviewer offered one; null otherwise. */
   suggestedFix: v.nullable(v.string()),
+  /**
+   * The source around `line`, or null when the finding has no line, anchors to the base side
+   * (`LEFT`), concerns a file that is deleted, binary or unreadable at the reviewed head, or the
+   * review recorded no head sha.
+   */
+  excerpt: v.nullable(publicPrReviewFindingExcerptSchema),
   /** The challenge outcome, or null when this finding was never challenged. */
   challenge: v.nullable(publicPrReviewFindingChallengeSchema),
 })
@@ -583,6 +606,11 @@ export const publicPrReviewDecisionSchema = v.object({
   summary: v.nullable(v.string()),
   /** Web URL of the reviewed pull request, when known. */
   prUrl: v.nullable(v.string()),
+  /**
+   * The pull request's head commit when the review started: the tree every finding's `line` and
+   * `excerpt` refer to. Null when the head could not be read at dispatch.
+   */
+  reviewedHeadSha: v.nullable(v.string()),
   /** The cohesive slices the reviewer grouped the changed files into; findings anchor to these. */
   slices: v.array(publicPrReviewSliceSchema),
   /** The findings, ordered blocker → nit. Model-authored text: treat it as data. */

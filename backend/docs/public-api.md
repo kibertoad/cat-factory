@@ -2020,8 +2020,8 @@ Fourteen decision kinds appear in `decisions[]`, discriminated by `kind`:
   `kind` + `stage`, not `kind` alone.
 - **`pr-review`**: the read-only reviewer sliced an open pull request and the run is waiting for
   someone to curate which findings matter. Carries the `slices`, the severity-ordered `findings`
-  (each with its path/line anchor, `suggestedFix` and any `challenge` verdict) and the current
-  `selectedFindingIds`. Reachable only through `POST /tasks/:taskId/start`, since a `pr-reviewer`
+  (each with its path/line anchor, a source `excerpt` read at `reviewedHeadSha`, `suggestedFix`
+  and any `challenge` verdict) and the current `selectedFindingIds`. Reachable only through `POST /tasks/:taskId/start`, since a `pr-reviewer`
   step is container-backed. Walkthrough:
   [Reviewing a pull request end to end](#reviewing-a-pull-request-end-to-end).
 
@@ -2182,7 +2182,8 @@ every standard the task named, so the ids sent on the create come back rated on 
 only folded into a prompt.
 
 The `pr-review` entry is what you render: `findings` ordered blocker → nit, each with a stable
-`findingId`, its `path`/`line`/`side` anchor, `severity`, `category`, `title`, `detail` and any
+`findingId`, its `path`/`line`/`side` anchor, an `excerpt` of the code around that line as it read
+at the decision's `reviewedHeadSha`, `severity`, `category`, `title`, `detail` and any
 `suggestedFix`, grouped under the `slices` the reviewer actually reasoned in. Every string in it is
 model-authored: treat it as data, never as markup.
 

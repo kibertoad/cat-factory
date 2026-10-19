@@ -8,8 +8,11 @@ import type {
   PipelineStep,
   PrReviewAgentOutput,
   PrReviewChallengeOutput,
+  PrReviewFinding,
   PrReviewStepState,
   ResolvePrReviewInput,
+  ResolveRunRepoContext,
+  RunInitiatorScope,
   WorkRunner,
 } from '@cat-factory/kernel'
 import { ConflictError } from '@cat-factory/kernel'
@@ -22,6 +25,7 @@ import {
   dismissFinding,
   failChallenge,
 } from './prReview.logic.js'
+import { attachFindingExcerpts } from './prReviewExcerpts.logic.js'
 import { planResumeSlices, sliceReviewsAfterAggregation } from './prReviewSlices.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
@@ -41,6 +45,9 @@ export interface PrReviewControllerDeps {
   clock: Clock
   /** Optional inbox channel; when unwired the `pr_review_ready` card is skipped. */
   notificationService?: NotificationService
+  /** Reads the reviewed files for finding excerpts; unwired, findings carry none. */
+  resolveRunRepoContext?: ResolveRunRepoContext
+  runInitiatorScope?: RunInitiatorScope
 }
 
 /**
@@ -161,7 +168,7 @@ export class PrReviewController {
       slices,
       sliceReviews,
       resumeAttempts,
-      findings,
+      findings: await this.withExcerpts(workspaceId, instance, block, reviewedHeadSha, findings),
       selectedFindingIds: [],
       resolution: null,
       prUrl: prUrl ?? null,
@@ -174,6 +181,32 @@ export class PrReviewController {
     }
     await this.raisePrReviewReady(workspaceId, instance, block, findings.length, slices.length)
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
+  }
+
+  /**
+   * Stamp each finding with the source around its line, read at the reviewed head. Best effort:
+   * without a head sha or a bound repo the findings are recorded as they came, since an excerpt
+   * read from any other tree could show code the reviewer never saw.
+   */
+  private async withExcerpts(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block | null | undefined,
+    reviewedHeadSha: string | null,
+    findings: PrReviewFinding[],
+  ): Promise<PrReviewFinding[]> {
+    const resolveRepo = this.deps.resolveRunRepoContext
+    if (!reviewedHeadSha || !block || !resolveRepo) return findings
+    const inScope = this.deps.runInitiatorScope ?? ((_scope, fn) => fn())
+    try {
+      const runRepo = await resolveRepo(workspaceId, block.id)
+      if (!runRepo) return findings
+      return await inScope({ workspaceId, initiatedBy: instance.initiatedBy }, () =>
+        attachFindingExcerpts(findings, (path) => runRepo.repo.getFile(path, reviewedHeadSha)),
+      )
+    } catch {
+      return findings
+    }
   }
 
   /**

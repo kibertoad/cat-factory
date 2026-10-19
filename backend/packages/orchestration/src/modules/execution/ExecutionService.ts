@@ -665,6 +665,8 @@ export class ExecutionService {
       serviceRepository: deps.serviceRepository,
       taskTypeRegistry: deps.taskTypeRegistry,
       promptFragmentSource: deps.promptFragmentSource,
+      resolveRunRepoContext: deps.resolveRunRepoContext,
+      runInitiatorScope: deps.runInitiatorScope,
       events: leaves.executionEventPublisher,
       // Bound, so a bug-fishing spawn starts its fix task through the real entry point rather
       // than a copy of it — the same shape `PostMergeBoardController` takes for auto-started
