@@ -100,7 +100,6 @@ async function setInherit(value: boolean) {
       </p>
       <UButton
         v-if="canManageSettings"
-        color="primary"
         variant="soft"
         size="xs"
         icon="i-lucide-link"
