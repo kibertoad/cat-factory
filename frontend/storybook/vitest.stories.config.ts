@@ -26,6 +26,8 @@ export default defineConfig({
         plugins: [storybookTest({ configDir: path.join(dirname, '.storybook') })],
         test: {
           name: 'stories',
+          // Read by `.storybook/preview.ts`, which runs an empty story first only in this lane.
+          env: { STORY_TEST_LANE: 'true' },
           browser: {
             enabled: true,
             headless: true,

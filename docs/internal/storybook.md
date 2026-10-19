@@ -88,6 +88,18 @@ story's Nuxt app starts. A store that reads something once, at creation, has alr
 seed that sets the deployment's tier pin changes nothing. Call `$dispose()` on the store and delete
 its state, so the component creates a fresh one.
 
+**Every page of the app is empty in Storybook.** A story frame's URL is `/?sessionId=…&iframeId=…`,
+which is the app's `/` route, and Nuxt's router resolves it each time the preset builds a story's
+Nuxt app. A real page there would load the whole app it imports into every stories file, so
+`nuxt.config.ts` keeps every route and its path, nested ones included, and gives each one
+`.storybook/EmptyPage.vue`. `useRoute()` reads the same route. No story renders a page.
+
+**A frame's first story pays for work the next ones do not.** The first Nuxt app a frame builds
+loads the modules its plugins import on demand (the locale messages among them), `UApp` loads its
+toaster, and the a11y check loads axe-core. A story has 15 s and a hook 30 s, so in the test lane
+`preview.ts` runs an empty story in `beforeAll` (`runEmptyStory`) and that work counts against the
+hook. Do not raise either timeout: if the empty story gets near 30 s, find what it loads.
+
 **Storybook runs standalone.** `@nuxtjs/storybook` is NOT in `nuxt.config`. Adding it boots
 Storybook inside `nuxt dev` at `/_storybook`, which changes the dev server for everyone and runs a
 second Vite server in the same process. The framework preset is what renders the stories.
@@ -230,6 +242,15 @@ the state never renders.
 A `play` that opens a menu, popover or modal queries `screen`, not `within(canvasElement)`: Nuxt
 UI teleports overlays to `body`. A play that types into a debounced field needs no sleep:
 `findBy*` retries for up to a second.
+
+A play never waits on the clock for data. A story's answer comes through msw's service worker with
+no deadline, so a `findBy*`, `waitFor` or user-event action counts only the time the page is idle
+against its second of retries (`waitOnRequests()` in `app/stories/settle.ts`, set up by
+`preview.ts`). It starts once none of the story's API requests is in flight, a request counting
+until its whole body has arrived; icons and fonts do not count. One that runs out while a request
+is on its way (a debounced search sends it after the wait began) waits for it and looks again, up
+to three times, then fails with its own error. Never raise the timeout instead: a longer guess
+fails the same way under more load.
 
 A story that changes the runtime config (`useRuntimeConfig().public`) puts the old value back when
 it unmounts. The preset shares that object between stories, so a value one story sets stays for

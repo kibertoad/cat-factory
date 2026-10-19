@@ -17,6 +17,17 @@ import { storyWorkspacePrefix } from './workspace'
 /** Hosts Storybook itself fetches from: Iconify's icon API, and the fonts in `preview-head.html`. */
 const STORYBOOK_HOSTS = new Set(['api.iconify.design', 'fonts.googleapis.com', 'fonts.gstatic.com'])
 
+/**
+ * Whether a request is one of the story's API calls: not to the page's own origin, which serves
+ * Vite's modules, and not to a host Storybook itself fetches from.
+ */
+export function isApiRequest(url: URL): boolean {
+  return url.origin !== window.location.origin && !STORYBOOK_HOSTS.has(url.hostname)
+}
+
+/** Marks a pending story's response, whose body never ends (`settle.ts` reads it). */
+export const PENDING_HEADER = 'x-story-pending'
+
 let worker: SetupWorker | undefined
 
 /** Start the worker once per preview. Requests nothing answers pass through and are logged. */
@@ -29,8 +40,7 @@ export async function startApiWorker(): Promise<void> {
     onUnhandledRequest(request, print) {
       // Every request goes through the worker, Vite's modules and the icon and font CDNs
       // included. Anything else is an API call no story answered.
-      const { origin, hostname } = new URL(request.url)
-      if (origin !== window.location.origin && !STORYBOOK_HOSTS.has(hostname)) print.warning()
+      if (isApiRequest(new URL(request.url))) print.warning()
     },
   })
 }
@@ -118,7 +128,7 @@ export function apiResponse<T extends ApiContract>(
 function neverEndingResponse(status: number, contentType: string): Response {
   return new HttpResponse(new ReadableStream<Uint8Array>(), {
     status,
-    headers: { 'content-type': contentType },
+    headers: { 'content-type': contentType, [PENDING_HEADER]: '1' },
   })
 }
 
