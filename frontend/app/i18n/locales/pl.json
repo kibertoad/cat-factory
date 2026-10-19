@@ -408,10 +408,38 @@
       "stalled": "Uruchomienie utknęło",
       "retryBootstrap": "Ponów inicjalizację",
       "retryRun": "Ponów uruchomienie",
+      "startNewRun": "Rozpocznij nowe uruchomienie",
       "environmentSetup": "Skonfiguruj środowiska",
       "deployRunnerSetup": "Skonfiguruj pulę runnerów",
       "environmentLocalHint": "Lokalne środowiska tymczasowe wymagają środowiska uruchomieniowego wdrożenia do uruchomienia kubectl/kustomize/helm. Ustaw {runtime} w pliku .env: tryb natywny uruchamia te narzędzia na twoim hoście ({native}), tryb kontenerowy uruchamia je w obrazie wdrożeniowym ({container}).",
       "showDetail": "Pokaż szczegóły",
+      "details": "Szczegóły",
+      "detailsMessage": "Komunikat",
+      "detailsHint": "Uwagi dla operatora",
+      "detailsFull": "Pełne wyjście",
+      "cause": {
+        "preflight": "Kontrola przed startem nie powiodła się, więc żadna praca nie została wykonana. Otwórz Szczegóły, aby zobaczyć, co poprawić, a potem ponów.",
+        "dispatch": "Kontener agenta nie uruchomił się, więc żadna praca nie została wykonana. Zwykle jest to problem chwilowy.",
+        "environment": "Nie udało się utworzyć środowiska testowego. Sprawdź ustawienia środowiska, a potem ponów.",
+        "evicted": "Kontener zatrzymał się kilka razy podczas uruchomienia. Zwykle dzieje się tak podczas aktualizacji platformy, więc ponów po jej zakończeniu.",
+        "harness_shutdown": "Coś zatrzymało kontener podczas tego kroku. Znajdź przyczynę w Szczegółach, zanim ponowisz, bo ponowienie może znów się zatrzymać.",
+        "timeout": "Uruchomienie przestało odpowiadać lub przekroczyło swój limit czasu. Sprawdź w Szczegółach, które z nich, a potem ponów.",
+        "agent": "Krok agenta nie powiódł się. Sprawdź przyczynę przy nieudanym kroku, a potem ponów.",
+        "job_failed": "Kontener agenta zgłosił błąd. Ponowienie uruchamia nowy kontener.",
+        "delegated_failed": "Zewnętrzny system, który wykonał ten krok, zgłosił błąd. Link przy kroku otwiera jego uruchomienie z przyczyną.",
+        "rejected": "Krok został odrzucony, więc uruchomienie zostało zatrzymane. Ponowienie zaczyna od tego kroku.",
+        "companion_rejected": "Agent towarzyszący nie zwrócił użytecznego wyniku. Ponowienie uruchamia go jeszcze raz.",
+        "stalled": "Platforma straciła kontakt z tym uruchomieniem. Ponowienie rozpoczyna nowe uruchomienie.",
+        "state_unreadable": "Nie można odczytać zapisanego stanu tego uruchomienia, więc ponowienie odczyta ten sam uszkodzony stan. Rozpocznij nowe uruchomienie.",
+        "cancelled": "To uruchomienie zostało zatrzymane. Ponowienie uruchamia je jeszcze raz.",
+        "unknown": "Uruchomienie nie powiodło się z nieznanej przyczyny. Sprawdź Szczegóły, a potem ponów.",
+        "deployRunnerUnwiredLocal": "Ten komputer nie ma środowiska wdrożeniowego do utworzenia środowiska testowego. Ustaw {variable} w pliku .env, a potem ponów.",
+        "singleJob": {
+          "evicted": "Kontener zatrzymał się przed zakończeniem zadania. Ponowienie uruchamia nowy kontener.",
+          "timeout": "Zadanie zbyt długo nie wykazywało aktywności lub przekroczyło swój limit czasu. Ponowienie uruchamia je jeszcze raz.",
+          "agent": "Agent lub git push nie powiódł się. Sprawdź przyczynę w Szczegółach, a potem ponów."
+        }
+      },
       "retrying": "Ponawianie…",
       "history": {
         "previousErrors": "{count} poprzedni błąd | {count} poprzednie błędy | {count} poprzednich błędów"
@@ -806,6 +834,7 @@
       "providersUnconfigured": {
         "title": "Brak dostawcy AI dla tego modelu",
         "body": "Dla {models} nie skonfigurowano żadnego dostawcy. Dodaj klucz dostawcy, połącz subskrypcję lub włącz Cloudflare AI, aby go uruchomić.",
+        "cause": "Dla modelu w tym potoku nie skonfigurowano dostawcy. Dodaj klucz dostawcy, połącz subskrypcję lub włącz Cloudflare AI, a potem ponów.",
         "action": "Skonfiguruj AI"
       },
       "binaryStorageUnconfigured": {
@@ -2640,8 +2669,12 @@
         "githubConnect": "Połącz GitHub",
         "slackManage": "Zarządzaj powiadomieniami Slack",
         "slackConnect": "Połącz Slack",
-        "sourceManage": "Zarządzaj {source}",
-        "sourceConnect": "Połącz {source}",
+        "documentSourceManage": "Zarządzaj {source} (dokumenty)",
+        "documentSourceConnect": "Połącz {source} (dokumenty)",
+        "designSourceManage": "Zarządzaj {source} (projekty)",
+        "designSourceConnect": "Połącz {source} (projekty)",
+        "taskSourceManage": "Zarządzaj {source} (system zgłoszeń)",
+        "taskSourceConnect": "Połącz {source} (system zgłoszeń)",
         "documentImport": "Importuj i utwórz z dokumentów",
         "taskImport": "Importuj zgłoszenia",
         "fragments": "Biblioteka fragmentów kontekstu",
@@ -8435,11 +8468,11 @@
           },
           "banner": {
             "title": "Co poszło nie tak",
-            "body": "Karta zamienia pasek postępu na ten komunikat. Nazywa przyczynę, szczegóły zawierają surowe wyjście, a niektóre przyczyny oferują przycisk prosto do ustawienia, które je naprawia."
+            "body": "Karta zastępuje pasek postępu tym banerem. Pokazuje, co się nie powiodło, i daje jedną akcję. Otwórz zadanie, aby przeczytać przyczynę w jednym wierszu, z pełnym wyjściem w Szczegółach."
           },
           "retry": {
-            "title": "Uruchomić ponownie",
-            "body": "Ponów uruchamia pracę od nowa. Wcześniejsze błędy zostają na zadaniu, w sekcji „Poprzednie błędy”, więc możesz porównywać próby, zamiast tracić ślad."
+            "title": "Następny krok",
+            "body": "Ten przycisk to następny krok. Zwykle jest to Ponów, które uruchamia pracę jeszcze raz. Gdy błąd powoduje ustawienie, przycisk otwiera to ustawienie. Wcześniejsze błędy zostają przy zadaniu w sekcji Poprzednie błędy, więc można porównać próby."
           },
           "finish": {
             "title": "Błąd to informacja",

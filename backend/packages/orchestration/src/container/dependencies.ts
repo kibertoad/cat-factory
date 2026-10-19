@@ -19,6 +19,7 @@ import type {
   EnvironmentBackendRegistry,
   RegisterHandlerInput,
   RunnerBackendRegistry,
+  RunnerPoolSeedSource,
   UserSecretKindRegistry,
   VcsPatConnectionService,
 } from '@cat-factory/integrations'
@@ -134,6 +135,7 @@ import type {
   RiskPolicySuppressionRepository,
   RunInitiatorScope,
   RunLifecycleSink,
+  AccountRunnerPoolRepository,
   RunnerPoolConnectionRepository,
   RunnerPoolProvider,
   SandboxExperimentRepository,
@@ -950,6 +952,21 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * `kubernetes` kinds (`defaultRunnerBackendRegistry()`).
    */
   runnerBackendRegistry?: RunnerBackendRegistry
+  /**
+   * The ACCOUNT tier of the runner pool: one row per account that every board of it falls back to
+   * when it has no pool of its own. Wired with {@link runnerPoolConnectionRepository} (the service
+   * reads both through one resolver); absent ⇒ the previous per-workspace-only behaviour.
+   */
+  accountRunnerPoolRepository?: AccountRunnerPoolRepository
+  /**
+   * A deployment's DECLARED runner pools: `(account) => { config, secrets } | undefined`, the
+   * runner-pool sibling of {@link seedEnvironmentHandlers}. When supplied (and the runners module
+   * and {@link accountRunnerPoolRepository} are wired), `createCore` builds a `RunnerPoolSeeder`:
+   * the runtime boot-backfills every account that has no pool and `WorkspaceService.create` seeds
+   * the account of a new board. Personal and org accounts both inherit; a legacy board with no
+   * account gets nothing. An account that already has a pool keeps it. Absent ⇒ no seeding.
+   */
+  seedAccountRunnerPool?: RunnerPoolSeedSource
   /**
    * The app-owned registry of per-user secret KINDS (a GitHub PAT built-in today). Carried on
    * the dependency bag so each facade reads the SAME instance off `overrides` and threads it

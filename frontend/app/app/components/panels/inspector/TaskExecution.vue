@@ -298,10 +298,13 @@ async function mergePr() {
 
 <template>
   <!-- The live run surface stays open by default: it is what a user selecting a
-       running task is looking for (and what the e2e specs assert on). -->
+       running task is looking for (and what the e2e specs assert on). The section holds the
+       task's only failure block, so a failed run marks the header too: a collapsed section must
+       still show that the run failed. -->
   <InspectorSection
     :title="t('inspector.execution.title')"
     :hint="t('inspector.execution.hint')"
+    :warning="!!failedRun"
     default-open
   >
     <!-- running pipeline -->

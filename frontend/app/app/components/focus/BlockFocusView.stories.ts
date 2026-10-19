@@ -4,6 +4,7 @@ import { authInitiative, boardWith, loginTask, logoutTask } from '~/stories/boar
 import { initiative, initiativeSnapshot } from '~/stories/initiative.stories.mocks'
 import { riskPolicy } from '~/stories/policies.stories.mocks'
 import { claudeOnlyCatalog } from '~/stories/providers.stories.mocks'
+import { failure } from '~/stories/pipelineStep.stories.mocks'
 import { execution } from '~/stories/snapshot.stories.mocks'
 import { taskFormSnapshot } from '~/stories/taskForm.stories.mocks'
 import {
@@ -18,7 +19,8 @@ import type { UiMode } from '~/utils/uiMode'
 import BlockFocusView from './BlockFocusView.vue'
 
 // One block full screen: the way back to the board, its type and status, and the Run menu, then
-// its pipeline run and, beside it, its description, progress and dependencies. An initiative runs
+// its pipeline run and, beside it, its description, progress and dependencies. A failed run shows
+// the failure block between the run's summary and its steps. An initiative runs
 // its planning pipeline from one button. The run mode follows the merge policy: a policy that
 // sandboxes the person's role says so, and the advanced tier can ask for a sandbox. The view loads
 // the model catalog on open, so the stories seed it loaded. Every run control sends a request no
@@ -97,4 +99,30 @@ export const DryRunForced: Story = {
  */
 export const Advanced: Story = {
   decorators: [focused(loginTask.id, running, { mode: 'advanced' })],
+}
+
+/**
+ * The login task's run failed because its container did not start: the failure block under the
+ * run's summary, with Retry run and the backend's text behind Details.
+ */
+export const Failed: Story = {
+  decorators: [
+    focused(
+      loginTask.id,
+      taskFormSnapshot({
+        blocks: boardWith({ ...loginTask, executionId: 'exec_login' }),
+        executions: [
+          execution({
+            status: 'failed',
+            failure: failure({
+              kind: 'dispatch',
+              message: 'The container failed to start.',
+              detail: 'Runner pool answered HTTP 503: no capacity in pool acme-runners.',
+              stepIndex: 1,
+            }),
+          }),
+        ],
+      }),
+    ),
+  ],
 }

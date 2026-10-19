@@ -15,7 +15,6 @@ export function useTaskActions(taskId: () => string) {
   const execution = useExecutionStore()
   const ui = useUiStore()
   const reviews = useReviewStage()
-  const toast = useActionToast()
   const { t } = useI18n()
   const { confirm } = useConfirm()
   const access = useWorkspaceAccess()
@@ -69,15 +68,6 @@ export function useTaskActions(taskId: () => string) {
   const starting = ref(false)
 
   async function start() {
-    if (!runnable.value) {
-      // A refusal decided in the browser, in translated copy: the `error` tone (`useActionToast`).
-      toast.error('board.task.blockedByDependenciesTitle', {
-        description: t('board.task.waitingOn', {
-          deps: unmet.value.map((d) => d.title).join(', '),
-        }),
-      })
-      return
-    }
     const block = task.value
     if (!block) return
     starting.value = true
@@ -184,14 +174,35 @@ export function useTaskActions(taskId: () => string) {
  * refused start, which `execution.start` reports itself).
  */
 export function useStartWithFeedback() {
+  const board = useBoardStore()
   const execution = useExecutionStore()
   const toast = useActionToast()
   const { t } = useI18n()
   const { forcedFor } = useDryRunPolicy()
   const pipelineFor = useStartPipelineResolver()
 
-  async function startTask(block: Pick<Block, 'id' | 'pipelineId'>): Promise<boolean> {
-    const pipeline = pipelineFor(block)
+  /**
+   * Start a run on the block. Every start path asks the dependency question here, so no button
+   * can start a task its board shows as blocked. `pipeline` names the pipeline to run when the
+   * caller already knows it (a new run that replaces a failed one runs the failed run's pipeline);
+   * without it, the plain Start's pipeline (`useStartPipelineResolver`).
+   */
+  async function startTask(
+    block: Pick<Block, 'id' | 'pipelineId'>,
+    pipeline: StartPipeline | undefined = pipelineFor(block),
+  ): Promise<boolean> {
+    if (!board.isRunnable(block.id)) {
+      // A refusal decided in the browser, in translated copy: the `error` tone (`useActionToast`).
+      toast.error('board.task.blockedByDependenciesTitle', {
+        description: t('board.task.waitingOn', {
+          deps: board
+            .unmetDeps(block.id)
+            .map((d) => d.title)
+            .join(', '),
+        }),
+      })
+      return false
+    }
     if (!pipeline) {
       // A refusal decided in the browser, in translated copy: the `error` tone.
       toast.error('board.task.noPipelineTitle', { description: t('board.task.noPipelineBody') })

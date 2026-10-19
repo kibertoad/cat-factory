@@ -739,8 +739,11 @@ export type {
   RunnerPoolConnectionTestRequest,
 } from './runner-pool-provider.js'
 export type {
+  AccountRunnerPoolRecord,
+  AccountRunnerPoolRepository,
   RunnerPoolConnectionRecord,
   RunnerPoolConnectionRepository,
+  RunnerPoolSeeder,
 } from './runner-pool-repositories.js'
 export type {
   SubscriptionVendor,
