@@ -63,6 +63,11 @@ overrides:
   # `scripts/check-cloudflare-runtime-pins.mjs` re-derives it from the lockfile every CI run.
   # Move it with workerd, never on its own.
   '@cloudflare/workers-types': 5.20261012.1
+  # msw is held at the version the stories' committed `mockServiceWorker.js` is generated for
+  # (docs/internal/storybook.md). `@vitest/mocker` names msw as an optional peer, which
+  # `autoInstallPeers` fills from the newest major in every Vitest graph. Move it together with the
+  # worker script, never on its own.
+  msw: 2.15.0
   # NO `wrangler` override here, deliberately. The invariant is ONE wrangler (and through it one
   # workerd + one miniflare) across the stack, because the Worker suite runs inside the pool's
   # workerd and `wrangler deploy` ships wrangler's: two copies mean the runtime the tests prove is
