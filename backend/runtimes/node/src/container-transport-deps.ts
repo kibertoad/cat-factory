@@ -4,6 +4,7 @@ import {
   type RunnerBackendRegistry,
 } from '@cat-factory/integrations'
 import type {
+  AccountRunnerPoolRepository,
   AppCaches,
   Clock,
   DeployCloneTarget,
@@ -49,13 +50,16 @@ export interface NodeTransportDeployInput {
   idGenerator: IdGenerator
   clock: Clock
   runnerPoolConnectionRepository: DrizzleRunnerPoolConnectionRepository
+  accountRunnerPoolRepository: AccountRunnerPoolRepository
   runnerBackendRegistry: RunnerBackendRegistry
   appRegistry: GitHubAppRegistry | undefined
   resolveRepoTarget: ResolveRepoTarget
   workspaceRepository: WorkspaceRepository
   /** Facade overrides (`resolveTransport`, the deploy seams) threaded from `NodeContainerOptions`. */
   resolveTransportOverride?: ResolveRunnerTransport | null
-  runnerPoolProvider?: Parameters<typeof buildNodeResolveTransport>[5]
+  runnerPoolProvider?: NonNullable<
+    Parameters<typeof buildNodeResolveTransport>[5]
+  >['injectedPoolProvider']
   skipProvisioningLogWrap?: boolean
   mintInstallationToken?: DispatchTokenMintDependencies['mint']
   deployJobClientOverride?: DeployJobClient
@@ -82,6 +86,7 @@ export function buildNodeTransportDeploy(input: NodeTransportDeployInput) {
     idGenerator,
     clock,
     runnerPoolConnectionRepository,
+    accountRunnerPoolRepository,
     runnerBackendRegistry,
     appRegistry,
     resolveRepoTarget,
@@ -121,7 +126,13 @@ export function buildNodeTransportDeploy(input: NodeTransportDeployInput) {
           workspaceRepository,
           clock,
           runnerBackendRegistry,
-          runnerPoolProvider,
+          {
+            injectedPoolProvider: runnerPoolProvider,
+            accountRunnerPool: {
+              repository: accountRunnerPoolRepository,
+              workspaceSettingsRepository: repos.workspaceSettingsRepository,
+            },
+          },
         )
   const resolveTransport = skipProvisioningLogWrap
     ? baseResolveTransport

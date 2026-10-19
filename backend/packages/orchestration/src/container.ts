@@ -52,7 +52,11 @@ import type {} from '@cat-factory/kernel'
 
 import type {} from '@cat-factory/kernel'
 
-import type { EnvironmentHandlerSeeder, SharedStackSeeder } from '@cat-factory/kernel'
+import type {
+  EnvironmentHandlerSeeder,
+  RunnerPoolSeeder,
+  SharedStackSeeder,
+} from '@cat-factory/kernel'
 
 import type {} from '@cat-factory/kernel'
 import type {} from '@cat-factory/kernel'
@@ -628,6 +632,12 @@ export interface OptionalCoreModules {
   sharedStackSeeder?: SharedStackSeeder
   /** Present only when the self-hosted runner-pool integration is configured. */
   runners?: RunnersModule
+  /**
+   * The deployment-declared runner-pool seeder, present only when the runners module is wired. Read
+   * by the runtime to boot-backfill every existing workspace, and late-bound into `WorkspaceService`
+   * for the on-create hook. A no-op when no seed was declared.
+   */
+  runnerPoolSeeder?: RunnerPoolSeeder
   /** Present only when the provisioning event-log store is wired (see CoreDependencies). */
   provisioningLogs?: ProvisioningLogsModule
   /** Present only when the repo-bootstrap repositories are wired (see CoreDependencies). */
@@ -816,6 +826,9 @@ export function createCore(injected: CoreDependencies): Core {
       getSpendService: () => spendServiceRef,
       getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
       getSharedStackSeeder: () => sharedStackSeederRef,
+      // Built with the runners module (after the foundation), and read through the registry at call
+      // time, so no separate ref is needed.
+      getRunnerPoolSeeder: () => modules.get('runnerPoolSeeder'),
     })
   // All three registries are passed from the RESOLVED set, not spread in from `injected`: a facade
   // may leave any unset and `resolveCoreRuntime` supplies the default. That matters most for

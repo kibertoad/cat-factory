@@ -1,5 +1,44 @@
 # @cat-factory/storybook
 
+## 0.0.8
+
+### Patch Changes
+
+- @cat-factory/app@0.321.2
+
+## 0.0.7
+
+### Patch Changes
+
+- Updated dependencies [e318526]
+  - @cat-factory/app@0.321.1
+
+## 0.0.6
+
+### Patch Changes
+
+- Updated dependencies [162a89b]
+  - @cat-factory/app@0.321.0
+
+## 0.0.5
+
+### Patch Changes
+
+- 6a3500f: Pause the story lane's nightly and per-PR runs until #2442 restores them. It still runs on manual dispatch.
+- Updated dependencies [3438f7f]
+  - @cat-factory/app@0.320.1
+
+## 0.0.4
+
+### Patch Changes
+
+- 335b599: Cap the story lane at 3 workers, the count Vitest gives CI's 4-vCPU runner. Without a cap, Vitest
+  opened one Chromium page per core but one (at most 12), which held the whole CPU on a large machine.
+  Pass `--maxWorkers` to override it.
+- c794c57: Bump `@storybook-vue/nuxt` to `10.0.2`, which ships the Nuxt 4.6 app-context fix
+  (nuxt-modules/storybook#1139). The local pnpm patch now carries only the fix for the empty canvas
+  id under `@storybook/addon-vitest` (nuxt-modules/storybook#1140).
+
 ## 0.0.3
 
 ### Patch Changes

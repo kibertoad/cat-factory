@@ -2782,8 +2782,12 @@
         "githubConnect": "Connetti GitHub",
         "slackManage": "Gestisci le notifiche Slack",
         "slackConnect": "Connetti Slack",
-        "sourceManage": "Gestisci {source}",
-        "sourceConnect": "Connetti {source}",
+        "documentSourceManage": "Gestisci {source} (documenti)",
+        "documentSourceConnect": "Connetti {source} (documenti)",
+        "designSourceManage": "Gestisci {source} (design)",
+        "designSourceConnect": "Connetti {source} (design)",
+        "taskSourceManage": "Gestisci {source} (tracker)",
+        "taskSourceConnect": "Connetti {source} (tracker)",
         "documentImport": "Importa e genera da documenti",
         "taskImport": "Importa issue",
         "fragments": "Libreria dei frammenti di contesto",
@@ -3297,10 +3301,38 @@
       "stalled": "Esecuzione in stallo",
       "retryBootstrap": "Riprova il bootstrap",
       "retryRun": "Riprova l'esecuzione",
+      "startNewRun": "Avvia una nuova esecuzione",
       "environmentSetup": "Configura gli ambienti",
       "deployRunnerSetup": "Configura il runner pool",
       "environmentLocalHint": "Gli ambienti effimeri locali necessitano di un runtime di deploy per eseguire kubectl/kustomize/helm. Imposta {runtime} nel tuo .env: la modalità native esegue quegli strumenti sul tuo host ({native}), la modalità container li esegue nell'immagine di deploy ({container}).",
       "showDetail": "Mostra dettaglio",
+      "details": "Dettagli",
+      "detailsMessage": "Messaggio",
+      "detailsHint": "Note per l'operatore",
+      "detailsFull": "Output completo",
+      "cause": {
+        "preflight": "Un controllo prima dell'avvio è fallito, quindi non è stato fatto alcun lavoro. Apri Dettagli per vedere cosa correggere, poi riprova.",
+        "dispatch": "Il container dell'agente non si è avviato, quindi non è stato fatto alcun lavoro. Di solito è temporaneo.",
+        "environment": "Non è stato possibile creare l'ambiente di test. Controlla le impostazioni dell'ambiente, poi riprova.",
+        "evicted": "Il container si è fermato più volte durante l'esecuzione. Di solito succede mentre la piattaforma viene aggiornata, quindi riprova quando l'aggiornamento è finito.",
+        "harness_shutdown": "Qualcosa ha fermato il container durante questo passaggio. Trova la causa in Dettagli prima di riprovare, perché un nuovo tentativo può fermarsi di nuovo.",
+        "timeout": "L'esecuzione ha smesso di rispondere o ha superato il suo limite di tempo. Guarda in Dettagli quale dei due, poi riprova.",
+        "agent": "Un passaggio di un agente è fallito. Guarda la causa nel passaggio fallito, poi riprova.",
+        "job_failed": "Il container dell'agente ha segnalato un errore. Un nuovo tentativo avvia un nuovo container.",
+        "delegated_failed": "Il sistema esterno che ha eseguito questo passaggio ha segnalato un errore. Il link nel passaggio apre la sua esecuzione, che mostra la causa.",
+        "rejected": "Un passaggio è stato rifiutato, quindi l'esecuzione si è fermata. Un nuovo tentativo riparte da quel passaggio.",
+        "companion_rejected": "Un agente di supporto non ha dato un risultato utilizzabile. Un nuovo tentativo lo esegue di nuovo.",
+        "stalled": "La piattaforma ha perso il contatto con questa esecuzione. Un nuovo tentativo avvia una nuova esecuzione.",
+        "state_unreadable": "Lo stato salvato di questa esecuzione non è leggibile, quindi un nuovo tentativo legge lo stesso stato danneggiato. Avvia una nuova esecuzione.",
+        "cancelled": "Questa esecuzione è stata fermata. Un nuovo tentativo la avvia di nuovo.",
+        "unknown": "L'esecuzione è fallita per una causa sconosciuta. Guarda Dettagli, poi riprova.",
+        "deployRunnerUnwiredLocal": "Questo computer non ha un runtime di deploy per creare l'ambiente di test. Imposta {variable} nel tuo file .env, poi riprova.",
+        "singleJob": {
+          "evicted": "Il container si è fermato prima che il job fosse completato. Un nuovo tentativo avvia un nuovo container.",
+          "timeout": "Il job è rimasto senza attività troppo a lungo, o ha superato il suo limite di tempo. Un nuovo tentativo lo avvia di nuovo.",
+          "agent": "L'agente o il git push è fallito. Guarda la causa in Dettagli, poi riprova."
+        }
+      },
       "retrying": "Nuovo tentativo…",
       "history": {
         "previousErrors": "{count} errore precedente | {count} errori precedenti"
@@ -6527,6 +6559,7 @@
       "providersUnconfigured": {
         "title": "Nessun provider AI per questo modello",
         "body": "Nessun provider è configurato per {models}. Aggiungi una chiave provider, connetti un abbonamento o abilita Cloudflare AI per eseguirlo.",
+        "cause": "Nessun provider è configurato per un modello di questa pipeline. Aggiungi una chiave del provider, collega un abbonamento o abilita Cloudflare AI, poi riprova.",
         "action": "Configura AI"
       },
       "binaryStorageUnconfigured": {
@@ -8435,11 +8468,11 @@
           },
           "banner": {
             "title": "Cosa è andato storto",
-            "body": "La card sostituisce la barra di avanzamento con questo avviso. Nomina la causa, i dettagli contengono l’output grezzo, e alcune cause offrono un pulsante diretto all’impostazione che le risolve."
+            "body": "La scheda sostituisce la barra di avanzamento con questo banner. Indica cosa è fallito e offre un'azione. Apri l'attività per leggere la causa in una riga, con l'output completo in Dettagli."
           },
           "retry": {
-            "title": "Eseguirla di nuovo",
-            "body": "Riprova rilancia il lavoro. Gli errori precedenti restano sull’attività, sotto «Errori precedenti», così puoi confrontare i tentativi invece di perdere la traccia."
+            "title": "Il passo successivo",
+            "body": "Questo pulsante è il passo successivo. Di solito è Riprova, che esegue di nuovo il lavoro. Quando un'impostazione causa l'errore, apre quell'impostazione. Gli errori precedenti restano sull'attività, in Errori precedenti, così puoi confrontare i tentativi."
           },
           "finish": {
             "title": "Un errore è informazione",

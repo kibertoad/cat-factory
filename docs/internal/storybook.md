@@ -14,8 +14,8 @@ Stories cover what a component draws for a given state. Whether the backend agre
 UI shows is the e2e suite's job ([`backend/internal/e2e/README.md`](../../backend/internal/e2e/README.md)):
 a story fakes the data, and a fake cannot prove the two sides agree.
 
-The work that adds stories domain by domain is tracked in
-[`docs/initiatives/component-stories.md`](../initiatives/component-stories.md).
+The design record for the stories is
+[ADR 0068](../../backend/docs/adr/0068-component-stories.md).
 
 ## The patch
 
@@ -263,7 +263,11 @@ every later story in the session.
 | The stories typecheck                                                                   | the app's `typecheck`, every PR |
 | `fixtures.spec.ts`                                                                      | the app's unit tests, every PR  |
 | `node scripts/check-story-titles.mjs` (titles, one file per component, `Default` first) | CI's guard steps, every PR      |
-| `test:stories`: every story renders in headless Chromium, with an axe check             | nightly, and on request         |
+| `test:stories`: every story renders in headless Chromium, with an axe check             | paused: on request only         |
+
+The nightly and per-PR runs of `test:stories` are paused until
+[#2442](https://github.com/kibertoad/cat-factory/issues/2442). Run the lane by hand with the
+workflow's manual dispatch.
 
 `test:stories` takes about 10 minutes for the whole tree, so no PR waits on it.
 `--browser.isolate=false` cut that to about 2 minutes, and was rejected: with the files shuffled,
