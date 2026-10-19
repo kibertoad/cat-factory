@@ -1,5 +1,20 @@
 # @cat-factory/storybook
 
+## 0.0.11
+
+### Patch Changes
+
+- bc3ff19: Fix the component story lane failing random files in CI. A `Loading` story's response now answers at
+  once with a body that never ends, instead of never returning, so msw's service worker no longer
+  holds an event open until Chromium stops it and fails every request it was passing on. The stories
+  go back to msw 2.15, whose worker does not hold events open either (mswjs/msw#2801).
+- bc3ff19: Component story plays wait for the story's API requests before they look for the state their story
+  renders, instead of giving up after one second. The first story of each stories file no longer pays
+  for the frame's first Nuxt boot inside its test timeout: the test lane runs an empty story first,
+  and the app's pages are empty in Storybook.
+- Updated dependencies [bc3ff19]
+  - @cat-factory/app@0.321.4
+
 ## 0.0.10
 
 ### Patch Changes
