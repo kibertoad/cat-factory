@@ -63,6 +63,7 @@ import {
   startServiceCatalogSweeper,
 } from './foundationalServices.js'
 import { startPlatformHealthSweeper } from './platformHealth.js'
+import { startDirectoryWebhookSweeper } from './directoryWebhooks.js'
 import { startInfraReachabilitySweeper } from './infraReachability.js'
 import { startSpendAlertSweeper } from './spendAlerts.js'
 import { buildRealtimePropagator } from './propagator.js'
@@ -482,6 +483,11 @@ export interface StartOptions {
    */
   seedSharedStacks?: NodeContainerOptions['seedSharedStacks']
   /**
+   * A deployment's DECLARED runner pools, `(account) => seed | undefined`, threaded and backfilled
+   * over every account at boot. An account that already has a pool keeps it. Omitted ⇒ no seeding.
+   */
+  seedAccountRunnerPool?: NodeContainerOptions['seedAccountRunnerPool']
+  /**
    * Optional last-mile transform over the {@link ConfigProblem} list before the misconfiguration
    * fallback is served, letting a sibling facade layer a facade-specific remedy onto the shared
    * problems. Local mode passes one that advertises its `.env`-generating CLI (which the hosted
@@ -631,6 +637,7 @@ function startBackgroundSweepers(deps: {
       // The account audit log, in its own `audit` schema: audit retention is measured in years
       // and gets its own knob, so it can never be shortened by tuning something else.
       auditEventRepository: repos.auditEventRepository,
+      directoryRepository: repos.directoryRepository,
       // The durable cost-attribution rollup: this sweep is its only writer, and prunes it
       // nowhere (see `RetentionRepos`).
       spendRollupRepository: repos.spendRollupRepository,
@@ -727,6 +734,9 @@ function startBackgroundSweepers(deps: {
   // while there is still time to act (the Worker uses cron). No opt-in flag: a configured budget
   // is the opt-in, and the sweep no-ops when notifications are unwired.
   const stopSpendAlerts = startSpendAlertSweeper(container, clock, logger, sweepHealth)
+  // Push the directory change feed to registered webhook endpoints (the Worker uses cron). No-op
+  // without an `ENCRYPTION_KEY` to seal endpoint secrets.
+  const stopDirectoryWebhooks = startDirectoryWebhookSweeper(container, logger, sweepHealth)
   // Refresh repo-linked foundational-service sources so a merged contract change reaches the
   // catalog without anyone opening the management surface (the Worker uses cron). No-op unless
   // the catalog + GitHub are both wired.
@@ -765,41 +775,23 @@ function startBackgroundSweepers(deps: {
     stopPlatformHealth,
     stopInfraReachability,
     stopSpendAlerts,
+    stopDirectoryWebhooks,
     stopFoundationalSources,
     stopServiceCatalog,
   }
 }
 
-/**
- * Boot backfill for a deployment's DECLARED SEEDS — the environment handlers that provision an
- * environment, and the shared stacks its previews attach to: idempotently ensure each exists for
- * EVERY existing workspace, so a deployment that ships them doesn't need a per-workspace manual SPA
- * step (new workspaces are covered by `WorkspaceService.create`). A no-op for a seeder that isn't
- * wired, or whose seed list is empty (the seeder itself is then a no-op). BEST-EFFORT: a
- * per-workspace failure is logged and skipped, and a total failure (e.g. the workspace enumeration
- * itself) is caught — a seed failure must never crash boot. Shared by the Node boot (after listen)
- * and the local mothership boot (which doesn't run `bootServer`).
- *
- * The workspace list is enumerated ONCE and both seeders run over it, so adding a seeded primitive
- * costs no extra pass. Enumerates via `workspaceService.list(null)` — a null `WorkspaceVisibility`
- * returns ALL boards (the auth-disabled path) — which is exactly the boot-time "every workspace"
- * set. (The container exposes `workspaceService`, not a bare `workspaceRepository`; `list`
- * delegates to `listVisible(null)`.)
- */
-export async function backfillDeclaredSeeds(
-  container: Pick<
-    ServerContainer,
-    'environmentHandlerSeeder' | 'sharedStackSeeder' | 'workspaceService'
-  >,
+/** The workspace-keyed pass of {@link backfillDeclaredSeeds}: one enumeration, every seeder over it. */
+async function backfillWorkspaceSeeds(
+  workspaceService: Pick<ServerContainer['workspaceService'], 'list'>,
+  seeders: Array<{
+    label: string
+    seeder: { ensureForWorkspace(workspaceId: string): Promise<void> } | undefined
+  }>,
   log: Logger,
 ): Promise<void> {
-  const seeders = [
-    { label: 'environment-handler', seeder: container.environmentHandlerSeeder },
-    { label: 'shared-stack', seeder: container.sharedStackSeeder },
-  ].filter((entry) => entry.seeder !== undefined)
-  if (seeders.length === 0) return
   try {
-    const workspaces = await container.workspaceService.list(null)
+    const workspaces = await workspaceService.list(null)
     for (const ws of workspaces) {
       for (const { label, seeder } of seeders) {
         try {
@@ -817,6 +809,38 @@ export async function backfillDeclaredSeeds(
       err: getErrorMessage(err),
     })
   }
+}
+
+/**
+ * Boot backfill for a deployment's DECLARED SEEDS, in two passes by the scope each is keyed at.
+ *
+ * Per WORKSPACE: the environment handlers that provision an environment, and the shared stacks its
+ * previews attach to. Each is ensured idempotently for EVERY existing workspace, enumerated ONCE
+ * through `workspaceService.list(null)` (a null `WorkspaceVisibility` returns ALL boards, the
+ * auth-disabled path), so adding a workspace-keyed seed costs no extra pass.
+ *
+ * Per ACCOUNT: the runner pool, which boards inherit from their account, so it is ensured over
+ * every account that has none, on batch reads (`ensureForAllAccounts`), never per board.
+ *
+ * New workspaces are covered by `WorkspaceService.create`. A seeder that isn't wired is skipped.
+ * BEST-EFFORT: a per-workspace failure is logged and skipped, and a total failure (e.g. the
+ * enumeration itself) is caught, because a seed failure must never crash boot (the runner-pool
+ * seeder reports its own failures, a bad seed at `error`). Shared by the Node boot (after listen).
+ * The local mothership boot does not run `bootServer` and does not seed a runner pool.
+ */
+export async function backfillDeclaredSeeds(
+  container: Pick<
+    ServerContainer,
+    'environmentHandlerSeeder' | 'sharedStackSeeder' | 'runnerPoolSeeder' | 'workspaceService'
+  >,
+  log: Logger,
+): Promise<void> {
+  const seeders = [
+    { label: 'environment-handler', seeder: container.environmentHandlerSeeder },
+    { label: 'shared-stack', seeder: container.sharedStackSeeder },
+  ].filter((entry) => entry.seeder !== undefined)
+  if (seeders.length > 0) await backfillWorkspaceSeeds(container.workspaceService, seeders, log)
+  await container.runnerPoolSeeder?.ensureForAllAccounts()
 }
 
 /**
@@ -903,6 +927,8 @@ async function bootServer(
     seedEnvironmentHandlers: options.seedEnvironmentHandlers,
     // …and its declared shared stacks, forwarded the same way and backfilled by the same call.
     seedSharedStacks: options.seedSharedStacks,
+    // …and its declared runner pools, keyed by account and backfilled over accounts.
+    seedAccountRunnerPool: options.seedAccountRunnerPool,
   })
   bootClock.mark('container')
   // Install the OTLP log export as soon as config is resolved (a no-op unless `OTEL_LOGS=true`

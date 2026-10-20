@@ -370,9 +370,12 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
       </span>
     </template>
 
-    <div class="flex min-h-0 flex-1">
+    <!-- Below `lg` the body is ONE scroller: the report, then the metadata section under it.
+         Giving each half its own scroller lets the tall, unshrinkable metadata take the whole
+         body on a phone and squeeze the report to zero height. -->
+    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
       <!-- Main: infrastructure observability + scenarios → outcomes → concerns tree -->
-      <div class="min-w-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+      <div class="min-w-0 flex-1 space-y-4 px-5 py-4 lg:min-h-0 lg:overflow-y-auto">
         <!-- Infrastructure: container lifecycle (where + what it's doing), the
                  ephemeral environment, and the run's infra attempts + logs — parity with
                  the Coder's step detail. Shown even before a report lands, so the infra
@@ -438,6 +441,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
             </p>
             <template v-if="infraSetup.logs">
               <UButton
+                color="neutral"
                 :icon="showInfraSetupLogs ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
                 variant="ghost"
                 size="xs"
@@ -476,6 +480,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
 
           <div v-if="executionId">
             <UButton
+              color="neutral"
               :icon="showProvisioning ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
               variant="ghost"
               size="xs"
@@ -787,15 +792,12 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                       class="h-full w-full object-cover object-top"
                     />
                     <span
-                      v-else
+                      v-else-if="blobs.statusFor(s.artifactId) === 'error'"
                       class="flex h-full w-full items-center justify-center text-3xs text-app-600"
                     >
-                      {{
-                        blobs.statusFor(s.artifactId) === 'error'
-                          ? t('testing.shot.failed')
-                          : t('testing.shot.loading')
-                      }}
+                      {{ t('testing.shot.failed') }}
                     </span>
+                    <USkeleton v-else class="h-full w-full rounded-none" />
                     <span
                       class="absolute inset-x-0 bottom-0 truncate bg-app-950/80 px-1 py-0.5 text-3xs text-toned"
                       >{{ s.view }}</span
@@ -828,15 +830,12 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   class="h-full w-full object-cover object-top"
                 />
                 <span
-                  v-else
+                  v-else-if="blobs.statusFor(s.artifactId) === 'error'"
                   class="flex h-full w-full items-center justify-center text-2xs text-app-600"
                 >
-                  {{
-                    blobs.statusFor(s.artifactId) === 'error'
-                      ? t('testing.shot.failedToLoad')
-                      : t('testing.shot.loading')
-                  }}
+                  {{ t('testing.shot.failedToLoad') }}
                 </span>
+                <USkeleton v-else class="h-full w-full rounded-none" />
                 <span
                   class="absolute inset-x-0 bottom-0 truncate bg-app-950/80 px-1.5 py-0.5 text-3xs text-toned"
                   >{{ s.view }}</span
@@ -847,9 +846,11 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
         </template>
       </div>
 
-      <!-- Sidebar: metadata -->
+      <!-- Sidebar: metadata. A right-hand column on wide screens, a full-width section below
+           the report on mobile (outcome counts / environment / run metadata are not redundant
+           with the header verdict badge, so they reflow rather than hide). -->
       <aside
-        class="hidden w-60 shrink-0 flex-col gap-4 border-s border-default bg-default/50 px-4 py-4 lg:flex"
+        class="flex w-full shrink-0 flex-col gap-4 border-t border-default bg-default/50 px-4 py-4 lg:w-60 lg:overflow-y-auto lg:border-s lg:border-t-0"
       >
         <div v-if="report">
           <SectionLabel as="h4" class="mb-2">

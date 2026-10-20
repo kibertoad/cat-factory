@@ -10,6 +10,7 @@ import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import TaskAprioriBranches from '~/components/panels/inspector/TaskAprioriBranches.vue'
 import DocReferenceRepos from '~/components/panels/inspector/DocReferenceRepos.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -305,13 +306,7 @@ const technicalLabel = computed(() => {
         </PipelinePicker>
       </div>
       <div v-if="selectedPipeline" class="flex items-center gap-1">
-        <UBadge
-          color="primary"
-          variant="subtle"
-          size="sm"
-          class="cursor-pointer"
-          @click="setPipeline('')"
-        >
+        <UBadge variant="subtle" size="sm" class="cursor-pointer" @click="setPipeline('')">
           {{ selectedPipeline.name }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
         </UBadge>
       </div>
@@ -509,9 +504,12 @@ const technicalLabel = computed(() => {
           @update:model-value="(v: boolean | 'indeterminate') => toggleInvolved(s.id, v === true)"
         />
       </div>
-      <div v-else class="text-2xs text-dimmed">
-        {{ t('inspector.runSettings.involvedServicesEmpty') }}
-      </div>
+      <EmptyState
+        v-else
+        compact
+        icon="i-lucide-plug"
+        :title="t('inspector.runSettings.involvedServicesEmpty')"
+      />
       <div v-if="staleInvolvedServices.length" class="mt-1 flex flex-wrap gap-1">
         <UBadge
           v-for="id in staleInvolvedServices"
@@ -615,13 +613,7 @@ const technicalLabel = computed(() => {
         </UDropdownMenu>
       </div>
       <div v-if="responsibleLabel" class="flex items-center gap-1">
-        <UBadge
-          color="primary"
-          variant="subtle"
-          size="sm"
-          class="cursor-pointer"
-          @click="setResponsible('')"
-        >
+        <UBadge variant="subtle" size="sm" class="cursor-pointer" @click="setResponsible('')">
           {{ responsibleLabel }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
         </UBadge>
       </div>

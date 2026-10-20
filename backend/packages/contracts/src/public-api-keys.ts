@@ -11,16 +11,22 @@ import * as v from 'valibot'
 // ENCRYPTION_KEY)`) — irrecoverable, DB-leak-resistant. The raw key is returned
 // exactly once, on create; thereafter only metadata is exposed.
 //
-// A key is scoped to one account + workspace: every `/api/v1` call it makes is
-// bound to that workspace.
+// A key belongs to one account and may be limited to a subset of its workspaces. Each
+// workspace-scoped `/api/v1` call acts on one workspace, named by the
+// `x-cat-factory-workspace` header or implied when the key reaches exactly one.
 // ---------------------------------------------------------------------------
 
 /**
  * The permission a key carries on the `/api/v1` surface. An ordered ladder — each level
- * INCLUDES the ones below it (`admin` ⊃ `write` ⊃ `read`), so an endpoint gates on a MINIMUM:
+ * INCLUDES the ones below it (`admin` ⊃ `decide` ⊃ `write` ⊃ `webhooks` ⊃ `read`), so an endpoint
+ * gates on a MINIMUM:
  *
  *  - `read`   — read-only reads/streams (list services/tasks/pipelines, poll a run, SSE).
- *  - `write`  — everything `read` can do, PLUS non-destructive mutations (create/start/stop/
+ *  - `webhooks`: everything `read` can do, PLUS registering and removing the push endpoints that
+ *    deliver what `read` could already poll: the account's directory webhooks (for a key reaching
+ *    every workspace) and a workspace's notification webhooks. It changes nothing on the board, so
+ *    a sync integration that only follows changes needs no rung that can author or delete work.
+ *  - `write`: everything `webhooks` can do, PLUS non-destructive mutations (create/start/stop/
  *    retry/edit a task, start an initiative run).
  *  - `decide` — everything `write` can do, PLUS answering a run's PARKED human decisions
  *    (requirement-review findings, implementation-fork choices) — and, because of that,
@@ -45,7 +51,7 @@ import * as v from 'valibot'
  * validation and the server-side `scope ≥ required` check read from one source of truth —
  * the ARRAY ORDER *is* the ladder, and `scopeSatisfies` derives its ranks from it.
  */
-export const PUBLIC_API_SCOPES = ['read', 'write', 'decide', 'admin'] as const
+export const PUBLIC_API_SCOPES = ['read', 'webhooks', 'write', 'decide', 'admin'] as const
 export const publicApiScopeSchema = v.picklist(PUBLIC_API_SCOPES)
 export type PublicApiScope = v.InferOutput<typeof publicApiScopeSchema>
 
@@ -114,14 +120,68 @@ export const publicApiExternalIdentitySchema = v.pipe(
 )
 export type PublicApiExternalIdentity = v.InferOutput<typeof publicApiExternalIdentitySchema>
 
+/** The request header naming the workspace a workspace-scoped `/api/v1` call acts on. */
+export const PUBLIC_API_WORKSPACE_HEADER = 'x-cat-factory-workspace'
+
+/**
+ * `details.reason` values for a request whose workspace cannot be resolved. `workspace_required`
+ * (422): the key reaches several workspaces and the request named none. `workspace_not_found`
+ * (404): the named workspace does not exist or is outside the key's reach; the two are not told
+ * apart, so a key cannot probe for workspaces it was not granted.
+ */
+export const PUBLIC_API_WORKSPACE_REFUSAL_REASONS = [
+  'workspace_required',
+  'workspace_not_found',
+] as const
+export type PublicApiWorkspaceRefusalReason = (typeof PUBLIC_API_WORKSPACE_REFUSAL_REASONS)[number]
+
+/**
+ * `details.reason` on the 403 refusing a key operation that would reach further than the caller
+ * may: minting a key for workspaces the minting key cannot act on, or revoking one that reaches
+ * them.
+ */
+export const PUBLIC_API_KEY_REACH_EXCEEDED_REASON = 'workspace_reach_exceeded'
+
+/** Upper bound on an explicit workspace list, so a grant stays one bounded write. */
+export const MAX_PUBLIC_API_KEY_WORKSPACES = 50
+
+/**
+ * The workspaces a key may act on: a non-empty list of workspace ids in the key's account, or
+ * `null` for every workspace in the account, including ones created later.
+ */
+export const publicApiKeyWorkspaceIdsSchema = v.nullable(
+  v.pipe(
+    v.array(v.pipe(v.string(), v.minLength(1))),
+    v.minLength(1),
+    v.maxLength(MAX_PUBLIC_API_KEY_WORKSPACES),
+  ),
+)
+export type PublicApiKeyWorkspaceIds = v.InferOutput<typeof publicApiKeyWorkspaceIdsSchema>
+
 /** One public-API key as exposed to clients — metadata only, never the secret. */
 export const publicApiKeySchema = v.object({
   /** `pak_*` — also the non-secret lookup id embedded in the raw key. */
   id: v.string(),
   accountId: v.string(),
+  /**
+   * The workspace the listing or mint was made for. A listed key always reaches it; a minted key
+   * whose `workspaceIds` leaves it out does not. Kept for clients built before keys could span
+   * workspaces; `workspaceIds` is the key's actual reach.
+   */
   workspaceId: v.string(),
+  /**
+   * Every workspace the key may act on, or `null` for all of the account's workspaces. Empty for
+   * a key that {@link publicApiKeySchema.entries.followsMemberships}: its reach is not a list.
+   */
+  workspaceIds: v.nullable(v.array(v.string())),
+  /**
+   * Whether the key reaches whatever its bound person (`actsAsUserId`) can act in, decided on
+   * each call rather than stored: joining a workspace grants it, leaving takes it away. `GET
+   * /api/v1/me` and `GET /api/v1/directory/reach` answer the workspaces that is right now.
+   */
+  followsMemberships: v.boolean(),
   label: v.string(),
-  /** What the key is allowed to do on `/api/v1` (read ⊂ write ⊂ admin). */
+  /** What the key is allowed to do on `/api/v1` (read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin). */
   scope: publicApiScopeSchema,
   /** The user who minted the key (`usr_*`), for audit/UI attribution; `null` when unknown. */
   createdByUserId: v.nullable(v.string()),
@@ -190,6 +250,18 @@ export const createPublicApiKeySchema = v.object({
    * like a system one at the moment a run needed the credential.
    */
   actsAsSelf: v.optional(v.boolean(), false),
+  /**
+   * The workspaces the key may act on; omitted means the workspace the key is minted from.
+   * Anything wider than that workspace requires an account admin.
+   */
+  workspaceIds: v.optional(publicApiKeyWorkspaceIdsSchema),
+  /**
+   * Reach every workspace the minting person can act in, on each call, instead of a list: the key
+   * for a person who works across several workspaces, which needs no re-mint when they join or
+   * leave one. Only with `actsAsSelf`, and never with `workspaceIds`. It needs no account admin,
+   * because it can never reach past what that person can already do in the app.
+   */
+  followsMemberships: v.optional(v.boolean(), false),
 })
 export type CreatePublicApiKeyInput = v.InferOutput<typeof createPublicApiKeySchema>
 
@@ -253,6 +325,12 @@ export const createHeadlessPublicApiKeySchema = v.object({
   label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
   scope: v.optional(v.picklist([...HEADLESS_MINTABLE_SCOPES])),
   externalIdentity: v.optional(publicApiExternalIdentitySchema),
+  /**
+   * The workspaces the minted key may act on; omitted means the workspace this request acts on.
+   * It never reaches further than the minting key: a list must be a subset of the minter's
+   * workspaces, and `null` (every workspace) needs a minter that is itself unrestricted.
+   */
+  workspaceIds: v.optional(publicApiKeyWorkspaceIdsSchema),
 })
 export type CreateHeadlessPublicApiKeyInput = v.InferOutput<typeof createHeadlessPublicApiKeySchema>
 

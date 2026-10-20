@@ -21,6 +21,7 @@ import {
 } from './TutorialOverlay.logic'
 import type { TutorialAdvanceCause, TutorialDirection } from './TutorialOverlay.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 // The one shared tour runtime: resolves the running tour from the `tutorialTours` slot,
 // anchors a highlight ring + tooltip to the current step's `data-testid`, and advances
@@ -593,7 +594,7 @@ onUnmounted(() => {
           class="mt-2 flex items-center gap-1.5 text-xs text-muted"
           data-testid="tutorial-searching"
         >
-          <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 motion-safe:animate-spin" />
+          <Spinner class="h-3.5 w-3.5" />
           {{ t('tutorial.overlay.searching') }}
         </p>
         <p
@@ -636,7 +637,6 @@ onUnmounted(() => {
           <p class="mt-0.5 text-xs text-muted">{{ t(nextTour.descriptionKey) }}</p>
           <UButton
             size="xs"
-            color="primary"
             variant="soft"
             class="mt-2"
             data-testid="tutorial-next-tour-start"
@@ -671,7 +671,6 @@ onUnmounted(() => {
             <UButton
               v-if="step.advanceOn !== 'target-click' || isLast"
               size="xs"
-              color="primary"
               data-testid="tutorial-next"
               @click="advance('nav-control')"
             >

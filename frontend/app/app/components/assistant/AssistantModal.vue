@@ -23,6 +23,8 @@
 import type { AssistantActionId, AssistantOutcome } from '~/types/domain'
 import { answerFor, assistantSurface, revealTarget, submitGate } from './AssistantModal.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -152,7 +154,7 @@ function reveal(blockId: string): void {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('assistant.title')" :ui="{ content: 'max-w-2xl' }">
+  <AppModal size="form" v-model:open="open" :title="t('assistant.title')">
     <template #body>
       <div class="space-y-4">
         <p class="text-sm text-muted">{{ t('assistant.intro') }}</p>
@@ -220,7 +222,6 @@ function reveal(blockId: string): void {
 
           <div class="flex flex-wrap items-center gap-2">
             <UButton
-              color="primary"
               icon="i-lucide-sparkles"
               :loading="assistant.running"
               :disabled="gate.state !== 'ready'"
@@ -244,11 +245,7 @@ function reveal(blockId: string): void {
               :class="submitReason ? 'text-app-warning-400' : 'text-dimmed'"
               data-testid="assistant-submit-status"
             >
-              <UIcon
-                v-if="gate.state === 'checking'"
-                name="i-lucide-loader-circle"
-                class="h-3 w-3 shrink-0 animate-spin"
-              />
+              <Spinner v-if="gate.state === 'checking'" class="h-3 w-3 shrink-0" />
               {{ submitReason ?? t('assistant.submitHint') }}
             </span>
           </div>
@@ -365,5 +362,5 @@ function reveal(blockId: string): void {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

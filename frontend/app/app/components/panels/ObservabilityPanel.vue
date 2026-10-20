@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { onKeyStroke } from '@vueuse/core'
 import type { TableColumn } from '@nuxt/ui'
 import { isLlmWarningFinishReason } from '@cat-factory/contracts'
 import type {
@@ -32,6 +31,8 @@ import RunFailureSummary from '~/components/observability/RunFailureSummary.vue'
 import ToolCallList from '~/components/observability/ToolCallList.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 /** No run selected: the same empty, NOT-truncated trajectory the store answers with. */
 const EMPTY_TRAJECTORY: RunToolCallTrajectory = Object.freeze({
@@ -524,9 +525,6 @@ function headroomOf(m: LlmCallMetric): number | null {
 function close() {
   ui.closeObservability()
 }
-onKeyStroke('Escape', () => {
-  if (open.value) close()
-})
 function exportJson() {
   if (executionId.value) void observability.downloadExport(executionId.value)
 }
@@ -535,19 +533,20 @@ function exportJson() {
 <template>
   <Teleport to="body">
     <Transition name="obs-fade">
-      <div
+      <TakeoverShell
         v-if="open"
-        class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
-        role="dialog"
-        aria-modal="true"
+        :label="t('observability.modelActivity')"
+        class="flex-col bg-app-950/96 backdrop-blur-sm"
+        data-testid="observability-panel"
+        @close="close"
       >
-        <header class="flex items-center gap-3 border-b border-default px-6 py-4">
+        <header class="flex flex-wrap items-center gap-3 border-b border-default px-6 py-4">
           <div
             class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-app-info-500/15"
           >
             <UIcon name="i-lucide-activity" class="h-5 w-5 text-app-info-400" />
           </div>
-          <div class="min-w-0">
+          <div class="min-w-0 flex-1">
             <h1 class="truncate text-base font-semibold text-highlighted">
               {{ t('observability.modelActivity') }}
             </h1>
@@ -555,7 +554,11 @@ function exportJson() {
               {{ block.title }} · {{ runSubtitle }}
             </p>
           </div>
-          <div class="ms-auto flex items-center gap-1.5">
+          <!-- Below lg the controls take their own row, so the close button stays on screen.
+               The row scrolls sideways when the tabs are wider than the phone. -->
+          <div
+            class="order-last flex w-full min-w-0 items-center gap-1.5 overflow-x-auto lg:order-none lg:w-auto"
+          >
             <!-- Four VIEWS of the same run, which is what tabs mean. The trajectory is loaded
                  lazily the first time the tools view is opened, so the change is watched rather
                  than bound straight to `view`. -->
@@ -580,15 +583,16 @@ function exportJson() {
             >
               {{ t('observability.exportJson') }}
             </UButton>
-            <IconButton
-              icon="i-lucide-x"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :label="t('observability.closeEsc')"
-              @click="close"
-            />
           </div>
+          <IconButton
+            class="lg:-ms-1.5"
+            icon="i-lucide-x"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            :label="t('observability.closeEsc')"
+            @click="close"
+          />
         </header>
 
         <div class="flex-1 overflow-auto px-6 py-6">
@@ -837,13 +841,9 @@ function exportJson() {
             </section>
 
             <!-- states -->
-            <p
-              v-if="loading && !calls.length"
-              class="flex items-center gap-2 py-8 text-center text-sm text-dimmed justify-center"
-            >
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-              {{ t('observability.loadingActivity') }}
-            </p>
+            <div v-if="loading && !calls.length" class="space-y-2">
+              <USkeleton v-for="n in 3" :key="n" class="h-10 w-full rounded-xl" />
+            </div>
             <div
               v-else-if="error"
               class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-app-error-900/60 py-6 text-center text-sm text-app-error-400"
@@ -860,12 +860,11 @@ function exportJson() {
                 {{ t('common.retry') }}
               </UButton>
             </div>
-            <p
+            <EmptyState
               v-else-if="!calls.length"
-              class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
-            >
-              {{ t('observability.noCalls') }}
-            </p>
+              icon="i-lucide-activity"
+              :title="t('observability.noCalls')"
+            />
 
             <!-- per-call list, narrowable by outcome -->
             <template v-else>
@@ -879,12 +878,11 @@ function exportJson() {
               <!-- Narrowed to nothing reads differently from recorded nothing, and on this
                    surface it is the good news: the operator asked for the failures and there
                    are none. -->
-              <p
+              <EmptyState
                 v-if="!visibleCalls.length"
-                class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
-              >
-                {{ t('observability.noCallsMatching') }}
-              </p>
+                icon="i-lucide-list-filter"
+                :title="t('observability.noCallsMatching')"
+              />
 
               <ul v-else class="space-y-2">
                 <li
@@ -1085,13 +1083,9 @@ function exportJson() {
 
           <!-- Provided context: the complete context each container agent was given. -->
           <div v-else-if="view === 'context'" class="mx-auto max-w-4xl space-y-5">
-            <p
-              v-if="contextLoading && !contextSnapshots.length"
-              class="flex items-center justify-center gap-2 py-8 text-center text-sm text-dimmed"
-            >
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-              {{ t('observability.loadingContext') }}
-            </p>
+            <div v-if="contextLoading && !contextSnapshots.length" class="space-y-2">
+              <USkeleton v-for="n in 3" :key="n" class="h-10 w-full rounded-xl" />
+            </div>
             <div
               v-else-if="contextError && !contextSnapshots.length"
               class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-app-error-900/60 py-8 text-center text-sm text-app-error-400"
@@ -1108,12 +1102,11 @@ function exportJson() {
                 {{ t('common.retry') }}
               </UButton>
             </div>
-            <p
+            <EmptyState
               v-else-if="!contextSnapshots.length"
-              class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
-            >
-              {{ t('observability.noContext') }}
-            </p>
+              icon="i-lucide-file-text"
+              :title="t('observability.noContext')"
+            />
 
             <ul v-else class="space-y-2">
               <li
@@ -1244,19 +1237,14 @@ function exportJson() {
               </span>
             </section>
 
-            <p
-              v-if="searchLoading && !searchQueries.length"
-              class="flex items-center justify-center gap-2 py-8 text-center text-sm text-dimmed"
-            >
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-              {{ t('observability.loadingSearch') }}
-            </p>
-            <p
+            <div v-if="searchLoading && !searchQueries.length" class="space-y-2">
+              <USkeleton v-for="n in 3" :key="n" class="h-10 w-full rounded-xl" />
+            </div>
+            <EmptyState
               v-else-if="!searchQueries.length"
-              class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
-            >
-              {{ t('observability.noSearch') }}
-            </p>
+              icon="i-lucide-search"
+              :title="t('observability.noSearch')"
+            />
 
             <div v-else>
               <SectionLabel class="mb-2">
@@ -1295,7 +1283,7 @@ function exportJson() {
             </div>
           </div>
         </div>
-      </div>
+      </TakeoverShell>
     </Transition>
   </Teleport>
 </template>

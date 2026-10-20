@@ -11,7 +11,6 @@
 // preference. The list view shows each preset; the editor view creates/edits one with a
 // base-model picker plus a filterable per-agent override list.
 import { computed, ref, watch } from 'vue'
-import { onKeyStroke } from '@vueuse/core'
 import type { ModelFlavor } from '@cat-factory/contracts'
 import type { AgentKind } from '~/types/domain'
 import type { ModelPreset } from '~/types/model-presets'
@@ -24,6 +23,8 @@ import ProviderPreferenceEditor from '~/components/settings/ProviderPreferenceEd
 import { showOverrideField } from '~/utils/uiMode'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -35,7 +36,7 @@ const agentTier = useAgentTierStore()
 const creds = useVendorCredentialsStore()
 const workspace = useWorkspaceStore()
 const { present } = usePipelineErrorToast()
-const toast = useToast()
+const actionToast = useActionToast()
 const { confirm } = useConfirm()
 
 const open = computed({
@@ -92,25 +93,36 @@ const hiddenByTier = computed(() =>
   filter.value.trim() ? 0 : configurableKinds.value.length - tieredKinds.value.length,
 )
 
+// Set when the catalog read rejects, so the preset list states the failure instead of holding a
+// skeleton that never resolves (`models.loaded` stays false after a failed read).
+const catalogFailed = ref(false)
+
+function loadCatalog() {
+  catalogFailed.value = false
+  models.ensureLoaded(workspace.workspaceId ?? undefined).catch((error) => {
+    catalogFailed.value = true
+    present(error, 'settings.modelConfiguration.toast.catalogFailed')
+  })
+}
+
 watch(
   open,
   (isOpen) => {
     if (isOpen) {
       editor.value = null
       filter.value = ''
-      void models.ensureLoaded(workspace.workspaceId ?? undefined)
+      loadCatalog()
       if (workspace.workspaceId) void creds.load(workspace.workspaceId)
     }
   },
   { immediate: true },
 )
 
-onKeyStroke('Escape', () => {
-  if (!open.value) return
-  // Esc backs out of the editor first, then closes the panel.
+// Esc backs out of the editor first, then closes the panel.
+function backOut() {
   if (editor.value) editor.value = null
   else open.value = false
-})
+}
 
 /** The selectable catalog models, as `{ id, label, suffix }` for a dropdown. */
 const selectableModels = computed(() => {
@@ -257,11 +269,8 @@ async function save() {
     // NOT through `present`: that funnel classifies a BACKEND failure, and a synthesized local
     // `Error` carries no envelope and no status, so it lands on the network-fault description and
     // tells the user the server could not be reached about a check that never left the browser.
-    toast.add({
-      title: t('settings.modelConfiguration.toast.nameRequiredTitle'),
+    actionToast.error('settings.modelConfiguration.toast.nameRequiredTitle', {
       description: t('settings.modelConfiguration.toast.nameRequiredBody'),
-      color: 'warning',
-      icon: 'i-lucide-triangle-alert',
     })
     return
   }
@@ -298,11 +307,13 @@ async function save() {
 <template>
   <Teleport to="body">
     <Transition name="reader-fade">
-      <div
+      <TakeoverShell
         v-if="open"
-        class="fixed inset-0 z-50 flex max-h-[100dvh] flex-col bg-app-950/96 backdrop-blur-sm"
-        role="dialog"
-        aria-modal="true"
+        :label="t('settings.modelConfiguration.title')"
+        :content-key="editor ? 'editor' : 'list'"
+        class="flex-col bg-app-950/96 backdrop-blur-sm"
+        data-testid="model-configuration-panel"
+        @close="backOut"
       >
         <header class="flex items-center gap-3 border-b border-default px-6 py-4">
           <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
@@ -367,18 +378,34 @@ async function save() {
                 </p>
                 <UButton
                   icon="i-lucide-plus"
-                  color="primary"
                   size="sm"
                   class="shrink-0"
+                  data-testid="model-preset-new"
                   @click="startCreate"
                 >
                   {{ t('settings.modelConfiguration.list.newPreset') }}
                 </UButton>
               </div>
 
-              <p v-if="models.models.length === 0" class="py-4 text-center text-sm text-dimmed">
-                {{ t('settings.modelConfiguration.list.loadingCatalog') }}
-              </p>
+              <UAlert
+                v-if="catalogFailed"
+                color="error"
+                variant="subtle"
+                icon="i-lucide-triangle-alert"
+                :title="t('settings.modelConfiguration.list.catalogFailed')"
+                :actions="[
+                  {
+                    label: t('common.retry'),
+                    color: 'neutral',
+                    variant: 'outline',
+                    onClick: loadCatalog,
+                  },
+                ]"
+              />
+
+              <div v-else-if="!models.loaded" class="space-y-3">
+                <USkeleton v-for="n in 3" :key="n" class="h-20 w-full rounded-lg" />
+              </div>
 
               <div v-else class="space-y-3">
                 <div
@@ -388,7 +415,7 @@ async function save() {
                 >
                   <div class="flex items-center gap-2">
                     <span class="truncate text-sm font-semibold text-app-100">{{ p.name }}</span>
-                    <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="xs">
+                    <UBadge v-if="p.isDefault" variant="subtle" size="xs">
                       {{ t('settings.modelConfiguration.list.default') }}
                     </UBadge>
                     <div class="ms-auto flex items-center gap-1">
@@ -415,6 +442,7 @@ async function save() {
                         variant="ghost"
                         color="error"
                         icon="i-lucide-trash-2"
+                        data-testid="model-preset-delete"
                         :disabled="p.isDefault"
                         :loading="busy"
                         :label="
@@ -447,9 +475,11 @@ async function save() {
                     </span>
                   </div>
                 </div>
-                <p v-if="sortedPresets.length === 0" class="py-6 text-center text-sm text-dimmed">
-                  {{ t('settings.modelConfiguration.list.empty') }}
-                </p>
+                <EmptyState
+                  v-if="sortedPresets.length === 0"
+                  icon="i-lucide-sliders-horizontal"
+                  :title="t('settings.modelConfiguration.list.empty')"
+                />
               </div>
 
               <!-- The consensus-GROUP library: which model PANELS review the workspace's heavier
@@ -467,6 +497,7 @@ async function save() {
                   </SectionLabel>
                   <UInput
                     v-model="editor.name"
+                    data-testid="model-preset-name"
                     :placeholder="t('settings.modelConfiguration.editor.namePlaceholder')"
                     size="sm"
                     class="w-full"
@@ -483,10 +514,10 @@ async function save() {
                   >
                     <UButton
                       size="sm"
-                      color="primary"
                       variant="subtle"
                       trailing-icon="i-lucide-chevron-down"
                       class="w-full justify-between"
+                      data-testid="model-preset-base-model"
                     >
                       <span class="truncate">{{ modelLabel(editor.baseModelId) }}</span>
                     </UButton>
@@ -554,12 +585,12 @@ async function save() {
                       </UButton>
                     </UDropdownMenu>
                   </div>
-                  <p
+                  <EmptyState
                     v-if="filteredKinds.length === 0"
-                    class="px-4 py-6 text-center text-sm text-dimmed"
-                  >
-                    {{ t('settings.modelConfiguration.editor.noAgentsMatch', { filter }) }}
-                  </p>
+                    compact
+                    icon="i-lucide-search-x"
+                    :title="t('settings.modelConfiguration.editor.noAgentsMatch', { filter })"
+                  />
                 </div>
               </div>
 
@@ -576,7 +607,7 @@ async function save() {
                 >
                   {{ t('common.cancel') }}
                 </UButton>
-                <UButton color="primary" size="sm" :loading="busy" @click="save">
+                <UButton size="sm" :loading="busy" @click="save">
                   {{
                     editor.id
                       ? t('settings.modelConfiguration.editor.saveChanges')
@@ -587,7 +618,7 @@ async function save() {
             </template>
           </div>
         </div>
-      </div>
+      </TakeoverShell>
     </Transition>
   </Teleport>
 </template>

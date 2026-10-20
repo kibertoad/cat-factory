@@ -32,7 +32,7 @@ const store = useWorkspaceSettingsStore()
 const workspace = useWorkspaceStore()
 const access = useWorkspaceAccess()
 const pipelines = usePipelinesStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const slots = useReactiveSlots<AppSlots>()
 // Whether the deployment registers any reusable operation at all, hidden or not, so the
@@ -283,11 +283,7 @@ async function save() {
   // Mirror the backend's enforce-mode validation client-side so the user gets an immediate,
   // localized message instead of the raw 422 (enforce needs at least one hard trigger).
   if (draft.reviewFrictionMode === 'enforce' && blockCount == null && blockStuckMinutes == null) {
-    toast.add({
-      title: t('settings.workspaceSettings.reviewFriction.needsTrigger'),
-      icon: 'i-lucide-triangle-alert',
-      color: 'warning',
-    })
+    actionToast.error('settings.workspaceSettings.reviewFriction.needsTrigger')
     return
   }
   saving.value = true
@@ -322,11 +318,7 @@ async function save() {
       reviewFrictionBlockCount: blockCount,
       reviewFrictionBlockStuckMinutes: blockStuckMinutes,
     })
-    toast.add({
-      title: t('settings.workspaceSettings.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.workspaceSettings.toast.saved')
   } catch (e) {
     present(e, 'settings.workspaceSettings.toast.saveFailed')
   } finally {
@@ -336,6 +328,7 @@ async function save() {
 </script>
 
 <template>
+  <!-- workbench-width-ok: tabbed workspace settings (768px). Its shell waits on #2359. -->
   <UModal
     v-model:open="open"
     :title="t('settings.workspaceSettings.title')"
@@ -418,7 +411,10 @@ async function save() {
                 />
               </label>
 
-              <div v-else-if="draft.taskLimitMode === 'per_type'" class="grid grid-cols-2 gap-3">
+              <div
+                v-else-if="draft.taskLimitMode === 'per_type'"
+                class="grid grid-cols-1 gap-3 sm:grid-cols-2"
+              >
                 <label v-for="taskType in TASK_TYPES" :key="taskType" class="block">
                   <SectionLabel as="span" class="mb-1 block">
                     {{ maxTaskTypeLabel(taskType) }}
@@ -706,13 +702,7 @@ async function save() {
             </section>
 
             <div class="flex justify-end">
-              <UButton
-                color="primary"
-                icon="i-lucide-save"
-                size="sm"
-                :loading="saving"
-                @click="save"
-              >
+              <UButton icon="i-lucide-save" size="sm" :loading="saving" @click="save">
                 {{ t('common.save') }}
               </UButton>
             </div>

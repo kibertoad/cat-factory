@@ -11,6 +11,7 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -136,13 +137,7 @@ const STATUS_META = computed<
     </template>
     <div class="flex min-h-0 flex-1">
       <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
-        <div
-          v-if="!ralph"
-          class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
-        >
-          <UIcon :name="meta.icon" class="h-8 w-8 opacity-40" />
-          <p class="text-sm">{{ t('ralph.noActivity') }}</p>
-        </div>
+        <EmptyState v-if="!ralph" class="h-full" :icon="meta.icon" :title="t('ralph.noActivity')" />
 
         <template v-else>
           <!-- The completion criterion. -->

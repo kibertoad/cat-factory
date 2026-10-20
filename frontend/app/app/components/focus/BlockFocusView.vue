@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { onKeyStroke } from '@vueuse/core'
+import { onBeforeUnmount, onMounted } from 'vue'
+import { useEventListener } from '@vueuse/core'
+import { sharedOverlayStack, type OverlayStackTicket } from '@modular-vue/core'
 import type { Block } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
@@ -7,10 +9,13 @@ import PipelineProgress from '~/components/pipeline/PipelineProgress.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
+const agentRuns = useAgentRunsStore()
 const ui = useUiStore()
 const models = useModelsStore()
 const workspace = useWorkspaceStore()
@@ -23,6 +28,11 @@ const block = computed<Block | undefined>(() =>
   ui.focusBlockId ? board.getBlock(ui.focusBlockId) : undefined,
 )
 const instance = computed(() => execution.getInstance(block.value?.executionId))
+// The block's failed run, read off the same per-block index the inspector and the cards read.
+const failedRun = computed(() => {
+  const run = block.value ? agentRuns.byBlock[block.value.id] : undefined
+  return run && run.status === 'failed' ? run : null
+})
 const statusMeta = computed(() => (block.value ? STATUS_META[block.value.status] : null))
 const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
 
@@ -78,9 +88,28 @@ function close() {
   ui.focus(null)
 }
 
-onKeyStroke('Escape', () => {
-  if (ui.focusBlockId) close()
+// The focus view is one more layer on the shared overlay stack: it holds a ticket while mounted and
+// takes Escape only when that ticket is the top one. A takeover, window, Nuxt UI menu or modal
+// opened from here is pushed after it, so it is the top overlay and keeps its own Escape. The
+// listener is in the CAPTURE phase and registered at setup, so it runs before the listener of any
+// overlay opened later and reads the stack as it was when the key was pressed, before that
+// overlay's close can release its ticket.
+let ticket: OverlayStackTicket | null = null
+onMounted(() => {
+  ticket = sharedOverlayStack.push()
 })
+onBeforeUnmount(() => {
+  ticket?.release()
+  ticket = null
+})
+useEventListener(
+  window,
+  'keydown',
+  (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && ticket?.isTop() && ui.focusBlockId) close()
+  },
+  { capture: true },
+)
 
 function openDecisionFor(decisionId: string) {
   if (instance.value) ui.openDecision(instance.value.id, decisionId)
@@ -103,7 +132,7 @@ function openApprovalFor(approvalId: string) {
     :data-focus-block="block.id"
   >
     <!-- header / breadcrumb -->
-    <header class="flex items-center gap-3 border-b border-default px-6 py-4">
+    <header class="flex flex-wrap items-center gap-3 border-b border-default px-6 py-4">
       <UButton
         icon="i-lucide-arrow-left"
         :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
@@ -121,7 +150,7 @@ function openApprovalFor(approvalId: string) {
       >
         <UIcon :name="typeMeta.icon" class="h-5 w-5" :style="{ color: typeMeta.accent }" />
       </div>
-      <div>
+      <div class="min-w-0">
         <h1 class="text-lg font-semibold text-highlighted">{{ block.title }}</h1>
         <div class="text-xs text-dimmed">
           {{ t('focus.typeSubtitle', { type: typeMeta.label }) }}
@@ -134,7 +163,6 @@ function openApprovalFor(approvalId: string) {
         <!-- An initiative has one legal pipeline, so it gets the button, not the picker. -->
         <UButton
           v-if="isInitiative"
-          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-play"
@@ -177,7 +205,6 @@ function openApprovalFor(approvalId: string) {
         >
           <template #trigger>
             <UButton
-              color="primary"
               variant="soft"
               size="sm"
               icon="i-lucide-play"
@@ -197,10 +224,12 @@ function openApprovalFor(approvalId: string) {
       </div>
     </header>
 
-    <div class="grid flex-1 grid-cols-[1fr_300px] gap-6 overflow-hidden p-6">
+    <div
+      class="grid flex-1 grid-cols-1 gap-6 overflow-y-auto p-6 lg:grid-cols-[1fr_300px] lg:overflow-hidden"
+    >
       <!-- main: pipeline flow -->
       <section
-        class="flex flex-col overflow-auto rounded-2xl border border-default bg-default/60 p-6"
+        class="flex flex-col rounded-2xl border border-default bg-default/60 p-6 lg:overflow-auto"
       >
         <div class="mb-4 flex items-center gap-2">
           <UIcon name="i-lucide-workflow" class="h-4 w-4 text-dimmed" />
@@ -214,18 +243,23 @@ function openApprovalFor(approvalId: string) {
           :instance="instance"
           @open-decision="openDecisionFor"
           @open-approval="openApprovalFor"
-        />
-
-        <div
-          v-else
-          class="flex flex-1 items-center justify-center rounded-xl border border-dashed border-muted text-sm text-dimmed"
         >
-          {{ t('focus.emptyPipelineHint') }}
-        </div>
+          <!-- A failed run: the same failure block the inspector shows, with its action. -->
+          <template v-if="failedRun" #after-summary>
+            <AgentFailureCard :run="failedRun" />
+          </template>
+        </PipelineProgress>
+
+        <EmptyState
+          v-else
+          class="flex-1"
+          icon="i-lucide-workflow"
+          :title="t('focus.emptyPipelineHint')"
+        />
       </section>
 
       <!-- side: details -->
-      <aside class="space-y-4 overflow-auto rounded-2xl border border-default bg-default/60 p-5">
+      <aside class="space-y-4 rounded-2xl border border-default bg-default/60 p-5 lg:overflow-auto">
         <div>
           <SectionLabel class="mb-1">
             {{ t('focus.description') }}

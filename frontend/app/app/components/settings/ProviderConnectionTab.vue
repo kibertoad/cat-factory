@@ -36,7 +36,7 @@ const emit = defineEmits<{ connected: [] }>()
 
 const { t } = useI18n()
 const store = useProviderConnectionsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
@@ -208,11 +208,7 @@ function buildFlatPayload() {
 }
 
 function toastSaved() {
-  toast.add({
-    title: t('settings.providerConnection.toast.saved', { title: title.value }),
-    icon: 'i-lucide-check',
-    color: 'success',
-  })
+  actionToast.success('settings.providerConnection.toast.saved', { params: { title: title.value } })
 }
 
 // --- Native flat-form actions (both manifest-overlay and config-overlay flavours) ---
@@ -330,7 +326,7 @@ async function remove() {
   try {
     await store.remove(props.kind)
     resetDraft()
-    toast.add({ title: t('settings.providerConnection.toast.removed'), icon: 'i-lucide-check' })
+    actionToast.success('settings.providerConnection.toast.removed')
   } catch (e) {
     present(e, 'settings.providerConnection.toast.removeFailed')
   } finally {
@@ -356,6 +352,7 @@ function fieldHelp(key: string): string | undefined {
     <div class="flex items-start justify-between gap-3">
       <p class="text-xs text-muted">{{ blurb }}</p>
       <UButton
+        color="neutral"
         :icon="showLogs ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
         variant="ghost"
         size="xs"
@@ -506,13 +503,7 @@ function fieldHelp(key: string): string | undefined {
       <ConnectionWarnings :warnings="testResult?.warnings" />
 
       <div class="flex justify-end">
-        <UButton
-          color="primary"
-          size="sm"
-          :loading="busy"
-          :disabled="!canSave"
-          @click="saveNative()"
-        >
+        <UButton size="sm" :loading="busy" :disabled="!canSave" @click="saveNative()">
           {{ connection ? t('common.save') : t('settings.providerConnection.form.connect') }}
         </UButton>
       </div>

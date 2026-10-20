@@ -8,7 +8,6 @@ const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
 const fragments = useFragmentsStore()
-const toast = useToast()
 const { t } = useI18n()
 
 // ---- module assignment -----------------------------------------------------

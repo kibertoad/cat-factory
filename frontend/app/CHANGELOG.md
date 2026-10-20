@@ -1,5 +1,564 @@
 # @cat-factory/app
 
+## 0.321.4
+
+### Patch Changes
+
+- bc3ff19: Fix the component story lane failing random files in CI. A `Loading` story's response now answers at
+  once with a body that never ends, instead of never returning, so msw's service worker no longer
+  holds an event open until Chromium stops it and fails every request it was passing on. The stories
+  go back to msw 2.15, whose worker does not hold events open either (mswjs/msw#2801).
+
+## 0.321.3
+
+### Patch Changes
+
+- 95b0338: Fix the component story lane failing random files in CI. A `Loading` story's response now answers at
+  once with a body that never ends, instead of never returning, so msw's service worker no longer
+  holds an event open until Chromium stops it and fails every request it was passing on. The stories
+  go back to msw 2.15, whose worker does not hold events open either (mswjs/msw#2801).
+
+## 0.321.2
+
+### Patch Changes
+
+- Updated dependencies [e9b24a1]
+  - @cat-factory/contracts@0.374.0
+
+## 0.321.1
+
+### Patch Changes
+
+- e318526: The command palette names the kind of each source it offers to connect or manage: "Connect Linear
+  (documents)" and "Connect Linear (tracker)" instead of "Connect Linear" twice, and "Connect Figma
+  (designs)" for a design source. Linear is both a document source and a task source, and the two are
+  separate connections that open different dialogs.
+  
+  The palette keys `layout.commandBar.cmd.sourceConnect` and `sourceManage` are removed. A layer that
+  overrides them must move its copy to the six new keys: `documentSourceConnect`,
+  `documentSourceManage`, `designSourceConnect`, `designSourceManage`, `taskSourceConnect` and
+  `taskSourceManage`. The old keys are no longer read, so an override left on them has no effect.
+
+## 0.321.0
+
+### Minor Changes
+
+- 162a89b: A failed run shows one failure block per task view: a title, a one-line cause, one action, and a
+  Details toggle. The cause line is translated SPA copy keyed by the failure's `kind` and `reason`,
+  and it says if a retry will probably work. The action is Retry, the setting a refusal names
+  (the same copy and fix as its toast: connect a repository host, configure AI, configure storage,
+  set up the runner pool), or a new run of the failed run's pipeline when the run's saved state
+  cannot be read; Retry is then inside Details. An environment failure leads with Retry and shows
+  the environment setup beside it. A single-job run (a service bootstrap, an environment config
+  repair) has its own cause lines where a kind means something different. The backend's message, its per-kind hint and the full output are inside Details only.
+  The board card and the queue card show the title and the action only. The "Read a failure" tour
+  follows the block's one action. The inspector no longer
+  repeats the block in its header for a task or an initiative, the focus view now shows it under
+  the run's summary, and the lists of earlier failures show the cause line with the rest behind
+  Details.
+
+## 0.320.1
+
+### Patch Changes
+
+- 3438f7f: Mobile-friendly layout fixes at 375px (initiative slice B): stop the desktop-first layouts
+  that clip, collapse, or hide their content on a phone.
+  
+  Fulfils goal #1 of the mobile-friendly frontend initiative ("nothing broken at 375px") by
+  restacking the fixed-column layouts that had no breakpoint. Every change follows an existing
+  good-citizen pattern (P-1 restack / P-6 reflow); no new responsive system is introduced.
+  
+  - **BlockFocusView (B1).** The full-screen focus overlay used a hard `grid-cols-[1fr_300px]`
+    with no breakpoint, so at 375px the main pipeline column collapsed toward zero width. It now
+    restacks to a single scrolling column below `lg` (`grid-cols-1 … lg:grid-cols-[1fr_300px]`,
+    with the container scrolling vertically on mobile and clamping to the docked two-column form
+    on wide screens). The two panels scroll internally only from `lg` up, so on a phone they size
+    to their content and the page scrolls as one column, and the header wraps instead of pushing
+    the run and close buttons off screen.
+  
+  - **Non-collapsing `grid-cols-2` forms (B2).** Budget, workspace task-limit, risk-policy, and
+    bootstrap-architecture forms hard-coded `grid-cols-2`, cramming two number inputs side by
+    side at 375px. They now start single-column and opt into columns at a breakpoint
+    (`grid-cols-1 sm:grid-cols-2`); the risk-policy 4-up grids collapse fully on phones while
+    keeping their density on wide (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`). The same input
+    pairs in the Add Task modal (bug fields, doc fields, pipeline and merge policy), the
+    environment wizard's review step and the GitHub open-PR form stack on a phone too.
+  
+  - **Kaizen table (B3).** The grading-history table was wrapped in `overflow-hidden`, clipping
+    columns on narrow screens; it now uses `overflow-x-auto` like every other table so it scrolls
+    horizontally instead.
+  
+  - **Side rails that hid instead of restacking (B4).** The Brainstorm window's action rail
+    (which carries the primary proceed / incorporate / re-run controls) and the Test-report
+    window's metadata rail were `hidden lg:flex`, making those actions and the outcome summary
+    unreachable on a phone. Both now restack below the main column below `lg`. The Brainstorm
+    rail is a bottom action bar copying the `RequirementsReviewWindow` reference (informational
+    stats collapse, the actions stay), capped at half the viewport with its own scroll and hidden
+    while the session offers no action. The Test-report window scrolls as one column below `lg`,
+    the metadata following the report, so its tall metadata section cannot squeeze the report to
+    zero height. The `AgentStepDetail` table-of-contents rail was verified redundant on mobile (a
+    jump-nav duplicating headings already in the scrollable prose), so it stays hidden below `lg`;
+    only its stray `md:` breakpoint is normalized to the `lg` cutoff.
+  
+  No user-facing copy added, so no i18n/locale changes.
+
+## 0.320.0
+
+### Minor Changes
+
+- afe22b9: The run deep link (`?ws=…&block=…&run=…`) lands on the run instead of only selecting its task: the
+  canvas switches from the queue if needed, the camera centres on the task's card at the zoom where a
+  task's pipeline steps render, and with no `view` (or `view=run`, new) the task's focus view opens on
+  its running pipeline. `view=outcome`, `observability` and `test-evidence` open those windows as
+  before, now with the task brought into view too. The queue's "Show on board" takes the same path,
+  so it zooms in on the task rather than only centring its service.
+
+## 0.319.2
+
+### Patch Changes
+
+- 5c17395: Dependency refresh, direct and transitive (the lockfile is re-resolved from scratch), held to the
+  24h `minimumReleaseAge` window.
+  
+  Majors, each taken because its whole peer group could move together:
+  
+  - **Vitest 5** (`vitest`, `@vitest/coverage-v8`, `@vitest/browser`, `@vitest/browser-playwright`
+    at `5.0.5`), now that `@cloudflare/vitest-plugin@1.4.4`, `@storybook/addon-vitest`,
+    `@nuxt/test-utils` and `vitest-browser-vue` all accept `^5`. The Worker suite turns Vitest 5's
+    new default `fsModuleCache` off: the Workers pool inlines every warm module into one WebSocket
+    reply, and this suite's graph (~80MB) exceeds workerd's message limit (`1009 Message is too
+    large`).
+  - **msw 3**, for the component stories. `onUnhandledRequest` became `onUnhandledFrame`, which
+    also receives WebSocket frames, and the bundled `mockServiceWorker.js` is regenerated.
+  - **happy-dom 21** for the SPA's unit tests.
+  
+  The Workers test pool moves to `@cloudflare/vitest-plugin@1.4.4`, which pins `wrangler@4.151.1`, so
+  the Cloudflare stack moves with it: workerd `1.20261012.1`, miniflare `5.20261012.1-beta`,
+  `@cloudflare/workers-types` `5.20261012.1` (the resolved workerd's date) and esbuild `0.28.2`
+  (the version wrangler and the plugin now pin, so the scoped esbuild overrides follow).
+  
+  Also the Vercel AI SDK family as one set (`ai@7.0.142`, `@ai-sdk/anthropic@4.0.81`,
+  `@ai-sdk/openai@4.0.95`, `@ai-sdk/openai-compatible@3.0.70`, `@ai-sdk/amazon-bedrock@5.0.117`,
+  `@ai-sdk/provider@4.0.28`), the Vue family at `3.5.44`, `@nuxt/ui@4.12.0`, `pinia@4.1.0`,
+  `storybook@10.6.2`, `undici@8.12.2`, `pg-boss@12.38.0`, `@aws-sdk/client-s3@3.1152.0`,
+  `@hono/node-server@2.1.5`, `@playwright/test@1.64.1`, and the root toolchain (`turbo@2.11.8`,
+  `oxlint@1.88.0`, `oxfmt@0.73.0`, `knip@6.41.0`).
+  
+  Held: the frontend stays on TypeScript 6 (TypeScript 7 ships no classic compiler API for
+  `vue-tsc`); `@nuxt/fonts` stays on 0.14 because `@nuxt/ui@4.12.0` depends on `^0.14.0`; Drizzle
+  stays on `1.0.0-rc.4`, still its `rc` tag; `nuxt@4.6.2` is inside the window.
+- Updated dependencies [5c17395]
+  - @cat-factory/contracts@0.373.1
+
+## 0.319.1
+
+### Patch Changes
+
+- 76176b8: The package no longer ships component stories or their shared fixtures: `files` excludes
+  `app/stories` and `app/**/*.stories.ts`, which the private `@cat-factory/storybook` package
+  in `frontend/storybook` renders.
+
+## 0.319.0
+
+### Minor Changes
+
+- 83f6b0c: A personal API key can follow its person's workspaces. Minted with `followsMemberships: true`
+  (beside `actsAsSelf: true`, and no `workspaceIds`), it reaches every workspace that person can act
+  in, resolved on each call: joining a workspace grants it on the next call and leaving takes it
+  away, with nothing to re-mint. In each workspace its scope is lowered to what the person's role
+  there allows (`read` for a viewer, `decide` for a member, `admin` for an admin), and on account-level
+  routes it acts with `read`, so it can never do more over `/api/v1` than its person can in the app.
+  That is also why anyone with `runs.execute` may mint one, list it and revoke it; an account admin
+  manages anyone's.
+  
+  `followsMemberships` is new on a listed or minted key (whose `workspaceIds` is then `[]`), on
+  `GET /api/v1/me` and on `GET /api/v1/directory/reach`, which answer the reach as of the call.
+  OpenAPI 1.89.0. The API tokens window offers "My workspaces (follows my memberships)", the default
+  for a personal token, and `?newApiKey` takes `reach=memberships`. New migrations: D1
+  `0110_public_api_key_follows_memberships.sql`, Drizzle
+  `20261016160143_public_api_key_follows_memberships`.
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/contracts@0.373.0
+
+## 0.318.0
+
+### Minor Changes
+
+- edd42af: An integration can now send a person to mint their own API key. `?newApiKey=1` opens the API tokens
+  window with the create form filled in from `label`, `scope` and `runsAsSelf=1` (the personal
+  identity, where someone is signed in to bind it to), and `ws` pins the board. Nothing is minted
+  until the person clicks create, and signing in first keeps the link.
+
+## 0.317.2
+
+### Patch Changes
+
+- 5194075: An add-repository link (`?addRepo=<owner>/<name>`) now opens the add-service window with the
+  repository selected. Two things lost it. Signing in from the link reloaded to a bare path, because
+  the board consumed the link as the session landed and the reload read the URL after that: every
+  sign-in form now reads where to return to before it signs in. And the window typed the repository
+  into its picker before the picker mounted, which Nuxt UI's menu clears on mount: it is now typed in
+  once the menu has mounted.
+
+## 0.317.1
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+
+## 0.317.0
+
+### Minor Changes
+
+- b3a13d3: An integration can now send a person to add a service for a repository. `GET /api/v1/deployment`
+  (`client.deployment.get`) answers where the deployment serves its web app, to any `read` key with
+  no workspace named. The app opens the add-service window with the repository searched for and
+  selected from `?addRepo=<owner>/<name>`, with optional `provider` and `ws` to name the host and
+  pin the board. Signing in first keeps the link.
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+
+## 0.316.0
+
+### Minor Changes
+
+- 6f574e9: API keys gain a `webhooks` scope between `read` and `write`: everything `read` can do, plus
+  registering and removing push endpoints. The directory webhooks (`/api/v1/directory/webhooks`,
+  still for a key reaching every workspace) and the notification webhooks
+  (`/api/v1/notification-webhook[s]`) now need `webhooks` instead of `admin`, so a sync integration
+  can follow changes with a key that cannot author or delete work. Every key that could manage
+  webhooks before still can. OpenAPI 1.86.0.
+  
+  The API token form names each scope by its API name (`read`, `webhooks`, `write`, `decide`,
+  `admin`), so the screen, the docs and the refusal messages agree. "Full access" is now "Admin".
+  
+  The token form always shows the Workspaces picker, in basic and advanced mode. It is disabled for
+  anyone who is not an account admin, with a line saying so, because only an account admin may mint
+  a key that reaches other workspaces.
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+
+## 0.315.9
+
+### Patch Changes
+
+- 8749655: The API token scope picker now says what each level includes. Each label names the level it builds on (Write includes Read, Decide includes Write, Full access includes Decide), and the help text lists what every level adds, including Decide, which it previously left out: answering a run's human decisions, which a token also needs to start a pipeline that can stop for one. Updated in every locale.
+
+## 0.315.8
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+
+## 0.315.7
+
+### Patch Changes
+
+- 85050fe: Render every full-bleed takeover inside one shared `TakeoverShell`, so focus stays inside an open takeover and Escape closes only the top overlay. The step reader, the model configuration takeover, the observability, reports, operator dashboard and Kaizen panels, and the artifact lightbox now use it. The safe-area guard also refuses a full-screen root class named outside its owning shell. Every Nuxt UI menu, select, popover and modal now holds a place on the shared overlay stack while it is open, so Escape in an open dropdown inside a takeover closes the dropdown, not the takeover. The block focus view no longer closes on the Escape that closes a window or takeover opened over it.
+
+## 0.315.6
+
+### Patch Changes
+
+- f3e31b4: The model configuration opened from the pipeline builder now takes clicks. It shows once the builder has closed, and the builder comes back with its draft when the model configuration closes. Before, the builder stayed open under it and took every click.
+
+## 0.315.5
+
+### Patch Changes
+
+- df137d3: Selecting a service frame no longer reads the GitHub repos, pull requests and issues twice. The inspector asks for the projection when the frame opens, and concurrent callers share one read. A connected workspace with no linked repos counts as loaded, so the inspector does not read it again on every open. The store records what the projection was loaded for (the workspace and its connection), so a failed load, a board reset, a disconnect and a reinstalled App each make the next request read again. One generation counter decides whether a read may land: an older read that finishes last, a read for a board you left, a read that finishes after a disconnect, and a read that started before a direct write (saving linked repos, opening or merging a pull request) no longer overwrite newer rows. The loading flag clears as soon as the projection is cleared. The add-service-from-repo, bootstrap and GitHub panel surfaces still re-read on open, and share a read that is already running. A failed read on frame open now shows the standard error toast.
+
+## 0.315.4
+
+### Patch Changes
+
+- 9fd2cd4: Modals open at one of three named widths instead of a width picked per dialog.
+  
+  A new `AppModal` wraps `UModal` with a required `size` from `utils/overlaySize.ts`: `prompt` (448px)
+  for confirmations, decisions and one- or two-field dialogs, `form` (576px) for forms, lists and
+  hubs, and `wide` (672px) for card lists with an action beside each paragraph, tabbed forms and three
+  pickers in a row. 46 modals move onto it. 13 keep their width, 31 move by one Tailwind step, and two
+  short dialogs (review friction, AI preset mismatch) narrow from 576px to 448px. The nine workbench
+  surfaces keep their own widths until #2359 decides their shell, each with a `workbench-width-ok:`
+  comment. `scripts/check-frontend-geometry.mjs` refuses a raw `UModal` without that waiver, and an
+  `AppModal` that names its own width utility or reads its classes from a variable. An `AppModal`
+  bound `:fullscreen` drops its width while fullscreen.
+
+## 0.315.3
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/contracts@0.368.0
+
+## 0.315.2
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/contracts@0.367.0
+
+## 0.315.1
+
+### Patch Changes
+
+- 4c0eac3: An inbox card that asks a person for something now carries its verb as the primary button ("Answer" for a parked decision, "Review", "Test", "Triage" and so on), and "Mark read" becomes a secondary button. Cards whose own action is already the verb (Merge, Retry run, Acknowledge) are unchanged. A parked agent question now opens the decision window from the inbox, where it can be answered, instead of the read-only step detail; an approval gate still opens the step to approve. Any verb whose window cannot open (its run is not loaded or not parked, as after a Ralph loop or a gate that gave up) says "Open", because it only opens the task. "Mark read" is an outline button beside the verb, so it no longer looks like "Dismiss". The inbox closes when a card opens something. Each type's verb and destination now sit in one route table (`utils/notificationRoutes.ts`), which the title link uses too.
+
+## 0.315.0
+
+### Minor Changes
+
+- 04c1587: Public-API keys belong to an account and reach every workspace in it or a chosen list. A
+  workspace-scoped `/api/v1` call names its workspace in the `x-cat-factory-workspace` header, which a
+  key reaching one workspace may omit, so every existing key keeps working unchanged. `PublicApiKey`
+  and `GET /api/v1/me` gain `workspaceIds`; both mint bodies accept it. Widening a key past the board
+  it is minted from takes an account admin, and a key can never mint or revoke one reaching further
+  than itself. The header is on the CORS allow-list, so a browser client can send it. The four SDK
+  clients take a workspace option. OpenAPI 1.80.0.
+  
+  Storage break (internal): `public_api_keys.workspace_id` is replaced by `all_workspaces` plus the
+  `public_api_key_workspaces` grant table (D1 `0108`, Drizzle `20261009143721` and `20261009143724`),
+  backfilled from the old column. The account cap is 200 live keys, where it was 50 per workspace,
+  and a key left with no workspace after its boards were deleted holds no slot.
+
+### Patch Changes
+
+- f1b6c9a: `/api/v1/directory/*`: an account's workspaces, users, account memberships, workspace memberships
+  and linked repositories as keyset-paged snapshots, plus an ordered change feed whose changes carry
+  each entity's current state (or `null` once it is gone), for an integration keeping its own copy in
+  sync. A feed cursor older than the new `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30) is refused
+  with the new `cursor_expired` conflict reason. OpenAPI 1.81.0.
+  
+  Internal: the change-row mapping both facades share moves to kernel's `directoryChangeFromRow`.
+  The slice 1 `DirectoryChangeRepository` port becomes `DirectoryRepository` and joins
+  `CoreDependencies` as a required member, with its reads on the mothership allow-list.
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+
+## 0.314.0
+
+### Minor Changes
+
+- 66b7fed: Add "Describe new work" (Create → Describe new work, the palette, and the queue view's header): a one-sentence intake that files a feature or a bug from a sentence and a service. The title comes from the first sentence and is shown before submit; the full text is the description. The overrides sit behind one "Change how this runs" disclosure that names the defaults it would use: the pipeline in every tier, and the merge policy and model preset in the advanced tier only, as in the full form. Closing the dialog with typed text asks first. "Add and start" starts through the card's own Start, with the same started, sandboxed and no-pipeline messages. "More kinds" and "Attach context" carry the kind and the overrides into the full form along with the text. The review-debt dialog's "Go review" closes whichever form raised it. Every other kind of task, and context attachments, hand the text to the full "Add a task" form, prefilled. Both forms now share one review-debt friction builder.
+
+## 0.313.0
+
+### Minor Changes
+
+- dc08534: Add a setup checklist (Configuration → Setup checklist, or the palette) for people who can change the workspace setup. It lists every prerequisite for "a task can run and merge" (model, source control, where agents run, test environments, screenshot storage) with its state and one action per row, composed from the probes the setup banners and startup dialogs already read. A row that needs attention says why (unreachable, a missing setting, a rejected or under-scoped token, a broken default preset, or a check that did not answer), and its action opens what the matching banner opens for that cause. A row follows the banners' rule for who may act on it: someone who cannot save the fix sees who can instead of a button. A probe that has not answered shows as checking, never as missing or done, and a failed probe offers "Try again". The banners and dialogs are unchanged. The GitHub store now records why the integration is unavailable (switched off, or the probe failed). The setup banners and the checklist open each fix through one shared map (`useSetupRemedies`), so a row and its banner cannot point at different screens. A token row says whose token it is, and a missing local token says to set `GITHUB_PAT`. A backend that does not report its infrastructure gets a row that says so instead of a spinner.
+
+## 0.312.0
+
+### Minor Changes
+
+- 1f02937: Add a queue view beside the board (issue #2258). The queue lists every task across every service in the column that says what it needs (Needs you, In flight, Ready to merge), and each card carries the one action its state implies. The sidebar's new Views switcher, the palette and a `?view=queue` link move between the queue and the canvas. The SPA opens on the view each person used last; a person who has not chosen lands on the queue. The canvas's decision counter now opens the queue view instead of a dropdown, on every service, and the queue lists a decision or approval on an initiative or a frame too. The queue's Done list follows the workspace's Done-lane settings, as each frame's Done lane does. A click anywhere on a queue card opens the task, and on a wide screen the queue's columns make room for the inspector instead of sitting under it. Starting a tour moves to the canvas, which every tour walks, and the Board basics tour gains a step on the two views. A Board basics tour broken off before this change resumes one step early. The board card and the frame swimlanes share their action and classification code with the queue (`useTaskActions`, `useTaskLaneClassifier`), so a member without `runs.execute` now sees the board card's Start and Merge disabled with the reason, as Retry already was.
+
+## 0.311.3
+
+### Patch Changes
+
+- d474fbe: Make the SPA's three feedback states look the same everywhere: toasts, loading and empty states.
+  
+  Every toast that is not a failed call now goes through `useActionToast()` (`success`, `info`,
+  `warning`, `error`), beside the existing failure funnel. The tone decides the colour, the icon and
+  the duration, so all success toasts render identically. Success and info toasts dismiss after the
+  default; warning and error toasts stay until closed. Some toasts change tone as a result (an
+  uncoloured "disconnected" or "attached" toast is now a green success).
+  
+  Loading uses the Nuxt UI `loading` prop where a component has one, `USkeleton` rows while an async
+  panel or list waits on its first fetch, and the new `common/Spinner.vue` for a bare loading glyph.
+  The spinner honours reduced motion. The skeleton fill is `bg-accented` app-wide, because the
+  default `bg-elevated` disappears on the `bg-elevated` and `app-950` surfaces many windows paint.
+  Empty lists and panels render `common/EmptyState.vue`, which now wraps Nuxt UI's `UEmpty`.
+  
+  `scripts/check-frontend-feedback.mjs` bans `toast.add(` outside the two toast composables and
+  `animate-spin` outside the spinner.
+
+## 0.311.2
+
+### Patch Changes
+
+- e091712: Modals and slideovers use Nuxt UI's default surfaces again: a `bg-default` panel over a `bg-elevated/75` overlay. The app had painted the panel `bg-app-950`, which in the default light theme is the same neutral-100 as the overlay, so the panel blended into the page behind it. The three hand-rolled backdrops (the mobile sidebar, the result window and the failed-chunk notice) follow the same rule.
+
+## 0.311.1
+
+### Patch Changes
+
+- c8d3870: Upgrade `nuxt` to 4.6.1 or later so a cold `nuxt dev` pre-bundles the SPA's dependencies and the
+  first page load no longer reloads. The layer's `nuxt` peer range is now `^4.5.2 <4.6.0 || ^4.6.1`,
+  so a deployment locked to 4.6.0 gets a peer warning.
+  
+  Nuxt 4.6.0 broke Vite's dependency scan in any app that uses `@nuxtjs/i18n` (nuxt/nuxt#36473), so
+  `nuxt dev` found every dependency while the page loaded and reloaded the page after each batch. The
+  peer range only warns: the fix is the `nuxt` upgrade. A deployment that links the layer from a
+  workspace, not from `node_modules`, must also add the layer's files as scan entries, because Nuxt
+  adds them only for an installed layer. The in-repo frontend deployment
+  (`deploy/frontend/nuxt.config.ts`) shows how.
+- 1c7d921: Full-screen overlays keep clear of a phone's notch and home indicator, and dragging inside one no
+  longer reloads the app.
+  
+  The result window shell now insets every window by the larger of 1rem and the device's safe-area
+  inset on each side, and caps a centered window at the padded height, so a full-height window's
+  header no longer sits under the notch. The step detail reader and the model configuration takeover
+  pad by the inset alone. `html` and `body` set `overscroll-behavior-y: none`, so a vertical drag
+  that reaches the viewport no longer triggers pull-to-refresh, which reloaded the app and dropped the
+  open window. Inner scrollers still hand the scroll on to the scroller around them.
+- b884a6d: The observability, reports, operator dashboard and Kaizen takeovers and the artifact lightbox pad
+  by the device's safe-area inset and cap to the dynamic viewport, so their headers, close buttons
+  and bottom edges no longer sit under a phone's notch, home indicator or browser chrome. On a phone,
+  the observability and operator dashboard headers put their tabs on a second row, so the close
+  button stays on screen. The sidebar drawer pads its top and inline-start insets, and the
+  inspector's bottom sheet pads its side insets. A tap in the lightbox's inset strips no longer
+  closes it.
+  
+  Every full-screen overlay now takes its root classes from `utils/safeArea.ts`
+  (`FULL_BLEED_TAKEOVER_CLASS`, `WINDOWED_OVERLAY_CLASS`), which replace the exported
+  `SAFE_AREA_INSET_CLASS` and `SAFE_AREA_GUTTER_CLASS`.
+
+## 0.311.0
+
+### Minor Changes
+
+- 91dedb6: Setup advisories now go to the people who can act on them. The workspace snapshot carries
+  `infraSetupOwners` beside `infraSetup`, naming who can close each gap: a board admin
+  (`workspace_admin`), an account admin (`account_admin`) or the deployment operator (`operator`).
+  Content storage falls to the operator when the deployment gives an account admin no backend to
+  select (`AccountSettingsService.canSelectContentStorage`).
+  
+  In the SPA, the infra-setup and provider-config cards render only for a caller who can save the
+  fix, and never on the designer surface. A caller who cannot act, but whose runs the gap stops (today,
+  a missing or unreachable runner pool), gets one compact line instead: it names who can fix it, or
+  tells an admin on the designer surface to switch role. A viewer gets nothing. The line honours the
+  card's session and permanent dismissals. The default test-environment prompt is also kept off the
+  designer surface, and the account-admin check now lives once in the accounts store
+  (`isActiveAccountAdmin`).
+  
+  On the repository-host gate, a caller without `integrations.manage` reads that a board admin can
+  connect the host, instead of "this deployment has nothing configured, ask an operator", and the
+  gate offers the board switcher without the items that need the board page's dialogs. The AI setup
+  dialog sends a member to the direct keys on their own
+  "My keys" scope, where their save lands, instead of the workspace pool they cannot write. That
+  default follows the active board's grant until the user picks a scope by hand.
+  
+  The new snapshot field is optional and internal: an older SPA ignores it, and this SPA falls back
+  to "a board admin" when a backend does not send it.
+
+### Patch Changes
+
+- Updated dependencies [91dedb6]
+  - @cat-factory/contracts@0.365.0
+
+## 0.310.3
+
+### Patch Changes
+
+- 466ce7a: Bring the SPA's buttons in line with the variant policy, and guard "one solid per view".
+  
+  The three gate windows that offered a solid "send back" action beside a solid "approve" (the
+  judge result, human testing, visual confirmation) now render send-back as `warning soft`, so the
+  approve stays the one primary.
+  
+  Twenty labelled destructive actions move to `error soft`: the ones that disconnect, clear, delete,
+  discard, reset or remove stored state, including the four confirm-gated Clear buttons on the
+  deployment credentials, Discard on a guided-review draft and Destroy environment in human testing.
+  The icon-only Delete pipeline button is now `error ghost`. Removing a row or chip from a form that
+  is not saved yet stays neutral: it is not destructive.
+  
+  Twenty-six inline and chrome actions that rendered as primary-coloured ghost buttons (Edit,
+  Resync, Refresh, show/hide toggles, file-tree rows) now render neutral, and two cancel buttons
+  that rendered in the primary colour now render neutral like the rest.
+  
+  `scripts/check-frontend-variants.mjs` also refuses two solid buttons under one parent element. A
+  `v-if` chain and a `v-for` list count as one button, a renderless component (`UTooltip`,
+  `UPopover`, `ClientOnly`, a plain `<template>`) adds no element, and a slot `<template #name>` is
+  its own region, so a file holding several forms that each end in a Save still passes.
+
+## 0.310.2
+
+### Patch Changes
+
+- 27a8afd: Delete the SPA's button and badge props that restate Nuxt UI's defaults, and guard against them.
+  
+  246 `color="primary"`, `variant="solid"` and `size="md"` props on `UButton`, `IconButton` and `UBadge`
+  restated Nuxt UI's own default. The defaults are now stated once in `app.config.ts`, where
+  `scripts/check-frontend-variants.mjs` (CI) reads them to refuse a value that repeats them.
+  
+  Nothing changes on screen with the built-in themes (Cat Factory and Mono), which set no button
+  defaults. An imported theme whose `style.defaults` sets a button size, variant or colour now reaches
+  the controls that used to pin Nuxt UI's value: for example, with `size: 'lg'` the buttons and badges
+  that said `size="md"` grow with the rest. That is the intent: a restated default was a value the
+  theme could not change.
+  
+  The defaults stay Nuxt UI's on purpose. A theme document's `style.defaults` replaces the default for
+  every control that does not state the prop, so the unstyled group is the one a theme restyles. Keeping
+  the primary actions unstyled means a theme with a larger size or a different button variant restyles
+  the actions, not every toolbar and icon button. The variant policy (one solid primary per view, the
+  secondary, destructive, chrome and size rules) is written down in `frontend/app/README.md`.
+
+## 0.310.1
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/contracts@0.364.0
+
+## 0.310.0
+
+### Minor Changes
+
+- 5dbc11b: Render every SPA control as its Nuxt UI component instead of a raw HTML element.
+  
+  Every raw `<button>`, `<input>`, `<select>`, `<textarea>`, hand-built `<table>`, `<details>`,
+  `<form>`, `<a href>` and `<datalist>` in the layer, each with its own border, background, hover and
+  focus recipe, moves onto `UButton`, `UInput` /
+  `UInputNumber` / `UCheckbox` / `URadioGroup` / `USlider` / `UFileUpload`, `USelect`, `UTextarea`,
+  `UTable`, `UCollapsible`, `UForm`, `ULink` and `UInputMenu`, so each now follows the theme, the
+  focus ring, the disabled state and the size scale.
+  
+  Four changes go beyond a swap and are visible:
+  
+  The four hand-built segmented switchers (the observability views, the reports window and
+  dimension rows, the operator window row) become `UTabs`, which adds arrow-key navigation and the
+  tab ARIA they had none of.
+  
+  The fork-decision cards were one choice rendered as N independent radios; they become a single
+  `URadioGroup variant="card"`, the custom-approach entry included, so the single-selection rule and
+  keyboard navigation come from the primitive.
+  
+  `ImageCompare` hand-rolled a drop zone, a hidden shared file input and its own drag state.
+  `UFileUpload` owns all three. The PNG/JPEG guard stays in the component, because `accept` filters
+  the picker and a dropped file arrives regardless.
+  
+  `IconButton` and `CopyButton` wrap their button in a `UTooltip` and keep `aria-label` on the
+  button. A `title` never fires on touch, is unstyled and waits about a second, so every icon-only
+  button's hint now appears as a themed tooltip, and every icon-only button has an accessible name.
+  The tooltip trigger is a wrapper around the button, so it still opens on a disabled one, and
+  `class` on `IconButton` lands on that wrapper, the box its parent lays out. A labelled button
+  keeps a `title` as a hover hint beside its own name.
+  
+  A Nuxt UI slot often sets more than the property a site overrides: `UButton`'s padding, text size
+  and hover background, `UTable`'s cell padding, colour and `whitespace-nowrap`, `ULink`'s colour.
+  Each converted site states the whole box it had, so where the old markup inherited a value the new
+  one restates it.
+  
+  `scripts/check-frontend-primitives.mjs` holds the count at zero, including a raw element rendered
+  through `as="button"`, an `:is` binding or `h()`, and an icon-only `UButton` named only by
+  `title`. It has no allow-list: the two cases expected to need one (a Vue Flow gesture handle, a
+  full-bleed media tile) both converted.
+
 ## 0.309.0
 
 ### Minor Changes

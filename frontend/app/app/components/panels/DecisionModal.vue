@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { agentKindMeta } from '~/utils/catalog'
+import AppModal from '~/components/common/AppModal.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -52,7 +53,7 @@ async function choose(option: string) {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('panels.decision.title')">
+  <AppModal size="prompt" v-model:open="open" :title="t('panels.decision.title')">
     <template #body>
       <div v-if="decision && agent" class="space-y-4" data-testid="decision-modal">
         <div class="flex items-center gap-2 text-sm text-muted">
@@ -81,7 +82,6 @@ async function choose(option: string) {
           <UButton
             v-for="opt in decision.options"
             :key="opt"
-            color="primary"
             variant="soft"
             block
             data-testid="decision-option"
@@ -98,5 +98,5 @@ async function choose(option: string) {
         </p>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

@@ -8,11 +8,12 @@ import { computed, reactive, ref, watch } from 'vue'
 import type { ObservabilityProviderKind } from '~/types/releaseHealth'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useReleaseHealthStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
@@ -66,21 +67,14 @@ async function saveIncident() {
     }
     if (incidentIo.apiKey.trim()) input.incidentIo = { apiKey: incidentIo.apiKey.trim() }
     if (!input.pagerDuty && !input.incidentIo) {
-      toast.add({
-        title: t('settings.observabilityConnection.toast.incidentCredsRequired'),
-        color: 'error',
-      })
+      actionToast.error('settings.observabilityConnection.toast.incidentCredsRequired')
       return
     }
     await store.saveIncident(input)
     pagerDuty.apiToken = ''
     pagerDuty.fromEmail = ''
     incidentIo.apiKey = ''
-    toast.add({
-      title: t('settings.observabilityConnection.toast.incidentSaved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.observabilityConnection.toast.incidentSaved')
   } catch (e) {
     present(e, 'settings.observabilityConnection.toast.incidentSaveFailed')
   } finally {
@@ -111,11 +105,7 @@ async function saveConnection() {
     })
     datadog.apiKey = ''
     datadog.appKey = ''
-    toast.add({
-      title: t('settings.observabilityConnection.toast.connected'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.observabilityConnection.toast.connected')
   } catch (e) {
     present(e, 'settings.observabilityConnection.toast.connectFailed')
   } finally {
@@ -147,11 +137,7 @@ const connectedLabel = computed(() => {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('settings.observabilityConnection.title')"
-    :ui="{ content: 'max-w-lg' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('settings.observabilityConnection.title')">
     <template #title>
       <IntegrationBackTitle :title="t('settings.observabilityConnection.title')" @back="back" />
     </template>
@@ -272,5 +258,5 @@ const connectedLabel = computed(() => {
         </section>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

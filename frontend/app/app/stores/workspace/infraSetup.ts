@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { applyInfraSetupTransition, isInfraSetupHealthStatus } from '@cat-factory/contracts'
-import type { InfraSetup, InfraSetupArea, InfraSetupStatus } from '~/types/domain'
+import type { InfraSetup, InfraSetupArea, InfraSetupOwners, InfraSetupStatus } from '~/types/domain'
 
 // The workspace store's infra-setup slice: the per-area setup/health projection the setup banner
 // renders, and the live `infraSetup` event patch the reachability watcher pushes into it. Its own
@@ -32,8 +32,16 @@ export function createInfraSetupState() {
    */
   const infraSetupDetails = ref<Partial<Record<InfraSetupArea, string>>>({})
 
-  function hydrate(next: InfraSetup | null | undefined) {
+  /**
+   * Who can close each area's gap (workspace admin, account admin or the operator), from the
+   * snapshot. Static for the life of a deployment, so the live event never touches it. Null on an
+   * older backend, which the banner reads as "owner unknown".
+   */
+  const infraSetupOwners = ref<InfraSetupOwners | null>(null)
+
+  function hydrate(next: InfraSetup | null | undefined, owners?: InfraSetupOwners | null) {
     infraSetup.value = next ?? null
+    infraSetupOwners.value = owners ?? null
     // The reasons belong to the live pushes this session observed, so an authoritative snapshot
     // supersedes them: keeping one would caption a freshly-read status with a stale probe.
     infraSetupDetails.value = {}
@@ -73,5 +81,5 @@ export function createInfraSetupState() {
     if (!isInfraSetupHealthStatus(status)) useUiStore().clearInfraSetupSessionDismissal(area)
   }
 
-  return { infraSetup, infraSetupDetails, hydrate, patchInfraSetup }
+  return { infraSetup, infraSetupDetails, infraSetupOwners, hydrate, patchInfraSetup }
 }

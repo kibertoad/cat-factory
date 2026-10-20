@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { isDesignSource } from '@cat-factory/contracts'
 import type { DocumentBoardPlan } from '~/types/domain'
+import Spinner from '~/components/common/Spinner.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 // Preview the structure an imported document expands into, then spawn it. The
 // plan is fetched fresh on open; a badge makes clear whether an LLM or the
@@ -16,7 +18,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const board = useBoardStore()
 const documents = useDocumentsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 /** Design documents are planned into an existing service; prose documents at the board root. */
@@ -102,16 +104,13 @@ async function spawn() {
       modules: t('documents.spawn.moduleCount', { count: result.modules }, result.modules),
       tasks: t('documents.spawn.taskCount', { count: result.tasks }, result.tasks),
     })
-    toast.add({
-      title: t('documents.spawn.spawned'),
+    actionToast.success('documents.spawn.spawned', {
       // A reused module is stated only when there was one, and never folded into the created
       // count: a spawn into a service that already had every planned module otherwise reports
       // "0 modules" beside its tasks, which reads as the modules having failed.
       description: result.reusedModules
         ? `${summary} · ${t('documents.spawn.reusedCount', { count: result.reusedModules }, result.reusedModules)}`
         : summary,
-      icon: 'i-lucide-check',
-      color: 'success',
     })
     ui.closeSpawnPreview()
     ui.closeDocumentImport()
@@ -124,7 +123,7 @@ async function spawn() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('documents.spawn.title')">
+  <AppModal size="form" v-model:open="open" :title="t('documents.spawn.title')">
     <template #body>
       <div class="space-y-4">
         <div v-if="plan" class="flex items-center justify-between gap-2">
@@ -168,7 +167,7 @@ async function spawn() {
         </p>
 
         <div v-if="loadingPlan" class="flex items-center gap-2 text-sm text-muted">
-          <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
+          <Spinner class="h-4 w-4" />
           {{ t('documents.spawn.buildingPlan') }}
         </div>
 
@@ -219,7 +218,6 @@ async function spawn() {
             t('common.cancel')
           }}</UButton>
           <UButton
-            color="primary"
             icon="i-lucide-wand-sparkles"
             :loading="spawning"
             :disabled="!plan || loadingPlan"
@@ -230,5 +228,5 @@ async function spawn() {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

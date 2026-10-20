@@ -5,7 +5,7 @@ import SecretInput from '~/components/common/SecretInput.vue'
 import type { VcsProvider } from '~/types/domain'
 import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS, vcsTokenCreateUrl } from '~/utils/vcs'
 import { SSO_ERROR_MESSAGE_KEYS } from '~/utils/sso'
-import { postSignInUrl } from '~/utils/postSignIn'
+import { signInThenReload } from '~/utils/postSignIn'
 
 const auth = useAuthStore()
 const { t } = useI18n()
@@ -62,8 +62,7 @@ async function submitPat(provider: PatProvider) {
   patError.value = null
   patBusy.value = true
   try {
-    await auth.patLogin({ provider })
-    if (typeof window !== 'undefined') window.location.assign(postSignInUrl(window.location))
+    await signInThenReload(() => auth.patLogin({ provider }))
   } catch (e) {
     patError.value = apiErrorEnvelope(e)?.message ?? t('auth.localMode.failed')
   } finally {
@@ -95,18 +94,17 @@ async function submitPassword() {
   error.value = null
   busy.value = true
   try {
-    if (mode.value === 'signup') {
-      await auth.signup({
-        email: email.value,
-        password: password.value,
-        name: name.value || undefined,
-        invite: invite.value,
-      })
-    } else {
-      await auth.passwordLogin({ email: email.value, password: password.value })
-    }
     // Reload so the app boots with the new session.
-    if (typeof window !== 'undefined') window.location.assign(postSignInUrl(window.location))
+    await signInThenReload(() =>
+      mode.value === 'signup'
+        ? auth.signup({
+            email: email.value,
+            password: password.value,
+            name: name.value || undefined,
+            invite: invite.value,
+          })
+        : auth.passwordLogin({ email: email.value, password: password.value }),
+    )
   } catch (e) {
     error.value = apiErrorEnvelope(e)?.message ?? t('auth.login.signInFailed')
   } finally {
@@ -177,8 +175,9 @@ async function submitRemotePat() {
   remotePatError.value = null
   remotePatBusy.value = true
   try {
-    await auth.patLogin({ provider: remotePatProvider.value, token: remotePatToken.value.trim() })
-    if (typeof window !== 'undefined') window.location.assign(postSignInUrl(window.location))
+    await signInThenReload(() =>
+      auth.patLogin({ provider: remotePatProvider.value, token: remotePatToken.value.trim() }),
+    )
   } catch (e) {
     remotePatError.value = apiErrorEnvelope(e)?.message ?? t('auth.login.signInFailed')
   } finally {
@@ -234,7 +233,6 @@ const noSignInMethod = computed(
         <UButton
           block
           size="lg"
-          color="primary"
           icon="i-lucide-cloud"
           data-testid="mothership-signin"
           @click="auth.signInViaMothership()"
@@ -260,7 +258,6 @@ const noSignInMethod = computed(
           :key="p"
           block
           size="lg"
-          color="primary"
           :icon="PROVIDER_ICONS[p]"
           :loading="patBusy"
           @click="submitPat(p)"
@@ -329,7 +326,6 @@ const noSignInMethod = computed(
         <UButton
           block
           size="lg"
-          color="primary"
           icon="i-lucide-building-2"
           data-testid="sso-signin"
           @click="auth.loginWithSso(invite)"
@@ -352,7 +348,6 @@ const noSignInMethod = computed(
           v-if="auth.providers.github"
           block
           size="lg"
-          color="primary"
           icon="i-lucide-github"
           @click="auth.login(invite)"
         >
@@ -413,14 +408,7 @@ const noSignInMethod = computed(
           data-testid="login-password"
         />
         <p v-if="error" class="text-sm text-app-error-400" data-testid="login-error">{{ error }}</p>
-        <UButton
-          block
-          size="lg"
-          color="primary"
-          type="submit"
-          :loading="busy"
-          data-testid="login-submit"
-        >
+        <UButton block size="lg" type="submit" :loading="busy" data-testid="login-submit">
           {{ mode === 'signup' ? t('auth.login.createAccount') : t('auth.login.signIn') }}
         </UButton>
         <p class="text-center text-xs text-muted">
@@ -428,7 +416,6 @@ const noSignInMethod = computed(
             <i18n-t keypath="auth.login.needAccount" tag="span" scope="global">
               <template #signUp>
                 <UButton
-                  color="primary"
                   variant="link"
                   class="p-0 text-xs text-primary hover:underline"
                   @click="setMode('signup')"
@@ -442,7 +429,6 @@ const noSignInMethod = computed(
             <i18n-t keypath="auth.login.haveAccount" tag="span" scope="global">
               <template #signIn>
                 <UButton
-                  color="primary"
                   variant="link"
                   class="p-0 text-xs text-primary hover:underline"
                   @click="setMode('login')"
@@ -455,7 +441,6 @@ const noSignInMethod = computed(
         </p>
         <p v-if="mode === 'login'" class="text-center text-xs text-muted">
           <UButton
-            color="primary"
             variant="link"
             class="p-0 text-xs text-primary hover:underline"
             @click="setMode('forgot')"
@@ -512,7 +497,6 @@ const noSignInMethod = computed(
           <UButton
             block
             size="lg"
-            color="primary"
             type="submit"
             :icon="PROVIDER_ICONS[remotePatProvider]"
             :loading="remotePatBusy"
@@ -572,13 +556,12 @@ const noSignInMethod = computed(
             class="w-full"
           />
           <p v-if="error" class="text-sm text-app-error-400">{{ error }}</p>
-          <UButton block size="lg" color="primary" type="submit" :loading="busy">
+          <UButton block size="lg" type="submit" :loading="busy">
             {{ t('auth.login.sendResetLink') }}
           </UButton>
         </template>
         <p class="text-center text-xs text-muted">
           <UButton
-            color="primary"
             variant="link"
             class="p-0 text-xs text-primary hover:underline"
             @click="setMode('login')"

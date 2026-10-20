@@ -20,6 +20,7 @@ import {
   makeOnboardingProbe,
   makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
+  mintMachineToken,
   mintSession,
   seedFrameRepoLink,
   type FrameRepoLinkRepositories,
@@ -54,6 +55,7 @@ import {
 import { DrizzleNotificationRepository } from '../src/repositories/notifications.js'
 import { DrizzleDocumentRepository } from '../src/repositories/documents.js'
 import { DrizzleTaskRepository } from '../src/repositories/tasks.js'
+import { DrizzlePublicApiKeyRepository } from '../src/repositories/publicApiKey.js'
 import { DrizzleGitHubInstallationRepository } from '../src/repositories/containerExecution.js'
 import { DrizzleRepoProjectionRepository } from '../src/repositories/github.js'
 import { createApp } from '../src/server.js'
@@ -76,7 +78,7 @@ const BASE = 'https://cat-factory.test'
 // Test env: open the auth gate (dev-open) exactly as the Worker pool does, and pin a
 // non-production ENVIRONMENT so `devOpen` is honoured. The integration toggles stay off
 // (this MVP wires only the runtime-neutral core), matching the Node config defaults.
-const TEST_ENV: NodeJS.ProcessEnv = {
+export const TEST_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   AUTH_DEV_OPEN: 'true',
   ENVIRONMENT: 'test',
@@ -530,6 +532,7 @@ export function makeConformanceApp(
     createOrgWorkspace,
     authEnabled: Boolean(TEST_ENV.AUTH_SESSION_SECRET),
     session: (user) => mintSession(TEST_ENV.AUTH_SESSION_SECRET!, user),
+    machineToken: () => mintMachineToken(TEST_ENV.AUTH_SESSION_SECRET!),
     createWorkspaceInAccount: (accountId, ownerUserId, options) =>
       container.workspaceService.create(
         { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
@@ -556,6 +559,7 @@ export function makeConformanceApp(
     blockRepository: () => createDrizzleRepositories(db, { now: () => Date.now() }).blockRepository,
     workspaceRepository: () => new DrizzleWorkspaceRepository(db),
     workspaceMemberRepository: () => new DrizzleWorkspaceMemberRepository(db),
+    publicApiKeyRepository: () => new DrizzlePublicApiKeyRepository(db),
     initiativeRepository: () =>
       createDrizzleRepositories(db, { now: () => Date.now() }).initiativeRepository,
     notificationRepository: () => new DrizzleNotificationRepository(db),

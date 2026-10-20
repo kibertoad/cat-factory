@@ -45,3 +45,63 @@ export interface RunnerPoolConnectionRepository {
   /** Tombstone the workspace's connection. */
   softDelete(workspaceId: string, at: number): Promise<void>
 }
+
+/**
+ * An ACCOUNT's runner pool: the same shape as {@link RunnerPoolConnectionRecord}, keyed by account
+ * instead of workspace. Every board of the account that has no live pool of its own (and has not
+ * opted out through its `inheritAccountRunnerPool` setting) dispatches to it. One row per account,
+ * with no tombstone: nothing unregisters it through the API, and only a deployment's seed writes it
+ * (inserts it, or replaces it when the seed changed), so a deleted-but-present row would only add a
+ * state nobody reads.
+ */
+export interface AccountRunnerPoolRecord {
+  accountId: string
+  kind: string
+  providerId: string
+  label: string
+  baseUrl: string
+  /** The serialized discriminated `RunnerBackendConfig`. */
+  configJson: string
+  /** Ciphertext of the `{ key: value }` secret bundle (SecretCipher envelope). */
+  secretsCipher: string
+  createdAt: number
+}
+
+export interface AccountRunnerPoolRepository {
+  getByAccount(accountId: string): Promise<AccountRunnerPoolRecord | null>
+  /** The rows of the given accounts in one query; an account with none is absent. Empty in, empty out. */
+  listByAccounts(accountIds: string[]): Promise<AccountRunnerPoolRecord[]>
+  /**
+   * Insert the account's pool unless it already has one, in one conflict-targeted statement (the
+   * unique key on `account_id` is the arbiter, so two concurrent seeders cannot both win). Returns
+   * whether THIS call inserted. An existing row is left untouched, whatever it holds.
+   */
+  insertIfAbsent(record: AccountRunnerPoolRecord): Promise<boolean>
+  /**
+   * Overwrite the account's existing row with `record`, keeping its `createdAt`. Never inserts:
+   * returns whether a row was there to replace.
+   */
+  replace(record: AccountRunnerPoolRecord): Promise<boolean>
+}
+
+/**
+ * Ensures a deployment's DECLARED runner pool exists for an account: the runner-pool sibling of
+ * `EnvironmentHandlerSeeder` and `SharedStackSeeder`, with the same two wiring sites (a boot
+ * backfill, and `WorkspaceService.create`'s on-create hook), but keyed by ACCOUNT because that is
+ * the scope a pool is inherited at. The boot backfill compares each account's row with what the
+ * deployment declares now and replaces it when they differ, so a rotated token or a new image
+ * reaches every account; a second boot with the same seed writes nothing.
+ *
+ * Kept free of integrations knowledge: the port speaks only ids; the concrete seeder (built over
+ * `RunnerPoolConnectionService` and the deployment's seed callback) lives in
+ * `@cat-factory/integrations`. Neither method throws: a failed seed is reported through the logger.
+ */
+export interface RunnerPoolSeeder {
+  /** Seed the account's pool when it has none. A legacy board's `null` account is a no-op. */
+  ensureForAccount(accountId: string | null): Promise<void>
+  /**
+   * Seed every existing account that has no pool, and replace the pool of every account whose
+   * declared seed changed, over batch reads.
+   */
+  ensureForAllAccounts(): Promise<void>
+}

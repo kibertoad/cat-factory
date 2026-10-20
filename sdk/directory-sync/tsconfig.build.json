@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "exclude": ["**/*.test.ts", "**/*.spec.ts", "test/**/*.ts"],
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../typescript/tsconfig.build.json" },
+    { "path": "../webhooks/tsconfig.build.json" }
+  ]
+}

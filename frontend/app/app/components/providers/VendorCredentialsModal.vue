@@ -10,12 +10,13 @@ import type { SubscriptionVendor } from '~/types/domain'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t, n } = useI18n()
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
 const creds = useVendorCredentialsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
@@ -127,11 +128,7 @@ async function add() {
     })
     token.value = ''
     label.value = ''
-    toast.add({
-      title: t('providers.vendorCredentials.toast.connected'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('providers.vendorCredentials.toast.connected')
   } catch (e) {
     present(e, 'providers.vendorCredentials.toast.connectFailed')
   } finally {
@@ -177,11 +174,7 @@ function vendorLabel(v: SubscriptionVendor): string {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('providers.vendorCredentials.title')"
-    :ui="{ content: 'max-w-2xl' }"
-  >
+  <AppModal size="wide" v-model:open="open" :title="t('providers.vendorCredentials.title')">
     <template #title>
       <IntegrationBackTitle :title="t('providers.vendorCredentials.title')" @back="back" />
     </template>
@@ -206,13 +199,7 @@ function vendorLabel(v: SubscriptionVendor): string {
               <p class="min-w-0 flex-1 text-sm text-toned">
                 {{ t('providers.vendorCredentials.personalCallout.text') }}
               </p>
-              <UButton
-                size="xs"
-                color="primary"
-                variant="subtle"
-                class="shrink-0"
-                @click="activeTab = 'personal'"
-              >
+              <UButton size="xs" variant="subtle" class="shrink-0" @click="activeTab = 'personal'">
                 {{ t('providers.vendorCredentials.personalCallout.cta') }}
               </UButton>
             </div>
@@ -347,5 +334,5 @@ function vendorLabel(v: SubscriptionVendor): string {
         </template>
       </UTabs>
     </template>
-  </UModal>
+  </AppModal>
 </template>

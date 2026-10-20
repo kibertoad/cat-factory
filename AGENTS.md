@@ -541,8 +541,8 @@ breaks GitLab deployments. Which layer owns what, and the accepted gaps:
 Six members under `sdk/` are the chain **contracts → `docs/openapi.json` → `sdk/*`** with no
 hand-editing at any link: four clients (TypeScript, Python, Go, Java) and two projections,
 `sdk/mcp` and `sdk/gatekeeper`. `pnpm check:sdk` fails CI on drift and version skew.
-`sdk/gatekeeper-worker` is the ONE hand-written member, a library CONSUMING that table. Generation,
-the smoketest and that exception: [`sdk/README.md`](./sdk/README.md).
+`sdk/{gatekeeper-worker,webhooks,directory-sync}` are hand-written libraries CONSUMING it. Generation,
+the smoketest and those exceptions: [`sdk/README.md`](./sdk/README.md).
 
 - **Never edit a file whose header says GENERATED**; change the contracts or the emitter. Only
   models and operations are generated; each transport is hand-written beside them.

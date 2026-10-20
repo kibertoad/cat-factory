@@ -1,0 +1,77 @@
+<!--
+  @nuxtjs/color-mode injects this global through Nuxt's own HTML template, and Storybook's
+  iframe.html is not that template. Without it the colour-mode plugin reads `preference` off
+  undefined and every story fails before it renders.
+-->
+<script>
+  // The class on <html> is the load-bearing half, not the global.
+  //
+  // `assets/css/tokens.css` is DARK-FIRST: every `--app-*` token is declared at `:root` with its
+  // dark value and overridden under `.light`. With no class at all, every story rendered the
+  // dark-mode tokens on a white page, which is why they all looked washed out. The real app gets
+  // the class from the colour-mode module's inline script, which Storybook's iframe.html never
+  // runs, so we do what that script does.
+  //
+  // `preview.ts` re-applies this per story from the toolbar global; this sets the first paint.
+  ;(function () {
+    var mode = 'light'
+    try {
+      mode = window.localStorage.getItem('sb-color-mode') || 'light'
+    } catch (e) {
+      // Private window or blocked storage. The default is fine.
+    }
+    window.__NUXT_COLOR_MODE__ = {
+      preference: mode,
+      value: mode,
+      // `preview.ts` changes `preference` and `value` when the toolbar changes the mode, so this
+      // reads the field instead of the mode at page load.
+      getColorScheme: function () {
+        return window.__NUXT_COLOR_MODE__.value
+      },
+      addColorScheme: function (c) {
+        document.documentElement.classList.add(c)
+      },
+      removeColorScheme: function (c) {
+        document.documentElement.classList.remove(c)
+      },
+    }
+    document.documentElement.classList.add(mode)
+    document.documentElement.style.colorScheme = mode
+  })()
+</script>
+
+<!--
+  Typefaces.
+
+  Two things have to happen, and only doing the first leaves stories silently rendering in the
+  system stack. The app self-hosts Geist and Geist Mono under `/_fonts` through @nuxt/fonts, which
+  cannot serve them here (see main.ts), so the families come from the CDN: this is a local dev
+  page, not the shipped app, where self-hosting is the whole point.
+  Second, `--font-sans` / `--font-mono` are set at RUNTIME by the theme plugin from the active
+  theme document, and Storybook has no document, so nothing would reference Geist at all. The
+  values below are the Mono preset's (`utils/theme/presets.ts`), which is the theme the catalog's
+  captures use, in the exact shape `utils/theme/css.ts` emits.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap"
+/>
+
+<style>
+  :root {
+    --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'Geist Mono', ui-monospace, monospace;
+  }
+
+  /*
+    The app's `main.css` sets `body { overflow: hidden }`, because the board is a full-screen
+    canvas whose page never scrolls. A story taller than the frame was clipped by it, with no way
+    to reach the rest. Storybook marks the body with the story's layout, so every layout but
+    `fullscreen` (the board canvas, which keeps the app's rule) scrolls again.
+  */
+  body.sb-show-main:not(.sb-main-fullscreen) {
+    overflow: auto;
+  }
+</style>

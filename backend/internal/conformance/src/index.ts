@@ -122,8 +122,14 @@ export { defineEnvironmentHandlersSuite } from './environment-handlers-suite.js'
 export { defineEnvironmentTestSuite } from './environment-test-suite.js'
 export { definePasswordResetTokenSuite } from './password-reset-suite.js'
 export { defineMachineNodeSuite } from './machine-node-suite.js'
+export {
+  defineAccountRunnerPoolSuite,
+  type AccountRunnerPoolSuiteRepos,
+} from './account-runner-pool-suite.js'
 export { defineAuditEventSuite } from './audit-event-suite.js'
 export { defineSessionGenerationSuite } from './session-generation-suite.js'
+export { defineDirectoryFeedSuite, type DirectoryFeedRepos } from './directory-feed-suite.js'
+export { defineDirectoryWebhookSuite } from './directory-webhook-suite.js'
 export { defineAuthAttemptSuite } from './auth-attempt-suite.js'
 export { defineTokenUsageSuite } from './token-usage-suite.js'
 export { defineCommitProjectionSuite } from './commit-projection-suite.js'
@@ -137,7 +143,10 @@ export { defineTutorialProgressSuite } from './tutorial-progress-suite.js'
 export { defineWorkspaceSettingsSuite } from './workspace-settings-suite.js'
 export { defineWorkspaceAccessSuite } from './workspace-access-suite.js'
 export { defineWorkspaceRbacSuite } from './workspace-rbac-suite.js'
-export { mintSession } from './session.js'
+export { definePublicKeyMembershipReachSuite } from './public-key-membership-reach-suite.js'
+export { definePublicKeyReachSuite } from './public-key-reach-suite.js'
+export { definePublicDirectorySuite } from './public-directory-suite.js'
+export { mintMachineToken, mintSession } from './session.js'
 export {
   seedFrameRepoLink,
   type FrameRepoLink,

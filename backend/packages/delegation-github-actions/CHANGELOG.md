@@ -1,5 +1,141 @@
 # @cat-factory/delegation-github-actions
 
+## 0.2.12
+
+### Patch Changes
+
+- Updated dependencies [e9b24a1]
+  - @cat-factory/kernel@0.363.0
+
+## 0.2.11
+
+### Patch Changes
+
+- 5c17395: Dependency refresh, direct and transitive (the lockfile is re-resolved from scratch), held to the
+  24h `minimumReleaseAge` window.
+  
+  Majors, each taken because its whole peer group could move together:
+  
+  - **Vitest 5** (`vitest`, `@vitest/coverage-v8`, `@vitest/browser`, `@vitest/browser-playwright`
+    at `5.0.5`), now that `@cloudflare/vitest-plugin@1.4.4`, `@storybook/addon-vitest`,
+    `@nuxt/test-utils` and `vitest-browser-vue` all accept `^5`. The Worker suite turns Vitest 5's
+    new default `fsModuleCache` off: the Workers pool inlines every warm module into one WebSocket
+    reply, and this suite's graph (~80MB) exceeds workerd's message limit (`1009 Message is too
+    large`).
+  - **msw 3**, for the component stories. `onUnhandledRequest` became `onUnhandledFrame`, which
+    also receives WebSocket frames, and the bundled `mockServiceWorker.js` is regenerated.
+  - **happy-dom 21** for the SPA's unit tests.
+  
+  The Workers test pool moves to `@cloudflare/vitest-plugin@1.4.4`, which pins `wrangler@4.151.1`, so
+  the Cloudflare stack moves with it: workerd `1.20261012.1`, miniflare `5.20261012.1-beta`,
+  `@cloudflare/workers-types` `5.20261012.1` (the resolved workerd's date) and esbuild `0.28.2`
+  (the version wrangler and the plugin now pin, so the scoped esbuild overrides follow).
+  
+  Also the Vercel AI SDK family as one set (`ai@7.0.142`, `@ai-sdk/anthropic@4.0.81`,
+  `@ai-sdk/openai@4.0.95`, `@ai-sdk/openai-compatible@3.0.70`, `@ai-sdk/amazon-bedrock@5.0.117`,
+  `@ai-sdk/provider@4.0.28`), the Vue family at `3.5.44`, `@nuxt/ui@4.12.0`, `pinia@4.1.0`,
+  `storybook@10.6.2`, `undici@8.12.2`, `pg-boss@12.38.0`, `@aws-sdk/client-s3@3.1152.0`,
+  `@hono/node-server@2.1.5`, `@playwright/test@1.64.1`, and the root toolchain (`turbo@2.11.8`,
+  `oxlint@1.88.0`, `oxfmt@0.73.0`, `knip@6.41.0`).
+  
+  Held: the frontend stays on TypeScript 6 (TypeScript 7 ships no classic compiler API for
+  `vue-tsc`); `@nuxt/fonts` stays on 0.14 because `@nuxt/ui@4.12.0` depends on `^0.14.0`; Drizzle
+  stays on `1.0.0-rc.4`, still its `rc` tag; `nuxt@4.6.2` is inside the window.
+- Updated dependencies [5c17395]
+- Updated dependencies [5c17395]
+  - @cat-factory/kernel@0.362.0
+
+## 0.2.10
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/kernel@0.361.0
+
+## 0.2.9
+
+### Patch Changes
+
+- @cat-factory/kernel@0.360.4
+
+## 0.2.8
+
+### Patch Changes
+
+- @cat-factory/kernel@0.360.3
+
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/kernel@0.360.2
+
+## 0.2.6
+
+### Patch Changes
+
+- @cat-factory/kernel@0.360.1
+
+## 0.2.5
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/kernel@0.360.0
+
+## 0.2.4
+
+### Patch Changes
+
+- @cat-factory/kernel@0.359.1
+
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/kernel@0.359.0
+
+## 0.2.2
+
+### Patch Changes
+
+- @cat-factory/kernel@0.358.1
+
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/kernel@0.358.0
+
+## 0.2.0
+
+### Minor Changes
+
+- 87b113e: `GitHubActionsWorkflowScope` gains `baseBranch`, the work repository's base branch from the brief's
+  `branches.base`. A caller shim committed to each onboarded repository is dispatched on that branch,
+  and a resolver had no way to name it, so every deployment restated its default-branch name per
+  repository. It is guaranteed the way `repo` is: a poll or cancel whose handle carries no branch
+  pair (a record written before branches were persisted) is refused rather than defaulted. A literal
+  `workflow` builds no scope and is unaffected.
+
+### Patch Changes
+
+- 1a42f34: `start` takes the run id from the dispatch answer. `POST .../dispatches` answers `200` with
+  `workflow_run_id` and `html_url` on github.com, so a fresh dispatch now returns the real id at once
+  instead of the correlation key, and no poll has to scan the `workflow_dispatch` page to recover it.
+  The pre-dispatch lookup by the `run-name:` marker stays, because a replay after a crash between the
+  dispatch and persisting its answer has only the brief to find its run by, and a server that answers
+  `204` still falls back to the scan. A run taken from the answer is read back once, and a run whose
+  `run-name:` lacks the correlation marker is logged and stated in the start's `note`, because a
+  replay could not re-attach to it. The `inputs` docs now state Actions' cap of 25 inputs.
+- Updated dependencies [1a42f34]
+  - @cat-factory/kernel@0.357.1
+
 ## 0.1.10
 
 ### Patch Changes

@@ -13,6 +13,8 @@
 // "Back to Model providers" control (IntegrationBackTitle). Layout mirrors the Integrations
 // hub row-for-row so the two read as siblings.
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -166,11 +168,7 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('layout.modelProvidersHub.title')"
-    :ui="{ content: 'max-w-xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('layout.modelProvidersHub.title')">
     <template #body>
       <div class="space-y-5" data-testid="model-providers-hub">
         <p class="text-xs text-muted">
@@ -197,9 +195,12 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
           class="w-full"
         />
 
-        <p v-if="!filteredGroups.length" class="px-1 py-6 text-center text-sm text-dimmed">
-          {{ t('layout.modelProvidersHub.noMatches', { query }) }}
-        </p>
+        <EmptyState
+          v-if="!filteredGroups.length"
+          compact
+          icon="i-lucide-search-x"
+          :title="t('layout.modelProvidersHub.noMatches', { query })"
+        />
 
         <section v-for="group in filteredGroups" :key="group.title">
           <SectionLabel as="h3" class="mb-2 px-1">
@@ -225,12 +226,7 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
                   <span v-else class="text-2xs text-dimmed">{{
                     t('layout.modelProvidersHub.status.notConnected')
                   }}</span>
-                  <UBadge
-                    v-if="!anyConnected && item.recommended"
-                    color="primary"
-                    variant="subtle"
-                    size="sm"
-                  >
+                  <UBadge v-if="!anyConnected && item.recommended" variant="subtle" size="sm">
                     {{ t('layout.modelProvidersHub.status.recommended') }}
                   </UBadge>
                 </div>
@@ -246,5 +242,5 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
         </section>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

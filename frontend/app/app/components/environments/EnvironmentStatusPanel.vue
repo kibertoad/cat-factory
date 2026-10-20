@@ -10,6 +10,8 @@ import {
   showsProviderFailure,
 } from '~/components/environments/EnvironmentStatusPanel.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{
   environment: RunEnvironment | null
@@ -112,13 +114,11 @@ const envInTransition = computed(
     </SectionLabel>
     <div v-if="environment" class="space-y-2">
       <div class="flex items-center gap-2 text-sm">
-        <UIcon
+        <Spinner
           :name="ENV_STATUS_META[environment.status].icon"
+          :spinning="runActive && envInTransition"
           class="h-3.5 w-3.5"
-          :class="[
-            ENV_STATUS_META[environment.status].color,
-            { 'animate-spin': runActive && envInTransition },
-          ]"
+          :class="ENV_STATUS_META[environment.status].color"
         />
         <span :class="ENV_STATUS_META[environment.status].color">{{
           ENV_STATUS_META[environment.status].label
@@ -166,8 +166,11 @@ const envInTransition = computed(
         {{ t('environments.statusNote', { note: statusNote }) }}
       </p>
     </div>
-    <p v-else class="text-xs text-dimmed">
-      {{ degradedReason ?? t('environments.empty') }}
-    </p>
+    <EmptyState
+      v-else
+      compact
+      icon="i-lucide-server"
+      :title="degradedReason ?? t('environments.empty')"
+    />
   </section>
 </template>

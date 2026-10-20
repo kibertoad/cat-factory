@@ -402,6 +402,12 @@ const CLASSIFICATION = [
     reason: 'a deployment-supplied environment provider speaking OUR contract',
   },
   {
+    path: 'backend/packages/integrations/src/modules/directoryWebhook/',
+    kind: 'internal',
+    reason:
+      'outbound directory pushes to a subscriber endpoint, on the webhook contract we publish',
+  },
+  {
     path: 'backend/packages/integrations/src/modules/notificationWebhook/',
     kind: 'internal',
     reason: 'outbound delivery to a subscriber endpoint, on the webhook contract we publish',
@@ -515,6 +521,12 @@ const CLASSIFICATION = [
     path: 'backend/runtimes/node/src/logExport.ts',
     kind: 'internal',
     reason: 'installs the OTLP log exporter from observability-otel (swept there)',
+  },
+  {
+    path: 'frontend/storybook/.storybook/public/mockServiceWorker.js',
+    kind: 'internal',
+    reason:
+      "msw's generated service worker for the component stories: it passes the preview page's own requests through and calls no API of its own",
   },
   {
     path: 'frontend/app/',

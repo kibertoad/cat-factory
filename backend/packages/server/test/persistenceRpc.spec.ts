@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ExecutionInstance } from '@cat-factory/kernel'
-import { dataIntegrityFaultOf, isDataIntegrityError } from '@cat-factory/kernel'
+import { DomainError, dataIntegrityFaultOf, isDataIntegrityError } from '@cat-factory/kernel'
 import { createRemoteRepositoryRegistry } from '../src/persistence/remoteRepositories.js'
 import { persistenceErrorToThrowable } from '../src/persistence/rpc.js'
 import {
@@ -90,6 +90,31 @@ describe('persistence RPC round-trip', () => {
     })
     expect(isDataIntegrityError(rebuilt)).toBe(true)
     expect(dataIntegrityFaultOf(rebuilt as never)).toBe('unrecognized_value')
+  })
+
+  it.each(['unavailable', 'unauthorized', 'rate_limited'] as const)(
+    'rebuilds a %s refusal as a DomainError carrying its reason',
+    (code) => {
+      // Left as a plain Error, the node's handleError answered 500 and dropped details.reason.
+      const rebuilt = persistenceErrorToThrowable({
+        code,
+        message: 'refused upstream',
+        details: { reason: 'some_reason' },
+      })
+      expect(rebuilt).toBeInstanceOf(DomainError)
+      expect((rebuilt as DomainError).code).toBe(code)
+      expect((rebuilt as DomainError).details).toEqual({ reason: 'some_reason' })
+    },
+  )
+
+  it("keeps the transport's own forbidden as a plain Error", () => {
+    // `forbidden` is what the transport answers for a rejected machine token; relayed as a 403
+    // it would tell the browser user they lack a workspace permission.
+    const rebuilt = persistenceErrorToThrowable({
+      code: 'forbidden',
+      message: 'invalid machine token',
+    })
+    expect(rebuilt).not.toBeInstanceOf(DomainError)
   })
 
   it('refuses a method outside the allow-list', async () => {

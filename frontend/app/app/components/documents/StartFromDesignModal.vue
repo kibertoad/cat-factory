@@ -20,6 +20,8 @@
 //    render identically. For a designer that widening IS the defect, not a detail.
 import { refRowFor, classifyRefFailure, type RefState } from './ContextDocumentPicker.logic'
 import type { DocumentSourceKind, ResolvedDocumentRef } from '~/types/domain'
+import Spinner from '~/components/common/Spinner.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -150,7 +152,7 @@ function stage() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('documents.startFromDesign.title')">
+  <AppModal size="form" v-model:open="open" :title="t('documents.startFromDesign.title')">
     <template #body>
       <div class="space-y-4">
         <p class="text-sm text-muted">{{ t('documents.startFromDesign.intro') }}</p>
@@ -178,7 +180,7 @@ function stage() {
             v-if="state.status === 'checking'"
             class="flex items-center gap-2 text-sm text-muted"
           >
-            <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
+            <Spinner class="h-4 w-4" />
             {{ t('documents.startFromDesign.checking') }}
           </div>
 
@@ -221,7 +223,6 @@ function stage() {
             {{ t('common.cancel') }}
           </UButton>
           <UButton
-            color="primary"
             icon="i-lucide-arrow-right"
             :disabled="!row || !target"
             data-testid="start-from-design-continue"
@@ -232,5 +233,5 @@ function stage() {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

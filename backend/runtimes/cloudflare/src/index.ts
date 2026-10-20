@@ -39,6 +39,7 @@ import { D1GateOutcomeRepository } from './infrastructure/repositories/D1GateOut
 import { D1NotificationRepository } from './infrastructure/repositories/D1NotificationRepository'
 import { D1PlatformMetricsRepository } from './infrastructure/repositories/D1PlatformMetricsRepository'
 import { D1AuditEventRepository } from './infrastructure/repositories/D1AuditEventRepository'
+import { D1DirectoryRepository } from './infrastructure/repositories/D1DirectoryRepository'
 import { D1SpendRollupRepository } from './infrastructure/repositories/D1SpendRollupRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
 import { registeredBinaryStoreRegistry } from './infrastructure/binaryStores'
@@ -59,6 +60,7 @@ import {
   sweepInfraReachability,
   sweepPlatformHealth,
   sweepSpendAlerts,
+  sweepDirectoryWebhooks,
   SPEND_ALERT_INTERVAL_MS,
   operationalMetrics,
 } from '@cat-factory/server'
@@ -654,6 +656,7 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
       // prune here that does not read `env.DB`: audit retention is measured in years and must not
       // compete with live transactional state for the per-database ceiling.
       auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
+      directoryRepository: new D1DirectoryRepository({ db: env.DB }),
       // The durable cost-attribution rollup: this sweep is its only writer, and prunes it
       // nowhere (see `RetentionDeps`).
       spendRollupRepository: new D1SpendRollupRepository({ db: env.DB }),
@@ -1177,6 +1180,16 @@ function runPeriodicBackstops(
         if (raised > 0 || cleared > 0)
           logger.info('platform health sweep', { cron: 'platform-health', raised, cleared })
       }),
+    )
+  }
+
+  // Push the directory change feed to registered webhook endpoints, on every frequent tick (the
+  // shared interval matches it). Built only when a key can seal endpoint secrets, since without one
+  // no endpoint can exist.
+  if (env.ENCRYPTION_KEY?.trim()) {
+    tick.run(
+      { name: 'directory-webhooks', failureMessage: 'directory webhook sweep failed' },
+      sweepDirectoryWebhooks(buildContainer(env), logger),
     )
   }
 

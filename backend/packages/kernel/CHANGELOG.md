@@ -1,5 +1,273 @@
 # @cat-factory/kernel
 
+## 0.363.0
+
+### Minor Changes
+
+- e9b24a1: A runner pool can now be set once per ACCOUNT, and every board of the account that has no pool of
+  its own dispatches to it. A deployment declares it with `seedAccountRunnerPool` on the Node
+  `start()`: a callback `(account) => { config, secrets } | undefined`, called for personal and org
+  accounts alike. The server inserts the result for each account that has none, at boot and when a
+  board is created. At boot it also replaces an account's pool when the callback's answer differs from
+  the stored one (config, or the decrypted secrets), so a rotated token reaches every account on the
+  next boot; board creation never replaces. On stock Node, where a runner pool is the only
+  executor, a new board then runs an agent with no Infrastructure step. A legacy board with no account
+  gets nothing.
+  
+  A board resolves its pool through one resolver: its own live row, then its account's row, then none.
+  The new workspace setting `inheritAccountRunnerPool` (default `true`) is the explicit "none" marker.
+  `DELETE /workspaces/:id/runner-pool/connection` now sets it to `false` unless the call carries
+  `fallBackToAccount=true`, so removing a board's own pool no longer silently re-routes its work to the
+  account's pool. The query parameter and the setting are additive.
+  
+  The seed is validated like an admin registration (backend kind registered, URL safe, referenced
+  secrets present) through a shared `RunnerPoolConnectionService.validate`. A seed that fails is logged
+  at `error` naming the account on every boot, and a failed read never fails board creation.
+  
+  New storage, mirrored on both runtimes: the `account_runner_pools` table (D1 migration 0110 and a
+  Drizzle migration) with an `AccountRunnerPoolRepository` kernel port (`insertIfAbsent`, and
+  `replace` for a changed seed), a unique key making the insert race safe, `AccountRepository.listAll`, and the `inherit_account_runner_pool` settings column. The
+  account repository is on the mothership allow-list for reads; mothership nodes and `startLocal()` do
+  not seed. The Worker does not take the option: there a pool is an optional target beside the built-in
+  containers.
+
+### Patch Changes
+
+- Updated dependencies [e9b24a1]
+  - @cat-factory/contracts@0.374.0
+
+## 0.362.0
+
+### Minor Changes
+
+- 5c17395: Add Gemini 4 Argon and Meta Muse Wonder to the model catalog and the price table, retire the
+  superseded Gemini Flash entries, and raise the four gateway price rows that had fallen below their
+  route.
+  
+  New catalog entries, both OpenRouter-only because no other route serves them yet:
+  
+  - `gemini-4-argon` (Gemini 4 Argon, 2026-10-13, `google/gemini-4-argon`): Google's new flagship,
+    1M window, image input. Its $2 / $10 per 1M launch price doubles on 2026-12-01, and the row is
+    already priced at the doubled $4 / $20, so the budget gate is never short when it lapses.
+  - `muse-wonder` (Meta Muse Wonder, 2026-10-12, `meta/muse-wonder`): $4 / $20 per 1M, 1M window.
+  
+  Removed: the `gemini-3.7-flash` and `gemini-flash` (3.6 Flash) catalog entries and their price
+  rows, since Google routes every 3.7 Flash request to 3.8 Flash, plus the price rows for the retired
+  `deepseek:deepseek-chat` and `qwen:qwen3-max`. A ref on any of them now meters at its provider's
+  bare fallback, which is dearer than the removed row. A block pinned to a removed catalog entry
+  needs a new pick.
+  
+  Price corrections, all in the safe direction: `openrouter:google/gemini-3.8-flash` follows the
+  gateway's 10% Vertex surcharge (0.76 / 3.80 EUR per 1M), `openrouter:z-ai/glm-5.3` output moves
+  to 4.42, `openrouter:qwen/qwen3.7-max` output to 4.08, and `openrouter:deepseek/deepseek-v4-flash`
+  input to 0.084.
+
+### Patch Changes
+
+- 5c17395: Dependency refresh, direct and transitive (the lockfile is re-resolved from scratch), held to the
+  24h `minimumReleaseAge` window.
+  
+  Majors, each taken because its whole peer group could move together:
+  
+  - **Vitest 5** (`vitest`, `@vitest/coverage-v8`, `@vitest/browser`, `@vitest/browser-playwright`
+    at `5.0.5`), now that `@cloudflare/vitest-plugin@1.4.4`, `@storybook/addon-vitest`,
+    `@nuxt/test-utils` and `vitest-browser-vue` all accept `^5`. The Worker suite turns Vitest 5's
+    new default `fsModuleCache` off: the Workers pool inlines every warm module into one WebSocket
+    reply, and this suite's graph (~80MB) exceeds workerd's message limit (`1009 Message is too
+    large`).
+  - **msw 3**, for the component stories. `onUnhandledRequest` became `onUnhandledFrame`, which
+    also receives WebSocket frames, and the bundled `mockServiceWorker.js` is regenerated.
+  - **happy-dom 21** for the SPA's unit tests.
+  
+  The Workers test pool moves to `@cloudflare/vitest-plugin@1.4.4`, which pins `wrangler@4.151.1`, so
+  the Cloudflare stack moves with it: workerd `1.20261012.1`, miniflare `5.20261012.1-beta`,
+  `@cloudflare/workers-types` `5.20261012.1` (the resolved workerd's date) and esbuild `0.28.2`
+  (the version wrangler and the plugin now pin, so the scoped esbuild overrides follow).
+  
+  Also the Vercel AI SDK family as one set (`ai@7.0.142`, `@ai-sdk/anthropic@4.0.81`,
+  `@ai-sdk/openai@4.0.95`, `@ai-sdk/openai-compatible@3.0.70`, `@ai-sdk/amazon-bedrock@5.0.117`,
+  `@ai-sdk/provider@4.0.28`), the Vue family at `3.5.44`, `@nuxt/ui@4.12.0`, `pinia@4.1.0`,
+  `storybook@10.6.2`, `undici@8.12.2`, `pg-boss@12.38.0`, `@aws-sdk/client-s3@3.1152.0`,
+  `@hono/node-server@2.1.5`, `@playwright/test@1.64.1`, and the root toolchain (`turbo@2.11.8`,
+  `oxlint@1.88.0`, `oxfmt@0.73.0`, `knip@6.41.0`).
+  
+  Held: the frontend stays on TypeScript 6 (TypeScript 7 ships no classic compiler API for
+  `vue-tsc`); `@nuxt/fonts` stays on 0.14 because `@nuxt/ui@4.12.0` depends on `^0.14.0`; Drizzle
+  stays on `1.0.0-rc.4`, still its `rc` tag; `nuxt@4.6.2` is inside the window.
+- Updated dependencies [5c17395]
+  - @cat-factory/contracts@0.373.1
+
+## 0.361.0
+
+### Minor Changes
+
+- 83f6b0c: A personal API key can follow its person's workspaces. Minted with `followsMemberships: true`
+  (beside `actsAsSelf: true`, and no `workspaceIds`), it reaches every workspace that person can act
+  in, resolved on each call: joining a workspace grants it on the next call and leaving takes it
+  away, with nothing to re-mint. In each workspace its scope is lowered to what the person's role
+  there allows (`read` for a viewer, `decide` for a member, `admin` for an admin), and on account-level
+  routes it acts with `read`, so it can never do more over `/api/v1` than its person can in the app.
+  That is also why anyone with `runs.execute` may mint one, list it and revoke it; an account admin
+  manages anyone's.
+  
+  `followsMemberships` is new on a listed or minted key (whose `workspaceIds` is then `[]`), on
+  `GET /api/v1/me` and on `GET /api/v1/directory/reach`, which answer the reach as of the call.
+  OpenAPI 1.89.0. The API tokens window offers "My workspaces (follows my memberships)", the default
+  for a personal token, and `?newApiKey` takes `reach=memberships`. New migrations: D1
+  `0110_public_api_key_follows_memberships.sql`, Drizzle
+  `20261016160143_public_api_key_follows_memberships`.
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/contracts@0.373.0
+
+## 0.360.4
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+
+## 0.360.3
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+
+## 0.360.2
+
+### Patch Changes
+
+- 6f574e9: API keys gain a `webhooks` scope between `read` and `write`: everything `read` can do, plus
+  registering and removing push endpoints. The directory webhooks (`/api/v1/directory/webhooks`,
+  still for a key reaching every workspace) and the notification webhooks
+  (`/api/v1/notification-webhook[s]`) now need `webhooks` instead of `admin`, so a sync integration
+  can follow changes with a key that cannot author or delete work. Every key that could manage
+  webhooks before still can. OpenAPI 1.86.0.
+  
+  The API token form names each scope by its API name (`read`, `webhooks`, `write`, `decide`,
+  `admin`), so the screen, the docs and the refusal messages agree. "Full access" is now "Admin".
+  
+  The token form always shows the Workspaces picker, in basic and advanced mode. It is disabled for
+  anyone who is not an account admin, with a line saying so, because only an account admin may mint
+  a key that reaches other workspaces.
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+
+## 0.360.1
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+
+## 0.360.0
+
+### Minor Changes
+
+- 58b57cc: A directory `DirectoryUser` carries `accounts`: the GitHub and GitLab accounts the user signed in
+  with, as `{ provider, id, login }` where `id` is the host's numeric user id, so a system mirroring
+  the directory can match people on their host account instead of an email. Linking such an account
+  to a user, or moving it to another user, records a `user` change on the feed for each user
+  involved. Password, Google and OIDC logins are not published. OpenAPI 1.84.0.
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/contracts@0.368.0
+
+## 0.359.1
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/contracts@0.367.0
+
+## 0.359.0
+
+### Minor Changes
+
+- 04c1587: Public-API keys belong to an account and reach every workspace in it or a chosen list. A
+  workspace-scoped `/api/v1` call names its workspace in the `x-cat-factory-workspace` header, which a
+  key reaching one workspace may omit, so every existing key keeps working unchanged. `PublicApiKey`
+  and `GET /api/v1/me` gain `workspaceIds`; both mint bodies accept it. Widening a key past the board
+  it is minted from takes an account admin, and a key can never mint or revoke one reaching further
+  than itself. The header is on the CORS allow-list, so a browser client can send it. The four SDK
+  clients take a workspace option. OpenAPI 1.80.0.
+  
+  Storage break (internal): `public_api_keys.workspace_id` is replaced by `all_workspaces` plus the
+  `public_api_key_workspaces` grant table (D1 `0108`, Drizzle `20261009143721` and `20261009143724`),
+  backfilled from the old column. The account cap is 200 live keys, where it was 50 per workspace,
+  and a key left with no workspace after its boards were deleted holds no slot.
+- f1b6c9a: `/api/v1/directory/*`: an account's workspaces, users, account memberships, workspace memberships
+  and linked repositories as keyset-paged snapshots, plus an ordered change feed whose changes carry
+  each entity's current state (or `null` once it is gone), for an integration keeping its own copy in
+  sync. A feed cursor older than the new `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30) is refused
+  with the new `cursor_expired` conflict reason. OpenAPI 1.81.0.
+  
+  Internal: the change-row mapping both facades share moves to kernel's `directoryChangeFromRow`.
+  The slice 1 `DirectoryChangeRepository` port becomes `DirectoryRepository` and joins
+  `CoreDependencies` as a required member, with its reads on the mothership allow-list.
+- 20d4f01: Directory webhooks: `/api/v1/directory/webhooks` registers account-level endpoints that the
+  directory change feed is pushed to every couple of minutes, signed like the notification webhooks.
+  Each push is a `directory.changed` page of hydrated changes, or `directory.resync_required` for an
+  endpoint that fell behind the feed's retention. Delivery is a sweep on both facades (the Worker's
+  frequent cron, a Node timer) that takes a per-endpoint lease before a push and moves the endpoint's
+  position only after the push succeeds, so pushes are at-least-once, arrive in feed order, and are
+  never doubled by concurrent sweepers; a lease whose sweeper died expires and the page is sent again. The spec gains an OpenAPI 3.1 `webhooks` section naming every push body, so
+  `DirectoryWebhookDelivery`, `NotificationWebhookDelivery`, `RunWebhookDelivery` and
+  `PlatformAlertWebhookDelivery` become generated types in every client.
+  OpenAPI 1.82.0. New migrations: D1 `0109_directory_webhooks.sql`, Drizzle
+  `20261010113115_directory_webhooks`.
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+
+## 0.358.1
+
+### Patch Changes
+
+- Updated dependencies [91dedb6]
+  - @cat-factory/contracts@0.365.0
+
+## 0.358.0
+
+### Minor Changes
+
+- 5ec1794: Record a per-account directory change feed. Every write to a user, account membership, workspace,
+  workspace membership or repo projection row now appends a `directory_changes` row naming the entity,
+  in the same transaction (Postgres) or batch (D1), with a per-account `seq` whose commit order equals
+  its numeric order. New migrations: D1 `0107_directory_changes.sql` and Drizzle
+  `20261009141534_directory_changes`. Nothing reads the feed yet; the public directory API and
+  webhooks follow (docs/initiatives/directory-sync.md).
+  
+  The local `linkRepo` helper now writes the repo through `DrizzleRepoProjectionRepository`, so
+  re-linking a repo keeps its monorepo flag instead of resetting it.
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/contracts@0.364.0
+
+## 0.357.1
+
+### Patch Changes
+
+- 1a42f34: `start` takes the run id from the dispatch answer. `POST .../dispatches` answers `200` with
+  `workflow_run_id` and `html_url` on github.com, so a fresh dispatch now returns the real id at once
+  instead of the correlation key, and no poll has to scan the `workflow_dispatch` page to recover it.
+  The pre-dispatch lookup by the `run-name:` marker stays, because a replay after a crash between the
+  dispatch and persisting its answer has only the brief to find its run by, and a server that answers
+  `204` still falls back to the scan. A run taken from the answer is read back once, and a run whose
+  `run-name:` lacks the correlation marker is logged and stated in the start's `note`, because a
+  replay could not re-attach to it. The `inputs` docs now state Actions' cap of 25 inputs.
+
 ## 0.357.0
 
 ### Minor Changes

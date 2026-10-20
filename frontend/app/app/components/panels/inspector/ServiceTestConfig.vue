@@ -21,6 +21,7 @@ import InspectorSection from '~/components/panels/inspector/InspectorSection.vue
 import ServiceSelfTests from '~/components/panels/inspector/ServiceSelfTests.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
+import AppModal from '~/components/common/AppModal.vue'
 
 // Service-level (frame) configuration: the service-owned PROVISIONING — the provision
 // TYPE this service produces (`infraless` / `docker-compose` / `kubernetes` / `custom`)
@@ -49,10 +50,10 @@ const ui = useUiStore()
 const { t, te } = useI18n()
 
 // The custom-manifest-type catalog feeds the `custom` picker. Cheap + shared (coalesced).
-// The repo list backs the detect-from-repo affordance (owner/name lookup).
+// The repo list behind the detect-from-repo affordance (owner/name lookup) is loaded by the
+// surface that hosts this section: the inspector panel, or the add-service modal on open.
 onMounted(() => {
   void infra.ensureLoaded()
-  void github.ensureLoaded()
 })
 
 // The service's declared provision type (absent ⇒ treated as `infraless`: no environment
@@ -467,7 +468,6 @@ function setSize(value: InstanceSize) {
       <UButton
         size="xs"
         variant="soft"
-        color="primary"
         icon="i-lucide-flask-conical"
         data-testid="env-setup-nudge-open"
         @click="ui.openEnvironmentSetup(props.block.id)"
@@ -484,7 +484,6 @@ function setSize(value: InstanceSize) {
         <UButton
           size="xs"
           variant="soft"
-          color="primary"
           icon="i-lucide-wand-sparkles"
           :loading="detecting"
           @click="detectFromRepo"
@@ -811,7 +810,6 @@ function setSize(value: InstanceSize) {
           <UButton
             size="xs"
             variant="soft"
-            color="primary"
             icon="i-lucide-file-cog"
             :loading="generating"
             :disabled="!customManifestPath && !selectedCustomType?.defaultManifestPath"
@@ -843,7 +841,8 @@ function setSize(value: InstanceSize) {
       </div>
     </div>
 
-    <UModal
+    <AppModal
+      size="form"
       v-model:open="browseOpen"
       :title="
         browseTarget === 'compose'
@@ -877,13 +876,13 @@ function setSize(value: InstanceSize) {
               </template>
               <template v-else>{{ t('inspector.testConfig.noFileSelected') }}</template>
             </p>
-            <UButton size="xs" color="primary" :disabled="!pickedPath" @click="applyPicked">
+            <UButton size="xs" :disabled="!pickedPath" @click="applyPicked">
               {{ t('inspector.testConfig.useThisFile') }}
             </UButton>
           </div>
         </div>
       </template>
-    </UModal>
+    </AppModal>
 
     <!-- Provisioning hints: advisory inputs to the ephemeral-environment provisioner.
          Collapsed by default — most services never tune them. -->

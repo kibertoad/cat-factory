@@ -159,6 +159,26 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByIds: { scope: { kind: 'accountList', arg: 0 } },
     findPersonalByUser: { scope: { kind: 'selfUser', arg: 0 } },
   },
+  // The public directory read side (backend/docs/adr/0067-directory-sync.md), so a mothership-mode node
+  // can serve `/api/v1/directory/*` over the account's real directory. Reads only, every one bound
+  // to the account it names: the feed rows are appended by the mothership's own writes, and
+  // `pruneChanges` is the mothership's retention sweep, which a node never runs. `headSeqs` reads
+  // across accounts for the mothership's webhook delivery sweep, so it is absent too.
+  directoryRepository: {
+    listChanges: { scope: { kind: 'account', arg: 0 } },
+    headSeq: { scope: { kind: 'account', arg: 0 } },
+    oldestSeq: { scope: { kind: 'account', arg: 0 } },
+    listWorkspaces: { scope: { kind: 'account', arg: 0 } },
+    listUsers: { scope: { kind: 'account', arg: 0 } },
+    listAccountMemberships: { scope: { kind: 'account', arg: 0 } },
+    listWorkspaceMemberships: { scope: { kind: 'account', arg: 0 } },
+    listRepos: { scope: { kind: 'account', arg: 0 } },
+    getWorkspaces: { scope: { kind: 'account', arg: 0 } },
+    getUsers: { scope: { kind: 'account', arg: 0 } },
+    getAccountMemberships: { scope: { kind: 'account', arg: 0 } },
+    getWorkspaceMemberships: { scope: { kind: 'account', arg: 0 } },
+    getRepos: { scope: { kind: 'account', arg: 0 } },
+  },
   membershipRepository: {
     // Reads only — `upsert`/`remove` are admin-gated (see allow-list note above).
     listByUser: { scope: { kind: 'selfUser', arg: 0 } },
@@ -1222,6 +1242,18 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
     softDelete: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // The ACCOUNT tier of the runner pool: the row every board of the account falls back to when it
+  // has none of its own, read by `RunnerPoolConnectionService`'s dispatch resolver. Both reads are
+  // account-scoped (`getByAccount` by arg0 under the `account` rule, `listByAccounts` by the
+  // `accountList` rule, so every requested id must be in scope) and return the credentials as a
+  // SEALED `secretsCipher` blob, exactly like `runnerPoolConnectionRepository` above, so no
+  // plaintext crosses the machine API. `insertIfAbsent` and `replace` are NOT exposed: they are the
+  // deployment seed's writes, which run where the deployment declares it (a node never seeds),
+  // classified `sweeper` in the drift guard.
+  accountRunnerPoolRepository: {
+    getByAccount: { scope: { kind: 'account', arg: 0 } },
+    listByAccounts: { scope: { kind: 'accountList', arg: 0 } },
   },
   // --- Binary-artifact metadata surface (visual-confirmation gate) -----------------
   // The metadata rows for stored binary blobs (UI screenshots + the reference design images they

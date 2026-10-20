@@ -2,6 +2,7 @@
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { CloudProvider } from '~/types/domain'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 // Account + board switching. Picks the active account (personal / org) and the
 // active board within it, and manages boards (new / rename / delete). The account
@@ -12,14 +13,23 @@ import SectionLabel from '~/components/common/SectionLabel.vue'
 // account row folds away — it is a label with a menu duplicated inside the board menu's
 // reach — and the board button keeps only its glyph. Both dropdowns are unchanged, so
 // switching boards never requires expanding the sidebar first.
-withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false })
+//
+// `standalone` is for a host OUTSIDE the board page (the repository-host gate), where the
+// page-level dialogs are not mounted. The items that open one are left out there: "Account
+// settings" opens `AccountSettingsPanel` and "Delete board" awaits `ConfirmDialog`, so on the gate
+// both would do nothing and then fire once a board page mounted, the delete against the board that
+// was active when it was asked.
+const props = withDefaults(defineProps<{ collapsed?: boolean; standalone?: boolean }>(), {
+  collapsed: false,
+  standalone: false,
+})
 
 const { t } = useI18n()
 
 const accounts = useAccountsStore()
 const workspace = useWorkspaceStore()
 const ui = useUiStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const access = useWorkspaceAccess()
 const { confirm } = useConfirm()
@@ -65,14 +75,19 @@ const accountItems = computed<DropdownMenuItem[][]>(() => [
     },
     // Account settings: the unified per-account panel (team + roles + invitations + email
     // sender + account-tier fragment library). The panel itself handles personal accounts
-    // (prompting to create an org for the team tab), so this is not gated.
-    {
-      label: t('layout.boardSwitcher.account.settings'),
-      icon: 'i-lucide-settings',
-      onSelect: () => ui.openAccountSettings(),
-    },
+    // (prompting to create an org for the team tab), so this is not gated by role; it is left out
+    // only where the panel is not mounted (`standalone`).
+    ...(props.standalone
+      ? []
+      : [
+          {
+            label: t('layout.boardSwitcher.account.settings'),
+            icon: 'i-lucide-settings',
+            onSelect: () => ui.openAccountSettings(),
+          },
+        ]),
     // Admins can set the account-wide default provider new services inherit.
-    ...(accounts.activeAccount?.roles?.includes('admin')
+    ...(accounts.isActiveAccountAdmin
       ? [
           {
             label: t('layout.boardSwitcher.account.defaultProvider'),
@@ -122,12 +137,17 @@ const boardItems = computed<DropdownMenuItem[][]>(() => [
             icon: 'i-lucide-pencil',
             onSelect: () => openPrompt('rename'),
           },
-          {
-            label: t('layout.boardSwitcher.board.delete'),
-            icon: 'i-lucide-trash-2',
-            color: 'error' as const,
-            onSelect: () => void removeBoard(),
-          },
+          // Delete confirms through the page's `ConfirmDialog`, absent in `standalone`.
+          ...(props.standalone
+            ? []
+            : [
+                {
+                  label: t('layout.boardSwitcher.board.delete'),
+                  icon: 'i-lucide-trash-2',
+                  color: 'error' as const,
+                  onSelect: () => void removeBoard(),
+                },
+              ]),
         ]
       : []),
   ],
@@ -172,7 +192,7 @@ async function removeBoard() {
   busy.value = true
   try {
     await workspace.remove(id)
-    toast.add({ title: t('layout.boardSwitcher.toast.boardDeleted'), icon: 'i-lucide-check' })
+    actionToast.success('layout.boardSwitcher.toast.boardDeleted')
   } catch (e) {
     present(e, 'layout.boardSwitcher.toast.deleteBoardFailed')
   } finally {
@@ -303,7 +323,11 @@ async function submitPrompt() {
     </UDropdownMenu>
 
     <!-- create / rename prompt -->
-    <UModal v-model:open="promptOpen" :title="prompt ? promptMeta[prompt].title : ''">
+    <AppModal
+      size="prompt"
+      v-model:open="promptOpen"
+      :title="prompt ? promptMeta[prompt].title : ''"
+    >
       <template #body>
         <UForm class="space-y-3" @submit="submitPrompt">
           <UFormField :label="t('layout.boardSwitcher.prompt.nameLabel')">
@@ -339,12 +363,12 @@ async function submitPrompt() {
             >
               {{ t('common.cancel') }}
             </UButton>
-            <UButton type="submit" color="primary" :loading="busy">
+            <UButton type="submit" :loading="busy">
               {{ prompt ? promptMeta[prompt].cta : '' }}
             </UButton>
           </div>
         </UForm>
       </template>
-    </UModal>
+    </AppModal>
   </div>
 </template>

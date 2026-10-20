@@ -52,7 +52,6 @@ useEnvironmentWizardTarget(() => props.input.frameId)
 
     <div v-if="!store.saved" class="flex justify-end">
       <UButton
-        color="primary"
         icon="i-lucide-save"
         :loading="store.saving"
         :disabled="!store.composeService.trim()"

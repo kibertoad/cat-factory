@@ -27,8 +27,10 @@ import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import { appInstallationManageUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
+import { prefilledRepoMatch, prefillProviderMismatch } from '~/composables/useAddRepoDeepLink'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 
@@ -41,7 +43,7 @@ const ui = useUiStore()
 const github = useGitHubStore()
 const board = useBoardStore()
 const services = useServicesStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { freeFramePosition, focusFrame } = useFramePlacement()
 
@@ -58,10 +60,10 @@ const adding = ref(false)
 async function loadRepos() {
   try {
     await github.probe()
-    // Load only the linked-repo projection (to flag repos already on the board). The
+    // Load the linked-repo projection once per board (to flag repos already on the board). The
     // available-repos list is NOT prefetched — it's searched server-side on demand once
     // the user types (see the repoQueryRaw watcher), so a wide install isn't shipped whole.
-    if (github.connected) await github.load()
+    await github.refresh()
   } catch {
     // Integration off / unreachable → the picker stays empty, GitHubConnect shows.
   }
@@ -308,6 +310,36 @@ watch(
   { immediate: true },
 )
 
+// A deep link's repository is typed into the search once the picker's menu has MOUNTED, and after
+// the tick it mounted in: Nuxt UI's InputMenu clears its own search term on that tick, so a term set
+// on open is wiped (the picker mounts with the window, or later behind the connect prompt). The
+// prefill is spent once its repository is selected below, so nothing is typed after that.
+const repoMenu = ref<unknown>(null)
+watch(
+  repoMenu,
+  async (menu) => {
+    if (menu === null || !ui.addServicePrefill) return
+    await nextTick()
+    if (ui.addServicePrefill) repoSearch.value = ui.addServicePrefill.repo
+  },
+  { flush: 'post' },
+)
+
+// A deep link names one repository: select it as soon as the search lists it, once. A repository
+// the connection cannot reach never lists, which leaves the search's own empty state (and its
+// grant-access remedy) in front of the person.
+const prefillMismatch = computed(() =>
+  prefillProviderMismatch(ui.addServicePrefill, github.connected ? github.provider : null),
+)
+watch(repoResults, (repos) => {
+  const prefill = ui.addServicePrefill
+  if (!prefill || prefillMismatch.value || selectedRepoId.value !== undefined) return
+  const match = prefilledRepoMatch(prefill, repos)
+  if (!match || toRepoItem(match).disabled) return
+  selectedRepoId.value = match.githubId
+  ui.addServicePrefill = null
+})
+
 // A whole-repo service is added once (then configured inline). A monorepo instead
 // multi-selects directories and adds them together via `addServices`.
 const canAdd = computed(
@@ -349,11 +381,8 @@ async function add() {
     // Centre the camera on the newly imported service.
     await focusFrame(block.id)
     configuredBlockId.value = block.id
-    toast.add({
-      title: t('github.addService.toast.addedTitle'),
+    actionToast.success('github.addService.toast.addedTitle', {
       description: t('github.addService.toast.addedDescription', { title: block.title }),
-      icon: 'i-lucide-check',
-      color: 'success',
     })
   } catch (e) {
     present(e, 'github.addService.toast.addFailedTitle')
@@ -417,17 +446,16 @@ async function addServices() {
     const lastBlockId = created.at(-1)?.blockId
     if (lastBlockId) await focusFrame(lastBlockId)
     selectedDirectories.value = []
-    toast.add({
-      title: t('github.addService.toast.servicesAddedTitle'),
+    const added = {
       description: [
         t('github.addService.toast.servicesAddedDescription', { count: dirs.length }, dirs.length),
         frontendNote(designatedDirectory, wiringLanded),
       ]
         .filter(Boolean)
         .join(' '),
-      icon: wiringLanded ? 'i-lucide-check' : 'i-lucide-triangle-alert',
-      color: wiringLanded ? 'success' : 'warning',
-    })
+    }
+    if (wiringLanded) actionToast.success('github.addService.toast.servicesAddedTitle', added)
+    else actionToast.warning('github.addService.toast.servicesAddedTitle', added)
   } catch (e) {
     present(e, 'github.addService.toast.addFailedTitle')
   } finally {
@@ -441,7 +469,7 @@ function done() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('github.addService.title')" :ui="{ content: 'max-w-xl' }">
+  <AppModal size="form" v-model:open="open" :title="t('github.addService.title')">
     <template #body>
       <div class="space-y-6">
         <p class="text-sm text-muted">
@@ -483,6 +511,7 @@ function done() {
                  to forward the attribute to. -->
             <div class="space-y-1.5" data-testid="add-service-repo-search">
               <UInputMenu
+                ref="repoMenu"
                 v-model="selectedRepoId"
                 v-model:search-term="repoSearch"
                 :items="repoMenuItems"
@@ -513,6 +542,19 @@ function done() {
               </UInputMenu>
             </div>
           </UFormField>
+
+          <p
+            v-if="prefillMismatch"
+            class="text-sm text-app-warning-200/90"
+            data-testid="add-service-prefill-mismatch"
+          >
+            {{
+              t('github.addService.prefillProviderMismatch', {
+                repo: ui.addServicePrefill?.repo,
+                connected: providerLabel,
+              })
+            }}
+          </p>
 
           <UFormField
             :label="t('github.addService.repoType')"
@@ -597,7 +639,6 @@ function done() {
 
                 <div class="flex justify-end">
                   <UButton
-                    color="primary"
                     icon="i-lucide-plus"
                     size="sm"
                     :loading="adding"
@@ -675,7 +716,6 @@ function done() {
             </UButton>
             <UButton
               v-if="!isMonorepo && !configuredBlock"
-              color="primary"
               icon="i-lucide-plus"
               :loading="adding"
               :disabled="!canAdd"
@@ -688,5 +728,5 @@ function done() {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>
