@@ -18,6 +18,7 @@ const ADMIN: SetupActor = {
   fullSurface: true,
   canManageIntegrations: true,
   canExecuteRuns: true,
+  canWriteBoard: true,
   isAccountAdmin: true,
   accountsEnabled: true,
 }

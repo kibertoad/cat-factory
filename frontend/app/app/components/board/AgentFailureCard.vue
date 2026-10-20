@@ -25,6 +25,8 @@ const agentRuns = useAgentRunsStore()
 const execution = useExecutionStore()
 const access = useWorkspaceAccess()
 const ui = useUiStore()
+const remedies = useSetupRemedies()
+const { actor } = useSetupActor()
 const auth = useAuthStore()
 const board = useBoardStore()
 
@@ -114,10 +116,13 @@ async function startNewRun() {
 }
 
 // The setting that fixes the cause: the block's action for `fix`, a second button beside Retry
-// for `retry` (an environment failure, which is most often temporary but can be a setting).
+// for `retry` (an environment failure, which is most often temporary but can be a setting). It
+// opens through the setup remedies, the same screen the toast's fix opens.
 const fix = computed(() => {
   const f = presented.value?.fix
-  return f ? { label: t(f.labelKey), icon: f.icon, run: () => f.run(ui) } : null
+  return f
+    ? { label: t(f.labelKey), icon: f.icon, run: () => f.fix.open(remedies, actor.value) }
+    : null
 })
 const newRunDenied = computed(() => action.value === 'newRun' && !access.canExecuteRuns.value)
 
