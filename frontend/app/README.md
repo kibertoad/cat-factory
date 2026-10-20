@@ -1496,7 +1496,8 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
 - **Board canvas** (`components/board`): `BoardCanvas` + `nodes/` (`BlockNode`,
   `FrameSwimlanes` / `TaskLane` / `LaneGroup` / `LaneTask`, `TaskCard`), dependency edges,
   the per-block `AgentFailureCard` (the ONE failure block per task view: a cause line from
-  `utils/failureCause.ts`, one action, and the backend's text behind Details) /
+  `utils/failureCause.ts`, one action, and the backend's text behind Details; a setup fix is a
+  button only for a caller who can save it, through `gateSetupFix`, as the toasts do) /
   `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`. Tasks are laid out in status
   lanes rather than at coordinates (see [Task swimlanes](#task-swimlanes)); the board-level
   order/grouping override is `LaneViewControl` in the toolbar. A running task card expands

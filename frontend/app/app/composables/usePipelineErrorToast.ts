@@ -25,10 +25,6 @@
  */
 
 import { createBespokeConflictToasts } from '~/composables/pipelineErrorToast/bespokeConflicts'
-import {
-  gateSetupFix,
-  type SetupConflictDeps,
-} from '~/composables/pipelineErrorToast/setupConflictGate'
 // Imported by path rather than left to Nuxt's auto-import: this module is also loaded directly by
 // unit tests (and from store setup), where the auto-import globals are not installed.
 import { useCopyToClipboard } from '~/composables/useCopyToClipboard'
@@ -40,7 +36,7 @@ import type {
 import { apiErrorEnvelope, apiErrorReason, apiErrorStatus } from './api/errors'
 import { conflictInfo } from '~/utils/conflictCopy'
 import { SETUP_REMEDY_KEYS } from '~/utils/setupAudience'
-import type { SetupRemedies } from '~/utils/setupFixes'
+import { gateSetupFix, type SetupConflictDeps, type SetupRemedies } from '~/utils/setupFixes'
 
 /** The parsed shape of a backend conflict (`{ error: { code: 'conflict', details } }`). */
 interface ConflictDetails {
