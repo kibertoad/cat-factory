@@ -825,8 +825,8 @@ async function backfillWorkspaceSeeds(
  * New workspaces are covered by `WorkspaceService.create`. A seeder that isn't wired is skipped.
  * BEST-EFFORT: a per-workspace failure is logged and skipped, and a total failure (e.g. the
  * enumeration itself) is caught, because a seed failure must never crash boot (the runner-pool
- * seeder reports its own failures, a bad seed at `error`). Shared by the Node boot (after listen).
- * The local mothership boot does not run `bootServer` and does not seed a runner pool.
+ * seeder reports its own failures, a bad seed at `error`). Shared by the Node boot (after listen)
+ * and the local mothership boot, whose container never builds a runner-pool seeder.
  */
 export async function backfillDeclaredSeeds(
   container: Pick<

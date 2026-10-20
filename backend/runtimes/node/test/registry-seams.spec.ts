@@ -318,6 +318,23 @@ const _authoringVocabulary:
     }
   | undefined = undefined
 
+// ---------------------------------------------------------------------------
+// The DECLARED SEEDS: rows a deployment states in code (environment handlers, shared stacks, the
+// account runner pool) that the boot backfills and board creation applies. They are not registries,
+// so the guards above cannot see them, and they fail the same silent way: `createCore` treats an
+// absent seed as "none declared", so an unforwarded one boots clean and seeds nothing.
+// `seedAccountRunnerPool` shipped on `start()` alone; the local sibling spec holds `startLocal` to
+// the same set.
+// ---------------------------------------------------------------------------
+
+/** Every declared seed on `CoreDependencies`, derived rather than listed. */
+type DeclaredSeed = Extract<keyof CoreDependencies, `seed${string}`>
+// If either line errors, a seed `createCore` reads is missing from the builder or the entry point.
+type _EverySeedIsANodeOption = DeclaredSeed extends keyof NodeContainerOptions ? true : never
+type _EverySeedIsAStartOption = DeclaredSeed extends keyof StartOptions ? true : never
+const _seedsAreThreaded: _EverySeedIsANodeOption = true
+const _seedsAreReachable: _EverySeedIsAStartOption = true
+
 describe('app-owned registry seams', () => {
   it('routes every registry on CoreDependencies, so a new one cannot land unthreaded', () => {
     // The compile-time assertions carry the guard; this keeps the classification honest at
@@ -393,6 +410,12 @@ describe('app-owned registry seams', () => {
     expect(published.length).toBeGreaterThan(0)
     const exported = new Set(Object.keys(facade))
     expect(published.filter((name) => !exported.has(name))).toEqual([])
+  })
+
+  it('reaches every DECLARED SEED from the builder and the boot entry point', () => {
+    // Carried by the type assertions above; the assertion gives them a failing test to point at.
+    expect(_seedsAreThreaded).toBe(true)
+    expect(_seedsAreReachable).toBe(true)
   })
 
   it('names the authoring vocabulary a registration literal is typed against', () => {

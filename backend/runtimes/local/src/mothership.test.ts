@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { noopLogger } from '@cat-factory/kernel'
-import { MachineTokenUnavailableError } from '@cat-factory/server'
+import { MachineTokenUnavailableError, logger } from '@cat-factory/server'
 import { type DriveConfig, NodeRealtimeHub, createDbClient } from '@cat-factory/node-server'
 import { buildLocalContainer } from './container.js'
 import {
@@ -738,6 +738,26 @@ describe('buildLocalContainer (mothership, no Postgres)', () => {
     expect(container.localSettings).toBeDefined()
     // The SPA flag is surfaced so the UI can label local-vs-mothership storage.
     expect(container.config.localMode?.mothership).toBe(true)
+  })
+
+  it('refuses a declared runner pool seed, saying why, rather than sealing org rows locally', () => {
+    vi.stubGlobal('fetch', () => {
+      throw new Error('no network at build time')
+    })
+    const warn = vi.spyOn(logger, 'warn')
+    const seedSource = vi.fn(() => undefined)
+
+    const container = buildLocalContainer({
+      env: MOTHERSHIP_ENV,
+      seedAccountRunnerPool: seedSource,
+    })
+
+    // No seeder, so neither the boot backfill nor board creation can write an account pool here:
+    // the rows live on the mothership and this node's key is not the one that opens them.
+    expect(container.runnerPoolSeeder).toBeUndefined()
+    expect(seedSource).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('seedAccountRunnerPool is ignored'))
+    warn.mockRestore()
   })
 })
 

@@ -7,6 +7,7 @@ import {
   type InitiativePresetRegistry,
   type FoundationalServiceRegistry,
   type InlineUseCaseRegistry,
+  type RunnerPoolSeedSource,
   type TaskTypeRegistry,
   DEFAULT_APP_CACHES_PROFILE,
   NodeRealtimeHub,
@@ -284,6 +285,18 @@ export interface StartLocalOptions {
    * own. Bringing one UP needs the host Docker daemon, which local mode has. Omitted ⇒ no seeding.
    */
   seedSharedStacks?: CreateSharedStackInput[]
+  /**
+   * A deployment's DECLARED runner pools, `(account) => { config, secrets } | undefined`: the same
+   * seed the Node `start()` takes, stored once per account and inherited by every board of it.
+   * Postgres path only: forwarded through `start()`, which boot-backfills every account and
+   * replaces a stored pool whose declared seed changed. In mothership mode it is IGNORED with a
+   * boot warning, because the account rows live on the mothership and this node would seal their
+   * secrets with its own key; declare the seed on the mothership instead.
+   *
+   * A local board still runs its agents in host containers by default. The inherited pool takes
+   * them only on a board with `delegateAgentsToRunnerPool` on. Omitted ⇒ no seeding.
+   */
+  seedAccountRunnerPool?: RunnerPoolSeedSource
 }
 
 // Boot the local-mode service. It reuses the Node facade's `start()` — Postgres +
@@ -452,6 +465,8 @@ async function bootLocal(
     // …and the declared shared stacks along the same path, so a local deployment can describe its
     // whole infra dependency set (inline compose documents included) in code.
     seedSharedStacks: options.seedSharedStacks,
+    // …and the declared runner pools, which `start()` backfills over every account at boot.
+    seedAccountRunnerPool: options.seedAccountRunnerPool,
     // Inject the deployment's backend registries (if any) by reference — `start()` never puts a
     // `backendRegistries` on `o`, so this can't clobber one, and when absent `buildLocalContainer`
     // falls back to `createBackendRegistries()` (the built-in-only default). Unchanged from the
@@ -577,6 +592,7 @@ async function startLocalMothership(
     capabilityCredentialEnvironmentFallback,
     seedEnvironmentHandlers,
     seedSharedStacks,
+    seedAccountRunnerPool,
   } = extensions
   logger.info(
     'local mode: booting in MOTHERSHIP mode (no local Postgres; org state served remotely)',
@@ -613,6 +629,9 @@ async function startLocalMothership(
     capabilityCredentialEnvironmentFallback,
     seedEnvironmentHandlers,
     seedSharedStacks,
+    // Forwarded so `buildLocalContainer` can REFUSE it in one place with the reason (this node must
+    // not seal org rows with its own key), rather than dropping it here without a word.
+    seedAccountRunnerPool,
   })
 
   // Export logs to the OTLP endpoint (a no-op unless `OTEL_LOGS=true` on top of a configured
