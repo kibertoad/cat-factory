@@ -7,15 +7,26 @@
 // ---------------------------------------------------------------------------
 
 import type { ConflictReason } from '@cat-factory/contracts'
-import type { useUiStore } from '~/stores/ui'
+import {
+  BINARY_STORAGE_FIX,
+  ENVIRONMENTS_FIX,
+  MODEL_CONFIG_FIX,
+  MODEL_SETUP_FIX,
+  RUNNER_POOL_FIX,
+  SOURCE_CONTROL_FIX,
+  type SetupFix,
+} from '~/utils/setupFixes'
 
 /** An optional one-click "jump to the panel that fixes it" affordance on a conflict toast. */
 export interface ConflictAction {
   /** i18n message key for the button label (a static literal so tier-1 typed keys see it). */
   labelKey: string
   icon: string
-  /** Where the button navigates: a `ui` store deep-link, run with the store passed in. */
-  run: (ui: ReturnType<typeof useUiStore>) => void
+  /**
+   * The gap's owner and the screen that closes it. A toast gates it on who is asking
+   * (`gateSetupFix`), so only a caller who can save gets the button.
+   */
+  fix: SetupFix
 }
 
 /** Per-reason toast copy: a translated title + description, and optionally a jump action. */
@@ -171,7 +182,7 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
     action: {
       labelKey: 'errors.conflict.action.configureRunnerPool',
       icon: 'i-lucide-server',
-      run: (ui) => ui.openInfrastructure('runner-pool'),
+      fix: RUNNER_POOL_FIX,
     },
   },
   run_not_retryable: {
@@ -196,7 +207,7 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
     action: {
       labelKey: 'errors.conflict.action.connectGitHub',
       icon: 'i-lucide-github',
-      run: (ui) => ui.openGitHub(),
+      fix: SOURCE_CONTROL_FIX,
     },
   },
   bootstrap_not_retryable: {
@@ -213,7 +224,7 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
     action: {
       labelKey: 'errors.conflict.action.chooseModel',
       icon: 'i-lucide-cpu',
-      run: (ui) => ui.openModelConfig(),
+      fix: MODEL_CONFIG_FIX,
     },
   },
   visual_pipeline_no_frontend: {
@@ -226,7 +237,7 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
     action: {
       labelKey: 'errors.conflict.action.chooseModel',
       icon: 'i-lucide-cpu',
-      run: (ui) => ui.openModelConfig(),
+      fix: MODEL_CONFIG_FIX,
     },
   },
   model_policy_unsupported: {
@@ -251,7 +262,7 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
     action: {
       labelKey: 'errors.conflict.action.configureInfrastructure',
       icon: 'i-lucide-settings',
-      run: (ui) => ui.openProviderConnection('environment'),
+      fix: ENVIRONMENTS_FIX,
     },
   },
   env_test_no_vcs: {
@@ -260,7 +271,7 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
     action: {
       labelKey: 'errors.conflict.action.connectGitHub',
       icon: 'i-lucide-github',
-      run: (ui) => ui.openGitHub(),
+      fix: SOURCE_CONTROL_FIX,
     },
   },
   env_test_connection_failed: {
@@ -269,7 +280,7 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
     action: {
       labelKey: 'errors.conflict.action.configureInfrastructure',
       icon: 'i-lucide-settings',
-      run: (ui) => ui.openProviderConnection('environment'),
+      fix: ENVIRONMENTS_FIX,
     },
   },
   // An agent dry run on a deployment that cannot drive one. No ACTION: the gap is a container
@@ -388,7 +399,7 @@ export const BESPOKE_CONFLICT_FIXES = {
     action: {
       labelKey: 'errors.conflict.providersUnconfigured.action',
       icon: 'i-lucide-settings',
-      run: (ui) => ui.openAiProviderSetup(),
+      fix: MODEL_SETUP_FIX,
     },
   },
   binary_storage_unconfigured: {
@@ -397,7 +408,7 @@ export const BESPOKE_CONFLICT_FIXES = {
     action: {
       labelKey: 'errors.conflict.binaryStorageUnconfigured.action',
       icon: 'i-lucide-settings',
-      run: (ui) => ui.openContentStorageSettings(),
+      fix: BINARY_STORAGE_FIX,
     },
   },
 } satisfies Partial<Record<BespokeConflictReason, ConflictInfo>>
