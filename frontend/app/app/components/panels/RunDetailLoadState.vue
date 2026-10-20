@@ -12,6 +12,7 @@
  * event delivered and every run already fetched once.
  */
 import { computed } from 'vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 const props = defineProps<{ instanceId: string | null }>()
 
@@ -25,14 +26,14 @@ const error = computed(() => execution.fullError(props.instanceId))
 <template>
   <div
     v-if="loading || error"
-    class="flex items-center gap-2 border-b border-slate-800 px-4 py-2 text-[11px]"
-    :class="error ? 'text-rose-300' : 'text-slate-400'"
+    class="flex items-center gap-2 border-b border-default px-4 py-2 text-2xs"
+    :class="error ? 'text-app-error-300' : 'text-muted'"
     data-testid="run-detail-load-state"
   >
-    <UIcon
-      :name="error ? 'i-lucide-triangle-alert' : 'i-lucide-loader-circle'"
+    <Spinner
+      :name="error ? 'i-lucide-triangle-alert' : undefined"
+      :spinning="!error"
       class="h-3.5 w-3.5 shrink-0"
-      :class="error ? '' : 'animate-spin'"
     />
     <span>{{
       error ? t('panels.runDetail.loadFailed', { reason: error }) : t('panels.runDetail.loading')

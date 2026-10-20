@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeRepoSearchQuery, parseOwnerRepoSlug, parseRepoWebUrl } from './repo-url.js'
+import {
+  normalizeRepoSearchQuery,
+  parseOwnerRepoSlug,
+  parseRepoWebUrl,
+  resolvePrNumber,
+} from './repo-url.js'
 
 describe('parseRepoWebUrl', () => {
   it('parses a bare repo URL as the root directory', () => {
@@ -95,5 +100,26 @@ describe('parseOwnerRepoSlug', () => {
 
   it.each(['octo', 'octo/repo/extra', 'octo/re po', ''])('returns null for %j', (input) => {
     expect(parseOwnerRepoSlug(input)).toBeNull()
+  })
+})
+
+describe('resolvePrNumber', () => {
+  it('prefers a valid prNumber', () => {
+    expect(resolvePrNumber({ prNumber: 42, prUrl: 'https://github.com/o/r/pull/7' })).toBe(42)
+  })
+  it('parses a GitHub pull URL', () => {
+    expect(resolvePrNumber({ prUrl: 'https://github.com/o/r/pull/123' })).toBe(123)
+  })
+  it('parses a GitLab merge-request URL', () => {
+    expect(resolvePrNumber({ prUrl: 'https://gitlab.com/o/r/-/merge_requests/55' })).toBe(55)
+  })
+  it('parses a trailing #<n>', () => {
+    expect(resolvePrNumber({ prUrl: 'o/r#88' })).toBe(88)
+  })
+  it('returns null for a missing/zero/non-numeric ref', () => {
+    expect(resolvePrNumber(undefined)).toBeNull()
+    expect(resolvePrNumber({})).toBeNull()
+    expect(resolvePrNumber({ prNumber: 0 })).toBeNull()
+    expect(resolvePrNumber({ prUrl: 'not a url' })).toBeNull()
   })
 })

@@ -22,6 +22,8 @@ import {
   type RequirementStateFilter,
 } from './ServiceSpecWindow.logic'
 import type { BadgeColor } from '~/utils/badge'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const board = useBoardStore()
@@ -182,7 +184,7 @@ function kindLabel(item: RequirementItem): string {
   <ResultWindowShell
     :open="open"
     icon="i-lucide-scroll-text"
-    icon-class="bg-indigo-500/15 text-indigo-300"
+    icon-class="bg-primary/15 text-primary"
     :title="t('spec.title')"
     :subtitle="block ? spec?.service || block.title : undefined"
     variant="centered"
@@ -191,7 +193,7 @@ function kindLabel(item: RequirementItem): string {
   >
     <!-- view toggle: Gherkin only when the spec (and its feature files) are on main -->
     <template v-if="present" #header-extras>
-      <div class="flex items-center rounded-lg border border-slate-700 p-0.5">
+      <div class="flex items-center rounded-lg border border-muted p-0.5">
         <UButton
           :color="mode === 'structured' ? 'primary' : 'neutral'"
           :variant="mode === 'structured' ? 'soft' : 'ghost'"
@@ -224,20 +226,22 @@ function kindLabel(item: RequirementItem): string {
     </template>
 
     <!-- loading -->
-    <div
-      v-if="loading && !view"
-      class="flex flex-1 items-center justify-center gap-2 text-sm text-slate-400"
-    >
-      <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-      {{ t('spec.loading') }}
+    <div v-if="loading && !view" class="flex min-h-0 flex-1">
+      <div class="w-64 shrink-0 space-y-2 border-e border-default px-3 py-4">
+        <USkeleton v-for="n in 6" :key="n" class="h-6 w-full" />
+      </div>
+      <div class="flex-1 space-y-3 px-6 py-4">
+        <USkeleton class="h-6 w-1/3" />
+        <USkeleton v-for="n in 4" :key="n" class="h-4 w-full" />
+      </div>
     </div>
 
     <!-- error -->
     <div
       v-else-if="errored"
-      class="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-sm text-slate-400"
+      class="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted"
     >
-      <UIcon name="i-lucide-triangle-alert" class="h-6 w-6 text-amber-400" />
+      <UIcon name="i-lucide-triangle-alert" class="h-6 w-6 text-app-warning-400" />
       {{ t('spec.error') }}
       <UButton
         icon="i-lucide-rotate-cw"
@@ -252,23 +256,18 @@ function kindLabel(item: RequirementItem): string {
     </div>
 
     <!-- empty: no spec on the repo's default branch yet -->
-    <div
+    <EmptyState
       v-else-if="!present"
-      class="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center"
-    >
-      <UIcon name="i-lucide-scroll-text" class="h-8 w-8 text-slate-600" />
-      <div>
-        <p class="text-sm font-medium text-slate-300">{{ t('spec.empty.title') }}</p>
-        <p class="mx-auto mt-1 max-w-md text-xs text-slate-500">
-          {{ t('spec.empty.description') }}
-        </p>
-      </div>
-    </div>
+      class="flex-1"
+      icon="i-lucide-scroll-text"
+      :title="t('spec.empty.title')"
+      :description="t('spec.empty.description')"
+    />
 
     <!-- spec body: navigable tree + detail -->
     <div v-else class="flex min-h-0 flex-1">
       <!-- nav: modules → feature groups -->
-      <nav class="w-64 shrink-0 overflow-y-auto border-e border-slate-800 px-3 py-4">
+      <nav class="w-64 shrink-0 overflow-y-auto border-e border-default px-3 py-4">
         <UButton
           block
           class="mb-2 justify-start"
@@ -285,28 +284,29 @@ function kindLabel(item: RequirementItem): string {
           {{ t('spec.overview') }}
         </UButton>
         <div v-for="(mod, mi) in modules" :key="mi" class="mb-3">
-          <div class="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <SectionLabel class="px-2 pb-1">
             {{ mod.name }}
-          </div>
+          </SectionLabel>
           <ul class="space-y-0.5">
             <li v-for="(group, gi) in mod.groups ?? []" :key="gi">
-              <button
-                type="button"
-                class="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-[13px] transition"
+              <UButton
+                color="neutral"
+                variant="ghost"
+                class="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-sm transition"
                 :class="
                   selected?.m === mi && selected?.g === gi
-                    ? 'bg-indigo-500/15 text-indigo-200'
-                    : 'text-slate-300 hover:bg-slate-800'
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-toned hover:bg-elevated'
                 "
                 @click="selectGroup(mi, gi)"
               >
                 <span class="truncate">{{ group.name }}</span>
-                <span class="shrink-0 text-[10px] text-slate-500">{{ reqCount(group) }}</span>
-              </button>
+                <span class="shrink-0 text-3xs text-dimmed">{{ reqCount(group) }}</span>
+              </UButton>
             </li>
             <li
               v-if="(mod.groups?.length ?? 0) === 0"
-              class="px-2 py-1 text-[11px] italic text-slate-600"
+              class="px-2 py-1 text-2xs italic text-app-600"
             >
               {{ t('spec.noFeatureGroups') }}
             </li>
@@ -318,14 +318,14 @@ function kindLabel(item: RequirementItem): string {
       <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
         <!-- service overview -->
         <template v-if="selected === null">
-          <h2 class="text-lg font-semibold text-white">{{ spec?.service }}</h2>
+          <h2 class="text-lg font-semibold text-highlighted">{{ spec?.service }}</h2>
           <!-- The service's own prose, so it takes the reading measure the shell's `full` width
                obliges (see the `width` prop). The requirement rows and Gherkin blocks below keep
                the full span — they are structure, not paragraphs. -->
-          <p v-if="spec?.summary" class="mt-2 max-w-3xl whitespace-pre-line text-sm text-slate-300">
+          <p v-if="spec?.summary" class="mt-2 max-w-3xl whitespace-pre-line text-sm text-toned">
             {{ spec.summary }}
           </p>
-          <p v-else class="mt-2 text-sm text-slate-500">{{ t('spec.noSummary') }}</p>
+          <p v-else class="mt-2 text-sm text-dimmed">{{ t('spec.noSummary') }}</p>
           <!-- implementation-state rollup: how much of the written-down behaviour is observed
                to hold, rather than merely agreed -->
           <div
@@ -339,9 +339,9 @@ function kindLabel(item: RequirementItem): string {
             <UBadge color="neutral" variant="subtle" size="sm">
               {{ t('spec.state.aspirationalCount', { count: specStates.aspirational }) }}
             </UBadge>
-            <span class="text-slate-500">{{ t('spec.state.rollupHint') }}</span>
+            <span class="text-dimmed">{{ t('spec.state.rollupHint') }}</span>
           </div>
-          <p class="mt-4 text-xs text-slate-500">
+          <p class="mt-4 text-xs text-dimmed">
             {{
               hasGherkin
                 ? t('spec.moduleHintGherkin', { count: modules.length }, modules.length)
@@ -352,11 +352,11 @@ function kindLabel(item: RequirementItem): string {
 
         <!-- selected feature group -->
         <template v-else-if="selectedGroup">
-          <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+          <SectionLabel class="mb-1">
             {{ selectedModule?.name }}
-          </div>
-          <h2 class="text-lg font-semibold text-white">{{ selectedGroup.name }}</h2>
-          <p v-if="selectedGroup.summary" class="mt-1 max-w-3xl text-sm text-slate-400">
+          </SectionLabel>
+          <h2 class="text-lg font-semibold text-highlighted">{{ selectedGroup.name }}</h2>
+          <p v-if="selectedGroup.summary" class="mt-1 max-w-3xl text-sm text-muted">
             {{ selectedGroup.summary }}
           </p>
 
@@ -364,29 +364,35 @@ function kindLabel(item: RequirementItem): string {
           <template v-if="mode === 'gherkin'">
             <pre
               v-if="selectedFeature"
-              class="mt-4 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/60 p-4 text-[12.5px] leading-relaxed text-slate-200"
+              class="mt-4 overflow-x-auto rounded-lg border border-default bg-app-950/60 p-4 text-xs leading-relaxed text-default"
             ><code>{{ selectedFeature.content }}</code></pre>
-            <div
+            <EmptyState
               v-else
-              class="mt-4 rounded-lg border border-dashed border-slate-700 p-6 text-center text-sm text-slate-500"
-            >
-              {{ t('spec.noGherkinForGroup') }}
-            </div>
+              class="mt-4"
+              icon="i-lucide-file-code"
+              :title="t('spec.noGherkinForGroup')"
+            />
           </template>
 
           <!-- STRUCTURED view: requirements + acceptance + domain rules -->
           <template v-else>
-            <div v-if="reqCount(selectedGroup) === 0" class="mt-4 text-sm text-slate-500">
-              {{ t('spec.noRequirements') }}
-            </div>
+            <EmptyState
+              v-if="reqCount(selectedGroup) === 0"
+              class="mt-4"
+              icon="i-lucide-list-checks"
+              :title="t('spec.noRequirements')"
+            />
             <!-- per-group implementation-state rollup + the filter over the two halves -->
             <div
               v-else
               class="mt-4 flex flex-wrap items-center justify-between gap-2"
               data-testid="spec-state-filter"
             >
-              <div class="flex items-center gap-1.5 text-[11px] text-slate-500">
-                <UIcon :name="STATE_META.established.icon" class="h-3.5 w-3.5 text-emerald-400" />
+              <div class="flex items-center gap-1.5 text-2xs text-dimmed">
+                <UIcon
+                  :name="STATE_META.established.icon"
+                  class="h-3.5 w-3.5 text-app-success-400"
+                />
                 {{
                   t('spec.state.groupRollup', {
                     established: groupStates.established,
@@ -394,7 +400,7 @@ function kindLabel(item: RequirementItem): string {
                   })
                 }}
               </div>
-              <div class="flex items-center rounded-lg border border-slate-700 p-0.5">
+              <div class="flex items-center rounded-lg border border-muted p-0.5">
                 <UButton
                   v-for="option in STATE_FILTERS"
                   :key="option.value"
@@ -416,14 +422,15 @@ function kindLabel(item: RequirementItem): string {
                  rendering a blank pane that reads like "no requirements". The filter is sticky
                  across groups, so the reader may have set it several groups ago — offer the way
                  back here rather than making them find the toggle again. -->
-            <div
+            <EmptyState
               v-if="reqCount(selectedGroup) > 0 && visibleRequirements.length === 0"
-              class="mt-4 flex flex-wrap items-center gap-2 text-sm text-slate-500"
+              class="mt-4"
+              compact
+              icon="i-lucide-filter-x"
+              :title="t('spec.state.noneMatchFilter')"
               data-testid="spec-state-filter-empty"
             >
-              {{ t('spec.state.noneMatchFilter') }}
               <UButton
-                color="primary"
                 variant="link"
                 size="xs"
                 class="p-0"
@@ -436,15 +443,15 @@ function kindLabel(item: RequirementItem): string {
               >
                 {{ t('spec.state.showAll') }}
               </UButton>
-            </div>
+            </EmptyState>
             <ul class="mt-4 space-y-4">
               <li
                 v-for="req in visibleRequirements"
                 :key="req.id"
-                class="rounded-lg border border-slate-800 bg-slate-900/60 p-4"
+                class="rounded-lg border border-default bg-default/60 p-4"
               >
                 <div class="flex items-start justify-between gap-3">
-                  <h3 class="text-sm font-semibold text-slate-100">{{ req.title }}</h3>
+                  <h3 class="text-sm font-semibold text-app-100">{{ req.title }}</h3>
                   <div class="flex shrink-0 items-center gap-1.5">
                     <!-- implementation state: agreed vs observed to hold. The distinction the
                          build prompt and the tester act on, so a reader must see it too. -->
@@ -463,7 +470,7 @@ function kindLabel(item: RequirementItem): string {
                     <UBadge color="neutral" variant="subtle" size="sm">{{ kindLabel(req) }}</UBadge>
                   </div>
                 </div>
-                <p class="mt-1.5 whitespace-pre-line text-[13px] leading-relaxed text-slate-300">
+                <p class="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-toned">
                   {{ req.statement }}
                 </p>
                 <!-- acceptance criteria (Given/When/Then) -->
@@ -471,22 +478,22 @@ function kindLabel(item: RequirementItem): string {
                   <div
                     v-for="ac in req.acceptance ?? []"
                     :key="ac.id"
-                    class="rounded-md border border-slate-800 bg-slate-950/50 px-3 py-2 text-[12.5px] leading-relaxed"
+                    class="rounded-md border border-default bg-app-950/50 px-3 py-2 text-xs leading-relaxed"
                   >
-                    <p class="text-slate-300">
-                      <span class="font-semibold text-emerald-400">{{
+                    <p class="text-toned">
+                      <span class="font-semibold text-app-success-400">{{
                         t('spec.acceptance.given')
                       }}</span>
                       {{ ac.given }}
                     </p>
-                    <p class="text-slate-300">
-                      <span class="font-semibold text-sky-400">{{
+                    <p class="text-toned">
+                      <span class="font-semibold text-app-info-400">{{
                         t('spec.acceptance.when')
                       }}</span>
                       {{ ac.when }}
                     </p>
-                    <p class="text-slate-300">
-                      <span class="font-semibold text-violet-400">{{
+                    <p class="text-toned">
+                      <span class="font-semibold text-app-secondary-400">{{
                         t('spec.acceptance.then')
                       }}</span>
                       {{ ac.outcome }}
@@ -498,20 +505,18 @@ function kindLabel(item: RequirementItem): string {
 
             <!-- domain rules / invariants scoped to this group -->
             <div v-if="(selectedGroup.rules?.length ?? 0) > 0" class="mt-6">
-              <div
-                class="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-              >
+              <SectionLabel class="mb-2 flex items-center gap-1.5">
                 <UIcon name="i-lucide-shield-check" class="h-3.5 w-3.5" />
                 {{ t('spec.domainRules') }}
-              </div>
+              </SectionLabel>
               <ul class="max-w-3xl space-y-1.5">
                 <li
                   v-for="rule in selectedGroup.rules ?? []"
                   :key="rule.id"
-                  class="rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-[13px] text-slate-300"
+                  class="rounded-md border border-default bg-default/60 px-3 py-2 text-sm text-toned"
                 >
                   {{ rule.rule }}
-                  <span v-if="rule.rationale" class="text-slate-500">{{
+                  <span v-if="rule.rationale" class="text-dimmed">{{
                     t('spec.ruleRationale', { rationale: rule.rationale })
                   }}</span>
                 </li>

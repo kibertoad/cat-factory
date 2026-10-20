@@ -72,7 +72,7 @@ describe('collectDeclaredToolServers', () => {
       // Both attachment paths, and `coder` — a built-in that is not a registry entry — is exactly
       // the case an `all()` walk would have missed.
       declaredBy: ['auditor', 'coder'],
-      servableHarnesses: ['claude-code'],
+      servableHarnesses: ['pi', 'claude-code'],
       allowedTools: ['search_issues', 'get_issue'],
       credentials: [
         {

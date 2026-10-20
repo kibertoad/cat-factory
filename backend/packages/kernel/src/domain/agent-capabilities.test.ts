@@ -41,14 +41,15 @@ describe('MCP_HARNESS_TRANSPORTS', () => {
   })
 
   it('states the two facts the whole slice turns on', () => {
-    // Pi has no MCP client; Codex's is stdio-only. Everything else here derives from these.
-    expect(MCP_HARNESS_TRANSPORTS.pi).toEqual([])
+    // Pi and claude-code reach both transports; Codex's client is stdio-only. Everything else
+    // here derives from these.
+    expect(MCP_HARNESS_TRANSPORTS.pi).toEqual(['stdio', 'http'])
     expect(MCP_HARNESS_TRANSPORTS.codex).toEqual(['stdio'])
     expect(MCP_HARNESS_TRANSPORTS['claude-code']).toEqual(['stdio', 'http'])
   })
 
   it('derives MCP_SUPPORTED_HARNESSES, so the two cannot drift into disagreeing', () => {
-    expect(MCP_SUPPORTED_HARNESSES).toEqual(['claude-code', 'codex'])
+    expect(MCP_SUPPORTED_HARNESSES).toEqual(['pi', 'claude-code', 'codex'])
     for (const harness of HARNESSES) {
       expect(MCP_SUPPORTED_HARNESSES.includes(harness), harness).toBe(
         MCP_HARNESS_TRANSPORTS[harness].length > 0,
@@ -67,30 +68,32 @@ describe('mcpHarnessServesTransport', () => {
     expect(mcpHarnessServesTransport('claude-code', 'http')).toBe(true)
   })
 
-  it('refuses everything on pi, which has no MCP client', () => {
-    expect(mcpHarnessServesTransport('pi', 'stdio')).toBe(false)
-    expect(mcpHarnessServesTransport('pi', 'http')).toBe(false)
+  it('serves both transports on pi, through its built-in MCP client', () => {
+    expect(mcpHarnessServesTransport('pi', 'stdio')).toBe(true)
+    expect(mcpHarnessServesTransport('pi', 'http')).toBe(true)
   })
 })
 
 describe('mcpServerSupportsHarness', () => {
   it('defaults to every MCP-speaking harness and lets a definition NARROW it', () => {
+    expect(mcpServerSupportsHarness(server(), 'pi')).toBe(true)
     expect(mcpServerSupportsHarness(server(), 'claude-code')).toBe(true)
     expect(mcpServerSupportsHarness(server(), 'codex')).toBe(true)
     expect(mcpServerSupportsHarness(server({ harnesses: ['claude-code'] }), 'codex')).toBe(false)
   })
 
-  it('cannot be WIDENED onto a harness with no MCP client', () => {
-    // A registration cannot teach Pi an MCP client, so naming it is inert rather than enabling.
-    expect(mcpServerSupportsHarness(server({ harnesses: ['pi'] }), 'pi')).toBe(false)
+  it('narrows onto pi alone like any other harness', () => {
+    expect(mcpServerSupportsHarness(server({ harnesses: ['pi'] }), 'pi')).toBe(true)
+    expect(mcpServerSupportsHarness(server({ harnesses: ['pi'] }), 'claude-code')).toBe(false)
   })
 })
 
 describe('mcpServableHarnesses', () => {
   it('intersects the declared allow-list with the harnesses that reach the transport', () => {
-    expect(mcpServableHarnesses(server())).toEqual(['claude-code', 'codex'])
-    // An http server is claude-code only, WITHOUT the definition having to say so.
-    expect(mcpServableHarnesses(httpServer())).toEqual(['claude-code'])
+    expect(mcpServableHarnesses(server())).toEqual(['pi', 'claude-code', 'codex'])
+    // An http server skips codex, WITHOUT the definition having to say so.
+    expect(mcpServableHarnesses(httpServer())).toEqual(['pi', 'claude-code'])
+    expect(mcpServableHarnesses(server({ harnesses: ['pi'] }))).toEqual(['pi'])
     expect(mcpServableHarnesses(server({ harnesses: ['codex'] }))).toEqual(['codex'])
   })
 
@@ -98,7 +101,6 @@ describe('mcpServableHarnesses', () => {
     // This is the boot-warning trigger: nothing is ever dropped for a reason here, because the
     // server simply never applies — so no prompt and no log line would ever mention it.
     expect(mcpServableHarnesses(httpServer({ harnesses: ['codex'] }))).toEqual([])
-    expect(mcpServableHarnesses(server({ harnesses: ['pi'] }))).toEqual([])
     expect(mcpServableHarnesses(server({ harnesses: [] }))).toEqual([])
   })
 })

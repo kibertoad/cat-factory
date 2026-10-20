@@ -1,5 +1,454 @@
 # @cat-factory/agents
 
+## 0.172.8
+
+### Patch Changes
+
+- Updated dependencies [e9b24a1]
+  - @cat-factory/kernel@0.363.0
+  - @cat-factory/contracts@0.374.0
+  - @cat-factory/prompt-fragments@1.1.73
+
+## 0.172.7
+
+### Patch Changes
+
+- 5c17395: Dependency refresh, direct and transitive (the lockfile is re-resolved from scratch), held to the
+  24h `minimumReleaseAge` window.
+  
+  Majors, each taken because its whole peer group could move together:
+  
+  - **Vitest 5** (`vitest`, `@vitest/coverage-v8`, `@vitest/browser`, `@vitest/browser-playwright`
+    at `5.0.5`), now that `@cloudflare/vitest-plugin@1.4.4`, `@storybook/addon-vitest`,
+    `@nuxt/test-utils` and `vitest-browser-vue` all accept `^5`. The Worker suite turns Vitest 5's
+    new default `fsModuleCache` off: the Workers pool inlines every warm module into one WebSocket
+    reply, and this suite's graph (~80MB) exceeds workerd's message limit (`1009 Message is too
+    large`).
+  - **msw 3**, for the component stories. `onUnhandledRequest` became `onUnhandledFrame`, which
+    also receives WebSocket frames, and the bundled `mockServiceWorker.js` is regenerated.
+  - **happy-dom 21** for the SPA's unit tests.
+  
+  The Workers test pool moves to `@cloudflare/vitest-plugin@1.4.4`, which pins `wrangler@4.151.1`, so
+  the Cloudflare stack moves with it: workerd `1.20261012.1`, miniflare `5.20261012.1-beta`,
+  `@cloudflare/workers-types` `5.20261012.1` (the resolved workerd's date) and esbuild `0.28.2`
+  (the version wrangler and the plugin now pin, so the scoped esbuild overrides follow).
+  
+  Also the Vercel AI SDK family as one set (`ai@7.0.142`, `@ai-sdk/anthropic@4.0.81`,
+  `@ai-sdk/openai@4.0.95`, `@ai-sdk/openai-compatible@3.0.70`, `@ai-sdk/amazon-bedrock@5.0.117`,
+  `@ai-sdk/provider@4.0.28`), the Vue family at `3.5.44`, `@nuxt/ui@4.12.0`, `pinia@4.1.0`,
+  `storybook@10.6.2`, `undici@8.12.2`, `pg-boss@12.38.0`, `@aws-sdk/client-s3@3.1152.0`,
+  `@hono/node-server@2.1.5`, `@playwright/test@1.64.1`, and the root toolchain (`turbo@2.11.8`,
+  `oxlint@1.88.0`, `oxfmt@0.73.0`, `knip@6.41.0`).
+  
+  Held: the frontend stays on TypeScript 6 (TypeScript 7 ships no classic compiler API for
+  `vue-tsc`); `@nuxt/fonts` stays on 0.14 because `@nuxt/ui@4.12.0` depends on `^0.14.0`; Drizzle
+  stays on `1.0.0-rc.4`, still its `rc` tag; `nuxt@4.6.2` is inside the window.
+- Updated dependencies [5c17395]
+- Updated dependencies [5c17395]
+  - @cat-factory/kernel@0.362.0
+  - @cat-factory/contracts@0.373.1
+  - @cat-factory/prompt-fragments@1.1.72
+
+## 0.172.6
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/contracts@0.373.0
+  - @cat-factory/kernel@0.361.0
+  - @cat-factory/prompt-fragments@1.1.71
+
+## 0.172.5
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+  - @cat-factory/kernel@0.360.4
+  - @cat-factory/prompt-fragments@1.1.70
+
+## 0.172.4
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+  - @cat-factory/kernel@0.360.3
+  - @cat-factory/prompt-fragments@1.1.69
+
+## 0.172.3
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+  - @cat-factory/kernel@0.360.2
+  - @cat-factory/prompt-fragments@1.1.68
+
+## 0.172.2
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+  - @cat-factory/kernel@0.360.1
+  - @cat-factory/prompt-fragments@1.1.67
+
+## 0.172.1
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/contracts@0.368.0
+  - @cat-factory/kernel@0.360.0
+  - @cat-factory/prompt-fragments@1.1.66
+
+## 0.172.0
+
+### Minor Changes
+
+- 918e977: `POST /api/v1/pr-assessments` (`client.prAssessments.assess`) scores a pull request in a linked
+  repository on the merger's complexity, risk and impact axes, classifies it by its changed paths, and
+  says whether a risk policy would let it land with no person: the named policy, or the workspace's
+  unattended default. The verdict comes from the merge step's own precedence ladder, now a pure
+  function shared by both (`mergePrecedence.ts`), so the policy's ceilings stay unpublished. A key bound to a person is judged under that person's
+  workspace role, as the runs it starts are. One
+  synchronous inline model call at `write` scope; nothing is persisted. OpenAPI 1.83.0.
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/contracts@0.367.0
+  - @cat-factory/kernel@0.359.1
+  - @cat-factory/prompt-fragments@1.1.65
+
+## 0.171.7
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+  - @cat-factory/kernel@0.359.0
+  - @cat-factory/prompt-fragments@1.1.64
+
+## 0.171.6
+
+### Patch Changes
+
+- Updated dependencies [91dedb6]
+  - @cat-factory/contracts@0.365.0
+  - @cat-factory/kernel@0.358.1
+  - @cat-factory/prompt-fragments@1.1.63
+
+## 0.171.5
+
+### Patch Changes
+
+- 22b6812: `GET /internal/agent-kinds` serves each distinct bundled skill and tool server once, in top-level
+  `bundledSkills` and `toolServers` lists, and each kind references them by index
+  (`skills.bundledRefs`, `toolServers.serverRefs`). A definition assigned to several kinds no longer
+  serialises once per kind (the Nuxt UI capability drops from ~300 KB to ~100 KB per mothership-mode
+  dispatch). The reply now carries a `version`, and a node refuses any version but its own with
+  `details.cause: 'mothership_version_mismatch'`.
+  
+  Boot validation refuses a bundled skill or tool server whose shape does not match its type
+  (`invalid_bundled_skill_definition`, `invalid_tool_server_definition`), naming the field.
+  
+  Internal wire break, with no compatibility path: update mothership-mode nodes together with the
+  mothership. Until then, on a deployment with assigned capabilities, every container dispatch on a
+  node whose build differs from its mothership fails with `agent_kinds_unreachable`. A newer node
+  names the cause; an older node cannot. An empty layer (no assigned capabilities) keeps working in
+  both directions.
+
+## 0.171.4
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/contracts@0.364.0
+  - @cat-factory/kernel@0.358.0
+  - @cat-factory/prompt-fragments@1.1.62
+
+## 0.171.3
+
+### Patch Changes
+
+- Updated dependencies [1a42f34]
+  - @cat-factory/kernel@0.357.1
+  - @cat-factory/prompt-fragments@1.1.61
+
+## 0.171.2
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/contracts@0.363.0
+  - @cat-factory/kernel@0.357.0
+  - @cat-factory/prompt-fragments@1.1.60
+
+## 0.171.1
+
+### Patch Changes
+
+- ffe4356: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Worker test pool moves from `@cloudflare/vitest-pool-workers@0.22.0` to its renamed successor
+  `@cloudflare/vitest-plugin@1.3.7`. The old package is deprecated and receives no further releases;
+  the new one exports the same `cloudflareTest`, `readD1Migrations` and `/types` entry, so only the
+  import specifiers change. It pins `wrangler@4.148.0`, so the Cloudflare stack moves with it:
+  wrangler `4.124.0` to `4.148.0`, workerd `1.20260815.1` to `1.20261006.1`, miniflare to
+  `5.20261006.0-alpha`, and `@cloudflare/workers-types` to `5.20261006.1`, the resolved workerd's
+  date. esbuild stays on `0.28.1`, which wrangler still pins.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.131`, `@ai-sdk/anthropic@4.0.75`,
+  `@ai-sdk/openai@4.0.87`, `@ai-sdk/openai-compatible@3.0.65`, `@ai-sdk/amazon-bedrock@5.0.109`,
+  `@ai-sdk/provider@4.0.24`), still one `@ai-sdk/provider` identity across every caller. Also
+  `nuxt@4.6.0` with `vue-router@5.4.0`, `@nuxt/ui@4.11.3`, `hono@4.13.13`,
+  `@modelcontextprotocol/sdk@1.32.1`, the OpenTelemetry SDK `2.12.0` / `0.223.0`, `pg-boss@12.37.0`,
+  `pino@10.4.0`, `@aws-sdk/client-s3@3.1147.0`, `@playwright/test@1.64.0`, and the root toolchain
+  (`turbo@2.11.7`, `oxlint@1.87.0`, `oxfmt@0.72.0`, `knip@6.40.0`).
+  
+  Held: vitest and `@vitest/coverage-v8` stay on 4, because the plugin release inside the window
+  peer-requires vitest `^4.1.0`. msw stays on 2 for the same reason: vitest 4's mocker peers
+  `msw@^2`. The frontend stays on TypeScript 6, since TypeScript 7 ships no classic compiler API for
+  `vue-tsc`.
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+  - @cat-factory/prompt-fragments@1.1.59
+
+## 0.171.0
+
+### Minor Changes
+
+- 97175f8: Guided review questions asked with `depth: "deep"` are answered from a read-only checkout of the repository (surface version 1.78.0). A new `guided-review-investigator` container-explore kind runs per question, with its own preset model; `ContainerGuidedReviewInvestigator` dispatches it standalone, the way the environment dry run's prober is dispatched, and files its spend through the same accounting a pipeline step uses. The job clones the target branch with full history, fetches the PR head and checks out the reviewed commit.
+  
+  A deep answer is driven as a state machine on its message: claim, dispatch, record the dispatch, poll. `GuidedReviewService.runJob` now returns `GuidedReviewJobProgress`, and the Workflow, pg-boss and local `node:sqlite` drivers loop on it within `GUIDED_REVIEW_MAX_PASSES`. Each poll refreshes the claim, so the stale scan never mistakes a live investigation for a dead one; a container still working after 45 minutes is stopped and its question reported failed. `GuidedReviewRepository` gains `recordInvestigation`, `getInvestigation` and `heartbeatMessage` (migration 0106 and its Drizzle mirror).
+  
+  The two standalone container flows now share one dispatch builder per facade. The single-kind model resolver accepts a job with no board frame, which resolves on the workspace's default preset. The local guided-review queue now wakes at its earliest due job, so a re-queued job can no longer wait for the periodic sweep when a timer fires early. The review window gains a "Deep dive" switch.
+
+### Patch Changes
+
+- Updated dependencies [97175f8]
+  - @cat-factory/contracts@0.362.0
+  - @cat-factory/kernel@0.355.0
+  - @cat-factory/prompt-fragments@1.1.58
+
+## 0.170.1
+
+### Patch Changes
+
+- Updated dependencies [a3a10b8]
+- Updated dependencies [0966666]
+  - @cat-factory/contracts@0.361.0
+  - @cat-factory/kernel@0.354.2
+  - @cat-factory/prompt-fragments@1.1.57
+
+## 0.170.0
+
+### Minor Changes
+
+- 8766c3f: `resolvePrNumber`, which reads the pull request a `review` task names from its `prNumber` or `prUrl`, moves to `@cat-factory/contracts` so the SPA's guided-review button and the dispatch read a task's target the same way. Breaking for internal consumers: `@cat-factory/agents` no longer exports it; import it from `@cat-factory/contracts`.
+
+### Patch Changes
+
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+  - @cat-factory/kernel@0.354.1
+  - @cat-factory/prompt-fragments@1.1.56
+
+## 0.169.0
+
+### Minor Changes
+
+- 0ea28b8: Guided PR review gets its engine. `GuidedReviewService` opens a session for a linked repository's pull request, generates a structured overview of it, answers questions in independent threads and turns a thread's conclusions into comment drafts. Each of those is background work: the request persists a pending row and returns, and a `GuidedReviewRunner` drives it (a Cloudflare Workflow, a pg-boss queue on Node and standard local, a `node:sqlite` queue on a mothership-mode node), with a sweeper re-waking work whose claim lapsed.
+  
+  Answers come from an inline model with read tools over the PR pinned to the reviewed commit (`list_changed_files`, `read_diff`, `read_file` on either side, `list_directory`), under a per-job read budget, with file contents scrubbed of secrets. Drafts are kept only where the host could place them (a line inside a diff hunk on that side), and every refused proposal is recorded in the message's `draftReport`. A failure is settled with a reason from a closed vocabulary, which gains `head_moved`: once the PR moves past the reviewed commit, its changed files no longer describe that commit, so the job fails until the session is refreshed.
+  
+  `ConflictError` gains the `thread_busy` reason, translated in every locale. `fenceVerbatim` is extracted into `@cat-factory/agents`' shared prompt helpers. No routes expose the service yet; they land in the next slice.
+
+### Patch Changes
+
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/contracts@0.359.0
+  - @cat-factory/kernel@0.354.0
+  - @cat-factory/prompt-fragments@1.1.55
+
+## 0.168.4
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/prompt-fragments@1.1.54
+
+## 0.168.3
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/contracts@0.357.0
+  - @cat-factory/prompt-fragments@1.1.53
+
+## 0.168.2
+
+### Patch Changes
+
+- e84b0d5: Dependency refresh within current majors, each at the newest release older than the 24h
+  `minimumReleaseAge` window: the Vercel AI SDK family (`ai` 7.0.120, `@ai-sdk/*` 4.x, `openai-compatible`
+  3.0.58, `amazon-bedrock` 5.0.99), `@aws-sdk/client-s3`, `@modelcontextprotocol/sdk` 1.31.0, `pg-boss`
+  12.35.0, `ws` 8.22.0 and `undici` 8.11.2. `publicApiAuth.refuse` now declares its return type, because
+  hono 4.13.10 ships bundled declarations whose inferred `c.json` return type a declaration emit can no
+  longer name.
+- e84b0d5: Tool servers (MCP) now run on the Pi harness. `MCP_HARNESS_TRANSPORTS.pi` is `['stdio', 'http']`,
+  so a declared server no longer drops as `harness_unsupported` on a Pi run: it is wired into Pi's own
+  MCP client through the `mcp.json` the runner image (1.162.0 onward) writes. On Pi an `allowedTools`
+  list is enforced rather than advisory.
+  
+  **Behaviour change for a deployment whose runner pool pins an older image.** Every earlier image
+  reported the `mcpServers` capability (for the subscription CLIs) while dropping a Pi run's servers,
+  so the handshake could not tell a Pi dispatch it was about to run blind. A Pi dispatch carrying tool
+  servers now requires the new `piMcpServers` body capability, and an image that reports a list
+  without it REFUSES the run at dispatch, naming the runner image as the fix. Unlike the older
+  capabilities, an image (or a runner pool control plane) that reports NO list is refused for it too
+  rather than treated as unknown: every such image predates Pi's MCP client, so that run would be
+  blind for certain. Move the pool to `cat-factory-executor:1.162.0`, or narrow the affected servers'
+  `harnesses` to `claude-code` / `codex` until you do. `HarnessBodyCapability` gains the
+  `piMcpServers` member, and `HARNESS_BODY_CAPABILITY_FIELDS` names the body field each member is
+  carried in. A body whose `harness` is absent or unrecognised is treated as Pi, as the harness's own
+  parser runs it.
+  
+  Boot validation no longer warns that a server narrowed to `['pi']` can never apply. The step
+  detail's `harness_unsupported` copy names every cause a persisted step can carry, in every locale:
+  a `harnesses` list that excludes the CLI, an ambient Codex login, and a Pi step recorded before Pi
+  could serve tool servers, which only needs a rerun on a current image.
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/kernel@0.351.0
+  - @cat-factory/prompt-fragments@1.1.52
+
+## 0.168.1
+
+### Patch Changes
+
+- c046707: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  One major moves with it: `layered-loader` goes `16.1.1` to `17.0.0`, whose only change is that
+  `getMany` now includes `null` in its return type. Nothing here calls `getMany`, so the caching layer
+  takes it with no source change.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.111` with `@ai-sdk/anthropic@4.0.60`,
+  `@ai-sdk/openai@4.0.72`, `@ai-sdk/amazon-bedrock@5.0.91`), staying inside the majors
+  `workers-ai-provider@4` pairs with. Every member resolves the same `@ai-sdk/provider@4.0.17` and
+  `@ai-sdk/provider-utils@5.0.45`, so the provider interface stays a single identity across the proxy
+  and the inline callers. Also `@aws-sdk/client-s3@3.1138.0`, `pg-boss@12.33.6`, `undici@8.11.0`,
+  `@nuxt/ui@4.11.2`, `turbo@2.11.3`, `oxlint@1.85.0` and `oxfmt@0.70.0`.
+  
+  Every hold was re-verified at HEAD rather than assumed, and all of them still bind.
+  `@cloudflare/vitest-pool-workers@0.22.0` is still its newest release, peer-requires vitest `^4.1.0`
+  and pins `wrangler@4.124.0` exactly, so vitest and `@vitest/coverage-v8` stay on 4 and wrangler,
+  workerd, miniflare and `@cloudflare/workers-types` stay where they are. The frontend stays on
+  TypeScript 6: TypeScript 7 ships no compiler API for `vue-tsc` to load. Drizzle stays on
+  `1.0.0-rc.4`, the newest non-snapshot release of its line, and the Vue family pins (`vue@3.5.43`,
+  `vue-router@5.3.1`, `esbuild@0.28.1`, `@modular-frontend/core@0.6.0`) are already what their
+  consumers need.
+- Updated dependencies [c046707]
+- Updated dependencies [c046707]
+  - @cat-factory/kernel@0.350.0
+  - @cat-factory/prompt-fragments@1.1.51
+
+## 0.168.0
+
+### Minor Changes
+
+- 7760397: Apply the Nuxt UI skill and MCP server to the platform's own coder agents.
+  
+  Slice 0 (#2247) vendored the `nuxt-ui` skill and declared the MCP server as Claude Code repo
+  conventions, which reach a local contributor session but not the coder agents this platform runs.
+  This adds `registerNuxtUiCapability`: an opt-in agent-kind capability that attaches the vendored
+  skill (a bundled playbook) and the `nuxt-ui` MCP server (`https://ui.nuxt.com/mcp`) to the coder
+  kinds that author or repair SPA source: `coder`, `fixer`, `ci-fixer`.
+  
+  It is opt-in per deployment, not a framework default: `defaultAgentKindRegistry()` stays
+  stack-agnostic, and the Node and Cloudflare facades opt in when they build their own default
+  registry. A deployment whose repos are not Nuxt gets neither the playbook nor a server pointing at
+  `ui.nuxt.com`, and a deployment injecting its own registry owns its capability wiring.
+  
+  The skill text stays single-sourced: `scripts/generate-nuxt-ui-skill.mjs` inlines the vendored
+  `.claude/skills/nuxt-ui/` tree into a committed generated module (the Worker cannot read the
+  filesystem at runtime), and `--check` guards it against drift in CI.
+
+## 0.167.0
+
+### Minor Changes
+
+- bc073ab: Delegated executors: a pipeline step can now run in a system the deployment already operates (its own GitHub-Actions loop, job runner or PR bot) while cat-factory keeps the intake, the standards, the CI gate, the merge policy and the notifications around it.
+  
+  A deployment registers a `DelegatedExecutorDefinition` on the new app-owned `DelegatedExecutorRegistry` and points an agent kind at it with `agent: { surface: 'delegated', executor }`. The executor is handed the same brief the container harness composes, so a workspace's prompt overrides and agreed standards reach both identically; its credentials resolve per call through the existing `ToolSecretResolver` port and never touch the brief.
+  
+  Each definition declares who creates the work branch its dispatches name. `workBranch: 'platform-creates'` has the engine create it at the base head just before `start`, idempotently, which is what an external CI runner needs: `actions/checkout` on a branch that is not there fails the job before any of the work begins, and a runner that quietly substitutes a branch of its own publishes to a ref the platform never recorded. `workBranch: 'executor-creates'` writes nothing, so a run whose external work never landed leaves no empty ref behind. Either way the branch is the one the rest of the run uses: a task's own apriori working branch when it declared one (probed, never created, exactly as the container dispatch treats it), else `cat-factory/<blockId>`.
+  
+  Two things the platform states rather than guesses. A delegated step's model calls never reach this deployment's proxy, so the step card says "usage not reported by <executor>" and the run rollups carry `llm.reporting.delegatedStepsWithoutUsage` instead of rendering a zero. And a run stopped while external work is still running records whether it actually stopped: an executor that declares no `cancel` leaves its run alive, and the record says so.
+  
+  Ships with `@cat-factory/delegation-github-actions` (a `DelegatedExecutor` over Actions: correlation by run name, since `workflow_dispatch` returns no run id) and a runnable example under `backend/internal/example-delegated-executor`. Its `workflow` is a location or a function of the dispatch, so one registration can dispatch against every repository a deployment onboards; the resolver sees only facts a brief and a handle both carry, because `poll` and `cancel` run hours later holding just the handle.
+  
+  A failure the executor calls `retryable` (a cancelled run, a runner-pool restart, a rate limit) buys one fresh dispatch on an engine-set budget, and everything else is terminal. Registered executors reach their own systems through a fetch the platform has already guarded: the deployment's outbound-URL policy on the first URL and on every redirect hop (the same guard the notification webhook sender uses), a deadline so a hung endpoint cannot hold a poll open indefinitely, and a running byte cap on what one response may return.
+  
+  Two declaration-time refusals, because neither has a reading under which it does something. A definition whose credentials resolve to the same injection name is refused at registration: the bag an executor is handed is keyed by the name it reads, so one name can carry only one value. And a delegated kind naming an executor this process does not register is refused by name at dispatch rather than falling through to the container harness, which is the mothership-mode case where nothing boot-validates the kinds a node resolves.
+  
+  Public API 1.75.0, both additive: `AgentFailureKind` gains `delegated_failed`, so an external system's verdict is classified as its own thing rather than as a container that was shut down, and the `llm` totals on the two debug run surfaces gain `reporting`, saying how many of a run's steps ran on an executor that files no usage.
+  
+  Internals: `AgentSurface` gains `delegated`, `AsyncAgentExecutor.reclaimRun` may return a `RunReclaimReport`, `AgentJobHandle` and `DelegationHandle` carry the run's block (so a poll and a cancel resolve credentials in the scope the dispatch used), and `PipelineStep` gains `delegated` plus `delegatedRetries`. Five new `error.details.reason` values, all additive: `delegated_executor_unwired` (409), `delegated_step_async_only` (409), `delegated_claim_missing` (409), `delegated_executor_failed` (503) and `delegated_work_branch_unprepared` (503, the platform's own VCS write rather than the executor's system).
+
+### Patch Changes
+
+- 1fc4ff1: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  Three majors move with it. The `@toad-contracts/*` family goes `0.x` to `1.0.0`, which redesigns
+  how a contract declares a non-JSON response: a status code now carries a media-type content map
+  rather than a tagged marker, and the `ContractNoBody` symbol is request-body-only. Every response
+  declaring it becomes `noBodyResponse()`, the form that survives; the symbol stays where it already
+  meant a request. `@vueuse/core` goes to `15.0.0` and `@openrouter/ai-sdk-provider` to `3.1.0`.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.107` with `@ai-sdk/anthropic@4.0.58`,
+  `@ai-sdk/openai@4.0.71`, `@ai-sdk/openai-compatible@3.0.53`, `@ai-sdk/amazon-bedrock@5.0.88`),
+  staying inside the majors `workers-ai-provider@4` pairs with, so `@ai-sdk/provider` keeps a single
+  identity across the proxy and the inline callers. Also `@aws-sdk/client-s3@3.1136.0`,
+  `pg-boss@12.33.2`, `turbo@2.11.2` and `@types/node@26.6.2`.
+  
+  `vitest` stays on 4: `@cloudflare/vitest-pool-workers@0.22.0` peer-requires `^4.1.0`, so taking
+  vitest 5 would leave the Worker suite running against a pool that never declared it.
+  `wrangler` and `@cloudflare/workers-types` stay put for the same kind of reason: the pool still
+  pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date.
+- 09bd94b: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.102 → 7.0.106` with `@ai-sdk/anthropic@4.0.57`,
+  `@ai-sdk/openai@4.0.70`, `@ai-sdk/openai-compatible@3.0.52`, `@ai-sdk/amazon-bedrock@5.0.87`,
+  `@ai-sdk/provider@4.0.17`), staying inside the majors `workers-ai-provider@4` pairs with. Every
+  member resolves the same `@ai-sdk/provider@4.0.17` and `@ai-sdk/provider-utils@5.0.44`, so the
+  provider interface stays a single identity across the proxy and the inline callers.
+  
+  Also `@aws-sdk/client-s3@3.1135.0`, `pg-boss@12.33.1`, `knip@6.37.0`, and on the frontend the whole
+  pinned Vue family to `3.5.43` with `vue-router` to `5.3.1`.
+  
+  `wrangler` and `@cloudflare/workers-types` deliberately stay put: `@cloudflare/vitest-pool-workers`
+  still pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date, so moving
+  either alone splits the runtime the Worker suite proves from the one that ships.
+- Updated dependencies [1fc4ff1]
+- Updated dependencies [bc073ab]
+- Updated dependencies [09bd94b]
+  - @cat-factory/contracts@0.356.0
+  - @cat-factory/kernel@0.349.0
+  - @cat-factory/prompt-fragments@1.1.50
+
 ## 0.166.3
 
 ### Patch Changes

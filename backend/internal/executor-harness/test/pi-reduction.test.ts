@@ -152,7 +152,7 @@ describe.runIf(unix)('runPi terminal-record certification', () => {
 
   const OVER_CAP = 33 * 1024 * 1024
   const answer = '{"type":"agent_end","messages":[{"role":"assistant","content":"the answer"}]}'
-  const run = () => runPi({ cwd, model: 'm', userPrompt: 'p', sessionToken: 't' })
+  const run = () => runPi({ cwd, agentDir: cwd, model: 'm', userPrompt: 'p', sessionToken: 't' })
 
   it('refuses to certify a clean exit whose terminal record was dropped for being oversized', async () => {
     // The exact case the terminal scan exists to prevent, arriving through the F6 line cap: the

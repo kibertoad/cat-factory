@@ -88,6 +88,24 @@ describe('RunStateMachine.finalizeBlock — no-PR terminal path', () => {
     expect(raised).toEqual([{ type: 'pipeline_complete' }])
   })
 
+  it('marks a resolve-conflicts run done without asking anyone to merge the PR it attached', async () => {
+    // The pull request belongs to whoever opened it: a `pipeline_complete` card would offer to
+    // merge somebody else's work on the strength of a conflict resolution.
+    const block = {
+      id: 'task_1',
+      level: 'task',
+      status: 'in_progress',
+      taskType: 'resolve-conflicts',
+      pullRequest: { branch: 'feat/x', url: 'https://example.test/pr/1', number: 1 },
+    } as unknown as Block
+    const { machine, updates, raised } = makeMachine(block)
+
+    await machine.finalizeBlock('ws_1', instanceWith(['conflicts']), undefined)
+
+    expect(updates).toEqual([{ id: 'task_1', patch: { status: 'done', progress: 1 } }])
+    expect(raised).toHaveLength(0)
+  })
+
   it('raises pipeline_complete BEFORE flipping the block, and leaves it alone if the raise fails', async () => {
     // F11: the card is the only actionable prompt for a confirm-and-merge, and nothing re-drives
     // a settled run. Flipping first meant a raise failure left a `pr_ready` block that looks

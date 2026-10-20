@@ -5,9 +5,10 @@
 // operator sets a hard cap env var, the account/user input cannot exceed it and the cap is
 // shown here. See docs/initiatives/tiered-budgets.md.
 import { computed, reactive, ref, watch, type Ref } from 'vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t, n } = useI18n()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 const settingsStore = useWorkspaceSettingsStore()
@@ -31,7 +32,7 @@ async function runSave(saving: Ref<boolean>, save: () => Promise<unknown>) {
   saving.value = true
   try {
     await save()
-    toast.add({ title: t('settings.workspaceSettings.toast.budgetSaved'), color: 'success' })
+    actionToast.success('settings.workspaceSettings.toast.budgetSaved')
     try {
       await useWorkspaceStore().refresh()
     } catch {
@@ -122,20 +123,20 @@ function saveUser() {
 
 <template>
   <div class="space-y-8">
-    <p class="text-[11px] text-slate-400">
+    <p class="text-2xs text-muted">
       {{ t('settings.workspaceSettings.budget.body') }}
     </p>
 
     <!-- Workspace tier -->
     <section class="space-y-2">
-      <h3 class="text-sm font-semibold text-slate-200">
+      <h3 class="text-sm font-semibold text-default">
         {{ t('settings.workspaceSettings.budget.workspace') }}
       </h3>
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label class="block">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+          <SectionLabel as="span" class="mb-1 block">
             {{ t('settings.workspaceSettings.budget.monthlyLimit') }}
-          </span>
+          </SectionLabel>
           <UInput
             v-model="wsDraft.spendMonthlyLimit"
             type="number"
@@ -145,9 +146,9 @@ function saveUser() {
           />
         </label>
         <label class="block">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+          <SectionLabel as="span" class="mb-1 block">
             {{ t('settings.workspaceSettings.budget.currency') }}
-          </span>
+          </SectionLabel>
           <UInput
             v-model="wsDraft.spendCurrency"
             placeholder="EUR"
@@ -157,7 +158,7 @@ function saveUser() {
           />
         </label>
       </div>
-      <div v-if="workspace.spend" class="text-[11px] text-slate-400">
+      <div v-if="workspace.spend" class="text-2xs text-muted">
         {{
           t('settings.workspaceSettings.budget.spent', {
             spent: money(workspace.spend.costSpent, workspace.spend.currency),
@@ -166,13 +167,7 @@ function saveUser() {
         }}
       </div>
       <div class="flex justify-end">
-        <UButton
-          color="primary"
-          icon="i-lucide-save"
-          size="sm"
-          :loading="savingWorkspace"
-          @click="saveWorkspace"
-        >
+        <UButton icon="i-lucide-save" size="sm" :loading="savingWorkspace" @click="saveWorkspace">
           {{ t('settings.workspaceSettings.budget.saveTier') }}
         </UButton>
       </div>
@@ -180,16 +175,16 @@ function saveUser() {
 
     <!-- Account tier -->
     <section v-if="account" class="space-y-2">
-      <h3 class="text-sm font-semibold text-slate-200">
+      <h3 class="text-sm font-semibold text-default">
         {{ t('settings.workspaceSettings.budget.account') }}
       </h3>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-2xs text-muted">
         {{ t('settings.workspaceSettings.budget.accountBody') }}
       </p>
       <label class="block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.workspaceSettings.budget.monthlyLimit') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model="accountDraft"
           type="number"
@@ -202,15 +197,13 @@ function saveUser() {
       </label>
       <p
         v-if="accountCap != null"
-        class="text-[11px]"
-        :class="accountOverCap ? 'text-rose-400' : 'text-amber-400'"
+        class="text-2xs"
+        :class="accountOverCap ? 'text-app-error-400' : 'text-app-warning-400'"
       >
         {{ t('settings.workspaceSettings.budget.hardCap', { amount: money(accountCap) }) }}
-        <span class="text-slate-500"
-          >({{ t('settings.workspaceSettings.budget.hardCapHint') }})</span
-        >
+        <span class="text-dimmed">({{ t('settings.workspaceSettings.budget.hardCapHint') }})</span>
       </p>
-      <div v-if="workspace.accountSpend" class="text-[11px] text-slate-400">
+      <div v-if="workspace.accountSpend" class="text-2xs text-muted">
         {{
           t('settings.workspaceSettings.budget.spent', {
             spent: money(workspace.accountSpend.costSpent),
@@ -218,12 +211,11 @@ function saveUser() {
           })
         }}
       </div>
-      <p v-if="!canEditAccount" class="text-[11px] text-slate-500">
+      <p v-if="!canEditAccount" class="text-2xs text-dimmed">
         {{ t('settings.workspaceSettings.budget.adminOnly') }}
       </p>
       <div v-if="canEditAccount" class="flex justify-end">
         <UButton
-          color="primary"
           icon="i-lucide-save"
           size="sm"
           :loading="savingAccount"
@@ -237,16 +229,16 @@ function saveUser() {
 
     <!-- User tier -->
     <section class="space-y-2">
-      <h3 class="text-sm font-semibold text-slate-200">
+      <h3 class="text-sm font-semibold text-default">
         {{ t('settings.workspaceSettings.budget.user') }}
       </h3>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-2xs text-muted">
         {{ t('settings.workspaceSettings.budget.userBody') }}
       </p>
       <label class="block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.workspaceSettings.budget.monthlyLimit') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model="userDraft"
           type="number"
@@ -258,15 +250,13 @@ function saveUser() {
       </label>
       <p
         v-if="userCap != null"
-        class="text-[11px]"
-        :class="userOverCap ? 'text-rose-400' : 'text-amber-400'"
+        class="text-2xs"
+        :class="userOverCap ? 'text-app-error-400' : 'text-app-warning-400'"
       >
         {{ t('settings.workspaceSettings.budget.hardCap', { amount: money(userCap) }) }}
-        <span class="text-slate-500"
-          >({{ t('settings.workspaceSettings.budget.hardCapHint') }})</span
-        >
+        <span class="text-dimmed">({{ t('settings.workspaceSettings.budget.hardCapHint') }})</span>
       </p>
-      <div v-if="workspace.userSpend" class="text-[11px] text-slate-400">
+      <div v-if="workspace.userSpend" class="text-2xs text-muted">
         {{
           t('settings.workspaceSettings.budget.spent', {
             spent: money(workspace.userSpend.costSpent),
@@ -276,7 +266,6 @@ function saveUser() {
       </div>
       <div class="flex justify-end">
         <UButton
-          color="primary"
           icon="i-lucide-save"
           size="sm"
           :loading="savingUser"

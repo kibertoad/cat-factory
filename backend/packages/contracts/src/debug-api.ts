@@ -8,6 +8,7 @@ import {
   llmExportInsightSchema,
   llmExportTotalsSchema,
   llmPhaseInsightSchema,
+  llmReportingGapsSchema,
   toolCallOutcomeSchema,
   type LlmCallOutcome,
 } from './observability.js'
@@ -450,6 +451,12 @@ export const debugRunOverviewSchema = v.object({
      * rather than repeated on every row: it is a property of the price table, not of a row.
      */
     costCurrency: v.nullable(v.string()),
+    /**
+     * What these totals DO NOT cover: the run's delegated steps, whose executor files no usage.
+     * Additive and always present going forward, because an absent field and a zero count are the
+     * same value and opposite facts. See {@link llmReportingGapsSchema}.
+     */
+    reporting: v.optional(llmReportingGapsSchema),
   }),
   /**
    * What the run's agents DID with their tools, and how much of it failed. Counted from the
@@ -960,6 +967,12 @@ export const debugLlmExportSchema = v.object({
      * deployment prices nothing (in which case those costs are null too).
      */
     costCurrency: v.nullable(v.string()),
+    /**
+     * What these totals DO NOT cover: the run's delegated steps, whose executor files no usage.
+     * Additive and always present going forward, because an absent field and a zero count are the
+     * same value and opposite facts. See {@link llmReportingGapsSchema}.
+     */
+    reporting: v.optional(llmReportingGapsSchema),
   }),
   /** Which end of the run {@link debugLlmExportSchema.entries.calls} was taken from. */
   order: debugLlmExportOrderSchema,

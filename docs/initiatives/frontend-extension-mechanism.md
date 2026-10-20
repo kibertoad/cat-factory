@@ -235,7 +235,7 @@ invented:
   `resultView` window (§1). The window reads `step.interaction.payload` off the
   execution store (live-pushed like any step field) and submits through a small public
   composable the layer exports: `useStepInteraction(viewId)` → `{ payload, status,
-submit(action, body), pending, error }`; wrapping the generic routes + the
+  submit(action, body), pending, error }`; wrapping the generic routes + the
   authed api client + the optimistic `reflect` pattern from `stores/forkDecision.ts`,
   so a consumer never touches `useApi` internals.
 - **Opening.** Parked steps already surface through the board's approval badge →

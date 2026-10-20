@@ -1,5 +1,446 @@
 # @cat-factory/integrations
 
+## 0.178.0
+
+### Minor Changes
+
+- e9b24a1: A runner pool can now be set once per ACCOUNT, and every board of the account that has no pool of
+  its own dispatches to it. A deployment declares it with `seedAccountRunnerPool` on the Node
+  `start()`: a callback `(account) => { config, secrets } | undefined`, called for personal and org
+  accounts alike. The server inserts the result for each account that has none, at boot and when a
+  board is created. At boot it also replaces an account's pool when the callback's answer differs from
+  the stored one (config, or the decrypted secrets), so a rotated token reaches every account on the
+  next boot; board creation never replaces. On stock Node, where a runner pool is the only
+  executor, a new board then runs an agent with no Infrastructure step. A legacy board with no account
+  gets nothing.
+  
+  A board resolves its pool through one resolver: its own live row, then its account's row, then none.
+  The new workspace setting `inheritAccountRunnerPool` (default `true`) is the explicit "none" marker.
+  `DELETE /workspaces/:id/runner-pool/connection` now sets it to `false` unless the call carries
+  `fallBackToAccount=true`, so removing a board's own pool no longer silently re-routes its work to the
+  account's pool. The query parameter and the setting are additive.
+  
+  The seed is validated like an admin registration (backend kind registered, URL safe, referenced
+  secrets present) through a shared `RunnerPoolConnectionService.validate`. A seed that fails is logged
+  at `error` naming the account on every boot, and a failed read never fails board creation.
+  
+  New storage, mirrored on both runtimes: the `account_runner_pools` table (D1 migration 0110 and a
+  Drizzle migration) with an `AccountRunnerPoolRepository` kernel port (`insertIfAbsent`, and
+  `replace` for a changed seed), a unique key making the insert race safe, `AccountRepository.listAll`, and the `inherit_account_runner_pool` settings column. The
+  account repository is on the mothership allow-list for reads; mothership nodes and `startLocal()` do
+  not seed. The Worker does not take the option: there a pool is an optional target beside the built-in
+  containers.
+
+### Patch Changes
+
+- Updated dependencies [e9b24a1]
+  - @cat-factory/kernel@0.363.0
+  - @cat-factory/contracts@0.374.0
+
+## 0.177.1
+
+### Patch Changes
+
+- 5c17395: Dependency refresh, direct and transitive (the lockfile is re-resolved from scratch), held to the
+  24h `minimumReleaseAge` window.
+  
+  Majors, each taken because its whole peer group could move together:
+  
+  - **Vitest 5** (`vitest`, `@vitest/coverage-v8`, `@vitest/browser`, `@vitest/browser-playwright`
+    at `5.0.5`), now that `@cloudflare/vitest-plugin@1.4.4`, `@storybook/addon-vitest`,
+    `@nuxt/test-utils` and `vitest-browser-vue` all accept `^5`. The Worker suite turns Vitest 5's
+    new default `fsModuleCache` off: the Workers pool inlines every warm module into one WebSocket
+    reply, and this suite's graph (~80MB) exceeds workerd's message limit (`1009 Message is too
+    large`).
+  - **msw 3**, for the component stories. `onUnhandledRequest` became `onUnhandledFrame`, which
+    also receives WebSocket frames, and the bundled `mockServiceWorker.js` is regenerated.
+  - **happy-dom 21** for the SPA's unit tests.
+  
+  The Workers test pool moves to `@cloudflare/vitest-plugin@1.4.4`, which pins `wrangler@4.151.1`, so
+  the Cloudflare stack moves with it: workerd `1.20261012.1`, miniflare `5.20261012.1-beta`,
+  `@cloudflare/workers-types` `5.20261012.1` (the resolved workerd's date) and esbuild `0.28.2`
+  (the version wrangler and the plugin now pin, so the scoped esbuild overrides follow).
+  
+  Also the Vercel AI SDK family as one set (`ai@7.0.142`, `@ai-sdk/anthropic@4.0.81`,
+  `@ai-sdk/openai@4.0.95`, `@ai-sdk/openai-compatible@3.0.70`, `@ai-sdk/amazon-bedrock@5.0.117`,
+  `@ai-sdk/provider@4.0.28`), the Vue family at `3.5.44`, `@nuxt/ui@4.12.0`, `pinia@4.1.0`,
+  `storybook@10.6.2`, `undici@8.12.2`, `pg-boss@12.38.0`, `@aws-sdk/client-s3@3.1152.0`,
+  `@hono/node-server@2.1.5`, `@playwright/test@1.64.1`, and the root toolchain (`turbo@2.11.8`,
+  `oxlint@1.88.0`, `oxfmt@0.73.0`, `knip@6.41.0`).
+  
+  Held: the frontend stays on TypeScript 6 (TypeScript 7 ships no classic compiler API for
+  `vue-tsc`); `@nuxt/fonts` stays on 0.14 because `@nuxt/ui@4.12.0` depends on `^0.14.0`; Drizzle
+  stays on `1.0.0-rc.4`, still its `rc` tag; `nuxt@4.6.2` is inside the window.
+- Updated dependencies [5c17395]
+- Updated dependencies [5c17395]
+  - @cat-factory/kernel@0.362.0
+  - @cat-factory/contracts@0.373.1
+
+## 0.177.0
+
+### Minor Changes
+
+- 83f6b0c: A personal API key can follow its person's workspaces. Minted with `followsMemberships: true`
+  (beside `actsAsSelf: true`, and no `workspaceIds`), it reaches every workspace that person can act
+  in, resolved on each call: joining a workspace grants it on the next call and leaving takes it
+  away, with nothing to re-mint. In each workspace its scope is lowered to what the person's role
+  there allows (`read` for a viewer, `decide` for a member, `admin` for an admin), and on account-level
+  routes it acts with `read`, so it can never do more over `/api/v1` than its person can in the app.
+  That is also why anyone with `runs.execute` may mint one, list it and revoke it; an account admin
+  manages anyone's.
+  
+  `followsMemberships` is new on a listed or minted key (whose `workspaceIds` is then `[]`), on
+  `GET /api/v1/me` and on `GET /api/v1/directory/reach`, which answer the reach as of the call.
+  OpenAPI 1.89.0. The API tokens window offers "My workspaces (follows my memberships)", the default
+  for a personal token, and `?newApiKey` takes `reach=memberships`. New migrations: D1
+  `0110_public_api_key_follows_memberships.sql`, Drizzle
+  `20261016160143_public_api_key_follows_memberships`.
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/contracts@0.373.0
+  - @cat-factory/kernel@0.361.0
+
+## 0.176.6
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+  - @cat-factory/kernel@0.360.4
+
+## 0.176.5
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+  - @cat-factory/kernel@0.360.3
+
+## 0.176.4
+
+### Patch Changes
+
+- 6f574e9: API keys gain a `webhooks` scope between `read` and `write`: everything `read` can do, plus
+  registering and removing push endpoints. The directory webhooks (`/api/v1/directory/webhooks`,
+  still for a key reaching every workspace) and the notification webhooks
+  (`/api/v1/notification-webhook[s]`) now need `webhooks` instead of `admin`, so a sync integration
+  can follow changes with a key that cannot author or delete work. Every key that could manage
+  webhooks before still can. OpenAPI 1.86.0.
+  
+  The API token form names each scope by its API name (`read`, `webhooks`, `write`, `decide`,
+  `admin`), so the screen, the docs and the refusal messages agree. "Full access" is now "Admin".
+  
+  The token form always shows the Workspaces picker, in basic and advanced mode. It is disabled for
+  anyone who is not an account admin, with a line saying so, because only an account admin may mint
+  a key that reaches other workspaces.
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+  - @cat-factory/kernel@0.360.2
+
+## 0.176.3
+
+### Patch Changes
+
+- 96e7e3d: Directory and notification webhook endpoints may be `http://` where the deployment allows it.
+  The request schemas refused every `http://` URL before the URL policy ran, so
+  `NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS` and `NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS` could never
+  admit one. The schemas now accept `http://` and `https://`, and the policy decides: hosted
+  deployments stay https-only with no private hosts, as before.
+  
+  Local mode turns that policy on by default for `localhost`, `127.0.0.1`,
+  `host.docker.internal` and `*.localhost`, the way it already does for environment URLs. A
+  receiver on the same laptop (a local sainte-beuve following the directory) can register its
+  push endpoint with no tunnel.
+  
+  The SDK clients are regenerated against OpenAPI 1.85.0.
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+  - @cat-factory/kernel@0.360.1
+
+## 0.176.2
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/contracts@0.368.0
+  - @cat-factory/kernel@0.360.0
+
+## 0.176.1
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/contracts@0.367.0
+  - @cat-factory/kernel@0.359.1
+
+## 0.176.0
+
+### Minor Changes
+
+- 04c1587: Public-API keys belong to an account and reach every workspace in it or a chosen list. A
+  workspace-scoped `/api/v1` call names its workspace in the `x-cat-factory-workspace` header, which a
+  key reaching one workspace may omit, so every existing key keeps working unchanged. `PublicApiKey`
+  and `GET /api/v1/me` gain `workspaceIds`; both mint bodies accept it. Widening a key past the board
+  it is minted from takes an account admin, and a key can never mint or revoke one reaching further
+  than itself. The header is on the CORS allow-list, so a browser client can send it. The four SDK
+  clients take a workspace option. OpenAPI 1.80.0.
+  
+  Storage break (internal): `public_api_keys.workspace_id` is replaced by `all_workspaces` plus the
+  `public_api_key_workspaces` grant table (D1 `0108`, Drizzle `20261009143721` and `20261009143724`),
+  backfilled from the old column. The account cap is 200 live keys, where it was 50 per workspace,
+  and a key left with no workspace after its boards were deleted holds no slot.
+- 20d4f01: Directory webhooks: `/api/v1/directory/webhooks` registers account-level endpoints that the
+  directory change feed is pushed to every couple of minutes, signed like the notification webhooks.
+  Each push is a `directory.changed` page of hydrated changes, or `directory.resync_required` for an
+  endpoint that fell behind the feed's retention. Delivery is a sweep on both facades (the Worker's
+  frequent cron, a Node timer) that takes a per-endpoint lease before a push and moves the endpoint's
+  position only after the push succeeds, so pushes are at-least-once, arrive in feed order, and are
+  never doubled by concurrent sweepers; a lease whose sweeper died expires and the page is sent again. The spec gains an OpenAPI 3.1 `webhooks` section naming every push body, so
+  `DirectoryWebhookDelivery`, `NotificationWebhookDelivery`, `RunWebhookDelivery` and
+  `PlatformAlertWebhookDelivery` become generated types in every client.
+  OpenAPI 1.82.0. New migrations: D1 `0109_directory_webhooks.sql`, Drizzle
+  `20261010113115_directory_webhooks`.
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+  - @cat-factory/kernel@0.359.0
+
+## 0.175.3
+
+### Patch Changes
+
+- 91dedb6: Setup advisories now go to the people who can act on them. The workspace snapshot carries
+  `infraSetupOwners` beside `infraSetup`, naming who can close each gap: a board admin
+  (`workspace_admin`), an account admin (`account_admin`) or the deployment operator (`operator`).
+  Content storage falls to the operator when the deployment gives an account admin no backend to
+  select (`AccountSettingsService.canSelectContentStorage`).
+  
+  In the SPA, the infra-setup and provider-config cards render only for a caller who can save the
+  fix, and never on the designer surface. A caller who cannot act, but whose runs the gap stops (today,
+  a missing or unreachable runner pool), gets one compact line instead: it names who can fix it, or
+  tells an admin on the designer surface to switch role. A viewer gets nothing. The line honours the
+  card's session and permanent dismissals. The default test-environment prompt is also kept off the
+  designer surface, and the account-admin check now lives once in the accounts store
+  (`isActiveAccountAdmin`).
+  
+  On the repository-host gate, a caller without `integrations.manage` reads that a board admin can
+  connect the host, instead of "this deployment has nothing configured, ask an operator", and the
+  gate offers the board switcher without the items that need the board page's dialogs. The AI setup
+  dialog sends a member to the direct keys on their own
+  "My keys" scope, where their save lands, instead of the workspace pool they cannot write. That
+  default follows the active board's grant until the user picks a scope by hand.
+  
+  The new snapshot field is optional and internal: an older SPA ignores it, and this SPA falls back
+  to "a board admin" when a backend does not send it.
+- Updated dependencies [91dedb6]
+  - @cat-factory/contracts@0.365.0
+  - @cat-factory/kernel@0.358.1
+
+## 0.175.2
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/contracts@0.364.0
+  - @cat-factory/kernel@0.358.0
+
+## 0.175.1
+
+### Patch Changes
+
+- Updated dependencies [1a42f34]
+  - @cat-factory/kernel@0.357.1
+
+## 0.175.0
+
+### Minor Changes
+
+- e3c4b3c: A new built-in `resolve-conflicts` task type points the conflict resolver at an existing open pull request the platform did not open (surface version 1.79.0). The task names it with `fields.prNumber` or `fields.prUrl`, and creation records it as the block's own `pullRequest`, refusing one the run could not push onto with a `422` and an `attached_pr_*` reason: not found, another repository, closed or merged, from a fork, targeting a branch other than the repository's base, or unreadable. When the repository provider fails to answer, creation is refused with a retryable `503` and reason `attached_pr_provider_unreachable` instead of a `500`.
+  
+  The task is pinned to the new `pl_resolve_conflicts` pipeline, the `conflicts` gate alone, under a new `maintenance` pipeline purpose that only this task type is offered. It parks nowhere, so a `write` key starts it with an empty body. A clean pull request finishes `done` with nothing pushed; one the resolver cannot clear fails the run with a message saying the conflicts could not be resolved automatically and carrying the resolver's last account. A run of a task that attached its pull request finishes `done` without a confirm-and-merge card, and the pre-dispatch input gate does not judge its description. Run admission refuses a pipeline with a merge step for such a task, and a fields patch cannot move its attachment to another pull request while its run is working.
+  
+  `OpenedPullRequest` gains an optional `crossRepository`, filled by the GitHub and GitLab clients, and `AgentRunContext.block` gains `taskType`, which the container executor reads to skip creating the per-task work branch for an attached pull request. The conflicts gate's give-up message now includes the last resolver attempt's summary.
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/contracts@0.363.0
+  - @cat-factory/kernel@0.357.0
+
+## 0.174.12
+
+### Patch Changes
+
+- ffe4356: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Worker test pool moves from `@cloudflare/vitest-pool-workers@0.22.0` to its renamed successor
+  `@cloudflare/vitest-plugin@1.3.7`. The old package is deprecated and receives no further releases;
+  the new one exports the same `cloudflareTest`, `readD1Migrations` and `/types` entry, so only the
+  import specifiers change. It pins `wrangler@4.148.0`, so the Cloudflare stack moves with it:
+  wrangler `4.124.0` to `4.148.0`, workerd `1.20260815.1` to `1.20261006.1`, miniflare to
+  `5.20261006.0-alpha`, and `@cloudflare/workers-types` to `5.20261006.1`, the resolved workerd's
+  date. esbuild stays on `0.28.1`, which wrangler still pins.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.131`, `@ai-sdk/anthropic@4.0.75`,
+  `@ai-sdk/openai@4.0.87`, `@ai-sdk/openai-compatible@3.0.65`, `@ai-sdk/amazon-bedrock@5.0.109`,
+  `@ai-sdk/provider@4.0.24`), still one `@ai-sdk/provider` identity across every caller. Also
+  `nuxt@4.6.0` with `vue-router@5.4.0`, `@nuxt/ui@4.11.3`, `hono@4.13.13`,
+  `@modelcontextprotocol/sdk@1.32.1`, the OpenTelemetry SDK `2.12.0` / `0.223.0`, `pg-boss@12.37.0`,
+  `pino@10.4.0`, `@aws-sdk/client-s3@3.1147.0`, `@playwright/test@1.64.0`, and the root toolchain
+  (`turbo@2.11.7`, `oxlint@1.87.0`, `oxfmt@0.72.0`, `knip@6.40.0`).
+  
+  Held: vitest and `@vitest/coverage-v8` stay on 4, because the plugin release inside the window
+  peer-requires vitest `^4.1.0`. msw stays on 2 for the same reason: vitest 4's mocker peers
+  `msw@^2`. The frontend stays on TypeScript 6, since TypeScript 7 ships no classic compiler API for
+  `vue-tsc`.
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+
+## 0.174.11
+
+### Patch Changes
+
+- Updated dependencies [97175f8]
+  - @cat-factory/contracts@0.362.0
+  - @cat-factory/kernel@0.355.0
+
+## 0.174.10
+
+### Patch Changes
+
+- Updated dependencies [a3a10b8]
+- Updated dependencies [0966666]
+  - @cat-factory/contracts@0.361.0
+  - @cat-factory/kernel@0.354.2
+
+## 0.174.9
+
+### Patch Changes
+
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+  - @cat-factory/kernel@0.354.1
+
+## 0.174.8
+
+### Patch Changes
+
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/contracts@0.359.0
+  - @cat-factory/kernel@0.354.0
+
+## 0.174.7
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+  - @cat-factory/kernel@0.353.0
+
+## 0.174.6
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/contracts@0.357.0
+
+## 0.174.5
+
+### Patch Changes
+
+- e84b0d5: Dependency refresh within current majors, each at the newest release older than the 24h
+  `minimumReleaseAge` window: the Vercel AI SDK family (`ai` 7.0.120, `@ai-sdk/*` 4.x, `openai-compatible`
+  3.0.58, `amazon-bedrock` 5.0.99), `@aws-sdk/client-s3`, `@modelcontextprotocol/sdk` 1.31.0, `pg-boss`
+  12.35.0, `ws` 8.22.0 and `undici` 8.11.2. `publicApiAuth.refuse` now declares its return type, because
+  hono 4.13.10 ships bundled declarations whose inferred `c.json` return type a declaration emit can no
+  longer name.
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/kernel@0.351.0
+
+## 0.174.4
+
+### Patch Changes
+
+- c046707: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  One major moves with it: `layered-loader` goes `16.1.1` to `17.0.0`, whose only change is that
+  `getMany` now includes `null` in its return type. Nothing here calls `getMany`, so the caching layer
+  takes it with no source change.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.111` with `@ai-sdk/anthropic@4.0.60`,
+  `@ai-sdk/openai@4.0.72`, `@ai-sdk/amazon-bedrock@5.0.91`), staying inside the majors
+  `workers-ai-provider@4` pairs with. Every member resolves the same `@ai-sdk/provider@4.0.17` and
+  `@ai-sdk/provider-utils@5.0.45`, so the provider interface stays a single identity across the proxy
+  and the inline callers. Also `@aws-sdk/client-s3@3.1138.0`, `pg-boss@12.33.6`, `undici@8.11.0`,
+  `@nuxt/ui@4.11.2`, `turbo@2.11.3`, `oxlint@1.85.0` and `oxfmt@0.70.0`.
+  
+  Every hold was re-verified at HEAD rather than assumed, and all of them still bind.
+  `@cloudflare/vitest-pool-workers@0.22.0` is still its newest release, peer-requires vitest `^4.1.0`
+  and pins `wrangler@4.124.0` exactly, so vitest and `@vitest/coverage-v8` stay on 4 and wrangler,
+  workerd, miniflare and `@cloudflare/workers-types` stay where they are. The frontend stays on
+  TypeScript 6: TypeScript 7 ships no compiler API for `vue-tsc` to load. Drizzle stays on
+  `1.0.0-rc.4`, the newest non-snapshot release of its line, and the Vue family pins (`vue@3.5.43`,
+  `vue-router@5.3.1`, `esbuild@0.28.1`, `@modular-frontend/core@0.6.0`) are already what their
+  consumers need.
+- Updated dependencies [c046707]
+- Updated dependencies [c046707]
+  - @cat-factory/kernel@0.350.0
+
+## 0.174.3
+
+### Patch Changes
+
+- 1fc4ff1: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  Three majors move with it. The `@toad-contracts/*` family goes `0.x` to `1.0.0`, which redesigns
+  how a contract declares a non-JSON response: a status code now carries a media-type content map
+  rather than a tagged marker, and the `ContractNoBody` symbol is request-body-only. Every response
+  declaring it becomes `noBodyResponse()`, the form that survives; the symbol stays where it already
+  meant a request. `@vueuse/core` goes to `15.0.0` and `@openrouter/ai-sdk-provider` to `3.1.0`.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.107` with `@ai-sdk/anthropic@4.0.58`,
+  `@ai-sdk/openai@4.0.71`, `@ai-sdk/openai-compatible@3.0.53`, `@ai-sdk/amazon-bedrock@5.0.88`),
+  staying inside the majors `workers-ai-provider@4` pairs with, so `@ai-sdk/provider` keeps a single
+  identity across the proxy and the inline callers. Also `@aws-sdk/client-s3@3.1136.0`,
+  `pg-boss@12.33.2`, `turbo@2.11.2` and `@types/node@26.6.2`.
+  
+  `vitest` stays on 4: `@cloudflare/vitest-pool-workers@0.22.0` peer-requires `^4.1.0`, so taking
+  vitest 5 would leave the Worker suite running against a pool that never declared it.
+  `wrangler` and `@cloudflare/workers-types` stay put for the same kind of reason: the pool still
+  pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date.
+- 09bd94b: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.102 → 7.0.106` with `@ai-sdk/anthropic@4.0.57`,
+  `@ai-sdk/openai@4.0.70`, `@ai-sdk/openai-compatible@3.0.52`, `@ai-sdk/amazon-bedrock@5.0.87`,
+  `@ai-sdk/provider@4.0.17`), staying inside the majors `workers-ai-provider@4` pairs with. Every
+  member resolves the same `@ai-sdk/provider@4.0.17` and `@ai-sdk/provider-utils@5.0.44`, so the
+  provider interface stays a single identity across the proxy and the inline callers.
+  
+  Also `@aws-sdk/client-s3@3.1135.0`, `pg-boss@12.33.1`, `knip@6.37.0`, and on the frontend the whole
+  pinned Vue family to `3.5.43` with `vue-router` to `5.3.1`.
+  
+  `wrangler` and `@cloudflare/workers-types` deliberately stay put: `@cloudflare/vitest-pool-workers`
+  still pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date, so moving
+  either alone splits the runtime the Worker suite proves from the one that ships.
+- Updated dependencies [1fc4ff1]
+- Updated dependencies [bc073ab]
+- Updated dependencies [09bd94b]
+  - @cat-factory/contracts@0.356.0
+  - @cat-factory/kernel@0.349.0
+
 ## 0.174.2
 
 ### Patch Changes

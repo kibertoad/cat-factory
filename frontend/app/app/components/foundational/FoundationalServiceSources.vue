@@ -27,6 +27,8 @@ import {
 } from '~/stores/foundationalServices'
 import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
+import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ kind: FoundationalServiceOwnerKind; ownerId: string }>()
 
@@ -35,7 +37,7 @@ const catalog =
     ? useFoundationalServicesStore()
     : useFoundationalServices(props.kind, props.ownerId)
 const github = useGitHubStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
@@ -162,7 +164,7 @@ async function link() {
         : {}),
     })
     resetDraft()
-    toast.add({ title: t('foundational.toast.sourceLinked'), icon: 'i-lucide-git-branch' })
+    actionToast.success('foundational.toast.sourceLinked')
     return result
   } catch (e) {
     present(e, 'foundational.toast.linkSourceFailed')
@@ -184,17 +186,14 @@ async function sync(id: string) {
         )
       const coverage = result.folderScan ? folderScanNotes.value[result.folderScan] : null
       if (coverage) notes.push(coverage)
-      toast.add({
-        title: t('foundational.toast.synced', {
-          updated: result.upserted,
-          removed: result.tombstoned,
-        }),
+      // A folder we could not fully see, or could not find at all, is the one sync outcome a
+      // human has to act on: the counts alone would read as an ordinary quiet success.
+      const synced = {
+        params: { updated: result.upserted, removed: result.tombstoned },
         ...(notes.length ? { description: notes.join(' ') } : {}),
-        icon: 'i-lucide-refresh-cw',
-        // A folder we could not fully see, or could not find at all, is the one sync outcome a
-        // human has to act on — the counts alone would read as an ordinary quiet success.
-        color: coverage ? 'warning' : 'info',
-      })
+      }
+      if (coverage) actionToast.warning('foundational.toast.synced', synced)
+      else actionToast.success('foundational.toast.synced', synced)
     } catch (e) {
       present(e, 'foundational.toast.syncFailed')
     }
@@ -205,12 +204,9 @@ async function check(id: string) {
   await withRow(`check:${id}`, async () => {
     try {
       const status = await catalog.checkSource(id)
-      toast.add({
-        title: status.changed
-          ? t('foundational.toast.changesAvailable')
-          : t('foundational.toast.upToDate'),
-        icon: status.changed ? 'i-lucide-bell-dot' : 'i-lucide-check',
-      })
+      actionToast.info(
+        status.changed ? 'foundational.toast.changesAvailable' : 'foundational.toast.upToDate',
+      )
     } catch (e) {
       present(e, 'foundational.toast.checkSourceFailed')
     }
@@ -232,7 +228,7 @@ async function unlink(id: string) {
   await withRow(`unlink:${id}`, async () => {
     try {
       await catalog.unlinkSource(id)
-      toast.add({ title: t('foundational.toast.sourceUnlinked'), icon: 'i-lucide-unplug' })
+      actionToast.success('foundational.toast.sourceUnlinked')
     } catch (e) {
       present(e, 'foundational.toast.unlinkSourceFailed')
     }
@@ -245,14 +241,14 @@ async function unlink(id: string) {
     <div
       v-for="s in catalog.sources"
       :key="s.id"
-      class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+      class="flex items-center gap-2 rounded-md border border-default bg-default/60 p-3"
     >
-      <UIcon name="i-lucide-git-branch" class="h-4 w-4 shrink-0 text-slate-400" />
+      <UIcon name="i-lucide-git-branch" class="h-4 w-4 shrink-0 text-muted" />
       <div class="min-w-0">
-        <span class="font-mono text-sm text-slate-100">
-          {{ s.repoOwner }}/{{ s.repoName }}<span class="text-slate-500">/{{ s.dirPath }}</span>
+        <span class="font-mono text-sm text-app-100">
+          {{ s.repoOwner }}/{{ s.repoName }}<span class="text-dimmed">/{{ s.dirPath }}</span>
         </span>
-        <p class="text-xs text-slate-500">
+        <p class="text-xs text-dimmed">
           <template v-if="s.mode === 'files'">
             {{
               t('foundational.sources.metaFiles', {
@@ -274,7 +270,7 @@ async function unlink(id: string) {
           </template>
           <template v-else>{{ t('foundational.sources.metaDirectory') }}</template>
         </p>
-        <p class="text-xs text-slate-500">
+        <p class="text-xs text-dimmed">
           {{
             s.lastSyncedAt
               ? t('foundational.sources.metaSynced', {
@@ -295,56 +291,61 @@ async function unlink(id: string) {
         {{ t('foundational.sources.changes') }}
       </UBadge>
       <div class="ms-auto flex gap-1">
-        <UButton
+        <IconButton
+          color="neutral"
           icon="i-lucide-search-check"
           size="xs"
           variant="ghost"
           :loading="rowBusy(`check:${s.id}`)"
-          :title="t('foundational.sources.check')"
+          :label="t('foundational.sources.check')"
           @click="check(s.id)"
         />
-        <UButton
+        <IconButton
+          color="neutral"
           icon="i-lucide-refresh-cw"
           size="xs"
           variant="ghost"
           :loading="rowBusy(`sync:${s.id}`)"
-          :title="t('foundational.sources.sync')"
+          :label="t('foundational.sources.sync')"
           @click="sync(s.id)"
         />
-        <UButton
+        <IconButton
           icon="i-lucide-unplug"
           size="xs"
           color="error"
           variant="ghost"
           :loading="rowBusy(`unlink:${s.id}`)"
-          :title="t('foundational.sources.unlink')"
+          :label="t('foundational.sources.unlink')"
           @click="unlink(s.id)"
         />
       </div>
     </div>
-    <p v-if="!catalog.sources.length" class="text-sm text-slate-500">
-      {{ t('foundational.sources.empty') }}
-    </p>
+    <EmptyState
+      v-if="!catalog.sources.length"
+      compact
+      icon="i-lucide-git-branch"
+      :title="t('foundational.sources.empty')"
+    />
 
     <!-- Linking needs the GitHub integration; say so rather than offering a form that 503s. -->
     <div
       v-if="!catalog.sourcesAvailable"
-      class="rounded-md border border-slate-800 bg-slate-900/40 p-3 text-sm text-slate-500"
+      class="rounded-md border border-default bg-default/40 p-3 text-sm text-dimmed"
     >
       {{ t('foundational.sources.githubRequired') }}
     </div>
-    <div v-else class="rounded-md border border-slate-800 p-3">
+    <div v-else class="rounded-md border border-default p-3">
       <p class="mb-2 text-sm font-medium">{{ t('foundational.sources.linkTitle') }}</p>
       <div class="flex flex-col gap-2">
         <URadioGroup v-model="mode" :items="modeItems" orientation="horizontal" size="sm" />
-        <p class="text-xs text-slate-500">{{ modeHints[mode] }}</p>
+        <p class="text-xs text-dimmed">{{ modeHints[mode] }}</p>
 
         <!-- Connected: search a repo, then browse to the folder / pick the contract files -->
         <template v-if="githubReady">
           <GitHubRepoSearchSelect v-model="repoId" @update:repo="repo = $event" />
           <div
             v-if="repoId !== undefined"
-            class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+            class="rounded-md border border-default bg-default/40 p-2"
           >
             <RepoTreeBrowser
               v-if="mode === 'files'"
@@ -355,13 +356,13 @@ async function unlink(id: string) {
               @toggle="toggleFile"
             />
             <RepoTreeBrowser v-else v-model="dirPath" :repo-github-id="repoId" mode="dir" />
-            <p class="mt-2 truncate text-xs text-slate-400">
+            <p class="mt-2 truncate text-xs text-muted">
               <template v-if="mode === 'files'">
                 {{ t('foundational.sources.selectedFiles', { count: filePaths.length }) }}
               </template>
               <template v-else-if="dirPath">
                 {{ t('foundational.sources.selectedDir') }}
-                <code class="text-slate-200">{{ dirPath }}</code>
+                <code class="text-default">{{ dirPath }}</code>
               </template>
               <template v-else>{{ t('foundational.sources.wholeRepo') }}</template>
             </p>

@@ -17,6 +17,7 @@ import { BINARY_OUTPUT_STATE_KEYS, binaryOutputView } from '~/utils/binaryOutput
 import { binaryCandidateView } from '~/utils/binaryCandidates'
 import CopyButton from '~/components/common/CopyButton.vue'
 import StoredAssetView from '~/components/binaryOutput/StoredAssetView.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // Two callers, one renderer — the same split `StepEffortReport` makes: the generic step-detail
 // panel drops it in as a `card` (its own heading + border, among the other detail sections),
@@ -55,24 +56,21 @@ const state = computed(() => {
     v-if="view"
     class="space-y-3"
     :class="
-      variant === 'card' ? 'scroll-mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4' : ''
+      variant === 'card' ? 'scroll-mt-4 rounded-xl border border-default bg-default/50 p-4' : ''
     "
     data-testid="binary-output-report"
   >
-    <div
-      v-if="variant === 'card'"
-      class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-    >
+    <SectionLabel v-if="variant === 'card'" class="flex items-center gap-1.5">
       <UIcon name="i-lucide-image" class="h-3.5 w-3.5" />
       <span>{{ t('binaryOutput.heading') }}</span>
-    </div>
+    </SectionLabel>
 
     <!-- The CANDIDATE decision, when this step compared before delivering. It sits ABOVE the
          delivery outcome because it happened first, and because "which of four was this" is the
          question the artifacts below cannot answer. An AUTOMATIC keep says so: nobody looked. -->
     <p
       v-if="candidates && candidates.state.candidates.length > 0"
-      class="text-[12px] leading-relaxed text-slate-300"
+      class="text-xs leading-relaxed text-toned"
       data-testid="binary-output-candidate-decision"
     >
       {{
@@ -92,7 +90,7 @@ const state = computed(() => {
     <!-- What happened, in one sentence, before any list. Four of the five states have no list
          at all, and the fifth still needs its qualifications read alongside it. -->
     <p
-      class="flex items-start gap-2 text-[12px] leading-relaxed"
+      class="flex items-start gap-2 text-xs leading-relaxed"
       :class="state.tone"
       data-testid="binary-output-state"
       :data-state="view.state"
@@ -106,29 +104,29 @@ const state = computed(() => {
          so — it is a real state (a trait-carrying kind dispatched under an overriding kind
          records a declaration against a step that never held one), and rendering a blank
          would read as a missing value rather than an absent comparison. -->
-    <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">
-      <dt class="text-slate-500">{{ t('binaryOutput.target') }}</dt>
+    <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-2xs">
+      <dt class="text-dimmed">{{ t('binaryOutput.target') }}</dt>
       <dd
         v-if="view.target"
-        class="min-w-0 font-mono text-slate-300"
+        class="min-w-0 font-mono text-toned"
         data-testid="binary-output-target"
       >
         {{ view.target }}
       </dd>
-      <dd v-else class="min-w-0 text-slate-400" data-testid="binary-output-target">
+      <dd v-else class="min-w-0 text-muted" data-testid="binary-output-target">
         {{ t('binaryOutput.targetNone') }}
       </dd>
       <template v-if="view.contextServices.length">
-        <dt class="text-slate-500">{{ t('binaryOutput.contextServices') }}</dt>
-        <dd class="min-w-0 font-mono text-slate-400">{{ view.contextServices.join(', ') }}</dd>
+        <dt class="text-dimmed">{{ t('binaryOutput.contextServices') }}</dt>
+        <dd class="min-w-0 font-mono text-muted">{{ view.contextServices.join(', ') }}</dd>
       </template>
       <!-- The formats the step REQUIRED, beside where they were meant to go. Rendered whenever
            the step stated any, including on a run that delivered them: the requirement is what
            makes the content types below it readable, and a reader checking whether a mesh will
            load needs to see what was asked for even when nothing went wrong. -->
       <template v-if="view.mediaTypes.length">
-        <dt class="text-slate-500">{{ t('binaryOutput.mediaTypes') }}</dt>
-        <dd class="min-w-0 font-mono text-slate-400" data-testid="binary-output-media-types">
+        <dt class="text-dimmed">{{ t('binaryOutput.mediaTypes') }}</dt>
+        <dd class="min-w-0 font-mono text-muted" data-testid="binary-output-media-types">
           {{ view.mediaTypes.join(', ') }}
         </dd>
       </template>
@@ -147,7 +145,7 @@ const state = computed(() => {
       <li
         v-for="(row, i) in view.rows"
         :key="`${row.service}:${row.location}:${i}`"
-        class="relative rounded-md border border-slate-800 bg-slate-950/40 px-2.5 py-2"
+        class="relative rounded-md border border-default bg-app-950/40 px-2.5 py-2"
         data-testid="binary-output-artifact"
       >
         <CopyButton :text="row.location" class="absolute end-1 top-1" />
@@ -158,10 +156,8 @@ const state = computed(() => {
           :label="row.entity ?? row.description"
           class="mb-2 pe-8"
         />
-        <code class="block break-all pe-8 font-mono text-[11px] text-slate-200">{{
-          row.location
-        }}</code>
-        <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-slate-500">
+        <code class="block break-all pe-8 font-mono text-2xs text-default">{{ row.location }}</code>
+        <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-3xs text-dimmed">
           <span class="font-mono">{{ row.service }}</span>
           <!-- The join the report cannot make on its own, and the question a human opens this
                for: did it go where the step pointed it? -->
@@ -225,7 +221,7 @@ const state = computed(() => {
             {{ t('binaryOutput.missizedBadge') }}
           </UBadge>
         </div>
-        <p v-if="row.description" class="mt-1 text-[11px] leading-relaxed text-slate-400">
+        <p v-if="row.description" class="mt-1 text-2xs leading-relaxed text-muted">
           {{ row.description }}
         </p>
       </li>
@@ -234,7 +230,7 @@ const state = computed(() => {
     <!-- Every qualification the report counted, each naming its own number. Never folded into
          one "some entries were dropped": the fix for an unknown service id is not the fix for
          a malformed entry, and neither is the fix for a list that stops short of the tail. -->
-    <ul class="space-y-1 text-[11px] text-amber-400">
+    <ul class="space-y-1 text-2xs text-app-warning-400">
       <!-- The step's OWN target went missing from the catalog, and an id the AGENT invented,
            are two different failures with two different fixes (re-register it, versus correct
            the declaration). `binaryOutputView` returns them as DISJOINT fields precisely so

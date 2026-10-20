@@ -17,6 +17,8 @@ import {
   makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
   seedFrameRepoLink,
+  withDelegatedArm,
+  lateHarnessCallRecorder,
   type FrameRepoLink,
   type FrameRepoLinkRepositories,
 } from '@cat-factory/conformance'
@@ -25,6 +27,7 @@ import {
   type DrizzleDb,
   DrizzleAccountRiskPolicyRepository,
   DrizzleDocInterviewRepository,
+  DrizzleGuidedReviewRepository,
   DrizzleAccountSettingsRepository,
   DrizzleDocumentRepository,
   DrizzleNotificationRepository,
@@ -61,7 +64,8 @@ import type {
 } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
-import type { CoreDependencies } from '@cat-factory/orchestration'
+import type { CoreDependencies, RecordHarnessCalls } from '@cat-factory/orchestration'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { createLocalCredentialStore } from '../../src/sqlite/credentialStore.js'
 import { createLocalTelemetryStore } from '../../src/sqlite/telemetryStore.js'
 import { ENCRYPTION_KEY, SESSION_SECRET, buildMothershipEnv, mintMachineToken } from './setup.js'
@@ -236,6 +240,18 @@ interface MothershipAppOptions {
   judgeRegistry?: CoreDependencies['judgeRegistry']
   judgeAssessor?: CoreDependencies['judgeAssessor']
   detectionConventions?: CoreDependencies['detectionConventions']
+  /**
+   * The app-owned agent-kind registry, and the external-executor registry beside it.
+   *
+   * On THIS harness for the reason mothership mode exists as a topology at all: a node with no
+   * main database resolves the same kinds and runs the same engine, so a step whose work leaves
+   * the platform has to dispatch, poll and settle here exactly as it does on a facade with a
+   * database. Absent, the suite's delegated kind fell through to the deterministic fake and every
+   * delegated assertion passed judgement on nothing.
+   */
+  agentKindRegistry?: AgentKindRegistry
+  gateRegistry?: CoreDependencies['gateRegistry']
+  delegatedExecutorRegistry?: CoreDependencies['delegatedExecutorRegistry']
 }
 
 /**
@@ -293,11 +309,27 @@ function buildMothershipOverrides(
   recorder: RecordingEventPublisher,
   agentOptions: FakeAgentOptions | undefined,
   opts: MothershipAppOptions | undefined,
+  recordHarnessCalls: RecordHarnessCalls,
 ): Partial<CoreDependencies> {
+  // The custom-kind suites inject a pre-loaded registry: thread it into BOTH the fake executor
+  // (so it detects the custom kind's structured output) and the container build below.
+  const agentExecutorOptions: FakeAgentOptions = {
+    ...agentOptions,
+    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+  }
   return {
-    agentExecutor: agentOptions?.asyncKinds?.length
-      ? new AsyncFakeAgentExecutor(agentOptions)
-      : new FakeAgentExecutor(agentOptions),
+    // The deterministic agent, WRAPPED in the production composite when the suite registered an
+    // external executor, so a delegated kind reaches the real `DelegatedAgentExecutor` while
+    // everything else stays on the fake. The same wrapping the other three harnesses do, and
+    // needed here for the same reason: overriding `agentExecutor` wholesale is right for every
+    // other assertion and would make the delegated ones vacuous.
+    agentExecutor: withDelegatedArm(
+      agentOptions?.asyncKinds?.length
+        ? new AsyncFakeAgentExecutor(agentExecutorOptions)
+        : new FakeAgentExecutor(agentExecutorOptions),
+      opts ?? {},
+      recordHarnessCalls,
+    ),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
     repoBootstrapper: new FakeRepoBootstrapper(),
@@ -336,6 +368,20 @@ function buildMothershipOverrides(
 }
 
 /**
+ * The mothership harness routes persistence over the RPC and runs auth-DISABLED, so it does not run
+ * the auth-enabled suites; these fields satisfy the type with auth reported off.
+ */
+const AUTH_DISABLED: Pick<ConformanceApp, 'authEnabled' | 'session' | 'machineToken'> = {
+  authEnabled: false,
+  session: async () => {
+    throw new Error('mothership harness does not run the auth-enabled workspace-RBAC suite')
+  },
+  machineToken: async () => {
+    throw new Error('mothership harness runs auth-disabled, so it can mint no machine token')
+  },
+}
+
+/**
  * Build one mothership-mode conformance app over the shared Postgres mothership. The SUT is a
  * no-database `buildNodeContainer` whose repositories are RPC-backed; the deterministic fake
  * agent + no-op runner let the suite advance runs itself via `drive`.
@@ -370,7 +416,10 @@ export function makeMothershipConformanceApp(
   const repos = createRemoteRepositoryRegistry(client, localFirst) as unknown as CoreRepositories
   const credentialStore = createLocalCredentialStore(':memory:')
   const recorder = new RecordingEventPublisher()
-  const overrides = buildMothershipOverrides(recorder, agentOptions, opts)
+  // The arm files a delegated step's reported usage through the container's OWN observability
+  // service, which exists only once the container is built.
+  const harnessCalls = lateHarnessCallRecorder()
+  const overrides = buildMothershipOverrides(recorder, agentOptions, opts, harnessCalls.record)
   const container = buildNodeContainer({
     // No `db`: org/durable state is the remote registry, credentials are the local sqlite store.
     repos,
@@ -404,7 +453,17 @@ export function makeMothershipConformanceApp(
     // Inject the app-owned JUDGE registry (pre-loaded in the judge suite) so the SUT container
     // resolves it by reference on this runtime.
     ...(opts?.judgeRegistry ? { judgeRegistry: opts.judgeRegistry } : {}),
+    // The app-owned agent-kind registry and the external-executor registry, resolved by reference
+    // on this runtime like every other registry above. The kind registry is what tells the engine
+    // a kind's work leaves the platform, so the pair travels together: one without the other
+    // composes a container that can never route to the executor.
+    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+    ...(opts?.gateRegistry ? { gateRegistry: opts.gateRegistry } : {}),
+    ...(opts?.delegatedExecutorRegistry
+      ? { delegatedExecutorRegistry: opts.delegatedExecutorRegistry }
+      : {}),
   })
+  harnessCalls.bind(container.llmObservability)
   const app = createApp(container, SUT_ENV)
 
   async function call<T>(method: string, path: string, body?: unknown) {
@@ -529,12 +588,7 @@ export function makeMothershipConformanceApp(
     callBinary,
     createWorkspace,
     createOrgWorkspace,
-    // The mothership harness routes persistence over the RPC and does not run the auth-enabled
-    // workspace-RBAC suite; expose the fields to satisfy the type, with auth reported off.
-    authEnabled: false,
-    session: async () => {
-      throw new Error('mothership harness does not run the auth-enabled workspace-RBAC suite')
-    },
+    ...AUTH_DISABLED,
     createWorkspaceInAccount: (accountId, ownerUserId, options) =>
       container.workspaceService.create(
         { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
@@ -568,6 +622,7 @@ export function makeMothershipConformanceApp(
     documentRepository: () => new DrizzleDocumentRepository(db),
     taskRepository: () => new DrizzleTaskRepository(db),
     docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
+    guidedReviewRepository: () => new DrizzleGuidedReviewRepository(db),
     accountSettingsRepository: () => new DrizzleAccountSettingsRepository(db),
     accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
     seedService,

@@ -17,6 +17,7 @@ export {
 } from './validation/validateRegistrations.js'
 
 export { BoardService, type BoardServiceDependencies } from './modules/board/BoardService.js'
+export type { GuidedReviewOwner } from './modules/guidedReview/GuidedReviewService.js'
 export type {
   PublicRepoOption,
   RepoUse,
@@ -75,6 +76,29 @@ export {
   JudgeRegistry,
   defaultJudgeRegistry,
   stubJudgeContext,
+} from '@cat-factory/kernel'
+// The DELEGATED-EXECUTOR seam, re-exported for the same reason the judge seam is: a deployment
+// writing a registration must be able to name its shapes from the package it already depends on,
+// or it adds a direct kernel dependency and risks resolving a second physical copy of the registry
+// the server never reads.
+export {
+  type DelegatedExecutor,
+  type DelegatedExecutorDefinition,
+  type DelegatedExecutorDeps,
+  type DelegatedExecutorPresentation,
+  type DelegatedExecutorTelemetry,
+  type DelegatedExecutorView,
+  type DelegatedFetch,
+  type DelegatedFetchResponse,
+  type DelegatedPollPolicy,
+  type DelegationBrief,
+  type DelegationHandle,
+  type DelegationResult,
+  type DelegationStart,
+  type DelegationUpdate,
+  DelegatedExecutorRegistrationError,
+  DelegatedExecutorRegistry,
+  defaultDelegatedExecutorRegistry,
 } from '@cat-factory/kernel'
 export {
   driveExecution,
@@ -278,6 +302,7 @@ export {
   type LlmObservabilityServiceDependencies,
   type RecordLlmCallInput,
   type HarnessCallsRecordInput,
+  type RecordHarnessCalls,
   // Exported for the same reason `MAX_AGENT_CONTEXT_TOTAL_CHARS` below is: a transport that moves
   // whole rows has to size its own limits against what capture can store, and deriving them from
   // the one ceiling beats a second copy that drifts (see `MAX_TELEMETRY_READ_CHARS`).
@@ -459,6 +484,8 @@ export {
   type DocumentsModule,
   type TasksModule,
   type AssistantModule,
+  type GuidedReviewModule,
+  type PrAssessmentModule,
   type EnvironmentsModule,
   type RunnersModule,
   type ProvisioningLogsModule,

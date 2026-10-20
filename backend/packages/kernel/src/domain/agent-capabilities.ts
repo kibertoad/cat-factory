@@ -381,9 +381,11 @@ export interface UnavailableToolServer {
    * than one place, so a remedy addressing only the obvious cause is a dead end for whoever hit
    * the other:
    *
-   * - `harness_unsupported` covers a CLI with no MCP client (Pi), a definition whose `harnesses`
-   *   excludes the resolved one, AND an ambient-auth Codex run, which is reached only AFTER both
-   *   of those tests passed. There the CLI does speak MCP and is allowed; what is missing is a
+   * - `harness_unsupported` covers a definition whose `harnesses` excludes the resolved CLI, a
+   *   CLI with no MCP client (none today, but every Pi step recorded before Pi's MCP client
+   *   carries this reason for that cause, so the vocabulary and its remedy copy keep it), AND an
+   *   ambient-auth Codex run, which is reached only AFTER both of those tests passed. There the
+   *   CLI does speak MCP and is allowed; what is missing is a
    *   per-run `CODEX_HOME`, so widening the list or switching CLI fixes nothing and only a leased
    *   credential in place of the developer's own login does.
    * - `missing_secret` is one answer from a COMPOSED resolver. The deployment-environment
@@ -407,13 +409,16 @@ export interface UnavailableToolServer {
  * `HarnessKind`, so a new harness cannot be added without stating its answer: an omitted entry
  * would read as "no transports" and silently drop every tool server on that harness.
  *
- * Pi has no MCP client at all (hence the empty list, which is what keeps it out of
- * {@link MCP_SUPPORTED_HARNESSES}); Codex's client is stdio-only, which is why an `http` server on
- * a Codex run is DROPPED with a stated reason rather than advertised in the prompt and then skipped
- * by the harness's TOML writer.
+ * Pi reaches both transports through its built-in MCP client (Pi 0.99.0 onward; the harness writes
+ * its `mcp.json`). An image older than that dropped a Pi run's servers while the prompt promised
+ * them, which the `piMcpServers` body capability now refuses at dispatch rather than running blind,
+ * including on an image that reports no capabilities at all (it predates Pi's client for certain;
+ * see `HARNESS_BODY_CAPABILITIES_NEWER_THAN_HANDSHAKE`).
+ * Codex's client is stdio-only, which is why an `http` server on a Codex run is DROPPED with a
+ * stated reason rather than advertised in the prompt and then skipped by the harness's TOML writer.
  */
 export const MCP_HARNESS_TRANSPORTS: Record<HarnessKind, readonly McpTransport['kind'][]> = {
-  pi: [],
+  pi: ['stdio', 'http'],
   'claude-code': ['stdio', 'http'],
   codex: ['stdio'],
 }
@@ -421,7 +426,7 @@ export const MCP_HARNESS_TRANSPORTS: Record<HarnessKind, readonly McpTransport['
 /**
  * The harnesses whose CLI speaks MCP. DERIVED from {@link MCP_HARNESS_TRANSPORTS} rather than
  * listed again, so "speaks MCP" and "can reach at least one transport" cannot drift into
- * disagreeing. Pi has no MCP client, so it is absent.
+ * disagreeing. Every harness speaks MCP today; a future CLI with no client would be absent.
  */
 export const MCP_SUPPORTED_HARNESSES: readonly HarnessKind[] = (
   Object.keys(MCP_HARNESS_TRANSPORTS) as HarnessKind[]

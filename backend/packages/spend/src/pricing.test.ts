@@ -426,8 +426,11 @@ describe('pinned gateway cache rates against the cache policy', () => {
     // Anthropic needs) and nothing on the gateway path emits them, so the published rate is real
     // and unreachable. Emitting the breakpoints is what would let these move. Both Alibaba slugs
     // are named for the one reason: the gateway withdrew the undated `qwen/qwen3.8-max` in favour
-    // of the dated snapshot, and `qwen3.8-flash` joined the table in the same sweep.
+    // of the dated snapshot, and `qwen3.8-flash` joined the table in the same sweep. The Prime
+    // speed tier is the same route, so it is named for the same reason.
     'qwen/qwen3.8-max-0902':
+      'Alibaba caches only on explicit breakpoints, which this path never sends',
+    'qwen/qwen3.8-max-prime':
       'Alibaba caches only on explicit breakpoints, which this path never sends',
     'qwen/qwen3.8-flash':
       'Alibaba caches only on explicit breakpoints, which this path never sends',

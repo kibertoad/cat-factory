@@ -18,7 +18,7 @@ import { uid } from '~/utils/catalog'
 const props = defineProps<{ block: Block }>()
 
 const store = useTestSecretsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -111,11 +111,7 @@ async function save() {
         value: r.value,
       })),
     })
-    toast.add({
-      title: t('inspector.testSecrets.savedToast'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('inspector.testSecrets.savedToast')
   } catch (e) {
     present(e, 'inspector.testSecrets.saveFailed')
   } finally {
@@ -152,7 +148,7 @@ async function clearAll() {
       <UButton
         v-if="configured.length"
         color="error"
-        variant="ghost"
+        variant="soft"
         size="xs"
         icon="i-lucide-trash-2"
         :loading="busy"
@@ -165,13 +161,13 @@ async function clearAll() {
 
     <!-- These are REAL secrets: an unmistakable sensitivity + replace-all warning. -->
     <div
-      class="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-[11px] leading-snug text-amber-200"
+      class="flex items-start gap-2 rounded-md border border-app-warning-500/40 bg-app-warning-500/10 px-2.5 py-2 text-2xs leading-snug text-app-warning-200"
     >
-      <UIcon name="i-lucide-shield-alert" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+      <UIcon name="i-lucide-shield-alert" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400" />
       <span>{{ t('inspector.testSecrets.warning') }}</span>
     </div>
 
-    <p class="text-[11px] leading-snug text-slate-500">
+    <p class="text-2xs leading-snug text-dimmed">
       {{ t('inspector.testSecrets.replaceNote') }}
     </p>
 
@@ -180,7 +176,7 @@ async function clearAll() {
       <div
         v-for="(row, index) in draft.rows"
         :key="row.uid"
-        class="space-y-2 rounded-md border border-slate-800 p-2.5"
+        class="space-y-2 rounded-md border border-default p-2.5"
         :data-testid="`test-secret-row-${index}`"
       >
         <div class="flex items-start gap-2">
@@ -234,7 +230,7 @@ async function clearAll() {
         </UFormField>
       </div>
 
-      <p v-if="duplicateKeys.size" class="text-[11px] text-error-400">
+      <p v-if="duplicateKeys.size" class="text-2xs text-app-error-400">
         {{ t('inspector.testSecrets.duplicateKey') }}
       </p>
 
@@ -250,7 +246,6 @@ async function clearAll() {
           {{ t('inspector.testSecrets.addRow') }}
         </UButton>
         <UButton
-          color="primary"
           variant="soft"
           size="xs"
           icon="i-lucide-save"

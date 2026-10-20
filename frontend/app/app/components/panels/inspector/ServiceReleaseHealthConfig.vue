@@ -13,7 +13,7 @@ const props = defineProps<{ block: Block }>()
 const store = useReleaseHealthStore()
 const ui = useUiStore()
 const uiMode = useUiModeStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -61,11 +61,7 @@ async function save() {
       sloIds: parseIds(draft.sloIds),
       envTag: draft.envTag.trim() || null,
     })
-    toast.add({
-      title: t('inspector.releaseHealth.savedToast'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('inspector.releaseHealth.savedToast')
   } catch (e) {
     present(e, 'inspector.releaseHealth.saveFailed')
   } finally {
@@ -101,7 +97,7 @@ async function clear() {
       <UButton
         v-if="saved"
         color="error"
-        variant="ghost"
+        variant="soft"
         size="xs"
         icon="i-lucide-trash-2"
         :loading="busy"
@@ -114,7 +110,7 @@ async function clear() {
     <!-- Disabled affordance until an observability integration is connected. -->
     <div
       v-if="!connected"
-      class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-[11px] text-slate-400"
+      class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-2 py-1.5 text-2xs text-muted"
     >
       <span>{{ t('inspector.releaseHealth.connectPrompt') }}</span>
       <UButton
@@ -130,7 +126,7 @@ async function clear() {
     </div>
 
     <div v-else class="space-y-2">
-      <p class="text-[11px] text-slate-500">
+      <p class="text-2xs text-dimmed">
         {{ t('inspector.releaseHealth.hint') }}
       </p>
       <div class="grid grid-cols-2 gap-2">
@@ -145,14 +141,7 @@ async function clear() {
         <UInput v-model="draft.envTag" placeholder="prod" size="sm" class="w-full" />
       </UFormField>
       <div class="flex justify-end">
-        <UButton
-          color="primary"
-          variant="soft"
-          size="xs"
-          icon="i-lucide-save"
-          :loading="busy"
-          @click="save"
-        >
+        <UButton variant="soft" size="xs" icon="i-lucide-save" :loading="busy" @click="save">
           {{ t('inspector.releaseHealth.saveMonitoring') }}
         </UButton>
       </div>

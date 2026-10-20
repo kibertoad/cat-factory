@@ -13,11 +13,12 @@ import { riskPolicyCopyName } from '~/utils/riskPolicy'
 import RiskPolicyCreateForm from '~/components/settings/RiskPolicyCreateForm.vue'
 import RiskPolicyEditorRow from '~/components/settings/RiskPolicyEditorRow.vue'
 import RiskPolicyInheritedRow from '~/components/settings/RiskPolicyInheritedRow.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 
 const store = useRiskPoliciesStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
@@ -68,11 +69,7 @@ async function run(key: string, titleKey: string, action: () => Promise<unknown>
 async function save(policy: RiskPolicyLibraryEntry, patch: UpdateRiskPolicyInput) {
   await run(policy.id, 'settings.riskPolicy.toast.saveFailed', async () => {
     await store.update(policy.id, patch)
-    toast.add({
-      title: t('settings.riskPolicy.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.riskPolicy.toast.saved')
   })
 }
 
@@ -111,11 +108,7 @@ async function create(input: Parameters<typeof store.create>[0]) {
   creating.value = true
   try {
     await store.create(input)
-    toast.add({
-      title: t('settings.riskPolicy.toast.created'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.riskPolicy.toast.created')
   } catch (e) {
     present(e, 'settings.riskPolicy.toast.createFailed')
   } finally {
@@ -135,11 +128,7 @@ function clone(policy: RiskPolicyLibraryEntry) {
       t('settings.riskPolicy.inherited.copyName', { name: source }),
     )
     await store.clone(policy.id, name)
-    toast.add({
-      title: t('settings.riskPolicy.toast.cloned'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.riskPolicy.toast.cloned')
   })
 }
 
@@ -170,24 +159,19 @@ function unhide(presetId: string) {
 
 <template>
   <div class="space-y-4" data-testid="risk-policy-panel">
-    <i18n-t
-      keypath="settings.riskPolicy.intro"
-      tag="p"
-      class="text-xs text-slate-400"
-      scope="global"
-    >
+    <i18n-t keypath="settings.riskPolicy.intro" tag="p" class="text-xs text-muted" scope="global">
       <template #merger>
-        <span class="text-slate-300">{{ t('settings.riskPolicy.mergerAgent') }}</span>
+        <span class="text-toned">{{ t('settings.riskPolicy.mergerAgent') }}</span>
       </template>
     </i18n-t>
 
     <!-- Inherited FIRST: they are the org's posture, and a board reading its own list wants to see
          what it is working from before what it has changed. -->
     <section v-if="inherited.length > 0" class="space-y-2">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <SectionLabel as="p">
         {{ t('settings.riskPolicy.inherited.heading') }}
-      </p>
-      <p class="text-[11px] text-slate-500">{{ t('settings.riskPolicy.inherited.hint') }}</p>
+      </SectionLabel>
+      <p class="text-2xs text-dimmed">{{ t('settings.riskPolicy.inherited.hint') }}</p>
       <RiskPolicyInheritedRow
         v-for="policy in inherited"
         :key="policy.id"
@@ -199,12 +183,9 @@ function unhide(presetId: string) {
     </section>
 
     <section class="space-y-4">
-      <p
-        v-if="inherited.length > 0"
-        class="text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-      >
+      <SectionLabel v-if="inherited.length > 0" as="p">
         {{ t('settings.riskPolicy.own.heading') }}
-      </p>
+      </SectionLabel>
       <RiskPolicyEditorRow
         v-for="policy in own"
         :key="policy.id"
@@ -222,21 +203,21 @@ function unhide(presetId: string) {
          whether it still shadows an account policy: one whose policy the account has since withdrawn
          withholds nothing, and reading it as a live opt-out would misstate what the board is doing. -->
     <section v-if="store.suppressions.length > 0 || suppressionsFailed" class="space-y-2">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <SectionLabel as="p">
         {{ t('settings.riskPolicy.hidden.heading') }}
-      </p>
-      <p v-if="suppressionsFailed" class="text-[11px] text-amber-400">
+      </SectionLabel>
+      <p v-if="suppressionsFailed" class="text-2xs text-app-warning-400">
         {{ t('settings.riskPolicy.hidden.loadFailed') }}
       </p>
       <div
         v-for="entry in store.suppressions"
         :key="entry.id"
-        class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/40 px-3 py-2"
+        class="flex items-center gap-2 rounded-md border border-default bg-default/40 px-3 py-2"
         data-testid="risk-policy-hidden-row"
         :data-policy-id="entry.id"
       >
-        <span class="flex-1 truncate text-[12px] text-slate-300">{{ entry.name }}</span>
-        <span v-if="!entry.inherited" class="text-[11px] text-slate-500">
+        <span class="flex-1 truncate text-xs text-toned">{{ entry.name }}</span>
+        <span v-if="!entry.inherited" class="text-2xs text-dimmed">
           {{ t('settings.riskPolicy.hidden.withdrawn') }}
         </span>
         <UButton

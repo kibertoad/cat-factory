@@ -7,6 +7,7 @@ const { connecting } = useDependencyConnect()
 </script>
 
 <template>
+  <!-- safe-area-ok: a pointer-events-none drawing layer with no controls or text -->
   <svg
     v-if="connecting"
     class="pointer-events-none fixed inset-0 z-50 h-full w-full overflow-visible"
@@ -16,7 +17,7 @@ const { connecting } = useDependencyConnect()
       :y1="connecting.y1"
       :x2="connecting.x2"
       :y2="connecting.y2"
-      stroke="#f59e0b"
+      stroke="var(--ui-warning)"
       :stroke-width="2"
       stroke-dasharray="5 4"
       stroke-opacity="0.9"

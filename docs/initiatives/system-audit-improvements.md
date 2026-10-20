@@ -24,7 +24,7 @@ remains clusters into four themes:
   planned cache can't fix on the Worker, a health endpoint with no readiness signal, one
   frontend store missing the standard anti-clobber guard.
 - **Coverage & hygiene**: the largest frontend component has zero e2e coverage, the CI
-  lane-gating filters are themselves unguarded, and several docs (including CLAUDE.md)
+  lane-gating filters are themselves unguarded, and several docs (including AGENTS.md)
   have drifted from verified reality.
 
 ### Explicitly excluded (already tracked elsewhere: do not re-add)
@@ -64,7 +64,7 @@ remains clusters into four themes:
   `ServiceRepository.listByIds`; add the chunked-`IN` method to the kernel port,
   implement in BOTH repos, assert in conformance.
 - **Monotonic-refresh store guard**: `stores/workspace.ts`'s sequence guard + its
-  `workspace.spec.ts` out-of-order test (the CLAUDE.md live-push coherence rule).
+  `workspace.spec.ts` out-of-order test (the AGENTS.md live-push coherence rule).
 - **Shared runtime machinery**: hoist duplicated facade code into `@cat-factory/server`
   (the `escalateNotifications.ts` / `makeResolveRunRepoContext` precedent) with each
   facade supplying only its driver.
@@ -94,7 +94,7 @@ benefit, bounded blast radius; **P3** = hygiene/polish. Effort S/M/L.
 | 13  | P2  | e2e         | Inline agent windows (brainstorm/clarity/consensus/doc-interview) have no e2e specs        | M      | ⬜ todo        |           |
 | 14  | P2  | ci          | `paths-filter` lane-gating globs are unguarded against drift (silent suite skips)          | S      | ⬜ todo        |           |
 | 15  | P3  | frontend    | Store-level out-of-order clobber specs cover ~5 of ~40 stateful stores; establish the rule | M      | 🔄 in-progress | (this PR) |
-| 16  | P2  | docs        | CLAUDE.md "Node GitHub connect/sync still needs the integration on Postgres" note is stale | S      | ⬜ todo        |           |
+| 16  | P2  | docs        | AGENTS.md "Node GitHub connect/sync still needs the integration on Postgres" note is stale | S      | ⬜ todo        |           |
 | 17  | P3  | docs        | `refactoring-candidates.md`/`modularisation.md` stale; the two biggest files untracked     | S      | ⬜ todo        |           |
 | 18  | P3  | docs        | Convert finished initiatives to ADRs (`custom-initiative-definitions`, `coder-fork`)       | S      | ⬜ todo        |           |
 | 19  | P2  | frontend    | Accessibility whitespace: no a11y tracker/doc; 48/176 components carry any `aria-*`        | M      | ⬜ todo        |           |
@@ -268,7 +268,7 @@ pg-boss `githubBackfill` / `githubWebhook`"), and pg-boss is already booted on N
 **Fix:** pg-boss-backed implementations of the two gateway seams (the analogue of the
 Worker's queue consumer, reusing `GitHubSyncService`), plus an integration assertion that
 the enqueue path is taken. This closes the "Async GitHub ingest still falls back to the
-inline paths" caveat in CLAUDE.md's Node facade section (update the doc in the same
+inline paths" caveat in AGENTS.md's Node facade section (update the doc in the same
 slice; pairs with item 16).
 
 **Landed (this PR).** `backend/runtimes/node/src/execution/githubSyncRunner.ts` is the
@@ -293,7 +293,7 @@ just replaces the inline processing behind it: the item's stated constraint). Gu
 `node/test/github-sync-runner.spec.ts` asserts the enqueue path is taken (right queue + payload,
 returns `true`) when a boss is wired and falls back to inline (`false`) without one, that
 `applyGitHubSyncJob` routes each kind to the matching service method, and that the worker applies
-a dequeued job / drops an unwired-module job / rethrows an apply failure. CLAUDE.md's Node-facade
+a dequeued job / drops an unwired-module job / rethrows an apply failure. AGENTS.md's Node-facade
 "Async GitHub ingest still falls back to the inline paths" sentence is rewritten to describe the
 pg-boss path (the item-16 half of the doc drift). **Not folded in:** hoisting the apply switch
 into `@cat-factory/server`: like the execution/bootstrap pg-boss runners, the durable driver is
@@ -434,7 +434,7 @@ readiness is a per-process signal with no D1 analogue.
 execution id and never evicts (slow memory creep across a long board session), and
 `loadForExecution` performs an unguarded `s.entries = entries`; the silent poll and a
 manual refresh can resolve out of order and clobber the newer result. This is exactly the
-out-of-order-overwrite shape the CLAUDE.md live-push rules warn about, minus the
+out-of-order-overwrite shape the AGENTS.md live-push rules warn about, minus the
 monotonic guard the core stores carry.
 
 **Fix:** per-execution monotonic sequence guard (copy `stores/workspace.ts`) + eviction
@@ -553,9 +553,9 @@ non-live stores with their own independent fetch-and-replace loads.
 
 ### Cluster E: docs & hygiene
 
-#### 16. CLAUDE.md's Node GitHub connect/sync note is stale: P2
+#### 16. AGENTS.md's Node GitHub connect/sync note is stale: P2
 
-CLAUDE.md still says "populating `github_installations` / `github_repos` still needs the
+AGENTS.md still says "populating `github_installations` / `github_repos` still needs the
 GitHub connect/sync integration on Postgres (the remaining follow-up)". Verified:
 `node/src/container.ts:1946,1973` wires `githubInstallationRepository` into the shared
 core, `GitHubInstallationService` / `WebhookService` (the upsert/seed paths) are
@@ -576,7 +576,7 @@ explicit split targets so the largest, fastest-growing files stop being untracke
 
 #### 18. Convert finished initiatives to ADRs: P3
 
-Per the CLAUDE.md tracker→ADR rule: `custom-initiative-definitions.md` is
+Per the AGENTS.md tracker→ADR rule: `custom-initiative-definitions.md` is
 "near-complete (only slice 4, low-prio/droppable, remains)"; decide slice 4 (drop or
 do), then convert to the next free ADR number and `git rm` the tracker.
 `coder-fork-decision.md` (PR 1 landed): either split the remaining chat slice into a
@@ -621,10 +621,10 @@ localization progress table. Translate every locale in the same PR (parity gate)
   pg-boss enqueue replaces the inline processing, the controller contract stays.
 - **e2e items (12, 13): testids first**, as their own behaviour-neutral frontend change +
   patch changeset; specs follow the suite's live-push assertion rules (no reloads, no
-  sleeps). A flaky new spec is a blocking bug per CLAUDE.md: deflake at the source.
+  sleeps). A flaky new spec is a blocking bug per AGENTS.md: deflake at the source.
 - **Changesets**: empty for doc-only slices (14, 16–18); patch for `@cat-factory/app`
   testid/i18n changes; per-package otherwise. No executor-harness changes are in scope
   here, so no image bumps.
-- **Doc updates ride their code slice**: item 5 updates CLAUDE.md's ingest sentence in
+- **Doc updates ride their code slice**: item 5 updates AGENTS.md's ingest sentence in
   the same PR; don't leave the docs to a separate cleanup pass (that's how item 16
   happened).

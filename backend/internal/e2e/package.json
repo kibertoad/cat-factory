@@ -18,15 +18,16 @@
     "@cat-factory/conformance": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/example-custom-agent": "workspace:*",
+    "@cat-factory/kernel": "workspace:*",
     "@cat-factory/node-server": "workspace:*",
     "@cat-factory/server": "workspace:*"
   },
   "devDependencies": {
     "@cat-factory/orchestration": "workspace:*",
-    "@playwright/test": "^1.63.0",
-    "@types/node": "^26.6.1",
-    "ai": "^7.0.106",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5",
+    "ai": "^7.0.142",
     "typescript": "7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.5"
   }
 }

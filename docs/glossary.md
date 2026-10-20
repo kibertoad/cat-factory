@@ -19,7 +19,7 @@ depending on the layer: there is one entity, not three:
 | --------- | ------------------------------------------------------------------ | ------------------------------------------------------------ |
 | **block** | the domain + persistence + most of the API                         | `backend/packages/contracts/src/entities.ts` (`blockSchema`) |
 | **task**  | at the **tracker/issue** boundary (linked GitHub/Jira/etc. issues) | `backend/packages/contracts/src/tasks.ts`                    |
-| **card**  | the **UI/board** rendering of a block                              | `entities.ts` / `events.ts` (render metadata on the block)   |
+| **card**  | the **UI** rendering of a block, on the canvas or in the queue     | `entities.ts` / `events.ts` (render metadata on the block)   |
 
 ### "task" means two different things
 
@@ -29,13 +29,23 @@ Both are in `backend/packages/contracts/src/primitives.ts`:
   "service" on the board is a block with `level: 'frame'`, `parentId: null`; modules are
   sub-frames; **tasks are the leaves**. A module no longer renders as a box on the board: its
   tasks appear in the enclosing frame's status swimlanes, grouped by module name, so `module` is
-  a structural parent rather than a visual container. (See `CLAUDE.md` → "Board / service /
+  a structural parent rather than a visual container. (See `AGENTS.md` → "Board / service /
   repo-linkage model".)
 - **Block type**: `blockTypeSchema`, a _separate_ axis (`taskType` field) chosen by the human
   at creation; drives the card's icon/badge and which pipeline runs.
 
 So `level: 'task'` (a leaf in the hierarchy) is unrelated to the block **type** axis. Don't
 conflate them.
+
+### "board" names the workspace and one of its two views
+
+A workspace's **board** is the whole surface. It has two **views** (`stores/workView.ts`,
+`?view=`): `'queue'`, which lists every task by what it needs, and `'board'`, the canvas where the
+work is planned. The Views switcher labels them "Queue" and "Board", so prose says "the queue
+view" and "the board view", and "the canvas" only for the spatial surface itself. The queue view is
+not the Gatekeeper's approval queue or the review task's skill queue: those hold approvals and
+skills, not tasks. Design:
+[`frontend/app/README.md` → Queue view](../frontend/app/README.md#queue-view).
 
 ## Runtime facades: directory ↔ package name
 
@@ -146,7 +156,7 @@ The step taxonomy is [`backend/docs/step-taxonomy.md`](../backend/docs/step-taxo
   `@cat-factory/gates` (`backend/packages/gates/src/gates.ts` + `providers.ts`), registered via
   the public `registerGate` seam.
 - Gate _consumption_ (the engine driving them): `backend/packages/orchestration/src/modules/
-execution/` (`GateStepController.evaluate` / `GateHelperDispatcher.dispatch` / `pollGate`).
+  execution/` (`GateStepController.evaluate` / `GateHelperDispatcher.dispatch` / `pollGate`).
 
 ### Judges
 
@@ -197,7 +207,7 @@ enum: the kinds are string constants across two homes:
   `kernel/src/domain/gate-logic.ts` as `*_AGENT_KIND` constants.
 - **Catalog agent kinds** (coder, spec-writer, blueprints, tester, merger, the companions, …):
   `@cat-factory/agents` under `src/agents/kinds/` + `src/agents/prompts/`.
-- **Custom/registered kinds**: added via `registerAgentKind` (`CLAUDE.md` → "Custom agents").
+- **Custom/registered kinds**: added via `registerAgentKind` (`AGENTS.md` → "Custom agents").
 - **Judge kinds**: a deployment's own, registered on the app-owned `JudgeRegistry`; the platform
   ships none (see "Judges" above).
 
@@ -259,7 +269,7 @@ and naming one is refused rather than honoured.
 
 ### D1 ⇄ Drizzle migration parity
 
-Every persisted table has two schemas that must stay in step (`CLAUDE.md` → "Keep the runtimes
+Every persisted table has two schemas that must stay in step (`AGENTS.md` → "Keep the runtimes
 symmetric"):
 
 - **Cloudflare (D1/SQLite)**: hand-numbered SQL across **five** dirs at the
@@ -268,7 +278,7 @@ symmetric"):
   Duplicate numeric prefixes are fine (they apply in lexical order).
 - **Node (Drizzle/Postgres)**: one `backend/runtimes/node/drizzle/` dir of generated migrations
   - the single source of truth `backend/runtimes/node/src/db/schema.ts`. It is a content-addressed
-    DAG (`prevIds`), not a linear journal: see `CLAUDE.md` → "Resolving conflicting Drizzle
+    DAG (`prevIds`), not a linear journal: see `AGENTS.md` → "Resolving conflicting Drizzle
     migrations (post-merge)".
 
 The two systems share no naming convention, so correlating a pair means reading the SQL bodies;

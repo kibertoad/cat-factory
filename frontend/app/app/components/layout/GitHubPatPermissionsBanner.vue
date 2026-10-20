@@ -3,11 +3,9 @@ import { computed, ref } from 'vue'
 import {
   GITHUB_PAT_FINE_GRAINED_PERMISSIONS,
   githubPatCheckNeedsAttention,
-  githubPatCheckSource,
   missingGitHubPatCapabilities,
 } from '@cat-factory/contracts'
-import type { GitHubPatCapability, GitHubPatKind } from '~/types/domain'
-import { githubPatRemintUrl } from '~/utils/vcs'
+import type { GitHubPatCapability } from '~/types/domain'
 
 // The token a run would authenticate with cannot do what the pipeline needs.
 //
@@ -67,14 +65,8 @@ function capabilityLabel(capability: GitHubPatCapability): string {
   return t(CAPABILITY_KEYS[capability])
 }
 
-/**
- * The kind carried over to the re-mint link. A rejected token was never classified, so it falls
- * back to `unknown` — which lands on the classic form, the only one GitHub lets us pre-fill.
- */
-const kind = computed<GitHubPatKind>(() => report.value?.kind ?? 'unknown')
-const remintUrl = computed(() =>
-  githubPatRemintUrl(kind.value, report.value?.webUrl ?? github.connection?.webUrl),
-)
+// The re-mint page and whose token it is: the map the setup checklist opens through too.
+const { patRemintUrl: remintUrl, patSource, patKind: kind } = useSetupRemedies()
 
 /**
  * Who has to act. A deployment token is replaced by whoever runs the deployment (local mode:
@@ -89,7 +81,7 @@ const remintUrl = computed(() =>
  * personal settings: the exact misrouting the wire field exists to prevent.
  */
 const sourceKey = computed(() =>
-  check.value && githubPatCheckSource(check.value) === 'deployment'
+  patSource.value === 'deployment'
     ? 'layout.githubPatPermissionsBanner.sourceDeployment'
     : 'layout.githubPatPermissionsBanner.sourceInitiator',
 )
@@ -102,15 +94,15 @@ const fineGrainedPermissions = GITHUB_PAT_FINE_GRAINED_PERMISSIONS.join(', ')
   <Transition name="fade">
     <div v-if="show" class="pointer-events-auto w-full max-w-3xl">
       <div
-        class="w-full max-w-3xl rounded-2xl border-2 border-red-500/70 bg-red-950/95 p-5 shadow-2xl backdrop-blur"
+        class="w-full max-w-3xl rounded-2xl border-2 border-app-error-500/70 bg-app-error-950/95 p-5 shadow-2xl backdrop-blur"
         role="alert"
         data-testid="github-pat-permissions-banner"
       >
         <div class="flex items-start gap-4">
-          <UIcon name="i-lucide-shield-alert" class="mt-0.5 h-9 w-9 shrink-0 text-red-400" />
+          <UIcon name="i-lucide-shield-alert" class="mt-0.5 h-9 w-9 shrink-0 text-app-error-400" />
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
-              <h2 class="text-lg font-semibold text-red-100">
+              <h2 class="text-lg font-semibold text-app-error-100">
                 {{
                   claim === 'rejected'
                     ? t('layout.githubPatPermissionsBanner.rejectedTitle')
@@ -131,7 +123,7 @@ const fineGrainedPermissions = GITHUB_PAT_FINE_GRAINED_PERMISSIONS.join(', ')
               />
             </div>
 
-            <p class="mt-1 text-sm text-red-200/90">
+            <p class="mt-1 text-sm text-app-error-200/90">
               {{
                 claim === 'rejected'
                   ? t('layout.githubPatPermissionsBanner.rejectedBody')
@@ -141,11 +133,11 @@ const fineGrainedPermissions = GITHUB_PAT_FINE_GRAINED_PERMISSIONS.join(', ')
 
             <!-- The established gaps, named one by one. A bare "permissions are missing" leaves
                  the reader to guess which box to tick on a form with dozens. -->
-            <p v-if="missing.length" class="mt-3 text-sm text-red-100">
+            <p v-if="missing.length" class="mt-3 text-sm text-app-error-100">
               <span class="font-medium">{{ t('layout.githubPatPermissionsBanner.missing') }}</span>
               {{ missing.map(capabilityLabel).join(', ') }}
             </p>
-            <p v-if="advisory.length" class="mt-1 text-xs text-red-200/80">
+            <p v-if="advisory.length" class="mt-1 text-xs text-app-error-200/80">
               {{
                 t('layout.githubPatPermissionsBanner.alsoMissing', {
                   capabilities: advisory.map(capabilityLabel).join(', '),
@@ -155,7 +147,10 @@ const fineGrainedPermissions = GITHUB_PAT_FINE_GRAINED_PERMISSIONS.join(', ')
 
             <!-- For a fine-grained token, WHICH repositories it was not granted is the whole
                  remedy: the permission list is right and the repository selection is not. -->
-            <p v-if="report && report.deniedRepos.length" class="mt-1 text-xs text-red-200/80">
+            <p
+              v-if="report && report.deniedRepos.length"
+              class="mt-1 text-xs text-app-error-200/80"
+            >
               {{
                 t('layout.githubPatPermissionsBanner.deniedRepos', {
                   repos: report.deniedRepos.join(', '),
@@ -163,7 +158,7 @@ const fineGrainedPermissions = GITHUB_PAT_FINE_GRAINED_PERMISSIONS.join(', ')
               }}
             </p>
 
-            <p class="mt-2 text-xs text-red-200/80">{{ t(sourceKey) }}</p>
+            <p class="mt-2 text-xs text-app-error-200/80">{{ t(sourceKey) }}</p>
 
             <div class="mt-4">
               <UButton
@@ -171,7 +166,6 @@ const fineGrainedPermissions = GITHUB_PAT_FINE_GRAINED_PERMISSIONS.join(', ')
                 target="_blank"
                 rel="noopener noreferrer"
                 color="error"
-                variant="solid"
                 icon="i-lucide-external-link"
                 trailing
               >
@@ -185,7 +179,7 @@ const fineGrainedPermissions = GITHUB_PAT_FINE_GRAINED_PERMISSIONS.join(', ')
                    no prefill at all, so its permissions are spelled out. Saying so is the point:
                    a link that silently arrived with nothing selected reads as "already done for
                    you", which is how the missing permission got there in the first place. -->
-              <p class="mt-2 text-xs text-red-300/70">
+              <p class="mt-2 text-xs text-app-error-300/70">
                 {{
                   kind === 'fine_grained'
                     ? t('layout.githubPatPermissionsBanner.fineGrainedHint', {
@@ -196,7 +190,10 @@ const fineGrainedPermissions = GITHUB_PAT_FINE_GRAINED_PERMISSIONS.join(', ')
               </p>
               <!-- A fine-grained verdict is a SAMPLE of the linked repositories. Declaring the
                    remainder keeps a clean-looking list from reading as a guarantee. -->
-              <p v-if="report && report.unprobedRepoCount > 0" class="mt-1 text-xs text-red-300/60">
+              <p
+                v-if="report && report.unprobedRepoCount > 0"
+                class="mt-1 text-xs text-app-error-300/60"
+              >
                 {{
                   t('layout.githubPatPermissionsBanner.sampled', {
                     checked: report.probedRepos.length,

@@ -3,6 +3,7 @@
 // backend these extend). They are pass-throughs until a workspace actually connects an `eks`
 // backend, and carry NO runtime AWS SDK dependency (the token is minted with WebCrypto), so this
 // adds no cost to a deployment that never uses EKS.
+import { DIRECTORY_WEBHOOK_CIPHER_INFO } from '@cat-factory/integrations'
 import {
   ConfluenceProvider,
   resolveDeploymentDocumentResolver,
@@ -51,10 +52,12 @@ import { executionRuntime } from './execution/config.js'
 import { PgBossBootstrapRunner } from './execution/bootstrapRunner.js'
 import { PgBossEnvConfigRepairRunner } from './execution/envConfigRepairRunner.js'
 import { PgBossEnvironmentTestRunner } from './execution/envTestRunner.js'
+import { PgBossGuidedReviewRunner } from './execution/guidedReviewRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { baseUrlForNode } from './providerEndpoints.js'
 import { DrizzleSubscriptionActivationRepository } from './repositories/personalSubscription.js'
+import { DrizzleDirectoryWebhookRepository } from './repositories/directoryWebhookRepository.js'
 import { createDrizzleRepositories, createDrizzleSandboxDeps } from './repositories/drizzle.js'
 import { DrizzleReferenceArchitectureRepository } from './repositories/bootstrap.js'
 import { DrizzleEnvConfigRepairJobRepository } from './repositories/envConfigRepair.js'
@@ -130,6 +133,7 @@ export interface NodeCoreDepsBundle {
   agentKindRegistry: NodeAppRegistriesResult['agentKindRegistry']
   gateRegistry: NodeAppRegistriesResult['gateRegistry']
   judgeRegistry: NodeAppRegistriesResult['judgeRegistry']
+  delegatedExecutorRegistry: NodeAppRegistriesResult['delegatedExecutorRegistry']
   stepResolverRegistry: NodeAppRegistriesResult['stepResolverRegistry']
   initiativePresetRegistry: NodeAppRegistriesResult['initiativePresetRegistry']
   providerRegistry: NodeAppRegistriesResult['providerRegistry']
@@ -142,6 +146,7 @@ export interface NodeCoreDepsBundle {
   cloudflareModelsEnabled: NodeModelDepsResult['cloudflareModelsEnabled']
   deployDeps: NodeTransportDeployResult['deployDeps']
   runnerPoolConnectionRepository: CoreDependencies['runnerPoolConnectionRepository']
+  accountRunnerPoolRepository: CoreDependencies['accountRunnerPoolRepository']
   agentContextObservability: NodeRunServicesResult['agentContextObservability']
   searchQueryObservability: NodeRunServicesResult['searchQueryObservability']
   resolveTestSecretRefs: NodeRunServicesResult['resolveTestSecretRefs']
@@ -282,6 +287,7 @@ function selectNodeRegistryDeps(bundle: NodeCoreDepsBundle) {
     agentKindRegistry,
     gateRegistry,
     judgeRegistry,
+    delegatedExecutorRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     providerRegistry,
@@ -299,6 +305,10 @@ function selectNodeRegistryDeps(bundle: NodeCoreDepsBundle) {
     // The app-owned JUDGE registry (the fourth step-taxonomy bucket); the engine's judge machine
     // reads it, and it is re-exposed on Core for the snapshot's palette projection.
     judgeRegistry,
+    // The app-owned DELEGATED-EXECUTOR registry: the dispatch path builds each executor from it,
+    // and it is re-exposed on Core so the boot validation can refuse a kind naming one nobody
+    // registered.
+    delegatedExecutorRegistry,
     stepResolverRegistry,
     // The app-owned provider registry the gate providers were wired onto above; the engine's gate
     // machine reads the SAME instance through its GateContext.
@@ -398,6 +408,8 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     accountRepository: repos.accountRepository,
     membershipRepository: repos.membershipRepository,
     userRepository: repos.userRepository,
+    directoryRepository: repos.directoryRepository,
+    ...selectNodeDirectoryWebhooks(bundle),
     passwordHasher: new WebCryptoPasswordHasher(),
     blockRepository: repos.blockRepository,
     pipelineRepository: repos.pipelineRepository,
@@ -464,6 +476,8 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // …and the pre-declared shared stacks, under the same rules. `createCore` builds the seeder
     // over them (when the shared-stacks module is wired) and exposes it for the same two sites.
     seedSharedStacks: options.seedSharedStacks,
+    // …and the declared runner pools, which `createCore` seeds beside the runners module.
+    seedAccountRunnerPool: options.seedAccountRunnerPool,
     serviceFragmentDefaultsRepository: repos.serviceFragmentDefaultsRepository,
     // Requirements-review feature (stateless reviewer + the requirements-rework
     // step). Wired identically to the Cloudflare facade's `selectRequirementsDeps`
@@ -476,6 +490,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // Interactive document-interview sessions (WS5). Wired unconditionally; the interviewer
     // reuses the requirements reviewer's model config resolved just below.
     docInterviewRepository: repos.docInterviewRepository,
+    guidedReviewRepository: repos.guidedReviewRepository,
     // Kaizen agent (post-run grading). Wired unconditionally, mirroring the Cloudflare
     // facade, so the engine schedules gradings at run completion and the background sweep
     // runs them. The grader resolves its model for the `kaizen` kind exactly like a step.
@@ -600,6 +615,7 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     cloudflareModelsEnabled,
     deployDeps,
     runnerPoolConnectionRepository,
+    accountRunnerPoolRepository,
     githubClient,
     issueWritebackProvider,
     githubGateDeps,
@@ -646,6 +662,7 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     ...(config.runners.enabled && config.runners.encryptionKey
       ? {
           runnerPoolConnectionRepository,
+          accountRunnerPoolRepository,
           runnerSecretCipher: new WebCryptoSecretCipher({
             masterKeyBase64: config.runners.encryptionKey,
             info: RUNNERS_CIPHER_INFO,
@@ -664,29 +681,7 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
           ...(runnerUrlPolicy ? { runnerUrlSafetyPolicy: runnerUrlPolicy } : {}),
         }
       : {}),
-    ...(options.boss
-      ? {
-          workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue),
-          // The durable bootstrap driver (analogue of the Worker's BootstrapWorkflow):
-          // BootstrapService.startRun enqueues a drive job that polls the run to terminal.
-          bootstrapRunner: new PgBossBootstrapRunner(
-            options.boss,
-            executionRuntime(config, env).queue,
-          ),
-          // The durable env-config-repair driver (analogue of the Worker's
-          // EnvConfigRepairWorkflow): start enqueues a drive job that polls the run to terminal.
-          envConfigRepairRunner: new PgBossEnvConfigRepairRunner(
-            options.boss,
-            executionRuntime(config, env).queue,
-          ),
-          // The durable ephemeral-environment self-test driver (analogue of the Worker's
-          // EnvironmentTestWorkflow): startRun enqueues a drive job that advances the run.
-          environmentTestRunner: new PgBossEnvironmentTestRunner(
-            options.boss,
-            executionRuntime(config, env).queue,
-          ),
-        }
-      : {}),
+    ...(options.boss ? pgBossRunners(options.boss, executionRuntime(config, env).queue) : {}),
     ...githubGateDeps,
     // GitHub installation + repo/branch/PR/issue/commit/check-run projections + the
     // sync/webhook module (inline ingest persists to these repos on Node).
@@ -1003,5 +998,51 @@ function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<C
     ...(config.environments.detectionConventions
       ? { detectionConventions: config.environments.detectionConventions }
       : {}),
+  }
+}
+
+/**
+ * The pg-boss durable drivers, one per standalone-work kind: each the Node analogue of a Worker
+ * Workflow class. Only wired when the facade booted pg-boss.
+ */
+function pgBossRunners(
+  boss: NonNullable<NodeContainerOptions['boss']>,
+  queue: ReturnType<typeof executionRuntime>['queue'],
+): Partial<CoreDependencies> {
+  return {
+    workRunner: new PgBossWorkRunner(boss, queue),
+    // BootstrapService.startRun enqueues a drive job that polls the run to terminal.
+    bootstrapRunner: new PgBossBootstrapRunner(boss, queue),
+    envConfigRepairRunner: new PgBossEnvConfigRepairRunner(boss, queue),
+    environmentTestRunner: new PgBossEnvironmentTestRunner(boss, queue),
+    guidedReviewRunner: new PgBossGuidedReviewRunner(boss, queue),
+  }
+}
+
+/**
+ * Directory webhook endpoints, wired only when `ENCRYPTION_KEY` can seal their signing secrets.
+ * Read straight off the env, as the notification webhooks are, so the two facades gate the
+ * feature on the same condition.
+ *
+ * Never on a mothership-mode node (no `options.db`): endpoint management is account-admin
+ * configuration the role-blind machine token may not reach, and delivery is the mothership's own
+ * sweep. Unwired, the routes answer a 503 naming the missing capability rather than a refusal from
+ * the persistence RPC; an integration registers its endpoint against the deployment itself.
+ */
+function selectNodeDirectoryWebhooks(
+  bundle: NodeCoreDepsBundle,
+): Pick<CoreDependencies, 'directoryWebhooks'> {
+  const encryptionKey = bundle.env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey || !bundle.options.db) return {}
+  const urlSafetyPolicy = resolveUrlSafetyPolicy(bundle.config.notificationWebhooks)
+  return {
+    directoryWebhooks: {
+      repository: new DrizzleDirectoryWebhookRepository(bundle.options.db),
+      secretCipher: new WebCryptoSecretCipher({
+        masterKeyBase64: encryptionKey,
+        info: DIRECTORY_WEBHOOK_CIPHER_INFO,
+      }),
+      ...(urlSafetyPolicy ? { urlSafetyPolicy } : {}),
+    },
   }
 }

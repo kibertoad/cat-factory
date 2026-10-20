@@ -17,6 +17,8 @@
 import { computed, ref } from 'vue'
 import { MAX_REVIEW_SKILLS } from '@cat-factory/contracts'
 import { useSkillsStore } from '~/stores/skills'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{
   /** The queued skill ids, in the order the reviewer applies them (`v-model`). */
@@ -63,9 +65,9 @@ function toggle(id: string) {
 <template>
   <div>
     <div class="mb-1 flex items-center justify-between gap-2">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <SectionLabel as="span">
         {{ t('skills.reviewQueue.label') }}
-      </span>
+      </SectionLabel>
       <UPopover v-model:open="open" :content="{ align: 'end' }">
         <UButton
           size="xs"
@@ -83,12 +85,13 @@ function toggle(id: string) {
           >
             <div class="min-h-0 flex-1 overflow-y-auto p-1">
               <template v-if="offered.length">
-                <button
+                <UButton
+                  color="neutral"
+                  variant="ghost"
                   v-for="s in offered"
                   :key="s.id"
-                  type="button"
-                  class="flex w-full items-start gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-slate-800/60 disabled:cursor-not-allowed disabled:opacity-40"
-                  :class="selectedSet.has(s.id) ? 'text-slate-100' : 'text-slate-300'"
+                  class="flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-start text-sm hover:bg-elevated/60 disabled:cursor-not-allowed disabled:opacity-40"
+                  :class="selectedSet.has(s.id) ? 'text-app-100' : 'text-toned'"
                   :disabled="atCap && !selectedSet.has(s.id)"
                   :aria-pressed="selectedSet.has(s.id)"
                   :data-testid="`review-skill-option-${s.id}`"
@@ -97,28 +100,31 @@ function toggle(id: string) {
                   <UIcon
                     :name="selectedSet.has(s.id) ? 'i-lucide-check' : 'i-lucide-plus'"
                     class="mt-0.5 h-4 w-4 shrink-0"
-                    :class="selectedSet.has(s.id) ? 'text-primary-400' : 'text-slate-500'"
+                    :class="selectedSet.has(s.id) ? 'text-primary' : 'text-dimmed'"
                   />
                   <span class="min-w-0 flex-1">
                     <span class="block truncate">{{ s.name }}</span>
-                    <span class="block truncate text-[11px] text-slate-500">
+                    <span class="block truncate text-2xs text-dimmed">
                       {{ s.description }}
                     </span>
                   </span>
-                </button>
+                </UButton>
               </template>
-              <p v-else class="px-2 py-3 text-[12px] text-slate-500">
-                {{ t('skills.reviewQueue.pickerEmpty') }}
-              </p>
+              <EmptyState
+                v-else
+                compact
+                icon="i-lucide-book-open-check"
+                :title="t('skills.reviewQueue.pickerEmpty')"
+              />
             </div>
 
             <p
               v-if="atCap"
-              class="border-t border-slate-800 px-2 py-1.5 text-[11px] text-amber-400"
+              class="border-t border-default px-2 py-1.5 text-2xs text-app-warning-400"
             >
               {{ t('skills.reviewQueue.capped', { max: MAX_REVIEW_SKILLS }) }}
             </p>
-            <div class="flex justify-end border-t border-slate-800 p-1.5">
+            <div class="flex justify-end border-t border-default p-1.5">
               <UButton
                 size="xs"
                 color="neutral"
@@ -137,7 +143,6 @@ function toggle(id: string) {
       <UBadge
         v-for="(s, i) in queued"
         :key="s.id"
-        color="primary"
         variant="subtle"
         size="sm"
         class="cursor-pointer"
@@ -145,11 +150,11 @@ function toggle(id: string) {
         data-testid="review-skill-badge"
         @click="toggle(s.id)"
       >
-        <span class="me-1 tabular-nums text-slate-400">{{ i + 1 }}</span>
+        <span class="me-1 tabular-nums text-muted">{{ i + 1 }}</span>
         {{ s.name }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
       </UBadge>
     </div>
-    <p v-else class="text-[11px] text-slate-500">
+    <p v-else class="text-2xs text-dimmed">
       {{ t('skills.reviewQueue.hint') }}
     </p>
   </div>

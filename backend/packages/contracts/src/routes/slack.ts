@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   connectSlackByTokenSchema,
@@ -53,7 +53,7 @@ export const connectSlackContract = defineApiContract({
 export const disconnectSlackContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/slack/connection',
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const listSlackChannelsContract = defineApiContract({

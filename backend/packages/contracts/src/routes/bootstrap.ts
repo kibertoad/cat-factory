@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   bootstrapJobSchema,
@@ -47,7 +47,7 @@ export const deleteReferenceArchitectureContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: referenceArchitectureIdParams,
   pathResolver: ({ id }) => `/bootstrap/reference-architectures/${id}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- bootstrap jobs -------------------------------------------------------

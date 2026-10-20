@@ -9,6 +9,9 @@ import {
   readStatusNote,
   showsProviderFailure,
 } from '~/components/environments/EnvironmentStatusPanel.logic'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{
   environment: RunEnvironment | null
@@ -60,32 +63,32 @@ const ENV_STATUS_META = computed<
 >(() => ({
   provisioning: {
     label: t('environments.status.provisioning'),
-    color: 'text-amber-300',
+    color: 'text-app-warning-300',
     icon: 'i-lucide-loader-circle',
   },
   ready: {
     label: t('environments.status.ready'),
-    color: 'text-emerald-300',
+    color: 'text-app-success-300',
     icon: 'i-lucide-circle-dot',
   },
   failed: {
     label: t('environments.status.failed'),
-    color: 'text-rose-300',
+    color: 'text-app-error-300',
     icon: 'i-lucide-circle-alert',
   },
   expired: {
     label: t('environments.status.expired'),
-    color: 'text-slate-400',
+    color: 'text-muted',
     icon: 'i-lucide-circle-off',
   },
   tearing_down: {
     label: t('environments.status.tearing_down'),
-    color: 'text-slate-400',
+    color: 'text-muted',
     icon: 'i-lucide-loader-circle',
   },
   torn_down: {
     label: t('environments.status.torn_down'),
-    color: 'text-slate-400',
+    color: 'text-muted',
     icon: 'i-lucide-circle-off',
   },
 }))
@@ -105,53 +108,52 @@ const envInTransition = computed(
 </script>
 
 <template>
-  <section class="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-    <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+  <section class="rounded-lg border border-default bg-default/60 p-3">
+    <SectionLabel as="h3" class="mb-2">
       {{ t('environments.title') }}
-    </h3>
+    </SectionLabel>
     <div v-if="environment" class="space-y-2">
-      <div class="flex items-center gap-2 text-[13px]">
-        <UIcon
+      <div class="flex items-center gap-2 text-sm">
+        <Spinner
           :name="ENV_STATUS_META[environment.status].icon"
+          :spinning="runActive && envInTransition"
           class="h-3.5 w-3.5"
-          :class="[
-            ENV_STATUS_META[environment.status].color,
-            { 'animate-spin': runActive && envInTransition },
-          ]"
+          :class="ENV_STATUS_META[environment.status].color"
         />
         <span :class="ENV_STATUS_META[environment.status].color">{{
           ENV_STATUS_META[environment.status].label
         }}</span>
       </div>
-      <a
+      <ULink
+        raw
         v-if="environment.url"
-        :href="environment.url"
+        :to="environment.url"
         target="_blank"
         rel="noopener"
-        class="inline-flex items-center gap-1.5 break-all text-[13px] text-sky-300 hover:underline"
+        class="inline-flex items-center gap-1.5 break-all text-sm text-app-info-300 hover:underline"
       >
         <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5 shrink-0" />
         {{ environment.url }}
-      </a>
-      <p v-if="environment.expiresAt" class="text-[11px] text-slate-500">
+      </ULink>
+      <p v-if="environment.expiresAt" class="text-2xs text-dimmed">
         {{ t('environments.expires', { date: d(new Date(environment.expiresAt), 'long') }) }}
       </p>
       <!-- The resolved provision type + engine recorded at provision time, so a run states
            exactly what was provisioned and how (the what/where ÷ how split). -->
       <dl v-if="provisionTypeLabel || engineLabel" class="flex flex-wrap gap-x-4 gap-y-0.5">
-        <div v-if="provisionTypeLabel" class="flex items-center gap-1 text-[11px]">
-          <dt class="text-slate-500">{{ t('environments.provisionTypeLabel') }}</dt>
-          <dd class="text-slate-300">{{ provisionTypeLabel }}</dd>
+        <div v-if="provisionTypeLabel" class="flex items-center gap-1 text-2xs">
+          <dt class="text-dimmed">{{ t('environments.provisionTypeLabel') }}</dt>
+          <dd class="text-toned">{{ provisionTypeLabel }}</dd>
         </div>
-        <div v-if="engineLabel" class="flex items-center gap-1 text-[11px]">
-          <dt class="text-slate-500">{{ t('environments.engineLabel') }}</dt>
-          <dd class="text-slate-300">{{ engineLabel }}</dd>
+        <div v-if="engineLabel" class="flex items-center gap-1 text-2xs">
+          <dt class="text-dimmed">{{ t('environments.engineLabel') }}</dt>
+          <dd class="text-toned">{{ engineLabel }}</dd>
         </div>
       </dl>
       <!-- The verbatim provider error when the environment failed/expired. -->
       <pre
         v-if="failureShown"
-        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-rose-900/60 bg-rose-950/40 p-1.5 text-[11px] text-rose-200/90"
+        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded-sm border border-app-error-900/60 bg-app-error-950/40 p-1.5 text-2xs text-app-error-200/90"
         >{{ environment.lastError }}</pre>
       <!-- What the provider says it is still waiting on. Muted rather than alarming: an
            environment mid-rollout is healthy, and styling this like the error above would report
@@ -159,13 +161,16 @@ const envInTransition = computed(
            prose. -->
       <p
         v-if="statusNote"
-        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words text-[11px] text-slate-400"
+        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words text-2xs text-muted"
       >
         {{ t('environments.statusNote', { note: statusNote }) }}
       </p>
     </div>
-    <p v-else class="text-[12px] text-slate-500">
-      {{ degradedReason ?? t('environments.empty') }}
-    </p>
+    <EmptyState
+      v-else
+      compact
+      icon="i-lucide-server"
+      :title="degradedReason ?? t('environments.empty')"
+    />
   </section>
 </template>

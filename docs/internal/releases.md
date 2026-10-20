@@ -1,7 +1,7 @@
 # Releases: the runner image and new published packages
 
 Versioning is changesets (root `pnpm changeset` / `ci:publish`); the rule that every change to a
-versioned package needs a changeset lives in CLAUDE.md. This doc holds the release mechanics with
+versioned package needs a changeset lives in AGENTS.md. This doc holds the release mechanics with
 non-obvious failure modes: how the version commit reaches GitHub, keeping the changelogs it
 rewrites small, rolling out the runner image, and wiring a NEW published package so it doesn't
 ship as an empty shell.
@@ -91,6 +91,12 @@ A folder is not wired up by existing (two packages once published as empty shell
 - **Register it in `backend/tsconfig.build.json`** `references`. A package reachable only
   transitively drops out the moment that reference goes away.
 - **Add a changeset** and **a row in README.md's repository-layout tables** (CI guards both).
+- **Under `sdk/`, name a sibling by range**: `workspace:^` for a dependency, and a hand-written
+  peer range (`workspace:>=0.57.0 <1.0.0`) when the package works on a client the integrator
+  builds. `scripts/check-sdk-dependency-ranges.mjs` fails on `workspace:*`, which publishes exact,
+  and on a peer range that admits one minor. `.changeset/config.json` sets
+  `onlyUpdatePeerDependentsWhenOutOfRange`, so `changeset version` leaves a peer range alone while
+  the new version satisfies it; without it every SDK release would raise the peer's floor to itself.
 - **Check knip knows about a dynamically-imported dependency** (`ignoreDependencies` in
   `knip.jsonc`).
 
@@ -137,5 +143,5 @@ nothing. Detection lives in `publish-payload.mjs`, with fixtures in `publish-pay
 
 - SDK publishing is gated on a VERSION CHANGE, not a file change; see
   [`sdk/README.md`](../../sdk/README.md) and `.github/workflows/sdk-release.yml`.
-- The `minimumReleaseAge` supply-chain gate on installs: CLAUDE.md, "Dependencies, releases, new
+- The `minimumReleaseAge` supply-chain gate on installs: AGENTS.md, "Dependencies, releases, new
   packages".

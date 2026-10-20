@@ -2,6 +2,9 @@
 import type { DocumentSourceKind } from '~/types/domain'
 import DocumentSyncState from '~/components/documents/DocumentSyncState.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 // Import pages from a connected document source and pick one to expand into
 // board structure. A source selector lets the user choose which connected source
@@ -10,7 +13,7 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 const open = computed({
@@ -57,10 +60,7 @@ async function doImport() {
   try {
     const doc = await documents.importDocument(source.value, value)
     ref_.value = ''
-    toast.add({
-      title: t('documents.import.imported', { title: doc.title }),
-      icon: 'i-lucide-file-down',
-    })
+    actionToast.success('documents.import.imported', { params: { title: doc.title } })
   } catch (e) {
     present(e, 'documents.import.importFailed')
   } finally {
@@ -74,19 +74,18 @@ function preview(externalId: string) {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('documents.import.title')">
+  <AppModal size="form" v-model:open="open" :title="t('documents.import.title')">
     <template #title>
       <IntegrationBackTitle :title="t('documents.import.title')" @back="back" />
     </template>
     <template #body>
       <div v-if="!documents.anyConnected" class="space-y-3 text-center">
-        <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-slate-500" />
-        <p class="text-sm text-slate-400">{{ t('documents.import.connectFirst') }}</p>
+        <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-dimmed" />
+        <p class="text-sm text-muted">{{ t('documents.import.connectFirst') }}</p>
         <div class="flex justify-center gap-2">
           <UButton
             v-for="s in documents.sources"
             :key="s.source"
-            color="primary"
             variant="soft"
             :icon="s.icon"
             @click="ui.openDocumentConnect(s.source)"
@@ -114,7 +113,6 @@ function preview(externalId: string) {
             />
           </UFormField>
           <UButton
-            color="primary"
             icon="i-lucide-file-down"
             :loading="importing"
             :disabled="!ref_.trim()"
@@ -125,29 +123,29 @@ function preview(externalId: string) {
         </div>
 
         <div v-if="sourceDocs.length" class="space-y-2">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <SectionLabel as="h3">
             {{ t('documents.import.importedHeading') }}
-          </h3>
+          </SectionLabel>
           <div
             v-for="doc in sourceDocs"
             :key="`${doc.source}:${doc.externalId}`"
-            class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+            class="rounded-lg border border-default bg-default/60 p-3"
           >
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
-                <a
-                  :href="doc.url"
+                <ULink
+                  raw
+                  :to="doc.url"
                   target="_blank"
                   rel="noopener"
-                  class="truncate text-sm font-medium text-white hover:underline"
+                  class="truncate text-sm font-medium text-highlighted hover:underline"
                 >
                   {{ doc.title }}
-                </a>
-                <p class="mt-0.5 line-clamp-2 text-xs text-slate-500">{{ doc.excerpt }}</p>
+                </ULink>
+                <p class="mt-0.5 line-clamp-2 text-xs text-dimmed">{{ doc.excerpt }}</p>
                 <DocumentSyncState :doc="doc" class="mt-1" />
               </div>
               <UButton
-                color="primary"
                 variant="soft"
                 size="xs"
                 icon="i-lucide-wand-sparkles"
@@ -158,10 +156,13 @@ function preview(externalId: string) {
             </div>
           </div>
         </div>
-        <p v-else class="text-center text-xs text-slate-500">
-          {{ t('documents.import.noneImported') }}
-        </p>
+        <EmptyState
+          v-else
+          compact
+          icon="i-lucide-file-down"
+          :title="t('documents.import.noneImported')"
+        />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

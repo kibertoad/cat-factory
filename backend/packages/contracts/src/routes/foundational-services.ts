@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   apiContractDocumentSchema,
@@ -59,7 +59,7 @@ export const deleteFoundationalServiceContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: serviceIdParams,
   pathResolver: ({ serviceId }) => `/foundational-services/${serviceId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 /**
@@ -121,14 +121,14 @@ export const suppressFoundationalServiceContract = defineApiContract({
   requestPathParamsSchema: serviceIdParams,
   pathResolver: ({ serviceId }) => `/foundational-services/${serviceId}/suppression`,
   requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const restoreFoundationalServiceContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: serviceIdParams,
   pathResolver: ({ serviceId }) => `/foundational-services/${serviceId}/suppression`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- repo sources ---------------------------------------------------------
@@ -150,7 +150,7 @@ export const unlinkFoundationalServiceSourceContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: sourceIdParams,
   pathResolver: ({ id }) => `/foundational-service-sources/${id}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const foundationalServiceSourceStatusContract = defineApiContract({

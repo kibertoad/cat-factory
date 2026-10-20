@@ -33,7 +33,7 @@ import { createRepoIssueWriteback } from './writeback/repo-issue.writeback.js'
 //
 // Runtime-neutral by construction: it depends only on kernel ports (GitHubClient,
 // GitHubInstallationRepository) and the shared pure logic, so both facades wire the
-// SAME class (CLAUDE.md "Keep the runtimes symmetric").
+// SAME class (AGENTS.md "Keep the runtimes symmetric").
 //
 // Two differences from the GitHub provider are load-bearing rather than incidental:
 //

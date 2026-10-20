@@ -10,6 +10,8 @@ import {
   isRevisionConflict,
   saveIntent,
 } from '~/components/pipeline/AgentPromptEditor.logic'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // The per-workspace system-prompt editor for ONE agent kind, opened from the pipeline builder
 // (where the kinds are actually chosen). It edits the SHIPPED track prompt only: the platform
@@ -29,7 +31,8 @@ const props = defineProps<{ agentKind: string | null }>()
 const emit = defineEmits<{ close: [] }>()
 
 const { t } = useI18n()
-const toast = useToast()
+const actionToast = useActionToast()
+const { present } = usePipelineErrorToast()
 const prompts = useAgentPromptsStore()
 const agentSettings = useAgentSettingsStore()
 
@@ -67,8 +70,8 @@ watch(
     try {
       const detail = await prompts.load(kind)
       draft.value = detail?.effectiveText ?? ''
-    } catch {
-      toast.add({ title: t('agentPrompt.toast.loadFailed'), color: 'error' })
+    } catch (error) {
+      present(error, 'agentPrompt.toast.loadFailed')
       emit('close')
     }
   },
@@ -96,8 +99,8 @@ async function saveBudget(value: number | null) {
   if (!kind) return
   try {
     await agentSettings.setMaxOutputTokens(kind, value)
-  } catch {
-    toast.add({ title: t('agentPrompt.toast.budgetFailed'), color: 'error' })
+  } catch (error) {
+    present(error, 'agentPrompt.toast.budgetFailed')
   }
 }
 
@@ -126,13 +129,13 @@ async function save() {
     const saved = await prompts.save(kind, intent.text, intent.restoredFrom)
     draft.value = saved?.effectiveText ?? draft.value
     restoredFrom.value = undefined
-    toast.add({ title: t('agentPrompt.toast.saved'), color: 'success', icon: 'i-lucide-check' })
+    actionToast.success('agentPrompt.toast.saved')
   } catch (error) {
     const conflict = isRevisionConflict(error)
-    toast.add({
-      title: conflict ? t('agentPrompt.toast.conflict') : t('agentPrompt.toast.saveFailed'),
-      color: 'error',
-    })
+    // A recognised refusal keeps its bespoke copy: the funnel's generic line for this reason says
+    // "reload it", but the editor has already reloaded by the time the toast shows.
+    if (conflict) actionToast.error('agentPrompt.toast.conflict')
+    else present(error, 'agentPrompt.toast.saveFailed')
     // The server's view already replaced the store's on a conflict, so re-seed the textarea
     // from what actually landed rather than leaving the user editing a lost revision — and drop
     // the restore candidate with it, since it names a revision from the log we just replaced.
@@ -150,9 +153,9 @@ async function revert() {
     const saved = await prompts.save(kind, null)
     draft.value = saved?.effectiveText ?? draft.value
     restoredFrom.value = undefined
-    toast.add({ title: t('agentPrompt.toast.reverted'), color: 'success' })
-  } catch {
-    toast.add({ title: t('agentPrompt.toast.saveFailed'), color: 'error' })
+    actionToast.success('agentPrompt.toast.reverted')
+  } catch (error) {
+    present(error, 'agentPrompt.toast.saveFailed')
   }
 }
 
@@ -167,6 +170,8 @@ function revisionLabel(revision: AgentPromptRevision): string {
 </script>
 
 <template>
+  <!-- workbench-width-ok: a prompt editor, up to 1024px on a large screen. Its shell waits on
+       #2359. -->
   <UModal
     v-model:open="open"
     :title="t('agentPrompt.title', { agent: label })"
@@ -174,13 +179,15 @@ function revisionLabel(revision: AgentPromptRevision): string {
     :ui="{ content: 'max-w-[92vw] sm:max-w-3xl lg:max-w-5xl' }"
   >
     <template #body>
-      <div v-if="prompts.loadingDetail" class="py-8 text-center text-sm text-slate-400">
-        {{ t('common.loading') }}
+      <div v-if="prompts.loadingDetail" class="flex flex-col gap-3">
+        <USkeleton class="h-6 w-1/3" />
+        <USkeleton class="h-64 w-full" />
+        <USkeleton class="h-24 w-full" />
       </div>
       <div v-else-if="detail" class="flex flex-col gap-3">
         <div class="flex flex-wrap items-center gap-2 text-xs">
           <AgentKindIcon v-if="agentKind" :kind="agentKind" icon-class="h-4 w-4" />
-          <span class="font-medium text-slate-200">{{ label }}</span>
+          <span class="font-medium text-default">{{ label }}</span>
           <UBadge v-if="detail.builtinVersionLabel" color="neutral" variant="subtle" size="sm">
             {{ detail.builtinVersionLabel }}
           </UBadge>
@@ -192,14 +199,14 @@ function revisionLabel(revision: AgentPromptRevision): string {
         <!-- The workspace-wide output ceiling for this kind. Same per-agent-kind scope as the
              prompt below it; saves on change, since there is no revision log to commit to. -->
         <div class="flex flex-wrap items-center gap-2">
-          <span class="text-[11px] text-slate-400">{{ t('pipeline.outputBudget.kindLabel') }}</span>
+          <span class="text-2xs text-muted">{{ t('pipeline.outputBudget.kindLabel') }}</span>
           <OutputBudgetInput
             class="w-32"
             :model-value="budget"
             :disabled="agentSettings.saving"
             @update:model-value="saveBudget"
           />
-          <span class="text-[10px] text-slate-500">
+          <span class="text-3xs text-dimmed">
             {{ t('pipeline.outputBudget.kindHint') }}
           </span>
         </div>
@@ -207,7 +214,7 @@ function revisionLabel(revision: AgentPromptRevision): string {
         <!-- What the platform appends is SHOWN, not described. A prose summary of it is copy
              that silently goes stale the moment a directive is added, and a user who does not
              know what is already there writes a prompt that fights it. -->
-        <p v-if="directives" class="text-[11px] leading-relaxed text-slate-500">
+        <p v-if="directives" class="text-2xs leading-relaxed text-dimmed">
           {{ t('agentPrompt.managedNotice') }}
           <UButton
             variant="link"
@@ -220,13 +227,13 @@ function revisionLabel(revision: AgentPromptRevision): string {
         </p>
         <div
           v-if="directives && showDirectives"
-          class="rounded-md border border-slate-800 bg-slate-950/60 p-2"
+          class="rounded-md border border-default bg-app-950/60 p-2"
         >
-          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <SectionLabel as="h4" class="mb-1">
             {{ t('agentPrompt.appendedHeading') }}
-          </h4>
+          </SectionLabel>
           <pre
-            class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-slate-300"
+            class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-2xs text-toned"
             >{{ directives.trim() }}</pre>
         </div>
 
@@ -241,7 +248,6 @@ function revisionLabel(revision: AgentPromptRevision): string {
 
         <div class="flex flex-wrap items-center gap-2">
           <UButton
-            color="primary"
             size="sm"
             icon="i-lucide-save"
             :loading="prompts.saving"
@@ -278,28 +284,31 @@ function revisionLabel(revision: AgentPromptRevision): string {
           >
             {{ showBuiltin ? t('agentPrompt.hideBuiltin') : t('agentPrompt.showBuiltin') }}
           </UButton>
-          <span v-if="restoredFrom !== undefined" class="text-[11px] text-slate-400">
+          <span v-if="restoredFrom !== undefined" class="text-2xs text-muted">
             {{ t('agentPrompt.restoringFrom', { n: restoredFrom }) }}
           </span>
         </div>
 
-        <div v-if="showBuiltin" class="rounded-md border border-slate-800 bg-slate-950/60 p-2">
-          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div v-if="showBuiltin" class="rounded-md border border-default bg-app-950/60 p-2">
+          <SectionLabel as="h4" class="mb-1">
             {{ t('agentPrompt.builtinHeading') }}
-          </h4>
+          </SectionLabel>
           <pre
-            class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-slate-300"
+            class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-2xs text-toned"
             >{{ detail.builtinText }}</pre>
         </div>
 
         <div>
-          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <SectionLabel as="h4" class="mb-1">
             {{ t('agentPrompt.historyHeading') }}
-          </h4>
-          <p v-if="!detail.revisions.length" class="text-[11px] text-slate-500">
-            {{ t('agentPrompt.historyEmpty') }}
-          </p>
-          <ul v-else class="max-h-52 divide-y divide-slate-800 overflow-y-auto text-xs">
+          </SectionLabel>
+          <EmptyState
+            v-if="!detail.revisions.length"
+            compact
+            icon="i-lucide-history"
+            :title="t('agentPrompt.historyEmpty')"
+          />
+          <ul v-else class="max-h-52 divide-y divide-default overflow-y-auto text-xs">
             <li
               v-for="revision in detail.revisions"
               :key="revision.revision"
@@ -307,16 +316,15 @@ function revisionLabel(revision: AgentPromptRevision): string {
             >
               <UBadge
                 v-if="revision.revision === detail.revisions[0]?.revision"
-                color="primary"
                 variant="subtle"
                 size="sm"
               >
                 {{ t('agentPrompt.live') }}
               </UBadge>
-              <span class="min-w-0 flex-1 truncate text-slate-300">
+              <span class="min-w-0 flex-1 truncate text-toned">
                 {{ revisionLabel(revision) }}
               </span>
-              <span class="shrink-0 text-[11px] text-slate-500">
+              <span class="shrink-0 text-2xs text-dimmed">
                 {{ d(new Date(revision.createdAt), 'short') }}
               </span>
               <UButton

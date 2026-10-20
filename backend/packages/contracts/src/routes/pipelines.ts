@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { pipelineSchema } from '../entities.js'
 import {
@@ -67,5 +67,5 @@ export const deletePipelineContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: pipelineIdParams,
   pathResolver: ({ pipelineId }) => `/pipelines/${pipelineId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

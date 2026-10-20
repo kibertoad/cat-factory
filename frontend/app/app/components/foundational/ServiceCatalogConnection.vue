@@ -22,8 +22,8 @@ import {
 } from '~/utils/serviceCatalog'
 
 const catalog = useFoundationalServicesStore()
-const toast = useToast()
-const { present } = usePipelineErrorToast()
+const actionToast = useActionToast()
+const { present, presentReported } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
 
@@ -137,7 +137,7 @@ async function connect() {
   await withBusy('connect', async () => {
     try {
       await catalog.connectServiceCatalog(buildInput())
-      toast.add({ title: t('serviceCatalog.toast.connected'), color: 'success' })
+      actionToast.success('serviceCatalog.toast.connected')
     } catch (error) {
       present(error, 'serviceCatalog.toast.connectFailed')
       return
@@ -154,13 +154,13 @@ async function probe() {
   await withBusy('probe', async () => {
     try {
       const result = await catalog.probeServiceCatalog(buildInput())
-      toast.add({
-        title: result.ok
-          ? t('serviceCatalog.toast.probeOk')
-          : t('serviceCatalog.toast.probeFailed'),
-        description: result.message,
-        color: result.ok ? 'success' : 'error',
-      })
+      if (result.ok) {
+        // The probe's `message` is backend prose: on a failure it is detail behind the disclosure,
+        // and on a success the translated title is the whole of what the reader needs.
+        actionToast.success('serviceCatalog.toast.probeOk')
+      } else {
+        presentReported(result.message, 'serviceCatalog.toast.probeFailed')
+      }
     } catch (error) {
       present(error, 'serviceCatalog.toast.probeFailed')
     }
@@ -175,15 +175,15 @@ async function importNow() {
 async function runImport(): Promise<void> {
   try {
     const result = await catalog.importServiceCatalog()
-    toast.add({
-      title: t('serviceCatalog.toast.imported'),
+    const imported = {
       description: t('serviceCatalog.toast.importedDetail', {
         upserted: result.upserted,
         unchanged: result.unchanged,
         tombstoned: result.tombstoned,
       }),
-      color: result.status === 'ok' ? 'success' : 'warning',
-    })
+    }
+    if (result.status === 'ok') actionToast.success('serviceCatalog.toast.imported', imported)
+    else actionToast.warning('serviceCatalog.toast.imported', imported)
   } catch (error) {
     present(error, 'serviceCatalog.toast.importFailed')
   }
@@ -206,7 +206,7 @@ async function disconnect() {
   await withBusy('disconnect', async () => {
     try {
       await catalog.disconnectServiceCatalog()
-      toast.add({ title: t('serviceCatalog.toast.disconnected'), color: 'success' })
+      actionToast.success('serviceCatalog.toast.disconnected')
     } catch (error) {
       present(error, 'serviceCatalog.toast.disconnectFailed')
     }
@@ -219,30 +219,30 @@ async function disconnect() {
     <!-- Unwired is stated, never offered as a form that would fail with a raw 503. -->
     <div
       v-if="catalog.serviceCatalogAvailable === false"
-      class="rounded-md border border-slate-800 bg-slate-900/40 p-3 text-sm text-slate-400"
+      class="rounded-md border border-default bg-default/40 p-3 text-sm text-muted"
     >
       {{ t('serviceCatalog.unavailable') }}
     </div>
 
     <template v-else>
-      <p class="text-sm text-slate-400">{{ t('serviceCatalog.intro') }}</p>
+      <p class="text-sm text-muted">{{ t('serviceCatalog.intro') }}</p>
 
       <!-- The CONNECTED state, with what the last import concluded. `lastSyncMessage` is the
            load-bearing line: it is what says a catalog is a PREFIX of the portal's estate. -->
       <div
         v-if="connection"
-        class="flex flex-col gap-2 rounded-md border border-slate-800 bg-slate-900/40 p-3"
+        class="flex flex-col gap-2 rounded-md border border-default bg-default/40 p-3"
         data-testid="service-catalog-connected"
       >
         <div class="flex flex-wrap items-center gap-2">
           <UBadge :color="syncStatusColor" variant="subtle">{{ statusLabel }}</UBadge>
-          <span class="font-mono text-xs text-slate-300">{{ connection.baseUrl }}</span>
-          <span class="text-xs text-slate-500">{{ authModeLabel(connection.authMode) }}</span>
-          <span v-if="connection.lastSyncedAt" class="text-xs text-slate-500">
+          <span class="font-mono text-xs text-toned">{{ connection.baseUrl }}</span>
+          <span class="text-xs text-dimmed">{{ authModeLabel(connection.authMode) }}</span>
+          <span v-if="connection.lastSyncedAt" class="text-xs text-dimmed">
             {{ d(new Date(connection.lastSyncedAt), 'short') }}
           </span>
         </div>
-        <p class="text-xs text-slate-400">
+        <p class="text-xs text-muted">
           {{
             t('serviceCatalog.summary', {
               filter: connection.entityFilter.join(', '),
@@ -250,7 +250,7 @@ async function disconnect() {
             })
           }}
         </p>
-        <p v-if="connection.lastSyncMessage" class="text-xs text-amber-400">
+        <p v-if="connection.lastSyncMessage" class="text-xs text-app-warning-400">
           {{ connection.lastSyncMessage }}
         </p>
         <div class="flex gap-2">
@@ -272,8 +272,8 @@ async function disconnect() {
 
       <!-- The connect / re-connect form. Shown alongside a live connection too, because rotating
            a token is the routine reason to come here. -->
-      <div class="flex flex-col gap-3 rounded-md border border-slate-800 p-3">
-        <h4 class="text-sm font-medium text-slate-200">
+      <div class="flex flex-col gap-3 rounded-md border border-default p-3">
+        <h4 class="text-sm font-medium text-default">
           {{ connection ? t('serviceCatalog.form.replace') : t('serviceCatalog.form.connect') }}
         </h4>
 

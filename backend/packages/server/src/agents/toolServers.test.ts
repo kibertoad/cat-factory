@@ -160,12 +160,24 @@ describe('resolveToolServers', () => {
     expect(result.mcpServers[0]?.headers).toEqual({ Authorization: 'Bearer abc' })
   })
 
-  it('drops a server the harness cannot serve and says so, rather than silently omitting it', async () => {
-    // Pi has no MCP client. An agent told the tool is missing plans around it; an agent told
-    // nothing discovers the gap mid-run, after planning on a tool that was never there.
+  it('wires a server on pi, whose built-in MCP client reaches both transports', async () => {
     const result = await resolveToolServers({
       context: context(),
-      agentKindRegistry: registryWith(STDIO),
+      agentKindRegistry: registryWith(STDIO, HTTP),
+      harness: 'pi',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ ISSUE_TOKEN: 'tok', DOCS_TOKEN: 'abc' }),
+    })
+    expect(result.mcpServers.map((s) => s.id)).toEqual(['issues', 'docs'])
+    expect(result.unavailableToolServers).toEqual([])
+  })
+
+  it('drops a server the harness cannot serve and says so, rather than silently omitting it', async () => {
+    // A definition narrowed to another CLI. An agent told the tool is missing plans around it; an
+    // agent told nothing discovers the gap mid-run, after planning on a tool that was never there.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith({ ...STDIO, harnesses: ['claude-code'] }),
       harness: 'pi',
       workspaceId: 'ws1',
       resolveToolSecrets: resolver({ ISSUE_TOKEN: 'tok' }),
@@ -328,13 +340,13 @@ describe('transport support', () => {
     expect(result.unavailableToolServers.map((s) => s.reason)).toEqual(['transport_unsupported'])
   })
 
-  it('reports `harness_unsupported`, not a transport reason, when the harness speaks no MCP', async () => {
-    // The two need different fixes (a `harnesses` list vs the choice of runtime), so a Pi run must
-    // not be described as a transport problem.
+  it('reports `harness_unsupported`, not a transport reason, when the definition excludes the CLI', async () => {
+    // The two need different fixes (a `harnesses` list vs the choice of transport), so a codex run
+    // excluded by the declaration must not be described as its stdio-only client's problem.
     const result = await resolveToolServers({
       context: context(),
-      agentKindRegistry: registryWith(HTTP),
-      harness: 'pi',
+      agentKindRegistry: registryWith({ ...HTTP, harnesses: ['claude-code'] }),
+      harness: 'codex',
       workspaceId: 'ws1',
       resolveToolSecrets: resolver({ DOCS_TOKEN: 'abc' }),
     })

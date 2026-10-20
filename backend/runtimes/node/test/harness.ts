@@ -1,5 +1,7 @@
 import {
   AsyncFakeAgentExecutor,
+  withDelegatedArm,
+  lateHarnessCallRecorder,
   type ConformanceApp,
   FakeAgentExecutor,
   type FakeAgentOptions,
@@ -18,6 +20,7 @@ import {
   makeOnboardingProbe,
   makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
+  mintMachineToken,
   mintSession,
   seedFrameRepoLink,
   type FrameRepoLinkRepositories,
@@ -32,7 +35,7 @@ import type {
   UpsertLocalModelEndpointInput,
   UserSecretKind,
 } from '@cat-factory/contracts'
-import type { CoreDependencies } from '@cat-factory/orchestration'
+import type { CoreDependencies, RecordHarnessCalls } from '@cat-factory/orchestration'
 import type { ServerContainer } from '@cat-factory/server'
 import { buildNodeContainer } from '../src/container.js'
 import { type DrizzleDb, createDbClient } from '../src/db/client.js'
@@ -41,6 +44,7 @@ import {
   DrizzleAccountRiskPolicyRepository,
   DrizzleClarityReviewRepository,
   DrizzleDocInterviewRepository,
+  DrizzleGuidedReviewRepository,
   DrizzleAccountSettingsRepository,
   DrizzleRequirementReviewRepository,
   DrizzleServiceRepository,
@@ -51,6 +55,7 @@ import {
 import { DrizzleNotificationRepository } from '../src/repositories/notifications.js'
 import { DrizzleDocumentRepository } from '../src/repositories/documents.js'
 import { DrizzleTaskRepository } from '../src/repositories/tasks.js'
+import { DrizzlePublicApiKeyRepository } from '../src/repositories/publicApiKey.js'
 import { DrizzleGitHubInstallationRepository } from '../src/repositories/containerExecution.js'
 import { DrizzleRepoProjectionRepository } from '../src/repositories/github.js'
 import { createApp } from '../src/server.js'
@@ -73,7 +78,7 @@ const BASE = 'https://cat-factory.test'
 // Test env: open the auth gate (dev-open) exactly as the Worker pool does, and pin a
 // non-production ENVIRONMENT so `devOpen` is honoured. The integration toggles stay off
 // (this MVP wires only the runtime-neutral core), matching the Node config defaults.
-const TEST_ENV: NodeJS.ProcessEnv = {
+export const TEST_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   AUTH_DEV_OPEN: 'true',
   ENVIRONMENT: 'test',
@@ -174,6 +179,7 @@ type ConformanceAppOpts = {
   agentKindRegistry?: AgentKindRegistry
   gateRegistry?: CoreDependencies['gateRegistry']
   judgeRegistry?: CoreDependencies['judgeRegistry']
+  delegatedExecutorRegistry?: CoreDependencies['delegatedExecutorRegistry']
   judgeAssessor?: CoreDependencies['judgeAssessor']
   bugHuntAssessor?: CoreDependencies['bugHuntAssessor']
   monorepoAdoptionAdvisor?: CoreDependencies['monorepoAdoptionAdvisor']
@@ -211,6 +217,7 @@ function buildConformanceOverrides(
   recorder: RecordingEventPublisher,
   agentOptions: FakeAgentOptions | undefined,
   opts: ConformanceAppOpts | undefined,
+  recordHarnessCalls: RecordHarnessCalls,
 ): Partial<CoreDependencies> {
   const o = opts ?? {}
   // The custom-kind suite injects a pre-loaded registry: thread it into BOTH the fake executor
@@ -220,9 +227,17 @@ function buildConformanceOverrides(
     ...(o.agentKindRegistry ? { agentKindRegistry: o.agentKindRegistry } : {}),
   }
   return {
-    agentExecutor: agentOptions?.asyncKinds?.length
-      ? new AsyncFakeAgentExecutor(agentExecutorOptions)
-      : new FakeAgentExecutor(agentExecutorOptions),
+    // The deterministic agent, WRAPPED in the production composite when the suite registered an
+    // external executor, so a delegated kind reaches the real `DelegatedAgentExecutor` while
+    // everything else stays on the fake. Overriding `agentExecutor` wholesale is right for every
+    // other assertion and would make the delegated ones vacuous.
+    agentExecutor: withDelegatedArm(
+      agentOptions?.asyncKinds?.length
+        ? new AsyncFakeAgentExecutor(agentExecutorOptions)
+        : new FakeAgentExecutor(agentExecutorOptions),
+      o,
+      recordHarnessCalls,
+    ),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
     // A deterministic bootstrapper so the suite can drive the dispatch→poll→finalise
@@ -300,6 +315,7 @@ function buildContainerRegistryOptions(opts: ConformanceAppOpts | undefined) {
     agentKindRegistry: o.agentKindRegistry,
     gateRegistry: o.gateRegistry,
     judgeRegistry: o.judgeRegistry,
+    delegatedExecutorRegistry: o.delegatedExecutorRegistry,
     stepResolverRegistry: o.stepResolverRegistry,
     initiativePresetRegistry: o.initiativePresetRegistry,
     taskTypeRegistry: o.taskTypeRegistry,
@@ -344,7 +360,10 @@ export function makeConformanceApp(
   // Record emitted run snapshots so the suite can assert intermediate transitions
   // (e.g. the model present on the first "spinning up container" emit).
   const recorder = new RecordingEventPublisher()
-  const overrides = buildConformanceOverrides(recorder, agentOptions, opts)
+  // The arm files a delegated step's reported usage through the container's OWN observability
+  // service, which exists only once the container is built.
+  const harnessCalls = lateHarnessCallRecorder()
+  const overrides = buildConformanceOverrides(recorder, agentOptions, opts, harnessCalls.record)
   const container = buildNodeContainer({
     db,
     env: TEST_ENV,
@@ -361,6 +380,7 @@ export function makeConformanceApp(
     // matching suites) so each is resolved by reference — the SAME instance the fake executor got.
     ...buildContainerRegistryOptions(opts),
   })
+  harnessCalls.bind(container.llmObservability)
   const app = createApp(container, TEST_ENV)
 
   async function call<T>(
@@ -512,6 +532,7 @@ export function makeConformanceApp(
     createOrgWorkspace,
     authEnabled: Boolean(TEST_ENV.AUTH_SESSION_SECRET),
     session: (user) => mintSession(TEST_ENV.AUTH_SESSION_SECRET!, user),
+    machineToken: () => mintMachineToken(TEST_ENV.AUTH_SESSION_SECRET!),
     createWorkspaceInAccount: (accountId, ownerUserId, options) =>
       container.workspaceService.create(
         { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
@@ -538,12 +559,14 @@ export function makeConformanceApp(
     blockRepository: () => createDrizzleRepositories(db, { now: () => Date.now() }).blockRepository,
     workspaceRepository: () => new DrizzleWorkspaceRepository(db),
     workspaceMemberRepository: () => new DrizzleWorkspaceMemberRepository(db),
+    publicApiKeyRepository: () => new DrizzlePublicApiKeyRepository(db),
     initiativeRepository: () =>
       createDrizzleRepositories(db, { now: () => Date.now() }).initiativeRepository,
     notificationRepository: () => new DrizzleNotificationRepository(db),
     documentRepository: () => new DrizzleDocumentRepository(db),
     taskRepository: () => new DrizzleTaskRepository(db),
     docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
+    guidedReviewRepository: () => new DrizzleGuidedReviewRepository(db),
     accountSettingsRepository: () => new DrizzleAccountSettingsRepository(db),
     accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
     seedService,

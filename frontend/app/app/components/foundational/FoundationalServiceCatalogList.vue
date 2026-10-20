@@ -19,9 +19,11 @@ import { useBusyRows } from '~/composables/useBusyRows'
 import type { ApiContractFormat, FoundationalServiceTier } from '~/types/domain'
 import { useFoundationalServicesStore } from '~/stores/foundationalServices'
 import FoundationalContractSummary from '~/components/foundational/FoundationalContractSummary.vue'
+import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const catalog = useFoundationalServicesStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -70,7 +72,7 @@ async function suppress(serviceId: string) {
   await withRow(`suppress:${serviceId}`, async () => {
     try {
       await catalog.suppress(serviceId)
-      toast.add({ title: t('foundational.toast.suppressed'), icon: 'i-lucide-eye-off' })
+      actionToast.success('foundational.toast.suppressed')
     } catch (e) {
       present(e, 'foundational.toast.suppressFailed')
     }
@@ -80,21 +82,21 @@ async function suppress(serviceId: string) {
 
 <template>
   <div class="flex flex-col gap-3" data-testid="foundational-catalog">
-    <p class="text-xs text-slate-500">{{ t('foundational.catalog.intro') }}</p>
+    <p class="text-xs text-dimmed">{{ t('foundational.catalog.intro') }}</p>
 
     <div
       v-for="s in catalog.resolved"
       :key="s.id"
-      class="rounded-md border border-slate-800 bg-slate-900/60 p-3"
+      class="rounded-md border border-default bg-default/60 p-3"
     >
       <div class="flex items-start gap-2">
-        <UIcon name="i-lucide-boxes" class="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
+        <UIcon name="i-lucide-boxes" class="mt-0.5 h-4 w-4 shrink-0 text-app-info-400" />
         <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-medium text-slate-100">
+          <p class="truncate text-sm font-medium text-app-100">
             {{ s.name }}
-            <code class="ms-1 text-[11px] text-slate-500">{{ s.id }}</code>
+            <code class="ms-1 text-2xs text-dimmed">{{ s.id }}</code>
           </p>
-          <p class="text-xs text-slate-400">{{ s.summary }}</p>
+          <p class="text-xs text-muted">{{ s.summary }}</p>
           <div v-if="s.capabilities.length" class="mt-1 flex flex-wrap gap-1">
             <UBadge v-for="c in s.capabilities" :key="c" size="xs" variant="subtle" color="neutral">
               {{ c }}
@@ -104,6 +106,7 @@ async function suppress(serviceId: string) {
 
           <div class="mt-2 flex items-center gap-2">
             <UButton
+              color="neutral"
               v-if="s.contracts.length"
               size="xs"
               variant="ghost"
@@ -122,13 +125,13 @@ async function suppress(serviceId: string) {
             <div
               v-for="doc in catalog.contractBodies[s.id] ?? []"
               :key="doc.contractId"
-              class="rounded-md border border-slate-800 bg-slate-950/60 p-2"
+              class="rounded-md border border-default bg-app-950/60 p-2"
             >
-              <p class="mb-1 text-[11px] text-slate-400">
+              <p class="mb-1 text-2xs text-muted">
                 {{ doc.title }}
-                <span v-if="doc.path" class="ms-1 font-mono text-slate-600">{{ doc.path }}</span>
+                <span v-if="doc.path" class="ms-1 font-mono text-app-600">{{ doc.path }}</span>
               </p>
-              <pre class="max-h-64 overflow-auto text-[11px] text-slate-300">{{ doc.body }}</pre>
+              <pre class="max-h-64 overflow-auto text-2xs text-toned">{{ doc.body }}</pre>
             </div>
           </div>
         </div>
@@ -139,13 +142,14 @@ async function suppress(serviceId: string) {
           <!-- Only an INHERITED entry can be suppressed — an account service or one the
                deployment registered in code; the board's own row is managed in the registry tab,
                where deleting it is the honest action. -->
-          <UButton
+          <IconButton
+            color="neutral"
             v-if="s.tier !== 'workspace'"
             icon="i-lucide-eye-off"
             size="xs"
             variant="ghost"
             :loading="rowBusy(`suppress:${s.id}`)"
-            :title="t('foundational.catalog.suppress')"
+            :label="t('foundational.catalog.suppress')"
             :data-testid="`foundational-suppress-${s.id}`"
             @click="suppress(s.id)"
           />
@@ -153,8 +157,11 @@ async function suppress(serviceId: string) {
       </div>
     </div>
 
-    <p v-if="!catalog.resolved.length" class="text-sm text-slate-500">
-      {{ t('foundational.catalog.empty') }}
-    </p>
+    <EmptyState
+      v-if="!catalog.resolved.length"
+      compact
+      icon="i-lucide-package"
+      :title="t('foundational.catalog.empty')"
+    />
   </div>
 </template>

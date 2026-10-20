@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { AuditEventWire } from '@cat-factory/contracts'
 import { actorLabel, describeEvent } from './AccountAuditLog.logic'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // The account audit log: who did what, when, for the privileged actions an account admin is
 // answerable for. Read-only by construction — the store exposes no mutation and the backend has
@@ -85,11 +86,11 @@ function timestamp(at: number): string {
 </script>
 
 <template>
-  <section class="rounded-md border border-slate-800 bg-slate-800/40 p-4">
+  <section class="rounded-md border border-default bg-elevated/40 p-4">
     <div class="mb-3 flex items-start justify-between gap-3">
       <div>
-        <h3 class="font-semibold text-white">{{ t('layout.auditLog.title') }}</h3>
-        <p class="mt-1 text-slate-400">{{ t('layout.auditLog.description') }}</p>
+        <h3 class="font-semibold text-highlighted">{{ t('layout.auditLog.title') }}</h3>
+        <p class="mt-1 text-muted">{{ t('layout.auditLog.description') }}</p>
       </div>
       <UButton
         size="xs"
@@ -104,26 +105,33 @@ function timestamp(at: number): string {
     </div>
 
     <!-- A failed load is NOT an empty log; it says so and offers the retry. -->
-    <p v-if="loadError" class="text-red-400" data-testid="audit-log-error">
+    <p v-if="loadError" class="text-app-error-400" data-testid="audit-log-error">
       {{ t('layout.auditLog.errors.load') }}
-      <span class="text-slate-400">{{ loadError }}</span>
+      <span class="text-muted">{{ loadError }}</span>
     </p>
 
-    <p v-else-if="events.length === 0 && !loading" class="text-slate-400">
-      {{ t('layout.auditLog.empty') }}
-    </p>
+    <div v-else-if="events.length === 0 && loading" class="space-y-2">
+      <USkeleton v-for="i in 3" :key="i" class="h-14 w-full" />
+    </div>
+
+    <EmptyState
+      v-else-if="events.length === 0"
+      compact
+      icon="i-lucide-scroll-text"
+      :title="t('layout.auditLog.empty')"
+    />
 
     <ol v-else class="space-y-2" data-testid="audit-log-list">
       <li
         v-for="event in events"
         :key="event.id"
-        class="rounded border border-slate-800 bg-slate-900/40 px-3 py-2"
+        class="rounded-sm border border-default bg-default/40 px-3 py-2"
       >
         <div class="flex flex-wrap items-baseline gap-x-2">
-          <span class="font-medium text-white">{{ actor(event) }}</span>
-          <span class="text-slate-300">{{ describe(event) }}</span>
+          <span class="font-medium text-highlighted">{{ actor(event) }}</span>
+          <span class="text-toned">{{ describe(event) }}</span>
         </div>
-        <div class="mt-1 text-xs text-slate-500">{{ timestamp(event.at) }}</div>
+        <div class="mt-1 text-xs text-dimmed">{{ timestamp(event.at) }}</div>
       </li>
     </ol>
 

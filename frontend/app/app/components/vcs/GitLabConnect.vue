@@ -15,7 +15,7 @@ import { vcsTokenCreateUrl } from '~/utils/vcs'
 
 const { t } = useI18n()
 const github = useGitHubStore()
-const toast = useToast()
+const actionToast = useActionToast()
 
 const pat = ref('')
 const connecting = ref(false)
@@ -37,11 +37,7 @@ async function connect() {
   try {
     await github.connectGitLab(token)
     pat.value = ''
-    toast.add({
-      title: t('vcs.connect.gitlab.toast.connected'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('vcs.connect.gitlab.toast.connected')
   } catch (e) {
     error.value =
       apiErrorEnvelope(e)?.message ??
@@ -54,7 +50,7 @@ async function connect() {
 
 <template>
   <section class="space-y-3">
-    <p class="text-sm text-slate-400">{{ t('vcs.connect.gitlab.intro') }}</p>
+    <p class="text-sm text-muted">{{ t('vcs.connect.gitlab.intro') }}</p>
 
     <UFormField :label="t('vcs.connect.gitlab.tokenLabel')" :hint="t('vcs.connect.gitlab.scope')">
       <SecretInput
@@ -67,18 +63,17 @@ async function connect() {
       />
     </UFormField>
 
-    <p class="text-[11px] text-slate-500">
-      <ULink :to="tokenUrl" target="_blank" class="text-indigo-400 hover:underline">
+    <p class="text-2xs text-dimmed">
+      <ULink :to="tokenUrl" target="_blank" class="text-primary hover:underline">
         {{ t('vcs.connect.gitlab.createToken') }}
       </ULink>
     </p>
 
-    <p v-if="error" class="text-sm text-rose-400" data-testid="gitlab-connect-error">
+    <p v-if="error" class="text-sm text-app-error-400" data-testid="gitlab-connect-error">
       {{ error }}
     </p>
 
     <UButton
-      color="primary"
       icon="i-lucide-gitlab"
       :loading="connecting"
       :disabled="!pat.trim()"

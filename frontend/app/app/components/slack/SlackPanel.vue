@@ -16,10 +16,12 @@ import {
 } from '~/utils/slackMemberMapping'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 const slack = useSlackStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirm } = useConfirm()
@@ -55,6 +57,8 @@ const ROLE_OPTIONS = computed<{ label: string; value: SlackMemberRole }[]>(() =>
 ])
 
 // Local editable copies, synced from the store on load.
+const channelSuggestions = computed(() => slack.channels.map((ch) => `#${ch.name}`))
+
 const routes = reactive<Record<NotificationType, SlackRoute>>({
   merge_review: { enabled: false, channel: '' },
   pipeline_complete: { enabled: false, channel: '' },
@@ -131,7 +135,7 @@ async function connectWithToken() {
   try {
     await slack.connectWithToken(tokenInput.value.trim())
     tokenInput.value = ''
-    toast.add({ title: t('slack.toast.connected'), icon: 'i-lucide-check', color: 'success' })
+    actionToast.success('slack.toast.connected')
   } catch (e) {
     present(e, 'slack.error.connect')
   }
@@ -160,7 +164,7 @@ async function saveRouting() {
       routes: { ...routes },
       mentionsEnabled: mentionsEnabled.value,
     })
-    toast.add({ title: t('slack.toast.routingSaved'), icon: 'i-lucide-check', color: 'success' })
+    actionToast.success('slack.toast.routingSaved')
   } catch (e) {
     present(e, 'slack.error.saveRouting')
   } finally {
@@ -179,11 +183,8 @@ async function saveMapping() {
   // dropped on save (UX-23) — block instead so the user doesn't lose the entry. A
   // fully-empty row is just an unused slot and is ignored.
   if (hasHalfFilledRow(mapping.value)) {
-    toast.add({
-      title: t('slack.members.incompleteTitle'),
+    actionToast.error('slack.members.incompleteTitle', {
       description: t('slack.members.incompleteBody'),
-      icon: 'i-lucide-triangle-alert',
-      color: 'warning',
     })
     return
   }
@@ -192,7 +193,7 @@ async function saveMapping() {
     const entries = toMemberEntries(mapping.value)
     await slack.updateMemberMapping(entries)
     mapping.value = slack.memberMapping.map((e) => toMemberRow(e, nextUid()))
-    toast.add({ title: t('slack.toast.mapSaved'), icon: 'i-lucide-check', color: 'success' })
+    actionToast.success('slack.toast.mapSaved')
   } catch (e) {
     present(e, 'slack.error.saveMap')
   } finally {
@@ -202,21 +203,20 @@ async function saveMapping() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('slack.panel.title')" :ui="{ content: 'max-w-2xl' }">
+  <AppModal size="form" v-model:open="open" :title="t('slack.panel.title')">
     <template #title>
       <IntegrationBackTitle :title="t('slack.panel.title')" @back="back" />
     </template>
     <template #body>
       <div class="space-y-5">
-        <p class="text-xs text-slate-400">
+        <p class="text-xs text-muted">
           {{ t('slack.panel.intro') }}
         </p>
 
         <!-- not connected: connect UI -->
-        <div v-if="!slack.connected" class="space-y-3 rounded-lg border border-slate-700 p-3">
+        <div v-if="!slack.connected" class="space-y-3 rounded-lg border border-muted p-3">
           <UButton
             v-if="slack.oauthEnabled"
-            color="primary"
             icon="i-lucide-slack"
             :loading="connectingOAuth"
             @click="connectViaOAuth"
@@ -224,13 +224,12 @@ async function saveMapping() {
             {{ t('slack.connect.addToSlack') }}
           </UButton>
           <div class="space-y-1">
-            <span class="block text-[10px] uppercase tracking-wide text-slate-500">
+            <SectionLabel as="span" class="block">
               {{ t('slack.connect.orPasteToken') }}
-            </span>
+            </SectionLabel>
             <div class="flex gap-2">
               <SecretInput v-model="tokenInput" size="sm" class="flex-1" placeholder="xoxb-…" />
               <UButton
-                color="primary"
                 variant="soft"
                 size="sm"
                 :loading="slack.connecting"
@@ -245,11 +244,9 @@ async function saveMapping() {
 
         <!-- connected -->
         <template v-else>
-          <div
-            class="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/40 p-3"
-          >
-            <UIcon name="i-lucide-slack" class="text-emerald-400" />
-            <span class="flex-1 text-sm text-slate-200">
+          <div class="flex items-center gap-2 rounded-lg border border-muted bg-elevated/40 p-3">
+            <UIcon name="i-lucide-slack" class="text-app-success-400" />
+            <span class="flex-1 text-sm text-default">
               <i18n-t keypath="slack.connected.label" tag="span">
                 <template #team>
                   <span class="font-semibold">{{ slack.connection?.teamName }}</span>
@@ -258,7 +255,7 @@ async function saveMapping() {
             </span>
             <UButton
               color="error"
-              variant="ghost"
+              variant="soft"
               size="xs"
               icon="i-lucide-unplug"
               @click="disconnect"
@@ -269,37 +266,38 @@ async function saveMapping() {
 
           <!-- routing -->
           <div class="space-y-3">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <SectionLabel as="p">
               {{ t('slack.routing.heading') }}
-            </p>
+            </SectionLabel>
             <div
               v-for="row in ROUTABLE"
               :key="row.type"
-              class="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/40 p-2"
+              class="flex items-center gap-3 rounded-lg border border-muted bg-elevated/40 p-2"
             >
               <USwitch v-model="routes[row.type]!.enabled" size="sm" />
-              <span class="w-32 text-sm text-slate-300">{{ row.label }}</span>
-              <UInput
+              <span class="w-32 text-sm text-toned">{{ row.label }}</span>
+              <!-- The workspace's channels are suggestions, not a closed list: a route may name
+                   a channel the bot cannot enumerate yet. `mode="autocomplete"` is what makes the
+                   typed name the value: the DEFAULT combobox mode writes its model only when
+                   something is SELECTED, so a channel typed and then saved would be dropped. -->
+              <UInputMenu
                 v-model="routes[row.type]!.channel"
+                mode="autocomplete"
+                :items="channelSuggestions"
                 size="sm"
                 class="flex-1"
                 :placeholder="t('slack.routing.channelPlaceholder')"
                 :disabled="!routes[row.type]!.enabled"
-                list="slack-channels"
               />
             </div>
-            <datalist id="slack-channels">
-              <option v-for="ch in slack.channels" :key="ch.id" :value="`#${ch.name}`" />
-            </datalist>
 
             <label class="flex items-center gap-2">
               <USwitch v-model="mentionsEnabled" size="sm" />
-              <span class="text-sm text-slate-300">{{ t('slack.routing.mentionMembers') }}</span>
+              <span class="text-sm text-toned">{{ t('slack.routing.mentionMembers') }}</span>
             </label>
 
             <div class="flex justify-end">
               <UButton
-                color="primary"
                 variant="soft"
                 size="xs"
                 icon="i-lucide-save"
@@ -313,15 +311,13 @@ async function saveMapping() {
 
           <!-- member mapping -->
           <div v-if="mentionsEnabled" class="space-y-2">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <SectionLabel as="p">
               {{ t('slack.members.heading') }}
-            </p>
-            <p class="text-[11px] leading-snug text-slate-500">
+            </SectionLabel>
+            <p class="text-2xs leading-snug text-dimmed">
               <i18n-t keypath="slack.members.hint" tag="span">
                 <template #product>
-                  <span class="font-medium text-slate-400">{{
-                    t('slack.members.productLabel')
-                  }}</span>
+                  <span class="font-medium text-muted">{{ t('slack.members.productLabel') }}</span>
                 </template>
               </i18n-t>
             </p>
@@ -364,7 +360,6 @@ async function saveMapping() {
                 {{ t('slack.members.add') }}
               </UButton>
               <UButton
-                color="primary"
                 variant="soft"
                 size="xs"
                 icon="i-lucide-save"
@@ -378,5 +373,5 @@ async function saveMapping() {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

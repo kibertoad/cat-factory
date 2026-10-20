@@ -3,7 +3,7 @@
 // Shared because two specs need a real card in the Durable Object and neither is about the
 // delivery path: `gatekeeper.spec.ts` drives the inbox over `/rpc`, and `os.spec.ts` reads the
 // same cards through a governed session. A second copy of the MAC would be a second thing to keep
-// in step with `webhook/signature.ts`, and the copy that drifted would go on passing.
+// in step with `@cat-factory/webhooks`, and the copy that drifted would go on passing.
 
 import { SELF } from 'cloudflare:test'
 

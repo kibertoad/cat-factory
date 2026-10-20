@@ -1,5 +1,5 @@
 // Prompt text for the brainstorm (structured-dialogue) flow — the requirements-review
-// iterative loop applied to a GENERATIVE subject (see CLAUDE.md). These are consumed
+// iterative loop applied to a GENERATIVE subject (see AGENTS.md). These are consumed
 // directly by `BrainstormService` for the inline option-generating / rework LLM calls,
 // and are entered into the versioned prompt registry (see ../kinds/versions.ts) so the
 // benchmark harness can pin them. There are two stages, served by one engine:

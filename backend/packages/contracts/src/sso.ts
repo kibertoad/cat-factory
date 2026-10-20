@@ -11,7 +11,7 @@ import * as v from 'valibot'
 //
 // A failed SSO round-trip lands the browser back on the SPA with a machine-readable reason in
 // the URL fragment rather than a JSON envelope the user would have to read raw. The backend
-// does not localize prose (CLAUDE.md's i18n rule), so the vocabulary is closed here and the SPA
+// does not localize prose (AGENTS.md's i18n rule), so the vocabulary is closed here and the SPA
 // maps each member to translated copy through an exhaustive `Record`.
 // ---------------------------------------------------------------------------
 

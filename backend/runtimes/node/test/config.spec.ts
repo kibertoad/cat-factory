@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { loadNodeConfig } from '../src/config.js'
 
 // `loadNodeConfig` is the Node analogue of the Worker's `loadConfig`; the two MUST
-// derive the same AppConfig shape from env (see CLAUDE.md "keep the runtimes
+// derive the same AppConfig shape from env (see AGENTS.md "keep the runtimes
 // symmetric"). This file guards the privileged-App tier (ADR 0005): Node used to omit
 // `github.privilegedApp` entirely, which silently disabled repo provisioning on the
 // Node + local facades. Mirrors the Worker's `loadGitHubConfig` semantics.

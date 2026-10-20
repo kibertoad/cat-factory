@@ -212,8 +212,9 @@ platform reads a declaration rather than about writing one:
   the server's bullet, competing with the rest of the prompt for attention, so phrase it as a
   decision rule ("look up X here before doing Y"). An agent handed a tool it was not told the
   purpose of tends not to use it.
-- **`harnesses` NARROWS and can never widen.** Pi has no MCP client regardless of what a definition
-  says, so the field's only effect is to exclude.
+- **`harnesses` NARROWS and can never widen.** A CLI's transports are fixed by kernel's
+  `MCP_HARNESS_TRANSPORTS` (Codex reaches stdio only) regardless of what a definition says, so the
+  field's only effect is to exclude.
 - **`oauth` carries two fields the website's walkthrough does not need.** `resource` is the RFC 8707
   resource indicator, defaulting to the server's own url, which is right whenever the server is its
   own resource; `header` / `headerTemplate` default to `Authorization` / `Bearer {value}`, and a

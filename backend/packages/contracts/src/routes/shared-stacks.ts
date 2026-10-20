@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   createSharedStackSchema,
@@ -54,7 +54,7 @@ export const deleteSharedStackContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: stackIdParams,
   pathResolver: ({ stackId }) => `/shared-stacks/${stackId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 /**

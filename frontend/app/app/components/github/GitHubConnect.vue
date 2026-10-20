@@ -6,9 +6,12 @@
 // successful connect the github store flips `connected`, which the host surfaces
 // react to. Shared by the GitHub panel and the bootstrap modal so the connect
 // flow lives in one place.
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+
 const { t } = useI18n()
 const github = useGitHubStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 const installing = ref(false)
@@ -46,11 +49,7 @@ async function connect(id: number, onDone?: () => void) {
   try {
     await github.connect(id)
     onDone?.()
-    toast.add({
-      title: t('github.connect.toast.connected'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('github.connect.toast.connected')
   } catch (e) {
     present(e, 'github.connect.errors.connect')
   } finally {
@@ -73,9 +72,9 @@ async function connectManually() {
     <!-- discovered installations: pick one the App is already on -->
     <section class="space-y-2">
       <div class="flex items-center justify-between">
-        <span class="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <SectionLabel as="span">
           {{ t('github.connect.yourInstallations') }}
-        </span>
+        </SectionLabel>
         <UButton
           size="xs"
           color="neutral"
@@ -88,25 +87,21 @@ async function connectManually() {
         </UButton>
       </div>
 
-      <div
-        v-if="github.loadingInstallations && !github.installations.length"
-        class="flex items-center gap-2 py-3 text-sm text-slate-400"
-      >
-        <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
-        {{ t('github.connect.lookingForInstallations') }}
+      <div v-if="github.loadingInstallations && !github.installations.length" class="space-y-2">
+        <USkeleton v-for="i in 2" :key="i" class="h-12 w-full" />
       </div>
 
-      <p
+      <EmptyState
         v-else-if="!github.installations.length"
-        class="rounded-md border border-dashed border-slate-800 px-3 py-3 text-sm text-slate-400"
-      >
-        {{ t('github.connect.noInstallations') }}
-      </p>
+        compact
+        icon="i-lucide-github"
+        :title="t('github.connect.noInstallations')"
+      />
 
       <div
         v-for="inst in github.installations"
         :key="inst.installationId"
-        class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2"
+        class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-3 py-2"
       >
         <div class="flex min-w-0 items-center gap-2">
           <UAvatar
@@ -115,10 +110,10 @@ async function connectManually() {
             size="2xs"
             :alt="inst.accountLogin"
           />
-          <UIcon v-else name="i-lucide-github" class="h-4 w-4 text-slate-400" />
+          <UIcon v-else name="i-lucide-github" class="h-4 w-4 text-muted" />
           <div class="min-w-0">
-            <div class="truncate text-sm text-slate-200">{{ inst.accountLogin }}</div>
-            <div class="text-[11px] text-slate-500">
+            <div class="truncate text-sm text-default">{{ inst.accountLogin }}</div>
+            <div class="text-2xs text-dimmed">
               {{
                 t('github.connect.installationMeta', {
                   targetType: inst.targetType,
@@ -149,7 +144,6 @@ async function connectManually() {
         <UButton
           v-else
           size="xs"
-          color="primary"
           variant="subtle"
           icon="i-lucide-plug"
           :loading="connectingId === inst.installationId"
@@ -162,7 +156,7 @@ async function connectManually() {
     </section>
 
     <USeparator :label="t('github.connect.or')" />
-    <UButton color="primary" icon="i-lucide-github" :loading="installing" @click="install">
+    <UButton icon="i-lucide-github" :loading="installing" @click="install">
       {{ t('github.connect.installApp') }}
     </UButton>
 

@@ -35,6 +35,8 @@ import type { ModuleRegistry } from './module-registry.js'
 import type { BoardService } from '../modules/board/BoardService.js'
 import type { WorkspaceService } from '@cat-factory/workspaces'
 import { createAssistantModule } from './assistant-module.js'
+import { createGuidedReviewModule } from './guided-review-module.js'
+import { createPrAssessmentModule } from './pr-assessment-module.js'
 import type { createFragmentLibraryModule } from '../container-content-libraries.js'
 import type { CoreDependencies, DocumentsModule, NotificationsModule } from '../container.js'
 import type { resolveCoreRuntime } from './runtime.js'
@@ -178,6 +180,11 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
   // against, so an action this deployment cannot perform must not be in it.
   modules.build('assistant', () =>
     createAssistantModule({ dependencies, workspaceService, boardService, tasks, spend }),
+  )
+
+  modules.build('guidedReview', () => createGuidedReviewModule({ dependencies, spend }))
+  modules.build('prAssessment', () =>
+    createPrAssessmentModule({ dependencies, spend, riskPolicies: modules.get('riskPolicies') }),
   )
 
   return {

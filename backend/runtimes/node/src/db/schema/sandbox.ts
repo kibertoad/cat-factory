@@ -10,7 +10,7 @@ import {
 
 // The SANDBOX surface's Drizzle tables, split out of `db/schema.ts` along the isolation boundary
 // the architecture already draws: `@cat-factory/sandbox` is "deliberately isolated from the core
-// product so it can be extracted" (CLAUDE.md), and its tables live in their own Postgres schema
+// product so it can be extracted" (AGENTS.md), and its tables live in their own Postgres schema
 // (the analogue of the Worker's separate `SANDBOX_DB` D1 database) rather than beside the core
 // ones. Keeping them in a sibling module — re-exported from `db/schema.ts`, so every importer and
 // drizzle-kit see exactly the same surface — makes that separation visible in the file layout too,
@@ -21,7 +21,7 @@ import {
 // the tables are unprefixed (`sandbox.prompt_versions`, …) — the schema is the namespace.
 // Same connection/migrator as the main schema; the boot migrator creates the schema.
 // Shipped baselines are NOT stored (read live from `@cat-factory/agents`); only candidate
-// prompt versions are. JSON-shaped fields are text JSON. See backend/CLAUDE.md
+// prompt versions are. JSON-shaped fields are text JSON. See backend/README.md
 // "Keep the runtimes symmetric".
 export const sandboxSchema = pgSchema('sandbox')
 

@@ -1,7 +1,6 @@
-import type { ReviewTargetReason } from '@cat-factory/contracts'
+import { resolvePrNumber, type ReviewTargetReason } from '@cat-factory/contracts'
 import type { Block, Logger, ResolveRunRepoContext } from '@cat-factory/kernel'
 import { runBestEffort, ValidationError } from '@cat-factory/kernel'
-import { resolvePrNumber } from '@cat-factory/agents'
 
 // ---------------------------------------------------------------------------
 // The `review` task's TARGET: the existing pull request the read-only `pr-reviewer` is pointed
@@ -53,7 +52,10 @@ function refuse(
 }
 
 /** Case-insensitive repo-identity compare (hosts differ in case-folding; owners/names don't). */
-function sameRepo(a: { owner: string; repo: string }, b: { owner: string; repo: string }): boolean {
+export function sameRepo(
+  a: { owner: string; repo: string },
+  b: { owner: string; repo: string },
+): boolean {
   return (
     a.owner.toLowerCase() === b.owner.toLowerCase() && a.repo.toLowerCase() === b.repo.toLowerCase()
   )

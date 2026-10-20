@@ -15,6 +15,8 @@ import { useForkDecisionStore } from '~/stores/forkDecision'
 import type { ForkChatMessage, ForkDecisionStepState, ForkOption } from '~/types/execution'
 import { FORK_DECISION_META } from '~/utils/catalog'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -64,6 +66,12 @@ const canChat = computed(() => awaiting.value && !chatBudgetSpent.value && !fork
 
 // The human's selection: a proposed fork id, or the sentinel 'custom' for the free-text path.
 const selected = ref<string | null>(null)
+// The proposed forks and "my own approach" are one choice, so they are one item list. `fork` is
+// null on the custom entry, which is what the label and description slots branch on.
+const forkItems = computed(() => [
+  ...forks.value.map((fork) => ({ value: fork.id, label: fork.title, fork })),
+  { value: 'custom', label: t('forkDecision.custom.title'), fork: null as ForkOption | null },
+])
 const customText = ref('')
 const note = ref('')
 const chatInput = ref('')
@@ -151,7 +159,7 @@ const { requestClose } = useUnsavedGuard({
   <ResultWindowShell
     :open="open"
     :icon="FORK_DECISION_META.icon"
-    icon-class="bg-violet-500/15 text-violet-300"
+    icon-class="bg-app-secondary-500/15 text-app-secondary-300"
     :title="headerTitle"
     :subtitle="t('forkDecision.subtitle')"
     width="3xl"
@@ -162,11 +170,11 @@ const { requestClose } = useUnsavedGuard({
       <!-- Proposing: the read-only proposer is still working. -->
       <div
         v-if="status === 'proposing'"
-        class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
+        class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-muted"
       >
-        <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+        <Spinner class="h-8 w-8 opacity-60" />
         <p class="text-sm">{{ t('forkDecision.proposing.title') }}</p>
-        <p class="max-w-sm text-[11px] text-slate-500">
+        <p class="max-w-sm text-2xs text-dimmed">
           {{ t('forkDecision.proposing.hint') }}
         </p>
       </div>
@@ -174,12 +182,12 @@ const { requestClose } = useUnsavedGuard({
       <!-- A single path (no materially different alternatives): a read-only record. -->
       <div
         v-else-if="status === 'single_path'"
-        class="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-slate-300"
+        class="rounded-xl border border-default bg-default/60 px-4 py-3 text-toned"
       >
-        <p class="text-[13px] font-medium text-slate-100">
+        <p class="text-sm font-medium text-app-100">
           {{ t('forkDecision.singlePath.title') }}
         </p>
-        <p v-if="state?.singlePathReason" class="mt-1 text-[12px]">
+        <p v-if="state?.singlePathReason" class="mt-1 text-xs">
           {{ state.singlePathReason }}
         </p>
       </div>
@@ -187,18 +195,18 @@ const { requestClose } = useUnsavedGuard({
       <!-- Chosen: a read-only record of what was decided. -->
       <div
         v-else-if="status === 'chosen'"
-        class="rounded-xl border border-violet-500/40 bg-slate-900/60 px-4 py-3 text-slate-300"
+        class="rounded-xl border border-app-secondary-500/40 bg-default/60 px-4 py-3 text-toned"
       >
-        <p class="text-[13px] font-medium text-violet-200">
+        <p class="text-sm font-medium text-app-secondary-200">
           {{ t('forkDecision.chosen.title') }}
         </p>
-        <p v-if="state?.chosen?.custom" class="mt-1 whitespace-pre-wrap text-[12px]">
+        <p v-if="state?.chosen?.custom" class="mt-1 whitespace-pre-wrap text-xs">
           {{ state.chosen.custom }}
         </p>
-        <p v-else-if="state?.chosen?.forkId" class="mt-1 text-[12px]">
+        <p v-else-if="state?.chosen?.forkId" class="mt-1 text-xs">
           {{ forks.find((f) => f.id === state?.chosen?.forkId)?.title }}
         </p>
-        <p v-if="state?.chosen?.note" class="mt-1 text-[11px] text-slate-400">
+        <p v-if="state?.chosen?.note" class="mt-1 text-2xs text-muted">
           {{ t('forkDecision.chosen.note', { note: state.chosen.note }) }}
         </p>
       </div>
@@ -207,112 +215,90 @@ const { requestClose } = useUnsavedGuard({
       <div v-else-if="interactive" class="space-y-3">
         <p
           v-if="forkDecision.error"
-          class="rounded-md bg-rose-500/10 px-3 py-2 text-[12px] text-rose-300"
+          class="rounded-md bg-app-error-500/10 px-3 py-2 text-xs text-app-error-300"
         >
           {{ forkDecision.error }}
         </p>
 
-        <p
-          v-if="state?.seamSummary"
-          class="rounded-md bg-slate-800/50 px-3 py-2 text-[12px] text-slate-300"
-        >
-          <span class="text-slate-500">{{ t('forkDecision.seam') }}</span>
+        <p v-if="state?.seamSummary" class="rounded-md bg-elevated/50 px-3 py-2 text-xs text-toned">
+          <span class="text-dimmed">{{ t('forkDecision.seam') }}</span>
           {{ state.seamSummary }}
         </p>
 
-        <!-- Proposed fork cards -->
-        <article
-          v-for="fork in forks"
-          :key="fork.id"
-          data-testid="fork-option-card"
-          class="cursor-pointer rounded-xl border px-4 py-3 transition"
-          :class="
-            selected === fork.id
-              ? 'border-violet-500/70 bg-violet-500/5'
-              : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'
-          "
-          @click="selected = fork.id"
+        <!-- The proposed forks and "my own approach" are ONE choice, so they are one radio
+             group rather than a set of cards each holding their own radio. `variant="card"`
+             is the shape these already had; the rich body rides the description slot. -->
+        <URadioGroup
+          :model-value="selected ?? undefined"
+          color="secondary"
+          variant="card"
+          :items="forkItems"
+          data-testid="fork-options"
+          :ui="{ item: 'px-4 py-3' }"
+          @update:model-value="selected = String($event)"
         >
-          <div class="flex items-start gap-2">
-            <input
-              type="radio"
-              class="mt-1 accent-violet-500"
-              :checked="selected === fork.id"
-              @change="selected = fork.id"
-            />
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <h3 class="min-w-0 flex-1 text-[13px] font-medium text-slate-100">
-                  {{ fork.title }}
-                </h3>
-                <UBadge v-if="fork.recommended" color="primary" variant="subtle" size="sm">
-                  {{ t('forkDecision.recommended') }}
-                </UBadge>
-              </div>
-              <p v-if="fork.summary" class="mt-0.5 text-[12px] text-slate-400">
-                {{ fork.summary }}
-              </p>
-              <p class="mt-1.5 whitespace-pre-wrap text-[12px] text-slate-300">
-                {{ fork.approach }}
-              </p>
-              <ul v-if="fork.tradeoffs.length" class="mt-1.5 space-y-0.5">
-                <li
-                  v-for="(tr, i) in fork.tradeoffs"
+          <template #label="{ item }">
+            <span class="flex items-center gap-2">
+              <span class="min-w-0 flex-1 text-sm font-medium text-app-100">{{ item.label }}</span>
+              <UBadge v-if="item.fork?.recommended" variant="subtle" size="sm">
+                {{ t('forkDecision.recommended') }}
+              </UBadge>
+            </span>
+          </template>
+          <template #description="{ item }">
+            <template v-if="item.fork">
+              <span v-if="item.fork.summary" class="block text-xs text-muted">
+                {{ item.fork.summary }}
+              </span>
+              <span class="mt-1.5 block whitespace-pre-wrap text-xs text-toned">
+                {{ item.fork.approach }}
+              </span>
+              <span v-if="item.fork.tradeoffs.length" class="mt-1.5 block space-y-0.5">
+                <span
+                  v-for="(tr, i) in item.fork.tradeoffs"
                   :key="i"
-                  class="flex gap-1.5 text-[11px] text-slate-400"
+                  class="flex gap-1.5 text-2xs text-muted"
                 >
-                  <span class="text-slate-600">•</span>{{ tr }}
-                </li>
-              </ul>
-              <p v-if="fork.riskNotes" class="mt-1.5 text-[11px] text-amber-300/90">
-                <span class="text-amber-500/70">{{ t('forkDecision.riskNotes') }}</span>
-                {{ fork.riskNotes }}
-              </p>
-            </div>
-          </div>
-        </article>
-
-        <!-- Custom approach -->
-        <article
-          class="rounded-xl border px-4 py-3 transition"
-          :class="
-            selected === 'custom'
-              ? 'border-violet-500/70 bg-violet-500/5'
-              : 'border-slate-800 bg-slate-900/60'
-          "
-        >
-          <label class="flex cursor-pointer items-center gap-2" @click="selected = 'custom'">
-            <input type="radio" class="accent-violet-500" :checked="selected === 'custom'" />
-            <span class="text-[13px] font-medium text-slate-100">{{
-              t('forkDecision.custom.title')
-            }}</span>
-          </label>
-          <textarea
-            v-model="customText"
-            data-testid="fork-custom-input"
-            rows="3"
-            :placeholder="t('forkDecision.custom.placeholder')"
-            class="mt-2 w-full resize-y rounded-md border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-[12px] text-slate-100 placeholder:text-slate-600 focus:border-violet-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60"
-            @focus="selected = 'custom'"
-          />
-        </article>
+                  <span class="text-app-600">•</span>{{ tr }}
+                </span>
+              </span>
+              <span
+                v-if="item.fork.riskNotes"
+                class="mt-1.5 block text-2xs text-app-warning-300/90"
+              >
+                <span class="text-app-warning-500/70">{{ t('forkDecision.riskNotes') }}</span>
+                {{ item.fork.riskNotes }}
+              </span>
+            </template>
+            <UTextarea
+              v-else
+              v-model="customText"
+              data-testid="fork-custom-input"
+              :rows="3"
+              size="xs"
+              class="mt-2 w-full"
+              :ui="{ base: 'resize-y' }"
+              :placeholder="t('forkDecision.custom.placeholder')"
+              @focus="selected = 'custom'"
+            />
+          </template>
+        </URadioGroup>
 
         <!-- Optional steering note -->
         <div>
-          <label class="mb-1 block text-[11px] text-slate-400">{{
-            t('forkDecision.noteLabel')
-          }}</label>
-          <input
-            v-model="note"
-            type="text"
-            :placeholder="t('forkDecision.notePlaceholder')"
-            class="w-full rounded-md border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-[12px] text-slate-100 placeholder:text-slate-600 focus:border-violet-500 focus:outline-none"
-          />
+          <UFormField size="xs" :label="t('forkDecision.noteLabel')">
+            <UInput
+              v-model="note"
+              size="xs"
+              class="w-full"
+              :placeholder="t('forkDecision.notePlaceholder')"
+            />
+          </UFormField>
         </div>
 
         <!-- Grounded chat: ask about the forks before deciding. -->
-        <section class="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
-          <p class="text-[11px] font-medium text-slate-400">
+        <section class="rounded-xl border border-default bg-default/40 px-4 py-3">
+          <p class="text-2xs font-medium text-muted">
             {{ t('forkDecision.chat.title') }}
           </p>
           <div v-if="chat.length || answering" class="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
@@ -324,11 +310,11 @@ const { requestClose } = useUnsavedGuard({
               :class="msg.role === 'human' ? 'justify-end' : 'justify-start'"
             >
               <p
-                class="max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-1.5 text-[12px]"
+                class="max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-1.5 text-xs"
                 :class="
                   msg.role === 'human'
-                    ? 'bg-violet-500/15 text-violet-100'
-                    : 'bg-slate-800/70 text-slate-200'
+                    ? 'bg-app-secondary-500/15 text-app-secondary-100'
+                    : 'bg-elevated/70 text-default'
                 "
               >
                 {{ msg.text }}
@@ -336,29 +322,31 @@ const { requestClose } = useUnsavedGuard({
             </div>
             <div v-if="answering" class="flex justify-start">
               <p
-                class="flex items-center gap-1.5 rounded-lg bg-slate-800/70 px-3 py-1.5 text-[12px] text-slate-400"
+                class="flex items-center gap-1.5 rounded-lg bg-elevated/70 px-3 py-1.5 text-xs text-muted"
               >
-                <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+                <Spinner class="h-3.5 w-3.5" />
                 {{ t('forkDecision.chat.thinking') }}
               </p>
             </div>
           </div>
-          <p v-else class="mt-1 text-[11px] text-slate-500">
+          <p v-else class="mt-1 text-2xs text-dimmed">
             {{ t('forkDecision.chat.hint') }}
           </p>
           <div class="mt-2 flex items-end gap-2">
-            <textarea
+            <UTextarea
               v-model="chatInput"
               data-testid="fork-chat-input"
-              rows="2"
+              :rows="2"
               :disabled="!canChat"
               :placeholder="
                 chatBudgetSpent
                   ? t('forkDecision.chat.budgetSpent')
                   : t('forkDecision.chat.placeholder')
               "
-              class="min-h-0 flex-1 resize-y rounded-md border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-[12px] text-slate-100 placeholder:text-slate-600 focus:border-violet-500 focus:outline-none disabled:opacity-50"
               @keydown.enter.exact.prevent="onSend"
+              size="xs"
+              class="min-h-0 flex-1"
+              :ui="{ base: 'resize-y' }"
             />
             <UButton
               data-testid="fork-chat-send"
@@ -378,25 +366,23 @@ const { requestClose } = useUnsavedGuard({
       </div>
 
       <!-- Skipped / no state: nothing to decide. -->
-      <div
+      <EmptyState
         v-else
-        class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
-      >
-        <UIcon :name="FORK_DECISION_META.icon" class="h-8 w-8 opacity-40" />
-        <p class="text-sm">{{ t('forkDecision.empty.title') }}</p>
-      </div>
+        class="h-full"
+        :icon="FORK_DECISION_META.icon"
+        :title="t('forkDecision.empty.title')"
+      />
     </div>
 
     <footer
       v-if="interactive"
-      class="flex items-center justify-end gap-2 border-t border-slate-800 px-5 py-3"
+      class="flex items-center justify-end gap-2 border-t border-default px-5 py-3"
     >
       <UButton color="neutral" variant="ghost" size="sm" @click="requestClose">
         {{ t('common.cancel') }}
       </UButton>
       <UButton
         data-testid="fork-option-choose"
-        color="primary"
         size="sm"
         icon="i-lucide-check"
         :loading="forkDecision.choosing"

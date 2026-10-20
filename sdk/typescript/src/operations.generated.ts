@@ -14,6 +14,8 @@ import type {
   ActPublicNotificationRequest,
   AddPublicTaskDependencyRequest,
   AddressPublicRunBugFishingFindingsRequest,
+  AskGuidedReview,
+  AssessPublicPullRequest,
   AttachPublicTaskDocumentRequest,
   ConnectPublicEnvironmentRequest,
   ConnectPublicEnvironmentResponse,
@@ -26,6 +28,17 @@ import type {
   DebugLlmCall,
   DebugRunOverview,
   DetachPublicTaskDocumentRequest,
+  DirectoryAccountMembershipPage,
+  DirectoryChangePage,
+  DirectoryReach,
+  DirectoryRepoPage,
+  DirectoryUserPage,
+  DirectoryWebhook,
+  DirectoryWebhookDelivery,
+  DirectoryWebhookList,
+  DirectoryWorkspaceMembershipPage,
+  DirectoryWorkspacePage,
+  EditGuidedReviewDraft,
   GetDebugLlmCallView,
   GetDebugLlmExportResponse,
   GetPublicMergeRecordResponse,
@@ -33,6 +46,11 @@ import type {
   GetPublicRunOutcomeResponse,
   GetPublicTrackerWritebackResponse,
   GetPublicVcsConnectionResponse,
+  GuidedReviewCommentDraft,
+  GuidedReviewExchange,
+  GuidedReviewPostResult,
+  GuidedReviewSessionView,
+  GuidedReviewThreadView,
   InvokePublicUseCaseRequest,
   InvokePublicUseCaseResponse,
   LinkPublicRepoRequest,
@@ -48,6 +66,7 @@ import type {
   ListPublicAvailableReposResponse,
   ListPublicEnvironmentConnectionsResponse,
   ListPublicEnvironmentManifestTypesResponse,
+  ListPublicGuidedReviewsMine,
   ListPublicJobsResponse,
   ListPublicKaizenEntriesAcknowledged,
   ListPublicMergeClassRollupsResponse,
@@ -64,6 +83,9 @@ import type {
   LlmCallOutcome,
   Notification,
   NotificationWebhook,
+  OpenGuidedReview,
+  OpenGuidedReviewThread,
+  PostGuidedReviewDrafts,
   PrVerificationReport,
   PublicAnswerFollowUp,
   PublicAnswerInterview,
@@ -72,6 +94,8 @@ import type {
   PublicChallengePrReviewFinding,
   PublicChooseFork,
   PublicDecisionList,
+  PublicDeployment,
+  PublicGuidedReviewList,
   PublicIdentity,
   PublicIncorporate,
   PublicJob,
@@ -84,6 +108,7 @@ import type {
   PublicNotificationWebhook,
   PublicNotificationWebhookList,
   PublicPipelineList,
+  PublicPrAssessment,
   PublicPromptFragmentList,
   PublicRejectStep,
   PublicReplyFinding,
@@ -107,7 +132,9 @@ import type {
   PublicTask,
   PublicTaskList,
   PublicUsage,
+  PutDirectoryWebhook,
   PutNotificationWebhook,
+  RequestGuidedReviewDrafts,
   RunStatus,
   StartPublicRepoBootstrapRequest,
   StartPublicRepoBootstrapResponse,
@@ -202,9 +229,54 @@ export type DebugListToolCallsQuery = {
   outcome?: ListDebugToolCallsOutcome
 }
 
+/** Query parameters for `client.directory.listAccountMemberships()`. */
+export type DirectoryListAccountMembershipsQuery = {
+  cursor?: string
+  limit?: number
+}
+
+/** Query parameters for `client.directory.listChanges()`. */
+export type DirectoryListChangesQuery = {
+  after?: number
+  limit?: number
+}
+
+/** Query parameters for `client.directory.listRepos()`. */
+export type DirectoryListReposQuery = {
+  cursor?: string
+  limit?: number
+}
+
+/** Query parameters for `client.directory.listUsers()`. */
+export type DirectoryListUsersQuery = {
+  cursor?: string
+  limit?: number
+}
+
+/** Query parameters for `client.directory.listWorkspaceMemberships()`. */
+export type DirectoryListWorkspaceMembershipsQuery = {
+  cursor?: string
+  limit?: number
+}
+
+/** Query parameters for `client.directory.listWorkspaces()`. */
+export type DirectoryListWorkspacesQuery = {
+  cursor?: string
+  limit?: number
+}
+
 /** Query parameters for `client.repos.listAvailable()`. */
 export type ReposListAvailableQuery = {
   q?: string
+}
+
+/** Query parameters for `client.guidedReviews.list()`. */
+export type GuidedReviewsListQuery = {
+  repoId?: string
+  prNumber?: number
+  mine?: ListPublicGuidedReviewsMine
+  limit?: number
+  cursor?: string
 }
 
 /** Query parameters for `client.jobs.list()`. */
@@ -1260,6 +1332,28 @@ export class MeResource {
   }
 }
 
+/** Where the deployment serves its web app, for sending a person to one of the app's deep links (the prefilled add-service screen, say). Any key may ask, with no workspace named. */
+export class DeploymentResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Describe the deployment
+   * Report where this deployment serves its web app (`appUrl`): `APP_BASE_URL` when the operator set one, otherwise the origin this API was reached on. An integration uses it to send a person to one of the app’s deep links, such as the prefilled add-service screen (`?addRepo=<owner>/<name>`). Account-level, so a key reaching several workspaces calls it without naming one. `read` scope.
+   * `GET /api/v1/deployment` — operation `getPublicDeployment`.
+   */
+  get(options: RequestOptions = {}): Promise<PublicDeployment> {
+    return this.#transport.request<PublicDeployment>({
+      method: 'GET',
+      path: `/api/v1/deployment`,
+      options,
+    })
+  }
+}
+
 /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates. */
 export class DecisionsResource {
   readonly #transport: Transport
@@ -2261,6 +2355,232 @@ export class MergeRecordsResource {
   }
 }
 
+/** The account's directory, for keeping an external copy in sync: workspaces, users, account and workspace memberships, and linked repositories as keyset-paged snapshots, plus the ordered change feed that brings a copy up to date. Everything here takes a `read` key; users and account memberships need one that reaches every workspace. */
+export class DirectoryResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Remove a directory webhook
+   * Stop pushing to an endpoint. Idempotent.
+   * `DELETE /api/v1/directory/webhooks/{webhookId}` — operation `deleteDirectoryWebhook`.
+   */
+  deleteWebhook(webhookId: string, options: RequestOptions = {}): Promise<void> {
+    return this.#transport.requestNoContent({
+      method: 'DELETE',
+      path: `/api/v1/directory/webhooks/${encodePathSegment(webhookId)}`,
+      options,
+    })
+  }
+
+  /**
+   * Read the key's directory reach
+   * The calling key’s account and the workspaces it reaches, `null` for every workspace in the account (later ones included). Account-scoped like the rest of the directory: no `x-cat-factory-workspace` header is read, so a key reaching several workspaces gets an answer where `GET /api/v1/me` asks it to name one. A mirror reads this to filter what a directory push may write, and to tell an account-wide key from one limited to some workspaces.
+   * `GET /api/v1/directory/reach` — operation `getDirectoryReach`.
+   */
+  getReach(options: RequestOptions = {}): Promise<DirectoryReach> {
+    return this.#transport.request<DirectoryReach>({
+      method: 'GET',
+      path: `/api/v1/directory/reach`,
+      options,
+    })
+  }
+
+  /**
+   * List the account's memberships
+   * A keyset-paged snapshot of the account’s memberships, each with the member’s account roles. Account-wide, so a key limited to some workspaces is refused with `403` and `reason: "account_scope_required"`.
+   * `GET /api/v1/directory/account-memberships` — operation `listDirectoryAccountMemberships`.
+   */
+  listAccountMemberships(query: DirectoryListAccountMembershipsQuery = {}, options: RequestOptions = {}): Promise<DirectoryAccountMembershipPage> {
+    return this.#transport.request<DirectoryAccountMembershipPage>({
+      method: 'GET',
+      path: `/api/v1/directory/account-memberships`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Every `items` across every page of `listAccountMemberships()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listAccountMembershipsAll(query: DirectoryListAccountMembershipsQuery = {}, options: RequestOptions = {}): AsyncGenerator<DirectoryAccountMembershipPage['items'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.listAccountMemberships({ ...query, cursor }, options)
+      for (const item of page.items) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
+
+  /**
+   * List directory changes
+   * The account’s directory changes after `after`, in `seq` order, each carrying the CURRENT state of the entity it names, or `null` once that entity no longer exists or is outside the key’s reach. Store `nextAfter` and pass it back as `after`; it can move past the last change served, since changes the key cannot see are skipped. `nextAfter === headSeq` means caught up. A cursor whose following changes were pruned (see `DIRECTORY_CHANGE_RETENTION_DAYS`), or one ahead of the feed, is refused with `409` and `reason: "cursor_expired"`: reconcile from the snapshot endpoints and replay from their `asOfSeq`. Account-scoped: no `x-cat-factory-workspace` header is read. A key limited to some workspaces sees only workspace, workspace-membership and repository changes of those workspaces, plus the `workspace` change (with `entity: null`) of every deleted workspace in the account, since deleting a board also drops the key’s grant on it. Treat that change as the removal of the workspace and of every membership and repository under it.
+   * `GET /api/v1/directory/changes` — operation `listDirectoryChanges`.
+   */
+  listChanges(query: DirectoryListChangesQuery = {}, options: RequestOptions = {}): Promise<DirectoryChangePage> {
+    return this.#transport.request<DirectoryChangePage>({
+      method: 'GET',
+      path: `/api/v1/directory/changes`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * List linked repositories
+   * A keyset-paged snapshot of the repositories linked to the account’s workspaces (the ones the key reaches). A repository is listed once per workspace that links it.
+   * `GET /api/v1/directory/repos` — operation `listDirectoryRepos`.
+   */
+  listRepos(query: DirectoryListReposQuery = {}, options: RequestOptions = {}): Promise<DirectoryRepoPage> {
+    return this.#transport.request<DirectoryRepoPage>({
+      method: 'GET',
+      path: `/api/v1/directory/repos`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Every `items` across every page of `listRepos()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listReposAll(query: DirectoryListReposQuery = {}, options: RequestOptions = {}): AsyncGenerator<DirectoryRepoPage['items'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.listRepos({ ...query, cursor }, options)
+      for (const item of page.items) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
+
+  /**
+   * List the account's users
+   * A keyset-paged snapshot of every user holding a membership in the account. Account-wide, so a key limited to some workspaces is refused with `403` and `reason: "account_scope_required"`.
+   * `GET /api/v1/directory/users` — operation `listDirectoryUsers`.
+   */
+  listUsers(query: DirectoryListUsersQuery = {}, options: RequestOptions = {}): Promise<DirectoryUserPage> {
+    return this.#transport.request<DirectoryUserPage>({
+      method: 'GET',
+      path: `/api/v1/directory/users`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Every `items` across every page of `listUsers()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listUsersAll(query: DirectoryListUsersQuery = {}, options: RequestOptions = {}): AsyncGenerator<DirectoryUserPage['items'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.listUsers({ ...query, cursor }, options)
+      for (const item of page.items) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
+
+  /**
+   * List the account's directory webhooks
+   * The endpoints the directory change feed is pushed to, each with the feed position delivered through. The signing secret is write-only: `hasSecret` says whether one is set. Requires an `admin` key that reaches every workspace (`403` with `reason: "account_scope_required"` otherwise), because an endpoint receives every change in the account.
+   * `GET /api/v1/directory/webhooks` — operation `listDirectoryWebhooks`.
+   */
+  listWebhooks(options: RequestOptions = {}): Promise<DirectoryWebhookList> {
+    return this.#transport.request<DirectoryWebhookList>({
+      method: 'GET',
+      path: `/api/v1/directory/webhooks`,
+      options,
+    })
+  }
+
+  /**
+   * List workspace memberships
+   * A keyset-paged snapshot of the explicit workspace memberships in the account’s workspaces (the ones the key reaches), each with its workspace role.
+   * `GET /api/v1/directory/workspace-memberships` — operation `listDirectoryWorkspaceMemberships`.
+   */
+  listWorkspaceMemberships(query: DirectoryListWorkspaceMembershipsQuery = {}, options: RequestOptions = {}): Promise<DirectoryWorkspaceMembershipPage> {
+    return this.#transport.request<DirectoryWorkspaceMembershipPage>({
+      method: 'GET',
+      path: `/api/v1/directory/workspace-memberships`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Every `items` across every page of `listWorkspaceMemberships()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listWorkspaceMembershipsAll(query: DirectoryListWorkspaceMembershipsQuery = {}, options: RequestOptions = {}): AsyncGenerator<DirectoryWorkspaceMembershipPage['items'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.listWorkspaceMemberships({ ...query, cursor }, options)
+      for (const item of page.items) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
+
+  /**
+   * List the account's workspaces
+   * A keyset-paged snapshot of the account’s workspaces (the ones the key reaches). Every page of one walk reports the same `asOfSeq`; after the last page, replay the change feed from it to pick up anything that changed while paging.
+   * `GET /api/v1/directory/workspaces` — operation `listDirectoryWorkspaces`.
+   */
+  listWorkspaces(query: DirectoryListWorkspacesQuery = {}, options: RequestOptions = {}): Promise<DirectoryWorkspacePage> {
+    return this.#transport.request<DirectoryWorkspacePage>({
+      method: 'GET',
+      path: `/api/v1/directory/workspaces`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Every `items` across every page of `listWorkspaces()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listWorkspacesAll(query: DirectoryListWorkspacesQuery = {}, options: RequestOptions = {}): AsyncGenerator<DirectoryWorkspacePage['items'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.listWorkspaces({ ...query, cursor }, options)
+      for (const item of page.items) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
+
+  /**
+   * Register or edit a directory webhook
+   * Register an endpoint the directory change feed is pushed to, or edit one; an omitted field keeps its stored value, and `url` is required only when registering. A new endpoint starts at the feed head: it is pushed what changes from now on, and its receiver bootstraps the past from the snapshots. Pushes run every couple of minutes, signed like the notification webhooks, each a `DirectoryWebhookDelivery`. An account holds at most 10 (`409` with `reason: "webhook_limit_reached"`).
+   * `PUT /api/v1/directory/webhooks/{webhookId}` — operation `putDirectoryWebhook`.
+   */
+  putWebhook(webhookId: string, body: PutDirectoryWebhook = {}, options: RequestOptions = {}): Promise<DirectoryWebhook> {
+    return this.#transport.request<DirectoryWebhook>({
+      method: 'PUT',
+      path: `/api/v1/directory/webhooks/${encodePathSegment(webhookId)}`,
+      body,
+      options,
+    })
+  }
+}
+
 /** The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything. */
 export class KaizenResource {
   readonly #transport: Transport
@@ -2327,6 +2647,217 @@ export class KaizenResource {
   }
 }
 
+/** Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking, drafting and posting drafts take a `write` key. Posting publishes plain comments on the pull request and never approves or requests changes. */
+export class GuidedReviewsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Ask a question in a thread
+   * Append a question and the placeholder that will answer it, and answer with both at once; the answer is produced in the background. A thread holds one unanswered question at a time: asking again before it is answered is `409` with `details.reason: "thread_busy"`, and other threads are unaffected. `depth: "deep"` answers from a read-only checkout of the repository instead, so it can search the whole tree and run read-only commands; it takes minutes rather than seconds and stays `running` meanwhile, and a deployment with no runner settles it as `depth_unavailable`.
+   * `POST /api/v1/guided-reviews/{sessionId}/threads/{threadId}/messages` — operation `askPublicGuidedReview`.
+   */
+  ask(sessionId: string, threadId: string, body: AskGuidedReview, options: RequestOptions = {}): Promise<GuidedReviewExchange> {
+    return this.#transport.request<GuidedReviewExchange>({
+      method: 'POST',
+      path: `/api/v1/guided-reviews/${encodePathSegment(sessionId)}/threads/${encodePathSegment(threadId)}/messages`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Delete a guided review
+   * Delete the session with its threads, messages and drafts. Only the identity that opened it may; anyone else is `403` with `details.reason: "not_session_owner"`. Nothing on the pull request is touched.
+   * `DELETE /api/v1/guided-reviews/{sessionId}` — operation `deletePublicGuidedReview`.
+   */
+  delete(sessionId: string, options: RequestOptions = {}): Promise<void> {
+    return this.#transport.requestNoContent({
+      method: 'DELETE',
+      path: `/api/v1/guided-reviews/${encodePathSegment(sessionId)}`,
+      options,
+    })
+  }
+
+  /**
+   * Edit, re-anchor or discard a comment draft
+   * Change a draft's body or the line it sits on, or discard it with `discard: true`. Send the `rev` you loaded: a draft edited, posted or discarded since is refused `409` with `details.reason: "draft_conflict"`, so reload and decide again. A new anchor must be a line inside the diff on its side, or the edit is `422` with `details.reason: "draft_anchor_outside_diff"`. Only the session's owner may edit.
+   * `PATCH /api/v1/guided-reviews/{sessionId}/comment-drafts/{draftId}` — operation `editPublicGuidedReviewDraft`.
+   */
+  editDraft(sessionId: string, draftId: string, body: EditGuidedReviewDraft, options: RequestOptions = {}): Promise<GuidedReviewCommentDraft> {
+    return this.#transport.request<GuidedReviewCommentDraft>({
+      method: 'PATCH',
+      path: `/api/v1/guided-reviews/${encodePathSegment(sessionId)}/comment-drafts/${encodePathSegment(draftId)}`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Get a guided review
+   * The session with its overview, its threads (each naming the answer it is waiting on, if any) and its comment drafts. The overview's `status` is `pending` or `running` while it is generated; a `failed` one carries `failure.reason` (`budget_exhausted`, `model_unavailable`, `repo_unavailable`, `generation_failed`, `unreadable_reply`, or `head_moved` when the author pushed before it finished, which `POST /api/v1/guided-reviews/{sessionId}/refresh` resolves) and the raw cause in `failure.detail`.
+   * `GET /api/v1/guided-reviews/{sessionId}` — operation `getPublicGuidedReview`.
+   */
+  get(sessionId: string, options: RequestOptions = {}): Promise<GuidedReviewSessionView> {
+    return this.#transport.request<GuidedReviewSessionView>({
+      method: 'GET',
+      path: `/api/v1/guided-reviews/${encodePathSegment(sessionId)}`,
+      options,
+    })
+  }
+
+  /**
+   * Get a thread with its messages
+   * The thread and its messages in order. An assistant message is `pending` or `running` until answered, then `complete` with markdown `content` and the `citations` (file spans) it rests on, or `failed` with a `failure`. A `comment-drafts` message's drafts are on the session; its `draftReport` names every proposed comment that was refused (`outside_diff`, `not_in_pr`, `incomplete`).
+   * `GET /api/v1/guided-reviews/{sessionId}/threads/{threadId}` — operation `getPublicGuidedReviewThread`.
+   */
+  getThread(sessionId: string, threadId: string, options: RequestOptions = {}): Promise<GuidedReviewThreadView> {
+    return this.#transport.request<GuidedReviewThreadView>({
+      method: 'GET',
+      path: `/api/v1/guided-reviews/${encodePathSegment(sessionId)}/threads/${encodePathSegment(threadId)}`,
+      options,
+    })
+  }
+
+  /**
+   * List the workspace's guided reviews
+   * Guided review sessions in the workspace, newest created first, optionally narrowed to one repository (`repoId`), one pull request (`prNumber`) or the calling key's own (`mine=true`). Keyset-paginated: up to `limit` rows (default 50, at most 100) per page, and `nextCursor` to pass back as `cursor` for the next page, null on the last. A malformed cursor is `400` with `code: "invalid_cursor"`.
+   * `GET /api/v1/guided-reviews` — operation `listPublicGuidedReviews`.
+   */
+  list(query: GuidedReviewsListQuery = {}, options: RequestOptions = {}): Promise<PublicGuidedReviewList> {
+    return this.#transport.request<PublicGuidedReviewList>({
+      method: 'GET',
+      path: `/api/v1/guided-reviews`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Every `sessions` across every page of `list()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listAll(query: GuidedReviewsListQuery = {}, options: RequestOptions = {}): AsyncGenerator<PublicGuidedReviewList['sessions'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.list({ ...query, cursor }, options)
+      for (const item of page.sessions) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
+
+  /**
+   * Open a guided review of a pull request
+   * Open a guided review of one pull request in a repository linked to the workspace, or return the one the calling key's identity already has for it. A guided review explains the PR (what it does, its meaningful changes, consequences, risks, where to focus, and suggested questions) and holds question threads answered by a model that reads the PR at the commit under review. Answers with the session at once; its overview is generated in the background, so follow `GET /api/v1/guided-reviews/{sessionId}/events` or re-read it. A key bound to a person acts as that person; an unbound key owns its own sessions and runs on the workspace's credentials, never a person's; `createdByKind` says which of the two owns a session. An unlinked repository is `404` with `details.reason: "repo_not_linked"`, and a PR the host cannot find is `404` with `details.reason: "pr_not_found"`.
+   * `POST /api/v1/guided-reviews` — operation `openPublicGuidedReview`.
+   */
+  open(body: OpenGuidedReview, options: RequestOptions = {}): Promise<GuidedReviewSessionView> {
+    return this.#transport.request<GuidedReviewSessionView>({
+      method: 'POST',
+      path: `/api/v1/guided-reviews`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Open an exploration thread
+   * Open a thread in the session, optionally asking its first question in the same call. A thread is an independent line of questioning: waiting on an answer in one never blocks another. Pass a suggested question from the overview verbatim to ask it.
+   * `POST /api/v1/guided-reviews/{sessionId}/threads` — operation `openPublicGuidedReviewThread`.
+   */
+  openThread(sessionId: string, body: OpenGuidedReviewThread = {}, options: RequestOptions = {}): Promise<GuidedReviewThreadView> {
+    return this.#transport.request<GuidedReviewThreadView>({
+      method: 'POST',
+      path: `/api/v1/guided-reviews/${encodePathSegment(sessionId)}/threads`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Post comment drafts to the pull request
+   * Publish the named drafts as review comments on the pull request, as the key's identity, with an optional summary comment. Each comment posts on its own, so a partial post is normal: the result counts `posted` and `failed` drafts (a failed one carries `postError` and can be posted again) and lists in `skipped` the named drafts this call did not claim because they were already posted, discarded or being posted, so a retried call never posts a comment twice. The summary posts only alongside a draft this call claimed, so an identical retry after a complete post publishes nothing. Refused `409` with `details.reason: "session_stale"` when the pull request has commits past `reviewedHeadSha`: refresh the review and check the drafts first. Posting never approves or requests changes.
+   * `POST /api/v1/guided-reviews/{sessionId}/comment-drafts/post` — operation `postPublicGuidedReviewDrafts`.
+   */
+  postDrafts(sessionId: string, body: PostGuidedReviewDrafts, options: RequestOptions = {}): Promise<GuidedReviewPostResult> {
+    return this.#transport.request<GuidedReviewPostResult>({
+      method: 'POST',
+      path: `/api/v1/guided-reviews/${encodePathSegment(sessionId)}/comment-drafts/post`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Point a guided review at the PR's current head
+   * Re-read the pull request and regenerate the overview at its current head commit, keeping every thread. Use it after the author pushes: the overview, answers and draft anchors are computed against the commit recorded as `reviewedHeadSha`.
+   * `POST /api/v1/guided-reviews/{sessionId}/refresh` — operation `refreshPublicGuidedReview`.
+   */
+  refresh(sessionId: string, options: RequestOptions = {}): Promise<GuidedReviewSessionView> {
+    return this.#transport.request<GuidedReviewSessionView>({
+      method: 'POST',
+      path: `/api/v1/guided-reviews/${encodePathSegment(sessionId)}/refresh`,
+      options,
+    })
+  }
+
+  /**
+   * Draft review comments from a thread's conclusions
+   * Ask the model to turn what the thread concluded into review comments, each placed on the line it is about. Optional `instructions` narrow which ones. Drafts are kept only on lines inside the PR's diff; posting them is a separate, explicit call. Busy like a question: `409` with `details.reason: "thread_busy"` while the thread is waiting on an answer.
+   * `POST /api/v1/guided-reviews/{sessionId}/threads/{threadId}/comment-drafts` — operation `requestPublicGuidedReviewDrafts`.
+   */
+  requestDrafts(sessionId: string, threadId: string, body: RequestGuidedReviewDrafts = {}, options: RequestOptions = {}): Promise<GuidedReviewExchange> {
+    return this.#transport.request<GuidedReviewExchange>({
+      method: 'POST',
+      path: `/api/v1/guided-reviews/${encodePathSegment(sessionId)}/threads/${encodePathSegment(threadId)}/comment-drafts`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Stream a guided review (SSE)
+   * Server-sent events for one guided review: a `state` frame carrying the session view (the same body `GET /api/v1/guided-reviews/{sessionId}` returns) whenever it changes, `deleted` when the session is removed, and `timeout` when the connection cap is reached (reconnect to continue). A thread whose `pendingMessageId` clears has an answer to fetch with `GET /api/v1/guided-reviews/{sessionId}/threads/{threadId}`. Authenticated by the API key header.
+   * `GET /api/v1/guided-reviews/{sessionId}/events` — operation `streamPublicGuidedReview`.
+   */
+  stream(sessionId: string, options: RequestOptions = {}): Promise<EventStream> {
+    return this.#transport.stream({
+      method: 'GET',
+      path: `/api/v1/guided-reviews/${encodePathSegment(sessionId)}/events`,
+      options,
+    })
+  }
+}
+
+/** Assess a pull request in a linked repository: the merger's complexity, risk and impact scores with a rationale, the change class its paths fall in, and whether a risk policy would let it land with no person. The verdict is given without publishing the policy's ceilings. Takes a `write` key: each assessment is one model call. Nothing is persisted and no run starts. */
+export class PrAssessmentsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Assess a pull request against a risk policy
+   * Score one pull request in a repository linked to the workspace on the merger’s three axes (complexity, risk, impact, each 0..1, with a rationale), classify it by its changed paths, and say whether a risk policy would let it land with no person. The policy is the one named by `riskPolicyId` from `GET /api/v1/risk-policies`, else the workspace’s unattended default (the one a run started through this API resolves); an unknown id is `422` with `details.reason: "risk_policy_not_found"`, and a workspace with no unattended default is `503` `risk_policy_default_missing`. The verdict comes from the same decision the merge step makes, so the policy’s ceilings are never published: `verdict.reason` and `verdict.exceededAxes` say why. A key bound to a person is judged under that person’s workspace role, as a task it creates is admitted, so the role-scoped rules (`classRulesByRole`, `dryRunRoles`, `submissionClassesByRole`) apply to it; a key bound to nobody has no role and they do not. Synchronous: one inline model call, nothing persisted, no run. An unlinked repository is `404` `repo_not_linked`, a PR the host cannot find is `404` `pr_not_found`, a PR that received commits while it was read is `503` `pr_head_moved` (retry), an exhausted budget is `429` `budget_exhausted`, no configured model is `503` `model_unavailable`, a failed model call is `503` `generation_failed`, a call that runs out of time is `503` `generation_timeout`, and a reply that is not an assessment is `503` `unreadable_reply`. A key bound to a person reads the PR and calls the model as that person. Requires a `write` key.
+   * `POST /api/v1/pr-assessments` — operation `assessPublicPullRequest`.
+   */
+  assess(body: AssessPublicPullRequest, options: RequestOptions = {}): Promise<PublicPrAssessment> {
+    return this.#transport.request<PublicPrAssessment>({
+      method: 'POST',
+      path: `/api/v1/pr-assessments`,
+      body,
+      options,
+    })
+  }
+}
+
 /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */
 export class KeysResource {
   readonly #transport: Transport
@@ -2337,7 +2868,7 @@ export class KeysResource {
 
   /**
    * Provision an API key
-   * Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE, so store it now: it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.
+   * Mint a key in the calling key’s account and return its raw secret EXACTLY ONCE, so store it now: it is not recoverable. Omitting `workspaceIds` mints a key for the workspace this request acts on; a list or `null` (every workspace) can never reach further than the calling key, refused as `403` with `reason: "workspace_reach_exceeded"`. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.
    * `POST /api/v1/keys` — operation `createPublicKey`.
    */
   create(body: CreateHeadlessPublicApiKey, options: RequestOptions = {}): Promise<CreatedPublicApiKey> {
@@ -2351,7 +2882,7 @@ export class KeysResource {
 
   /**
    * List the workspace's API keys
-   * The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret is never readable back. `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.
+   * The account’s live (non-revoked) keys that reach the workspace this request acts on, account-wide ones included, metadata only; a secret is never readable back. `workspaceIds` is each key’s reach (`null` for every workspace). `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.
    * `GET /api/v1/keys` — operation `listPublicKeys`.
    */
   list(options: RequestOptions = {}): Promise<PublicApiKeyList> {
@@ -2364,7 +2895,7 @@ export class KeysResource {
 
   /**
    * Revoke an API key
-   * Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive its own revocation through the credentials it left behind. Idempotent, and it may name the calling key. Requires an `admin`-scope key.
+   * Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive its own revocation through the credentials it left behind. Idempotent, and it may name the calling key. A key reaching workspaces the calling key does not is refused with `reason: "workspace_reach_exceeded"`. Requires an `admin`-scope key.
    * `DELETE /api/v1/keys/{keyId}` — operation `revokePublicKey`.
    */
   revoke(keyId: string, options: RequestOptions = {}): Promise<void> {
@@ -2423,6 +2954,8 @@ export abstract class CatFactoryResources {
   readonly usage: UsageResource
   /** What the calling key is and what it may do — the self-check an integration runs at startup. */
   readonly me: MeResource
+  /** Where the deployment serves its web app, for sending a person to one of the app's deep links (the prefilled add-service screen, say). Any key may ask, with no workspace named. */
+  readonly deployment: DeploymentResource
   /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates. */
   readonly decisions: DecisionsResource
   /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs, and the whole model-activity bundle as one document. */
@@ -2431,8 +2964,14 @@ export abstract class CatFactoryResources {
   readonly evidence: EvidenceResource
   /** The evidence behind the auto-merge policy: what kind of change each merged run made, what the merger scored it, what happened to the pull request, and how much review a human actually spent, plus the per-class rollups that justify widening a rule. Reading takes a `read` key and recording an effort tag a `write` one: neither merges anything. */
   readonly mergeRecords: MergeRecordsResource
+  /** The account's directory, for keeping an external copy in sync: workspaces, users, account and workspace memberships, and linked repositories as keyset-paged snapshots, plus the ordered change feed that brings a copy up to date. Everything here takes a `read` key; users and account memberships need one that reaches every workspace. */
+  readonly directory: DirectoryResource
   /** The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything. */
   readonly kaizen: KaizenResource
+  /** Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking, drafting and posting drafts take a `write` key. Posting publishes plain comments on the pull request and never approves or requests changes. */
+  readonly guidedReviews: GuidedReviewsResource
+  /** Assess a pull request in a linked repository: the merger's complexity, risk and impact scores with a rationale, the change class its paths fall in, and whether a risk policy would let it land with no person. The verdict is given without publishing the policy's ceilings. Takes a `write` key: each assessment is one model call. Nothing is persisted and no run starts. */
+  readonly prAssessments: PrAssessmentsResource
   /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */
   readonly keys: KeysResource
 
@@ -2456,11 +2995,15 @@ export abstract class CatFactoryResources {
     this.webhook = new WebhookResource(transport)
     this.usage = new UsageResource(transport)
     this.me = new MeResource(transport)
+    this.deployment = new DeploymentResource(transport)
     this.decisions = new DecisionsResource(transport)
     this.debug = new DebugResource(transport)
     this.evidence = new EvidenceResource(transport)
     this.mergeRecords = new MergeRecordsResource(transport)
+    this.directory = new DirectoryResource(transport)
     this.kaizen = new KaizenResource(transport)
+    this.guidedReviews = new GuidedReviewsResource(transport)
+    this.prAssessments = new PrAssessmentsResource(transport)
     this.keys = new KeysResource(transport)
   }
 }

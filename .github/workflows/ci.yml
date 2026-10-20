@@ -197,6 +197,7 @@ jobs:
               - 'deploy/gatekeeper/**'
               - 'sdk/gatekeeper/**'
               - 'sdk/gatekeeper-worker/**'
+              - 'sdk/webhooks/**'
               - 'sdk/typescript/**'
               - 'backend/packages/server/src/modules/publicApi/**'
               - 'backend/packages/orchestration/**'
@@ -466,6 +467,12 @@ jobs:
       - name: Guard workspace bin scripts
         run: node scripts/check-workspace-bin-scripts.mjs
 
+      # Guard the published SDK packages against pinning each other: a `workspace:*` sibling
+      # publishes as an exact version, and a consumer one release ahead then installs two SDKs.
+      # Its fixtures run in the `node --test` step below. Pure node; no install.
+      - name: Guard SDK dependency ranges
+        run: node scripts/check-sdk-dependency-ranges.mjs
+
       # Guard the version numbers a branch introduces against the npm registry. In practice this
       # gates the RELEASE PR, the only branch that moves a version field. `changeset publish`
       # reports "already published on npm" as a warn and exits 0, and it says that about every
@@ -495,6 +502,85 @@ jobs:
       # fails here instead of silently regrowing between audits. Pure node; no install.
       - name: Guard file-size budgets
         run: node scripts/check-file-size.mjs
+
+      # Bans a tracked AGENTS.md anywhere: Claude Code reads a directory's AGENTS.md INSTEAD of its
+      # AGENTS.md, so one committed file silently switches off the per-package guidance at and
+      # below it (#2257). Pure node; no install.
+      - name: Guard against a re-added AGENTS.md
+        run: node scripts/check-no-claude-md.mjs
+
+      # Bans raw Tailwind palette utilities (`bg-slate-900`, `text-indigo-400`) in the SPA: the
+      # theme migration (#2239) moved them onto the `app.config.ts` aliases (`neutral`/`primary`)
+      # so the config actually recolors the app, and a reintroduced raw class silently opts back
+      # out. Its fixtures run in the `node --test` step below. Pure node; no install.
+      - name: Guard SPA theme aliases
+        run: node scripts/check-frontend-palette.mjs
+
+      # Bans font-size literals (`text-[11px]`, `font-size: 11px`, `fontSize: '11px'`) in the SPA: a
+      # theme document's `fontSize` is a root `font-size`, so Tailwind's rem steps follow it and a px
+      # literal does not (#2248). Its fixtures run in the `node --test` step below. Pure node; no
+      # install.
+      - name: Guard SPA type scale
+        run: node scripts/check-frontend-type-scale.mjs
+
+      # Bans corner radii that ignore the theme in the SPA. The scale itself is fixed in
+      # `main.css`, which binds `--radius` and `--radius-4xl` onto `--ui-radius` so every
+      # `rounded-*` utility follows a theme document's `radius` (#2251); what is left to ban is an
+      # arbitrary value and a raw `border-radius` literal, neither of which the rebind can reach.
+      # Its fixtures run in the `node --test` step below. Pure node; no install.
+      - name: Guard SPA radius scale
+        run: node scripts/check-frontend-radius.mjs
+
+      # Bans raw HTML CONTROLS (`<button>`, `<input>`, `<table>`, …) in the SPA: a raw control
+      # beside its Nuxt UI component is the same thing in two styles, and only one of them follows
+      # the theme, the focus ring and the disabled state (#2249). Its fixtures run in the
+      # `node --test` step below. Pure node; no install.
+      - name: Guard SPA primitives
+        run: node scripts/check-frontend-primitives.mjs
+
+      # Bans a `UButton` / `IconButton` / `UBadge` prop that restates the app default from
+      # `app.config.ts`. A restated default is noise, and it pins the value against a theme that
+      # changes it. Also bans two solid buttons under one parent element, so each view keeps one
+      # solid primary action. See #2250. Its fixtures run in the `node --test` step below. Pure
+      # node; no install.
+      - name: Guard SPA variant defaults
+        run: node scripts/check-frontend-variants.mjs
+
+      # Bans `toast.add(` outside the two toast funnels (`usePipelineErrorToast` for a failed call,
+      # `useActionToast` for everything else) and `animate-spin` outside `common/Spinner.vue`, so a
+      # toast of one tone and a loading glyph render the same everywhere (#2252). Its fixtures run
+      # in the `node --test` step below. Pure node; no install.
+      - name: Guard SPA feedback states
+        run: node scripts/check-frontend-feedback.mjs
+
+      # Bans a hand-written full-screen `fixed` surface in the SPA. A full-screen overlay binds a
+      # root class from `utils/safeArea.ts`, which carries the safe-area padding and the `100dvh`
+      # cap, so a phone's notch cannot cover its header or close button. Its fixtures run in the
+      # `node --test` step below. Pure node; no install.
+      - name: Guard SPA safe-area overlays
+        run: node scripts/check-frontend-safe-area.mjs
+
+      # The mechanical half of the story conventions (docs/internal/storybook.md): a title is
+      # `<Domain>/<Kind>/<Component>` from closed vocabularies, its last segment is the file's stem,
+      # no two files claim one title, a stories file sits beside its component, and `Default` comes
+      # first. Rendering the stories is the nightly `stories.yml`. Its fixtures run in the
+      # `node --test` step below. Pure node; no install.
+      - name: Guard story titles
+        run: node scripts/check-story-titles.mjs
+
+      # Holds every SPA modal to a named width: `<AppModal size="prompt|form|wide">`, never a raw
+      # `UModal` / `USlideover` or a `max-w-*` on the call site (#2251). A workbench surface waiting
+      # on #2359 says why in a `workbench-width-ok:` comment above its tag. Its fixtures run in the
+      # `node --test` step below. Pure node; no install.
+      - name: Guard SPA modal widths
+        run: node scripts/check-frontend-geometry.mjs
+
+      # The bundled Nuxt UI skill (`backend/packages/agents/.../nuxt-ui/skill.generated.ts`) is
+      # inlined from the vendored `.claude/skills/nuxt-ui/` tree so the platform's own coder agents
+      # apply the same text a local Claude Code session does. This fails if the two have drifted, so
+      # there is no second copy anyone maintains by hand. Pure node; no install.
+      - name: Guard the bundled Nuxt UI skill
+        run: node scripts/generate-nuxt-ui-skill.mjs --check
 
       # Bans `.catch(() => {})` in backend non-test source — a swallowed failure with no log and
       # no cause (observability-logging-gaps.md, B1). `runBestEffort` keeps the swallow and adds
@@ -574,7 +660,7 @@ jobs:
       # Requires every RELATIVE link in a repo markdown file to resolve to a path and, where it
       # deep-links one, a heading. The two guards above sound like they cover this and neither does:
       # the shipped-doc one walks published package directories only, and the anchor one resolves
-      # only URLs that CODE builds. So `git rm`ing a doc was green, which matters because CLAUDE.md
+      # only URLs that CODE builds. So `git rm`ing a doc was green, which matters because AGENTS.md
       # REQUIRES that when a completed initiative tracker converts to an ADR. Twelve links were
       # dangling when this landed, three of them at trackers deleted exactly that way. Generated
       # CHANGELOGs are out of scope: frozen history correctly naming what was true when written. Its
@@ -625,7 +711,7 @@ jobs:
         run: node scripts/check-runner-image-paths.mjs
 
       # Guard the Cloudflare runtime pins: ONE wrangler, and through it one workerd and one
-      # miniflare. `@cloudflare/vitest-pool-workers` pins wrangler exactly and the Worker suite
+      # miniflare. `@cloudflare/vitest-plugin` pins wrangler exactly and the Worker suite
       # runs inside the pool's workerd, while `wrangler deploy` ships wrangler's, so a second copy
       # means the runtime the tests prove is not the runtime that ships. Both halves stay green
       # while that is true, which is why it needs an assertion rather than a convention. Also
@@ -788,7 +874,7 @@ jobs:
       # i18n drift guard (tier 3): fail if a `t('…')` references a key absent from the
       # catalog. Complements the typed-message-keys typecheck above (tier 1), which can't
       # see a runtime-built key. Unused keys are reported but non-blocking — see the
-      # script header and CLAUDE.md → Internationalization.
+      # script header and AGENTS.md → Internationalization.
       - name: Check i18n keys
         run: pnpm --filter @cat-factory/app run i18n:check
 
@@ -872,7 +958,7 @@ jobs:
           echo "All build lanes passed or were skipped with no relevant changes."
 
   # The Cloudflare worker suite (58 files) is the dominant test cost, and its
-  # per-file overhead is intrinsic pool-workers isolate setup — embarrassingly
+  # per-file overhead is intrinsic vitest-plugin isolate setup: embarrassingly
   # parallel across jobs but not within one. Split it into 3 shards via vitest
   # --shard (deterministic file partition); each shard runs in its own miniflare
   # local D1, so there is no cross-shard contention. No Postgres here — the
@@ -1747,7 +1833,7 @@ jobs:
         run: pnpm build
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # Pre-build the executor image with a cross-run GHA layer cache and load it
       # into the daemon. The expensive layers (apt git, the global Pi CLI install,

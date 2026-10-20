@@ -19,11 +19,14 @@ import type {
   ReviewItemSeverity,
   ReviewItemStatus,
 } from '~/types/clarity'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const clarity = useClarityStore()
 const models = useModelsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const access = useWorkspaceAccess()
@@ -232,10 +235,8 @@ async function incorporate(feedback?: string) {
   showRedo.value = false
   // The fold + re-review now run in the durable driver. Hand the user back to the board;
   // a notification calls them back only if the re-review needs more input.
-  toast.add({
-    title: t('clarity.toast.clarifyingTitle'),
+  actionToast.info('clarity.toast.clarifyingTitle', {
     description: t('clarity.toast.clarifyingDescription'),
-    icon: 'i-lucide-wand-sparkles',
   })
   close()
 }
@@ -245,15 +246,16 @@ async function reReview() {
   try {
     const updated = await clarity.reReview(blockId.value)
     const newFindings = clarity.openCount(updated)
-    toast.add({
-      title:
-        updated.status === 'incorporated'
-          ? t('clarity.toast.reReviewSatisfied')
-          : updated.status === 'exceeded'
-            ? t('clarity.toast.reReviewExceeded')
-            : t('clarity.toast.reReviewNewFindings', { count: newFindings }, newFindings),
-      icon: 'i-lucide-sparkles',
-    })
+    if (updated.status === 'incorporated') {
+      actionToast.success('clarity.toast.reReviewSatisfied')
+    } else if (updated.status === 'exceeded') {
+      actionToast.warning('clarity.toast.reReviewExceeded')
+    } else {
+      actionToast.info('clarity.toast.reReviewNewFindings', {
+        params: { count: newFindings },
+        plural: newFindings,
+      })
+    }
   } catch (e) {
     present(e, 'clarity.error.reReview')
   }
@@ -265,7 +267,7 @@ async function proceed() {
   try {
     await flushDrafts()
     await clarity.proceed(blockId.value)
-    toast.add({ title: t('clarity.toast.proceeding'), icon: 'i-lucide-arrow-right' })
+    actionToast.info('clarity.toast.proceeding')
   } catch (e) {
     present(e, 'clarity.error.proceed')
   } finally {
@@ -279,12 +281,12 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
   try {
     await clarity.resolveExceeded(blockId.value, choice)
     if (choice === 'stop-reset') {
-      toast.add({ title: t('clarity.toast.taskReset'), icon: 'i-lucide-undo' })
+      actionToast.info('clarity.toast.taskReset')
       close()
     } else if (choice === 'proceed') {
-      toast.add({ title: t('clarity.toast.proceeding'), icon: 'i-lucide-arrow-right' })
+      actionToast.info('clarity.toast.proceeding')
     } else {
-      toast.add({ title: t('clarity.toast.extraRoundGranted'), icon: 'i-lucide-rotate-cw' })
+      actionToast.info('clarity.toast.extraRoundGranted')
     }
   } catch (e) {
     present(e, 'clarity.error.resolve')
@@ -298,7 +300,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
   <ResultWindowShell
     :open="open"
     icon="i-lucide-bug"
-    icon-class="bg-indigo-500/15 text-indigo-300"
+    icon-class="bg-primary/15 text-primary"
     :title="t('clarity.title')"
     :subtitle="block?.title"
     variant="centered"
@@ -314,41 +316,45 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
     <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
       <!-- main column -->
       <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
-        <p class="mb-4 text-sm text-slate-400">
+        <p class="mb-4 text-sm text-muted">
           <i18n-t keypath="clarity.intro" tag="span" scope="global">
             <template #level>{{ block?.level ?? t('clarity.itemFallback') }}</template>
             <template #answer
-              ><span class="text-slate-300">{{ t('clarity.introAnswer') }}</span></template
+              ><span class="text-toned">{{ t('clarity.introAnswer') }}</span></template
             >
             <template #dismiss
-              ><span class="text-slate-300">{{ t('clarity.introDismiss') }}</span></template
+              ><span class="text-toned">{{ t('clarity.introDismiss') }}</span></template
             >
           </i18n-t>
         </p>
 
         <!-- empty state — the reviewer runs automatically as the first pipeline
                  gate step, so there's nothing to do here until then -->
-        <div
+        <EmptyState
           v-if="!review && !busy && !loading"
-          class="rounded-lg border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500"
-        >
-          {{ t('clarity.empty') }}
+          icon="i-lucide-list-checks"
+          :title="t('clarity.empty')"
+        />
+
+        <!-- initial fetch on open -->
+        <div v-else-if="loading && !busy && !review" class="flex flex-col gap-3">
+          <USkeleton v-for="n in 3" :key="n" class="h-20 w-full rounded-lg" />
         </div>
 
-        <!-- working state (initial fetch on open, or a reviewer pass running) -->
+        <!-- a reviewer pass running -->
         <div
-          v-else-if="(busy || loading) && !review"
-          class="flex items-center justify-center gap-2 p-8 text-sm text-slate-400"
+          v-else-if="busy && !review"
+          class="flex items-center justify-center gap-2 p-8 text-sm text-muted"
         >
-          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-          {{ loading && !busy ? t('clarity.loadingReview') : t('clarity.triaging') }}
+          <Spinner class="h-4 w-4" />
+          {{ t('clarity.triaging') }}
         </div>
 
         <template v-else-if="review">
           <!-- converged: reviewer satisfied -->
           <div
             v-if="incorporated"
-            class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-4 text-sm text-emerald-300"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-app-success-900/60 bg-app-success-950/30 p-4 text-sm text-app-success-300"
           >
             <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
             {{ t('clarity.converged') }}
@@ -368,9 +374,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                    the human can see which of the two LLM calls is currently in progress. -->
           <div
             v-else-if="working"
-            class="mb-4 flex items-center gap-2 rounded-lg border border-indigo-900/60 bg-indigo-950/30 p-4 text-sm text-indigo-200"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-primary/60 bg-primary/10 p-4 text-sm text-primary"
           >
-            <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
+            <Spinner class="h-5 w-5 shrink-0" />
             <span v-if="incorporating">
               {{ t('clarity.incorporatingStage') }}
             </span>
@@ -384,17 +390,17 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             <div
               v-for="item in sortedItems"
               :key="item.id"
-              class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+              class="rounded-lg border border-default bg-default/60 p-3"
               :class="{ 'opacity-60': item.status === 'dismissed' }"
             >
               <div class="flex items-start gap-2">
                 <UIcon
                   :name="CATEGORY_ICON[item.category]"
-                  class="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
+                  class="mt-0.5 h-4 w-4 shrink-0 text-muted"
                 />
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-1.5">
-                    <span class="text-sm font-medium text-white">{{ item.title }}</span>
+                    <span class="text-sm font-medium text-highlighted">{{ item.title }}</span>
                     <UBadge size="xs" variant="subtle" :color="SEVERITY_COLOR[item.severity]">
                       {{ t(SEVERITY_LABELS[item.severity]) }}
                     </UBadge>
@@ -414,7 +420,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                        card around it takes the span (see the shell's `width` prop: the unit is the
                        paragraph, not the section). The badge row above and the answer control
                        below are what the full width is actually for. -->
-                  <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-slate-400">
+                  <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-muted">
                     {{ item.detail }}
                   </p>
 
@@ -422,11 +428,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                            the answer lives in the textarea below, seeded from the reply) -->
                   <div
                     v-if="item.reply && item.status !== 'open' && item.status !== 'answered'"
-                    class="mt-2 max-w-3xl rounded-md border-s-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
+                    class="mt-2 max-w-3xl rounded-md border-s-2 border-muted bg-app-950/40 px-3 py-1.5 text-sm text-toned"
                   >
-                    <span class="text-[10px] uppercase tracking-wide text-slate-500">
+                    <SectionLabel as="span">
                       {{ t('clarity.answerLabel') }}
-                    </span>
+                    </SectionLabel>
                     <p class="whitespace-pre-line">{{ item.reply }}</p>
                   </div>
 
@@ -479,8 +485,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
 
           <!-- clarified document: the standard-format bug report -->
-          <section v-if="outline" class="mt-6 border-t border-slate-800 pt-5">
-            <div class="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-400">
+          <section v-if="outline" class="mt-6 border-t border-default pt-5">
+            <div class="mb-3 flex items-center gap-1.5 text-2xs text-app-success-400">
               <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
               <span class="font-semibold uppercase tracking-wide">
                 {{ incorporated ? t('clarity.docHeading') : t('clarity.docHeadingDraft') }}
@@ -490,25 +496,27 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                  `width` prop): the window is `full`-width now, and this is continuous prose that
                  would otherwise run to 200-character lines. -->
             <div v-for="s in outline.sections" :key="s.id" class="mb-2 max-w-3xl">
-              <button
+              <UButton
+                color="neutral"
+                variant="ghost"
                 v-if="s.title"
-                class="group flex w-full items-center gap-2 text-start"
+                class="group flex w-full items-center gap-2 p-0 text-start hover:bg-transparent"
                 @click="toggle(s.id)"
               >
                 <UIcon
                   name="i-lucide-chevron-right"
-                  class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform"
+                  class="h-3.5 w-3.5 shrink-0 text-dimmed transition-transform"
                   :class="collapsed[s.id] ? '' : 'rotate-90'"
                 />
                 <span
-                  class="font-semibold text-white"
+                  class="font-semibold text-highlighted"
                   :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
                   v-html="s.titleHtml"
                 />
-              </button>
+              </UButton>
               <div
                 v-show="!s.title || !collapsed[s.id]"
-                class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-slate-300"
+                class="reader-prose mt-1 ps-5.5 text-sm leading-relaxed text-toned"
                 v-html="s.bodyHtml"
               />
             </div>
@@ -521,35 +529,34 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                tablet, UX-32). The informational stats collapse away below `lg` to keep the
                bottom bar compact; the actions themselves always show. -->
       <aside
-        class="flex w-full shrink-0 flex-col border-t border-slate-800 lg:w-72 lg:border-s lg:border-t-0"
+        class="flex w-full shrink-0 flex-col border-t border-default lg:w-72 lg:border-s lg:border-t-0"
       >
         <div class="flex flex-col gap-4 px-4 py-5">
-          <div v-if="review" class="hidden space-y-2 text-xs text-slate-400 lg:block">
+          <div v-if="review" class="hidden space-y-2 text-xs text-muted lg:block">
             <div class="flex items-center justify-between">
               <span>{{ t('clarity.rail.findings') }}</span>
-              <span class="text-slate-300">{{ review.items.length }}</span>
+              <span class="text-toned">{{ review.items.length }}</span>
             </div>
             <div class="flex items-center justify-between">
               <span>{{ t('clarity.rail.open') }}</span>
-              <span class="text-slate-300">{{ openCount }}</span>
+              <span class="text-toned">{{ openCount }}</span>
             </div>
             <div class="flex items-center justify-between">
               <span>{{ t('clarity.rail.answered') }}</span>
-              <span class="text-slate-300">{{ answeredCount }}</span>
+              <span class="text-toned">{{ answeredCount }}</span>
             </div>
             <div v-if="review.model" class="flex items-center justify-between">
               <span>{{ t('clarity.rail.model') }}</span>
-              <span class="truncate ps-2 text-slate-500">{{
+              <span class="truncate ps-2 text-dimmed">{{
                 models.labelForRef(review.model) ?? review.model
               }}</span>
             </div>
           </div>
 
           <!-- action: ready (answer → incorporate / proceed) -->
-          <div v-if="review && status === 'ready'" class="space-y-2 border-t border-slate-800 pt-4">
+          <div v-if="review && status === 'ready'" class="space-y-2 border-t border-default pt-4">
             <UButton
               v-if="canProceed"
-              color="primary"
               size="sm"
               block
               icon="i-lucide-arrow-right"
@@ -563,7 +570,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             </UButton>
             <UButton
               v-else
-              color="primary"
               size="sm"
               block
               icon="i-lucide-wand-sparkles"
@@ -574,7 +580,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             >
               {{ t('clarity.incorporateAnswers') }}
             </UButton>
-            <p class="text-[11px] leading-relaxed text-slate-500">
+            <p class="text-2xs leading-relaxed text-dimmed">
               <template v-if="canProceed">
                 {{ t('clarity.hint.proceed') }}
               </template>
@@ -586,9 +592,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
 
           <!-- action: merged (inspect → re-review / redo) -->
-          <div v-if="review && merged" class="space-y-2 border-t border-slate-800 pt-4">
+          <div v-if="review && merged" class="space-y-2 border-t border-default pt-4">
             <UButton
-              color="primary"
               size="sm"
               block
               icon="i-lucide-sparkles"
@@ -623,7 +628,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 :placeholder="t('clarity.redoPlaceholder')"
               />
               <UButton
-                color="primary"
                 variant="soft"
                 size="xs"
                 block
@@ -636,14 +640,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 {{ t('clarity.redoWithDirection') }}
               </UButton>
             </div>
-            <p class="text-[11px] leading-relaxed text-slate-500">
+            <p class="text-2xs leading-relaxed text-dimmed">
               {{ t('clarity.redoHint') }}
             </p>
           </div>
 
           <div
             v-if="review && incorporated"
-            class="border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-500"
+            class="border-t border-default pt-4 text-2xs leading-relaxed text-dimmed"
           >
             {{ t('clarity.incorporatedFooter') }}
           </div>

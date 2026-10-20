@@ -1,5 +1,371 @@
 # @cat-factory/contracts
 
+## 0.374.0
+
+### Minor Changes
+
+- e9b24a1: A runner pool can now be set once per ACCOUNT, and every board of the account that has no pool of
+  its own dispatches to it. A deployment declares it with `seedAccountRunnerPool` on the Node
+  `start()`: a callback `(account) => { config, secrets } | undefined`, called for personal and org
+  accounts alike. The server inserts the result for each account that has none, at boot and when a
+  board is created. At boot it also replaces an account's pool when the callback's answer differs from
+  the stored one (config, or the decrypted secrets), so a rotated token reaches every account on the
+  next boot; board creation never replaces. On stock Node, where a runner pool is the only
+  executor, a new board then runs an agent with no Infrastructure step. A legacy board with no account
+  gets nothing.
+  
+  A board resolves its pool through one resolver: its own live row, then its account's row, then none.
+  The new workspace setting `inheritAccountRunnerPool` (default `true`) is the explicit "none" marker.
+  `DELETE /workspaces/:id/runner-pool/connection` now sets it to `false` unless the call carries
+  `fallBackToAccount=true`, so removing a board's own pool no longer silently re-routes its work to the
+  account's pool. The query parameter and the setting are additive.
+  
+  The seed is validated like an admin registration (backend kind registered, URL safe, referenced
+  secrets present) through a shared `RunnerPoolConnectionService.validate`. A seed that fails is logged
+  at `error` naming the account on every boot, and a failed read never fails board creation.
+  
+  New storage, mirrored on both runtimes: the `account_runner_pools` table (D1 migration 0110 and a
+  Drizzle migration) with an `AccountRunnerPoolRepository` kernel port (`insertIfAbsent`, and
+  `replace` for a changed seed), a unique key making the insert race safe, `AccountRepository.listAll`, and the `inherit_account_runner_pool` settings column. The
+  account repository is on the mothership allow-list for reads; mothership nodes and `startLocal()` do
+  not seed. The Worker does not take the option: there a pool is an optional target beside the built-in
+  containers.
+
+## 0.373.1
+
+### Patch Changes
+
+- 5c17395: Dependency refresh, direct and transitive (the lockfile is re-resolved from scratch), held to the
+  24h `minimumReleaseAge` window.
+  
+  Majors, each taken because its whole peer group could move together:
+  
+  - **Vitest 5** (`vitest`, `@vitest/coverage-v8`, `@vitest/browser`, `@vitest/browser-playwright`
+    at `5.0.5`), now that `@cloudflare/vitest-plugin@1.4.4`, `@storybook/addon-vitest`,
+    `@nuxt/test-utils` and `vitest-browser-vue` all accept `^5`. The Worker suite turns Vitest 5's
+    new default `fsModuleCache` off: the Workers pool inlines every warm module into one WebSocket
+    reply, and this suite's graph (~80MB) exceeds workerd's message limit (`1009 Message is too
+    large`).
+  - **msw 3**, for the component stories. `onUnhandledRequest` became `onUnhandledFrame`, which
+    also receives WebSocket frames, and the bundled `mockServiceWorker.js` is regenerated.
+  - **happy-dom 21** for the SPA's unit tests.
+  
+  The Workers test pool moves to `@cloudflare/vitest-plugin@1.4.4`, which pins `wrangler@4.151.1`, so
+  the Cloudflare stack moves with it: workerd `1.20261012.1`, miniflare `5.20261012.1-beta`,
+  `@cloudflare/workers-types` `5.20261012.1` (the resolved workerd's date) and esbuild `0.28.2`
+  (the version wrangler and the plugin now pin, so the scoped esbuild overrides follow).
+  
+  Also the Vercel AI SDK family as one set (`ai@7.0.142`, `@ai-sdk/anthropic@4.0.81`,
+  `@ai-sdk/openai@4.0.95`, `@ai-sdk/openai-compatible@3.0.70`, `@ai-sdk/amazon-bedrock@5.0.117`,
+  `@ai-sdk/provider@4.0.28`), the Vue family at `3.5.44`, `@nuxt/ui@4.12.0`, `pinia@4.1.0`,
+  `storybook@10.6.2`, `undici@8.12.2`, `pg-boss@12.38.0`, `@aws-sdk/client-s3@3.1152.0`,
+  `@hono/node-server@2.1.5`, `@playwright/test@1.64.1`, and the root toolchain (`turbo@2.11.8`,
+  `oxlint@1.88.0`, `oxfmt@0.73.0`, `knip@6.41.0`).
+  
+  Held: the frontend stays on TypeScript 6 (TypeScript 7 ships no classic compiler API for
+  `vue-tsc`); `@nuxt/fonts` stays on 0.14 because `@nuxt/ui@4.12.0` depends on `^0.14.0`; Drizzle
+  stays on `1.0.0-rc.4`, still its `rc` tag; `nuxt@4.6.2` is inside the window.
+
+## 0.373.0
+
+### Minor Changes
+
+- 83f6b0c: A personal API key can follow its person's workspaces. Minted with `followsMemberships: true`
+  (beside `actsAsSelf: true`, and no `workspaceIds`), it reaches every workspace that person can act
+  in, resolved on each call: joining a workspace grants it on the next call and leaving takes it
+  away, with nothing to re-mint. In each workspace its scope is lowered to what the person's role
+  there allows (`read` for a viewer, `decide` for a member, `admin` for an admin), and on account-level
+  routes it acts with `read`, so it can never do more over `/api/v1` than its person can in the app.
+  That is also why anyone with `runs.execute` may mint one, list it and revoke it; an account admin
+  manages anyone's.
+  
+  `followsMemberships` is new on a listed or minted key (whose `workspaceIds` is then `[]`), on
+  `GET /api/v1/me` and on `GET /api/v1/directory/reach`, which answer the reach as of the call.
+  OpenAPI 1.89.0. The API tokens window offers "My workspaces (follows my memberships)", the default
+  for a personal token, and `?newApiKey` takes `reach=memberships`. New migrations: D1
+  `0110_public_api_key_follows_memberships.sql`, Drizzle
+  `20261016160143_public_api_key_follows_memberships`.
+
+## 0.372.0
+
+### Minor Changes
+
+- f702a8e: `GET /api/v1/directory/reach` (`client.directory.getReach`) answers the calling key's account and
+  workspace reach without an `x-cat-factory-workspace` header. `GET /api/v1/me` names one workspace,
+  so it refused a key reaching several that sent no header, and that is every key a directory webhook
+  accepts.
+  
+  `DirectorySyncer.handleDelivery` read the key's reach from `/me`, so every push to a directory
+  webhook failed with `422 workspace_required`. It now reads `/api/v1/directory/reach`, and falls back
+  to `/me` against a deployment without that route or with an SDK that predates `getReach`. OpenAPI
+  1.88.0.
+
+## 0.371.0
+
+### Minor Changes
+
+- b3a13d3: An integration can now send a person to add a service for a repository. `GET /api/v1/deployment`
+  (`client.deployment.get`) answers where the deployment serves its web app, to any `read` key with
+  no workspace named. The app opens the add-service window with the repository searched for and
+  selected from `?addRepo=<owner>/<name>`, with optional `provider` and `ws` to name the host and
+  pin the board. Signing in first keeps the link.
+
+## 0.370.0
+
+### Minor Changes
+
+- 6f574e9: API keys gain a `webhooks` scope between `read` and `write`: everything `read` can do, plus
+  registering and removing push endpoints. The directory webhooks (`/api/v1/directory/webhooks`,
+  still for a key reaching every workspace) and the notification webhooks
+  (`/api/v1/notification-webhook[s]`) now need `webhooks` instead of `admin`, so a sync integration
+  can follow changes with a key that cannot author or delete work. Every key that could manage
+  webhooks before still can. OpenAPI 1.86.0.
+  
+  The API token form names each scope by its API name (`read`, `webhooks`, `write`, `decide`,
+  `admin`), so the screen, the docs and the refusal messages agree. "Full access" is now "Admin".
+  
+  The token form always shows the Workspaces picker, in basic and advanced mode. It is disabled for
+  anyone who is not an account admin, with a line saying so, because only an account admin may mint
+  a key that reaches other workspaces.
+
+## 0.369.0
+
+### Minor Changes
+
+- 96e7e3d: Directory and notification webhook endpoints may be `http://` where the deployment allows it.
+  The request schemas refused every `http://` URL before the URL policy ran, so
+  `NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS` and `NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS` could never
+  admit one. The schemas now accept `http://` and `https://`, and the policy decides: hosted
+  deployments stay https-only with no private hosts, as before.
+  
+  Local mode turns that policy on by default for `localhost`, `127.0.0.1`,
+  `host.docker.internal` and `*.localhost`, the way it already does for environment URLs. A
+  receiver on the same laptop (a local sainte-beuve following the directory) can register its
+  push endpoint with no tunnel.
+  
+  The SDK clients are regenerated against OpenAPI 1.85.0.
+
+## 0.368.0
+
+### Minor Changes
+
+- 58b57cc: A directory `DirectoryUser` carries `accounts`: the GitHub and GitLab accounts the user signed in
+  with, as `{ provider, id, login }` where `id` is the host's numeric user id, so a system mirroring
+  the directory can match people on their host account instead of an email. Linking such an account
+  to a user, or moving it to another user, records a `user` change on the feed for each user
+  involved. Password, Google and OIDC logins are not published. OpenAPI 1.84.0.
+
+## 0.367.0
+
+### Minor Changes
+
+- 918e977: `POST /api/v1/pr-assessments` (`client.prAssessments.assess`) scores a pull request in a linked
+  repository on the merger's complexity, risk and impact axes, classifies it by its changed paths, and
+  says whether a risk policy would let it land with no person: the named policy, or the workspace's
+  unattended default. The verdict comes from the merge step's own precedence ladder, now a pure
+  function shared by both (`mergePrecedence.ts`), so the policy's ceilings stay unpublished. A key bound to a person is judged under that person's
+  workspace role, as the runs it starts are. One
+  synchronous inline model call at `write` scope; nothing is persisted. OpenAPI 1.83.0.
+
+## 0.366.0
+
+### Minor Changes
+
+- 04c1587: Public-API keys belong to an account and reach every workspace in it or a chosen list. A
+  workspace-scoped `/api/v1` call names its workspace in the `x-cat-factory-workspace` header, which a
+  key reaching one workspace may omit, so every existing key keeps working unchanged. `PublicApiKey`
+  and `GET /api/v1/me` gain `workspaceIds`; both mint bodies accept it. Widening a key past the board
+  it is minted from takes an account admin, and a key can never mint or revoke one reaching further
+  than itself. The header is on the CORS allow-list, so a browser client can send it. The four SDK
+  clients take a workspace option. OpenAPI 1.80.0.
+  
+  Storage break (internal): `public_api_keys.workspace_id` is replaced by `all_workspaces` plus the
+  `public_api_key_workspaces` grant table (D1 `0108`, Drizzle `20261009143721` and `20261009143724`),
+  backfilled from the old column. The account cap is 200 live keys, where it was 50 per workspace,
+  and a key left with no workspace after its boards were deleted holds no slot.
+- f1b6c9a: `/api/v1/directory/*`: an account's workspaces, users, account memberships, workspace memberships
+  and linked repositories as keyset-paged snapshots, plus an ordered change feed whose changes carry
+  each entity's current state (or `null` once it is gone), for an integration keeping its own copy in
+  sync. A feed cursor older than the new `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30) is refused
+  with the new `cursor_expired` conflict reason. OpenAPI 1.81.0.
+  
+  Internal: the change-row mapping both facades share moves to kernel's `directoryChangeFromRow`.
+  The slice 1 `DirectoryChangeRepository` port becomes `DirectoryRepository` and joins
+  `CoreDependencies` as a required member, with its reads on the mothership allow-list.
+- 20d4f01: Directory webhooks: `/api/v1/directory/webhooks` registers account-level endpoints that the
+  directory change feed is pushed to every couple of minutes, signed like the notification webhooks.
+  Each push is a `directory.changed` page of hydrated changes, or `directory.resync_required` for an
+  endpoint that fell behind the feed's retention. Delivery is a sweep on both facades (the Worker's
+  frequent cron, a Node timer) that takes a per-endpoint lease before a push and moves the endpoint's
+  position only after the push succeeds, so pushes are at-least-once, arrive in feed order, and are
+  never doubled by concurrent sweepers; a lease whose sweeper died expires and the page is sent again. The spec gains an OpenAPI 3.1 `webhooks` section naming every push body, so
+  `DirectoryWebhookDelivery`, `NotificationWebhookDelivery`, `RunWebhookDelivery` and
+  `PlatformAlertWebhookDelivery` become generated types in every client.
+  OpenAPI 1.82.0. New migrations: D1 `0109_directory_webhooks.sql`, Drizzle
+  `20261010113115_directory_webhooks`.
+
+## 0.365.0
+
+### Minor Changes
+
+- 91dedb6: Setup advisories now go to the people who can act on them. The workspace snapshot carries
+  `infraSetupOwners` beside `infraSetup`, naming who can close each gap: a board admin
+  (`workspace_admin`), an account admin (`account_admin`) or the deployment operator (`operator`).
+  Content storage falls to the operator when the deployment gives an account admin no backend to
+  select (`AccountSettingsService.canSelectContentStorage`).
+  
+  In the SPA, the infra-setup and provider-config cards render only for a caller who can save the
+  fix, and never on the designer surface. A caller who cannot act, but whose runs the gap stops (today,
+  a missing or unreachable runner pool), gets one compact line instead: it names who can fix it, or
+  tells an admin on the designer surface to switch role. A viewer gets nothing. The line honours the
+  card's session and permanent dismissals. The default test-environment prompt is also kept off the
+  designer surface, and the account-admin check now lives once in the accounts store
+  (`isActiveAccountAdmin`).
+  
+  On the repository-host gate, a caller without `integrations.manage` reads that a board admin can
+  connect the host, instead of "this deployment has nothing configured, ask an operator", and the
+  gate offers the board switcher without the items that need the board page's dialogs. The AI setup
+  dialog sends a member to the direct keys on their own
+  "My keys" scope, where their save lands, instead of the workspace pool they cannot write. That
+  default follows the active board's grant until the user picks a scope by hand.
+  
+  The new snapshot field is optional and internal: an older SPA ignores it, and this SPA falls back
+  to "a board admin" when a backend does not send it.
+
+## 0.364.0
+
+### Minor Changes
+
+- 5ec1794: Record a per-account directory change feed. Every write to a user, account membership, workspace,
+  workspace membership or repo projection row now appends a `directory_changes` row naming the entity,
+  in the same transaction (Postgres) or batch (D1), with a per-account `seq` whose commit order equals
+  its numeric order. New migrations: D1 `0107_directory_changes.sql` and Drizzle
+  `20261009141534_directory_changes`. Nothing reads the feed yet; the public directory API and
+  webhooks follow (docs/initiatives/directory-sync.md).
+  
+  The local `linkRepo` helper now writes the repo through `DrizzleRepoProjectionRepository`, so
+  re-linking a repo keeps its monorepo flag instead of resetting it.
+
+## 0.363.0
+
+### Minor Changes
+
+- e3c4b3c: A new built-in `resolve-conflicts` task type points the conflict resolver at an existing open pull request the platform did not open (surface version 1.79.0). The task names it with `fields.prNumber` or `fields.prUrl`, and creation records it as the block's own `pullRequest`, refusing one the run could not push onto with a `422` and an `attached_pr_*` reason: not found, another repository, closed or merged, from a fork, targeting a branch other than the repository's base, or unreadable. When the repository provider fails to answer, creation is refused with a retryable `503` and reason `attached_pr_provider_unreachable` instead of a `500`.
+  
+  The task is pinned to the new `pl_resolve_conflicts` pipeline, the `conflicts` gate alone, under a new `maintenance` pipeline purpose that only this task type is offered. It parks nowhere, so a `write` key starts it with an empty body. A clean pull request finishes `done` with nothing pushed; one the resolver cannot clear fails the run with a message saying the conflicts could not be resolved automatically and carrying the resolver's last account. A run of a task that attached its pull request finishes `done` without a confirm-and-merge card, and the pre-dispatch input gate does not judge its description. Run admission refuses a pipeline with a merge step for such a task, and a fields patch cannot move its attachment to another pull request while its run is working.
+  
+  `OpenedPullRequest` gains an optional `crossRepository`, filled by the GitHub and GitLab clients, and `AgentRunContext.block` gains `taskType`, which the container executor reads to skip creating the per-task work branch for an attached pull request. The conflicts gate's give-up message now includes the last resolver attempt's summary.
+
+## 0.362.0
+
+### Minor Changes
+
+- 97175f8: Guided review questions asked with `depth: "deep"` are answered from a read-only checkout of the repository (surface version 1.78.0). A new `guided-review-investigator` container-explore kind runs per question, with its own preset model; `ContainerGuidedReviewInvestigator` dispatches it standalone, the way the environment dry run's prober is dispatched, and files its spend through the same accounting a pipeline step uses. The job clones the target branch with full history, fetches the PR head and checks out the reviewed commit.
+  
+  A deep answer is driven as a state machine on its message: claim, dispatch, record the dispatch, poll. `GuidedReviewService.runJob` now returns `GuidedReviewJobProgress`, and the Workflow, pg-boss and local `node:sqlite` drivers loop on it within `GUIDED_REVIEW_MAX_PASSES`. Each poll refreshes the claim, so the stale scan never mistakes a live investigation for a dead one; a container still working after 45 minutes is stopped and its question reported failed. `GuidedReviewRepository` gains `recordInvestigation`, `getInvestigation` and `heartbeatMessage` (migration 0106 and its Drizzle mirror).
+  
+  The two standalone container flows now share one dispatch builder per facade. The single-kind model resolver accepts a job with no board frame, which resolves on the workspace's default preset. The local guided-review queue now wakes at its earliest due job, so a re-queued job can no longer wait for the periodic sweep when a timer fires early. The review window gains a "Deep dive" switch.
+
+## 0.361.0
+
+### Minor Changes
+
+- 0966666: Guided PR review drafts can be edited and posted (surface version 1.77.0). An edit names the `rev` it was made against and is refused `409 draft_conflict` from a stale one; moving a draft is checked against the diff and refused `422 draft_anchor_outside_diff` outside it. Posting publishes the chosen drafts on the pull request as plain review comments under the caller's credential scope, with comment bodies scrubbed of secrets and passed through the host-markdown boundary. Each draft is claimed before the host call and settled with the host's own per-comment answer, so a retried post never publishes a comment twice and a partial post is reported per draft. A post after the pull request moved past the reviewed commit is refused `409 session_stale`.
+  
+  The optional summary comment posts only alongside a draft the call claimed, so an identical retry after a complete post publishes nothing. Contracts export `isPostableDraft` and `GUIDED_REVIEW_POST_LEASE_MS`, the rule the server claims by and the review window selects by, so a `posting` draft whose poster died is offered for posting again once its lease ends. `ConflictError` gains `draft_conflict` and `session_stale`, translated in every locale. The four SDKs and the MCP server gain `editDraft` and `postDrafts`.
+
+### Patch Changes
+
+- a3a10b8: Mark the package free of side effects, so a frontend bundling a few of its schemas tree-shakes the rest instead of shipping every module in the barrel.
+
+## 0.360.0
+
+### Minor Changes
+
+- 8766c3f: `resolvePrNumber`, which reads the pull request a `review` task names from its `prNumber` or `prUrl`, moves to `@cat-factory/contracts` so the SPA's guided-review button and the dispatch read a task's target the same way. Breaking for internal consumers: `@cat-factory/agents` no longer exports it; import it from `@cat-factory/contracts`.
+
+## 0.359.0
+
+### Minor Changes
+
+- 0ea28b8: Guided PR review gets its engine. `GuidedReviewService` opens a session for a linked repository's pull request, generates a structured overview of it, answers questions in independent threads and turns a thread's conclusions into comment drafts. Each of those is background work: the request persists a pending row and returns, and a `GuidedReviewRunner` drives it (a Cloudflare Workflow, a pg-boss queue on Node and standard local, a `node:sqlite` queue on a mothership-mode node), with a sweeper re-waking work whose claim lapsed.
+  
+  Answers come from an inline model with read tools over the PR pinned to the reviewed commit (`list_changed_files`, `read_diff`, `read_file` on either side, `list_directory`), under a per-job read budget, with file contents scrubbed of secrets. Drafts are kept only where the host could place them (a line inside a diff hunk on that side), and every refused proposal is recorded in the message's `draftReport`. A failure is settled with a reason from a closed vocabulary, which gains `head_moved`: once the PR moves past the reviewed commit, its changed files no longer describe that commit, so the job fails until the session is refreshed.
+  
+  `ConflictError` gains the `thread_busy` reason, translated in every locale. `fenceVerbatim` is extracted into `@cat-factory/agents`' shared prompt helpers. No routes expose the service yet; they land in the next slice.
+- 0ea28b8: Guided PR review is on the public API (surface version 1.76.0). `/api/v1/guided-reviews` opens, lists, reads, refreshes and deletes sessions, opens threads, asks questions and requests comment drafts, and `GET /api/v1/guided-reviews/{sessionId}/events` streams the session view as it changes. Reading takes a `read` key; opening, asking and drafting take `write`, because they spend model budget, and nothing here posts to the pull request. A key bound to a person acts as that person; an unbound key owns its own sessions on the workspace's credentials, and a session's `createdByKind` says which of the two owns it. The session list is keyset-paginated, newest created first.
+  
+  The four SDKs gain a `guidedReviews` resource group and the MCP server its tools (the stream excepted: a tool call has no streaming channel). Three value sets the new shapes share with earlier operations are pinned to their published type names, so no released SDK type is renamed.
+- 0ea28b8: Guided PR review is reachable from the SPA. `/workspaces/:workspaceId/guided-reviews` opens, lists, reads, refreshes and deletes sessions, and its `threads` sub-routes open threads, ask questions and request comment drafts. Writes return at once; the overview and each answer arrive through a new `guidedReview` workspace event, which carries ids only so a member who is not viewing a review learns nothing more than that it moved. The routes are member tier and only a session's creator may change it.
+  
+  `ExecutionEventPublisher` gains `guidedReviewChanged`, implemented on the Durable Object, Node and fan-out publishers. Thread routes are addressed under their session, and a thread of another session is answered as absent. The SPA gains the API client and a `guidedReview` store that follows the event. A conformance assertion checks every facade wires the module.
+- 0ea28b8: The guided review store binds every settle to the claim that won it. `claimOverview` and `claimMessage` return a `GuidedReviewClaim` (or null), and `settleOverview`, `settleMessage` and `settleDrafts` require it, so a driver whose lease lapsed cannot land over the driver that took the work over. Every write is checked against the contracts schema the reads decode with, so an oversized outcome is refused at its writer instead of making the thread unreadable; `guidedReviewFailure` builds a failure whose raw detail fits. `settleDrafts` takes `GuidedReviewDraftProposal` and the store fills in the ids it owns. Deleting a session removes threads before messages and drafts on both runtimes, and a node recovers its own jobs from its local durable queue.
+
+## 0.358.0
+
+### Minor Changes
+
+- 075ff13: Guided PR review gets its persistence foundation: the session, thread, message and comment-draft contracts, kernel's `GuidedReviewRepository` port, D1 migration 0104 and its Drizzle mirror, and both repositories, wired as `CoreDependencies.guidedReviewRepository` on every facade so a mothership serves it to its nodes. No service reads or writes the tables yet; the service, the durable answering driver and the routes land in later slices (`docs/initiatives/guided-pr-review.md`).
+  
+  Concurrent threads write disjoint rows. A thread admits one live answer through a partial unique index, so a second question while one is pending returns `thread_busy` without writing, and a question on a thread that is missing or belongs to another session returns `thread_not_found`. The store writes the queued state itself (a pending overview on open, a pending placeholder per question), so a caller cannot create work no driver can claim. Driver claims, overview generations and draft posts are conditional writes that report whether they won. Every repository method is `remote` in mothership mode except the cross-workspace stale-job scan, which is a sweeper read. Queued work records which host drives it (`deployment` or `node:<nodeId>`), and the stale scan lists only one driver's jobs, so a hosted sweeper never answers a laptop's question with the deployment's credentials.
+
+## 0.357.0
+
+### Minor Changes
+
+- 57d9db3: A delegated executor's reported usage now reaches the step it belongs to. The step's metrics, the run totals and the "usage not reported by <executor>" gap all read `llm_call_metrics`, while a result's `usage` was written only to the usage ledger, so a `self-reported` executor's step still read as unreported. The delegated arm now files the figure as one job-level call metric through the same recorder a subscription harness uses (`standsForJob`, counted as the job's call), keyed on the dispatch's job id so a replayed poll records nothing twice.
+  
+  That row is filed under kernel's new `DELEGATED_USAGE_PROVIDER` and is never priced: `LlmObservabilityService` answers no rate for it, so the step and the run totals show the tokens with an unknown cost instead of the deployment's fallback rate.
+  
+  `DelegationUpdate`'s `failed` arm gains `usage`, with the meaning it has on a result. A run that fails late has usually spent most of its tokens, and it previously had no way to say so. `AgentJobUpdate`'s `failed` arm gains `usage` and `usageBilling` to carry it, and the failed-poll path meters it into the usage ledger and stamps the step's `usageBilling`, as the completion path does for a result.
+  
+  Each settled delegation attempt records `usageReported`, and `delegatedSpendUnreported` reports a gap when the FINAL attempt reported nothing, even if an earlier attempt's row put calls in the step's metrics.
+  
+  `RecordHarnessCalls` is exported from `@cat-factory/orchestration` as the one recorder type. `buildDelegatedAgentExecutor` takes a required `recordHarnessCalls` (its value may be `undefined`), so a facade cannot wire it on one runtime and forget it on the other. The Worker builds one recorder and hands it to both the container and the delegated arm; `buildWorkerJobAccountingDeps` now takes that recorder instead of building its own. Conformance's `withDelegatedArm` takes the facade's recorder, and a new conformance assertion checks on every runtime that a self-reported usage lands on the step unpriced.
+
+## 0.356.0
+
+### Minor Changes
+
+- bc073ab: Delegated executors: a pipeline step can now run in a system the deployment already operates (its own GitHub-Actions loop, job runner or PR bot) while cat-factory keeps the intake, the standards, the CI gate, the merge policy and the notifications around it.
+  
+  A deployment registers a `DelegatedExecutorDefinition` on the new app-owned `DelegatedExecutorRegistry` and points an agent kind at it with `agent: { surface: 'delegated', executor }`. The executor is handed the same brief the container harness composes, so a workspace's prompt overrides and agreed standards reach both identically; its credentials resolve per call through the existing `ToolSecretResolver` port and never touch the brief.
+  
+  Each definition declares who creates the work branch its dispatches name. `workBranch: 'platform-creates'` has the engine create it at the base head just before `start`, idempotently, which is what an external CI runner needs: `actions/checkout` on a branch that is not there fails the job before any of the work begins, and a runner that quietly substitutes a branch of its own publishes to a ref the platform never recorded. `workBranch: 'executor-creates'` writes nothing, so a run whose external work never landed leaves no empty ref behind. Either way the branch is the one the rest of the run uses: a task's own apriori working branch when it declared one (probed, never created, exactly as the container dispatch treats it), else `cat-factory/<blockId>`.
+  
+  Two things the platform states rather than guesses. A delegated step's model calls never reach this deployment's proxy, so the step card says "usage not reported by <executor>" and the run rollups carry `llm.reporting.delegatedStepsWithoutUsage` instead of rendering a zero. And a run stopped while external work is still running records whether it actually stopped: an executor that declares no `cancel` leaves its run alive, and the record says so.
+  
+  Ships with `@cat-factory/delegation-github-actions` (a `DelegatedExecutor` over Actions: correlation by run name, since `workflow_dispatch` returns no run id) and a runnable example under `backend/internal/example-delegated-executor`. Its `workflow` is a location or a function of the dispatch, so one registration can dispatch against every repository a deployment onboards; the resolver sees only facts a brief and a handle both carry, because `poll` and `cancel` run hours later holding just the handle.
+  
+  A failure the executor calls `retryable` (a cancelled run, a runner-pool restart, a rate limit) buys one fresh dispatch on an engine-set budget, and everything else is terminal. Registered executors reach their own systems through a fetch the platform has already guarded: the deployment's outbound-URL policy on the first URL and on every redirect hop (the same guard the notification webhook sender uses), a deadline so a hung endpoint cannot hold a poll open indefinitely, and a running byte cap on what one response may return.
+  
+  Two declaration-time refusals, because neither has a reading under which it does something. A definition whose credentials resolve to the same injection name is refused at registration: the bag an executor is handed is keyed by the name it reads, so one name can carry only one value. And a delegated kind naming an executor this process does not register is refused by name at dispatch rather than falling through to the container harness, which is the mothership-mode case where nothing boot-validates the kinds a node resolves.
+  
+  Public API 1.75.0, both additive: `AgentFailureKind` gains `delegated_failed`, so an external system's verdict is classified as its own thing rather than as a container that was shut down, and the `llm` totals on the two debug run surfaces gain `reporting`, saying how many of a run's steps ran on an executor that files no usage.
+  
+  Internals: `AgentSurface` gains `delegated`, `AsyncAgentExecutor.reclaimRun` may return a `RunReclaimReport`, `AgentJobHandle` and `DelegationHandle` carry the run's block (so a poll and a cancel resolve credentials in the scope the dispatch used), and `PipelineStep` gains `delegated` plus `delegatedRetries`. Five new `error.details.reason` values, all additive: `delegated_executor_unwired` (409), `delegated_step_async_only` (409), `delegated_claim_missing` (409), `delegated_executor_failed` (503) and `delegated_work_branch_unprepared` (503, the platform's own VCS write rather than the executor's system).
+
+### Patch Changes
+
+- 1fc4ff1: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  Three majors move with it. The `@toad-contracts/*` family goes `0.x` to `1.0.0`, which redesigns
+  how a contract declares a non-JSON response: a status code now carries a media-type content map
+  rather than a tagged marker, and the `ContractNoBody` symbol is request-body-only. Every response
+  declaring it becomes `noBodyResponse()`, the form that survives; the symbol stays where it already
+  meant a request. `@vueuse/core` goes to `15.0.0` and `@openrouter/ai-sdk-provider` to `3.1.0`.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.107` with `@ai-sdk/anthropic@4.0.58`,
+  `@ai-sdk/openai@4.0.71`, `@ai-sdk/openai-compatible@3.0.53`, `@ai-sdk/amazon-bedrock@5.0.88`),
+  staying inside the majors `workers-ai-provider@4` pairs with, so `@ai-sdk/provider` keeps a single
+  identity across the proxy and the inline callers. Also `@aws-sdk/client-s3@3.1136.0`,
+  `pg-boss@12.33.2`, `turbo@2.11.2` and `@types/node@26.6.2`.
+  
+  `vitest` stays on 4: `@cloudflare/vitest-pool-workers@0.22.0` peer-requires `^4.1.0`, so taking
+  vitest 5 would leave the Worker suite running against a pool that never declared it.
+  `wrangler` and `@cloudflare/workers-types` stay put for the same kind of reason: the pool still
+  pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date.
+
 ## 0.355.1
 
 ### Patch Changes

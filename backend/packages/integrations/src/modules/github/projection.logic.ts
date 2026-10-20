@@ -82,6 +82,17 @@ export interface GhPullPayload {
   base?: { ref?: string; repo?: { id?: number } | null } | null
 }
 
+/**
+ * Whether a PR's head branch lives in another repository than its base. A head repo GitHub no
+ * longer reports (`null`, a deleted fork) counts as another one, since nothing can push to it.
+ * Undefined when the payload names no base repo to compare against.
+ */
+export function pullIsCrossRepository(p: GhPullPayload): boolean | undefined {
+  const baseId = p.base?.repo?.id
+  if (baseId === undefined) return undefined
+  return p.head?.repo?.id !== baseId
+}
+
 /** Resolve the repo a PR belongs to (base repo, falling back to head repo). */
 export function pullRepoGithubId(p: GhPullPayload): number | null {
   return p.base?.repo?.id ?? p.head?.repo?.id ?? null

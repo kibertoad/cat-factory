@@ -25,11 +25,13 @@ import type {
   NotificationType,
 } from '~/types/notifications'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 const notifications = useNotificationsStore()
 const slack = useSlackStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -118,11 +120,7 @@ async function save() {
   busy.value = true
   try {
     await notifications.updateSettings(matrix)
-    toast.add({
-      title: t('notificationSettings.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('notificationSettings.toast.saved')
   } catch (e) {
     present(e, 'notificationSettings.error.save')
   } finally {
@@ -137,28 +135,24 @@ function resetToDefaults() {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('notificationSettings.panel.title')"
-    :ui="{ content: 'max-w-2xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('notificationSettings.panel.title')">
     <template #title>
       <IntegrationBackTitle :title="t('notificationSettings.panel.title')" @back="back" />
     </template>
     <template #body>
       <div class="space-y-4">
-        <p class="text-xs text-slate-400">{{ t('notificationSettings.panel.intro') }}</p>
+        <p class="text-xs text-muted">{{ t('notificationSettings.panel.intro') }}</p>
 
         <div
           v-if="notifications.settingsStatus === 'unavailable'"
-          class="rounded-lg border border-slate-700 bg-slate-800/40 p-3 text-xs text-slate-400"
+          class="rounded-lg border border-muted bg-elevated/40 p-3 text-xs text-muted"
         >
           {{ t('notificationSettings.unavailable') }}
         </div>
 
         <div
           v-else-if="notifications.settingsStatus === 'failed'"
-          class="space-y-3 rounded-lg border border-amber-700/60 bg-amber-950/30 p-3 text-xs text-amber-200"
+          class="space-y-3 rounded-lg border border-app-warning-700/60 bg-app-warning-950/30 p-3 text-xs text-app-warning-200"
         >
           <p>{{ t('notificationSettings.loadFailed') }}</p>
           <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-rotate-cw" @click="load">
@@ -166,29 +160,24 @@ function resetToDefaults() {
           </UButton>
         </div>
 
-        <div
-          v-else-if="!editable"
-          class="rounded-lg border border-slate-700 bg-slate-800/40 p-3 text-xs text-slate-400"
-        >
-          {{ t('common.loading') }}
+        <div v-else-if="!editable" class="space-y-1">
+          <USkeleton v-for="n in 4" :key="n" class="h-10 w-full" />
         </div>
 
         <template v-else>
-          <div
-            class="flex items-center gap-3 px-2 text-[10px] uppercase tracking-wide text-slate-500"
-          >
+          <SectionLabel class="flex items-center gap-3 px-2">
             <span class="flex-1">{{ t('notificationSettings.column.event') }}</span>
             <span class="w-16 text-center">{{ t('notificationSettings.column.inApp') }}</span>
             <span class="w-16 text-center">{{ t('notificationSettings.column.email') }}</span>
-          </div>
+          </SectionLabel>
 
           <div class="max-h-[50vh] space-y-1 overflow-y-auto pr-1">
             <div
               v-for="type in TYPES"
               :key="type"
-              class="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/40 p-2"
+              class="flex items-center gap-3 rounded-lg border border-muted bg-elevated/40 p-2"
             >
-              <span class="flex-1 text-sm text-slate-300">
+              <span class="flex-1 text-sm text-toned">
                 {{ t(`notificationSettings.type.${type}`) }}
               </span>
               <div class="flex w-16 justify-center">
@@ -200,9 +189,13 @@ function resetToDefaults() {
             </div>
           </div>
 
-          <p class="text-[11px] text-slate-500">{{ t('notificationSettings.panel.inAppNote') }}</p>
-          <p class="text-[11px] text-slate-500">{{ t('notificationSettings.panel.emailNote') }}</p>
-          <p class="text-[11px] text-slate-500">
+          <p class="text-2xs text-dimmed">
+            {{ t('notificationSettings.panel.inAppNote') }}
+          </p>
+          <p class="text-2xs text-dimmed">
+            {{ t('notificationSettings.panel.emailNote') }}
+          </p>
+          <p class="text-2xs text-dimmed">
             {{ t('notificationSettings.panel.otherChannelsNote') }}
             <UButton
               v-if="slack.available"
@@ -227,7 +220,6 @@ function resetToDefaults() {
               {{ t('notificationSettings.action.reset') }}
             </UButton>
             <UButton
-              color="primary"
               variant="soft"
               size="xs"
               icon="i-lucide-save"
@@ -240,5 +232,5 @@ function resetToDefaults() {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

@@ -48,7 +48,9 @@ describe('parseHarnessBodyCapabilities', () => {
 
 describe('requiredHarnessCapabilities', () => {
   it('reads what the BODY carries, not what a kind declares', () => {
-    expect(requiredHarnessCapabilities({ mcpServers: [{ id: 'docs' }] })).toEqual(['mcpServers'])
+    expect(
+      requiredHarnessCapabilities({ harness: 'claude-code', mcpServers: [{ id: 'docs' }] }),
+    ).toEqual(['mcpServers'])
     // A dispatch that dropped every server for its own reasons promised the agent nothing.
     expect(requiredHarnessCapabilities({ mcpServers: [] })).toEqual([])
     expect(requiredHarnessCapabilities({})).toEqual([])
@@ -70,17 +72,60 @@ describe('requiredHarnessCapabilities', () => {
     ).toEqual([])
   })
 
-  it('covers every capability, because the name IS the body field', () => {
-    // One POPULATED body per capability, typed as an exhaustive `Record` so a new member cannot be
-    // added without stating what carrying it looks like. Built from wire shapes rather than from
-    // the predicates the code reads, so a predicate loosened to accept anything still fails here.
-    const populated: Record<HarnessBodyCapability, unknown> = {
-      mcpServers: [{ id: 'docs' }],
-      skills: [{ id: 'house-style' }],
-      designImages: { url: 'https://x/y', token: 't', files: [{ artifactId: 'a' }] },
-      generateImages: true,
+  it('covers every capability', () => {
+    // One POPULATED body fragment per capability, typed as an exhaustive `Record` so a new member
+    // cannot be added without stating what carrying it looks like. Built from wire shapes rather
+    // than from the predicates the code reads, so a predicate loosened to accept anything still
+    // fails here. Each fragment is checked ALONE too, so one capability cannot pass on the
+    // strength of another's field.
+    const populated: Record<HarnessBodyCapability, Record<string, unknown>> = {
+      mcpServers: { harness: 'claude-code', mcpServers: [{ id: 'docs' }] },
+      piMcpServers: { harness: 'pi', mcpServers: [{ id: 'docs' }] },
+      skills: { skills: [{ id: 'house-style' }] },
+      designImages: {
+        designImages: { url: 'https://x/y', token: 't', files: [{ artifactId: 'a' }] },
+      },
+      generateImages: { generateImages: true },
     }
-    expect(requiredHarnessCapabilities(populated)).toEqual(HARNESS_BODY_CAPABILITIES)
+    for (const capability of HARNESS_BODY_CAPABILITIES) {
+      expect(requiredHarnessCapabilities(populated[capability]), capability).toContain(capability)
+    }
+    const whole = Object.assign({}, ...Object.values(populated), { harness: 'pi' })
+    expect(requiredHarnessCapabilities(whole)).toEqual(HARNESS_BODY_CAPABILITIES)
+  })
+
+  it('requires `piMcpServers` for tool servers on a Pi body, and only there', () => {
+    // Every image before Pi's MCP client reported `mcpServers` while dropping a Pi run's servers,
+    // so on Pi the promise is the Pi-specific member. An absent or unrecognised `harness` is Pi,
+    // as the harness's own parser reads it: the image runs that body on Pi.
+    const servers = [{ id: 'docs' }]
+    expect(requiredHarnessCapabilities({ harness: 'pi', mcpServers: servers })).toEqual([
+      'mcpServers',
+      'piMcpServers',
+    ])
+    expect(requiredHarnessCapabilities({ mcpServers: servers })).toContain('piMcpServers')
+    for (const harness of [null, 'opencode', 42]) {
+      expect(
+        requiredHarnessCapabilities({ harness, mcpServers: servers }),
+        String(harness),
+      ).toContain('piMcpServers')
+    }
+    expect(requiredHarnessCapabilities({ harness: 'claude-code', mcpServers: servers })).toEqual([
+      'mcpServers',
+    ])
+    expect(requiredHarnessCapabilities({ harness: 'codex', mcpServers: servers })).toEqual([
+      'mcpServers',
+    ])
+    expect(requiredHarnessCapabilities({ harness: 'pi', mcpServers: [] })).toEqual([])
+  })
+
+  it('refuses a Pi dispatch with servers on an image that reports only `mcpServers`', () => {
+    // The image one release behind: it names `mcpServers` (for claude-code and codex) and would
+    // have dropped these servers on Pi while the prompt promised them.
+    const required = requiredHarnessCapabilities({ harness: 'pi', mcpServers: [{ id: 'docs' }] })
+    expect(
+      resolveHarnessCapabilitySupport(required, ['mcpServers', 'skills', 'designImages']),
+    ).toEqual({ kind: 'unsupported', missing: ['piMcpServers'] })
   })
 
   it('sees a FLAG-shaped capability, and reads an unset flag as carrying nothing', () => {
@@ -104,6 +149,15 @@ describe('resolveHarnessCapabilitySupport', () => {
     expect(resolveHarnessCapabilitySupport(['mcpServers'], undefined)).toEqual({
       kind: 'unknown',
       required: ['mcpServers'],
+    })
+  })
+
+  it('is unsupported, not unknown, for a capability newer than the handshake', () => {
+    // An image reporting no list predates the handshake, so it predates Pi's MCP client too: the
+    // run would be blind for certain, not maybe. The older members keep their `unknown`.
+    expect(resolveHarnessCapabilitySupport(['mcpServers', 'piMcpServers'], undefined)).toEqual({
+      kind: 'unsupported',
+      missing: ['piMcpServers'],
     })
   })
 

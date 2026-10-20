@@ -6,6 +6,7 @@
 // and Fixtures (the graded inputs each run is scored against). Loaded on demand when the
 // window opens; 503 (the deployment hasn't provisioned the Sandbox DB) shows a notice.
 import { computed, ref, watch } from 'vue'
+import type { TableColumn } from '@nuxt/ui'
 import type {
   SandboxExperimentStatus,
   SandboxFixtureKind,
@@ -15,10 +16,13 @@ import type {
   SandboxRun,
   SandboxUnsupportedReason,
 } from '~/types/sandbox'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const ui = useUiStore()
 const store = useSandboxStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -79,13 +83,9 @@ async function promote(version: SandboxPromptVersion) {
   promoting.value = version.id
   try {
     await store.promotePrompt(version)
-    toast.add({
-      title: t('sandbox.prompts.promoted', { agent: version.agentKind }),
-      color: 'success',
-      icon: 'i-lucide-rocket',
-    })
-  } catch {
-    toast.add({ title: t('sandbox.prompts.promoteFailed'), color: 'error' })
+    actionToast.success('sandbox.prompts.promoted', { params: { agent: version.agentKind } })
+  } catch (error) {
+    present(error, 'sandbox.prompts.promoteFailed')
   } finally {
     promoting.value = null
   }
@@ -190,9 +190,9 @@ async function createAndRun() {
       },
     })
     name.value = ''
-    toast.add({ title: t('sandbox.toast.running'), icon: 'i-lucide-flask-conical', color: 'info' })
+    actionToast.info('sandbox.toast.running')
     await store.launch(created.id)
-    toast.add({ title: t('sandbox.toast.complete'), icon: 'i-lucide-check', color: 'success' })
+    actionToast.success('sandbox.toast.complete')
   } catch (e) {
     present(e, 'sandbox.toast.runFailed')
   }
@@ -221,10 +221,20 @@ const detailRows = computed(() =>
 )
 const selectedRun = ref<SandboxRun | null>(null)
 
+// Column definitions rather than hand-written `<th>`s: the header typography then comes from the
+// table theme instead of a per-file recipe.
+const detailColumns = computed<TableColumn<(typeof detailRows.value)[number]>[]>(() => [
+  { id: 'prompt', header: t('sandbox.results.col.prompt') },
+  { id: 'model', header: t('sandbox.results.col.model') },
+  { id: 'fixture', header: t('sandbox.results.col.fixture') },
+  { id: 'score', header: t('sandbox.results.col.score') },
+  { id: 'objective', header: t('sandbox.results.col.objective') },
+])
+
 function scoreColor(score: number): string {
-  if (score >= 4) return 'text-emerald-400'
-  if (score >= 3) return 'text-amber-400'
-  return 'text-rose-400'
+  if (score >= 4) return 'text-app-success-400'
+  if (score >= 3) return 'text-app-warning-400'
+  return 'text-app-error-400'
 }
 
 // ---- prompt editor ---------------------------------------------------------
@@ -242,7 +252,7 @@ async function saveVersion() {
   savingPrompt.value = true
   try {
     await store.saveVersion(editing.value.id, editText.value)
-    toast.add({ title: t('sandbox.toast.versionSaved'), icon: 'i-lucide-check', color: 'success' })
+    actionToast.success('sandbox.toast.versionSaved')
     editing.value = null
   } catch (e) {
     present(e, 'sandbox.toast.saveFailed')
@@ -262,6 +272,8 @@ async function archive(prompt: SandboxPromptVersion) {
 </script>
 
 <template>
+  <!-- workbench-width-ok: experiments, prompts and fixtures with a graded grid (1024px). Its
+       shell waits on #2359. -->
   <UModal
     v-model:open="open"
     :title="t('sandbox.title')"
@@ -269,16 +281,20 @@ async function archive(prompt: SandboxPromptVersion) {
     :ui="{ content: 'max-w-5xl' }"
   >
     <template #body>
-      <div v-if="store.loading" class="flex items-center justify-center py-12">
-        <UIcon name="i-lucide-loader-circle" class="h-6 w-6 animate-spin text-slate-400" />
+      <div v-if="store.loading" class="space-y-4">
+        <USkeleton class="h-8 w-full" />
+        <div class="grid gap-4 lg:grid-cols-2">
+          <USkeleton class="h-80 w-full rounded-lg" />
+          <USkeleton class="h-80 w-full rounded-lg" />
+        </div>
       </div>
 
       <div
         v-else-if="!store.available"
-        class="rounded-lg border border-slate-700 bg-slate-900/50 p-6 text-sm text-slate-300"
+        class="rounded-lg border border-muted bg-default/50 p-6 text-sm text-toned"
       >
-        <p class="font-medium text-slate-200">{{ t('sandbox.unavailable.title') }}</p>
-        <i18n-t keypath="sandbox.unavailable.body" tag="p" class="mt-1 text-slate-400">
+        <p class="font-medium text-default">{{ t('sandbox.unavailable.title') }}</p>
+        <i18n-t keypath="sandbox.unavailable.body" tag="p" class="mt-1 text-muted">
           <template #db><code>SANDBOX_DB</code></template>
           <template #schema><code>sandbox</code></template>
         </i18n-t>
@@ -286,10 +302,10 @@ async function archive(prompt: SandboxPromptVersion) {
 
       <div
         v-else-if="store.error"
-        class="rounded-lg border border-rose-800 bg-rose-950/40 p-6 text-sm text-rose-200"
+        class="rounded-lg border border-app-error-800 bg-app-error-950/40 p-6 text-sm text-app-error-200"
       >
-        <p class="font-medium text-rose-100">{{ t('sandbox.error.title') }}</p>
-        <p class="mt-1 text-rose-300">{{ store.error }}</p>
+        <p class="font-medium text-app-error-100">{{ t('sandbox.error.title') }}</p>
+        <p class="mt-1 text-app-error-300">{{ store.error }}</p>
         <UButton class="mt-3" size="xs" color="neutral" variant="subtle" @click="store.load()">
           {{ t('common.retry') }}
         </UButton>
@@ -316,10 +332,10 @@ async function archive(prompt: SandboxPromptVersion) {
         <!-- ============================= EXPERIMENTS ============================= -->
         <div v-if="tab === 'experiments'" class="grid gap-4 lg:grid-cols-2">
           <!-- builder -->
-          <div class="space-y-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <div class="space-y-3 rounded-lg border border-muted bg-default/40 p-3">
+            <SectionLabel as="p">
               {{ t('sandbox.builder.title') }}
-            </p>
+            </SectionLabel>
 
             <UFormField :label="t('sandbox.builder.agent')">
               <USelect
@@ -331,9 +347,9 @@ async function archive(prompt: SandboxPromptVersion) {
               <p
                 v-for="excluded in unrunnableAgentKinds"
                 :key="excluded.agentKind"
-                class="mt-1 text-[11px] leading-snug text-slate-500"
+                class="mt-1 text-2xs leading-snug text-dimmed"
               >
-                <span class="font-medium text-slate-400">{{ excluded.label }}:</span>
+                <span class="font-medium text-muted">{{ excluded.label }}:</span>
                 {{
                   excluded.unsupportedReason
                     ? UNSUPPORTED_REASON_LABEL[excluded.unsupportedReason]
@@ -343,14 +359,14 @@ async function archive(prompt: SandboxPromptVersion) {
             </UFormField>
 
             <div>
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+              <SectionLabel as="span" class="mb-1 block">
                 {{ t('sandbox.builder.promptVersions') }}
-              </span>
+              </SectionLabel>
               <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
                   v-for="p in kindPrompts"
                   :key="p.id"
-                  class="flex items-center gap-2 text-sm text-slate-300"
+                  class="flex items-center gap-2 text-sm text-toned"
                 >
                   <UCheckbox
                     :model-value="selectedPromptIds.includes(p.id)"
@@ -375,14 +391,14 @@ async function archive(prompt: SandboxPromptVersion) {
             </div>
 
             <div>
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+              <SectionLabel as="span" class="mb-1 block">
                 {{ t('sandbox.builder.models') }}
-              </span>
+              </SectionLabel>
               <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
                   v-for="m in store.selectableModels"
                   :key="m.id"
-                  class="flex items-center gap-2 text-sm text-slate-300"
+                  class="flex items-center gap-2 text-sm text-toned"
                 >
                   <UCheckbox
                     :model-value="selectedModelIds.includes(m.id)"
@@ -392,21 +408,24 @@ async function archive(prompt: SandboxPromptVersion) {
                   />
                   <span class="truncate">{{ m.label }}</span>
                 </label>
-                <p v-if="!store.selectableModels.length" class="text-xs text-slate-500">
-                  {{ t('sandbox.builder.noModels') }}
-                </p>
+                <EmptyState
+                  v-if="!store.selectableModels.length"
+                  compact
+                  icon="i-lucide-cpu"
+                  :title="t('sandbox.builder.noModels')"
+                />
               </div>
             </div>
 
             <div>
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+              <SectionLabel as="span" class="mb-1 block">
                 {{ t('sandbox.builder.fixtures') }}
-              </span>
+              </SectionLabel>
               <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
                   v-for="f in kindFixtures"
                   :key="f.id"
-                  class="flex items-center gap-2 text-sm text-slate-300"
+                  class="flex items-center gap-2 text-sm text-toned"
                 >
                   <UCheckbox
                     :model-value="selectedFixtureIds.includes(f.id)"
@@ -416,9 +435,12 @@ async function archive(prompt: SandboxPromptVersion) {
                   />
                   <span class="truncate">{{ f.name }}</span>
                 </label>
-                <p v-if="!kindFixtures.length" class="text-xs text-slate-500">
-                  {{ t('sandbox.builder.noFixtures') }}
-                </p>
+                <EmptyState
+                  v-if="!kindFixtures.length"
+                  compact
+                  icon="i-lucide-clipboard-list"
+                  :title="t('sandbox.builder.noFixtures')"
+                />
               </div>
             </div>
 
@@ -437,14 +459,13 @@ async function archive(prompt: SandboxPromptVersion) {
             </UFormField>
 
             <div class="flex items-center justify-between">
-              <span class="text-xs text-slate-500">
+              <span class="text-xs text-dimmed">
                 {{ t('sandbox.builder.cellCount', { count: cellCount }, cellCount) }}
-                <span v-if="cellCount > store.maxCells" class="text-rose-400">
+                <span v-if="cellCount > store.maxCells" class="text-app-error-400">
                   {{ t('sandbox.builder.maxCells', { max: store.maxCells }) }}
                 </span>
               </span>
               <UButton
-                color="primary"
                 icon="i-lucide-play"
                 size="sm"
                 :loading="store.launching"
@@ -458,9 +479,9 @@ async function archive(prompt: SandboxPromptVersion) {
 
           <!-- history + results -->
           <div class="space-y-3">
-            <div v-if="store.detail" class="rounded-lg border border-slate-700 bg-slate-900/40 p-3">
+            <div v-if="store.detail" class="rounded-lg border border-muted bg-default/40 p-3">
               <div class="mb-2 flex items-center justify-between">
-                <p class="text-sm font-medium text-slate-200">
+                <p class="text-sm font-medium text-default">
                   {{ store.detail.experiment.name }}
                 </p>
                 <UBadge variant="soft" size="xs">{{
@@ -468,97 +489,109 @@ async function archive(prompt: SandboxPromptVersion) {
                 }}</UBadge>
               </div>
               <div class="overflow-auto">
-                <table class="w-full text-start text-xs">
-                  <thead class="text-slate-500">
-                    <tr>
-                      <th class="py-1 pe-2 font-medium">{{ t('sandbox.results.col.prompt') }}</th>
-                      <th class="py-1 pe-2 font-medium">{{ t('sandbox.results.col.model') }}</th>
-                      <th class="py-1 pe-2 font-medium">{{ t('sandbox.results.col.fixture') }}</th>
-                      <th class="py-1 pe-2 font-medium">{{ t('sandbox.results.col.score') }}</th>
-                      <th class="py-1 font-medium">{{ t('sandbox.results.col.objective') }}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="{ run, grade, fixtureName } in detailRows"
-                      :key="run.id"
-                      class="cursor-pointer border-t border-slate-800 hover:bg-slate-800/40"
-                      @click="selectedRun = run"
+                <UTable
+                  :data="detailRows"
+                  :columns="detailColumns"
+                  :ui="{
+                    base: 'text-xs',
+                    th: 'ps-0 pe-2 py-1',
+                    td: 'ps-0 pe-2 py-1 text-xs whitespace-normal',
+                    tbody: '[&>tr]:cursor-pointer',
+                    empty: 'py-0',
+                  }"
+                  @select="(_event, row) => (selectedRun = row.original.run)"
+                >
+                  <template #prompt-cell="{ row }">
+                    <span class="text-toned">{{ row.original.run.promptLabel }}</span>
+                  </template>
+                  <template #model-cell="{ row }">
+                    <span class="font-mono text-2xs text-muted">{{ row.original.run.model }}</span>
+                  </template>
+                  <template #fixture-cell="{ row }">
+                    <span class="text-muted">{{ row.original.fixtureName }}</span>
+                  </template>
+                  <template #score-cell="{ row }">
+                    <span
+                      v-if="row.original.grade"
+                      :class="scoreColor(row.original.grade.weightedTotal)"
+                      class="font-semibold"
                     >
-                      <td class="py-1 pe-2 text-slate-300">{{ run.promptLabel }}</td>
-                      <td class="py-1 pe-2 font-mono text-[11px] text-slate-400">
-                        {{ run.model }}
-                      </td>
-                      <td class="py-1 pe-2 text-slate-400">{{ fixtureName }}</td>
-                      <td class="py-1 pe-2">
-                        <span
-                          v-if="grade"
-                          :class="scoreColor(grade.weightedTotal)"
-                          class="font-semibold"
-                        >
-                          {{ grade.weightedTotal.toFixed(2) }}
-                        </span>
-                        <span v-else-if="run.status === 'failed'" class="text-rose-400">{{
-                          t('sandbox.results.failed')
-                        }}</span>
-                        <span v-else class="text-slate-600">—</span>
-                      </td>
-                      <td class="py-1">
-                        <span
-                          v-if="grade?.objective"
-                          :class="grade.objective.pass ? 'text-emerald-400' : 'text-amber-400'"
-                        >
-                          {{ grade.objective.caught }}/{{ grade.objective.total }}
-                        </span>
-                        <span v-else class="text-slate-600">—</span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                      {{ row.original.grade.weightedTotal.toFixed(2) }}
+                    </span>
+                    <span
+                      v-else-if="row.original.run.status === 'failed'"
+                      class="text-app-error-400"
+                      >{{ t('sandbox.results.failed') }}</span
+                    >
+                    <span v-else class="text-app-600">&mdash;</span>
+                  </template>
+                  <template #objective-cell="{ row }">
+                    <span
+                      v-if="row.original.grade?.objective"
+                      :class="
+                        row.original.grade.objective.pass
+                          ? 'text-app-success-400'
+                          : 'text-app-warning-400'
+                      "
+                    >
+                      {{ row.original.grade.objective.caught }}/{{
+                        row.original.grade.objective.total
+                      }}
+                    </span>
+                    <span v-else class="text-app-600">&mdash;</span>
+                  </template>
+                  <!-- See InitiativeTrackerWindow: the fallback copy is untranslated. -->
+                  <template #empty />
+                </UTable>
               </div>
 
               <!-- selected cell output -->
-              <div v-if="selectedRun" class="mt-3 border-t border-slate-800 pt-2">
-                <p class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+              <div v-if="selectedRun" class="mt-3 border-t border-default pt-2">
+                <SectionLabel as="p" class="mb-1">
                   {{ selectedRun.promptLabel }} · {{ selectedRun.model }}
-                </p>
-                <p v-if="selectedRun.error" class="text-xs text-rose-400">
+                </SectionLabel>
+                <p v-if="selectedRun.error" class="text-xs text-app-error-400">
                   {{ selectedRun.error }}
                 </p>
                 <pre
                   v-if="selectedRun.outputText"
-                  class="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-slate-950/60 p-2 text-[11px] text-slate-300"
+                  class="max-h-48 overflow-auto whitespace-pre-wrap rounded-sm bg-app-950/60 p-2 text-2xs text-toned"
                   >{{ selectedRun.outputText }}</pre>
                 <div v-if="gradeByRun.get(selectedRun.id)" class="mt-2 space-y-0.5">
                   <p
                     v-for="d in gradeByRun.get(selectedRun.id)!.scores"
                     :key="d.key"
-                    class="text-[11px] text-slate-400"
+                    class="text-2xs text-muted"
                   >
                     <span :class="scoreColor(d.score)" class="font-semibold">{{ d.score }}</span>
-                    <span class="ms-1 text-slate-300">{{ d.key }}</span>
-                    <span v-if="d.rationale" class="ms-1 text-slate-500">— {{ d.rationale }}</span>
+                    <span class="ms-1 text-toned">{{ d.key }}</span>
+                    <span v-if="d.rationale" class="ms-1 text-dimmed">— {{ d.rationale }}</span>
                   </p>
                 </div>
               </div>
             </div>
 
-            <p class="text-[11px] uppercase tracking-wide text-slate-500">
+            <SectionLabel as="p">
               {{ t('sandbox.results.past') }}
-            </p>
+            </SectionLabel>
             <div class="max-h-56 space-y-1 overflow-auto">
-              <button
+              <UButton
+                color="neutral"
+                variant="ghost"
                 v-for="x in store.experiments"
                 :key="x.id"
-                class="flex w-full items-center justify-between rounded-md border border-slate-800 bg-slate-900/40 px-2 py-1.5 text-start text-sm hover:bg-slate-800/50"
+                class="flex w-full items-center justify-between rounded-md border border-default bg-default/40 px-2 py-1.5 text-start text-sm hover:bg-elevated/50"
                 @click="store.openExperiment(x.id)"
               >
-                <span class="truncate text-slate-300">{{ x.name }}</span>
+                <span class="truncate text-toned">{{ x.name }}</span>
                 <UBadge variant="soft" size="xs">{{ EXPERIMENT_STATUS_LABEL[x.status] }}</UBadge>
-              </button>
-              <p v-if="!store.experiments.length" class="text-xs text-slate-500">
-                {{ t('sandbox.results.empty') }}
-              </p>
+              </UButton>
+              <EmptyState
+                v-if="!store.experiments.length"
+                compact
+                icon="i-lucide-flask-conical"
+                :title="t('sandbox.results.empty')"
+              />
             </div>
           </div>
         </div>
@@ -569,11 +602,11 @@ async function archive(prompt: SandboxPromptVersion) {
             <div
               v-for="p in store.prompts"
               :key="p.id"
-              class="flex items-center justify-between rounded-md border border-slate-800 bg-slate-900/40 px-2.5 py-1.5 text-sm"
+              class="flex items-center justify-between rounded-md border border-default bg-default/40 px-2.5 py-1.5 text-sm"
             >
               <div class="min-w-0">
                 <div class="flex items-center gap-2">
-                  <span class="truncate text-slate-200">{{ p.name }}</span>
+                  <span class="truncate text-default">{{ p.name }}</span>
                   <UBadge :color="PROMPT_ORIGIN_COLOR[p.origin]" variant="soft" size="xs">
                     {{
                       p.origin === 'baseline'
@@ -589,15 +622,15 @@ async function archive(prompt: SandboxPromptVersion) {
                     }}
                   </UBadge>
                 </div>
-                <span class="text-[11px] text-slate-500">{{ p.agentKind }}</span>
+                <span class="text-2xs text-dimmed">{{ p.agentKind }}</span>
               </div>
               <div class="flex items-center gap-1">
-                <UButton
+                <IconButton
                   icon="i-lucide-pencil"
                   color="neutral"
                   variant="ghost"
                   size="xs"
-                  :title="
+                  :label="
                     p.origin === 'baseline'
                       ? t('sandbox.prompts.forkTitle')
                       : t('sandbox.prompts.editTitle')
@@ -607,14 +640,14 @@ async function archive(prompt: SandboxPromptVersion) {
                 <!-- Deploy: make this version the workspace's live prompt for its agent kind.
                      Offered on a graded candidate and on an older workspace revision (rolling
                      back), but not on the one already live, where it would be a no-op. -->
-                <UButton
+                <IconButton
+                  color="neutral"
                   v-if="canPromote(p)"
                   icon="i-lucide-rocket"
-                  color="primary"
                   variant="ghost"
                   size="xs"
                   :loading="promoting === p.id"
-                  :title="t('sandbox.prompts.promoteTitle')"
+                  :label="t('sandbox.prompts.promoteTitle')"
                   @click="promote(p)"
                 />
                 <UButton
@@ -629,17 +662,14 @@ async function archive(prompt: SandboxPromptVersion) {
             </div>
           </div>
 
-          <div
-            v-if="editing"
-            class="space-y-2 rounded-lg border border-slate-700 bg-slate-900/40 p-3"
-          >
-            <p class="text-[11px] uppercase tracking-wide text-slate-500">
+          <div v-if="editing" class="space-y-2 rounded-lg border border-muted bg-default/40 p-3">
+            <SectionLabel as="p">
               {{
                 editing.origin === 'baseline'
                   ? t('sandbox.prompts.forkOf', { name: editing.name })
                   : t('sandbox.prompts.newVersionOf', { name: editing.name })
               }}
-            </p>
+            </SectionLabel>
             <UTextarea v-model="editText" :rows="16" class="w-full font-mono text-xs" autoresize />
             <div class="flex justify-end gap-2">
               <UButton
@@ -655,7 +685,6 @@ async function archive(prompt: SandboxPromptVersion) {
                 {{ t('common.cancel') }}
               </UButton>
               <UButton
-                color="primary"
                 icon="i-lucide-save"
                 size="sm"
                 :loading="savingPrompt"
@@ -666,7 +695,7 @@ async function archive(prompt: SandboxPromptVersion) {
               </UButton>
             </div>
           </div>
-          <p v-else class="self-start text-xs text-slate-500">
+          <p v-else class="self-start text-xs text-dimmed">
             {{ t('sandbox.prompts.hint') }}
           </p>
         </div>
@@ -676,10 +705,10 @@ async function archive(prompt: SandboxPromptVersion) {
           <div
             v-for="f in store.fixtures"
             :key="f.id"
-            class="rounded-md border border-slate-800 bg-slate-900/40 px-2.5 py-2 text-sm"
+            class="rounded-md border border-default bg-default/40 px-2.5 py-2 text-sm"
           >
             <div class="flex items-center justify-between">
-              <span class="text-slate-200">{{ f.name }}</span>
+              <span class="text-default">{{ f.name }}</span>
               <div class="flex items-center gap-1.5">
                 <UBadge variant="soft" size="xs">{{ FIXTURE_KIND_LABEL[f.kind] }}</UBadge>
                 <UBadge
@@ -691,7 +720,7 @@ async function archive(prompt: SandboxPromptVersion) {
                 </UBadge>
               </div>
             </div>
-            <p v-if="f.objective?.kind === 'findings'" class="mt-0.5 text-[11px] text-slate-500">
+            <p v-if="f.objective?.kind === 'findings'" class="mt-0.5 text-2xs text-dimmed">
               {{
                 t(
                   'sandbox.fixtures.expectations',
@@ -701,9 +730,11 @@ async function archive(prompt: SandboxPromptVersion) {
               }}
             </p>
           </div>
-          <p v-if="!store.fixtures.length" class="text-xs text-slate-500">
-            {{ t('sandbox.fixtures.empty') }}
-          </p>
+          <EmptyState
+            v-if="!store.fixtures.length"
+            icon="i-lucide-clipboard-list"
+            :title="t('sandbox.fixtures.empty')"
+          />
         </div>
       </div>
     </template>

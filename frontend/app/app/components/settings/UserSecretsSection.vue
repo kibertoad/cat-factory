@@ -10,11 +10,13 @@ import type { ProviderConfigField, UserSecretKind } from '~/types/userSecrets'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useUserSecretsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
@@ -104,12 +106,10 @@ async function save() {
     // (backend/docs/security-model.md). Best-effort: the save already succeeded, so a probe
     // failure must not read as one.
     testResult.value = await store.test(kind.value, payload).catch(() => null)
-    toast.add({
-      title: t('settings.userSecrets.toast.saved', {
+    actionToast.success('settings.userSecrets.toast.saved', {
+      params: {
         label: descriptor.value?.label ?? t('settings.userSecrets.secretFallback'),
-      }),
-      icon: 'i-lucide-check',
-      color: 'success',
+      },
     })
   } catch (e) {
     present(e, 'settings.userSecrets.toast.saveFailed')
@@ -133,7 +133,7 @@ async function remove() {
   try {
     await store.remove(kind.value)
     resetDraft()
-    toast.add({ title: t('settings.userSecrets.toast.removed'), icon: 'i-lucide-check' })
+    actionToast.success('settings.userSecrets.toast.removed')
   } catch (e) {
     present(e, 'settings.userSecrets.toast.removeFailed')
   } finally {
@@ -143,34 +143,30 @@ async function remove() {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('settings.userSecrets.title')"
-    :ui="{ content: 'max-w-xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('settings.userSecrets.title')">
     <template #title>
       <IntegrationBackTitle :title="t('settings.userSecrets.title')" @back="back" />
     </template>
     <template #body>
       <div class="space-y-4">
-        <p class="text-xs text-slate-400">
+        <p class="text-xs text-muted">
           <i18n-t keypath="settings.userSecrets.intro" tag="span" scope="global">
             <template #you>
               <strong>{{ t('settings.userSecrets.introYou') }}</strong>
             </template>
             <template #scope>
-              <span class="text-slate-300">{{ t('settings.userSecrets.introScope') }}</span>
+              <span class="text-toned">{{ t('settings.userSecrets.introScope') }}</span>
             </template>
           </i18n-t>
         </p>
 
         <div
           v-if="status"
-          class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+          class="flex items-center justify-between rounded-md border border-muted bg-default/50 px-3 py-2 text-sm"
         >
           <div>
-            <span class="font-medium text-slate-200">{{ status.label }}</span>
-            <div class="text-[11px] text-emerald-400">
+            <span class="font-medium text-default">{{ status.label }}</span>
+            <div class="text-2xs text-app-success-400">
               {{ t('settings.userSecrets.connectedStored') }}
             </div>
           </div>
@@ -184,15 +180,12 @@ async function remove() {
           />
         </div>
 
-        <div
-          v-if="descriptor"
-          class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3"
-        >
-          <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div v-if="descriptor" class="rounded-lg border border-dashed border-muted p-3 space-y-3">
+          <SectionLabel as="p">
             {{
               status ? t('settings.userSecrets.replaceToken') : t('settings.userSecrets.addToken')
             }}
-          </p>
+          </SectionLabel>
 
           <UFormField :label="t('settings.userSecrets.labelField')">
             <UInput v-model="labelDraft" :placeholder="descriptor.label" />
@@ -228,10 +221,10 @@ async function remove() {
             >
               {{ t('settings.userSecrets.testConnection') }}
             </UButton>
-            <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
+            <span v-if="testResult && testResult.ok" class="text-xs text-app-success-400">
               {{ testResult.message ?? t('settings.userSecrets.tokenValid') }}
             </span>
-            <span v-else-if="testResult" class="text-xs text-rose-400">
+            <span v-else-if="testResult" class="text-xs text-app-error-400">
               {{ testResult.message ?? t('settings.userSecrets.tokenRejected') }}
             </span>
           </div>
@@ -244,18 +237,12 @@ async function remove() {
           />
 
           <div class="flex justify-end">
-            <UButton
-              color="primary"
-              size="sm"
-              :loading="busy"
-              :disabled="!buildPayload()"
-              @click="save()"
-            >
+            <UButton size="sm" :loading="busy" :disabled="!buildPayload()" @click="save()">
               {{ status ? t('common.save') : t('settings.userSecrets.addToken') }}
             </UButton>
           </div>
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

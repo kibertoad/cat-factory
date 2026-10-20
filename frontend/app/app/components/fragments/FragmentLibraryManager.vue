@@ -19,6 +19,8 @@ import { showOverrideField } from '~/utils/uiMode'
 import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import GitHubDocUrlImport from '~/components/fragments/GitHubDocUrlImport.vue'
+import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -40,7 +42,7 @@ const library =
     : useFragmentLibrary(props.kind, props.ownerId)
 const documents = useDocumentsStore()
 const github = useGitHubStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
@@ -206,7 +208,7 @@ async function saveEdit() {
           .filter(Boolean),
       })
       editDraft.value = null
-      toast.add({ title: t('fragments.toast.updated'), icon: 'i-lucide-check' })
+      actionToast.success('fragments.toast.updated')
     } catch (e) {
       present(e, 'fragments.toast.updateFailed')
     }
@@ -228,7 +230,7 @@ async function createFragment() {
         .filter(Boolean),
     })
     draft.value = { title: '', summary: '', body: '', brief: '', tags: '' }
-    toast.add({ title: t('fragments.toast.added'), icon: 'i-lucide-check' })
+    actionToast.success('fragments.toast.added')
   } catch (e) {
     present(e, 'fragments.toast.addFailed')
   } finally {
@@ -249,7 +251,7 @@ async function removeFragment(id: string) {
   await withRow(`remove:${id}`, async () => {
     try {
       await library.remove(id)
-      toast.add({ title: t('fragments.toast.removed'), icon: 'i-lucide-trash-2' })
+      actionToast.success('fragments.toast.removed')
     } catch (e) {
       present(e, 'fragments.toast.removeFailed')
     }
@@ -414,7 +416,7 @@ async function linkDocumentFragment() {
       // Free-text field: exactly one ref.
       await library.createDocumentFragment({ source, ref: docDraft.value.ref.trim(), tags })
       docDraft.value = { source: '', ref: '', tags: '' }
-      toast.add({ title: t('fragments.toast.documentLinked'), icon: 'i-lucide-link' })
+      actionToast.success('fragments.toast.documentLinked')
       return
     }
 
@@ -439,9 +441,9 @@ async function linkDocumentFragment() {
     if (linked > 0) {
       // A vue-i18n plural message (count as the plural choice) so Slavic few/many forms
       // render correctly, and the count==1 case reads naturally too.
-      toast.add({
-        title: t('fragments.toast.documentsLinked', { count: linked }, linked),
-        icon: 'i-lucide-link',
+      actionToast.success('fragments.toast.documentsLinked', {
+        params: { count: linked },
+        plural: linked,
       })
     }
     if (firstError) {
@@ -461,7 +463,7 @@ async function refreshFragment(id: string) {
   await withRow(`refresh:${id}`, async () => {
     try {
       await library.refreshDocumentFragment(id)
-      toast.add({ title: t('fragments.toast.refreshed'), icon: 'i-lucide-refresh-cw' })
+      actionToast.success('fragments.toast.refreshed')
     } catch (e) {
       present(e, 'fragments.toast.refreshFailed')
     }
@@ -518,7 +520,7 @@ async function linkSource() {
     // `syncSource` row wrapper): a failure here should surface as a link failure, and
     // the form-level `linkingSource` spinner already covers the whole operation.
     await library.syncSource(source.id)
-    toast.add({ title: t('fragments.toast.sourceLinked'), icon: 'i-lucide-git-branch' })
+    actionToast.success('fragments.toast.sourceLinked')
   } catch (e) {
     present(e, 'fragments.toast.linkSourceFailed')
   } finally {
@@ -530,13 +532,8 @@ async function syncSource(id: string) {
   await withRow(`sync:${id}`, async () => {
     try {
       const result = await library.syncSource(id)
-      toast.add({
-        title: t('fragments.toast.synced', {
-          updated: result.upserted,
-          removed: result.tombstoned,
-        }),
-        icon: 'i-lucide-refresh-cw',
-        color: 'info',
+      actionToast.success('fragments.toast.synced', {
+        params: { updated: result.upserted, removed: result.tombstoned },
       })
     } catch (e) {
       present(e, 'fragments.toast.syncFailed')
@@ -548,12 +545,9 @@ async function checkSource(id: string) {
   await withRow(`check:${id}`, async () => {
     try {
       const status = await library.checkSource(id)
-      toast.add({
-        title: status.changed
-          ? t('fragments.toast.changesAvailable')
-          : t('fragments.toast.upToDate'),
-        icon: status.changed ? 'i-lucide-bell-dot' : 'i-lucide-check',
-      })
+      actionToast.info(
+        status.changed ? 'fragments.toast.changesAvailable' : 'fragments.toast.upToDate',
+      )
     } catch (e) {
       present(e, 'fragments.toast.checkSourceFailed')
     }
@@ -574,7 +568,7 @@ async function unlinkSource(id: string) {
   await withRow(`unlink:${id}`, async () => {
     try {
       await library.unlinkSource(id)
-      toast.add({ title: t('fragments.toast.sourceUnlinked'), icon: 'i-lucide-unplug' })
+      actionToast.success('fragments.toast.sourceUnlinked')
     } catch (e) {
       present(e, 'fragments.toast.unlinkSourceFailed')
     }
@@ -592,13 +586,13 @@ async function unlinkSource(id: string) {
          would fail with a raw 503 — say so instead (any entry point lands here). -->
     <div
       v-if="library.available === false"
-      class="rounded-md border border-slate-800 bg-slate-900/40 p-3 text-sm text-slate-400"
+      class="rounded-md border border-default bg-default/40 p-3 text-sm text-muted"
     >
       {{ t('fragments.unavailable') }}
     </div>
 
     <template v-else>
-      <p class="text-sm text-slate-400">
+      <p class="text-sm text-muted">
         <template v-if="isWorkspace">
           {{ t('fragments.intro.workspace') }}
         </template>
@@ -626,7 +620,7 @@ async function unlinkSource(id: string) {
 
       <!-- Resolved (merged) catalog — workspace scope only -->
       <div v-if="tab === 'catalog'" class="flex flex-col gap-2">
-        <p class="text-xs text-slate-500">
+        <p class="text-xs text-dimmed">
           {{
             t(
               'fragments.catalog.summary',
@@ -638,10 +632,10 @@ async function unlinkSource(id: string) {
         <div
           v-for="f in library.resolved"
           :key="f.id"
-          class="rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="rounded-md border border-default bg-default/60 p-3"
         >
           <div class="flex items-center gap-2">
-            <span class="font-medium text-slate-100">{{ f.title }}</span>
+            <span class="font-medium text-app-100">{{ f.title }}</span>
             <UBadge size="xs" :color="tierColor[f.tier]" variant="subtle">
               {{ tierLabel[f.tier] }}
             </UBadge>
@@ -654,9 +648,9 @@ async function unlinkSource(id: string) {
             >
               {{ t('fragments.catalog.live', { source: f.documentRef.source }) }}
             </UBadge>
-            <span class="ms-auto font-mono text-[11px] text-slate-500">{{ f.id }}</span>
+            <span class="ms-auto font-mono text-2xs text-dimmed">{{ f.id }}</span>
           </div>
-          <p class="mt-1 text-sm text-slate-400">{{ f.summary }}</p>
+          <p class="mt-1 text-sm text-muted">{{ f.summary }}</p>
           <div v-if="f.tags?.length" class="mt-1 flex flex-wrap gap-1">
             <UBadge v-for="tag in f.tags" :key="tag" size="xs" variant="outline" color="neutral">
               {{ tag }}
@@ -670,7 +664,7 @@ async function unlinkSource(id: string) {
         <div
           v-for="f in library.fragments"
           :key="f.id"
-          class="rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="rounded-md border border-default bg-default/60 p-3"
         >
           <!-- Inline editor (hand-authored fragments): title / summary / body / tags, with the
                same auto-generate-title button as the create form. -->
@@ -716,7 +710,7 @@ async function unlinkSource(id: string) {
                 :placeholder="t('fragments.authored.briefPlaceholder')"
                 :rows="2"
               />
-              <p class="text-xs text-slate-500">{{ t('fragments.authored.briefHint') }}</p>
+              <p class="text-xs text-dimmed">{{ t('fragments.authored.briefHint') }}</p>
             </div>
             <UInput
               v-model="editDraft.tags"
@@ -740,22 +734,23 @@ async function unlinkSource(id: string) {
           <div v-else class="flex items-start gap-2">
             <div class="min-w-0">
               <div class="flex items-center gap-2">
-                <span class="font-medium text-slate-100">{{ f.title }}</span>
+                <span class="font-medium text-app-100">{{ f.title }}</span>
                 <UBadge v-if="f.source" size="xs" color="info" variant="subtle">{{
                   t('fragments.authored.fromRepo')
                 }}</UBadge>
               </div>
-              <p class="text-sm text-slate-400">{{ f.summary }}</p>
+              <p class="text-sm text-muted">{{ f.summary }}</p>
             </div>
             <div class="ms-auto flex gap-1">
               <!-- Editing a repo-SOURCED fragment locally would be overwritten on the next sync,
                    so only hand-authored fragments are editable here. -->
-              <UButton
+              <IconButton
+                color="neutral"
                 v-if="!f.source"
                 icon="i-lucide-pencil"
                 size="xs"
                 variant="ghost"
-                :title="t('common.edit')"
+                :label="t('common.edit')"
                 @click="startEdit(f)"
               />
               <UButton
@@ -769,15 +764,18 @@ async function unlinkSource(id: string) {
             </div>
           </div>
         </div>
-        <p v-if="!library.fragments.length" class="text-sm text-slate-500">
-          {{
+        <EmptyState
+          v-if="!library.fragments.length"
+          compact
+          icon="i-lucide-puzzle"
+          :title="
             isWorkspace
               ? t('fragments.authored.empty.workspace')
               : t('fragments.authored.empty.account')
-          }}
-        </p>
+          "
+        />
 
-        <div class="rounded-md border border-slate-800 p-3">
+        <div class="rounded-md border border-default p-3">
           <p class="mb-2 text-sm font-medium">{{ t('fragments.authored.addTitle') }}</p>
           <div class="flex flex-col gap-2">
             <div class="flex gap-2">
@@ -822,7 +820,7 @@ async function unlinkSource(id: string) {
                 :placeholder="t('fragments.authored.briefPlaceholder')"
                 :rows="2"
               />
-              <p class="text-xs text-slate-500">{{ t('fragments.authored.briefHint') }}</p>
+              <p class="text-xs text-dimmed">{{ t('fragments.authored.briefHint') }}</p>
             </div>
             <UInput v-model="draft.tags" :placeholder="t('fragments.authored.tagsPlaceholder')" />
             <UButton
@@ -841,37 +839,38 @@ async function unlinkSource(id: string) {
 
       <!-- Document-backed (living) fragments -->
       <div v-else-if="tab === 'documents'" class="flex flex-col gap-3">
-        <p class="text-xs text-slate-500">
+        <p class="text-xs text-dimmed">
           {{ t('fragments.documents.intro') }}
         </p>
 
         <div
           v-for="f in documentFragments"
           :key="f.id"
-          class="flex items-start gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="flex items-start gap-2 rounded-md border border-default bg-default/60 p-3"
         >
-          <UIcon name="i-lucide-radio" class="mt-0.5 h-4 w-4 text-emerald-400" />
+          <UIcon name="i-lucide-radio" class="mt-0.5 h-4 w-4 text-app-success-400" />
           <div class="min-w-0">
             <div class="flex items-center gap-2">
-              <span class="font-medium text-slate-100">{{ f.title }}</span>
+              <span class="font-medium text-app-100">{{ f.title }}</span>
               <UBadge size="xs" color="success" variant="subtle">
                 {{ f.documentRef?.source }}
               </UBadge>
             </div>
-            <p class="text-sm text-slate-400">{{ f.summary }}</p>
-            <p v-if="f.resolvedAt" class="text-[11px] text-slate-500">
+            <p class="text-sm text-muted">{{ f.summary }}</p>
+            <p v-if="f.resolvedAt" class="text-2xs text-dimmed">
               {{
                 t('fragments.documents.lastResolved', { date: d(new Date(f.resolvedAt), 'long') })
               }}
             </p>
           </div>
           <div class="ms-auto flex gap-1">
-            <UButton
+            <IconButton
+              color="neutral"
               icon="i-lucide-refresh-cw"
               size="xs"
               variant="ghost"
               :loading="rowBusy(`refresh:${f.id}`)"
-              :title="t('fragments.documents.refreshTitle')"
+              :label="t('fragments.documents.refreshTitle')"
               @click="refreshFragment(f.id)"
             />
             <UButton
@@ -884,16 +883,19 @@ async function unlinkSource(id: string) {
             />
           </div>
         </div>
-        <p v-if="!documentFragments.length" class="text-sm text-slate-500">
-          {{ t('fragments.documents.empty') }}
-        </p>
+        <EmptyState
+          v-if="!documentFragments.length"
+          compact
+          icon="i-lucide-file-text"
+          :title="t('fragments.documents.empty')"
+        />
 
-        <div class="rounded-md border border-slate-800 p-3">
+        <div class="rounded-md border border-default p-3">
           <p class="mb-2 text-sm font-medium">{{ t('fragments.documents.linkTitle') }}</p>
-          <div v-if="docLinkDisabled" class="text-sm text-slate-500">
+          <div v-if="docLinkDisabled" class="text-sm text-dimmed">
             {{ t('fragments.documents.disabledHint') }}
           </div>
-          <div v-else-if="!documents.connectedSources.length" class="text-sm text-slate-500">
+          <div v-else-if="!documents.connectedSources.length" class="text-sm text-dimmed">
             {{ t('fragments.documents.connectFirst') }}
           </div>
           <div v-else class="flex flex-col gap-2">
@@ -921,9 +923,9 @@ async function unlinkSource(id: string) {
               <GitHubRepoSearchSelect v-model="docRepoId" @update:repo="docRepo = $event" />
               <div
                 v-if="docRepoId !== undefined"
-                class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+                class="rounded-md border border-default bg-default/40 p-2"
               >
-                <p class="mb-2 text-xs text-slate-400">
+                <p class="mb-2 text-xs text-muted">
                   {{ t('fragments.documents.githubBrowseHint') }}
                 </p>
                 <RepoTreeBrowser
@@ -936,18 +938,15 @@ async function unlinkSource(id: string) {
                   @toggle="toggleDocFile"
                 />
                 <div v-if="stagedDocRefs.length" class="mt-2 space-y-1">
-                  <p class="text-xs font-medium text-slate-400">
+                  <p class="text-xs font-medium text-muted">
                     {{ t('fragments.documents.selectedFiles', { count: stagedDocRefs.length }) }}
                   </p>
                   <div
                     v-for="staged in stagedDocRefs"
                     :key="staged.path"
-                    class="flex items-center gap-1.5 rounded bg-slate-800/60 px-2 py-1 text-xs text-slate-300"
+                    class="flex items-center gap-1.5 rounded-sm bg-elevated/60 px-2 py-1 text-xs text-toned"
                   >
-                    <UIcon
-                      name="i-lucide-file-code-2"
-                      class="h-3.5 w-3.5 shrink-0 text-indigo-400"
-                    />
+                    <UIcon name="i-lucide-file-code-2" class="h-3.5 w-3.5 shrink-0 text-primary" />
                     <span class="truncate">{{ staged.path }}</span>
                     <UButton
                       class="ms-auto"
@@ -985,7 +984,7 @@ async function unlinkSource(id: string) {
               </UButton>
               <p
                 v-if="docLinkBlockedReason"
-                class="flex items-center gap-1 text-xs text-slate-500"
+                class="flex items-center gap-1 text-xs text-dimmed"
                 data-testid="fragment-link-blocked-reason"
               >
                 <UIcon name="i-lucide-info" class="h-3.5 w-3.5 shrink-0" />
@@ -1001,15 +1000,15 @@ async function unlinkSource(id: string) {
         <div
           v-for="s in library.sources"
           :key="s.id"
-          class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="flex items-center gap-2 rounded-md border border-default bg-default/60 p-3"
         >
-          <UIcon name="i-lucide-git-branch" class="h-4 w-4 text-slate-400" />
+          <UIcon name="i-lucide-git-branch" class="h-4 w-4 text-muted" />
           <div class="min-w-0">
-            <span class="font-mono text-sm text-slate-100">
+            <span class="font-mono text-sm text-app-100">
               {{ s.repoOwner }}/{{ s.repoName
-              }}<span class="text-slate-500">/{{ s.dirPath || '' }}</span>
+              }}<span class="text-dimmed">/{{ s.dirPath || '' }}</span>
             </span>
-            <p class="text-xs text-slate-500">
+            <p class="text-xs text-dimmed">
               {{
                 s.lastSyncedAt
                   ? t('fragments.sources.metaSynced', { ref: s.gitRef })
@@ -1028,6 +1027,7 @@ async function unlinkSource(id: string) {
           </UBadge>
           <div class="ms-auto flex gap-1">
             <UButton
+              color="neutral"
               icon="i-lucide-search-check"
               size="xs"
               variant="ghost"
@@ -1035,6 +1035,7 @@ async function unlinkSource(id: string) {
               @click="checkSource(s.id)"
             />
             <UButton
+              color="neutral"
               icon="i-lucide-refresh-cw"
               size="xs"
               variant="ghost"
@@ -1051,11 +1052,14 @@ async function unlinkSource(id: string) {
             />
           </div>
         </div>
-        <p v-if="!library.sources.length" class="text-sm text-slate-500">
-          {{ t('fragments.sources.empty') }}
-        </p>
+        <EmptyState
+          v-if="!library.sources.length"
+          compact
+          icon="i-lucide-git-branch"
+          :title="t('fragments.sources.empty')"
+        />
 
-        <div class="rounded-md border border-slate-800 p-3">
+        <div class="rounded-md border border-default p-3">
           <p class="mb-2 text-sm font-medium">{{ t('fragments.sources.linkTitle') }}</p>
           <div class="flex flex-col gap-2">
             <!-- Connected: search a repo + browse to the guideline directory -->
@@ -1063,16 +1067,16 @@ async function unlinkSource(id: string) {
               <GitHubRepoSearchSelect v-model="sourceRepoId" @update:repo="sourceRepo = $event" />
               <div
                 v-if="sourceRepoId !== undefined"
-                class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+                class="rounded-md border border-default bg-default/40 p-2"
               >
-                <p class="mb-2 text-xs text-slate-400">
+                <p class="mb-2 text-xs text-muted">
                   {{ t('fragments.sources.browseHint') }}
                 </p>
                 <RepoTreeBrowser v-model="sourceDir" :repo-github-id="sourceRepoId" mode="dir" />
-                <p class="mt-2 truncate text-xs text-slate-400">
+                <p class="mt-2 truncate text-xs text-muted">
                   <template v-if="sourceDir">
                     {{ t('fragments.sources.selectedDir') }}
-                    <code class="text-slate-200">{{ sourceDir }}</code>
+                    <code class="text-default">{{ sourceDir }}</code>
                   </template>
                   <template v-else>{{ t('fragments.sources.wholeRepo') }}</template>
                 </p>

@@ -76,7 +76,7 @@ const timezoneOptions = computed(() =>
           class="w-24"
           @update:model-value="patch({ intervalHours: Math.max(1, Number($event) || 1) })"
         />
-        <span class="text-xs text-slate-400">{{ t('recurring.hours') }}</span>
+        <span class="text-xs text-muted">{{ t('recurring.hours') }}</span>
       </div>
     </UFormField>
 
@@ -110,7 +110,7 @@ const timezoneOptions = computed(() =>
         class="w-28"
         @update:model-value="patch({ windowStartHour: Number($event) })"
       />
-      <span class="text-xs text-slate-400">{{ t('recurring.to') }}</span>
+      <span class="text-xs text-muted">{{ t('recurring.to') }}</span>
       <USelect
         :model-value="modelValue.windowEndHour ?? 24 % 24"
         :items="hours"

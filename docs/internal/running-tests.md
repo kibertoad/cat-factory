@@ -4,7 +4,7 @@ What it costs to get a green suite on a machine that is not a CI runner. Nothing
 is part of the product: it is the setup, the scope worth running per edit, and the two
 traps that make a working tree look broken when the only thing missing is a database.
 
-Kept SHORT and ratcheted (`scripts/check-file-size.mjs`) because `CLAUDE.md` points an
+Kept SHORT and ratcheted (`scripts/check-file-size.mjs`) because `AGENTS.md` points an
 agent straight here. A pointer is only cheap while the thing it points at is: detail for
 one package goes in that package's `AGENTS.md`, and anything a human contributor needs
 before their first commit goes in [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
@@ -12,7 +12,7 @@ before their first commit goes in [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
 ## The suites
 
 `pnpm test:run` from the root covers every package, and it is CI's lane: running the
-whole tree locally is BANNED (`CLAUDE.md`), so the scopes below are what you run. Most
+whole tree locally is BANNED (`AGENTS.md`), so the scopes below are what you run. Most
 of it needs no setup; two packages are the exception, the Node and Local facades, which
 test against a real Postgres and with no server reachable fail with `DATABASE_URL is
 required to run the local conformance tests` while every other task passes: read that

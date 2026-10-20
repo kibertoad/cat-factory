@@ -401,37 +401,37 @@ export const BINARY_OUTPUT_STATE_KEYS: Record<
 > = {
   'not-started': {
     icon: 'i-lucide-clock',
-    tone: 'text-slate-400',
+    tone: 'text-muted',
     summary: 'binaryOutput.state.notStarted.summary',
     detail: 'binaryOutput.state.notStarted.detail',
   },
   configured: {
     icon: 'i-lucide-hourglass',
-    tone: 'text-slate-300',
+    tone: 'text-toned',
     summary: 'binaryOutput.state.configured.summary',
     detail: 'binaryOutput.state.configured.detail',
   },
   undeclared: {
     icon: 'i-lucide-circle-help',
-    tone: 'text-amber-300',
+    tone: 'text-app-warning-300',
     summary: 'binaryOutput.state.undeclared.summary',
     detail: 'binaryOutput.state.undeclared.detail',
   },
   'parse-failed': {
     icon: 'i-lucide-file-warning',
-    tone: 'text-amber-300',
+    tone: 'text-app-warning-300',
     summary: 'binaryOutput.state.parseFailed.summary',
     detail: 'binaryOutput.state.parseFailed.detail',
   },
   'declared-none': {
     icon: 'i-lucide-circle-slash',
-    tone: 'text-slate-300',
+    tone: 'text-toned',
     summary: 'binaryOutput.state.declaredNone.summary',
     detail: 'binaryOutput.state.declaredNone.detail',
   },
   stored: {
     icon: 'i-lucide-package-check',
-    tone: 'text-emerald-300',
+    tone: 'text-app-success-300',
     summary: 'binaryOutput.state.stored.summary',
     detail: '',
   },

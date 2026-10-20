@@ -1,0 +1,2 @@
+ALTER TABLE "guided_review_sessions" ADD COLUMN "created_by_kind" text DEFAULT 'user' NOT NULL;--> statement-breakpoint
+CREATE INDEX "idx_guided_review_sessions_created" ON "guided_review_sessions" ("workspace_id","created_at","id");

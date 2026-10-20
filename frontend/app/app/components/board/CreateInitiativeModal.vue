@@ -26,6 +26,7 @@ import { GENERIC_PRESET_ID } from '~/stores/initiative'
 import DescriptorFields from '~/components/common/DescriptorFields.vue'
 import ContextAttachmentFields from '~/components/context/ContextAttachmentFields.vue'
 import type { PendingContext } from '~/composables/useContextLinking'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -146,9 +147,7 @@ async function create() {
     const { resolved, failures } = await resolvePending(pendingContext.value)
     pendingContext.value = resolved
     if (failures.length) {
-      presentLinkFailures(failures, undefined, {
-        title: (count) => t('initiative.create.contextFailed', { count }, count),
-      })
+      presentLinkFailures(failures, undefined, { titleKey: 'initiative.create.contextFailed' })
       return
     }
     const { block } = await initiatives.create(frameId, {
@@ -163,7 +162,7 @@ async function create() {
     // doc another task already holds), surfaced with its specific cause rather than a bare count.
     // The initiative is already created, so a failed link never costs the user the form.
     presentLinkFailures(await linkPending(block.id, pendingContext.value), block.id, {
-      title: (count) => t('initiative.create.linkFailed', { count }, count),
+      titleKey: 'initiative.create.linkFailed',
     })
     ui.closeCreateInitiative()
     // Select the fresh block so the inspector offers "Run planning" right away.
@@ -177,13 +176,13 @@ async function create() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('initiative.create.title')">
+  <AppModal size="form" v-model:open="open" :title="t('initiative.create.title')">
     <template #body>
       <div class="space-y-4" data-testid="create-initiative-modal">
-        <p v-if="frame" class="text-xs text-slate-400">
+        <p v-if="frame" class="text-xs text-muted">
           <i18n-t keypath="initiative.create.inFrame" tag="span" scope="global">
             <template #frame>
-              <span class="font-medium text-slate-200">{{ frame.title }}</span>
+              <span class="font-medium text-default">{{ frame.title }}</span>
             </template>
           </i18n-t>
         </p>
@@ -191,21 +190,20 @@ async function create() {
         <!-- Preset picker: only when a deployment registered presets beyond the built-in generic
              one, so a single-preset install keeps today's plain form. -->
         <div v-if="presets.length > 1" class="space-y-1.5">
-          <span class="text-xs font-medium text-slate-300">{{
-            t('initiative.create.preset')
-          }}</span>
+          <span class="text-xs font-medium text-toned">{{ t('initiative.create.preset') }}</span>
           <div class="grid gap-2" data-testid="initiative-preset-picker">
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               v-for="p in presets"
               :key="p.id"
-              type="button"
               :data-testid="`initiative-preset-option-${p.id}`"
               :aria-pressed="p.id === selectedPresetId"
               class="flex items-start gap-3 rounded-md border px-3 py-2 text-left transition"
               :class="
                 p.id === selectedPresetId
-                  ? 'border-primary-500 bg-primary-950/30'
-                  : 'border-slate-700 hover:border-slate-600'
+                  ? 'border-primary bg-primary/10 hover:bg-primary/10 focus-visible:bg-primary/10 disabled:bg-primary/10'
+                  : 'border-muted hover:border-app-600'
               "
               @click="selectPreset(p.id)"
             >
@@ -215,14 +213,14 @@ async function create() {
                 :style="{ color: p.presentation.color }"
               />
               <span class="min-w-0">
-                <span class="block text-sm font-medium text-slate-200">
+                <span class="block text-sm font-medium text-default">
                   {{ p.presentation.label }}
                 </span>
-                <span class="block text-[11px] text-slate-400">
+                <span class="block text-2xs text-muted">
                   {{ p.presentation.description }}
                 </span>
               </span>
-            </button>
+            </UButton>
           </div>
         </div>
 
@@ -266,7 +264,7 @@ async function create() {
           :issues-hint="t('initiative.create.contextIssuesHint')"
         />
 
-        <p class="text-[11px] text-slate-500">
+        <p class="text-2xs text-dimmed">
           {{ t('initiative.create.hint') }}
         </p>
       </div>
@@ -286,7 +284,6 @@ async function create() {
         </UButton>
         <UButton
           data-testid="create-initiative-submit"
-          color="primary"
           :loading="submitting || initiatives.creating"
           :disabled="!canSubmit"
           @click="create"
@@ -295,5 +292,5 @@ async function create() {
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

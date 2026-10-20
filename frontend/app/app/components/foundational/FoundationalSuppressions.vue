@@ -23,7 +23,7 @@ const catalog =
   props.kind === 'workspace'
     ? useFoundationalServicesStore()
     : useFoundationalServices(props.kind, props.ownerId)
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -47,7 +47,7 @@ async function restore(serviceId: string) {
   busyRows.add(serviceId)
   try {
     await catalog.restore(serviceId)
-    toast.add({ title: t('foundational.toast.restored'), icon: 'i-lucide-eye' })
+    actionToast.success('foundational.toast.restored')
   } catch (e) {
     present(e, 'foundational.toast.restoreFailed')
   } finally {
@@ -63,24 +63,25 @@ async function restore(serviceId: string) {
     data-testid="foundational-suppressions"
   >
     <p class="text-sm font-medium">{{ title[props.kind] }}</p>
-    <p class="text-xs text-slate-500">{{ intro[props.kind] }}</p>
+    <p class="text-xs text-dimmed">{{ intro[props.kind] }}</p>
     <div
       v-for="s in catalog.suppressions"
       :key="s.id"
-      class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/40 p-3"
+      class="flex items-center gap-2 rounded-md border border-default bg-default/40 p-3"
     >
-      <UIcon name="i-lucide-eye-off" class="h-4 w-4 shrink-0 text-slate-500" />
+      <UIcon name="i-lucide-eye-off" class="h-4 w-4 shrink-0 text-dimmed" />
       <div class="min-w-0 flex-1">
-        <p class="truncate text-sm text-slate-300">
+        <p class="truncate text-sm text-toned">
           {{ s.name || s.id }}
-          <code v-if="s.name" class="ms-1 text-[11px] text-slate-500">{{ s.id }}</code>
+          <code v-if="s.name" class="ms-1 text-2xs text-dimmed">{{ s.id }}</code>
         </p>
-        <p v-if="s.summary" class="text-xs text-slate-500">{{ s.summary }}</p>
-        <p v-if="!s.inherited" class="text-[11px] text-slate-500">
+        <p v-if="s.summary" class="text-xs text-dimmed">{{ s.summary }}</p>
+        <p v-if="!s.inherited" class="text-2xs text-dimmed">
           {{ t('foundational.suppressions.shadowsNothing') }}
         </p>
       </div>
       <UButton
+        color="neutral"
         icon="i-lucide-eye"
         size="xs"
         variant="ghost"

@@ -10,7 +10,7 @@ defineProps<{ message: string }>()
 
 <template>
   <div
-    class="flex items-start gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200"
+    class="flex items-start gap-2.5 rounded-lg border border-app-warning-500/40 bg-app-warning-500/10 p-3 text-sm text-app-warning-200"
     role="alert"
   >
     <UIcon name="i-lucide-lock" class="mt-0.5 h-4 w-4 shrink-0" />

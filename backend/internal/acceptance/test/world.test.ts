@@ -267,7 +267,7 @@ describe('coerceWorld', () => {
   })
 
   it('drops a ledger written before scenario 01 stopped bootstrapping, rather than half-reading it', () => {
-    // Internals are not kept backwards compatible (CLAUDE.md), and this is the shape that proves it
+    // Internals are not kept backwards compatible (AGENTS.md), and this is the shape that proves it
     // costs nothing: an old ledger's `bootstrapJobs` is simply not read, and the pass starts fresh
     // instead of re-attaching to a job id no endpoint answers any more.
     const world = coerceWorld({ runId: 'run-1', bootstrapJobs: { backend: 'job_1' } })

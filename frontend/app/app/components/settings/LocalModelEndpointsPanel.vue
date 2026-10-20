@@ -17,11 +17,14 @@ import {
 } from '~/types/localModels'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useLocalModelsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
@@ -228,12 +231,10 @@ async function save() {
       models: selected.value.map((id) => ({ id, ...modalityOf(imageInput.value[id]) })),
     })
     apiKey.value = ''
-    toast.add({
-      title: t('settings.localModelEndpoints.toast.saved', {
+    actionToast.success('settings.localModelEndpoints.toast.saved', {
+      params: {
         name: LOCAL_RUNNER_LABELS[provider.value],
-      }),
-      icon: 'i-lucide-check',
-      color: 'success',
+      },
     })
   } catch (e) {
     present(e, 'settings.localModelEndpoints.toast.saveFailed')
@@ -259,7 +260,7 @@ async function remove(p: LocalRunner) {
     // The row is gone from the store, so re-seeding the draft it was showing yields the
     // fresh-runner defaults: the same reset, without a second copy of what a reset means.
     if (provider.value === p) seedDraft(p)
-    toast.add({ title: t('settings.localModelEndpoints.toast.removed'), icon: 'i-lucide-check' })
+    actionToast.success('settings.localModelEndpoints.toast.removed')
   } catch (e) {
     present(e, 'settings.localModelEndpoints.toast.removeFailed')
   } finally {
@@ -269,23 +270,19 @@ async function remove(p: LocalRunner) {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('settings.localModelEndpoints.title')"
-    :ui="{ content: 'max-w-2xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('settings.localModelEndpoints.title')">
     <template #title>
       <IntegrationBackTitle :title="t('settings.localModelEndpoints.title')" @back="back" />
     </template>
     <template #body>
       <div class="space-y-4">
-        <p class="text-xs text-slate-400">
+        <p class="text-xs text-muted">
           <i18n-t keypath="settings.localModelEndpoints.intro" tag="span" scope="global">
             <template #ownMachine>
               <strong>{{ t('settings.localModelEndpoints.introOwnMachine') }}</strong>
             </template>
             <template #justForYou>
-              <span class="text-slate-300">{{
+              <span class="text-toned">{{
                 t('settings.localModelEndpoints.introJustForYou')
               }}</span>
             </template>
@@ -296,12 +293,12 @@ async function remove(p: LocalRunner) {
         <div
           v-for="e in store.endpoints"
           :key="e.provider"
-          class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+          class="flex items-center justify-between rounded-md border border-muted bg-default/50 px-3 py-2 text-sm"
         >
           <div>
-            <span class="font-medium text-slate-200">{{ e.label }}</span>
-            <span class="ms-2 text-xs text-slate-500">{{ LOCAL_RUNNER_LABELS[e.provider] }}</span>
-            <div class="text-[11px] text-slate-500">
+            <span class="font-medium text-default">{{ e.label }}</span>
+            <span class="ms-2 text-xs text-dimmed">{{ LOCAL_RUNNER_LABELS[e.provider] }}</span>
+            <div class="text-2xs text-dimmed">
               {{ e.baseUrl }} ·
               {{
                 t(
@@ -316,25 +313,27 @@ async function remove(p: LocalRunner) {
             </div>
             <!-- A row whose URL the deployment no longer permits: its models are withheld
                  from the picker, so this is the only place that can say why. -->
-            <div v-if="e.urlBlockedReason" class="mt-1 text-[11px] text-amber-400">
+            <div v-if="e.urlBlockedReason" class="mt-1 text-2xs text-app-warning-400">
               {{ t('settings.localModelEndpoints.blocked') }}
-              <span class="block text-amber-300/70">{{ urlReasonText(e.urlBlockedReason) }}</span>
+              <span class="block text-app-warning-300/70">{{
+                urlReasonText(e.urlBlockedReason)
+              }}</span>
             </div>
             <!-- Part of the stored model list could not be read and was discarded. Without this
                  the shortened list reads exactly like a runner nothing was ever enabled on, and
                  only one of those is fixed by re-ticking. -->
-            <div v-if="e.unreadableModels" class="mt-1 text-[11px] text-amber-400">
+            <div v-if="e.unreadableModels" class="mt-1 text-2xs text-app-warning-400">
               {{ t('settings.localModelEndpoints.modelsDiscarded') }}
             </div>
           </div>
           <div class="flex items-center gap-1">
-            <UButton
+            <IconButton
               icon="i-lucide-pencil"
               color="neutral"
               variant="ghost"
               size="xs"
               :disabled="busy"
-              :title="t('settings.localModelEndpoints.edit')"
+              :label="t('settings.localModelEndpoints.edit')"
               @click="selectRunner(e.provider)"
             />
             <UButton
@@ -349,14 +348,14 @@ async function remove(p: LocalRunner) {
         </div>
 
         <!-- add / edit form -->
-        <div class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3">
-          <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div class="rounded-lg border border-dashed border-muted p-3 space-y-3">
+          <SectionLabel as="p">
             {{
               existing
                 ? t('settings.localModelEndpoints.editRunner')
                 : t('settings.localModelEndpoints.addRunner')
             }}
-          </p>
+          </SectionLabel>
 
           <div class="flex flex-wrap items-end gap-3">
             <UFormField :label="t('settings.localModelEndpoints.runnerType')">
@@ -411,13 +410,13 @@ async function remove(p: LocalRunner) {
             >
               {{ t('settings.localModelEndpoints.testConnection') }}
             </UButton>
-            <span v-if="testError" class="text-xs text-rose-400">
+            <span v-if="testError" class="text-xs text-app-error-400">
               {{ testError }}
-              <span v-if="testErrorDetail" class="block text-[11px] text-rose-300/70">{{
+              <span v-if="testErrorDetail" class="block text-2xs text-app-error-300/70">{{
                 testErrorDetail
               }}</span>
             </span>
-            <span v-else-if="tested && discovered.length" class="text-xs text-emerald-400">
+            <span v-else-if="tested && discovered.length" class="text-xs text-app-success-400">
               {{
                 t(
                   'settings.localModelEndpoints.reachable',
@@ -426,22 +425,22 @@ async function remove(p: LocalRunner) {
                 )
               }}
             </span>
-            <span v-else-if="tested" class="text-xs text-slate-500">{{
+            <span v-else-if="tested" class="text-xs text-dimmed">{{
               t('settings.localModelEndpoints.noModels')
             }}</span>
           </div>
 
           <!-- discovered models multi-select, each with its declared image support -->
           <div v-if="discovered.length" class="space-y-1.5">
-            <span class="block text-[10px] uppercase tracking-wide text-slate-500">
+            <SectionLabel as="span" class="block">
               {{ t('settings.localModelEndpoints.enableModels') }}
-            </span>
-            <p class="text-[11px] text-slate-500">
+            </SectionLabel>
+            <p class="text-2xs text-dimmed">
               {{ t('settings.localModelEndpoints.imageInputHint') }}
             </p>
             <div class="space-y-1.5">
               <div v-for="m in discovered" :key="m" class="flex items-center gap-2">
-                <label class="flex min-w-0 flex-1 items-center gap-2 text-sm text-slate-300">
+                <label class="flex min-w-0 flex-1 items-center gap-2 text-sm text-toned">
                   <UCheckbox
                     :model-value="selected.includes(m)"
                     @update:model-value="
@@ -468,7 +467,6 @@ async function remove(p: LocalRunner) {
 
           <div class="flex justify-end">
             <UButton
-              color="primary"
               variant="soft"
               size="sm"
               icon="i-lucide-save"
@@ -482,5 +480,5 @@ async function remove(p: LocalRunner) {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

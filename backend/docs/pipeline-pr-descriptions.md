@@ -36,5 +36,5 @@ template's shape and none of its meaning.
 - The engine-managed section of the same PR body:
   [`pr-verification-report.md`](../../docs/initiatives/pr-verification-report.md).
 - The untrusted-text rules every rendered PR surface obeys (host auto-links, fence escapes,
-  `redactSecrets` at compose time): CLAUDE.md, "Untrusted text crossing a rendered surface", and
+  `redactSecrets` at compose time): AGENTS.md, "Untrusted text crossing a rendered surface", and
   [`security-model.md`](./security-model.md).

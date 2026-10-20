@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { onKeyStroke } from '@vueuse/core'
 import type { IterationCapChoice } from '~/types/execution'
 import { agentKindMeta } from '~/utils/catalog'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
@@ -29,6 +28,10 @@ import {
 } from '~/utils/pipelineRender'
 import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 import RunDetailLoadState from '~/components/panels/RunDetailLoadState.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
@@ -368,10 +371,6 @@ watch(
   },
 )
 
-onKeyStroke('Escape', () => {
-  if (open.value) close()
-})
-
 const { copy } = useCopyToClipboard()
 async function copyOutput() {
   if (step.value?.output) await copy(step.value.output)
@@ -387,67 +386,76 @@ async function copyOutput() {
   <!-- `data-agent-kind` names WHICH step this window is scoped to, as the kind rather than as
        the heading beside it: the heading is a translated display label, so it is the wrong
        thing to read for anything that needs to know which agent's step is open. -->
-  <div
+  <!-- `content-key` moves focus back to the top when the reader swaps to another step. -->
+  <TakeoverShell
     v-if="open && step && agent"
+    :label="agent.label"
+    :content-key="ctx && `${ctx.instanceId}:${ctx.stepIndex}`"
     data-testid="step-detail"
     :data-agent-kind="step?.agentKind"
-    class="fixed inset-0 z-50 flex max-h-[100dvh] bg-slate-950/96 backdrop-blur-sm"
-    role="dialog"
-    aria-modal="true"
+    class="bg-app-950/96 backdrop-blur-sm"
+    @close="close"
   >
-    <!-- ToC sidebar (only meaningful when there are prose headings) -->
+    <!-- ToC sidebar (only meaningful when there are prose headings). Hidden below `lg`
+         (the compact cutoff): it is a jump-nav duplicating headings already present in the
+         scrollable prose, so it stays a wide-screen convenience rather than restacking a
+         vertical nav into a top strip. -->
     <aside
       v-if="outline.hasToc"
       data-testid="step-detail-toc"
-      class="hidden w-72 shrink-0 flex-col border-e border-slate-800 bg-slate-900/60 md:flex"
+      class="hidden w-72 shrink-0 flex-col border-e border-default bg-default/60 lg:flex"
     >
-      <div class="border-b border-slate-800 px-4 py-3">
-        <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <div class="border-b border-default px-4 py-3">
+        <SectionLabel>
           {{ t('panels.stepDetail.contents') }}
-        </div>
+        </SectionLabel>
       </div>
       <nav class="flex-1 space-y-0.5 overflow-auto px-2 py-3">
-        <button
-          class="block w-full truncate rounded-md px-2 py-1 text-start text-[13px] transition"
+        <UButton
+          color="neutral"
+          variant="ghost"
+          class="block w-full truncate rounded-md px-2 py-1 text-start text-sm transition"
           :class="
             activeId === 'step-details'
-              ? 'bg-indigo-500/15 font-medium text-indigo-200'
-              : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+              ? 'bg-primary/15 font-medium text-primary'
+              : 'text-muted hover:bg-elevated/60 hover:text-default'
           "
           @click="goTo('step-details')"
         >
           {{ t('panels.stepDetail.details') }}
-        </button>
-        <button
+        </UButton>
+        <UButton
+          color="neutral"
+          variant="ghost"
           v-for="s in tocSections"
           :key="s.id"
-          class="block w-full truncate rounded-md px-2 py-1 text-start text-[13px] transition"
+          class="block w-full truncate rounded-md px-2 py-1 text-start text-sm transition"
           :class="
             activeId === s.id
-              ? 'bg-indigo-500/15 font-medium text-indigo-200'
-              : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+              ? 'bg-primary/15 font-medium text-primary'
+              : 'text-muted hover:bg-elevated/60 hover:text-default'
           "
           :style="{ paddingLeft: `${(s.depth - outline.minDepth) * 0.85 + 0.5}rem` }"
           :title="s.title"
           @click="goTo(s.id)"
         >
           {{ s.title }}
-        </button>
+        </UButton>
       </nav>
     </aside>
 
     <!-- main column -->
     <div class="flex min-w-0 flex-1 flex-col">
-      <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
+      <header class="flex items-center gap-3 border-b border-default px-6 py-4">
         <div
           class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-          :style="{ backgroundColor: agent.color + '22' }"
+          :style="{ backgroundColor: tint(agent.color) }"
         >
           <UIcon :name="agent.icon" class="h-5 w-5" :style="{ color: agent.color }" />
         </div>
         <div class="min-w-0">
-          <h1 class="truncate text-base font-semibold text-white">{{ agent.label }}</h1>
-          <p v-if="block" class="truncate text-xs text-slate-500">{{ block.title }}</p>
+          <h1 class="truncate text-base font-semibold text-highlighted">{{ agent.label }}</h1>
+          <p v-if="block" class="truncate text-xs text-dimmed">{{ block.title }}</p>
         </div>
         <div class="ms-auto flex items-center gap-1.5">
           <UBadge
@@ -470,24 +478,24 @@ async function copyOutput() {
             <UIcon name="i-lucide-alert-triangle" class="me-1 h-3 w-3" />
             {{ t('panels.stepDetail.decisionRequired') }}
           </UBadge>
-          <UButton
+          <IconButton
             v-if="outline.sections.length"
             :icon="allCollapsed ? 'i-lucide-unfold-vertical' : 'i-lucide-fold-vertical'"
             color="neutral"
             variant="ghost"
             size="sm"
-            :title="
+            :label="
               allCollapsed ? t('panels.stepDetail.expandAll') : t('panels.stepDetail.collapseAll')
             "
             @click="setAll(!allCollapsed)"
           />
-          <UButton
+          <IconButton
             v-if="hasOutput"
             icon="i-lucide-copy"
             color="neutral"
             variant="ghost"
             size="sm"
-            :title="t('panels.stepDetail.copyRawOutput')"
+            :label="t('panels.stepDetail.copyRawOutput')"
             @click="copyOutput"
           />
           <!-- Restart the pipeline from this step (shared two-click confirm; resetting
@@ -499,12 +507,12 @@ async function copyOutput() {
             :step-index="ctx?.stepIndex ?? null"
             @restarted="close"
           />
-          <UButton
+          <IconButton
             icon="i-lucide-x"
             color="neutral"
             variant="ghost"
             size="sm"
-            :title="t('panels.stepDetail.closeEsc')"
+            :label="t('panels.stepDetail.closeEsc')"
             @click="close"
           />
         </div>
@@ -519,7 +527,7 @@ async function copyOutput() {
           <section
             id="step-details"
             :ref="(el) => (sectionEls['step-details'] = el as HTMLElement | null)"
-            class="scroll-mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4"
+            class="scroll-mt-4 rounded-xl border border-default bg-default/50 p-4"
           >
             <StepMetadataCard
               :step="step"
@@ -599,16 +607,15 @@ async function copyOutput() {
 
           <div
             v-if="parkPresentation"
-            class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"
+            class="rounded-xl border border-app-warning-500/30 bg-app-warning-500/5 p-4"
             data-testid="dedicated-park-redirect"
             :data-park="dedicatedPark"
           >
-            <p class="text-[13px] leading-relaxed text-amber-200/90">
+            <p class="text-sm leading-relaxed text-app-warning-200/90">
               {{ t(parkPresentation.noticeKey) }}
             </p>
             <UButton
               class="mt-3"
-              color="primary"
               size="sm"
               :icon="parkPresentation.icon"
               data-testid="dedicated-park-open"
@@ -640,7 +647,7 @@ async function copyOutput() {
             <li
               v-for="(note, i) in runNotes"
               :key="i"
-              class="flex items-start gap-1.5 text-[11px] leading-snug text-amber-300/80"
+              class="flex items-start gap-1.5 text-2xs leading-snug text-app-warning-300/80"
             >
               <UIcon name="i-lucide-info" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>{{ note }}</span>
@@ -652,6 +659,7 @@ async function copyOutput() {
                provider error, behind a toggle (most useful on a failed-to-start run) -->
           <div v-if="executionId">
             <UButton
+              color="neutral"
               :icon="showProvisioning ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
               variant="ghost"
               size="xs"
@@ -680,6 +688,7 @@ async function copyOutput() {
                superseded and the FAILED attempts, scoped to the step being looked at -->
           <div v-if="hasStepHistory">
             <UButton
+              color="neutral"
               :icon="showHistory ? 'i-lucide-chevron-up' : 'i-lucide-history'"
               variant="ghost"
               size="xs"
@@ -755,7 +764,7 @@ async function copyOutput() {
           <!-- edit-then-approve: a direct editor over the raw conclusions; the
                edits become the approved proposal that flows to the next step -->
           <section v-if="editing" class="scroll-mt-4">
-            <div class="mb-2 flex items-center gap-1.5 text-[11px] text-amber-400">
+            <div class="mb-2 flex items-center gap-1.5 text-2xs text-app-warning-400">
               <UIcon name="i-lucide-pencil" class="h-3.5 w-3.5" />
               <span class="font-semibold uppercase tracking-wide">{{
                 t('panels.stepDetail.editingConclusions')
@@ -767,7 +776,7 @@ async function copyOutput() {
               autoresize
               size="sm"
               class="w-full"
-              :ui="{ base: 'font-mono text-[12px] leading-relaxed' }"
+              :ui="{ base: 'font-mono text-xs leading-relaxed' }"
               :placeholder="t('panels.stepDetail.editConclusionsPlaceholder')"
             />
           </section>
@@ -781,26 +790,28 @@ async function copyOutput() {
               :ref="(el) => (sectionEls[s.id] = el as HTMLElement | null)"
               class="scroll-mt-4"
             >
-              <button
+              <UButton
+                color="neutral"
+                variant="ghost"
                 v-if="s.depth > 0"
-                class="group flex w-full items-center gap-2 rounded-md py-1 text-start transition hover:text-white"
+                class="group flex w-full items-center gap-2 rounded-md px-0 py-1 text-start transition hover:bg-transparent hover:text-highlighted"
                 @click="toggle(s.id)"
               >
                 <UIcon
                   name="i-lucide-chevron-right"
-                  class="h-4 w-4 shrink-0 text-slate-500 transition-transform group-hover:text-slate-300"
+                  class="h-4 w-4 shrink-0 text-dimmed transition-transform group-hover:text-toned"
                   :class="collapsed[s.id] ? '' : 'rotate-90'"
                 />
                 <span
-                  class="font-semibold text-slate-100"
+                  class="font-semibold text-app-100"
                   :class="s.depth <= 1 ? 'text-lg' : s.depth === 2 ? 'text-base' : 'text-sm'"
                   v-html="s.titleHtml"
                 />
-              </button>
+              </UButton>
               <!-- eslint-disable-next-line vue/no-v-html -->
               <div
                 v-show="!collapsed[s.id]"
-                class="reader-prose mt-1 text-[13px] leading-relaxed text-slate-300"
+                class="reader-prose mt-1 text-sm leading-relaxed text-toned"
                 :class="[
                   s.depth > 0 ? 'ps-6' : '',
                   genericApprovalPending && !editing ? 'review-mode' : '',
@@ -811,12 +822,11 @@ async function copyOutput() {
             </section>
           </template>
 
-          <p
+          <EmptyState
             v-else
-            class="rounded-lg border border-dashed border-slate-800 py-6 text-center text-sm text-slate-500"
-          >
-            {{ t('panels.stepDetail.noProseOutput') }}
-          </p>
+            icon="i-lucide-file-text"
+            :title="t('panels.stepDetail.noProseOutput')"
+          />
         </div>
       </div>
     </div>
@@ -826,24 +836,24 @@ async function copyOutput() {
          bottom sheet (still reachable) below lg, so the gate is always actionable. -->
     <aside
       v-if="genericApprovalPending"
-      class="absolute inset-x-0 bottom-0 z-10 flex max-h-[70dvh] flex-col rounded-t-2xl border-t border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:w-96 lg:shrink-0 lg:rounded-none lg:border-s lg:border-t-0 lg:border-slate-800 lg:bg-slate-900/60 lg:shadow-none lg:backdrop-blur-none"
+      class="absolute inset-x-0 bottom-0 z-10 flex max-h-[70dvh] flex-col rounded-t-2xl border-t border-muted bg-default/95 shadow-2xl backdrop-blur lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:w-96 lg:shrink-0 lg:rounded-none lg:border-s lg:border-t-0 lg:border-default lg:bg-default/60 lg:shadow-none lg:backdrop-blur-none"
     >
-      <div class="border-b border-slate-800 px-4 py-3">
-        <div class="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
+      <div class="border-b border-default px-4 py-3">
+        <div class="text-2xs font-semibold uppercase tracking-wide text-app-warning-400">
           {{
             editing
               ? t('panels.stepDetail.approveWithCorrections')
               : t('panels.stepDetail.reviewAndApprove')
           }}
         </div>
-        <p class="mt-1 text-[12px] text-slate-400">
+        <p class="mt-1 text-xs text-muted">
           {{ editing ? t('panels.stepDetail.editHint') : t('panels.stepDetail.reviewHint') }}
         </p>
         <!-- The gate's configured POLICY, when it has one. Both lines exist because an
            approve on such a gate legitimately may not advance the run: without the tally, a
            correctly-recorded approval is indistinguishable from a call that failed, and
            without the refusal a person would press a button the server answers 403. -->
-        <p v-if="gateQuorum" class="mt-1 text-[12px] text-amber-300/90" data-testid="gate-quorum">
+        <p v-if="gateQuorum" class="mt-1 text-xs text-app-warning-300/90" data-testid="gate-quorum">
           {{
             t('panels.stepDetail.quorumProgress', {
               recorded: gateQuorum.recorded,
@@ -852,11 +862,7 @@ async function copyOutput() {
           }}
           <span v-if="viewerHasApproved">{{ t('panels.stepDetail.quorumYours') }}</span>
         </p>
-        <p
-          v-if="gateRefusal"
-          class="mt-1 text-[12px] text-slate-400"
-          data-testid="gate-not-approver"
-        >
+        <p v-if="gateRefusal" class="mt-1 text-xs text-muted" data-testid="gate-not-approver">
           {{ t(GATE_REFUSAL_KEYS[gateRefusal]) }}
         </p>
       </div>
@@ -864,7 +870,7 @@ async function copyOutput() {
       <div class="flex-1 space-y-3 overflow-auto overscroll-contain px-4 py-3">
         <p
           v-if="editing"
-          class="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[12px] leading-relaxed text-amber-200/90"
+          class="rounded-lg border border-app-warning-500/30 bg-app-warning-500/5 p-3 text-xs leading-relaxed text-app-warning-200/90"
         >
           {{ t('panels.stepDetail.editingNotice') }}
         </p>
@@ -873,13 +879,13 @@ async function copyOutput() {
           <div
             v-if="draftTarget"
             data-testid="step-review-composer"
-            class="rounded-lg border border-indigo-500/40 bg-indigo-500/5 p-3"
+            class="rounded-lg border border-primary/40 bg-primary/5 p-3"
           >
-            <div class="mb-1 text-[10px] uppercase tracking-wide text-indigo-300">
+            <div class="mb-1 text-3xs uppercase tracking-wide text-primary">
               {{ t('panels.stepDetail.commentingOn') }}
             </div>
             <pre
-              class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-slate-950/60 p-2 text-[11px] text-slate-300"
+              class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded-sm bg-app-950/60 p-2 text-2xs text-toned"
               >{{ draftTarget.quotedSource }}</pre>
             <UTextarea
               v-model="draftBody"
@@ -895,7 +901,6 @@ async function copyOutput() {
                 {{ t('common.cancel') }}
               </UButton>
               <UButton
-                color="primary"
                 size="xs"
                 data-testid="step-review-comment-add"
                 :disabled="!draftBody.trim()"
@@ -911,32 +916,34 @@ async function copyOutput() {
             v-for="(c, idx) in reviewComments"
             :key="idx"
             data-testid="step-review-comment"
-            class="rounded-lg border border-slate-800 bg-slate-900/50 p-3"
+            class="rounded-lg border border-default bg-default/50 p-3"
           >
             <div class="mb-1 flex items-start justify-between gap-2">
-              <div class="text-[10px] uppercase tracking-wide text-slate-500">
+              <SectionLabel>
                 {{ t('panels.stepDetail.commentN', { number: idx + 1 }) }}
-              </div>
-              <button
-                class="text-slate-500 transition hover:text-rose-400"
-                :title="t('panels.stepDetail.removeComment')"
+              </SectionLabel>
+              <IconButton
+                color="neutral"
+                variant="ghost"
+                icon="i-lucide-x"
+                :label="t('panels.stepDetail.removeComment')"
+                :ui="{
+                  base: 'p-0 text-dimmed transition hover:bg-transparent hover:text-app-error-400',
+                  leadingIcon: 'h-3.5 w-3.5',
+                }"
                 @click="removeComment(idx)"
-              >
-                <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-              </button>
+              />
             </div>
             <pre
-              class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-slate-950/50 p-1.5 text-[10px] text-slate-400"
+              class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded-sm bg-app-950/50 p-1.5 text-3xs text-muted"
               >{{ c.quotedSource }}</pre>
-            <p class="text-[12px] text-slate-200">{{ c.body }}</p>
+            <p class="text-xs text-default">{{ c.body }}</p>
           </div>
 
           <div>
-            <label
-              class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-            >
+            <SectionLabel as="label" class="mb-1 block">
               {{ t('panels.stepDetail.overallFeedback') }}
-            </label>
+            </SectionLabel>
             <UTextarea
               v-model="feedback"
               data-testid="step-review-feedback"
@@ -953,10 +960,9 @@ async function copyOutput() {
       <!-- edit-then-approve actions -->
       <div
         v-if="editing"
-        class="space-y-2 border-t border-slate-800 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+        class="space-y-2 border-t border-default px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:pb-3"
       >
         <UButton
-          color="primary"
           size="sm"
           icon="i-lucide-check"
           block
@@ -979,10 +985,9 @@ async function copyOutput() {
 
       <div
         v-else
-        class="space-y-2 border-t border-slate-800 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+        class="space-y-2 border-t border-default px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:pb-3"
       >
         <UButton
-          color="primary"
           data-testid="step-approve"
           size="sm"
           icon="i-lucide-check"
@@ -995,7 +1000,6 @@ async function copyOutput() {
         </UButton>
         <UButton
           v-if="proposalEditableNow"
-          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-pencil"
@@ -1007,20 +1011,23 @@ async function copyOutput() {
         </UButton>
         <p
           v-else-if="!proposalEditable"
-          class="text-[10px] text-slate-500"
+          class="text-3xs text-dimmed"
           data-testid="step-rendered-output-note"
         >
           {{ t('panels.stepDetail.renderedOutputNote') }}
         </p>
         <!-- Withheld only until the quorum is one approval away, so it says so rather than
            leaving a reviewer to wonder where the affordance went. -->
-        <p v-else class="text-[10px] text-slate-500" data-testid="step-quorum-edit-locked">
+        <p v-else class="text-3xs text-dimmed" data-testid="step-quorum-edit-locked">
           {{ t('panels.stepDetail.quorumEditLocked') }}
         </p>
 
         <!-- destructive: a two-step inline confirm instead of a native dialog -->
-        <div v-if="rejectArmed" class="rounded-lg border border-rose-500/40 bg-rose-500/5 p-2.5">
-          <p class="mb-2 text-[11px] text-rose-200">
+        <div
+          v-if="rejectArmed"
+          class="rounded-lg border border-app-error-500/40 bg-app-error-500/5 p-2.5"
+        >
+          <p class="mb-2 text-2xs text-app-error-200">
             {{ t('panels.stepDetail.rejectConfirmPrompt') }}
           </p>
           <div class="flex gap-2">
@@ -1072,12 +1079,12 @@ async function copyOutput() {
             {{ t('panels.stepDetail.reject') }}
           </UButton>
         </div>
-        <p class="text-[10px] text-slate-500">
+        <p class="text-3xs text-dimmed">
           {{ t('panels.stepDetail.requestChangesHint') }}
         </p>
       </div>
     </aside>
-  </div>
+  </TakeoverShell>
 </template>
 
 <style scoped>

@@ -13,6 +13,7 @@ import type {
   IssueWritebackProvider,
   EnvironmentInvestigator,
   JudgeAssessor,
+  DelegatedExecutorRegistry,
   JudgeRegistry,
   Logger,
   OperationalMetrics,
@@ -40,6 +41,7 @@ import type {
 } from '@cat-factory/integrations'
 import type { SpendService } from '@cat-factory/spend'
 import type { AgentContextBuilder, FragmentBodyResolver } from './AgentContextBuilder.js'
+import type { StartStepDispatch } from './delegation.logic.js'
 import type { CompanionController } from './CompanionController.js'
 import type { BinaryCandidateController } from './BinaryCandidateController.js'
 import type { ForkDecisionController } from './ForkDecisionController.js'
@@ -94,6 +96,13 @@ export interface RunDispatcherDeps {
   agentExecutor: AgentExecutor
   /** App-owned agent-kind registry: a registered kind's step spec + pre/post-op hooks. */
   agentKindRegistry: AgentKindRegistry
+  /**
+   * The app-owned DELEGATED-EXECUTOR registry: the external systems a deployment plugs in as the
+   * executor of a step. The dispatch reads an executor's declared poll cadence from it and copies
+   * that onto the step's delegation claim; the poll builds the executor itself from the SAME
+   * instance, so a kind's route and its cadence can never come from two different registries.
+   */
+  delegatedExecutorRegistry: DelegatedExecutorRegistry
   /** App-owned polling-gate registry (built-ins installed by the facade via `registerBuiltinGates`). */
   gateRegistry: GateRegistry
   /**
@@ -144,6 +153,13 @@ export interface RunDispatcherDeps {
   stepGraph: StepGraph
   runStateMachine: RunStateMachine
   contextBuilder: AgentContextBuilder
+  /**
+   * The shared async dispatch, bound by the engine: it commits a delegated step's claim (or a
+   * container step's cold boot) before anything is contacted, calls the executor, and folds the
+   * outcome either way. Every async dispatch site the dispatcher owns takes it.
+   * See {@link StartStepDispatch}.
+   */
+  startStepDispatch: StartStepDispatch
   mergeResolver: MergeResolver
   companionController: CompanionController
   testerController: TesterController

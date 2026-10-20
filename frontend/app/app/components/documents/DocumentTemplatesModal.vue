@@ -3,6 +3,9 @@ import { DOC_KINDS } from '~/types/domain'
 import type { DocKind, DocumentLinkRole, SourceDocument } from '~/types/domain'
 import DocumentOriginLink from '~/components/documents/DocumentOriginLink.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 // Manage the workspace's per-DocKind TEMPLATE (singular) + EXEMPLAR (multi) document links (WS1).
 // A kind can be pointed at one of the workspace's already-imported documents so its parsed
@@ -87,27 +90,24 @@ async function unlink(doc: SourceDocument) {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('documents.templates.title')">
+  <AppModal size="form" v-model:open="open" :title="t('documents.templates.title')">
     <template #title>
       <IntegrationBackTitle :title="t('documents.templates.title')" @back="back" />
     </template>
     <template #body>
       <div class="space-y-4">
-        <p class="text-xs text-slate-400">{{ t('documents.templates.intro') }}</p>
+        <p class="text-xs text-muted">{{ t('documents.templates.intro') }}</p>
 
         <!-- No imported documents yet: a template/exemplar must be an imported document. -->
-        <div v-if="!documents.documents.length" class="space-y-3 text-center">
-          <UIcon name="i-lucide-file-plus" class="mx-auto h-8 w-8 text-slate-500" />
-          <p class="text-sm text-slate-400">{{ t('documents.templates.importFirst') }}</p>
-          <UButton
-            color="primary"
-            variant="soft"
-            icon="i-lucide-file-down"
-            @click="ui.openDocumentImport()"
-          >
+        <EmptyState
+          v-if="!documents.documents.length"
+          icon="i-lucide-file-plus"
+          :title="t('documents.templates.importFirst')"
+        >
+          <UButton variant="soft" icon="i-lucide-file-down" @click="ui.openDocumentImport()">
             {{ t('documents.templates.importButton') }}
           </UButton>
-        </div>
+        </EmptyState>
 
         <template v-else>
           <UFormField :label="t('documents.templates.kindLabel')">
@@ -131,20 +131,20 @@ async function unlink(doc: SourceDocument) {
           </UFormField>
 
           <!-- Template (singular per kind) ------------------------------------ -->
-          <section class="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <section class="rounded-lg border border-default bg-default/50 p-3">
+            <SectionLabel as="h3">
               {{ t('documents.templates.templateHeading') }}
-            </h3>
-            <p class="mt-0.5 text-xs text-slate-500">
+            </SectionLabel>
+            <p class="mt-0.5 text-xs text-dimmed">
               {{ t('documents.templates.templateHint', { kind }) }}
             </p>
             <div
               v-if="template"
-              class="mt-2 flex items-center justify-between gap-2 rounded-md bg-slate-900/70 px-3 py-2"
+              class="mt-2 flex items-center justify-between gap-2 rounded-md bg-elevated/70 px-3 py-2"
             >
               <DocumentOriginLink
                 :url="template.url"
-                class="truncate text-sm font-medium text-white"
+                class="truncate text-sm font-medium text-highlighted"
                 hover-class="hover:underline"
               >
                 {{ template.title }}
@@ -160,28 +160,28 @@ async function unlink(doc: SourceDocument) {
                 {{ t('documents.templates.remove') }}
               </UButton>
             </div>
-            <p v-else class="mt-2 text-xs text-slate-500">
+            <p v-else class="mt-2 text-xs text-dimmed">
               {{ t('documents.templates.templateEmpty') }}
             </p>
           </section>
 
           <!-- Exemplars (multi per kind) -------------------------------------- -->
-          <section class="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <section class="rounded-lg border border-default bg-default/50 p-3">
+            <SectionLabel as="h3">
               {{ t('documents.templates.exemplarsHeading') }}
-            </h3>
-            <p class="mt-0.5 text-xs text-slate-500">
+            </SectionLabel>
+            <p class="mt-0.5 text-xs text-dimmed">
               {{ t('documents.templates.exemplarsHint') }}
             </p>
             <div v-if="exemplars.length" class="mt-2 space-y-1.5">
               <div
                 v-for="doc in exemplars"
                 :key="`${doc.source}:${doc.externalId}`"
-                class="flex items-center justify-between gap-2 rounded-md bg-slate-900/70 px-3 py-2"
+                class="flex items-center justify-between gap-2 rounded-md bg-elevated/70 px-3 py-2"
               >
                 <DocumentOriginLink
                   :url="doc.url"
-                  class="truncate text-sm font-medium text-white"
+                  class="truncate text-sm font-medium text-highlighted"
                   hover-class="hover:underline"
                 >
                   {{ doc.title }}
@@ -198,9 +198,12 @@ async function unlink(doc: SourceDocument) {
                 </UButton>
               </div>
             </div>
-            <p v-else class="mt-2 text-xs text-slate-500">
-              {{ t('documents.templates.exemplarsEmpty') }}
-            </p>
+            <EmptyState
+              v-else
+              compact
+              icon="i-lucide-files"
+              :title="t('documents.templates.exemplarsEmpty')"
+            />
           </section>
 
           <!-- Picker: choose an imported document, then set as template or add as example. -->
@@ -214,7 +217,6 @@ async function unlink(doc: SourceDocument) {
               />
             </UFormField>
             <UButton
-              color="primary"
               variant="soft"
               icon="i-lucide-file-badge"
               :loading="busy"
@@ -237,5 +239,5 @@ async function unlink(doc: SourceDocument) {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

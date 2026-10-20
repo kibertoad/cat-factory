@@ -120,6 +120,10 @@ export type {
   RunEnvironment,
   RunContainer,
   RunContainerStatus,
+  // The DELEGATED sibling: the external work a step dispatched, and what the platform can see of it.
+  RunDelegation,
+  RunDelegationAttempt,
+  RunDelegationStatus,
   HumanTestRound,
   HumanTestStepState,
   VisualConfirmStepState,

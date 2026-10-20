@@ -1,6 +1,6 @@
 import type { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { HARNESS_BODY_CAPABILITIES } from '../src/agent-capabilities.js'
+import { reportedBodyCapabilities } from '../src/capability-report.js'
 import { server } from '../src/harness-server.js'
 
 // The capability handshake as the backend actually reads it: off the wire.
@@ -55,7 +55,7 @@ describe('the harness reports which body capabilities it parses', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({
       status: 'ok',
-      capabilities: HARNESS_BODY_CAPABILITIES,
+      capabilities: await reportedBodyCapabilities(),
     })
   })
 
@@ -64,7 +64,7 @@ describe('the harness reports which body capabilities it parses', () => {
     expect(res.status).toBe(202)
     expect(await res.json()).toMatchObject({
       jobId: 'job-capabilities',
-      capabilities: HARNESS_BODY_CAPABILITIES,
+      capabilities: await reportedBodyCapabilities(),
     })
     // The job the assertion above just started, stopped before it can spawn anything real.
     expect((await stop('job-capabilities')).status).toBe(200)

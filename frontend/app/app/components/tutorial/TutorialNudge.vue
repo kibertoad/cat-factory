@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The contextual offer's surface: one walkthrough, offered beside the work that just made it
 // relevant. Deliberately NOT a modal — the whole point is the moment, and a modal would
@@ -64,7 +65,7 @@ function take(tourId: string) {
          this far, which is acceptable in a way the standing overlap was not: it clears itself. -->
     <div
       v-if="offered && !suppressed"
-      class="fixed end-4 bottom-20 z-50 w-80 max-w-[calc(100vw-32px)] rounded-xl border border-slate-700 bg-slate-900/95 p-3 shadow-2xl backdrop-blur"
+      class="fixed end-4 bottom-20 z-50 w-80 max-w-[calc(100vw-32px)] rounded-xl border border-muted bg-default/95 p-3 shadow-2xl backdrop-blur"
       role="status"
       aria-live="polite"
       data-testid="tutorial-nudge"
@@ -72,14 +73,14 @@ function take(tourId: string) {
       <div class="flex items-start gap-2">
         <UIcon
           :name="offered.icon ?? 'i-lucide-graduation-cap'"
-          class="text-primary-300 mt-0.5 h-4 w-4 shrink-0"
+          class="text-primary mt-0.5 h-4 w-4 shrink-0"
         />
         <div class="min-w-0 flex-1">
-          <p class="text-[11px] tracking-wide text-slate-400 uppercase">
+          <SectionLabel as="p">
             {{ t('tutorial.nudge.label') }}
-          </p>
-          <p class="mt-0.5 text-sm font-medium text-slate-100">{{ t(offered.titleKey) }}</p>
-          <p class="mt-0.5 text-xs text-slate-400">{{ t(offered.descriptionKey) }}</p>
+          </SectionLabel>
+          <p class="mt-0.5 text-sm font-medium text-app-100">{{ t(offered.titleKey) }}</p>
+          <p class="mt-0.5 text-xs text-muted">{{ t(offered.descriptionKey) }}</p>
         </div>
         <UButton
           size="xs"
@@ -94,7 +95,6 @@ function take(tourId: string) {
       <div class="mt-2 flex justify-end">
         <UButton
           size="xs"
-          color="primary"
           variant="soft"
           data-testid="tutorial-nudge-start"
           @click="take(offered.id)"

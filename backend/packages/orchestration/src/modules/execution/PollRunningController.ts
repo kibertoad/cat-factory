@@ -15,8 +15,11 @@ import {
 } from '@cat-factory/kernel'
 import {
   applyContainerRunning,
+  applyDelegationRunning,
   applyLastActivity,
   applySubtaskProgress,
+  inFlightDelegation,
+  settleDelegation,
 } from './step-fold.logic.js'
 import { applyValidationReport } from './validation.logic.js'
 import { applySliceReviews } from './prReviewSlices.logic.js'
@@ -34,6 +37,7 @@ import type { RunStateMachine } from './RunStateMachine.js'
 import type { DeployerStepController } from './DeployerStepController.js'
 import type { FollowUpGateController } from './FollowUpGateController.js'
 import type { SettledGate } from '../observability/GateOutcomeRecorder.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 /**
  * Collaborators + bound call-backs the {@link PollRunningController} needs. The three
@@ -124,7 +128,12 @@ export class PollRunningController {
         throw error
       }
     }
-    return { kind: 'awaiting_job', jobId, stepIndex: instance.currentStep }
+    // Re-read the step from the instance this call holds: the fold above may have replaced it
+    // under CAS, and the park's cadence is derived from what the step says NOW.
+    const current = instance.steps[instance.currentStep]
+    return current
+      ? awaitingJob(current, instance.currentStep, jobId)
+      : { kind: 'awaiting_job', jobId, stepIndex: instance.currentStep }
   }
 
   /**
@@ -215,7 +224,33 @@ export class PollRunningController {
     // The step advanced (or the job was superseded) under a concurrent write — nothing to fold.
     if (!s || s.jobId !== jobId) return false
     let changed = false
-    if (applyContainerRunning(s, update)) changed = true
+    // WHICH live record this poll folds onto, and the two are exclusive rather than layered: a
+    // container job reports a phase, an id and an address; a delegated one reports a phase in its
+    // own vocabulary and a link to somebody else's logs. Folding a delegated poll onto the
+    // container record would render the step as a container that never reports an address, and
+    // put it in front of the reclaim that kills containers by run.
+    //
+    // Asked of the IN-FLIGHT job rather than of the record's mere presence: a settled delegation
+    // outlives the step (its attempt log is why the step is being re-run), so a later container
+    // job on the same step would otherwise flip a `done` delegation back to `running` and stamp
+    // the container's phase on external work that finished hours ago, while `step.container` never
+    // gains an id or an address at all.
+    if (inFlightDelegation(s)) {
+      if (
+        applyDelegationRunning(s, {
+          // The external id a poll RECOVERED, for a system that could not name its run at start.
+          // Folded once and read back on every later poll, which is what stops the executor
+          // re-deriving it by correlation for the life of the run.
+          ...(update.delegated?.externalId ? { externalId: update.delegated.externalId } : {}),
+          ...(update.delegated?.url ? { url: update.delegated.url } : {}),
+          ...(update.phase ? { phase: update.phase } : {}),
+        })
+      ) {
+        changed = true
+      }
+    } else if (applyContainerRunning(s, update)) {
+      changed = true
+    }
     if (applySubtaskProgress(s, update.subtasks)) changed = true
     // Persist the harness liveness heartbeat (throttled) so a quiet-but-alive container keeps the
     // run's `updated_at` fresh — the signal a long, output-less phase (a reviewer reading files)
@@ -375,9 +410,9 @@ export class PollRunningController {
     }
     // Eviction budget spent — the container is gone for good. Mark it errored and persist so the
     // failed details show the errored container (failRun re-reads the run from storage, so an
-    // in-memory-only mutation would be lost; it emits the terminal frame, so markContainerErrored
+    // in-memory-only mutation would be lost; it emits the terminal frame, so markDispatchErrored
     // deliberately doesn't).
-    await this.markContainerErrored(workspaceId, instance, step)
+    await this.markDispatchErrored(workspaceId, instance, step)
     // The transports' post-mortems of the containers that died (exit state + log tail). Each
     // container is reclaimed as the run settles or re-dispatches, so this is the only place the
     // cause survives — carry it onto the failure rather than reporting a bare "still evicting".
@@ -392,19 +427,40 @@ export class PollRunningController {
   }
 
   /**
-   * Mark a container step's container `errored` (preserving the id/url/phase it reached) and
-   * PERSIST it, so a failed run's details show the errored container. Called on the genuine
-   * job-failure / exhausted-eviction paths before the result funnels to `failRun`, which
-   * re-reads the run from storage (so an in-memory-only mutation here would be lost) and emits
-   * the terminal frame itself — so we deliberately persist WITHOUT emitting here, to avoid a
-   * redundant transient "errored but still running" broadcast right before the "failed" one.
+   * Mark the step's EXECUTION SURFACE failed and PERSIST it, so a failed run's details show where
+   * the work died: a container `errored` (preserving the id/url/phase it reached), or a delegation
+   * `failed` (preserving the external link, which for a delegated step is the whole post-mortem).
+   *
+   * Called on the genuine job-failure / exhausted-eviction paths before the result funnels to
+   * `failRun`, which re-reads the run from storage (so an in-memory-only mutation here would be
+   * lost) and emits the terminal frame itself, so we deliberately persist WITHOUT emitting here,
+   * to avoid a redundant transient "errored but still running" broadcast right before the "failed"
+   * one.
+   *
+   * The two surfaces are exclusive rather than layered, which is why this branches instead of
+   * writing both: a delegated step never had a container, and stamping one would leave the board
+   * reporting an errored container for a system the platform does not run.
+   *
+   * WHICH one is decided by the job actually in flight, never by the delegation record's presence.
+   * A step that delegated its own work and later ran a container helper still carries the settled
+   * record, and branching on it would report the external executor as having failed (overwriting
+   * the outcome it really reached) while the container that died is never marked at all.
    */
-  async markContainerErrored(
+  async markDispatchErrored(
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
+    failure?: { error?: string; url?: string },
   ): Promise<void> {
-    step.container = { ...step.container, status: 'errored' }
+    if (inFlightDelegation(step)) {
+      settleDelegation(step, {
+        status: 'failed',
+        ...(failure?.error ? { outcome: failure.error } : {}),
+        ...(failure?.url ? { url: failure.url } : {}),
+      })
+    } else {
+      step.container = { ...step.container, status: 'errored' }
+    }
     await this.deps.runStateMachine.casPersist(workspaceId, instance)
   }
 }

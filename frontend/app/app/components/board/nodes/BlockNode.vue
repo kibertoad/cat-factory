@@ -9,11 +9,12 @@ import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import AdoptionReviewModal from '~/components/bootstrap/AdoptionReviewModal.vue'
 import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
+import IconButton from '~/components/common/IconButton.vue'
+import Spinner from '~/components/common/Spinner.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
 import { useViewport } from '~/composables/useViewport'
 import { laneBodyHeightIn } from '~/utils/laneGeometry'
-
 // Vue Flow passes the node's `id` and `data` as props to custom node components.
 // Only frames are rendered as board nodes; their tasks live inside the card.
 const props = defineProps<{ id: string }>()
@@ -224,9 +225,10 @@ const bootstrapPct = computed(() => {
 // The actual todo items the agent is working through, surfaced on the expanded
 // card so a zoomed-in user sees the task list, not just the "N/M" count.
 const bootstrapItems = computed(() => bootstrapSubtasks.value?.items ?? [])
-const ITEM_ICON: Record<string, string> = {
+// `in_progress` takes the spinner's own loading glyph.
+const ITEM_ICON: Record<string, string | undefined> = {
   completed: 'i-lucide-check-circle-2',
-  in_progress: 'i-lucide-loader-circle',
+  in_progress: undefined,
   pending: 'i-lucide-circle',
 }
 </script>
@@ -238,21 +240,21 @@ const ITEM_ICON: Record<string, string> = {
        shows only the internal id + a "Permission denied" placeholder (never the repo). -->
   <div
     v-if="block?.accessDenied"
-    class="w-56 overflow-hidden rounded-xl border border-slate-700 bg-slate-900/90 shadow-xl backdrop-blur"
+    class="w-56 overflow-hidden rounded-xl border border-muted bg-default/90 shadow-xl backdrop-blur"
     :data-block-id="block.id"
     data-testid="frame-access-denied"
   >
-    <div class="flex items-center gap-2 border-b border-slate-800 px-3 py-2">
-      <span class="i-lucide-lock h-4 w-4 shrink-0 text-slate-400" />
-      <span class="truncate text-sm font-semibold text-slate-200">{{
+    <div class="flex items-center gap-2 border-b border-default px-3 py-2">
+      <span class="i-lucide-lock h-4 w-4 shrink-0 text-muted" />
+      <span class="truncate text-sm font-semibold text-default">{{
         t('board.frame.accessDenied.title')
       }}</span>
     </div>
     <div class="px-3 py-3">
-      <p class="text-[11px] leading-snug text-slate-400">
+      <p class="text-2xs leading-snug text-muted">
         {{ t('board.frame.accessDenied.hint') }}
       </p>
-      <code class="mt-2 block truncate font-mono text-[11px] text-slate-500">{{ block.id }}</code>
+      <code class="mt-2 block truncate font-mono text-2xs text-dimmed">{{ block.id }}</code>
     </div>
   </div>
 
@@ -291,23 +293,20 @@ const ITEM_ICON: Record<string, string> = {
          and a collapsed summary) went with the header's collapse control, since between them they
          held the only render of the "Shared" badge, which now lives in the header below. -->
     <div
-      class="relative overflow-visible rounded-2xl border bg-slate-900/95 shadow-2xl backdrop-blur"
-      :class="[selected ? 'border-white' : 'border-slate-700', pulseClass]"
+      class="relative overflow-visible rounded-2xl border bg-default/95 shadow-2xl backdrop-blur"
+      :class="[selected ? 'border-inverted' : 'border-muted', pulseClass]"
     >
       <div class="h-1.5 w-full rounded-t-2xl" :style="{ backgroundColor: accent }" />
       <!-- bootstrap-in-progress banner -->
       <div
         v-if="bootstrapping"
-        class="border-b border-amber-900/50 bg-amber-950/30 px-4 py-2"
+        class="border-b border-app-warning-900/50 bg-app-warning-950/30 px-4 py-2"
         data-testid="bootstrap-progress"
       >
         <div class="flex items-center gap-1.5 text-xs">
-          <UIcon
-            name="i-lucide-loader-circle"
-            class="h-4 w-4 shrink-0 animate-spin text-amber-400"
-          />
-          <span class="text-amber-300">{{ t('board.frame.bootstrappingRepository') }}</span>
-          <span v-if="bootstrapSubtasks" class="ms-auto text-amber-200/80">
+          <Spinner class="h-4 w-4 shrink-0 text-app-warning-400" />
+          <span class="text-app-warning-300">{{ t('board.frame.bootstrappingRepository') }}</span>
+          <span v-if="bootstrapSubtasks" class="ms-auto text-app-warning-200/80">
             {{
               t('board.frame.bootstrapStepsCount', {
                 completed: bootstrapSubtasks.completed,
@@ -316,9 +315,9 @@ const ITEM_ICON: Record<string, string> = {
             }}
           </span>
         </div>
-        <div class="mt-1.5 h-1 w-full overflow-hidden rounded bg-amber-900/40">
+        <div class="mt-1.5 h-1 w-full overflow-hidden rounded-sm bg-app-warning-900/40">
           <div
-            class="h-full rounded bg-amber-400 transition-all"
+            class="h-full rounded-sm bg-app-warning-400 transition-all"
             :style="{ width: bootstrapPct + '%' }"
           />
         </div>
@@ -327,22 +326,26 @@ const ITEM_ICON: Record<string, string> = {
           <li
             v-for="(item, i) in bootstrapItems"
             :key="i"
-            class="flex items-start gap-1.5 text-[11px]"
+            class="flex items-start gap-1.5 text-2xs"
             :class="
               item.status === 'completed'
-                ? 'text-amber-200/60 line-through'
+                ? 'text-app-warning-200/60 line-through'
                 : item.status === 'in_progress'
-                  ? 'text-amber-100'
-                  : 'text-amber-200/80'
+                  ? 'text-app-warning-100'
+                  : 'text-app-warning-200/80'
             "
           >
-            <UIcon
+            <Spinner
               :name="ITEM_ICON[item.status]"
+              :spinning="item.status === 'in_progress'"
               class="mt-px h-3 w-3 shrink-0"
-              :class="[
-                item.status === 'in_progress' ? 'animate-spin text-amber-400' : '',
-                item.status === 'completed' ? 'text-emerald-400' : 'text-amber-400/70',
-              ]"
+              :class="
+                item.status === 'in_progress'
+                  ? 'text-app-warning-400'
+                  : item.status === 'completed'
+                    ? 'text-app-success-400'
+                    : 'text-app-warning-400/70'
+              "
             />
             <span>{{ item.label }}</span>
           </li>
@@ -368,11 +371,11 @@ const ITEM_ICON: Record<string, string> = {
       <!-- parked on a human adoption review: the run is waiting on the viewer, not working -->
       <div
         v-else-if="awaitingReview"
-        class="m-3 space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3"
+        class="m-3 space-y-2 rounded-md border border-app-warning-500/40 bg-app-warning-500/5 p-3"
       >
         <div class="flex items-start gap-2">
-          <UIcon name="i-lucide-user-check" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-          <p class="text-xs text-amber-200/90">{{ t('bootstrap.adoption.cardPrompt') }}</p>
+          <UIcon name="i-lucide-user-check" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400" />
+          <p class="text-xs text-app-warning-200/90">{{ t('bootstrap.adoption.cardPrompt') }}</p>
         </div>
         <BootstrapRunSteps :run-id="awaitingReview.id" />
         <div class="flex justify-end">
@@ -404,7 +407,7 @@ const ITEM_ICON: Record<string, string> = {
             <div class="flex items-center gap-2">
               <div
                 class="flex h-8 w-8 items-center justify-center rounded-lg"
-                :style="{ backgroundColor: typeMeta!.accent + '22' }"
+                :style="{ backgroundColor: tint(typeMeta!.accent) }"
               >
                 <UIcon
                   :name="typeMeta!.icon"
@@ -414,7 +417,7 @@ const ITEM_ICON: Record<string, string> = {
               </div>
               <div>
                 <div class="flex items-center gap-1.5">
-                  <span class="text-sm font-semibold text-white">{{ block.title }}</span>
+                  <span class="text-sm font-semibold text-highlighted">{{ block.title }}</span>
                   <!-- Mounted on more than one board in the org. On the title row rather than in
                        the action strip, because it qualifies the service's NAME: the work lands in
                        a repo another board also drives. -->
@@ -430,7 +433,7 @@ const ITEM_ICON: Record<string, string> = {
                     {{ t('board.frame.shared') }}
                   </UBadge>
                 </div>
-                <div class="text-[11px] text-slate-400">{{ typeMeta!.label }}</div>
+                <div class="text-2xs text-muted">{{ typeMeta!.label }}</div>
               </div>
             </div>
             <div class="flex items-center gap-1">
@@ -441,27 +444,27 @@ const ITEM_ICON: Record<string, string> = {
                    are `board.write`, hidden for a read-only viewer, who keeps the status badge
                    (the one view-only affordance here). -->
               <template v-if="access.canWriteBoard.value">
-                <UButton
+                <IconButton
                   class="nodrag"
                   data-testid="frame-add-task"
                   :size="isTouch ? 'sm' : 'xs'"
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-plus"
-                  :title="t('board.frame.addTaskTitle')"
+                  :label="t('board.frame.addTaskTitle')"
                   @click.stop="addTask"
                 />
-                <UButton
+                <IconButton
                   v-if="tasks.anyOffered"
                   class="nodrag"
                   :size="isTouch ? 'sm' : 'xs'"
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-ticket"
-                  :title="t('board.frame.createTaskFromIssueTitle')"
+                  :label="t('board.frame.createTaskFromIssueTitle')"
                   @click.stop="createTaskFromIssue"
                 />
-                <UButton
+                <IconButton
                   v-if="documents.connectedDesignSources.length > 0"
                   class="nodrag"
                   data-testid="frame-start-from-design"
@@ -469,7 +472,7 @@ const ITEM_ICON: Record<string, string> = {
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-frame"
-                  :title="t('board.frame.startFromDesignTitle')"
+                  :label="t('board.frame.startFromDesignTitle')"
                   @click.stop="startFromDesign"
                 />
                 <!-- Recurring pipelines + initiatives are ADVANCED-tier authoring: both plan
@@ -480,7 +483,7 @@ const ITEM_ICON: Record<string, string> = {
                      badges its task card and opens its inspector panel, and an initiative is
                      still a block on the board with its own inspector — so what a basic-mode
                      user loses is the ability to author a new one, not sight of one. -->
-                <UButton
+                <IconButton
                   v-if="uiMode.isAdvanced"
                   class="nodrag"
                   data-testid="frame-add-recurring"
@@ -488,10 +491,10 @@ const ITEM_ICON: Record<string, string> = {
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-repeat"
-                  :title="t('board.frame.addRecurringTitle')"
+                  :label="t('board.frame.addRecurringTitle')"
                   @click.stop="addRecurring"
                 />
-                <UButton
+                <IconButton
                   v-if="uiMode.isAdvanced"
                   class="nodrag"
                   data-testid="frame-add-initiative"
@@ -499,7 +502,7 @@ const ITEM_ICON: Record<string, string> = {
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-milestone"
-                  :title="t('board.frame.createInitiativeTitle')"
+                  :label="t('board.frame.createInitiativeTitle')"
                   @click.stop="createInitiative"
                 />
                 <!-- Hunting a tracker board for a bug worth adopting is TRIAGE, not intake: it
@@ -507,7 +510,7 @@ const ITEM_ICON: Record<string, string> = {
                      engineer/PM judgement call. So it is dropped for a narrowed role, whose three
                      routes in (a new task, a task from a named ticket, a task from a design) all
                      start from work somebody has already decided to do. -->
-                <UButton
+                <IconButton
                   v-if="tasks.anyOffered && uiRole.fullSurface"
                   class="nodrag"
                   data-testid="frame-hunt-bugs"
@@ -515,7 +518,7 @@ const ITEM_ICON: Record<string, string> = {
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-radar"
-                  :title="t('board.frame.huntBugsTitle')"
+                  :label="t('board.frame.huntBugsTitle')"
                   @click.stop="huntBugs"
                 />
               </template>
@@ -530,13 +533,13 @@ const ITEM_ICON: Record<string, string> = {
                stays is what the canvas can't show at a glance. -->
           <div
             v-if="modules.length || prTasks"
-            class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500"
+            class="flex items-center gap-2 text-3xs uppercase tracking-wide text-dimmed"
           >
             <span v-if="modules.length">{{
               t('board.frame.moduleCount', { count: modules.length }, modules.length)
             }}</span>
             <span v-if="modules.length && prTasks" aria-hidden="true">·</span>
-            <span v-if="prTasks" class="text-emerald-400">{{
+            <span v-if="prTasks" class="text-app-success-400">{{
               t('board.frame.prReadyCount', { count: prTasks })
             }}</span>
           </div>
@@ -549,7 +552,7 @@ const ITEM_ICON: Record<string, string> = {
              through to nothing; each lane body carries the same zone for drops inside it. -->
         <div
           :data-drop-zone="block.id"
-          class="nodrag relative rounded-xl bg-slate-950/40 p-2"
+          class="nodrag relative rounded-xl bg-app-950/40 p-2"
           :style="{ width: canvas.w + 'px', minHeight: canvas.h + 'px' }"
         >
           <!-- Initiatives sit in a wrapping band above the lanes: they are containers of work,
@@ -560,15 +563,16 @@ const ITEM_ICON: Record<string, string> = {
 
           <FrameSwimlanes v-if="hasTasks" :frame-id="block.id" :lane-body-height="laneBodyHeight" />
 
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-if="!hasTasks && access.canWriteBoard.value"
-            type="button"
             data-testid="frame-add-task-empty"
-            class="absolute inset-4 flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-700 text-[11px] text-slate-500 hover:border-slate-500 hover:text-slate-300"
+            class="absolute inset-4 flex items-center justify-center gap-1 rounded-lg border border-dashed border-muted text-2xs text-dimmed hover:border-app-500 hover:text-toned"
             @click.stop="addTask"
           >
             <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" /> {{ t('board.frame.addFirstTask') }}
-          </button>
+          </UButton>
         </div>
       </div>
 

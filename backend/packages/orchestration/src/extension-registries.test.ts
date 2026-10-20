@@ -574,6 +574,36 @@ describe('agent-capability validation: reach and scoping', () => {
     ).toBe(true)
   })
 
+  it('errors on a definition whose SHAPE does not match its type, naming the field', () => {
+    // A JS-authored or config-loaded definition can carry the wrong type. The mothership's own
+    // dispatch might still run it, but a mothership-mode node refuses the whole capability layer
+    // that carries it, so boot is where it must fail, by name.
+    registry.registerSkill({
+      id: 'org.loose-skill',
+      name: 'loose-skill',
+      description: 'A skill with a malformed resource.',
+      instructions: 'Do the work.',
+      resources: [{ relPath: 'notes.md', content: 42 as unknown as string }],
+    })
+    registry.registerToolServer({
+      id: 'loose-server',
+      transport: { kind: 'stdio', command: 'x', env: { PORT: 3000 as unknown as string } },
+    })
+    registry.assignSkills('coder', ['org.loose-skill'])
+    registry.assignToolServers('merger', ['loose-server'])
+    const problems = collectRegistrationProblems({
+      registries: { agentKindRegistry: registry, gateRegistry: gates },
+    })
+    const skill = problems.find((p) => p.code === 'invalid_bundled_skill_definition')
+    const server = problems.find((p) => p.code === 'invalid_tool_server_definition')
+    expect(skill?.severity).toBe('error')
+    expect(skill?.message).toContain('org.loose-skill')
+    expect(skill?.message).toContain('resources.0.content')
+    expect(server?.severity).toBe('error')
+    expect(server?.message).toContain('loose-server')
+    expect(server?.message).toContain('transport.env.PORT')
+  })
+
   it('warns (not errors) when tool servers are declared on a non-container kind', () => {
     // An inline LLM step has no agent CLI to wire them into, so they can never take effect — but a
     // deployment may declare them ahead of moving the kind onto a container surface.
@@ -743,17 +773,17 @@ describe('agent-capability validation: reach and scoping', () => {
       expect(warning?.message).toContain('stdio-only')
     })
 
-    it('warns about anything narrowed to pi, which has no MCP client at all', () => {
+    it('stays silent for a server narrowed to pi, whose client reaches both transports', () => {
       const problems = assign({
         id: 'issues',
         harnesses: ['pi'],
-        transport: { kind: 'stdio', command: 'x' },
+        transport: { kind: 'http', url: 'https://mcp.example.com/mcp' },
       })
-      expect(problems.some((p) => p.code === 'tool_server_unservable')).toBe(true)
+      expect(problems.some((p) => p.code === 'tool_server_unservable')).toBe(false)
     })
 
     it('stays silent for a combination SOME harness serves', () => {
-      // An http server on the default (unnarrowed) list is claude-code-only and perfectly fine:
+      // An http server on the default (unnarrowed) list skips codex and is perfectly fine:
       // a Codex run states it as unavailable, which is a run-time report, not a registration fault.
       const problems = assign({
         id: 'docs',

@@ -32,7 +32,7 @@ each facade. Nothing else can see that gap — a facade missing a group runs its
 green, and assertions that never execute read exactly like assertions that passed.
 
 **Run the Cloudflare one.** It needs no database, so it works on a machine with nothing set up, and
-it covers the same assertions. `CLAUDE.md` bans reaching for a package lane to check nothing else
+it covers the same assertions. `AGENTS.md` bans reaching for a package lane to check nothing else
 broke, and a suite edit is not the exception: name the spec for the group you touched on the command
 line (`conformance.core`, `.agents`, `.integration`, `.execution`, `.misc`, `.cache`).
 

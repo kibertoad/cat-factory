@@ -1,5 +1,293 @@
 # @cat-factory/spend
 
+## 0.23.22
+
+### Patch Changes
+
+- Updated dependencies [e9b24a1]
+  - @cat-factory/kernel@0.363.0
+  - @cat-factory/contracts@0.374.0
+
+## 0.23.21
+
+### Patch Changes
+
+- 5c17395: Add Gemini 4 Argon and Meta Muse Wonder to the model catalog and the price table, retire the
+  superseded Gemini Flash entries, and raise the four gateway price rows that had fallen below their
+  route.
+  
+  New catalog entries, both OpenRouter-only because no other route serves them yet:
+  
+  - `gemini-4-argon` (Gemini 4 Argon, 2026-10-13, `google/gemini-4-argon`): Google's new flagship,
+    1M window, image input. Its $2 / $10 per 1M launch price doubles on 2026-12-01, and the row is
+    already priced at the doubled $4 / $20, so the budget gate is never short when it lapses.
+  - `muse-wonder` (Meta Muse Wonder, 2026-10-12, `meta/muse-wonder`): $4 / $20 per 1M, 1M window.
+  
+  Removed: the `gemini-3.7-flash` and `gemini-flash` (3.6 Flash) catalog entries and their price
+  rows, since Google routes every 3.7 Flash request to 3.8 Flash, plus the price rows for the retired
+  `deepseek:deepseek-chat` and `qwen:qwen3-max`. A ref on any of them now meters at its provider's
+  bare fallback, which is dearer than the removed row. A block pinned to a removed catalog entry
+  needs a new pick.
+  
+  Price corrections, all in the safe direction: `openrouter:google/gemini-3.8-flash` follows the
+  gateway's 10% Vertex surcharge (0.76 / 3.80 EUR per 1M), `openrouter:z-ai/glm-5.3` output moves
+  to 4.42, `openrouter:qwen/qwen3.7-max` output to 4.08, and `openrouter:deepseek/deepseek-v4-flash`
+  input to 0.084.
+- 5c17395: Dependency refresh, direct and transitive (the lockfile is re-resolved from scratch), held to the
+  24h `minimumReleaseAge` window.
+  
+  Majors, each taken because its whole peer group could move together:
+  
+  - **Vitest 5** (`vitest`, `@vitest/coverage-v8`, `@vitest/browser`, `@vitest/browser-playwright`
+    at `5.0.5`), now that `@cloudflare/vitest-plugin@1.4.4`, `@storybook/addon-vitest`,
+    `@nuxt/test-utils` and `vitest-browser-vue` all accept `^5`. The Worker suite turns Vitest 5's
+    new default `fsModuleCache` off: the Workers pool inlines every warm module into one WebSocket
+    reply, and this suite's graph (~80MB) exceeds workerd's message limit (`1009 Message is too
+    large`).
+  - **msw 3**, for the component stories. `onUnhandledRequest` became `onUnhandledFrame`, which
+    also receives WebSocket frames, and the bundled `mockServiceWorker.js` is regenerated.
+  - **happy-dom 21** for the SPA's unit tests.
+  
+  The Workers test pool moves to `@cloudflare/vitest-plugin@1.4.4`, which pins `wrangler@4.151.1`, so
+  the Cloudflare stack moves with it: workerd `1.20261012.1`, miniflare `5.20261012.1-beta`,
+  `@cloudflare/workers-types` `5.20261012.1` (the resolved workerd's date) and esbuild `0.28.2`
+  (the version wrangler and the plugin now pin, so the scoped esbuild overrides follow).
+  
+  Also the Vercel AI SDK family as one set (`ai@7.0.142`, `@ai-sdk/anthropic@4.0.81`,
+  `@ai-sdk/openai@4.0.95`, `@ai-sdk/openai-compatible@3.0.70`, `@ai-sdk/amazon-bedrock@5.0.117`,
+  `@ai-sdk/provider@4.0.28`), the Vue family at `3.5.44`, `@nuxt/ui@4.12.0`, `pinia@4.1.0`,
+  `storybook@10.6.2`, `undici@8.12.2`, `pg-boss@12.38.0`, `@aws-sdk/client-s3@3.1152.0`,
+  `@hono/node-server@2.1.5`, `@playwright/test@1.64.1`, and the root toolchain (`turbo@2.11.8`,
+  `oxlint@1.88.0`, `oxfmt@0.73.0`, `knip@6.41.0`).
+  
+  Held: the frontend stays on TypeScript 6 (TypeScript 7 ships no classic compiler API for
+  `vue-tsc`); `@nuxt/fonts` stays on 0.14 because `@nuxt/ui@4.12.0` depends on `^0.14.0`; Drizzle
+  stays on `1.0.0-rc.4`, still its `rc` tag; `nuxt@4.6.2` is inside the window.
+- Updated dependencies [5c17395]
+- Updated dependencies [5c17395]
+  - @cat-factory/kernel@0.362.0
+  - @cat-factory/contracts@0.373.1
+
+## 0.23.20
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/contracts@0.373.0
+  - @cat-factory/kernel@0.361.0
+
+## 0.23.19
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+  - @cat-factory/kernel@0.360.4
+
+## 0.23.18
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+  - @cat-factory/kernel@0.360.3
+
+## 0.23.17
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+  - @cat-factory/kernel@0.360.2
+
+## 0.23.16
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+  - @cat-factory/kernel@0.360.1
+
+## 0.23.15
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/contracts@0.368.0
+  - @cat-factory/kernel@0.360.0
+
+## 0.23.14
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/contracts@0.367.0
+  - @cat-factory/kernel@0.359.1
+
+## 0.23.13
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+  - @cat-factory/kernel@0.359.0
+
+## 0.23.12
+
+### Patch Changes
+
+- Updated dependencies [91dedb6]
+  - @cat-factory/contracts@0.365.0
+  - @cat-factory/kernel@0.358.1
+
+## 0.23.11
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/contracts@0.364.0
+  - @cat-factory/kernel@0.358.0
+
+## 0.23.10
+
+### Patch Changes
+
+- Updated dependencies [1a42f34]
+  - @cat-factory/kernel@0.357.1
+
+## 0.23.9
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/contracts@0.363.0
+  - @cat-factory/kernel@0.357.0
+
+## 0.23.8
+
+### Patch Changes
+
+- ffe4356: Add Claude Haiku 5.5 to the model catalog and the price table, and correct the two gateway price rows that had fallen below their route.
+  
+  New catalog entry, declared only on routes verified to serve that exact model:
+  
+  - `claude-haiku-5-5` (Claude Haiku 5.5, 2026-10-07): Claude Code subscription, AWS Bedrock (`anthropic.claude-haiku-5-5`) and OpenRouter (`anthropic/claude-haiku-5.5`). It is the one two-band Claude model: $0.10 / $0.50 per 1M for a prompt up to 100,000 tokens and $0.50 / $2.50 for the whole request past it, so both its direct and its gateway row carry a long band at that threshold.
+  
+  Price corrections, both in the safe direction: `openrouter:deepseek/deepseek-v4-flash` output moves to 1.18 EUR/1M (the retired slug's blend now bills $1.28 out), and `openrouter:moonshotai/kimi-k3` names its cache read at 0.51 EUR/1M, the gateway's $0.55 blend, which sat above the derived 0.1x floor. The `anthropic:claude-sonnet-5-5` note now states its real 0.05x cache read; the row was already on the safe side.
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+
+## 0.23.7
+
+### Patch Changes
+
+- Updated dependencies [97175f8]
+  - @cat-factory/contracts@0.362.0
+  - @cat-factory/kernel@0.355.0
+
+## 0.23.6
+
+### Patch Changes
+
+- Updated dependencies [a3a10b8]
+- Updated dependencies [0966666]
+  - @cat-factory/contracts@0.361.0
+  - @cat-factory/kernel@0.354.2
+
+## 0.23.5
+
+### Patch Changes
+
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+  - @cat-factory/kernel@0.354.1
+
+## 0.23.4
+
+### Patch Changes
+
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/contracts@0.359.0
+  - @cat-factory/kernel@0.354.0
+
+## 0.23.3
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+  - @cat-factory/kernel@0.353.0
+
+## 0.23.2
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/contracts@0.357.0
+
+## 0.23.1
+
+### Patch Changes
+
+- e84b0d5: Add GPT-6.1 Sol and Claude Sonnet 5.5 to the model catalog and the price table, and name the GLM-5.2 gateway cache rate that had fallen below its route.
+  
+  New catalog entries, each declared only on routes verified to serve that exact model:
+  
+  - `gpt-6.1-sol` (GPT-6.1 Sol, 2026-09-29): Codex subscription and OpenRouter (`openai/gpt-6.1-sol`), two-band like every OpenAI row at $2 / $10 short and $4 / $15 long per 1M. Codex resolves the slug only from 0.159.0 onward. OpenRouter's `-pro` slug gets no entry: same model, same price, only a reasoning mode.
+  - `claude-sonnet-5-5` (Claude Sonnet 5.5, 2026-09-28): Claude Code subscription, AWS Bedrock (`anthropic.claude-sonnet-5-5`) and OpenRouter (`anthropic/claude-sonnet-5.5`), $2 / $10 per 1M like Sonnet 5.
+  
+  The existing `gpt-6-sol` and `claude-sonnet` entries keep their ids and models, so a block pinned to GPT-6 Sol or Sonnet 5 runs what it ran before.
+  
+  Price correction, in the safe direction: `openrouter:z-ai/glm-5.2` names its cache read again (0.21 EUR/1M), because the gateway's cached rate moved back above the 0.1x floor its input rate derives.
+  
+  The SPA's "Enable recommended" OpenRouter set gains GPT-6.1 Sol and Sonnet 5.5.
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/kernel@0.351.0
+
+## 0.23.0
+
+### Minor Changes
+
+- c046707: Add the models released since the last catalog sweep, and correct the price rows that had fallen below their route.
+  
+  New catalog entries, each declared only on routes verified to serve that exact model:
+  
+  - `claude-opus-5-5` (Claude Opus 5.5, 2026-09-22): Claude Code subscription, AWS Bedrock (`anthropic.claude-opus-5-5`) and OpenRouter (`anthropic/claude-opus-5.5`), $4 / $20 per 1M.
+  - `gpt-6-sol` and `gpt-6-luna` (2026-09-22): Codex subscription and OpenRouter, two-band like every OpenAI row. Codex resolves both slugs only from 0.156.1 onward.
+  - `grok-4.7` (2026-09-21): direct xAI and OpenRouter, billed exactly as Grok 4.6.
+  - `glm-5.3-flashx`, `glm-5.3-prime` and `qwen3.8-max-prime`: faster serving tiers of models already in the catalog, at roughly twice the price, through OpenRouter. Each is its own entry so the speed-for-price trade is made per block.
+  
+  The existing entries keep their ids and models, so a block pinned to Opus 5, Grok 4.6 or GLM-5.3 runs what it ran before.
+  
+  Price corrections, all in the safe direction: `openrouter:openai/gpt-oss-120b` had fallen to a quarter of the gateway's listed rate and now names its cache read; `openrouter:z-ai/glm-5.3-flash` names the gateway's higher cache rate; the Workers AI gpt-oss-120b input and Llama 4 Scout output round up to Cloudflare's list instead of just under it.
+  
+  The SPA's "Enable recommended" OpenRouter set gains Opus 5.5, GPT-6 Sol and Grok 4.7.
+
+### Patch Changes
+
+- Updated dependencies [c046707]
+- Updated dependencies [c046707]
+  - @cat-factory/kernel@0.350.0
+
+## 0.22.2
+
+### Patch Changes
+
+- Updated dependencies [1fc4ff1]
+- Updated dependencies [bc073ab]
+- Updated dependencies [09bd94b]
+  - @cat-factory/contracts@0.356.0
+  - @cat-factory/kernel@0.349.0
+
 ## 0.22.1
 
 ### Patch Changes

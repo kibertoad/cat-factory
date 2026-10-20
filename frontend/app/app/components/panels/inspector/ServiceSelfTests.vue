@@ -185,26 +185,25 @@ async function stop(mode: EnvironmentTestMode) {
 </script>
 
 <template>
-  <div class="mt-3 space-y-3 border-t border-white/5 pt-3" data-testid="env-test-section">
+  <div class="mt-3 space-y-3 border-t border-default pt-3" data-testid="env-test-section">
     <!-- The precondition both self-tests share, stated once at the top: with no provision type
          there is no environment to stand up and therefore nothing for an agent to drive either. -->
-    <p v-if="!canTest" class="text-[11px] text-slate-500">
+    <p v-if="!canTest" class="text-2xs text-dimmed">
       {{ t('inspector.testConfig.envTest.infraless') }}
     </p>
 
     <!-- 1. The provisioning self-test: the whole lifecycle against a throwaway branch. -->
     <div class="flex items-center justify-between gap-2">
       <div class="min-w-0">
-        <p class="text-[11px] font-medium text-slate-300">
+        <p class="text-2xs font-medium text-toned">
           {{ t('inspector.testConfig.envTest.title') }}
         </p>
-        <p class="text-[11px] text-slate-400">{{ t('inspector.testConfig.envTest.hint') }}</p>
+        <p class="text-2xs text-muted">{{ t('inspector.testConfig.envTest.hint') }}</p>
       </div>
       <UButton
         v-if="!isRunning('provision')"
         icon="i-lucide-flask-conical"
         size="xs"
-        color="primary"
         variant="soft"
         data-testid="env-test-start"
         :loading="starting.provision"
@@ -228,11 +227,11 @@ async function stop(mode: EnvironmentTestMode) {
 
     <p
       v-if="provisionRun"
-      class="text-[11px]"
+      class="text-2xs"
       :class="{
-        'text-sky-300/80': provisionRun.status === 'running',
-        'text-emerald-300/80': provisionRun.status === 'succeeded',
-        'text-rose-300/80': provisionRun.status === 'failed',
+        'text-app-info-300/80': provisionRun.status === 'running',
+        'text-app-success-300/80': provisionRun.status === 'succeeded',
+        'text-app-error-300/80': provisionRun.status === 'failed',
       }"
       data-testid="env-test-status"
     >
@@ -247,13 +246,13 @@ async function stop(mode: EnvironmentTestMode) {
         <template v-if="provisionRun.failedStage">
           ({{ stageLabel(provisionRun.failedStage) }})
         </template>
-        <span v-if="provisionRun.error" class="block text-rose-300/70">
+        <span v-if="provisionRun.error" class="block text-app-error-300/70">
           {{ provisionRun.error }}
         </span>
       </template>
     </p>
 
-    <div v-if="errors.provision" class="text-[11px] text-rose-400" data-testid="env-test-error">
+    <div v-if="errors.provision" class="text-2xs text-app-error-400" data-testid="env-test-error">
       <p>{{ errors.provision.text }}</p>
       <!-- Only the not-provisionable handler case is one-click fixable: jump to Infrastructure →
            Test environments, where the workspace's per-type environment handler is registered. -->
@@ -273,12 +272,12 @@ async function stop(mode: EnvironmentTestMode) {
 
     <!-- 2. The agent dry run: the same lifecycle plus a prober, reporting what an agent could
          and could not do with the environment it was handed. -->
-    <div class="flex items-center justify-between gap-2 border-t border-white/5 pt-3">
+    <div class="flex items-center justify-between gap-2 border-t border-default pt-3">
       <div class="min-w-0">
-        <p class="text-[11px] font-medium text-slate-300">
+        <p class="text-2xs font-medium text-toned">
           {{ t('inspector.testConfig.envProbe.title') }}
         </p>
-        <p class="text-[11px] text-slate-400">
+        <p class="text-2xs text-muted">
           {{ t('inspector.testConfig.envProbe.hint') }}
           {{
             probeSurface === 'ui'
@@ -291,7 +290,6 @@ async function stop(mode: EnvironmentTestMode) {
         v-if="!isRunning('agent-probe')"
         icon="i-lucide-bot"
         size="xs"
-        color="primary"
         variant="soft"
         data-testid="env-probe-start"
         :loading="starting['agent-probe']"
@@ -315,11 +313,11 @@ async function stop(mode: EnvironmentTestMode) {
 
     <p
       v-if="probeRun"
-      class="text-[11px]"
+      class="text-2xs"
       :class="{
-        'text-sky-300/80': probeRun.status === 'running',
-        'text-emerald-300/80': probeRun.status === 'succeeded',
-        'text-rose-300/80': probeRun.status === 'failed',
+        'text-app-info-300/80': probeRun.status === 'running',
+        'text-app-success-300/80': probeRun.status === 'succeeded',
+        'text-app-error-300/80': probeRun.status === 'failed',
       }"
       data-testid="env-probe-status"
     >
@@ -340,7 +338,7 @@ async function stop(mode: EnvironmentTestMode) {
       <template v-else>
         {{ t('inspector.testConfig.envProbe.failed') }}
         <template v-if="probeRun.failedStage">({{ stageLabel(probeRun.failedStage) }})</template>
-        <span v-if="probeRun.error" class="block text-rose-300/70">{{ probeRun.error }}</span>
+        <span v-if="probeRun.error" class="block text-app-error-300/70">{{ probeRun.error }}</span>
       </template>
     </p>
 
@@ -351,7 +349,7 @@ async function stop(mode: EnvironmentTestMode) {
 
     <div
       v-if="errors['agent-probe']"
-      class="text-[11px] text-rose-400"
+      class="text-2xs text-app-error-400"
       data-testid="env-probe-error"
     >
       <p>{{ errors['agent-probe']!.text }}</p>

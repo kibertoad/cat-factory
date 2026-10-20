@@ -14,7 +14,7 @@ The problem (review finding #1): the repair is **awaited synchronously inside th
 `maxPolls=240 × 5s ≈ 20 minutes` inside one `fetch` request
 (`EnvironmentController` → `EnvironmentConnectionService.bootstrapRepo` → `dispatchConfigRepair`).
 
-That diverges from the platform's gold-standard async+durable+observable pattern (see CLAUDE.md
+That diverges from the platform's gold-standard async+durable+observable pattern (see AGENTS.md
 "Execution flow" / "Repo bootstrap flow") and **cannot survive on the Cloudflare Worker facade**,
 whose requests can't block for 20 minutes. The fix: drive the repair **durably and
 asynchronously, exactly like the "bootstrap repo" flow**; dispatch + return immediately, drive
@@ -174,7 +174,7 @@ describe the durable-async shape, and add `@cat-factory/app` if the frontend lan
   `EnvConfigRepairService.start` and is recorded on the job row (kind `preflight`/`dispatch`),
   surfaced on the infra window, no longer a 500. Optionally also gate it out at facade wiring
   (skip wiring + log) so a misconfigured deployment is "no fallback" rather than a failing run.
-- **Keep the runtimes symmetric** (CLAUDE.md): the new Workflow binding (CF) ⇄ pg-boss queue/worker
+- **Keep the runtimes symmetric** (AGENTS.md): the new Workflow binding (CF) ⇄ pg-boss queue/worker
   (Node) ⇄ local-inherits must all land together, with the conformance assertion, in ONE change.
 - Verify with `pnpm typecheck` / `pnpm test:run` / `pnpm build` via Turbo from the repo root
   (Linux/macOS for the worker suite; CI provides Postgres for the Node suite).

@@ -57,6 +57,11 @@ test.describe('agent run failure + retry', () => {
     const inspector = page.getByTestId('inspector-panel')
     await expect(inspector).toBeVisible({ timeout: LIVE_TIMEOUT })
     await expect(inspector.getByTestId('agent-failure-history')).toHaveCount(0)
+    // One failure block per task view: the Execution section holds it, and the inspector header
+    // does not repeat it.
+    await expect(inspector.getByTestId('agent-failure-banner')).toHaveCount(1)
+    // The block leads with the SPA's own cause line for the kind, not the backend's paragraph.
+    await expect(inspector.getByTestId('agent-failure-cause')).toBeVisible()
 
     // The retry control is wired: clicking it re-drives the run. `carryForwardFailures` moves the
     // outgoing attempt's failure onto the run's preserved trail and mints the fresh attempt with
@@ -74,10 +79,11 @@ test.describe('agent run failure + retry', () => {
 
     const history = inspector.getByTestId('agent-failure-history')
     await expect(history).toBeVisible({ timeout: LIVE_TIMEOUT })
-    // Expand the disclosure (its own `summary` is the first one; each entry nests another for
-    // its detail) so the superseded error is genuinely readable, then pin the trail's length:
-    // zero would mean nothing re-dispatched, two that the click fired twice.
-    await history.locator('summary').first().click()
+    // Expand the disclosure so the superseded error is genuinely readable, then pin the trail's
+    // length: zero would mean nothing re-dispatched, two that the click fired twice. The
+    // disclosure is a `UCollapsible` whose trigger is its first button (each entry nests another
+    // for its own detail), where it used to be a `<details>` with a `<summary>`.
+    await history.locator('button').first().click()
     const priorErrors = history.getByTestId('agent-failure-history-entry')
     await expect(priorErrors).toHaveCount(1)
     await expect(priorErrors).toBeVisible()

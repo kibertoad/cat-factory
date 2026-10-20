@@ -16,6 +16,7 @@ import { useFrameOverlapGuard } from '~/composables/useFrameOverlapGuard'
 import { useViewport } from '~/composables/useViewport'
 import { boardPanMode } from '~/utils/boardPanMode'
 import { createBoardNodeProjection } from './BoardCanvas.logic'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const ui = useUiStore()
@@ -141,7 +142,8 @@ function onPaneClick() {
       @pane-click="onPaneClick"
       @contextmenu.prevent
     >
-      <Background pattern-color="#1e293b" :gap="22" :size="1.4" />
+      <!-- The dot grid rides the border token: `neutral-800` in dark (the shade it always was), `200` in light. -->
+      <Background pattern-color="var(--ui-border)" :gap="22" :size="1.4" />
       <!-- No minimap: it's a precise-pointer affordance (too small to hit on touch,
            eats scarce width on narrow windows) that earned its keep on neither
            desktop nor mobile. The toolbar's zoom-in/out + fit-view controls are the
@@ -161,41 +163,39 @@ function onPaneClick() {
          the buttons themselves. -->
     <div
       v-if="board.frames.length === 0"
-      class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4 text-center"
+      class="pointer-events-none absolute inset-0 flex items-center justify-center"
     >
-      <UIcon name="i-lucide-layout-dashboard" class="h-10 w-10 text-slate-600" />
-      <div>
-        <h2 class="text-base font-semibold text-slate-300">{{ t('board.canvas.emptyTitle') }}</h2>
-        <p class="mt-1 max-w-sm text-sm text-slate-500">
-          {{ t('board.canvas.emptyBody') }}
-        </p>
-      </div>
-      <div
-        v-if="
-          access.canManageIntegrations.value || (github.available && access.canWriteBoard.value)
-        "
-        class="pointer-events-auto flex flex-wrap items-center justify-center gap-2"
+      <EmptyState
+        icon="i-lucide-layout-dashboard"
+        :title="t('board.canvas.emptyTitle')"
+        :description="t('board.canvas.emptyBody')"
+        class="max-w-sm"
       >
-        <UButton
-          v-if="access.canManageIntegrations.value"
-          color="primary"
-          icon="i-lucide-git-branch-plus"
-          @click="ui.openBootstrap()"
+        <div
+          v-if="
+            access.canManageIntegrations.value || (github.available && access.canWriteBoard.value)
+          "
+          class="pointer-events-auto flex flex-wrap items-center justify-center gap-2"
         >
-          {{ t('nav.bootstrapRepo') }}
-        </UButton>
-        <UButton
-          v-if="github.available && access.canWriteBoard.value"
-          color="primary"
-          variant="soft"
-          icon="i-lucide-folder-git-2"
-          @click="ui.openAddService()"
-        >
-          {{ t('nav.addFromRepo') }}
-        </UButton>
-      </div>
-      <!-- A read-only viewer sees the empty state but no create affordances. -->
-      <p v-else class="max-w-sm text-xs text-slate-600">{{ t('access.noBoardWrite') }}</p>
+          <UButton
+            v-if="access.canManageIntegrations.value"
+            icon="i-lucide-git-branch-plus"
+            @click="ui.openBootstrap()"
+          >
+            {{ t('nav.bootstrapRepo') }}
+          </UButton>
+          <UButton
+            v-if="github.available && access.canWriteBoard.value"
+            variant="soft"
+            icon="i-lucide-folder-git-2"
+            @click="ui.openAddService()"
+          >
+            {{ t('nav.addFromRepo') }}
+          </UButton>
+        </div>
+        <!-- A read-only viewer sees the empty state but no create affordances. -->
+        <p v-else class="max-w-sm text-xs text-app-600">{{ t('access.noBoardWrite') }}</p>
+      </EmptyState>
     </div>
 
     <!-- task dependency arrows, overlaid in screen space -->

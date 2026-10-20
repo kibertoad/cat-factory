@@ -79,6 +79,7 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     pipelineRegistry: runtime.pipelineRegistry,
     gateRegistry: runtime.gateRegistry,
     judgeRegistry: runtime.judgeRegistry,
+    delegatedExecutorRegistry: runtime.delegatedExecutorRegistry,
     judgeAssessor,
     environmentInvestigator,
     stepResolverRegistry: runtime.stepResolverRegistry,

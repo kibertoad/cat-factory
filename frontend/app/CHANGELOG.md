@@ -1,5 +1,927 @@
 # @cat-factory/app
 
+## 0.321.4
+
+### Patch Changes
+
+- bc3ff19: Fix the component story lane failing random files in CI. A `Loading` story's response now answers at
+  once with a body that never ends, instead of never returning, so msw's service worker no longer
+  holds an event open until Chromium stops it and fails every request it was passing on. The stories
+  go back to msw 2.15, whose worker does not hold events open either (mswjs/msw#2801).
+
+## 0.321.3
+
+### Patch Changes
+
+- 95b0338: Fix the component story lane failing random files in CI. A `Loading` story's response now answers at
+  once with a body that never ends, instead of never returning, so msw's service worker no longer
+  holds an event open until Chromium stops it and fails every request it was passing on. The stories
+  go back to msw 2.15, whose worker does not hold events open either (mswjs/msw#2801).
+
+## 0.321.2
+
+### Patch Changes
+
+- Updated dependencies [e9b24a1]
+  - @cat-factory/contracts@0.374.0
+
+## 0.321.1
+
+### Patch Changes
+
+- e318526: The command palette names the kind of each source it offers to connect or manage: "Connect Linear
+  (documents)" and "Connect Linear (tracker)" instead of "Connect Linear" twice, and "Connect Figma
+  (designs)" for a design source. Linear is both a document source and a task source, and the two are
+  separate connections that open different dialogs.
+  
+  The palette keys `layout.commandBar.cmd.sourceConnect` and `sourceManage` are removed. A layer that
+  overrides them must move its copy to the six new keys: `documentSourceConnect`,
+  `documentSourceManage`, `designSourceConnect`, `designSourceManage`, `taskSourceConnect` and
+  `taskSourceManage`. The old keys are no longer read, so an override left on them has no effect.
+
+## 0.321.0
+
+### Minor Changes
+
+- 162a89b: A failed run shows one failure block per task view: a title, a one-line cause, one action, and a
+  Details toggle. The cause line is translated SPA copy keyed by the failure's `kind` and `reason`,
+  and it says if a retry will probably work. The action is Retry, the setting a refusal names
+  (the same copy and fix as its toast: connect a repository host, configure AI, configure storage,
+  set up the runner pool), or a new run of the failed run's pipeline when the run's saved state
+  cannot be read; Retry is then inside Details. An environment failure leads with Retry and shows
+  the environment setup beside it. A single-job run (a service bootstrap, an environment config
+  repair) has its own cause lines where a kind means something different. The backend's message, its per-kind hint and the full output are inside Details only.
+  The board card and the queue card show the title and the action only. The "Read a failure" tour
+  follows the block's one action. The inspector no longer
+  repeats the block in its header for a task or an initiative, the focus view now shows it under
+  the run's summary, and the lists of earlier failures show the cause line with the rest behind
+  Details.
+
+## 0.320.1
+
+### Patch Changes
+
+- 3438f7f: Mobile-friendly layout fixes at 375px (initiative slice B): stop the desktop-first layouts
+  that clip, collapse, or hide their content on a phone.
+  
+  Fulfils goal #1 of the mobile-friendly frontend initiative ("nothing broken at 375px") by
+  restacking the fixed-column layouts that had no breakpoint. Every change follows an existing
+  good-citizen pattern (P-1 restack / P-6 reflow); no new responsive system is introduced.
+  
+  - **BlockFocusView (B1).** The full-screen focus overlay used a hard `grid-cols-[1fr_300px]`
+    with no breakpoint, so at 375px the main pipeline column collapsed toward zero width. It now
+    restacks to a single scrolling column below `lg` (`grid-cols-1 … lg:grid-cols-[1fr_300px]`,
+    with the container scrolling vertically on mobile and clamping to the docked two-column form
+    on wide screens). The two panels scroll internally only from `lg` up, so on a phone they size
+    to their content and the page scrolls as one column, and the header wraps instead of pushing
+    the run and close buttons off screen.
+  
+  - **Non-collapsing `grid-cols-2` forms (B2).** Budget, workspace task-limit, risk-policy, and
+    bootstrap-architecture forms hard-coded `grid-cols-2`, cramming two number inputs side by
+    side at 375px. They now start single-column and opt into columns at a breakpoint
+    (`grid-cols-1 sm:grid-cols-2`); the risk-policy 4-up grids collapse fully on phones while
+    keeping their density on wide (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`). The same input
+    pairs in the Add Task modal (bug fields, doc fields, pipeline and merge policy), the
+    environment wizard's review step and the GitHub open-PR form stack on a phone too.
+  
+  - **Kaizen table (B3).** The grading-history table was wrapped in `overflow-hidden`, clipping
+    columns on narrow screens; it now uses `overflow-x-auto` like every other table so it scrolls
+    horizontally instead.
+  
+  - **Side rails that hid instead of restacking (B4).** The Brainstorm window's action rail
+    (which carries the primary proceed / incorporate / re-run controls) and the Test-report
+    window's metadata rail were `hidden lg:flex`, making those actions and the outcome summary
+    unreachable on a phone. Both now restack below the main column below `lg`. The Brainstorm
+    rail is a bottom action bar copying the `RequirementsReviewWindow` reference (informational
+    stats collapse, the actions stay), capped at half the viewport with its own scroll and hidden
+    while the session offers no action. The Test-report window scrolls as one column below `lg`,
+    the metadata following the report, so its tall metadata section cannot squeeze the report to
+    zero height. The `AgentStepDetail` table-of-contents rail was verified redundant on mobile (a
+    jump-nav duplicating headings already in the scrollable prose), so it stays hidden below `lg`;
+    only its stray `md:` breakpoint is normalized to the `lg` cutoff.
+  
+  No user-facing copy added, so no i18n/locale changes.
+
+## 0.320.0
+
+### Minor Changes
+
+- afe22b9: The run deep link (`?ws=…&block=…&run=…`) lands on the run instead of only selecting its task: the
+  canvas switches from the queue if needed, the camera centres on the task's card at the zoom where a
+  task's pipeline steps render, and with no `view` (or `view=run`, new) the task's focus view opens on
+  its running pipeline. `view=outcome`, `observability` and `test-evidence` open those windows as
+  before, now with the task brought into view too. The queue's "Show on board" takes the same path,
+  so it zooms in on the task rather than only centring its service.
+
+## 0.319.2
+
+### Patch Changes
+
+- 5c17395: Dependency refresh, direct and transitive (the lockfile is re-resolved from scratch), held to the
+  24h `minimumReleaseAge` window.
+  
+  Majors, each taken because its whole peer group could move together:
+  
+  - **Vitest 5** (`vitest`, `@vitest/coverage-v8`, `@vitest/browser`, `@vitest/browser-playwright`
+    at `5.0.5`), now that `@cloudflare/vitest-plugin@1.4.4`, `@storybook/addon-vitest`,
+    `@nuxt/test-utils` and `vitest-browser-vue` all accept `^5`. The Worker suite turns Vitest 5's
+    new default `fsModuleCache` off: the Workers pool inlines every warm module into one WebSocket
+    reply, and this suite's graph (~80MB) exceeds workerd's message limit (`1009 Message is too
+    large`).
+  - **msw 3**, for the component stories. `onUnhandledRequest` became `onUnhandledFrame`, which
+    also receives WebSocket frames, and the bundled `mockServiceWorker.js` is regenerated.
+  - **happy-dom 21** for the SPA's unit tests.
+  
+  The Workers test pool moves to `@cloudflare/vitest-plugin@1.4.4`, which pins `wrangler@4.151.1`, so
+  the Cloudflare stack moves with it: workerd `1.20261012.1`, miniflare `5.20261012.1-beta`,
+  `@cloudflare/workers-types` `5.20261012.1` (the resolved workerd's date) and esbuild `0.28.2`
+  (the version wrangler and the plugin now pin, so the scoped esbuild overrides follow).
+  
+  Also the Vercel AI SDK family as one set (`ai@7.0.142`, `@ai-sdk/anthropic@4.0.81`,
+  `@ai-sdk/openai@4.0.95`, `@ai-sdk/openai-compatible@3.0.70`, `@ai-sdk/amazon-bedrock@5.0.117`,
+  `@ai-sdk/provider@4.0.28`), the Vue family at `3.5.44`, `@nuxt/ui@4.12.0`, `pinia@4.1.0`,
+  `storybook@10.6.2`, `undici@8.12.2`, `pg-boss@12.38.0`, `@aws-sdk/client-s3@3.1152.0`,
+  `@hono/node-server@2.1.5`, `@playwright/test@1.64.1`, and the root toolchain (`turbo@2.11.8`,
+  `oxlint@1.88.0`, `oxfmt@0.73.0`, `knip@6.41.0`).
+  
+  Held: the frontend stays on TypeScript 6 (TypeScript 7 ships no classic compiler API for
+  `vue-tsc`); `@nuxt/fonts` stays on 0.14 because `@nuxt/ui@4.12.0` depends on `^0.14.0`; Drizzle
+  stays on `1.0.0-rc.4`, still its `rc` tag; `nuxt@4.6.2` is inside the window.
+- Updated dependencies [5c17395]
+  - @cat-factory/contracts@0.373.1
+
+## 0.319.1
+
+### Patch Changes
+
+- 76176b8: The package no longer ships component stories or their shared fixtures: `files` excludes
+  `app/stories` and `app/**/*.stories.ts`, which the private `@cat-factory/storybook` package
+  in `frontend/storybook` renders.
+
+## 0.319.0
+
+### Minor Changes
+
+- 83f6b0c: A personal API key can follow its person's workspaces. Minted with `followsMemberships: true`
+  (beside `actsAsSelf: true`, and no `workspaceIds`), it reaches every workspace that person can act
+  in, resolved on each call: joining a workspace grants it on the next call and leaving takes it
+  away, with nothing to re-mint. In each workspace its scope is lowered to what the person's role
+  there allows (`read` for a viewer, `decide` for a member, `admin` for an admin), and on account-level
+  routes it acts with `read`, so it can never do more over `/api/v1` than its person can in the app.
+  That is also why anyone with `runs.execute` may mint one, list it and revoke it; an account admin
+  manages anyone's.
+  
+  `followsMemberships` is new on a listed or minted key (whose `workspaceIds` is then `[]`), on
+  `GET /api/v1/me` and on `GET /api/v1/directory/reach`, which answer the reach as of the call.
+  OpenAPI 1.89.0. The API tokens window offers "My workspaces (follows my memberships)", the default
+  for a personal token, and `?newApiKey` takes `reach=memberships`. New migrations: D1
+  `0110_public_api_key_follows_memberships.sql`, Drizzle
+  `20261016160143_public_api_key_follows_memberships`.
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/contracts@0.373.0
+
+## 0.318.0
+
+### Minor Changes
+
+- edd42af: An integration can now send a person to mint their own API key. `?newApiKey=1` opens the API tokens
+  window with the create form filled in from `label`, `scope` and `runsAsSelf=1` (the personal
+  identity, where someone is signed in to bind it to), and `ws` pins the board. Nothing is minted
+  until the person clicks create, and signing in first keeps the link.
+
+## 0.317.2
+
+### Patch Changes
+
+- 5194075: An add-repository link (`?addRepo=<owner>/<name>`) now opens the add-service window with the
+  repository selected. Two things lost it. Signing in from the link reloaded to a bare path, because
+  the board consumed the link as the session landed and the reload read the URL after that: every
+  sign-in form now reads where to return to before it signs in. And the window typed the repository
+  into its picker before the picker mounted, which Nuxt UI's menu clears on mount: it is now typed in
+  once the menu has mounted.
+
+## 0.317.1
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+
+## 0.317.0
+
+### Minor Changes
+
+- b3a13d3: An integration can now send a person to add a service for a repository. `GET /api/v1/deployment`
+  (`client.deployment.get`) answers where the deployment serves its web app, to any `read` key with
+  no workspace named. The app opens the add-service window with the repository searched for and
+  selected from `?addRepo=<owner>/<name>`, with optional `provider` and `ws` to name the host and
+  pin the board. Signing in first keeps the link.
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+
+## 0.316.0
+
+### Minor Changes
+
+- 6f574e9: API keys gain a `webhooks` scope between `read` and `write`: everything `read` can do, plus
+  registering and removing push endpoints. The directory webhooks (`/api/v1/directory/webhooks`,
+  still for a key reaching every workspace) and the notification webhooks
+  (`/api/v1/notification-webhook[s]`) now need `webhooks` instead of `admin`, so a sync integration
+  can follow changes with a key that cannot author or delete work. Every key that could manage
+  webhooks before still can. OpenAPI 1.86.0.
+  
+  The API token form names each scope by its API name (`read`, `webhooks`, `write`, `decide`,
+  `admin`), so the screen, the docs and the refusal messages agree. "Full access" is now "Admin".
+  
+  The token form always shows the Workspaces picker, in basic and advanced mode. It is disabled for
+  anyone who is not an account admin, with a line saying so, because only an account admin may mint
+  a key that reaches other workspaces.
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+
+## 0.315.9
+
+### Patch Changes
+
+- 8749655: The API token scope picker now says what each level includes. Each label names the level it builds on (Write includes Read, Decide includes Write, Full access includes Decide), and the help text lists what every level adds, including Decide, which it previously left out: answering a run's human decisions, which a token also needs to start a pipeline that can stop for one. Updated in every locale.
+
+## 0.315.8
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+
+## 0.315.7
+
+### Patch Changes
+
+- 85050fe: Render every full-bleed takeover inside one shared `TakeoverShell`, so focus stays inside an open takeover and Escape closes only the top overlay. The step reader, the model configuration takeover, the observability, reports, operator dashboard and Kaizen panels, and the artifact lightbox now use it. The safe-area guard also refuses a full-screen root class named outside its owning shell. Every Nuxt UI menu, select, popover and modal now holds a place on the shared overlay stack while it is open, so Escape in an open dropdown inside a takeover closes the dropdown, not the takeover. The block focus view no longer closes on the Escape that closes a window or takeover opened over it.
+
+## 0.315.6
+
+### Patch Changes
+
+- f3e31b4: The model configuration opened from the pipeline builder now takes clicks. It shows once the builder has closed, and the builder comes back with its draft when the model configuration closes. Before, the builder stayed open under it and took every click.
+
+## 0.315.5
+
+### Patch Changes
+
+- df137d3: Selecting a service frame no longer reads the GitHub repos, pull requests and issues twice. The inspector asks for the projection when the frame opens, and concurrent callers share one read. A connected workspace with no linked repos counts as loaded, so the inspector does not read it again on every open. The store records what the projection was loaded for (the workspace and its connection), so a failed load, a board reset, a disconnect and a reinstalled App each make the next request read again. One generation counter decides whether a read may land: an older read that finishes last, a read for a board you left, a read that finishes after a disconnect, and a read that started before a direct write (saving linked repos, opening or merging a pull request) no longer overwrite newer rows. The loading flag clears as soon as the projection is cleared. The add-service-from-repo, bootstrap and GitHub panel surfaces still re-read on open, and share a read that is already running. A failed read on frame open now shows the standard error toast.
+
+## 0.315.4
+
+### Patch Changes
+
+- 9fd2cd4: Modals open at one of three named widths instead of a width picked per dialog.
+  
+  A new `AppModal` wraps `UModal` with a required `size` from `utils/overlaySize.ts`: `prompt` (448px)
+  for confirmations, decisions and one- or two-field dialogs, `form` (576px) for forms, lists and
+  hubs, and `wide` (672px) for card lists with an action beside each paragraph, tabbed forms and three
+  pickers in a row. 46 modals move onto it. 13 keep their width, 31 move by one Tailwind step, and two
+  short dialogs (review friction, AI preset mismatch) narrow from 576px to 448px. The nine workbench
+  surfaces keep their own widths until #2359 decides their shell, each with a `workbench-width-ok:`
+  comment. `scripts/check-frontend-geometry.mjs` refuses a raw `UModal` without that waiver, and an
+  `AppModal` that names its own width utility or reads its classes from a variable. An `AppModal`
+  bound `:fullscreen` drops its width while fullscreen.
+
+## 0.315.3
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/contracts@0.368.0
+
+## 0.315.2
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/contracts@0.367.0
+
+## 0.315.1
+
+### Patch Changes
+
+- 4c0eac3: An inbox card that asks a person for something now carries its verb as the primary button ("Answer" for a parked decision, "Review", "Test", "Triage" and so on), and "Mark read" becomes a secondary button. Cards whose own action is already the verb (Merge, Retry run, Acknowledge) are unchanged. A parked agent question now opens the decision window from the inbox, where it can be answered, instead of the read-only step detail; an approval gate still opens the step to approve. Any verb whose window cannot open (its run is not loaded or not parked, as after a Ralph loop or a gate that gave up) says "Open", because it only opens the task. "Mark read" is an outline button beside the verb, so it no longer looks like "Dismiss". The inbox closes when a card opens something. Each type's verb and destination now sit in one route table (`utils/notificationRoutes.ts`), which the title link uses too.
+
+## 0.315.0
+
+### Minor Changes
+
+- 04c1587: Public-API keys belong to an account and reach every workspace in it or a chosen list. A
+  workspace-scoped `/api/v1` call names its workspace in the `x-cat-factory-workspace` header, which a
+  key reaching one workspace may omit, so every existing key keeps working unchanged. `PublicApiKey`
+  and `GET /api/v1/me` gain `workspaceIds`; both mint bodies accept it. Widening a key past the board
+  it is minted from takes an account admin, and a key can never mint or revoke one reaching further
+  than itself. The header is on the CORS allow-list, so a browser client can send it. The four SDK
+  clients take a workspace option. OpenAPI 1.80.0.
+  
+  Storage break (internal): `public_api_keys.workspace_id` is replaced by `all_workspaces` plus the
+  `public_api_key_workspaces` grant table (D1 `0108`, Drizzle `20261009143721` and `20261009143724`),
+  backfilled from the old column. The account cap is 200 live keys, where it was 50 per workspace,
+  and a key left with no workspace after its boards were deleted holds no slot.
+
+### Patch Changes
+
+- f1b6c9a: `/api/v1/directory/*`: an account's workspaces, users, account memberships, workspace memberships
+  and linked repositories as keyset-paged snapshots, plus an ordered change feed whose changes carry
+  each entity's current state (or `null` once it is gone), for an integration keeping its own copy in
+  sync. A feed cursor older than the new `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30) is refused
+  with the new `cursor_expired` conflict reason. OpenAPI 1.81.0.
+  
+  Internal: the change-row mapping both facades share moves to kernel's `directoryChangeFromRow`.
+  The slice 1 `DirectoryChangeRepository` port becomes `DirectoryRepository` and joins
+  `CoreDependencies` as a required member, with its reads on the mothership allow-list.
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+
+## 0.314.0
+
+### Minor Changes
+
+- 66b7fed: Add "Describe new work" (Create → Describe new work, the palette, and the queue view's header): a one-sentence intake that files a feature or a bug from a sentence and a service. The title comes from the first sentence and is shown before submit; the full text is the description. The overrides sit behind one "Change how this runs" disclosure that names the defaults it would use: the pipeline in every tier, and the merge policy and model preset in the advanced tier only, as in the full form. Closing the dialog with typed text asks first. "Add and start" starts through the card's own Start, with the same started, sandboxed and no-pipeline messages. "More kinds" and "Attach context" carry the kind and the overrides into the full form along with the text. The review-debt dialog's "Go review" closes whichever form raised it. Every other kind of task, and context attachments, hand the text to the full "Add a task" form, prefilled. Both forms now share one review-debt friction builder.
+
+## 0.313.0
+
+### Minor Changes
+
+- dc08534: Add a setup checklist (Configuration → Setup checklist, or the palette) for people who can change the workspace setup. It lists every prerequisite for "a task can run and merge" (model, source control, where agents run, test environments, screenshot storage) with its state and one action per row, composed from the probes the setup banners and startup dialogs already read. A row that needs attention says why (unreachable, a missing setting, a rejected or under-scoped token, a broken default preset, or a check that did not answer), and its action opens what the matching banner opens for that cause. A row follows the banners' rule for who may act on it: someone who cannot save the fix sees who can instead of a button. A probe that has not answered shows as checking, never as missing or done, and a failed probe offers "Try again". The banners and dialogs are unchanged. The GitHub store now records why the integration is unavailable (switched off, or the probe failed). The setup banners and the checklist open each fix through one shared map (`useSetupRemedies`), so a row and its banner cannot point at different screens. A token row says whose token it is, and a missing local token says to set `GITHUB_PAT`. A backend that does not report its infrastructure gets a row that says so instead of a spinner.
+
+## 0.312.0
+
+### Minor Changes
+
+- 1f02937: Add a queue view beside the board (issue #2258). The queue lists every task across every service in the column that says what it needs (Needs you, In flight, Ready to merge), and each card carries the one action its state implies. The sidebar's new Views switcher, the palette and a `?view=queue` link move between the queue and the canvas. The SPA opens on the view each person used last; a person who has not chosen lands on the queue. The canvas's decision counter now opens the queue view instead of a dropdown, on every service, and the queue lists a decision or approval on an initiative or a frame too. The queue's Done list follows the workspace's Done-lane settings, as each frame's Done lane does. A click anywhere on a queue card opens the task, and on a wide screen the queue's columns make room for the inspector instead of sitting under it. Starting a tour moves to the canvas, which every tour walks, and the Board basics tour gains a step on the two views. A Board basics tour broken off before this change resumes one step early. The board card and the frame swimlanes share their action and classification code with the queue (`useTaskActions`, `useTaskLaneClassifier`), so a member without `runs.execute` now sees the board card's Start and Merge disabled with the reason, as Retry already was.
+
+## 0.311.3
+
+### Patch Changes
+
+- d474fbe: Make the SPA's three feedback states look the same everywhere: toasts, loading and empty states.
+  
+  Every toast that is not a failed call now goes through `useActionToast()` (`success`, `info`,
+  `warning`, `error`), beside the existing failure funnel. The tone decides the colour, the icon and
+  the duration, so all success toasts render identically. Success and info toasts dismiss after the
+  default; warning and error toasts stay until closed. Some toasts change tone as a result (an
+  uncoloured "disconnected" or "attached" toast is now a green success).
+  
+  Loading uses the Nuxt UI `loading` prop where a component has one, `USkeleton` rows while an async
+  panel or list waits on its first fetch, and the new `common/Spinner.vue` for a bare loading glyph.
+  The spinner honours reduced motion. The skeleton fill is `bg-accented` app-wide, because the
+  default `bg-elevated` disappears on the `bg-elevated` and `app-950` surfaces many windows paint.
+  Empty lists and panels render `common/EmptyState.vue`, which now wraps Nuxt UI's `UEmpty`.
+  
+  `scripts/check-frontend-feedback.mjs` bans `toast.add(` outside the two toast composables and
+  `animate-spin` outside the spinner.
+
+## 0.311.2
+
+### Patch Changes
+
+- e091712: Modals and slideovers use Nuxt UI's default surfaces again: a `bg-default` panel over a `bg-elevated/75` overlay. The app had painted the panel `bg-app-950`, which in the default light theme is the same neutral-100 as the overlay, so the panel blended into the page behind it. The three hand-rolled backdrops (the mobile sidebar, the result window and the failed-chunk notice) follow the same rule.
+
+## 0.311.1
+
+### Patch Changes
+
+- c8d3870: Upgrade `nuxt` to 4.6.1 or later so a cold `nuxt dev` pre-bundles the SPA's dependencies and the
+  first page load no longer reloads. The layer's `nuxt` peer range is now `^4.5.2 <4.6.0 || ^4.6.1`,
+  so a deployment locked to 4.6.0 gets a peer warning.
+  
+  Nuxt 4.6.0 broke Vite's dependency scan in any app that uses `@nuxtjs/i18n` (nuxt/nuxt#36473), so
+  `nuxt dev` found every dependency while the page loaded and reloaded the page after each batch. The
+  peer range only warns: the fix is the `nuxt` upgrade. A deployment that links the layer from a
+  workspace, not from `node_modules`, must also add the layer's files as scan entries, because Nuxt
+  adds them only for an installed layer. The in-repo frontend deployment
+  (`deploy/frontend/nuxt.config.ts`) shows how.
+- 1c7d921: Full-screen overlays keep clear of a phone's notch and home indicator, and dragging inside one no
+  longer reloads the app.
+  
+  The result window shell now insets every window by the larger of 1rem and the device's safe-area
+  inset on each side, and caps a centered window at the padded height, so a full-height window's
+  header no longer sits under the notch. The step detail reader and the model configuration takeover
+  pad by the inset alone. `html` and `body` set `overscroll-behavior-y: none`, so a vertical drag
+  that reaches the viewport no longer triggers pull-to-refresh, which reloaded the app and dropped the
+  open window. Inner scrollers still hand the scroll on to the scroller around them.
+- b884a6d: The observability, reports, operator dashboard and Kaizen takeovers and the artifact lightbox pad
+  by the device's safe-area inset and cap to the dynamic viewport, so their headers, close buttons
+  and bottom edges no longer sit under a phone's notch, home indicator or browser chrome. On a phone,
+  the observability and operator dashboard headers put their tabs on a second row, so the close
+  button stays on screen. The sidebar drawer pads its top and inline-start insets, and the
+  inspector's bottom sheet pads its side insets. A tap in the lightbox's inset strips no longer
+  closes it.
+  
+  Every full-screen overlay now takes its root classes from `utils/safeArea.ts`
+  (`FULL_BLEED_TAKEOVER_CLASS`, `WINDOWED_OVERLAY_CLASS`), which replace the exported
+  `SAFE_AREA_INSET_CLASS` and `SAFE_AREA_GUTTER_CLASS`.
+
+## 0.311.0
+
+### Minor Changes
+
+- 91dedb6: Setup advisories now go to the people who can act on them. The workspace snapshot carries
+  `infraSetupOwners` beside `infraSetup`, naming who can close each gap: a board admin
+  (`workspace_admin`), an account admin (`account_admin`) or the deployment operator (`operator`).
+  Content storage falls to the operator when the deployment gives an account admin no backend to
+  select (`AccountSettingsService.canSelectContentStorage`).
+  
+  In the SPA, the infra-setup and provider-config cards render only for a caller who can save the
+  fix, and never on the designer surface. A caller who cannot act, but whose runs the gap stops (today,
+  a missing or unreachable runner pool), gets one compact line instead: it names who can fix it, or
+  tells an admin on the designer surface to switch role. A viewer gets nothing. The line honours the
+  card's session and permanent dismissals. The default test-environment prompt is also kept off the
+  designer surface, and the account-admin check now lives once in the accounts store
+  (`isActiveAccountAdmin`).
+  
+  On the repository-host gate, a caller without `integrations.manage` reads that a board admin can
+  connect the host, instead of "this deployment has nothing configured, ask an operator", and the
+  gate offers the board switcher without the items that need the board page's dialogs. The AI setup
+  dialog sends a member to the direct keys on their own
+  "My keys" scope, where their save lands, instead of the workspace pool they cannot write. That
+  default follows the active board's grant until the user picks a scope by hand.
+  
+  The new snapshot field is optional and internal: an older SPA ignores it, and this SPA falls back
+  to "a board admin" when a backend does not send it.
+
+### Patch Changes
+
+- Updated dependencies [91dedb6]
+  - @cat-factory/contracts@0.365.0
+
+## 0.310.3
+
+### Patch Changes
+
+- 466ce7a: Bring the SPA's buttons in line with the variant policy, and guard "one solid per view".
+  
+  The three gate windows that offered a solid "send back" action beside a solid "approve" (the
+  judge result, human testing, visual confirmation) now render send-back as `warning soft`, so the
+  approve stays the one primary.
+  
+  Twenty labelled destructive actions move to `error soft`: the ones that disconnect, clear, delete,
+  discard, reset or remove stored state, including the four confirm-gated Clear buttons on the
+  deployment credentials, Discard on a guided-review draft and Destroy environment in human testing.
+  The icon-only Delete pipeline button is now `error ghost`. Removing a row or chip from a form that
+  is not saved yet stays neutral: it is not destructive.
+  
+  Twenty-six inline and chrome actions that rendered as primary-coloured ghost buttons (Edit,
+  Resync, Refresh, show/hide toggles, file-tree rows) now render neutral, and two cancel buttons
+  that rendered in the primary colour now render neutral like the rest.
+  
+  `scripts/check-frontend-variants.mjs` also refuses two solid buttons under one parent element. A
+  `v-if` chain and a `v-for` list count as one button, a renderless component (`UTooltip`,
+  `UPopover`, `ClientOnly`, a plain `<template>`) adds no element, and a slot `<template #name>` is
+  its own region, so a file holding several forms that each end in a Save still passes.
+
+## 0.310.2
+
+### Patch Changes
+
+- 27a8afd: Delete the SPA's button and badge props that restate Nuxt UI's defaults, and guard against them.
+  
+  246 `color="primary"`, `variant="solid"` and `size="md"` props on `UButton`, `IconButton` and `UBadge`
+  restated Nuxt UI's own default. The defaults are now stated once in `app.config.ts`, where
+  `scripts/check-frontend-variants.mjs` (CI) reads them to refuse a value that repeats them.
+  
+  Nothing changes on screen with the built-in themes (Cat Factory and Mono), which set no button
+  defaults. An imported theme whose `style.defaults` sets a button size, variant or colour now reaches
+  the controls that used to pin Nuxt UI's value: for example, with `size: 'lg'` the buttons and badges
+  that said `size="md"` grow with the rest. That is the intent: a restated default was a value the
+  theme could not change.
+  
+  The defaults stay Nuxt UI's on purpose. A theme document's `style.defaults` replaces the default for
+  every control that does not state the prop, so the unstyled group is the one a theme restyles. Keeping
+  the primary actions unstyled means a theme with a larger size or a different button variant restyles
+  the actions, not every toolbar and icon button. The variant policy (one solid primary per view, the
+  secondary, destructive, chrome and size rules) is written down in `frontend/app/README.md`.
+
+## 0.310.1
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/contracts@0.364.0
+
+## 0.310.0
+
+### Minor Changes
+
+- 5dbc11b: Render every SPA control as its Nuxt UI component instead of a raw HTML element.
+  
+  Every raw `<button>`, `<input>`, `<select>`, `<textarea>`, hand-built `<table>`, `<details>`,
+  `<form>`, `<a href>` and `<datalist>` in the layer, each with its own border, background, hover and
+  focus recipe, moves onto `UButton`, `UInput` /
+  `UInputNumber` / `UCheckbox` / `URadioGroup` / `USlider` / `UFileUpload`, `USelect`, `UTextarea`,
+  `UTable`, `UCollapsible`, `UForm`, `ULink` and `UInputMenu`, so each now follows the theme, the
+  focus ring, the disabled state and the size scale.
+  
+  Four changes go beyond a swap and are visible:
+  
+  The four hand-built segmented switchers (the observability views, the reports window and
+  dimension rows, the operator window row) become `UTabs`, which adds arrow-key navigation and the
+  tab ARIA they had none of.
+  
+  The fork-decision cards were one choice rendered as N independent radios; they become a single
+  `URadioGroup variant="card"`, the custom-approach entry included, so the single-selection rule and
+  keyboard navigation come from the primitive.
+  
+  `ImageCompare` hand-rolled a drop zone, a hidden shared file input and its own drag state.
+  `UFileUpload` owns all three. The PNG/JPEG guard stays in the component, because `accept` filters
+  the picker and a dropped file arrives regardless.
+  
+  `IconButton` and `CopyButton` wrap their button in a `UTooltip` and keep `aria-label` on the
+  button. A `title` never fires on touch, is unstyled and waits about a second, so every icon-only
+  button's hint now appears as a themed tooltip, and every icon-only button has an accessible name.
+  The tooltip trigger is a wrapper around the button, so it still opens on a disabled one, and
+  `class` on `IconButton` lands on that wrapper, the box its parent lays out. A labelled button
+  keeps a `title` as a hover hint beside its own name.
+  
+  A Nuxt UI slot often sets more than the property a site overrides: `UButton`'s padding, text size
+  and hover background, `UTable`'s cell padding, colour and `whitespace-nowrap`, `ULink`'s colour.
+  Each converted site states the whole box it had, so where the old markup inherited a value the new
+  one restates it.
+  
+  `scripts/check-frontend-primitives.mjs` holds the count at zero, including a raw element rendered
+  through `as="button"`, an `:is` binding or `h()`, and an icon-only `UButton` named only by
+  `title`. It has no allow-list: the two cases expected to need one (a Vue Flow gesture handle, a
+  full-bleed media tile) both converted.
+
+## 0.309.0
+
+### Minor Changes
+
+- 084fb66: Size SPA text through named type steps instead of pixel literals.
+  
+  The app declares two steps below Tailwind's `text-xs` in `app/assets/css/type.css`, `text-2xs`
+  (0.6875rem) and `text-3xs` (0.625rem), and every `text-[Npx]` literal in the layer moves onto a named
+  step. All steps are rem, so a theme document's `fontSize` now scales the app's own text the way it
+  already scaled Nuxt UI's components. The 11px and 10px sites are exact on the two new steps and
+  render unchanged. The four sizes with no step of their own move by a pixel (9px up to 10px, 12px and
+  12.5px to 12px, 13px up to 14px). Those four also take the LINE HEIGHT that `text-xs` and `text-sm`
+  pair with their size, where the literal paired none, so a 12px block with no `leading-*` tightens
+  from 18px lines to 16px.
+  
+  `common/SectionLabel.vue` becomes the one section eyebrow, replacing six hand-written recipes. The
+  recipe is visible wherever a label was not already on it: labels at 9px or 10px grow to 11px, labels
+  at `text-xs` or `text-sm` shrink to 11px, labels with no weight gain `font-semibold`, and labels on
+  `text-dimmed` render one step darker on `text-muted`.
+  
+  The colour is a deliberate departure from the most common value. At 11px `text-dimmed` measures
+  2.63:1 against a light surface, under WCAG AA's 4.5:1 and under the 3:1 large-text floor;
+  `text-muted` is 4.76:1. The SPA's wider use of `text-dimmed` outside this component is unchanged.
+  
+  `scripts/check-frontend-type-scale.mjs` keeps font-size literals from returning: utilities, CSS
+  declarations including the `font:` shorthand, and JS style properties.
+
+### Patch Changes
+
+- 084fb66: Make every corner radius in the SPA follow the theme.
+  
+  Nuxt UI rebuilds seven of Tailwind's radius steps on top of `--ui-radius`, so `rounded-xs` through
+  `rounded-3xl` already tracked a theme document's `radius`. Two spellings sat outside that scale:
+  bare `rounded` (and its side and corner forms), which resolves through Tailwind's `--radius`, and
+  `rounded-4xl`, which keeps Tailwind's own 2rem. `main.css` now binds both onto `--ui-radius`, so
+  every `rounded-*` utility in the SPA follows the theme with no per-site change. Both are declared
+  `@theme default` upstream, so the app's own `@theme inline` block wins, and `inline` is what makes
+  the utility compile to `var(--ui-radius)` rather than to a value frozen at build time.
+  
+  Nothing moves on the default `Cat Factory` theme: `--ui-radius` is the same 0.25rem the bare alias
+  was inlined as, and 8x it is the 2rem `--radius-4xl` already held. On a theme with a different
+  radius the boxes now move with the buttons and cards around them. On the built-in `Mono`
+  (`radius: 0.5`) the affected boxes go from 4px to 8px, where before the theme rounded the Nuxt UI
+  components and left the app's own boxes behind. Every preset the Nuxt UI theme editor ships carries
+  a non-default radius, from 0 to 0.75rem, so an imported theme hit this too.
+  
+  The raw `border-radius` declarations in the reader-prose styles move onto `var(--ui-radius)`, which
+  the `--radius-*` scale cannot be used for: Tailwind emits those variables only where the compiled
+  stylesheet graph references them, so one is correct until the last other reference is deleted.
+  
+  `radius` is now stated on the `Cat Factory` document. It equals the default and writes no CSS,
+  which is the point: the number has one visible home.
+  
+  `scripts/check-frontend-radius.mjs` keeps out what the rebind cannot reach: an arbitrary value
+  (`rounded-[10px]`, `rounded-(--x)`) and a raw `border-radius` literal.
+
+## 0.308.0
+
+### Minor Changes
+
+- e3c4b3c: A new built-in `resolve-conflicts` task type points the conflict resolver at an existing open pull request the platform did not open (surface version 1.79.0). The task names it with `fields.prNumber` or `fields.prUrl`, and creation records it as the block's own `pullRequest`, refusing one the run could not push onto with a `422` and an `attached_pr_*` reason: not found, another repository, closed or merged, from a fork, targeting a branch other than the repository's base, or unreadable. When the repository provider fails to answer, creation is refused with a retryable `503` and reason `attached_pr_provider_unreachable` instead of a `500`.
+  
+  The task is pinned to the new `pl_resolve_conflicts` pipeline, the `conflicts` gate alone, under a new `maintenance` pipeline purpose that only this task type is offered. It parks nowhere, so a `write` key starts it with an empty body. A clean pull request finishes `done` with nothing pushed; one the resolver cannot clear fails the run with a message saying the conflicts could not be resolved automatically and carrying the resolver's last account. A run of a task that attached its pull request finishes `done` without a confirm-and-merge card, and the pre-dispatch input gate does not judge its description. Run admission refuses a pipeline with a merge step for such a task, and a fields patch cannot move its attachment to another pull request while its run is working.
+  
+  `OpenedPullRequest` gains an optional `crossRepository`, filled by the GitHub and GitLab clients, and `AgentRunContext.block` gains `taskType`, which the container executor reads to skip creating the per-task work branch for an attached pull request. The conflicts gate's give-up message now includes the last resolver attempt's summary.
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/contracts@0.363.0
+
+## 0.307.1
+
+### Patch Changes
+
+- ffe4356: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Worker test pool moves from `@cloudflare/vitest-pool-workers@0.22.0` to its renamed successor
+  `@cloudflare/vitest-plugin@1.3.7`. The old package is deprecated and receives no further releases;
+  the new one exports the same `cloudflareTest`, `readD1Migrations` and `/types` entry, so only the
+  import specifiers change. It pins `wrangler@4.148.0`, so the Cloudflare stack moves with it:
+  wrangler `4.124.0` to `4.148.0`, workerd `1.20260815.1` to `1.20261006.1`, miniflare to
+  `5.20261006.0-alpha`, and `@cloudflare/workers-types` to `5.20261006.1`, the resolved workerd's
+  date. esbuild stays on `0.28.1`, which wrangler still pins.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.131`, `@ai-sdk/anthropic@4.0.75`,
+  `@ai-sdk/openai@4.0.87`, `@ai-sdk/openai-compatible@3.0.65`, `@ai-sdk/amazon-bedrock@5.0.109`,
+  `@ai-sdk/provider@4.0.24`), still one `@ai-sdk/provider` identity across every caller. Also
+  `nuxt@4.6.0` with `vue-router@5.4.0`, `@nuxt/ui@4.11.3`, `hono@4.13.13`,
+  `@modelcontextprotocol/sdk@1.32.1`, the OpenTelemetry SDK `2.12.0` / `0.223.0`, `pg-boss@12.37.0`,
+  `pino@10.4.0`, `@aws-sdk/client-s3@3.1147.0`, `@playwright/test@1.64.0`, and the root toolchain
+  (`turbo@2.11.7`, `oxlint@1.87.0`, `oxfmt@0.72.0`, `knip@6.40.0`).
+  
+  Held: vitest and `@vitest/coverage-v8` stay on 4, because the plugin release inside the window
+  peer-requires vitest `^4.1.0`. msw stays on 2 for the same reason: vitest 4's mocker peers
+  `msw@^2`. The frontend stays on TypeScript 6, since TypeScript 7 ships no classic compiler API for
+  `vue-tsc`.
+
+## 0.307.0
+
+### Minor Changes
+
+- 97175f8: Guided review questions asked with `depth: "deep"` are answered from a read-only checkout of the repository (surface version 1.78.0). A new `guided-review-investigator` container-explore kind runs per question, with its own preset model; `ContainerGuidedReviewInvestigator` dispatches it standalone, the way the environment dry run's prober is dispatched, and files its spend through the same accounting a pipeline step uses. The job clones the target branch with full history, fetches the PR head and checks out the reviewed commit.
+  
+  A deep answer is driven as a state machine on its message: claim, dispatch, record the dispatch, poll. `GuidedReviewService.runJob` now returns `GuidedReviewJobProgress`, and the Workflow, pg-boss and local `node:sqlite` drivers loop on it within `GUIDED_REVIEW_MAX_PASSES`. Each poll refreshes the claim, so the stale scan never mistakes a live investigation for a dead one; a container still working after 45 minutes is stopped and its question reported failed. `GuidedReviewRepository` gains `recordInvestigation`, `getInvestigation` and `heartbeatMessage` (migration 0106 and its Drizzle mirror).
+  
+  The two standalone container flows now share one dispatch builder per facade. The single-kind model resolver accepts a job with no board frame, which resolves on the workspace's default preset. The local guided-review queue now wakes at its earliest due job, so a re-queued job can no longer wait for the periodic sweep when a timer fires early. The review window gains a "Deep dive" switch.
+
+### Patch Changes
+
+- Updated dependencies [97175f8]
+  - @cat-factory/contracts@0.362.0
+
+## 0.306.0
+
+### Minor Changes
+
+- 0966666: Guided PR review drafts can be edited and posted (surface version 1.77.0). An edit names the `rev` it was made against and is refused `409 draft_conflict` from a stale one; moving a draft is checked against the diff and refused `422 draft_anchor_outside_diff` outside it. Posting publishes the chosen drafts on the pull request as plain review comments under the caller's credential scope, with comment bodies scrubbed of secrets and passed through the host-markdown boundary. Each draft is claimed before the host call and settled with the host's own per-comment answer, so a retried post never publishes a comment twice and a partial post is reported per draft. A post after the pull request moved past the reviewed commit is refused `409 session_stale`.
+  
+  The optional summary comment posts only alongside a draft the call claimed, so an identical retry after a complete post publishes nothing. Contracts export `isPostableDraft` and `GUIDED_REVIEW_POST_LEASE_MS`, the rule the server claims by and the review window selects by, so a `posting` draft whose poster died is offered for posting again once its lease ends. `ConflictError` gains `draft_conflict` and `session_stale`, translated in every locale. The four SDKs and the MCP server gain `editDraft` and `postDrafts`.
+
+### Patch Changes
+
+- Updated dependencies [a3a10b8]
+- Updated dependencies [0966666]
+  - @cat-factory/contracts@0.361.0
+
+## 0.305.0
+
+### Minor Changes
+
+- 8766c3f: The SPA gains the guided PR review window. It opens from the sidebar and command palette ("Explore a pull request"), where a linked repository and one of its pull requests are picked, or from a `review` task's inspector on the PR that task targets. The window shows the PR's overview (summary, intent, meaningful changes, consequences, risks, areas worth reviewing) with suggested questions as chips, beside tabbed exploration threads. Each thread waits on its own answer only, so other tabs stay usable, and each can ask for review comment drafts, which are listed read-only with every refused proposal and its reason. A failed overview or answer shows its translated reason, with the raw cause behind a disclosure, and the overview flags a pull request that has moved past the reviewed commit. All copy is translated in every locale.
+
+### Patch Changes
+
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+
+## 0.304.0
+
+### Minor Changes
+
+- 0ea28b8: Guided PR review is reachable from the SPA. `/workspaces/:workspaceId/guided-reviews` opens, lists, reads, refreshes and deletes sessions, and its `threads` sub-routes open threads, ask questions and request comment drafts. Writes return at once; the overview and each answer arrive through a new `guidedReview` workspace event, which carries ids only so a member who is not viewing a review learns nothing more than that it moved. The routes are member tier and only a session's creator may change it.
+  
+  `ExecutionEventPublisher` gains `guidedReviewChanged`, implemented on the Durable Object, Node and fan-out publishers. Thread routes are addressed under their session, and a thread of another session is answered as absent. The SPA gains the API client and a `guidedReview` store that follows the event. A conformance assertion checks every facade wires the module.
+
+### Patch Changes
+
+- 0ea28b8: Guided PR review gets its engine. `GuidedReviewService` opens a session for a linked repository's pull request, generates a structured overview of it, answers questions in independent threads and turns a thread's conclusions into comment drafts. Each of those is background work: the request persists a pending row and returns, and a `GuidedReviewRunner` drives it (a Cloudflare Workflow, a pg-boss queue on Node and standard local, a `node:sqlite` queue on a mothership-mode node), with a sweeper re-waking work whose claim lapsed.
+  
+  Answers come from an inline model with read tools over the PR pinned to the reviewed commit (`list_changed_files`, `read_diff`, `read_file` on either side, `list_directory`), under a per-job read budget, with file contents scrubbed of secrets. Drafts are kept only where the host could place them (a line inside a diff hunk on that side), and every refused proposal is recorded in the message's `draftReport`. A failure is settled with a reason from a closed vocabulary, which gains `head_moved`: once the PR moves past the reviewed commit, its changed files no longer describe that commit, so the job fails until the session is refreshed.
+  
+  `ConflictError` gains the `thread_busy` reason, translated in every locale. `fenceVerbatim` is extracted into `@cat-factory/agents`' shared prompt helpers. No routes expose the service yet; they land in the next slice.
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/contracts@0.359.0
+
+## 0.303.4
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+
+## 0.303.3
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/contracts@0.357.0
+
+## 0.303.2
+
+### Patch Changes
+
+- e84b0d5: Add GPT-6.1 Sol and Claude Sonnet 5.5 to the model catalog and the price table, and name the GLM-5.2 gateway cache rate that had fallen below its route.
+  
+  New catalog entries, each declared only on routes verified to serve that exact model:
+  
+  - `gpt-6.1-sol` (GPT-6.1 Sol, 2026-09-29): Codex subscription and OpenRouter (`openai/gpt-6.1-sol`), two-band like every OpenAI row at $2 / $10 short and $4 / $15 long per 1M. Codex resolves the slug only from 0.159.0 onward. OpenRouter's `-pro` slug gets no entry: same model, same price, only a reasoning mode.
+  - `claude-sonnet-5-5` (Claude Sonnet 5.5, 2026-09-28): Claude Code subscription, AWS Bedrock (`anthropic.claude-sonnet-5-5`) and OpenRouter (`anthropic/claude-sonnet-5.5`), $2 / $10 per 1M like Sonnet 5.
+  
+  The existing `gpt-6-sol` and `claude-sonnet` entries keep their ids and models, so a block pinned to GPT-6 Sol or Sonnet 5 runs what it ran before.
+  
+  Price correction, in the safe direction: `openrouter:z-ai/glm-5.2` names its cache read again (0.21 EUR/1M), because the gateway's cached rate moved back above the 0.1x floor its input rate derives.
+  
+  The SPA's "Enable recommended" OpenRouter set gains GPT-6.1 Sol and Sonnet 5.5.
+- e84b0d5: Tool servers (MCP) now run on the Pi harness. `MCP_HARNESS_TRANSPORTS.pi` is `['stdio', 'http']`,
+  so a declared server no longer drops as `harness_unsupported` on a Pi run: it is wired into Pi's own
+  MCP client through the `mcp.json` the runner image (1.162.0 onward) writes. On Pi an `allowedTools`
+  list is enforced rather than advisory.
+  
+  **Behaviour change for a deployment whose runner pool pins an older image.** Every earlier image
+  reported the `mcpServers` capability (for the subscription CLIs) while dropping a Pi run's servers,
+  so the handshake could not tell a Pi dispatch it was about to run blind. A Pi dispatch carrying tool
+  servers now requires the new `piMcpServers` body capability, and an image that reports a list
+  without it REFUSES the run at dispatch, naming the runner image as the fix. Unlike the older
+  capabilities, an image (or a runner pool control plane) that reports NO list is refused for it too
+  rather than treated as unknown: every such image predates Pi's MCP client, so that run would be
+  blind for certain. Move the pool to `cat-factory-executor:1.162.0`, or narrow the affected servers'
+  `harnesses` to `claude-code` / `codex` until you do. `HarnessBodyCapability` gains the
+  `piMcpServers` member, and `HARNESS_BODY_CAPABILITY_FIELDS` names the body field each member is
+  carried in. A body whose `harness` is absent or unrecognised is treated as Pi, as the harness's own
+  parser runs it.
+  
+  Boot validation no longer warns that a server narrowed to `['pi']` can never apply. The step
+  detail's `harness_unsupported` copy names every cause a persisted step can carry, in every locale:
+  a `harnesses` list that excludes the CLI, an ambient Codex login, and a Pi step recorded before Pi
+  could serve tool servers, which only needs a rerun on a current image.
+
+## 0.303.1
+
+### Patch Changes
+
+- c046707: Add the models released since the last catalog sweep, and correct the price rows that had fallen below their route.
+  
+  New catalog entries, each declared only on routes verified to serve that exact model:
+  
+  - `claude-opus-5-5` (Claude Opus 5.5, 2026-09-22): Claude Code subscription, AWS Bedrock (`anthropic.claude-opus-5-5`) and OpenRouter (`anthropic/claude-opus-5.5`), $4 / $20 per 1M.
+  - `gpt-6-sol` and `gpt-6-luna` (2026-09-22): Codex subscription and OpenRouter, two-band like every OpenAI row. Codex resolves both slugs only from 0.156.1 onward.
+  - `grok-4.7` (2026-09-21): direct xAI and OpenRouter, billed exactly as Grok 4.6.
+  - `glm-5.3-flashx`, `glm-5.3-prime` and `qwen3.8-max-prime`: faster serving tiers of models already in the catalog, at roughly twice the price, through OpenRouter. Each is its own entry so the speed-for-price trade is made per block.
+  
+  The existing entries keep their ids and models, so a block pinned to Opus 5, Grok 4.6 or GLM-5.3 runs what it ran before.
+  
+  Price corrections, all in the safe direction: `openrouter:openai/gpt-oss-120b` had fallen to a quarter of the gateway's listed rate and now names its cache read; `openrouter:z-ai/glm-5.3-flash` names the gateway's higher cache rate; the Workers AI gpt-oss-120b input and Llama 4 Scout output round up to Cloudflare's list instead of just under it.
+  
+  The SPA's "Enable recommended" OpenRouter set gains Opus 5.5, GPT-6 Sol and Grok 4.7.
+- c046707: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  One major moves with it: `layered-loader` goes `16.1.1` to `17.0.0`, whose only change is that
+  `getMany` now includes `null` in its return type. Nothing here calls `getMany`, so the caching layer
+  takes it with no source change.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.111` with `@ai-sdk/anthropic@4.0.60`,
+  `@ai-sdk/openai@4.0.72`, `@ai-sdk/amazon-bedrock@5.0.91`), staying inside the majors
+  `workers-ai-provider@4` pairs with. Every member resolves the same `@ai-sdk/provider@4.0.17` and
+  `@ai-sdk/provider-utils@5.0.45`, so the provider interface stays a single identity across the proxy
+  and the inline callers. Also `@aws-sdk/client-s3@3.1138.0`, `pg-boss@12.33.6`, `undici@8.11.0`,
+  `@nuxt/ui@4.11.2`, `turbo@2.11.3`, `oxlint@1.85.0` and `oxfmt@0.70.0`.
+  
+  Every hold was re-verified at HEAD rather than assumed, and all of them still bind.
+  `@cloudflare/vitest-pool-workers@0.22.0` is still its newest release, peer-requires vitest `^4.1.0`
+  and pins `wrangler@4.124.0` exactly, so vitest and `@vitest/coverage-v8` stay on 4 and wrangler,
+  workerd, miniflare and `@cloudflare/workers-types` stay where they are. The frontend stays on
+  TypeScript 6: TypeScript 7 ships no compiler API for `vue-tsc` to load. Drizzle stays on
+  `1.0.0-rc.4`, the newest non-snapshot release of its line, and the Vue family pins (`vue@3.5.43`,
+  `vue-router@5.3.1`, `esbuild@0.28.1`, `@modular-frontend/core@0.6.0`) are already what their
+  consumers need.
+
+## 0.303.0
+
+### Minor Changes
+
+- bc073ab: Delegated executors: a pipeline step can now run in a system the deployment already operates (its own GitHub-Actions loop, job runner or PR bot) while cat-factory keeps the intake, the standards, the CI gate, the merge policy and the notifications around it.
+  
+  A deployment registers a `DelegatedExecutorDefinition` on the new app-owned `DelegatedExecutorRegistry` and points an agent kind at it with `agent: { surface: 'delegated', executor }`. The executor is handed the same brief the container harness composes, so a workspace's prompt overrides and agreed standards reach both identically; its credentials resolve per call through the existing `ToolSecretResolver` port and never touch the brief.
+  
+  Each definition declares who creates the work branch its dispatches name. `workBranch: 'platform-creates'` has the engine create it at the base head just before `start`, idempotently, which is what an external CI runner needs: `actions/checkout` on a branch that is not there fails the job before any of the work begins, and a runner that quietly substitutes a branch of its own publishes to a ref the platform never recorded. `workBranch: 'executor-creates'` writes nothing, so a run whose external work never landed leaves no empty ref behind. Either way the branch is the one the rest of the run uses: a task's own apriori working branch when it declared one (probed, never created, exactly as the container dispatch treats it), else `cat-factory/<blockId>`.
+  
+  Two things the platform states rather than guesses. A delegated step's model calls never reach this deployment's proxy, so the step card says "usage not reported by <executor>" and the run rollups carry `llm.reporting.delegatedStepsWithoutUsage` instead of rendering a zero. And a run stopped while external work is still running records whether it actually stopped: an executor that declares no `cancel` leaves its run alive, and the record says so.
+  
+  Ships with `@cat-factory/delegation-github-actions` (a `DelegatedExecutor` over Actions: correlation by run name, since `workflow_dispatch` returns no run id) and a runnable example under `backend/internal/example-delegated-executor`. Its `workflow` is a location or a function of the dispatch, so one registration can dispatch against every repository a deployment onboards; the resolver sees only facts a brief and a handle both carry, because `poll` and `cancel` run hours later holding just the handle.
+  
+  A failure the executor calls `retryable` (a cancelled run, a runner-pool restart, a rate limit) buys one fresh dispatch on an engine-set budget, and everything else is terminal. Registered executors reach their own systems through a fetch the platform has already guarded: the deployment's outbound-URL policy on the first URL and on every redirect hop (the same guard the notification webhook sender uses), a deadline so a hung endpoint cannot hold a poll open indefinitely, and a running byte cap on what one response may return.
+  
+  Two declaration-time refusals, because neither has a reading under which it does something. A definition whose credentials resolve to the same injection name is refused at registration: the bag an executor is handed is keyed by the name it reads, so one name can carry only one value. And a delegated kind naming an executor this process does not register is refused by name at dispatch rather than falling through to the container harness, which is the mothership-mode case where nothing boot-validates the kinds a node resolves.
+  
+  Public API 1.75.0, both additive: `AgentFailureKind` gains `delegated_failed`, so an external system's verdict is classified as its own thing rather than as a container that was shut down, and the `llm` totals on the two debug run surfaces gain `reporting`, saying how many of a run's steps ran on an executor that files no usage.
+  
+  Internals: `AgentSurface` gains `delegated`, `AsyncAgentExecutor.reclaimRun` may return a `RunReclaimReport`, `AgentJobHandle` and `DelegationHandle` carry the run's block (so a poll and a cancel resolve credentials in the scope the dispatch used), and `PipelineStep` gains `delegated` plus `delegatedRetries`. Five new `error.details.reason` values, all additive: `delegated_executor_unwired` (409), `delegated_step_async_only` (409), `delegated_claim_missing` (409), `delegated_executor_failed` (503) and `delegated_work_branch_unprepared` (503, the platform's own VCS write rather than the executor's system).
+- 5118fdd: Themes as Nuxt UI theme editor documents, with a theme switch. The Appearance picker gains a
+  Theme group with two built-ins: Cat Factory (indigo on slate, the default) and the editor's own
+  Mono preset (black on a pure grey neutral, generous radius, Geist). A theme is the sparse document
+  the editor (https://ui.nuxt.com/theme) edits and shares, applied at runtime: aliases land on
+  `app.config` `ui.colors`, default variants on `ui.<component>`, tokens / radius / fonts on one
+  injected stylesheet. The pre-JS loading shell wears the active theme from a per-theme, per-mode
+  cache of its computed colours. The built-in faces (Geist, Geist Mono) are self-hosted through
+  `@nuxt/fonts`. Importing a user's own theme is the next change.
+- cc7d5b7: Import a theme built in the Nuxt UI theme editor (https://ui.nuxt.com/theme). The Appearance
+  menu gains "Import a Nuxt UI theme": paste the editor's share link or the raw document JSON, name
+  it, and the theme is stored in this browser and applied; the active imported theme can be removed
+  from the same menu. A shorthand link that names an editor preset rebuilds from the preset table.
+  A name another theme already uses is disambiguated ("Mono (2)") and the dialog shows the name that
+  will be saved while the user types. An imported theme's font is applied as a family name only, so
+  the deployment provides the face.
+- 7c185f1: Light mode and a colour-mode switcher.
+  
+  Colour mode now follows the visitor's system preference and the new Appearance picker at the
+  sidebar bottom (system / light / dark), instead of being pinned dark; the browser chrome follows
+  the app's pick, not the OS.
+  
+  Every colour in the SPA is now a theme token. Status surfaces move from fixed palette shades
+  (`text-amber-300`, `bg-rose-950/40`) onto the app's mirrored `app-<alias>-<n>` tokens, whose dark
+  value is the exact shade the raw class used and whose light value is the mirrored shade; brand
+  accents move from numbered indigo shades onto Nuxt UI's bare `primary` alias (a few shades collapse
+  to one per mode); the per-kind identity colours (agent kinds, task types, step kinds) move from hex
+  onto mode-adaptive `app-hue-<h>` tokens, while task status, step state and
+  verdict colours take the semantic aliases directly (`done` is now the muted grey of a finished
+  state rather than a second green one shade from `pr_ready`); the board canvas, the dot grid, the
+  prose reader and the status halos ride tokens too. Dark mode is unchanged; light mode renders coherently. `red` and `rose` unify on
+  the `error` alias (rose), a small hue shift on the few `red` sites. `scripts/check-frontend-palette.mjs`
+  now bans every fixed-palette colour utility, not only slate/indigo.
+
+### Patch Changes
+
+- 1fc4ff1: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  Three majors move with it. The `@toad-contracts/*` family goes `0.x` to `1.0.0`, which redesigns
+  how a contract declares a non-JSON response: a status code now carries a media-type content map
+  rather than a tagged marker, and the `ContractNoBody` symbol is request-body-only. Every response
+  declaring it becomes `noBodyResponse()`, the form that survives; the symbol stays where it already
+  meant a request. `@vueuse/core` goes to `15.0.0` and `@openrouter/ai-sdk-provider` to `3.1.0`.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.107` with `@ai-sdk/anthropic@4.0.58`,
+  `@ai-sdk/openai@4.0.71`, `@ai-sdk/openai-compatible@3.0.53`, `@ai-sdk/amazon-bedrock@5.0.88`),
+  staying inside the majors `workers-ai-provider@4` pairs with, so `@ai-sdk/provider` keeps a single
+  identity across the proxy and the inline callers. Also `@aws-sdk/client-s3@3.1136.0`,
+  `pg-boss@12.33.2`, `turbo@2.11.2` and `@types/node@26.6.2`.
+  
+  `vitest` stays on 4: `@cloudflare/vitest-pool-workers@0.22.0` peer-requires `^4.1.0`, so taking
+  vitest 5 would leave the Worker suite running against a pool that never declared it.
+  `wrangler` and `@cloudflare/workers-types` stay put for the same kind of reason: the pool still
+  pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date.
+- 09bd94b: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.102 → 7.0.106` with `@ai-sdk/anthropic@4.0.57`,
+  `@ai-sdk/openai@4.0.70`, `@ai-sdk/openai-compatible@3.0.52`, `@ai-sdk/amazon-bedrock@5.0.87`,
+  `@ai-sdk/provider@4.0.17`), staying inside the majors `workers-ai-provider@4` pairs with. Every
+  member resolves the same `@ai-sdk/provider@4.0.17` and `@ai-sdk/provider-utils@5.0.44`, so the
+  provider interface stays a single identity across the proxy and the inline callers.
+  
+  Also `@aws-sdk/client-s3@3.1135.0`, `pg-boss@12.33.1`, `knip@6.37.0`, and on the frontend the whole
+  pinned Vue family to `3.5.43` with `vue-router` to `5.3.1`.
+  
+  `wrangler` and `@cloudflare/workers-types` deliberately stay put: `@cloudflare/vitest-pool-workers`
+  still pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date, so moving
+  either alone splits the runtime the Worker suite proves from the one that ships.
+- facb6a2: Add a fixed white/black rule to the SPA colour-token guard
+  (`scripts/check-frontend-palette.mjs`), the lexical half of the #2242 review
+  follow-up: `bg-white`, `text-black`, `border-white/5` and the like are invisible
+  or wrong in light mode, so they join the existing raw-palette, numbered-alias and
+  colour-literal bans. A deliberate exception says why with a `fixed-colour-ok:`
+  comment, on the line or the one above. The one in-tree offender, the
+  difference-composite canvas in `ImageCompare.vue`, carries that marker. No
+  behaviour change.
+- c5df391: Route every SPA colour through the Nuxt UI theme so `app.config.ts` actually drives the UI, and
+  make the theme light-capable. Greys move from raw Tailwind palette classes (`bg-slate-900`,
+  `text-slate-400`) onto Nuxt UI role tokens (`bg-default`, `text-muted`, `border-default`, ...) that
+  flip with the colour mode; the five grey shades with no role token use hand-defined `app-*` flipping
+  tokens; `text-white` becomes `text-highlighted`; brand accents use the `primary` alias.
+  
+  Dark mode is unchanged (every role/`app-*` token resolves to the exact shade it replaced; verified
+  by pixel-diff against the prior build, with one sub-perceptual `backdrop-blur` toolbar artifact
+  noted). `colorMode` shipped pinned dark when this landed; the theme layer is light-capable and the
+  stacked follow-up in this release turns light on and adds the colour-mode switch. A new e2e `palette-token-parity` dark-identity test
+  and `scripts/check-frontend-palette.mjs` guard against regressions.
+- Updated dependencies [1fc4ff1]
+- Updated dependencies [bc073ab]
+  - @cat-factory/contracts@0.356.0
+
 ## 0.302.2
 
 ### Patch Changes

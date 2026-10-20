@@ -1,24 +1,35 @@
 <script setup lang="ts">
-import { defaultBuildPipelineId } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
 import { STATUS_META, MODULE_META, taskTypeMeta } from '~/utils/catalog'
-import { composeRunOutcome, hasOutcomeToShow } from '~/utils/runOutcome'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import TaskPipelineMini from './TaskPipelineMini.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = defineProps<{ taskId: string }>()
 
 const board = useBoardStore()
-const execution = useExecutionStore()
-const pipelines = usePipelinesStore()
 const ui = useUiStore()
 const agentRuns = useAgentRunsStore()
-const reviews = useReviewStage()
-const toast = useToast()
 const { t } = useI18n()
-const { confirm } = useConfirm()
 
-const task = computed<Block | undefined>(() => board.getBlock(props.taskId))
+// What the card offers a human to do, shared with the queue's card (see `useTaskActions`).
+const {
+  task,
+  sandboxed,
+  unmet,
+  runnable,
+  canExecute,
+  executeDeniedTitle,
+  defaultPipeline,
+  outcomeReadable,
+  openOutcome,
+  starting,
+  start: run,
+  merge,
+  reviewStage,
+  reviewStageLabel,
+  attention,
+} = useTaskActions(() => props.taskId)
 const statusMeta = computed(() => (task.value ? STATUS_META[task.value.status] : null))
 
 // A type badge for any NON-default task type — built-in (bug/document/spike/review/ralph) or a
@@ -38,13 +49,6 @@ const typeBadge = computed(() => {
 })
 const selected = computed(() => ui.selectedBlockId === props.taskId)
 
-// This card's Start is a ONE-TAP live start, so it has nothing to ask for and offers no dry-run
-// request. What it does owe the reader is the half that is not a choice: a preset that sandboxes
-// their role means this button opens a pull request and merges nothing, and a card that said so
-// only after the fact would leave that to be discovered from a run that stops at the merge.
-const { forcedFor } = useDryRunPolicy()
-const sandboxed = computed(() => forcedFor(props.taskId))
-
 // Drag-to-connect: dragging from this card's handle onto another task makes THAT task
 // depend on this one (this is the prerequisite). The composable tracks the gesture.
 const { start: startConnect } = useDependencyConnect()
@@ -55,51 +59,9 @@ const deps = computed(() =>
 )
 const uiMode = useUiModeStore()
 
-/** Deps that haven't merged yet — these block this task from running. */
-const unmet = computed(() => board.unmetDeps(props.taskId))
-const runnable = computed(() => board.isRunnable(props.taskId))
-
 /** Label a dependency, noting its frame when it lives in another one. */
 const { depLabel: labelDep } = useDepLabels()
 const depLabel = (dep: Block) => labelDep(dep, task.value?.parentId)
-
-/**
- * The pipeline a plain "Start" will use: the task's pinned pipeline, else the build rung this
- * INTERFACE MODE defaults to (`defaultBuildPipelineId` — the fixed Standard build in basic mode,
- * the Adaptive one in advanced). The workspace's positional first pipeline remains the last
- * resort, for a board whose catalog does not carry the rung (an older seed, or a deployment that
- * retired it).
- *
- * A PIN is honoured even when the library holds no row for it, and that branch is the whole reason
- * this returns a descriptor rather than a `Pipeline`. An INTERNAL pipeline is withheld from the
- * library on purpose (the platform starts it on its own behalf, so no picker may offer it), and a
- * task can legitimately be pinned to one — the docs-refresh preset spawns its tasks onto
- * `pl_code_comments`. Resolving that pin through the library alone answers undefined, and the
- * fallback below then starts a FULL BUILD on a comment-only task while the button still reads as
- * an ordinary Start. The fallback chain exists for a task with NO pin; a pin the library cannot
- * show is still the task's answer, and the backend resolves the id for the run.
- */
-const defaultPipeline = computed<{ id: string; name: string } | undefined>(() => {
-  const pinnedId = task.value?.pipelineId
-  if (pinnedId) {
-    return (
-      pipelines.getPipeline(pinnedId) ?? {
-        id: pinnedId,
-        // The catalog NAME map spans the whole catalog (unlike the versions map), so an internal
-        // pin still names itself here; the generic label covers a pin to something this build's
-        // catalog does not know at all.
-        name: pipelines.catalogNames[pinnedId] ?? t('board.task.pipelineFallback'),
-      }
-    )
-  }
-  // No pin: the workspace's own DECLARED in-app default outranks the interface-mode rung, because
-  // an operator who named one said something a tier cannot overrule.
-  const declared = pipelines.declaredDefaultId('interactive')
-  return (
-    pipelines.getPipeline(declared ?? defaultBuildPipelineId(uiMode.isAdvanced)) ??
-    pipelines.pipelines[0]
-  )
-})
 
 /** The PR the implementer agent opened for this task, if any. */
 const pr = computed(() => task.value?.pullRequest)
@@ -107,32 +69,18 @@ const prLabel = computed(() =>
   pr.value?.number ? t('board.task.prNumber', { number: pr.value.number }) : t('board.task.pr'),
 )
 
-/**
- * Reading the result starts at the OUTCOME summary (what changed in product terms, with the
- * captured evidence), and the pull request is one click inside it. In BASIC mode that replaces
- * the card's raw PR chip: the diff is still exactly as reachable, through a surface that says
- * what the diff is about first. Advanced mode keeps both, since a reader who wants the diff
- * directly is the reader that tier is for.
- *
- * Offered only where there is something to read, asked of the SAME reduction the window renders
- * and the inspector's button gates on: a card that offered "read the result" on a task whose
- * every section says "nothing here" would teach people the surface is empty. A task marked done
- * by hand, with no pull request and no run, is that task.
- */
 const laneView = useLaneViewStore()
-const outcomeReadable = computed(() => {
-  const block = task.value
-  if (!block) return false
-  return hasOutcomeToShow(
-    composeRunOutcome({ block, instance: execution.getInstance(block.executionId) ?? null }),
-  )
-})
 /**
- * The card's raw pull-request chip, which basic mode drops in favour of the outcome card
- * carrying the same link at the top. Written as the INVARIANT ("the diff never stops being
- * reachable from this card") rather than as `isAdvanced` alone, so the tier can only ever
- * reorder two routes and never remove the last one: where the outcome card is not offered,
- * the chip stays in both tiers.
+ * The card's raw pull-request chip. Reading the result starts at the OUTCOME summary (what changed
+ * in product terms, with the captured evidence), and the pull request is one click inside it, so
+ * BASIC mode drops the chip in favour of the outcome card carrying the same link at the top: the
+ * diff is still exactly as reachable, through a surface that says what the diff is about first.
+ * Advanced mode keeps both, since a reader who wants the diff directly is the reader that tier is
+ * for.
+ *
+ * Written as the INVARIANT ("the diff never stops being reachable from this card") rather than as
+ * `isAdvanced` alone, so the tier can only ever reorder two routes and never remove the last one:
+ * where the outcome card is not offered, the chip stays in both tiers.
  */
 const showPrChip = computed(
   () => Boolean(pr.value) && (uiMode.isAdvanced || !outcomeReadable.value),
@@ -148,10 +96,6 @@ const showPrChip = computed(
 const showModuleChip = computed(
   () => Boolean(task.value?.moduleName) && laneView.groupKey !== 'module',
 )
-function openOutcome() {
-  ui.openOutcome(props.taskId, task.value?.executionId ?? null)
-}
-
 // This task's current agent run (if any). A failed run must surface the shared
 // failure banner + retry — NOT a stuck progress bar — so the card never looks
 // like it's still working after the run has terminated.
@@ -163,129 +107,6 @@ const runFailed = computed(() => agentRun.value?.status === 'failed')
 const recurring = useRecurringPipelinesStore()
 const schedule = computed(() => recurring.byBlock(props.taskId))
 
-// Optimistic "Start": flip the button into a spinning "Starting…" state the
-// instant it's clicked, before the server confirms. The button naturally
-// unmounts once the stream pushes the block into `in_progress`; if the start
-// call faults we revert and surface a toast.
-const starting = ref(false)
-
-async function run() {
-  if (!runnable.value) {
-    toast.add({
-      title: t('board.task.blockedByDependenciesTitle'),
-      description: t('board.task.waitingOn', { deps: unmet.value.map((d) => d.title).join(', ') }),
-      icon: 'i-lucide-lock',
-    })
-    return
-  }
-  const pipeline = defaultPipeline.value
-  if (!pipeline) {
-    toast.add({
-      title: t('board.task.noPipelineTitle'),
-      description: t('board.task.noPipelineBody'),
-    })
-    return
-  }
-  starting.value = true
-  // false ⇒ the run never started (the user cancelled the personal-password prompt, or
-  // the start was refused — the store surfaces the actionable toast itself). Revert the
-  // optimistic state; on success the button unmounts once the stream pushes in_progress.
-  const started = await execution.start(props.taskId, pipeline)
-  if (started) {
-    // Confirm the (optimistic) start landed — the button unmounts once the stream pushes
-    // in_progress, so without this the successful action gives no feedback. A sandboxed start
-    // says so here rather than borrowing the live wording: this is the moment the reader learns
-    // what they just started, and the two runs differ in what they will end up doing.
-    toast.add({
-      title: sandboxed.value ? t('board.dryRunToast.title') : t('board.task.startedToast.title'),
-      description: sandboxed.value
-        ? t('board.dryRunToast.body', { name: pipeline.name })
-        : t('board.task.startedToast.body', { name: pipeline.name }),
-      color: sandboxed.value ? 'warning' : 'success',
-      icon: sandboxed.value ? 'i-lucide-shield' : 'i-lucide-play',
-    })
-  } else {
-    starting.value = false
-  }
-}
-
-function review() {
-  ui.select(props.taskId)
-  ui.focus(props.taskId)
-}
-
-async function merge() {
-  // Merging a PR into its base is consequential and effectively irreversible — gate it behind a
-  // confirm (plain, not the destructive shape). `execution.mergePr` surfaces its own error toast.
-  const ok = await confirm({
-    title: t('board.task.mergeConfirm.title'),
-    description: t('board.task.mergeConfirm.body'),
-    confirmLabel: t('board.task.mergeConfirm.confirm'),
-    icon: 'i-lucide-git-merge',
-  })
-  if (!ok) return
-  await execution.mergePr(props.taskId)
-}
-
-// A `blocked` task is waiting on a human for one of two reasons — an agent-raised
-// decision OR an approval gate — and both must surface here (a failed run is shown
-// separately by the AgentFailureCard above). The board previously only handled
-// decisions, so an approval-gated task was a dead end: it read "Decision needed"
-// (the old generic `blocked` label) with no badge and a click that did nothing.
-// Read off the per-block index rather than scanning the workspace-wide list: this computed is
-// mounted once per card and invalidated by every execution event, so a `find` over `openDecisions`
-// cost O(cards x open gates) per event. `decisionsByBlock` is the index built for exactly this.
-const pendingDecision = computed(() => execution.decisionsByBlock.get(props.taskId)?.[0])
-// The async stage an iterative reviewer gate (requirements-review / clarity-review) is
-// mid-cycle in (folding the answers, then re-reviewing), or null. While set, the gate
-// needs NO human action, so its approval is suppressed below and a working indicator
-// shows instead.
-const reviewStage = computed(() => reviews.stageForBlock(props.taskId))
-const reviewStageLabel = computed(() =>
-  reviewStage.value === 'incorporating'
-    ? t('board.task.incorporatingAnswers')
-    : reviewStage.value === 'reviewing'
-      ? t('board.task.reReviewing')
-      : reviewStage.value === 'recommending'
-        ? t('board.task.recommending')
-        : null,
-)
-const pendingApproval = computed(() => {
-  const a = execution.approvalsByBlock.get(props.taskId)?.[0]
-  // A reviewer gate whose review is incorporating / re-reviewing in the driver is doing
-  // background work, not awaiting a human — don't surface it as "Approval needed".
-  if (a && reviews.isBackground(a.agentKind, props.taskId)) return undefined
-  return a
-})
-
-/** What this blocked task actually needs from a human — drives the card's label,
- * pulse and action. Decision takes precedence over approval (a step never holds
- * both at once; this is just a stable order). Null when nothing is pending. */
-const attention = computed<{
-  label: string
-  icon: string
-  action: string
-  open: () => void
-} | null>(() => {
-  const d = pendingDecision.value
-  if (d)
-    return {
-      label: t('board.task.decisionNeeded'),
-      icon: 'i-lucide-circle-help',
-      action: t('board.task.resolve'),
-      open: () => ui.openDecision(d.instanceId, d.decision.id),
-    }
-  const a = pendingApproval.value
-  if (a)
-    return {
-      label: t('board.task.approvalNeeded'),
-      icon: 'i-lucide-shield-check',
-      action: t('board.task.approve'),
-      open: () => ui.openApprovalDetail(a.instanceId, a.approval.id),
-    }
-  return null
-})
-
 /** Specific header copy: a failed run reads "Failed", a parked task reads its
  * decision/approval reason, otherwise the generic status label. */
 const statusText = computed(() =>
@@ -293,6 +114,11 @@ const statusText = computed(() =>
     ? t('board.task.failed')
     : (reviewStageLabel.value ?? attention.value?.label ?? statusMeta.value?.label ?? ''),
 )
+
+function review() {
+  ui.select(props.taskId)
+  ui.focus(props.taskId)
+}
 
 // Clicking the card body only selects the task (opening the inspector so the human can
 // interact with it). Whatever the task is parked on — a decision, an approval, or the
@@ -311,9 +137,9 @@ function selectTask() {
     :data-status="task.status"
     :data-task-type="task.taskType"
     data-testid="task-card"
-    class="nodrag w-full cursor-pointer rounded-lg border bg-slate-950/70 p-2 text-start transition"
+    class="nodrag w-full cursor-pointer rounded-lg border bg-app-950/70 p-2 text-start transition"
     :class="[
-      selected ? 'border-white' : 'border-slate-700 hover:border-slate-500',
+      selected ? 'border-inverted' : 'border-muted hover:border-app-500',
       task.status === 'pr_ready' ? 'board-pulse-green' : attention ? 'board-pulse' : '',
     ]"
     @click.stop="selectTask"
@@ -327,8 +153,8 @@ function selectTask() {
            hover. Renders a built-in OR a deployment-registered custom type via `taskTypeMeta`. -->
       <span
         v-if="typeBadge"
-        class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded"
-        :style="{ color: typeBadge.color, backgroundColor: `${typeBadge.color}22` }"
+        class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm"
+        :style="{ color: typeBadge.color, backgroundColor: tint(typeBadge.color) }"
         :title="typeBadge.label"
         :data-task-type-badge="task.taskType"
         data-testid="task-type-badge"
@@ -338,7 +164,7 @@ function selectTask() {
       <UIcon
         v-if="schedule"
         name="i-lucide-repeat"
-        class="h-3 w-3 shrink-0 text-indigo-400"
+        class="h-3 w-3 shrink-0 text-primary"
         :title="
           schedule.enabled
             ? t('board.task.recurringPipeline')
@@ -346,29 +172,33 @@ function selectTask() {
         "
       />
       <span
-        class="ms-auto truncate text-[9px] uppercase tracking-wide"
+        class="ms-auto truncate text-3xs uppercase tracking-wide"
         :class="
           runFailed
-            ? 'text-rose-400'
+            ? 'text-app-error-400'
             : reviewStage
-              ? 'text-indigo-300'
+              ? 'text-primary'
               : attention
-                ? 'text-amber-400'
-                : 'text-slate-500'
+                ? 'text-app-warning-400'
+                : 'text-dimmed'
         "
       >
         {{ statusText }}
       </span>
       <!-- drag-to-connect handle: drag onto another task to make it depend on this one -->
-      <button
-        type="button"
-        class="nodrag shrink-0 cursor-crosshair touch-none rounded-full p-0.5 text-slate-500 hover:bg-slate-800 hover:text-amber-400 pointer-coarse:p-2.5"
-        :title="t('board.task.dragToConnect')"
+      <IconButton
+        color="neutral"
+        variant="ghost"
+        icon="i-lucide-spline"
+        class="nodrag shrink-0"
+        :label="t('board.task.dragToConnect')"
+        :ui="{
+          base: 'cursor-crosshair touch-none rounded-full p-0.5 text-dimmed hover:bg-elevated hover:text-app-warning-400 pointer-coarse:p-2.5',
+          leadingIcon: 'h-3 w-3 pointer-coarse:h-5 pointer-coarse:w-5',
+        }"
         @pointerdown.stop="startConnect(task.id, $event)"
         @click.stop
-      >
-        <UIcon name="i-lucide-spline" class="h-3 w-3 pointer-coarse:h-5 pointer-coarse:w-5" />
-      </button>
+      />
     </div>
 
     <!-- title gets a full-width row so long titles wrap to two lines rather than
@@ -379,7 +209,7 @@ function selectTask() {
          title is the one always-rendered part of the body that no control can occupy. -->
     <div
       data-testid="task-title"
-      class="mt-1 line-clamp-2 break-words text-[11px] font-semibold leading-snug text-slate-100"
+      class="mt-1 line-clamp-2 break-words text-2xs font-semibold leading-snug text-app-100"
       :title="task.title"
     >
       {{ task.title }}
@@ -410,13 +240,13 @@ function selectTask() {
       <UIcon
         :name="runnable ? 'i-lucide-link' : 'i-lucide-lock'"
         class="h-3 w-3"
-        :class="runnable ? 'text-slate-500' : 'text-amber-400'"
+        :class="runnable ? 'text-dimmed' : 'text-app-warning-400'"
       />
       <span
         v-for="d in deps"
         :key="d.id"
-        class="inline-flex items-center gap-0.5 rounded bg-slate-800/80 px-1 py-0.5 text-[9px]"
-        :class="d.status === 'done' ? 'text-slate-400' : 'text-amber-300'"
+        class="inline-flex items-center gap-0.5 rounded-sm bg-elevated/80 px-1 py-0.5 text-3xs"
+        :class="d.status === 'done' ? 'text-muted' : 'text-app-warning-300'"
         :title="depLabel(d)"
       >
         <UIcon
@@ -431,7 +261,7 @@ function selectTask() {
     <div class="nodrag mt-2 flex flex-wrap items-center gap-1">
       <!-- a reviewer gate folding/re-reviewing in the background: a working indicator,
            NOT a gate — the human is back on the board and summoned only if input is needed -->
-      <span v-if="reviewStage" class="inline-flex items-center gap-1 text-[9px] text-indigo-300">
+      <span v-if="reviewStage" class="inline-flex items-center gap-1 text-3xs text-primary">
         <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
         {{ reviewStageLabel }}
       </span>
@@ -456,10 +286,11 @@ function selectTask() {
           size="xs"
           :icon="!runnable ? 'i-lucide-lock' : sandboxed ? 'i-lucide-shield' : 'i-lucide-play'"
           :loading="starting"
-          :disabled="!runnable || starting"
+          :disabled="!runnable || starting || !canExecute"
           data-testid="task-start"
           :title="
-            !runnable
+            executeDeniedTitle ??
+            (!runnable
               ? t('board.task.waitingOn', { deps: unmet.map((d) => d.title).join(', ') })
               : sandboxed
                 ? t('board.task.startPipelineDryRun', {
@@ -467,7 +298,7 @@ function selectTask() {
                   })
                 : t('board.task.startPipeline', {
                     name: defaultPipeline?.name ?? t('board.task.pipelineFallback'),
-                  })
+                  }))
           "
           @click.stop="run"
         >
@@ -481,7 +312,7 @@ function selectTask() {
         </UButton>
         <span
           v-if="runnable && defaultPipeline"
-          class="inline-flex items-center gap-0.5 text-[9px] text-slate-500"
+          class="inline-flex items-center gap-0.5 text-3xs text-dimmed"
         >
           <UIcon name="i-lucide-workflow" class="h-2.5 w-2.5" />{{ defaultPipeline.name }}
         </span>
@@ -490,7 +321,6 @@ function selectTask() {
       <template v-if="task.status === 'pr_ready'">
         <UButton
           v-if="outcomeReadable"
-          color="primary"
           variant="soft"
           size="xs"
           icon="i-lucide-clipboard-check"
@@ -527,9 +357,10 @@ function selectTask() {
         </UButton>
         <UButton
           color="success"
-          variant="solid"
           size="xs"
           icon="i-lucide-git-merge"
+          :disabled="!canExecute"
+          :title="executeDeniedTitle"
           @click.stop="merge"
         >
           {{ t('board.task.merge') }}
@@ -539,7 +370,7 @@ function selectTask() {
       <!-- A merged task is the one people come back to READ, so its result stays openable
            rather than collapsing to a tick the moment it lands. -->
       <template v-else-if="task.status === 'done'">
-        <span class="inline-flex items-center gap-1 text-[9px] text-emerald-400">
+        <span class="inline-flex items-center gap-1 text-3xs text-app-success-400">
           <UIcon name="i-lucide-check-check" class="h-3 w-3" /> {{ t('board.task.implemented') }}
         </span>
         <UButton
@@ -562,10 +393,10 @@ function selectTask() {
          cost a row of card height each and add nothing. -->
     <div
       v-if="showModuleChip"
-      class="mt-2 flex flex-wrap items-center gap-1 border-t border-slate-800 pt-2"
+      class="mt-2 flex flex-wrap items-center gap-1 border-t border-default pt-2"
     >
       <span
-        class="inline-flex items-center gap-1 rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] text-violet-200"
+        class="inline-flex items-center gap-1 rounded-sm bg-app-secondary-500/15 px-1.5 py-0.5 text-3xs text-app-secondary-200"
         :title="t('board.task.module', { name: task.moduleName })"
       >
         <UIcon :name="MODULE_META.icon" class="h-3 w-3" :style="{ color: MODULE_META.color }" />

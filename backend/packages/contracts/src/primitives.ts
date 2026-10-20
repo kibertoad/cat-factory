@@ -128,11 +128,16 @@ export const BUILTIN_TASK_TYPES = [
   'document',
   'spike',
   'review',
+  'resolve-conflicts',
   'ralph',
   'media',
   'recurring',
 ] as const
-/** The built-in task types a human can pick in the create-task form (`recurring` is schedule-only). */
+/**
+ * The built-in task types a CREATE door accepts (`recurring` is schedule-only). The SPA's create
+ * form offers every one but `resolve-conflicts`, which an integration files against a pull request
+ * it already has open (see {@link taskTypeAttachesPullRequest}).
+ */
 export const BUILTIN_CREATE_TASK_TYPES = [
   'feature',
   'bug',
@@ -140,6 +145,7 @@ export const BUILTIN_CREATE_TASK_TYPES = [
   'document',
   'spike',
   'review',
+  'resolve-conflicts',
   'ralph',
   'media',
 ] as const
@@ -148,7 +154,9 @@ export const BUILTIN_CREATE_TASK_TYPES = [
  * The kind of work a task represents, chosen by the human at creation. Drives the
  * task card's icon/badge, per-type creation fields, and (optionally) the per-service
  * running-task limit's bucketing. `review` is a deep-review of an EXISTING open pull
- * request (see {@link taskTypeFieldsSchema}'s `prNumber`/`prUrl`); `bug-fishing` is a
+ * request (see {@link taskTypeFieldsSchema}'s `prNumber`/`prUrl`); `resolve-conflicts` points
+ * the conflict resolver at an EXISTING open pull request named the same way and pushes the
+ * resolution onto that pull request's own branch; `bug-fishing` is a
  * multi-angle read-only hunt through the service's codebase for latent defects, whose
  * findings a human marks to spawn their own bug-fix tasks (see `bugFishing.ts`);
  * `media` produces BINARY
@@ -174,6 +182,17 @@ export const createTaskTypeSchema = v.union([
   namespacedIdSchema,
 ])
 export type CreateTaskType = v.InferOutput<typeof createTaskTypeSchema>
+
+/**
+ * Whether a task of this type works on a pull request ATTACHED at creation (one somebody else
+ * opened) rather than on one its own run opens. Such a task never owns that pull request's merge,
+ * so its run finishes `done` without asking anyone to confirm and merge it.
+ *
+ * Built-in types only: a deployment-registered custom task type cannot opt in yet.
+ */
+export function taskTypeAttachesPullRequest(taskType: string | null | undefined): boolean {
+  return taskType === 'resolve-conflicts'
+}
 
 /**
  * The kinds of document a `document` task can produce. Drives the document-authoring

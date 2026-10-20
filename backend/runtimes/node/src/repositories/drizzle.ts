@@ -23,6 +23,7 @@ import type {
   ConsensusGroupRepository,
   ConsensusSessionRepository,
   DocInterviewRepository,
+  GuidedReviewRepository,
   EmailConnectionRepository,
   ExecutionRepository,
   GateOutcomeRepository,
@@ -70,6 +71,8 @@ import type {
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
+import type { DirectoryRepository } from '@cat-factory/kernel'
+import { DrizzleDirectoryRepository } from './directoryRepository.js'
 
 import type { DrizzleDb } from '../db/client.js'
 
@@ -136,6 +139,7 @@ import {
   DrizzleDocInterviewRepository,
   DrizzleRequirementReviewRepository,
 } from './drizzle/reviews.js'
+import { DrizzleGuidedReviewRepository } from './drizzle/guidedReview.js'
 
 import {
   DrizzleKaizenGradingRepository,
@@ -175,6 +179,7 @@ export interface CoreRepositories {
   accountRepository: AccountRepository
   membershipRepository: MembershipRepository
   userRepository: UserRepository
+  directoryRepository: DirectoryRepository
   invitationRepository: AccountInvitationRepository
   passwordResetTokenRepository: PasswordResetTokenRepository
   machineNodeRepository: MachineNodeRepository
@@ -206,6 +211,7 @@ export interface CoreRepositories {
   workspaceMountRepository: WorkspaceMountRepository
   requirementReviewRepository: RequirementReviewRepository
   docInterviewRepository: DocInterviewRepository
+  guidedReviewRepository: GuidedReviewRepository
   kaizenGradingRepository: KaizenGradingRepository
   kaizenVerifiedComboRepository: KaizenVerifiedComboRepository
   consensusSessionRepository: ConsensusSessionRepository
@@ -243,6 +249,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     accountRepository: new DrizzleAccountRepository(db),
     membershipRepository: new DrizzleMembershipRepository(db),
     userRepository: new DrizzleUserRepository(db),
+    directoryRepository: new DrizzleDirectoryRepository(db),
     invitationRepository: new DrizzleAccountInvitationRepository(db),
     passwordResetTokenRepository: new DrizzlePasswordResetTokenRepository(db),
     machineNodeRepository: new DrizzleMachineNodeRepository(db),
@@ -274,6 +281,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     workspaceMountRepository: new DrizzleWorkspaceMountRepository(db),
     requirementReviewRepository: new DrizzleRequirementReviewRepository(db),
     docInterviewRepository: new DrizzleDocInterviewRepository(db),
+    guidedReviewRepository: new DrizzleGuidedReviewRepository(db),
     kaizenGradingRepository: new DrizzleKaizenGradingRepository(db),
     kaizenVerifiedComboRepository: new DrizzleKaizenVerifiedComboRepository(db),
     consensusSessionRepository: new DrizzleConsensusSessionRepository(db),
@@ -320,6 +328,7 @@ export {
   DrizzleDocInterviewRepository,
   DrizzleRequirementReviewRepository,
 } from './drizzle/reviews.js'
+export { DrizzleGuidedReviewRepository } from './drizzle/guidedReview.js'
 // The account tier of the risk-policy library (ADR 0055). Re-exported so the conformance harness
 // can author an account policy against the real store.
 export { DrizzleAccountRiskPolicyRepository } from './drizzle/account-risk-policies.js'

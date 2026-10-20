@@ -21,7 +21,7 @@ const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
 const uiMode = useUiModeStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { t } = useI18n()
 
 const busy = ref(false)
@@ -64,11 +64,7 @@ async function save() {
     // needs saying here; announcing it unconditionally would claim a save the rollback undid.
     const persisted = await board.updateBlock(props.block.id, { testingContext: outgoing.value })
     if (persisted) {
-      toast.add({
-        title: t('inspector.testingContext.savedToast'),
-        icon: 'i-lucide-check',
-        color: 'success',
-      })
+      actionToast.success('inspector.testingContext.savedToast')
     }
   } finally {
     busy.value = false
@@ -89,9 +85,9 @@ function revert() {
   >
     <!-- This text reaches the model in the prompt, so it must never hold a real secret. -->
     <div
-      class="flex items-start gap-2 rounded-md border border-slate-700 bg-slate-800/40 px-2.5 py-2 text-[11px] leading-snug text-slate-300"
+      class="flex items-start gap-2 rounded-md border border-muted bg-elevated/40 px-2.5 py-2 text-2xs leading-snug text-toned"
     >
-      <UIcon name="i-lucide-info" class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+      <UIcon name="i-lucide-info" class="mt-0.5 h-4 w-4 shrink-0 text-muted" />
       <span>{{ t('inspector.testingContext.notSecret') }}</span>
     </div>
 
@@ -104,7 +100,7 @@ function revert() {
     />
 
     <div class="flex items-center justify-between gap-2">
-      <p class="text-[11px] text-slate-500" :class="{ 'text-error-400': tooLong }">
+      <p class="text-2xs text-dimmed" :class="{ 'text-app-error-400': tooLong }">
         {{
           t('inspector.testingContext.length', {
             count: outgoing.length,
@@ -124,7 +120,6 @@ function revert() {
           {{ t('inspector.testingContext.revert') }}
         </UButton>
         <UButton
-          color="primary"
           variant="soft"
           size="xs"
           icon="i-lucide-save"

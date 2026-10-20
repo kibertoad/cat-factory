@@ -16,15 +16,18 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <component
-    :is="props.url ? 'a' : 'span'"
-    :class="props.url ? props.hoverClass : undefined"
-    v-bind="
-      props.url
-        ? { href: props.url, title: props.url, target: '_blank', rel: 'noopener' }
-        : { title: t('documents.taskDocs.uploadedHint') }
-    "
+  <ULink
+    v-if="props.url"
+    raw
+    :to="props.url"
+    target="_blank"
+    rel="noopener"
+    :title="props.url"
+    :class="props.hoverClass"
   >
     <slot />
-  </component>
+  </ULink>
+  <span v-else :title="t('documents.taskDocs.uploadedHint')">
+    <slot />
+  </span>
 </template>

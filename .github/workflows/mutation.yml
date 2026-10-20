@@ -10,7 +10,7 @@ name: Mutation
 # NON-BLOCKING by construction: a separate workflow contributes no check to `ci.yml`'s aggregated
 # `Build` / `Test` gates, so a red run can never block a merge.
 #
-# It is also never expected to run on a developer's machine (see CLAUDE.md → "Run the CI guard
+# It is also never expected to run on a developer's machine (see AGENTS.md → "Run the CI guard
 # scripts locally before committing"). Model, scope and how a package joins the set:
 # docs/internal/mutation-testing.md.
 

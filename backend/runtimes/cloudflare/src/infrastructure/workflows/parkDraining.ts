@@ -63,6 +63,22 @@ interface PollLoopSite {
   scope: string
 }
 
+/**
+ * Apply a park's OWN poll cadence over the deployment's configured one.
+ *
+ * Its own function rather than a spread at the call site because the two halves must move together:
+ * an interval taken from the executor with the deployment's poll COUNT would either give up on a
+ * three-hour run in minutes or busy-poll a fast one for days. Absent ⇒ the deps are returned
+ * untouched, which is byte-for-byte the pre-delegation behaviour for every container job.
+ */
+function withPollOverride(
+  deps: PollLoopDeps,
+  poll: { intervalMs: number; maxPolls: number } | undefined,
+): PollLoopDeps {
+  if (!poll) return deps
+  return { ...deps, pollInterval: poll.intervalMs, maxPolls: poll.maxPolls }
+}
+
 /** {@link PollLoopDeps} plus the gate's own budget-exhaustion policy (see `driveGatePollLoop`). */
 export type GatePollLoopDeps = PollLoopDeps & { resolveExhaustion: () => Promise<AdvanceResult> }
 
@@ -232,7 +248,11 @@ export async function drainParks(
     // job's bound is enforced container-side (inactivity + max-duration watchdogs); `jobMaxPolls`
     // is only a backstop.
     if (result.kind === 'awaiting_job') {
-      const polled = await drivePollLoop(deps.job, site, result)
+      // The park may carry its OWN cadence: a DELEGATED step's executor declares the interval and
+      // window its external system works on, which is not a number any deployment-wide job setting
+      // could be right about. Workflows takes a sleep in milliseconds, so the override needs no
+      // translation. Absent ⇒ the configured job cadence, which is every container job.
+      const polled = await drivePollLoop(withPollOverride(deps.job, result.poll), site, result)
       if (polled === null) return null
       result = polled
       continue

@@ -3,6 +3,31 @@
 /* The shared rendered-markdown reader presentation (see prose.css). */
 @import './prose.css';
 
+/* The app's own mode-adaptive colour tokens (`app-*`), layered on Nuxt UI's. */
+@import './tokens.css';
+
+/* The app's own type steps below `text-xs` (`text-2xs`, `text-3xs`). */
+@import './type.css';
+
+/* Bind the last two radius steps Nuxt UI leaves alone onto `--ui-radius`, so EVERY `rounded-*`
+ * utility follows a theme document's `radius` (issue #2251).
+ *
+ * Nuxt UI rebuilds seven of Tailwind's steps on `--ui-radius` (`--radius-sm` is it, `--radius-lg`
+ * is twice it, and so on), which is why a hand-written box on a named step already lines up with
+ * the Nuxt UI component beside it. Two spellings sat outside that: the bare `rounded` alias, whose
+ * `--radius` Tailwind declares `@theme default inline reference` and so inlines as a literal
+ * 0.25rem, and `rounded-4xl`, whose `--radius-4xl` keeps Tailwind's own 2rem. Both are `default`,
+ * so declaring them here wins, and `inline` is what lets `rounded` compile to `var(--ui-radius)`
+ * rather than to a value frozen at build time.
+ *
+ * Neither number moves on the default theme: `--ui-radius` is 0.25rem, and 8x it is the 2rem
+ * `--radius-4xl` already held. Declaring them here also EMITS both as ordinary custom properties,
+ * where Tailwind's `reference` kept `--radius` out of the stylesheet entirely. */
+@theme inline {
+  --radius: var(--ui-radius);
+  --radius-4xl: calc(var(--ui-radius) * 8);
+}
+
 /* The two toaster rules below are scoped by the `app-toaster` marker class that
  * `app.config.ts` puts on the toaster's viewport slot, NOT by `[data-slot='viewport']`.
  * That attribute is Nuxt UI's name for the scroll region of ELEVEN components
@@ -53,14 +78,20 @@
 
 /* ---- Agent Architecture Board: shared visual language ---------------------- */
 
-:root {
-  --board-bg: #0b1020;
-}
-
 html,
 body,
 #__nuxt {
   height: 100%;
+}
+
+/* No pull-to-refresh and no scroll chaining out of the app. The SPA is a full-screen canvas whose
+ * body never scrolls, so a vertical overscroll that reaches the viewport (from a modal's header,
+ * the end of a list, a gutter) has nothing to scroll and on a phone would reload the app instead,
+ * dropping whatever was open. Setting it on the root once covers every overlay, and inner scrollers
+ * still chain to the scroller around them. */
+html,
+body {
+  overscroll-behavior-y: none;
 }
 
 body {
@@ -68,9 +99,9 @@ body {
   overflow: hidden;
 }
 
-/* Vue Flow surface tuned to a dark "design board" look */
+/* The Vue Flow surface is the board canvas: one step below the page background in both modes. */
 .vue-flow__background {
-  background-color: var(--board-bg);
+  background-color: var(--app-bg-canvas);
 }
 
 /* Touch: let the pane own one-finger pan + pinch-zoom rather than the browser
@@ -83,14 +114,15 @@ body {
   touch-action: none;
 }
 
-/* Status-pulse used by blocked / decision-needed blocks */
+/* Status-pulse used by blocked / decision-needed blocks: the warning alias, so a theme that
+ * recolours `warning` recolours the halo. `color-mix` is how a custom property gets an alpha. */
 @keyframes board-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.55);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ui-warning) 55%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+    box-shadow: 0 0 0 10px transparent;
   }
 }
 
@@ -98,14 +130,14 @@ body {
   animation: board-pulse 1.4s ease-in-out infinite;
 }
 
-/* Green pulse used when a block reaches the "PR ready" state */
+/* Success pulse used when a block reaches the "PR ready" state */
 @keyframes board-pulse-green {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ui-success) 60%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 12px rgba(34, 197, 94, 0);
+    box-shadow: 0 0 0 12px transparent;
   }
 }
 
@@ -121,7 +153,7 @@ body {
 
 /* A selected edge: highlight it so the user knows what Delete/Backspace removes */
 .vue-flow__edge.selected .vue-flow__edge-path {
-  stroke: #f43f5e !important;
+  stroke: var(--ui-error) !important;
   stroke-width: 2.5 !important;
 }
 

@@ -13,6 +13,7 @@
 // request-changes rail has to live here or the gate has no resolving surface at all —
 // which is exactly how an approved-only-over-REST plan gate shipped.
 import { computed, reactive, ref } from 'vue'
+import type { TableColumn } from '@nuxt/ui'
 import type { InitiativeFollowUp, InitiativeItem } from '~/types/domain'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
 import {
@@ -29,6 +30,8 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import InitiativePlanReview from '~/components/initiative/InitiativePlanReview.vue'
 import InitiativePlanNotice from '~/components/initiative/InitiativePlanNotice.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
@@ -85,6 +88,16 @@ const phases = computed(() => initiative.value?.phases ?? [])
 function itemsOf(phaseId: string): InitiativeItem[] {
   return (initiative.value?.items ?? []).filter((i) => i.phaseId === phaseId)
 }
+
+// One column set for every phase's table, so the header typography is the table theme's rather
+// than a per-file recipe.
+const phaseItems = computed(() => phases.value.map((p) => ({ label: p.title, value: p.id })))
+
+const itemColumns = computed<TableColumn<InitiativeItem>[]>(() => [
+  { id: 'item', header: t('initiative.tracker.colItem') },
+  { id: 'status', header: t('initiative.tracker.colStatus') },
+  { id: 'pr', header: t('initiative.tracker.colPr') },
+])
 
 const progress = computed(() => initiativeProgress(initiative.value?.items))
 const progressPct = computed(() =>
@@ -298,7 +311,7 @@ const { requestClose } = useUnsavedGuard({
   <ResultWindowShell
     :open="open"
     icon="i-lucide-milestone"
-    icon-class="bg-indigo-500/15 text-indigo-300"
+    icon-class="bg-primary/15 text-primary"
     :title="initiative?.title ?? block?.title ?? t('initiative.tracker.title')"
     :subtitle="t('initiative.tracker.subtitle')"
     width="full"
@@ -307,17 +320,17 @@ const { requestClose } = useUnsavedGuard({
   >
     <template #header-extras>
       <div v-if="progress" class="flex items-center gap-2" data-testid="initiative-progress">
-        <div class="h-1.5 w-24 overflow-hidden rounded-full bg-slate-800">
+        <div class="h-1.5 w-24 overflow-hidden rounded-full bg-elevated">
           <div
-            class="h-full rounded-full bg-emerald-500 transition-[width] duration-500"
+            class="h-full rounded-full bg-app-success-500 transition-[width] duration-500"
             :style="{ width: `${progressPct}%` }"
           />
         </div>
-        <span class="text-[11px] tabular-nums text-slate-400">
+        <span class="text-2xs tabular-nums text-muted">
           {{ t('initiative.card.progress', { done: progress.settled, total: progress.total }) }}
         </span>
       </div>
-      <UBadge v-if="initiative" color="primary" variant="subtle" size="sm">
+      <UBadge v-if="initiative" variant="subtle" size="sm">
         {{ t(INITIATIVE_STATUS_LABEL_KEYS[initiative.status]) }}
       </UBadge>
     </template>
@@ -361,14 +374,12 @@ const { requestClose } = useUnsavedGuard({
         <!-- No entity yet (module unwired / still creating). Centred in the column when it is the
              only thing in it; merely inset when the notice above it means `h-full` would overflow
              the scroller by the notice's own height. -->
-        <div
+        <EmptyState
           v-if="!initiative"
-          class="flex flex-col items-center justify-center gap-2 text-center text-slate-400"
           :class="planApproval ? 'py-16' : 'h-full'"
-        >
-          <UIcon name="i-lucide-milestone" class="h-8 w-8 opacity-40" />
-          <p class="text-sm">{{ t('initiative.tracker.empty') }}</p>
-        </div>
+          icon="i-lucide-milestone"
+          :title="t('initiative.tracker.empty')"
+        />
 
         <template v-else>
           <!-- Paused at a phase checkpoint (D2): a completed checkpoint phase is awaiting
@@ -376,35 +387,42 @@ const { requestClose } = useUnsavedGuard({
                    then resume (continue) or cancel (stop) the initiative right here. -->
           <section
             v-if="pausedAtCheckpoint"
-            class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3.5"
+            class="mb-4 rounded-lg border border-app-warning-500/40 bg-app-warning-500/10 p-3.5"
             data-testid="initiative-checkpoint-pause"
           >
             <div class="flex items-start gap-2.5">
-              <UIcon name="i-lucide-pause-circle" class="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+              <UIcon
+                name="i-lucide-pause-circle"
+                class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-300"
+              />
               <div class="min-w-0 flex-1">
-                <h3 class="text-[13px] font-semibold text-amber-200">
+                <h3 class="text-sm font-semibold text-app-warning-200">
                   {{ t('initiative.checkpoint.pausedTitle') }}
                 </h3>
-                <p class="mt-0.5 text-[12px] leading-relaxed text-amber-100/80">
+                <p class="mt-0.5 text-xs leading-relaxed text-app-warning-100/80">
                   {{ t('initiative.checkpoint.pausedBody', { phase: checkpointPhase!.title }) }}
                 </p>
                 <div class="mt-2.5 flex flex-wrap gap-2">
-                  <button
-                    class="rounded bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
+                    class="rounded-sm bg-primary/90 px-2.5 py-1 text-2xs font-medium text-inverted hover:bg-primary disabled:opacity-50"
                     :disabled="initiatives.controlling"
                     data-testid="initiative-checkpoint-resume"
                     @click="checkpointControl('resume')"
                   >
                     {{ t('initiative.inspector.resume') }}
-                  </button>
-                  <button
-                    class="rounded border border-rose-500/50 px-2.5 py-1 text-[11px] font-medium text-rose-300 hover:bg-rose-500/10 disabled:opacity-50"
+                  </UButton>
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
+                    class="rounded-sm border border-app-error-500/50 px-2.5 py-1 text-2xs font-medium text-app-error-300 hover:bg-app-error-500/10 disabled:opacity-50"
                     :disabled="initiatives.controlling"
                     data-testid="initiative-checkpoint-cancel"
                     @click="checkpointControl('cancel')"
                   >
                     {{ t('initiative.inspector.cancel') }}
-                  </button>
+                  </UButton>
                 </div>
               </div>
             </div>
@@ -415,49 +433,50 @@ const { requestClose } = useUnsavedGuard({
                structure that reads better at the full span, but these are paragraphs and bullets
                of agent-written text that would otherwise run the width of the display. -->
           <section v-if="initiative.goal" class="mb-4">
-            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.goal') }}
-            </h3>
-            <p class="max-w-3xl whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">
+            </SectionLabel>
+            <p class="max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-toned">
               {{ initiative.goal }}
             </p>
           </section>
           <section v-if="initiative.constraints?.length" class="mb-4">
-            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.constraints') }}
-            </h3>
-            <ul class="max-w-3xl list-inside list-disc text-[13px] text-slate-300">
+            </SectionLabel>
+            <ul class="max-w-3xl list-inside list-disc text-sm text-toned">
               <li v-for="(c, i) in initiative.constraints" :key="i">{{ c }}</li>
             </ul>
           </section>
           <section v-if="initiative.nonGoals?.length" class="mb-4">
-            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.nonGoals') }}
-            </h3>
-            <ul class="max-w-3xl list-inside list-disc text-[13px] text-slate-300">
+            </SectionLabel>
+            <ul class="max-w-3xl list-inside list-disc text-sm text-toned">
               <li v-for="(g, i) in initiative.nonGoals" :key="i">{{ g }}</li>
             </ul>
           </section>
           <section v-if="initiative.analysisSummary" class="mb-4">
-            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.analysis') }}
-            </h3>
-            <p class="max-w-3xl whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">
+            </SectionLabel>
+            <p class="max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-toned">
               {{ initiative.analysisSummary }}
             </p>
           </section>
 
           <!-- Awaiting planning -->
-          <div
+          <EmptyState
             v-if="phases.length === 0"
-            class="mb-4 rounded-lg border border-dashed border-slate-700 p-4 text-center text-[12px] text-slate-400"
-          >
-            {{ t('initiative.tracker.noPlan') }}
-          </div>
+            class="mb-4"
+            compact
+            icon="i-lucide-list-todo"
+            :title="t('initiative.tracker.noPlan')"
+          />
 
           <!-- Phases + items -->
           <section v-for="phase in phases" :key="phase.id" class="mb-5">
-            <h3 class="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-200">
+            <h3 class="mb-1 flex items-center gap-2 text-sm font-semibold text-default">
               <span>{{ t('initiative.tracker.phase', { title: phase.title }) }}</span>
               <!-- Checkpoint annotation (D2): this phase pauses the initiative for human review
                        once its items settle. Cleared → already reviewed; the pending one → awaiting
@@ -485,100 +504,112 @@ const { requestClose } = useUnsavedGuard({
                 }}
               </UBadge>
             </h3>
-            <p v-if="phase.goal" class="mb-2 text-[12px] text-slate-400">{{ phase.goal }}</p>
-            <div class="overflow-x-auto rounded-lg border border-slate-800">
-              <table class="w-full text-[12px]">
-                <thead>
-                  <tr class="border-b border-slate-800 text-left text-slate-500">
-                    <th class="px-3 py-2 font-medium">{{ t('initiative.tracker.colItem') }}</th>
-                    <th class="px-3 py-2 font-medium">{{ t('initiative.tracker.colStatus') }}</th>
-                    <th class="px-3 py-2 font-medium">{{ t('initiative.tracker.colPr') }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="item in itemsOf(phase.id)"
-                    :key="item.id"
-                    class="border-b border-slate-800/60 last:border-0"
-                  >
-                    <td class="px-3 py-2 align-top">
-                      <div class="font-medium text-slate-200">{{ item.title }}</div>
-                      <div v-if="item.dependsOn?.length" class="mt-0.5 text-[10px] text-slate-500">
-                        {{
-                          t('initiative.tracker.dependsOn', {
-                            items: item.dependsOn.join(', '),
-                          })
-                        }}
-                      </div>
-                      <div v-if="item.note" class="mt-0.5 max-w-3xl text-[10px] text-amber-300/80">
-                        {{ item.note }}
-                      </div>
-                      <div
-                        v-if="editable && (item.status === 'blocked' || item.status === 'pending')"
-                        class="mt-1 flex gap-1.5"
-                      >
-                        <button
-                          v-if="item.status === 'blocked'"
-                          class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-                          :disabled="initiatives.curating"
-                          :data-testid="`initiative-item-retry-${item.id}`"
-                          @click="itemAction(item, 'retry')"
-                        >
-                          {{ t('initiative.curation.retry') }}
-                        </button>
-                        <button
-                          class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-                          :disabled="initiatives.curating"
-                          :data-testid="`initiative-item-skip-${item.id}`"
-                          @click="itemAction(item, 'skip')"
-                        >
-                          {{ t('initiative.curation.skip') }}
-                        </button>
-                      </div>
-                    </td>
-                    <td class="px-3 py-2 align-top">
-                      <UBadge
-                        :color="INITIATIVE_ITEM_STATUS_CHIPS[item.status]"
-                        variant="subtle"
-                        size="sm"
-                      >
-                        {{ t(INITIATIVE_ITEM_STATUS_LABEL_KEYS[item.status]) }}
-                      </UBadge>
-                    </td>
-                    <td class="px-3 py-2 align-top">
-                      <a
-                        v-if="item.pr"
-                        :href="item.pr.url"
-                        target="_blank"
-                        rel="noopener"
-                        class="text-sky-400 hover:underline"
-                      >
-                        {{ item.pr.number ? `#${item.pr.number}` : t('initiative.tracker.prLink') }}
-                      </a>
-                      <span v-else class="text-slate-600">—</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <p v-if="phase.goal" class="mb-2 text-xs text-muted">{{ phase.goal }}</p>
+            <UTable
+              :data="itemsOf(phase.id)"
+              :columns="itemColumns"
+              :ui="{
+                root: 'overflow-x-auto rounded-lg border border-default',
+                base: 'text-xs',
+                th: 'px-3 py-2',
+                td: 'px-3 py-2 text-xs whitespace-normal',
+                empty: 'py-0',
+                tr: 'align-top',
+              }"
+            >
+              <template #item-cell="{ row }">
+                <div class="font-medium text-default">{{ row.original.title }}</div>
+                <div v-if="row.original.dependsOn?.length" class="mt-0.5 text-3xs text-dimmed">
+                  {{
+                    t('initiative.tracker.dependsOn', {
+                      items: row.original.dependsOn.join(', '),
+                    })
+                  }}
+                </div>
+                <div
+                  v-if="row.original.note"
+                  class="mt-0.5 max-w-3xl text-3xs text-app-warning-300/80"
+                >
+                  {{ row.original.note }}
+                </div>
+                <div
+                  v-if="
+                    editable &&
+                    (row.original.status === 'blocked' || row.original.status === 'pending')
+                  "
+                  class="mt-1 flex gap-1.5"
+                >
+                  <UButton
+                    v-if="row.original.status === 'blocked'"
+                    color="neutral"
+                    variant="outline"
+                    size="xs"
+                    :label="t('initiative.curation.retry')"
+                    :disabled="initiatives.curating"
+                    :data-testid="`initiative-item-retry-${row.original.id}`"
+                    @click="itemAction(row.original, 'retry')"
+                  />
+                  <UButton
+                    color="neutral"
+                    variant="outline"
+                    size="xs"
+                    :label="t('initiative.curation.skip')"
+                    :disabled="initiatives.curating"
+                    :data-testid="`initiative-item-skip-${row.original.id}`"
+                    @click="itemAction(row.original, 'skip')"
+                  />
+                </div>
+              </template>
+              <template #status-cell="{ row }">
+                <UBadge
+                  :color="INITIATIVE_ITEM_STATUS_CHIPS[row.original.status]"
+                  variant="subtle"
+                  size="sm"
+                >
+                  {{ t(INITIATIVE_ITEM_STATUS_LABEL_KEYS[row.original.status]) }}
+                </UBadge>
+              </template>
+              <template #pr-cell="{ row }">
+                <ULink
+                  raw
+                  v-if="row.original.pr"
+                  :to="row.original.pr.url"
+                  target="_blank"
+                  rel="noopener"
+                  class="text-app-info-400 hover:underline"
+                >
+                  {{
+                    row.original.pr.number
+                      ? `#${row.original.pr.number}`
+                      : t('initiative.tracker.prLink')
+                  }}
+                </ULink>
+                <span v-else class="text-app-600">&mdash;</span>
+              </template>
+              <!-- The hand-built table rendered its header and no row; Nuxt UI's fallback is
+                   an untranslated "No data.", so the slot states the same nothing. -->
+              <template #empty />
+            </UTable>
           </section>
 
           <!-- Execution policy -->
           <section v-if="initiative.policy" class="mb-4">
             <div class="mb-1 flex items-center gap-2">
-              <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <SectionLabel as="h3">
                 {{ t('initiative.tracker.policy') }}
-              </h3>
-              <button
+              </SectionLabel>
+              <UButton
+                color="neutral"
+                variant="ghost"
                 v-if="editable && !editingPolicy"
-                class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                class="rounded-sm border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated"
                 data-testid="initiative-policy-edit"
                 @click="startEditPolicy"
               >
                 {{ t('initiative.curation.edit') }}
-              </button>
+              </UButton>
             </div>
-            <ul v-if="!editingPolicy" class="text-[12px] text-slate-300">
+            <ul v-if="!editingPolicy" class="text-xs text-toned">
               <li>
                 {{
                   t('initiative.tracker.maxConcurrent', {
@@ -587,94 +618,109 @@ const { requestClose } = useUnsavedGuard({
                 }}
               </li>
               <li v-for="(rule, i) in policyRules" :key="i">
-                <code class="text-sky-300">{{ rule.pipelineId }}</code>
+                <code class="text-app-info-300">{{ rule.pipelineId }}</code>
                 · {{ ruleAxes(rule) }}
               </li>
               <li>
                 {{ t('initiative.tracker.defaultPipeline') }}
-                <code class="text-sky-300">{{ initiative.policy.defaultPipelineId }}</code>
+                <code class="text-app-info-300">{{ initiative.policy.defaultPipelineId }}</code>
               </li>
             </ul>
             <!-- Edit form: the two scalar knobs; planner-authored rules are preserved. -->
-            <div v-else class="flex flex-col gap-2 rounded-lg border border-slate-800 p-3">
-              <label class="flex items-center gap-2 text-[12px] text-slate-300">
-                <span class="w-40">{{ t('initiative.curation.maxConcurrentField') }}</span>
-                <input
-                  v-model.number="policyForm.maxConcurrent"
-                  type="number"
-                  min="1"
-                  max="20"
-                  class="w-20 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200"
+            <div v-else class="flex flex-col gap-2 rounded-lg border border-default p-3">
+              <UFormField
+                size="xs"
+                :label="t('initiative.curation.maxConcurrentField')"
+                :ui="{ root: 'flex items-center gap-2', label: 'w-40', container: 'mt-0' }"
+              >
+                <UInputNumber
+                  v-model.optional="policyForm.maxConcurrent"
+                  :min="1"
+                  :max="20"
+                  size="xs"
+                  class="w-28"
                   data-testid="initiative-policy-max-concurrent"
                 />
-              </label>
-              <label class="flex items-center gap-2 text-[12px] text-slate-300">
-                <span class="w-40">{{ t('initiative.curation.defaultPipelineField') }}</span>
-                <input
+              </UFormField>
+              <UFormField
+                size="xs"
+                :label="t('initiative.curation.defaultPipelineField')"
+                :ui="{
+                  root: 'flex items-center gap-2',
+                  label: 'w-40',
+                  container: 'flex-1 mt-0',
+                }"
+              >
+                <UInput
                   v-model="policyForm.defaultPipelineId"
-                  type="text"
-                  class="flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-[11px] text-slate-200"
+                  size="xs"
+                  class="w-full"
+                  :ui="{ base: 'font-mono' }"
                   data-testid="initiative-policy-default-pipeline"
                 />
-              </label>
+              </UFormField>
               <div class="flex gap-2">
-                <button
-                  class="rounded bg-indigo-600 px-2 py-1 text-[11px] text-white hover:bg-indigo-500 disabled:opacity-50"
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  class="rounded-sm bg-primary/90 px-2 py-1 text-2xs text-inverted hover:bg-primary disabled:opacity-50"
                   :disabled="initiatives.curating"
                   data-testid="initiative-policy-save"
                   @click="savePolicy"
                 >
                   {{ t('initiative.curation.save') }}
-                </button>
-                <button
-                  class="rounded border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800"
+                </UButton>
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  class="rounded-sm border border-muted px-2 py-1 text-2xs text-toned hover:bg-elevated"
                   @click="editingPolicy = false"
                 >
                   {{ t('initiative.curation.cancel') }}
-                </button>
+                </UButton>
               </div>
             </div>
           </section>
 
           <!-- Logs -->
           <section v-if="initiative.decisions?.length" class="mb-4">
-            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.decisions') }}
-            </h3>
-            <ul class="list-inside list-disc text-[13px] text-slate-300">
+            </SectionLabel>
+            <ul class="list-inside list-disc text-sm text-toned">
               <li v-for="d in initiative.decisions" :key="d.id">
                 <span class="font-medium">{{ d.title }}</span>
-                <span v-if="d.detail" class="text-slate-400"> — {{ d.detail }}</span>
+                <span v-if="d.detail" class="text-muted"> — {{ d.detail }}</span>
               </li>
             </ul>
           </section>
           <section v-if="initiative.deviations?.length" class="mb-4">
-            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.deviations') }}
-            </h3>
-            <ul class="max-w-3xl list-inside list-disc text-[13px] text-slate-300">
+            </SectionLabel>
+            <ul class="max-w-3xl list-inside list-disc text-sm text-toned">
               <li v-for="d in initiative.deviations" :key="d.id">
-                <code v-if="d.itemId" class="text-slate-400">{{ d.itemId }}</code>
+                <code v-if="d.itemId" class="text-muted">{{ d.itemId }}</code>
                 {{ d.description }}
-                <span v-if="d.resolution" class="text-slate-400"> → {{ d.resolution }}</span>
+                <span v-if="d.resolution" class="text-muted"> → {{ d.resolution }}</span>
               </li>
             </ul>
           </section>
           <section v-if="initiative.followUps?.length" class="mb-4">
-            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.followUps') }}
-            </h3>
-            <ul class="flex flex-col gap-2 text-[13px] text-slate-300">
+            </SectionLabel>
+            <ul class="flex flex-col gap-2 text-sm text-toned">
               <li
                 v-for="f in initiative.followUps"
                 :key="f.id"
-                class="rounded-lg border border-slate-800 p-2.5"
+                class="rounded-lg border border-default p-2.5"
                 :data-testid="`initiative-followup-${f.id}`"
               >
                 <div class="flex items-start gap-2">
                   <div class="min-w-0 flex-1">
                     <span class="font-medium">{{ f.title }}</span>
-                    <span v-if="f.detail" class="text-slate-400"> — {{ f.detail }}</span>
+                    <span v-if="f.detail" class="text-muted"> — {{ f.detail }}</span>
                   </div>
                   <UBadge
                     :color="INITIATIVE_FOLLOWUP_STATUS_CHIPS[f.status]"
@@ -687,68 +733,76 @@ const { requestClose } = useUnsavedGuard({
                 <!-- Triage actions for an open follow-up (only while executing) -->
                 <div v-if="editable && f.status === 'open'" class="mt-2">
                   <div v-if="promotingId === f.id" class="flex flex-col gap-2">
-                    <label class="flex items-center gap-2 text-[12px]">
-                      <span class="text-slate-400">{{ t('initiative.curation.phaseField') }}</span>
-                      <select
+                    <UFormField
+                      size="xs"
+                      :label="t('initiative.curation.phaseField')"
+                      :ui="{ root: 'flex items-center gap-2', container: 'flex-1 mt-0' }"
+                    >
+                      <USelect
                         v-model="promoteForm.phaseId"
-                        class="flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200"
+                        :items="phaseItems"
+                        size="xs"
+                        class="w-full"
                         data-testid="initiative-promote-phase"
-                      >
-                        <option v-for="p in phases" :key="p.id" :value="p.id">
-                          {{ p.title }}
-                        </option>
-                      </select>
-                    </label>
-                    <input
+                      />
+                    </UFormField>
+                    <UInput
                       v-model="promoteForm.title"
-                      type="text"
-                      class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[12px] text-slate-200"
+                      size="xs"
                       :placeholder="t('initiative.curation.itemTitlePlaceholder')"
                       data-testid="initiative-promote-title"
                     />
                     <div class="flex gap-2">
-                      <button
-                        class="rounded bg-indigo-600 px-2 py-1 text-[11px] text-white hover:bg-indigo-500 disabled:opacity-50"
+                      <UButton
+                        color="neutral"
+                        variant="ghost"
+                        class="rounded-sm bg-primary/90 px-2 py-1 text-2xs text-inverted hover:bg-primary disabled:opacity-50"
                         :disabled="initiatives.curating || !promoteForm.phaseId"
                         data-testid="initiative-promote-submit"
                         @click="submitPromote(f)"
                       >
                         {{ t('initiative.curation.promoteConfirm') }}
-                      </button>
-                      <button
-                        class="rounded border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800"
+                      </UButton>
+                      <UButton
+                        color="neutral"
+                        variant="ghost"
+                        class="rounded-sm border border-muted px-2 py-1 text-2xs text-toned hover:bg-elevated"
                         @click="promotingId = null"
                       >
                         {{ t('initiative.curation.cancel') }}
-                      </button>
+                      </UButton>
                     </div>
                   </div>
                   <div v-else class="flex gap-1.5">
-                    <button
-                      class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                    <UButton
+                      color="neutral"
+                      variant="ghost"
+                      class="rounded-sm border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated"
                       data-testid="initiative-followup-promote"
                       @click="startPromote(f)"
                     >
                       {{ t('initiative.curation.promote') }}
-                    </button>
-                    <button
-                      class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                    </UButton>
+                    <UButton
+                      color="neutral"
+                      variant="ghost"
+                      class="rounded-sm border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated disabled:opacity-50"
                       :disabled="initiatives.curating"
                       data-testid="initiative-followup-dismiss"
                       @click="dismissFollowUp(f)"
                     >
                       {{ t('initiative.curation.dismiss') }}
-                    </button>
+                    </UButton>
                   </div>
                 </div>
               </li>
             </ul>
           </section>
           <section v-if="initiative.caveats?.length" class="mb-4">
-            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.caveats') }}
-            </h3>
-            <ul class="max-w-3xl list-inside list-disc text-[13px] text-slate-300">
+            </SectionLabel>
+            <ul class="max-w-3xl list-inside list-disc text-sm text-toned">
               <li v-for="(c, i) in initiative.caveats" :key="i">{{ c }}</li>
             </ul>
           </section>
@@ -762,7 +816,7 @@ const { requestClose } = useUnsavedGuard({
       <aside
         v-if="runMeta"
         data-testid="initiative-tracker-run-meta"
-        class="hidden w-60 shrink-0 flex-col gap-4 overflow-y-auto border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+        class="hidden w-60 shrink-0 flex-col gap-4 overflow-y-auto border-s border-default bg-default/50 px-4 py-4 lg:flex"
       >
         <StepRunMeta v-bind="runMeta" />
       </aside>

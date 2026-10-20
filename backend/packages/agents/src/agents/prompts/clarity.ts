@@ -1,5 +1,5 @@
 // Prompt text for the clarity-review flow (the requirements-review flow applied to
-// BUG-REPORT TRIAGE — see CLAUDE.md). These are consumed directly by
+// BUG-REPORT TRIAGE — see AGENTS.md). These are consumed directly by
 // `ClarityReviewService` for the inline reviewer / rework LLM calls, and are entered
 // into the versioned prompt registry (see ../kinds/versions.ts) so the benchmark
 // harness can pin them. They mirror the requirements reviewer/rework prompts but judge

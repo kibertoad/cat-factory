@@ -12,12 +12,14 @@ import { useSkillLibrary } from '~/stores/skillLibrary'
 import { SKILL_GROUP_LABEL_KEYS } from '~/utils/skills'
 import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
+import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ accountId: string }>()
 
 const library = useSkillLibrary(props.accountId)
 const github = useGitHubStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
@@ -84,7 +86,7 @@ async function linkSource() {
       gitRef: sourceRef.value.trim() || undefined,
     })
     resetSourceDraft()
-    toast.add({ title: t('skills.toast.sourceLinked'), icon: 'i-lucide-git-branch' })
+    actionToast.success('skills.toast.sourceLinked')
   } catch (e) {
     present(e, 'skills.toast.linkSourceFailed')
   } finally {
@@ -96,13 +98,11 @@ async function syncSource(id: string) {
   await withRow(`sync:${id}`, async () => {
     try {
       const result = await library.syncSource(id)
-      toast.add({
-        title: t('skills.toast.synced', {
+      actionToast.success('skills.toast.synced', {
+        params: {
           updated: result.upserted,
           removed: result.tombstoned,
-        }),
-        icon: 'i-lucide-refresh-cw',
-        color: 'info',
+        },
       })
     } catch (e) {
       present(e, 'skills.toast.syncFailed')
@@ -114,10 +114,7 @@ async function checkSource(id: string) {
   await withRow(`check:${id}`, async () => {
     try {
       const status = await library.checkSource(id)
-      toast.add({
-        title: status.changed ? t('skills.toast.changesAvailable') : t('skills.toast.upToDate'),
-        icon: status.changed ? 'i-lucide-bell-dot' : 'i-lucide-check',
-      })
+      actionToast.info(status.changed ? 'skills.toast.changesAvailable' : 'skills.toast.upToDate')
     } catch (e) {
       present(e, 'skills.toast.checkSourceFailed')
     }
@@ -138,7 +135,7 @@ async function unlinkSource(id: string) {
   await withRow(`unlink:${id}`, async () => {
     try {
       await library.unlinkSource(id)
-      toast.add({ title: t('skills.toast.sourceUnlinked'), icon: 'i-lucide-unplug' })
+      actionToast.success('skills.toast.sourceUnlinked')
     } catch (e) {
       present(e, 'skills.toast.unlinkSourceFailed')
     }
@@ -152,7 +149,7 @@ async function unlinkSource(id: string) {
          with a raw 503 — say so instead. -->
     <div
       v-if="library.available === false"
-      class="rounded-md border border-slate-800 bg-slate-900/40 p-3 text-sm text-slate-400"
+      class="rounded-md border border-default bg-default/40 p-3 text-sm text-muted"
     >
       {{ t('skills.unavailable') }}
     </div>
@@ -164,24 +161,27 @@ async function unlinkSource(id: string) {
         <div
           v-for="s in library.catalog"
           :key="s.id"
-          class="flex items-start gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="flex items-start gap-2 rounded-md border border-default bg-default/60 p-3"
         >
-          <UIcon name="i-lucide-book-open-check" class="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
+          <UIcon
+            name="i-lucide-book-open-check"
+            class="mt-0.5 h-4 w-4 shrink-0 text-app-info-400"
+          />
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
-              <p class="truncate text-sm font-medium text-slate-100">{{ s.name }}</p>
+              <p class="truncate text-sm font-medium text-app-100">{{ s.name }}</p>
               <UBadge color="neutral" variant="subtle" size="sm" class="shrink-0">
                 {{ t(SKILL_GROUP_LABEL_KEYS[s.group]) }}
               </UBadge>
             </div>
-            <p class="text-xs text-slate-400">{{ s.description }}</p>
+            <p class="text-xs text-muted">{{ s.description }}</p>
             <!-- The manifest declared a group this build does not know (a typo, or a member
                  retired since the sync). It is filed under Other, and saying which value was
                  declared is what lets the author fix their frontmatter. -->
-            <p v-if="s.declaredGroup" class="mt-1 text-[11px] text-amber-400">
+            <p v-if="s.declaredGroup" class="mt-1 text-2xs text-app-warning-400">
               {{ t('skills.catalog.groupUnknown', { group: s.declaredGroup }) }}
             </p>
-            <p class="mt-1 flex flex-wrap gap-x-3 text-[11px] text-slate-500">
+            <p class="mt-1 flex flex-wrap gap-x-3 text-2xs text-dimmed">
               <span v-if="s.resources.length">
                 {{ t('skills.catalog.resources', { count: s.resources.length }) }}
               </span>
@@ -191,9 +191,12 @@ async function unlinkSource(id: string) {
             </p>
           </div>
         </div>
-        <p v-if="!library.catalog.length" class="text-sm text-slate-500">
-          {{ t('skills.catalog.empty') }}
-        </p>
+        <EmptyState
+          v-if="!library.catalog.length"
+          compact
+          icon="i-lucide-book-open-check"
+          :title="t('skills.catalog.empty')"
+        />
       </div>
 
       <!-- Repo sources -->
@@ -202,15 +205,15 @@ async function unlinkSource(id: string) {
         <div
           v-for="s in library.sources"
           :key="s.id"
-          class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="flex items-center gap-2 rounded-md border border-default bg-default/60 p-3"
         >
-          <UIcon name="i-lucide-git-branch" class="h-4 w-4 text-slate-400" />
+          <UIcon name="i-lucide-git-branch" class="h-4 w-4 text-muted" />
           <div class="min-w-0">
-            <span class="font-mono text-sm text-slate-100">
+            <span class="font-mono text-sm text-app-100">
               {{ s.repoOwner }}/{{ s.repoName
-              }}<span class="text-slate-500">/{{ s.dirPath || '' }}</span>
+              }}<span class="text-dimmed">/{{ s.dirPath || '' }}</span>
             </span>
-            <p class="text-xs text-slate-500">
+            <p class="text-xs text-dimmed">
               {{
                 s.lastSyncedAt
                   ? t('skills.sources.metaSynced', {
@@ -231,45 +234,50 @@ async function unlinkSource(id: string) {
             {{ t('skills.sources.changes') }}
           </UBadge>
           <div class="ms-auto flex gap-1">
-            <UButton
+            <IconButton
+              color="neutral"
               icon="i-lucide-search-check"
               size="xs"
               variant="ghost"
               :loading="rowBusy(`check:${s.id}`)"
-              :title="t('skills.sources.check')"
+              :label="t('skills.sources.check')"
               @click="checkSource(s.id)"
             />
-            <UButton
+            <IconButton
+              color="neutral"
               icon="i-lucide-refresh-cw"
               size="xs"
               variant="ghost"
               :loading="rowBusy(`sync:${s.id}`)"
-              :title="t('skills.sources.sync')"
+              :label="t('skills.sources.sync')"
               @click="syncSource(s.id)"
             />
-            <UButton
+            <IconButton
               icon="i-lucide-unplug"
               size="xs"
               color="error"
               variant="ghost"
               :loading="rowBusy(`unlink:${s.id}`)"
-              :title="t('skills.sources.unlink')"
+              :label="t('skills.sources.unlink')"
               @click="unlinkSource(s.id)"
             />
           </div>
         </div>
-        <p v-if="!library.sources.length" class="text-sm text-slate-500">
-          {{ t('skills.sources.empty') }}
-        </p>
+        <EmptyState
+          v-if="!library.sources.length"
+          compact
+          icon="i-lucide-git-branch"
+          :title="t('skills.sources.empty')"
+        />
 
         <!-- Link a new source. Needs the GitHub integration; hide the form when it's off. -->
         <div
           v-if="!library.sourcesAvailable"
-          class="rounded-md border border-slate-800 bg-slate-900/40 p-3 text-sm text-slate-500"
+          class="rounded-md border border-default bg-default/40 p-3 text-sm text-dimmed"
         >
           {{ t('skills.sources.githubRequired') }}
         </div>
-        <div v-else class="rounded-md border border-slate-800 p-3">
+        <div v-else class="rounded-md border border-default p-3">
           <p class="mb-2 text-sm font-medium">{{ t('skills.sources.linkTitle') }}</p>
           <div class="flex flex-col gap-2">
             <!-- Connected: search a repo + browse to the skills directory -->
@@ -277,16 +285,16 @@ async function unlinkSource(id: string) {
               <GitHubRepoSearchSelect v-model="sourceRepoId" @update:repo="sourceRepo = $event" />
               <div
                 v-if="sourceRepoId !== undefined"
-                class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+                class="rounded-md border border-default bg-default/40 p-2"
               >
-                <p class="mb-2 text-xs text-slate-400">
+                <p class="mb-2 text-xs text-muted">
                   {{ t('skills.sources.browseHint') }}
                 </p>
                 <RepoTreeBrowser v-model="sourceDir" :repo-github-id="sourceRepoId" mode="dir" />
-                <p class="mt-2 truncate text-xs text-slate-400">
+                <p class="mt-2 truncate text-xs text-muted">
                   <template v-if="sourceDir">
                     {{ t('skills.sources.selectedDir') }}
-                    <code class="text-slate-200">{{ sourceDir }}</code>
+                    <code class="text-default">{{ sourceDir }}</code>
                   </template>
                   <template v-else>{{ t('skills.sources.wholeRepo') }}</template>
                 </p>

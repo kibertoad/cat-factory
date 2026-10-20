@@ -6,11 +6,13 @@
 // link into its connect panel. Dismissible per session.
 import { computed, ref, watch } from 'vue'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
+import { canActOnSetup } from '~/utils/setupAudience'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
 const store = useProviderConnectionsStore()
+const { actor } = useSetupActor()
 
 // Exhaustive per-kind title/action keys (leaf names mirror the kind verbatim).
 const TITLE_KEYS: Record<ProviderConnectionKind, string> = {
@@ -33,7 +35,12 @@ watch(
 
 const dismissed = ref(false)
 const pending = computed(() => store.needingConfig as ProviderConnectionKind[])
-const show = computed(() => pending.value.length > 0 && !dismissed.value)
+// Only for the people whose save would land: the connection fields are a workspace-admin write,
+// and a member or a designer could only open the panel and be refused.
+const show = computed(
+  () =>
+    pending.value.length > 0 && !dismissed.value && canActOnSetup('workspace_admin', actor.value),
+)
 </script>
 
 <template>
@@ -42,14 +49,14 @@ const show = computed(() => pending.value.length > 0 && !dismissed.value)
          renders only its card and re-enables pointer events on it. -->
     <div v-if="show" class="pointer-events-auto w-full max-w-3xl">
       <div
-        class="w-full max-w-3xl rounded-2xl border-2 border-amber-500/70 bg-amber-950/95 p-5 shadow-2xl backdrop-blur"
+        class="w-full max-w-3xl rounded-2xl border-2 border-app-warning-500/70 bg-app-warning-950/95 p-5 shadow-2xl backdrop-blur"
         role="alert"
       >
         <div class="flex items-start gap-4">
-          <UIcon name="i-lucide-plug" class="mt-0.5 h-9 w-9 shrink-0 text-amber-400" />
+          <UIcon name="i-lucide-plug" class="mt-0.5 h-9 w-9 shrink-0 text-app-warning-400" />
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
-              <h2 class="text-lg font-semibold text-amber-100">
+              <h2 class="text-lg font-semibold text-app-warning-100">
                 {{
                   pending.length > 1
                     ? t('layout.providerConfigBanner.titleMany')
@@ -69,7 +76,7 @@ const show = computed(() => pending.value.length > 0 && !dismissed.value)
                 "
               />
             </div>
-            <p class="mt-1 text-sm text-amber-200/90">
+            <p class="mt-1 text-sm text-app-warning-200/90">
               {{ t('layout.providerConfigBanner.body') }}
             </p>
             <div class="mt-4 flex flex-wrap gap-2">
@@ -77,7 +84,6 @@ const show = computed(() => pending.value.length > 0 && !dismissed.value)
                 v-for="k in pending"
                 :key="k"
                 color="warning"
-                variant="solid"
                 icon="i-lucide-settings"
                 @click="ui.openProviderConnection(k)"
               >

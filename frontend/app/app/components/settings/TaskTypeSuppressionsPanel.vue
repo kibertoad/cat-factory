@@ -12,6 +12,7 @@
 // convention); only the chrome around them is i18n.
 import { onMounted, ref } from 'vue'
 import type { TaskTypeSuppression } from '~/types/domain'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const api = useApi()
@@ -61,28 +62,31 @@ async function toggle(row: TaskTypeSuppression, offered: boolean) {
 
 <template>
   <div class="space-y-4">
-    <p class="text-xs text-slate-400">
+    <p class="text-xs text-muted">
       {{ t('settings.taskTypeSuppressions.intro') }}
     </p>
 
-    <p v-if="loading" class="text-[11px] text-slate-500">
-      {{ t('settings.taskTypeSuppressions.loading') }}
-    </p>
-    <p v-else-if="!rows.length" class="text-[11px] text-slate-500">
-      {{ t('settings.taskTypeSuppressions.empty') }}
-    </p>
+    <div v-if="loading" class="space-y-2">
+      <USkeleton v-for="n in 3" :key="n" class="h-12 w-full" />
+    </div>
+    <EmptyState
+      v-else-if="!rows.length"
+      compact
+      icon="i-lucide-list-checks"
+      :title="t('settings.taskTypeSuppressions.empty')"
+    />
     <ul v-else class="space-y-2" data-testid="task-type-suppressions">
       <li
         v-for="row in rows"
         :key="row.taskType.taskType"
-        class="flex items-start justify-between gap-3 rounded border border-slate-800 px-3 py-2"
+        class="flex items-start justify-between gap-3 rounded-sm border border-default px-3 py-2"
         data-testid="task-type-suppression"
         :data-task-type="row.taskType.taskType"
       >
         <div class="min-w-0">
           <div class="flex items-center gap-1.5">
             <UIcon :name="row.taskType.presentation.icon" class="h-3.5 w-3.5 shrink-0" />
-            <span class="truncate text-xs font-medium text-slate-200">
+            <span class="truncate text-xs font-medium text-default">
               {{ row.taskType.presentation.label }}
             </span>
             <UBadge
@@ -94,7 +98,7 @@ async function toggle(row: TaskTypeSuppression, offered: boolean) {
               {{ row.taskType.presentation.category }}
             </UBadge>
           </div>
-          <p class="mt-0.5 text-[11px] text-slate-500">
+          <p class="mt-0.5 text-2xs text-dimmed">
             {{ row.taskType.presentation.description }}
           </p>
         </div>

@@ -1,0 +1,24 @@
+/* The app's own type steps below Tailwind's `text-xs` (issue #2248).
+ *
+ * Both are rem, so both scale with a theme document's `fontSize`, which `utils/theme/css.ts` applies
+ * as the root `font-size`:
+ *
+ *   --text-2xs  0.6875rem  (11px at the 16px default)  the dense body size: panel rows, node
+ *                                                      metadata, inline detail, and the section
+ *                                                      eyebrow (`common/SectionLabel.vue`).
+ *   --text-3xs  0.625rem   (10px)                      the caption tier below the eyebrow: pill and
+ *                                                      badge text on a board node, a quoted source
+ *                                                      excerpt, axis and legend captions.
+ *
+ * Neither step declares a line height. Tailwind pairs `--text-<n>` with an optional
+ * `--text-<n>--line-height`, and when one exists the utility sets both properties. Dense text here
+ * inherits its rhythm from the surrounding block; a block that wants a specific rhythm says so with
+ * `leading-*`.
+ *
+ * `scripts/check-frontend-type-scale.mjs` bans font-size literals, so these two and Tailwind's own
+ * steps are the whole scale. */
+
+@theme {
+  --text-2xs: 0.6875rem;
+  --text-3xs: 0.625rem;
+}

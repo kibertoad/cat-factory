@@ -1,3 +1,4 @@
+import type { GitHubRepo, RepoProjectionRepository } from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
 import { linkRepo } from './linkRepo.js'
 
@@ -8,6 +9,7 @@ import { linkRepo } from './linkRepo.js'
 // the account lookup falls back to null — the paths a fresh CLI link exercises.
 function fakeDb() {
   const writes: { values: Record<string, unknown> }[] = []
+  const updates: Record<string, unknown>[] = []
   let deletes = 0
   const insert = (_table: unknown) => ({
     values(values: Record<string, unknown>) {
@@ -36,7 +38,12 @@ function fakeDb() {
       }
     },
     update(_table: unknown) {
-      return { set: (_v: unknown) => ({ where: (_p: unknown) => Promise.resolve() }) }
+      return {
+        set: (values: Record<string, unknown>) => {
+          updates.push(values)
+          return { where: (_p: unknown) => Promise.resolve() }
+        },
+      }
     },
     delete(_table: unknown) {
       return {
@@ -47,12 +54,18 @@ function fakeDb() {
       }
     },
   }
-  return { db, writes, deletes: () => deletes }
+  return { db, writes, updates, deletes: () => deletes }
 }
 
 describe('linkRepo', () => {
   it('fetches repo metadata with the PAT and seeds installation + repo + service rows', async () => {
-    const { db, writes, deletes } = fakeDb()
+    const { db, writes, updates, deletes } = fakeDb()
+    const upserted: { workspaceId: string; repos: GitHubRepo[] }[] = []
+    const repoProjection = {
+      upsertMany: async (workspaceId: string, repos: GitHubRepo[]) => {
+        upserted.push({ workspaceId, repos })
+      },
+    } as unknown as RepoProjectionRepository
     const fetchImpl = vi.fn(
       async (_input: string | URL | Request, _init?: RequestInit) =>
         new Response(
@@ -72,6 +85,7 @@ describe('linkRepo', () => {
       pat: 'pat_x',
       db: db as never,
       fetchImpl: fetchImpl as unknown as typeof fetch,
+      repoProjection,
     })
 
     // Any stale installation row for the workspace (different id) is cleared first.
@@ -90,14 +104,28 @@ describe('linkRepo', () => {
     expect(result.defaultBranch).toBe('trunk')
     expect(result.private).toBe(true)
 
-    // The repo row: no block_id link (removed), attributed as an `'app'`-reachable repo
-    // (local mode's shared PAT), keyed to the synthetic installation id.
-    const repoRow = writes.map((w) => w.values).find((v) => 'default_branch' in v && 'name' in v)!
-    expect('block_id' in repoRow).toBe(false)
-    expect(repoRow.linked_via).toBe('app')
-    expect(repoRow.github_id).toBe(555)
-    expect(repoRow.installation_id).toBe(result.installationId)
-    expect(repoRow.private).toBe(1)
+    // The repo goes through the projection repository (so the directory feed records it),
+    // attributed as an `'app'`-reachable repo (local mode's shared PAT), keyed to the synthetic
+    // installation id.
+    expect(upserted).toEqual([
+      {
+        workspaceId: 'ws_1',
+        repos: [
+          {
+            githubId: 555,
+            installationId: result.installationId,
+            owner: 'acme',
+            name: 'widgets',
+            defaultBranch: 'trunk',
+            private: true,
+            isMonorepo: false,
+            linkedVia: 'app',
+            provider: 'github',
+            syncedAt: expect.any(Number),
+          },
+        ],
+      },
+    ])
 
     // The frame's Service is bound to the repo — the sole repo↔frame linkage.
     const serviceRow = writes.map((w) => w.values).find((v) => 'frame_block_id' in v)!
@@ -110,6 +138,9 @@ describe('linkRepo', () => {
     expect(installRow.workspace_id).toBe('ws_1')
     expect(installRow.account_login).toBe('acme')
     expect(installRow.target_type).toBe('Organization')
+
+    // A re-link takes over `linked_via`, which `upsertMany` leaves alone on an existing row.
+    expect(updates).toContainEqual({ linked_via: 'app', etag: null })
   })
 
   it('rejects a malformed repo and a missing PAT', async () => {

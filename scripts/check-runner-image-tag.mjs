@@ -3,7 +3,7 @@
 // places that must stay in lockstep, and a change to the image sources that forgets to
 // bump the tag would republish over the live tag without minting a new version, so a
 // deployment mirroring that tag never rolls out the change (its per-run containers keep
-// running stale code; see CLAUDE.md, Releases & changesets).
+// running stale code; see AGENTS.md, Releases & changesets).
 //
 // Two container images are covered, each with its own harness package + registry tag:
 //   - executor (the Pi coding-agent image): @cat-factory/executor-harness ⇄ cat-factory-executor:<tag>

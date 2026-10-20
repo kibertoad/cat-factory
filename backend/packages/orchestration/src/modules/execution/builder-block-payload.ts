@@ -75,6 +75,7 @@ export function buildBlockPayload(args: BlockPayloadArgs): BlockPayload {
     // so a kind's user-prompt builder can specialise on them — the document-authoring
     // agents read these. Sparse; omitted when none were collected.
     ...(block.taskTypeFields ? { taskTypeFields: block.taskTypeFields } : {}),
+    ...(block.taskType ? { taskType: block.taskType } : {}),
     // Workspace-linked template / exemplar documents for a doc-authoring kind (WS1). Omitted
     // when nothing is linked (the prompts then fall back to the built-in skeleton / built-in
     // exemplars) or the kind isn't doc-aware.

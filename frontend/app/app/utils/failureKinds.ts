@@ -30,6 +30,7 @@ export const FAILURE_KIND_KEYS: Record<AgentFailureKind, string> = {
   timeout: 'platformObservability.failureKind.timeout',
   agent: 'platformObservability.failureKind.agent',
   job_failed: 'platformObservability.failureKind.job_failed',
+  delegated_failed: 'platformObservability.failureKind.delegated_failed',
   rejected: 'platformObservability.failureKind.rejected',
   companion_rejected: 'platformObservability.failureKind.companion_rejected',
   stalled: 'platformObservability.failureKind.stalled',

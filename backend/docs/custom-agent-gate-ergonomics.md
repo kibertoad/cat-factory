@@ -7,7 +7,7 @@
 > ergonomics layer both sit on: the helpers, and what fails loudly at boot.
 
 Companion to [`custom-agents.md`](./custom-agents.md) (the three-stage agent model) and the
-"Gates vs agents" section of [`../../CLAUDE.md`](../../CLAUDE.md). That doc covers _what_ the
+"Gates vs agents" section of [`../../AGENTS.md`](../../AGENTS.md). That doc covers _what_ the
 extension seams are; this one covers the ergonomics layered on top so writing a custom agent
 kind or gate is less boilerplate-heavy and fails loudly when misconfigured.
 
@@ -242,7 +242,7 @@ than the gate.
 
 ## Runtime symmetry rules (recap)
 
-Per CLAUDE.md: any provider wiring or validation hook lands in BOTH `runtimes/cloudflare` and
+Per AGENTS.md: any provider wiring or validation hook lands in BOTH `runtimes/cloudflare` and
 `runtimes/node` (local inherits node), and shared gate behaviour gets a `conformance` assertion.
 The gates package depends only on kernel + contracts, never on orchestration.
 

@@ -6,6 +6,7 @@ import type {
   ConsensusSession,
   ClarityReview,
   DocInterviewSession,
+  GuidedReviewChange,
   EnvConfigRepairJob,
   EnvironmentTestRun,
   ExecutionEventPublisher,
@@ -154,5 +155,10 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
   async docInterviewChanged(workspaceId: string, session: DocInterviewSession): Promise<void> {
     const targets = await this.targets(workspaceId, session.blockId)
     await Promise.all(targets.map((ws) => this.inner.docInterviewChanged?.(ws, session)))
+  }
+
+  // A guided review belongs to one workspace and no board block, so there is nothing to fan out.
+  async guidedReviewChanged(workspaceId: string, change: GuidedReviewChange): Promise<void> {
+    await this.inner.guidedReviewChanged?.(workspaceId, change)
   }
 }

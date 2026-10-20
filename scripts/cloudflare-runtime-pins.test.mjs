@@ -20,7 +20,7 @@ overrides:
 
 packages:
 
-  '@cloudflare/vitest-pool-workers@0.22.0':
+  '@cloudflare/vitest-plugin@1.3.7':
     resolution: {integrity: sha512-aaa}
 
   '@cloudflare/workers-types@5.20260815.1':
@@ -46,7 +46,7 @@ const cleanManifest = {
   path: 'backend/runtimes/cloudflare/package.json',
   manifest: {
     devDependencies: {
-      '@cloudflare/vitest-pool-workers': '^0.22.0',
+      '@cloudflare/vitest-plugin': '^1.3.7',
       '@cloudflare/workers-types': '5.20260815.1',
       wrangler: '4.124.0',
     },

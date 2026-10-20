@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   capabilityCredentialKeySchema,
@@ -55,5 +55,5 @@ export const deleteCapabilityCredentialContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: keyParams,
   pathResolver: ({ key }) => `/capability-credentials/${key}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

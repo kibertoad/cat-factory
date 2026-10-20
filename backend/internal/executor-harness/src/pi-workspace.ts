@@ -5,6 +5,8 @@ import type { RepoSpec, ImageManifestSpec } from './job.js'
 import { deliverJobImages } from './job-images.js'
 import type { McpServerSpec, SkillSpec } from './agent-capabilities.js'
 import { readEffortReport } from './effort.js'
+import { piImageAgentDir, withPiAgentDir } from './pi-agent-dir.js'
+import { writePiMcpConfig } from './pi-mcp.js'
 import { log } from './logger.js'
 import {
   type ContextFileInfo,
@@ -168,7 +170,7 @@ export interface AgentRunSpec {
    * run is forbidden to write to it, so a change there is not this run making progress.
    */
   repoDirs?: readonly string[]
-  /** Composed role + best-practice fragments; written to Pi's global AGENTS.md context. */
+  /** Composed role + best-practice fragments; written to the AGENTS.md context of the pass's Pi config dir. */
   systemPrompt: string
   /** The concrete task prompt handed to Pi. */
   userPrompt: string
@@ -252,10 +254,10 @@ export interface AgentRunSpec {
    */
   skills?: SkillSpec[]
   /**
-   * Tool servers (MCP) to wire into the agent CLI. Served by the subscription harnesses only —
-   * Pi has no MCP client, and the BACKEND is what decides that (it drops an unservable server and
-   * tells the agent so), which is why this path simply forwards whatever it is given rather than
-   * re-deciding. Absent ⇒ the CLI's built-in tools only.
+   * Tool servers (MCP) to wire into the agent CLI: Pi's `mcp.json` (see `writePiMcpConfig`), or
+   * the subscription CLI's own config. The BACKEND decides which servers a harness can serve (it
+   * drops an unservable one and tells the agent so), which is why this path simply materialises
+   * whatever it is given rather than re-deciding. Absent ⇒ the CLI's built-in tools only.
    */
   mcpServers?: McpServerSpec[]
   /**
@@ -393,7 +395,7 @@ async function runSubscriptionInWorkspace(
 }
 
 /**
- * Write Pi's global agent context (`~/.pi/agent/AGENTS.md`) + provider config,
+ * Write Pi's agent context (`<agentDir>/AGENTS.md`, a per-pass directory) + provider config,
  * then run Pi once in `spec.dir` and return its summary/stats/stderr. The context
  * lives outside the checkout so it never lands in a commit; the shared middle of
  * every container agent.
@@ -461,6 +463,43 @@ export async function runAgentInWorkspace(
   }
   const proxyBaseUrl = spec.proxyBaseUrl
   const sessionToken = spec.sessionToken
+  // Every file this pass hands Pi (the composed AGENTS.md, the provider config, the tool-server
+  // config) goes into a config directory made for the pass and removed after it, seeded with the
+  // extensions the image installed. See `createPiAgentDir` for why it is not the home directory.
+  const piOutcome = await withPiAgentDir({ seedFrom: piImageAgentDir() }, (agentDir) =>
+    runPiPass(spec, opts, {
+      agentDir,
+      proxyBaseUrl,
+      sessionToken,
+      contextFiles,
+      imageGuidance,
+      workspaceProbe,
+    }),
+  )
+  return withEffortReport(spec.dir, piOutcome)
+}
+
+/**
+ * One Pi pass inside its own config directory: stage the run's files there and run Pi. Split
+ * from {@link runAgentInWorkspace} so the directory's lifetime (created, then removed whatever the
+ * pass did) is one call in the caller rather than a `finally` around forty lines.
+ */
+async function runPiPass(
+  spec: AgentRunSpec,
+  opts: RunOptions,
+  pass: {
+    agentDir: string
+    proxyBaseUrl: string
+    sessionToken: string
+    contextFiles: NonNullable<AgentRunSpec['contextFiles']>
+    imageGuidance: string | undefined
+    workspaceProbe: WorkspaceProbe
+  },
+): Promise<PiRunOutcome> {
+  const { agentDir, proxyBaseUrl, sessionToken, contextFiles, imageGuidance, workspaceProbe } = pass
+  // Tool servers (MCP): Pi's `mcp.json`, credentials in the file and never in Pi's env; see
+  // `writePiMcpConfig`.
+  await writePiMcpConfig(agentDir, spec.mcpServers)
   // Opt-in web search/fetch (rpiv-web-tools). Two ways it turns on, both no-ops by
   // default:
   //  - proxy-backed (the Cloudflare/managed path): the backend set `webSearchProxy`,
@@ -479,6 +518,7 @@ export async function runAgentInWorkspace(
   if (webSearch) await writeWebToolsConfig(webSearch)
   const hasBlueprints = await checkoutHasBlueprints(spec.dir, spec.multiRepo === true)
   await writeAgentsContext(spec.systemPrompt, {
+    agentDir,
     webSearch: Boolean(webSearch),
     guidance: spec.webToolsGuidance,
     serviceDirectory: spec.serviceDirectory,
@@ -493,12 +533,14 @@ export async function runAgentInWorkspace(
   // spend distinguishable from the first pass's. Only when the BACKEND said it serves that
   // route, since a runner pool or `LOCAL_HARNESS_IMAGE` can pair this image with an older one.
   await writePiModelsConfig({
+    agentDir,
     model: spec.model,
     proxyBaseUrl: phasedProxyBaseUrl(proxyBaseUrl, opts.currentPhase?.(), spec.proxyPhasePath),
   })
   const { signal, onActivity, onProgress, onSpan, beginToolWindow } = opts
-  const piOutcome = await runPi({
+  return runPi({
     cwd: spec.dir,
+    agentDir,
     model: spec.model,
     userPrompt: spec.userPrompt,
     sessionToken,
@@ -515,7 +557,6 @@ export async function runAgentInWorkspace(
     workspaceProbe,
     extraEnv,
   })
-  return withEffortReport(spec.dir, piOutcome)
 }
 
 /**

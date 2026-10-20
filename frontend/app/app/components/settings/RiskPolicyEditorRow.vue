@@ -23,6 +23,8 @@ import {
 import { RISK_POLICY_AXES, RISK_POLICY_CEILING_FIELD } from '~/utils/riskPolicy'
 import MergeClassRulesEditor from '~/components/settings/MergeClassRulesEditor.vue'
 import MergeRolePolicyEditor from '~/components/settings/MergeRolePolicyEditor.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = defineProps<{
   policy: RiskPolicyLibraryEntry
@@ -93,7 +95,7 @@ const deleteBlocked = computed(
 
 <template>
   <div
-    class="rounded-lg border border-slate-700 bg-slate-800/40 p-3"
+    class="rounded-lg border border-muted bg-elevated/40 p-3"
     data-testid="risk-policy-row"
     :data-policy-id="policy.id"
     :data-policy-tier="policy.tier"
@@ -128,7 +130,7 @@ const deleteBlocked = computed(
         >
           {{ t('settings.riskPolicy.makeUnattendedDefaultShort') }}
         </UButton>
-        <UBadge v-if="policy.isDefault" color="primary" variant="subtle" size="sm">
+        <UBadge v-if="policy.isDefault" variant="subtle" size="sm">
           {{ t('settings.riskPolicy.default') }}
         </UBadge>
         <UButton
@@ -143,22 +145,22 @@ const deleteBlocked = computed(
           {{ t('settings.riskPolicy.makeDefault') }}
         </UButton>
       </template>
-      <UButton
+      <IconButton
         color="error"
         variant="ghost"
         size="xs"
         icon="i-lucide-trash-2"
         :disabled="deleteBlocked || busy?.startsWith(policy.id)"
-        :title="deleteBlockedReason"
+        :label="deleteBlockedReason"
         @click="emit('remove')"
       />
     </div>
 
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-4">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <label v-for="axis in RISK_POLICY_AXES" :key="axis" class="block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t(CEILING_LABEL_KEYS[axis]) }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model.number="draft[RISK_POLICY_CEILING_FIELD[axis]]"
           type="number"
@@ -168,15 +170,15 @@ const deleteBlocked = computed(
         />
       </label>
       <label class="block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.field.ciMaxAttempts') }}
-        </span>
+        </SectionLabel>
         <UInput v-model.number="draft.ciMaxAttempts" type="number" :min="0" :max="50" size="sm" />
       </label>
       <label class="block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.field.maxRequirementIterations') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model.number="draft.maxRequirementIterations"
           type="number"
@@ -186,9 +188,9 @@ const deleteBlocked = computed(
         />
       </label>
       <label class="block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.field.companionMaxReworks') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model.number="draft.companionMaxReworks"
           type="number"
@@ -198,9 +200,9 @@ const deleteBlocked = computed(
         />
       </label>
       <label class="block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.field.maxRequirementConcernAllowed') }}
-        </span>
+        </SectionLabel>
         <USelect
           v-model="draft.maxRequirementConcernAllowed"
           :items="concernOptions"
@@ -212,7 +214,7 @@ const deleteBlocked = computed(
 
     <!-- Per-change-class auto-merge rules, each shown beside that class's accumulated track
          record — the number that justifies widening the rule. -->
-    <div class="mt-3 rounded-md border border-slate-800 bg-slate-900/40 p-3">
+    <div class="mt-3 rounded-md border border-default bg-default/40 p-3">
       <MergeClassRulesEditor
         v-model="draft.classRules"
         :auto-merge-enabled="draft.autoMergeEnabled"
@@ -223,7 +225,7 @@ const deleteBlocked = computed(
     <!-- The role layer over those rules: what a run may do depending on WHO started it, up to and
          including a full sandbox. Directly under the base rules it narrows, since a role rule is
          only readable against the rule it applies to. -->
-    <div class="mt-3 rounded-md border border-slate-800 bg-slate-900/40 p-3">
+    <div class="mt-3 rounded-md border border-default bg-default/40 p-3">
       <MergeRolePolicyEditor
         v-model:class-rules-by-role="draft.classRulesByRole"
         v-model:dry-run-roles="draft.dryRunRoles"
@@ -236,18 +238,21 @@ const deleteBlocked = computed(
 
     <!-- Implementation-fork decision gate: propose materially different approaches before the
          Coder writes code (in `auto` tri-state, gated on the task estimate). -->
-    <div class="mt-3 rounded-md border border-slate-800 bg-slate-900/40 p-3">
+    <div class="mt-3 rounded-md border border-default bg-default/40 p-3">
       <USwitch
         v-model="draft.forkEnabled"
         size="sm"
         :label="t('settings.riskPolicy.forkDecision.label')"
         :description="t('settings.riskPolicy.forkDecision.hint')"
       />
-      <div v-if="draft.forkEnabled" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <div
+        v-if="draft.forkEnabled"
+        class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      >
         <label v-for="axis in RISK_POLICY_AXES" :key="axis" class="block">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+          <SectionLabel as="span" class="mb-1 block">
             {{ t(FORK_FLOOR_LABEL_KEYS[axis]) }}
-          </span>
+          </SectionLabel>
           <UInput
             v-model.number="draft[FORK_FLOOR_FIELD[axis]]"
             type="number"
@@ -257,9 +262,9 @@ const deleteBlocked = computed(
           />
         </label>
         <label class="block">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+          <SectionLabel as="span" class="mb-1 block">
             {{ t('settings.riskPolicy.forkDecision.onMissingLabel') }}
-          </span>
+          </SectionLabel>
           <USelect v-model="draft.forkOnMissing" :items="onMissingOptions" size="sm" />
         </label>
       </div>
@@ -268,7 +273,7 @@ const deleteBlocked = computed(
     <!-- The autonomy posture: whether the parks the engine's own quality loops raise when they give
          up wait for a person, or are answered on the record so the run finishes. Never touches a
          gate the PIPELINE asked for. -->
-    <div class="mt-3 rounded-md border border-slate-800 bg-slate-900/40 p-3">
+    <div class="mt-3 rounded-md border border-default bg-default/40 p-3">
       <USwitch
         v-model="draft.unattended"
         size="sm"
@@ -283,9 +288,9 @@ const deleteBlocked = computed(
            on an attended policy would be a control over a decision this policy never makes. It is
            not hidden as an "advanced override" — it is inert, which is a different thing. -->
       <label v-if="draft.unattended" class="mt-3 block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.autoAnswer.label') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model.number="draft.minAutoAnswerConfidence"
           type="number"
@@ -294,7 +299,7 @@ const deleteBlocked = computed(
           size="sm"
           data-testid="risk-policy-auto-answer-floor"
         />
-        <span class="mt-1 block text-[11px] text-slate-500">
+        <span class="mt-1 block text-2xs text-dimmed">
           {{ t('settings.riskPolicy.autoAnswer.hint') }}
         </span>
       </label>
@@ -312,7 +317,6 @@ const deleteBlocked = computed(
         "
       />
       <UButton
-        color="primary"
         variant="soft"
         size="xs"
         icon="i-lucide-save"

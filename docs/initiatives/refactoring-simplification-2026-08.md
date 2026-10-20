@@ -119,7 +119,7 @@ immutability rationale, and pin the surface with a reflection test.
 proposal named `GitHubPullRequestReviewProvider.ts:162`, `GitHubBranchUpdater.ts:45` and
 `repoFiles.ts:95-121` as silently degrading. They do not: all three hold the RAW App client
 (`engineVcsClient` on Node, `githubClient` on the Worker), and both facades carry a comment
-saying so deliberately, per CLAUDE.md's rule that the RepoFiles and GitHub-issue consumers
+saying so deliberately, per AGENTS.md's rule that the RepoFiles and GitHub-issue consumers
 must not gain a GitLab fallback. The router fronts the `github` module alone
 (`CoreDependencies.githubClient`), and that module reaches exactly ONE of the 18 dropped
 methods: `getBranchProtection`, via `GitHubService.checkDefaultBranchProtection`. So the real

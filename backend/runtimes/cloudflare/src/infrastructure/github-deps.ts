@@ -130,7 +130,7 @@ export function selectGitHubDeps(
   // enabled, route each installation-keyed call to the App or GitLab client by the connection's
   // stored provider; otherwise the App client serves the module directly. The RepoFiles seams +
   // the GitHub-issue/docs consumers keep the raw App `githubClient` (they must not gain the
-  // GitLab fallback, per CLAUDE.md's VCS rule).
+  // GitLab fallback, per AGENTS.md's VCS rule).
   const moduleClient: GitHubClient = gitlabConnectClient
     ? providerRoutingGitHubClient({
         installations: githubInstallationRepository,

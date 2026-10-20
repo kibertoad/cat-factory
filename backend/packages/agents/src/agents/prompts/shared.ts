@@ -583,3 +583,15 @@ export const FOLLOW_UP_GUIDANCE =
   'act on the follow-ups yourself in this pass, and do NOT block waiting for answers to ' +
   'questions — keep delivering the task. This file is a side channel only; it is kept out ' +
   'of the commit, so never reference it in code and never add it to git.'
+
+/**
+ * Fence `body` so nothing inside it can close the block: the fence is one backtick longer than the
+ * longest run in the body, as CommonMark specifies. Use it for every verbatim file, patch or
+ * human-authored text embedded in a prompt, so a body carrying its own fence cannot spill the rest
+ * of the prompt into what the model reads as prose.
+ */
+export function fenceVerbatim(body: string): string {
+  const longest = Math.max(0, ...[...body.matchAll(/`+/g)].map((m) => m[0].length))
+  const fence = '`'.repeat(Math.max(3, longest + 1))
+  return `${fence}\n${body}\n${fence}`
+}

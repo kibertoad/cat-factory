@@ -6,6 +6,8 @@
 // proceed read as dead buttons. Copy is per-feature (passed in); the treatment is shared, so the
 // two windows can't drift on how a wait or a failure looks. See
 // `docs/initiatives/clarification-items.md`.
+import Spinner from '~/components/common/Spinner.vue'
+
 defineProps<{
   /** `working` = a pass is in flight (spinner); `failed` = the run stopped (error treatment). */
   variant: 'working' | 'failed'
@@ -21,19 +23,19 @@ defineProps<{
 <template>
   <div
     v-if="variant === 'working'"
-    class="flex flex-col items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 p-6 text-center"
+    class="flex flex-col items-center gap-2 rounded-lg border border-default bg-app-950/40 p-6 text-center"
     :data-testid="testid"
   >
-    <UIcon name="i-lucide-loader-circle" class="h-5 w-5 animate-spin text-indigo-300" />
-    <p class="text-[13px] text-slate-200">{{ title }}</p>
-    <p class="text-[12px] text-slate-400">{{ hint }}</p>
+    <Spinner class="h-5 w-5 text-primary" />
+    <p class="text-sm text-default">{{ title }}</p>
+    <p class="text-xs text-muted">{{ hint }}</p>
   </div>
   <div
     v-else
-    class="rounded-lg border border-red-900/60 bg-red-950/20 p-4 text-center"
+    class="rounded-lg border border-app-error-900/60 bg-app-error-950/20 p-4 text-center"
     :data-testid="testid"
   >
-    <p class="text-[13px] text-red-200">{{ title }}</p>
-    <p class="mt-1 text-[12px] text-slate-400">{{ hint }}</p>
+    <p class="text-sm text-app-error-200">{{ title }}</p>
+    <p class="mt-1 text-xs text-muted">{{ hint }}</p>
   </div>
 </template>

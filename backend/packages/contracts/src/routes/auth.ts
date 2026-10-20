@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   forgotPasswordSchema,
@@ -14,7 +14,7 @@ import { errorResponses, singleStringParam } from './_shared.js'
 // Authentication route contracts. Mounted under `/auth`, so the paths here are
 // relative to that prefix. Public endpoints (no auth gate). The OAuth round-trip
 // routes (`/login`, `/callback`, `/google/*`) return a browser redirect (or an
-// inline error), so their success is modelled as `ContractNoBody`. The JSON
+// inline error), so their success is modelled as `noBodyResponse()`. The JSON
 // endpoints (`/config`, `/me`, `/signup`, `/password-login`, invitations) carry
 // proper response schemas. See AuthController in @cat-factory/server.
 // ---------------------------------------------------------------------------
@@ -230,13 +230,13 @@ export const authConfigContract = defineApiContract({
 export const githubLoginContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/login',
-  responsesByStatusCode: { 200: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 200: noBodyResponse(), ...errorResponses },
 })
 
 export const githubCallbackContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/callback',
-  responsesByStatusCode: { 200: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 200: noBodyResponse(), ...errorResponses },
 })
 
 // ---- Google OAuth (browser redirect) --------------------------------------
@@ -244,13 +244,13 @@ export const githubCallbackContract = defineApiContract({
 export const googleLoginContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/google/login',
-  responsesByStatusCode: { 200: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 200: noBodyResponse(), ...errorResponses },
 })
 
 export const googleCallbackContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/google/callback',
-  responsesByStatusCode: { 200: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 200: noBodyResponse(), ...errorResponses },
 })
 
 // ---- Enterprise SSO (browser redirect) ------------------------------------
@@ -259,18 +259,18 @@ export const googleCallbackContract = defineApiContract({
 // Entra ID, Auth0, Keycloak, PingFederate, a Shibboleth OP — because the provider is resolved
 // from its discovery document at runtime, not from a per-vendor code path. Both legs are pure
 // browser redirects (session token in the fragment on success, a machine-readable
-// `#sso_error=<reason>` on refusal), so their success is `ContractNoBody` like the OAuth pair.
+// `#sso_error=<reason>` on refusal), so their success is `noBodyResponse()` like the OAuth pair.
 
 export const ssoLoginContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/sso/login',
-  responsesByStatusCode: { 200: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 200: noBodyResponse(), ...errorResponses },
 })
 
 export const ssoCallbackContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/sso/callback',
-  responsesByStatusCode: { 200: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 200: noBodyResponse(), ...errorResponses },
 })
 
 // ---- Email / password -----------------------------------------------------
@@ -369,7 +369,7 @@ export const revokeMachineNodeContract = defineApiContract({
   requestPathParamsSchema: singleStringParam('nodeId'),
   pathResolver: ({ nodeId }) => `/machine-nodes/${nodeId}/revoke`,
   requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---------------------------------------------------------------------------
@@ -433,7 +433,7 @@ export const forgotPasswordContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/forgot-password',
   requestBodySchema: forgotPasswordSchema,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // Redeem a reset token + set a new password (a 400 on an invalid/used/expired token).
@@ -441,7 +441,7 @@ export const resetPasswordContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/reset-password',
   requestBodySchema: resetPasswordSchema,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- Invitations (peek + accept) ------------------------------------------
@@ -473,5 +473,5 @@ export const logoutContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/logout',
   requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

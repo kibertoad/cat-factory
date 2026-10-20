@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   cloneRiskPolicySchema,
@@ -51,7 +51,7 @@ export const deleteRiskPolicyContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: presetIdParams,
   pathResolver: ({ presetId }) => `/risk-policies/${presetId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 /**
@@ -98,14 +98,14 @@ export const suppressRiskPolicyContract = defineApiContract({
   requestPathParamsSchema: presetIdParams,
   pathResolver: ({ presetId }) => `/risk-policies/${presetId}/suppression`,
   requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const restoreRiskPolicyContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: presetIdParams,
   pathResolver: ({ presetId }) => `/risk-policies/${presetId}/suppression`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 /**

@@ -22,6 +22,8 @@ from .models import (
     ActPublicNotificationRequest,
     AddPublicTaskDependencyRequest,
     AddressPublicRunBugFishingFindingsRequest,
+    AskGuidedReview,
+    AssessPublicPullRequest,
     AttachPublicTaskDocumentRequest,
     ConnectPublicEnvironmentRequest,
     ConnectPublicEnvironmentResponse,
@@ -34,6 +36,17 @@ from .models import (
     DebugLlmCall,
     DebugRunOverview,
     DetachPublicTaskDocumentRequest,
+    DirectoryAccountMembershipPage,
+    DirectoryChangePage,
+    DirectoryReach,
+    DirectoryRepoPage,
+    DirectoryUserPage,
+    DirectoryWebhook,
+    DirectoryWebhookDelivery,
+    DirectoryWebhookList,
+    DirectoryWorkspaceMembershipPage,
+    DirectoryWorkspacePage,
+    EditGuidedReviewDraft,
     GetDebugLlmCallView,
     GetDebugLlmExportResponse,
     GetPublicMergeRecordResponse,
@@ -41,6 +54,11 @@ from .models import (
     GetPublicRunOutcomeResponse,
     GetPublicTrackerWritebackResponse,
     GetPublicVcsConnectionResponse,
+    GuidedReviewCommentDraft,
+    GuidedReviewExchange,
+    GuidedReviewPostResult,
+    GuidedReviewSessionView,
+    GuidedReviewThreadView,
     InvokePublicUseCaseRequest,
     InvokePublicUseCaseResponse,
     LinkPublicRepoRequest,
@@ -56,6 +74,7 @@ from .models import (
     ListPublicAvailableReposResponse,
     ListPublicEnvironmentConnectionsResponse,
     ListPublicEnvironmentManifestTypesResponse,
+    ListPublicGuidedReviewsMine,
     ListPublicJobsResponse,
     ListPublicKaizenEntriesAcknowledged,
     ListPublicMergeClassRollupsResponse,
@@ -72,6 +91,9 @@ from .models import (
     LlmCallOutcome,
     Notification,
     NotificationWebhook,
+    OpenGuidedReview,
+    OpenGuidedReviewThread,
+    PostGuidedReviewDrafts,
     PrVerificationReport,
     PublicAnswerFollowUp,
     PublicAnswerInterview,
@@ -80,6 +102,8 @@ from .models import (
     PublicChallengePrReviewFinding,
     PublicChooseFork,
     PublicDecisionList,
+    PublicDeployment,
+    PublicGuidedReviewList,
     PublicIdentity,
     PublicIncorporate,
     PublicJob,
@@ -92,6 +116,7 @@ from .models import (
     PublicNotificationWebhook,
     PublicNotificationWebhookList,
     PublicPipelineList,
+    PublicPrAssessment,
     PublicPromptFragmentList,
     PublicRejectStep,
     PublicReplyFinding,
@@ -115,7 +140,9 @@ from .models import (
     PublicTask,
     PublicTaskList,
     PublicUsage,
+    PutDirectoryWebhook,
     PutNotificationWebhook,
+    RequestGuidedReviewDrafts,
     RunStatus,
     StartPublicRepoBootstrapRequest,
     StartPublicRepoBootstrapResponse,
@@ -1504,6 +1531,32 @@ class MeResource:
         return PublicIdentity.from_dict(raw)
 
 
+class DeploymentResource:
+    """Where the deployment serves its web app, for sending a person to one of the app's deep
+    links (the prefilled add-service screen, say). Any key may ask, with no workspace named.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def get(self, *, timeout: float | None = None) -> PublicDeployment:
+        """Describe the deployment
+        Report where this deployment serves its web app (`appUrl`): `APP_BASE_URL` when the
+        operator set one, otherwise the origin this API was reached on. An integration uses
+        it to send a person to one of the app’s deep links, such as the prefilled
+        add-service screen (`?addRepo=<owner>/<name>`). Account-level, so a key reaching
+        several workspaces calls it without naming one. `read` scope.
+        `GET /api/v1/deployment` (operation `getPublicDeployment`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/deployment",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDeployment.from_dict(raw)
+
+
 class DecisionsResource:
     """Every way a run stops for a person: approval gates, review and brainstorm loops, forks,
     judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the
@@ -2733,6 +2786,269 @@ class MergeRecordsResource:
         return GetPublicMergeRecordResponse.from_dict(raw)
 
 
+class DirectoryResource:
+    """The account's directory, for keeping an external copy in sync: workspaces, users,
+    account and workspace memberships, and linked repositories as keyset-paged snapshots,
+    plus the ordered change feed that brings a copy up to date. Everything here takes a
+    `read` key; users and account memberships need one that reaches every workspace.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def delete_webhook(self, webhook_id: str, *, timeout: float | None = None) -> None:
+        """Remove a directory webhook
+        Stop pushing to an endpoint. Idempotent.
+        `DELETE /api/v1/directory/webhooks/{webhookId}` (operation
+        `deleteDirectoryWebhook`).
+        """
+        self._transport.request_no_content(
+            "DELETE",
+            f"/api/v1/directory/webhooks/{_quote(webhook_id)}",
+            query=None,
+            timeout=timeout,
+        )
+
+    def get_reach(self, *, timeout: float | None = None) -> DirectoryReach:
+        """Read the key's directory reach
+        The calling key’s account and the workspaces it reaches, `null` for every workspace
+        in the account (later ones included). Account-scoped like the rest of the directory:
+        no `x-cat-factory-workspace` header is read, so a key reaching several workspaces
+        gets an answer where `GET /api/v1/me` asks it to name one. A mirror reads this to
+        filter what a directory push may write, and to tell an account-wide key from one
+        limited to some workspaces.
+        `GET /api/v1/directory/reach` (operation `getDirectoryReach`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/reach",
+            query=None,
+            timeout=timeout,
+        )
+        return DirectoryReach.from_dict(raw)
+
+    def list_account_memberships(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryAccountMembershipPage:
+        """List the account's memberships
+        A keyset-paged snapshot of the account’s memberships, each with the member’s account
+        roles. Account-wide, so a key limited to some workspaces is refused with `403` and
+        `reason: "account_scope_required"`.
+        `GET /api/v1/directory/account-memberships` (operation
+        `listDirectoryAccountMemberships`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/account-memberships",
+            query={"cursor": cursor, "limit": limit},
+            timeout=timeout,
+        )
+        return DirectoryAccountMembershipPage.from_dict(raw)
+
+    def list_account_memberships_all(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `items` across every page of `list_account_memberships()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `DirectoryAccountMembershipPage.items`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list_account_memberships(limit=limit, cursor=page_cursor, timeout=timeout)
+            yield from page.items
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
+
+    def list_changes(self, *, after: int | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryChangePage:
+        """List directory changes
+        The account’s directory changes after `after`, in `seq` order, each carrying the
+        CURRENT state of the entity it names, or `null` once that entity no longer exists or
+        is outside the key’s reach. Store `nextAfter` and pass it back as `after`; it can
+        move past the last change served, since changes the key cannot see are skipped.
+        `nextAfter === headSeq` means caught up. A cursor whose following changes were
+        pruned (see `DIRECTORY_CHANGE_RETENTION_DAYS`), or one ahead of the feed, is refused
+        with `409` and `reason: "cursor_expired"`: reconcile from the snapshot endpoints and
+        replay from their `asOfSeq`. Account-scoped: no `x-cat-factory-workspace` header is
+        read. A key limited to some workspaces sees only workspace, workspace-membership and
+        repository changes of those workspaces, plus the `workspace` change (with `entity:
+        null`) of every deleted workspace in the account, since deleting a board also drops
+        the key’s grant on it. Treat that change as the removal of the workspace and of
+        every membership and repository under it.
+        `GET /api/v1/directory/changes` (operation `listDirectoryChanges`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/changes",
+            query={"after": after, "limit": limit},
+            timeout=timeout,
+        )
+        return DirectoryChangePage.from_dict(raw)
+
+    def list_repos(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryRepoPage:
+        """List linked repositories
+        A keyset-paged snapshot of the repositories linked to the account’s workspaces (the
+        ones the key reaches). A repository is listed once per workspace that links it.
+        `GET /api/v1/directory/repos` (operation `listDirectoryRepos`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/repos",
+            query={"cursor": cursor, "limit": limit},
+            timeout=timeout,
+        )
+        return DirectoryRepoPage.from_dict(raw)
+
+    def list_repos_all(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `items` across every page of `list_repos()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `DirectoryRepoPage.items`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list_repos(limit=limit, cursor=page_cursor, timeout=timeout)
+            yield from page.items
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
+
+    def list_users(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryUserPage:
+        """List the account's users
+        A keyset-paged snapshot of every user holding a membership in the account.
+        Account-wide, so a key limited to some workspaces is refused with `403` and `reason:
+        "account_scope_required"`.
+        `GET /api/v1/directory/users` (operation `listDirectoryUsers`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/users",
+            query={"cursor": cursor, "limit": limit},
+            timeout=timeout,
+        )
+        return DirectoryUserPage.from_dict(raw)
+
+    def list_users_all(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `items` across every page of `list_users()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `DirectoryUserPage.items`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list_users(limit=limit, cursor=page_cursor, timeout=timeout)
+            yield from page.items
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
+
+    def list_webhooks(self, *, timeout: float | None = None) -> DirectoryWebhookList:
+        """List the account's directory webhooks
+        The endpoints the directory change feed is pushed to, each with the feed position
+        delivered through. The signing secret is write-only: `hasSecret` says whether one is
+        set. Requires an `admin` key that reaches every workspace (`403` with `reason:
+        "account_scope_required"` otherwise), because an endpoint receives every change in
+        the account.
+        `GET /api/v1/directory/webhooks` (operation `listDirectoryWebhooks`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/webhooks",
+            query=None,
+            timeout=timeout,
+        )
+        return DirectoryWebhookList.from_dict(raw)
+
+    def list_workspace_memberships(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryWorkspaceMembershipPage:
+        """List workspace memberships
+        A keyset-paged snapshot of the explicit workspace memberships in the account’s
+        workspaces (the ones the key reaches), each with its workspace role.
+        `GET /api/v1/directory/workspace-memberships` (operation
+        `listDirectoryWorkspaceMemberships`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/workspace-memberships",
+            query={"cursor": cursor, "limit": limit},
+            timeout=timeout,
+        )
+        return DirectoryWorkspaceMembershipPage.from_dict(raw)
+
+    def list_workspace_memberships_all(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `items` across every page of `list_workspace_memberships()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `DirectoryWorkspaceMembershipPage.items`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list_workspace_memberships(limit=limit, cursor=page_cursor, timeout=timeout)
+            yield from page.items
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
+
+    def list_workspaces(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryWorkspacePage:
+        """List the account's workspaces
+        A keyset-paged snapshot of the account’s workspaces (the ones the key reaches).
+        Every page of one walk reports the same `asOfSeq`; after the last page, replay the
+        change feed from it to pick up anything that changed while paging.
+        `GET /api/v1/directory/workspaces` (operation `listDirectoryWorkspaces`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/workspaces",
+            query={"cursor": cursor, "limit": limit},
+            timeout=timeout,
+        )
+        return DirectoryWorkspacePage.from_dict(raw)
+
+    def list_workspaces_all(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `items` across every page of `list_workspaces()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `DirectoryWorkspacePage.items`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list_workspaces(limit=limit, cursor=page_cursor, timeout=timeout)
+            yield from page.items
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
+
+    def put_webhook(self, webhook_id: str, body: PutDirectoryWebhook | None = None, *, timeout: float | None = None) -> DirectoryWebhook:
+        """Register or edit a directory webhook
+        Register an endpoint the directory change feed is pushed to, or edit one; an omitted
+        field keeps its stored value, and `url` is required only when registering. A new
+        endpoint starts at the feed head: it is pushed what changes from now on, and its
+        receiver bootstraps the past from the snapshots. Pushes run every couple of minutes,
+        signed like the notification webhooks, each a `DirectoryWebhookDelivery`. An account
+        holds at most 10 (`409` with `reason: "webhook_limit_reached"`).
+        `PUT /api/v1/directory/webhooks/{webhookId}` (operation `putDirectoryWebhook`).
+        """
+        raw = self._transport.request(
+            "PUT",
+            f"/api/v1/directory/webhooks/{_quote(webhook_id)}",
+            body={} if body is None else _encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return DirectoryWebhook.from_dict(raw)
+
+
 class KaizenResource:
     """The platform's own improvement backlog: every post-run grading of an agent step, with
     the agent kind, model, prompt version and run it came from, what the grader recommended
@@ -2826,6 +3142,309 @@ class KaizenResource:
             page_cursor = page.next_cursor
 
 
+class GuidedReviewsResource:
+    """Guided pull request review: a structured explanation of a PR (what it does, meaningful
+    changes, consequences, risks, where to focus, suggested questions), independent question
+    threads answered by a model that reads the PR at the reviewed commit, and comment drafts
+    placed on the lines they are about. Following a review takes a `read` key; opening one,
+    asking, drafting and posting drafts take a `write` key. Posting publishes plain comments
+    on the pull request and never approves or requests changes.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def ask(self, session_id: str, thread_id: str, body: AskGuidedReview, *, timeout: float | None = None) -> GuidedReviewExchange:
+        """Ask a question in a thread
+        Append a question and the placeholder that will answer it, and answer with both at
+        once; the answer is produced in the background. A thread holds one unanswered
+        question at a time: asking again before it is answered is `409` with
+        `details.reason: "thread_busy"`, and other threads are unaffected. `depth: "deep"`
+        answers from a read-only checkout of the repository instead, so it can search the
+        whole tree and run read-only commands; it takes minutes rather than seconds and
+        stays `running` meanwhile, and a deployment with no runner settles it as
+        `depth_unavailable`.
+        `POST /api/v1/guided-reviews/{sessionId}/threads/{threadId}/messages` (operation
+        `askPublicGuidedReview`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/guided-reviews/{_quote(session_id)}/threads/{_quote(thread_id)}/messages",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewExchange.from_dict(raw)
+
+    def delete(self, session_id: str, *, timeout: float | None = None) -> None:
+        """Delete a guided review
+        Delete the session with its threads, messages and drafts. Only the identity that
+        opened it may; anyone else is `403` with `details.reason: "not_session_owner"`.
+        Nothing on the pull request is touched.
+        `DELETE /api/v1/guided-reviews/{sessionId}` (operation `deletePublicGuidedReview`).
+        """
+        self._transport.request_no_content(
+            "DELETE",
+            f"/api/v1/guided-reviews/{_quote(session_id)}",
+            query=None,
+            timeout=timeout,
+        )
+
+    def edit_draft(self, session_id: str, draft_id: str, body: EditGuidedReviewDraft, *, timeout: float | None = None) -> GuidedReviewCommentDraft:
+        """Edit, re-anchor or discard a comment draft
+        Change a draft's body or the line it sits on, or discard it with `discard: true`.
+        Send the `rev` you loaded: a draft edited, posted or discarded since is refused
+        `409` with `details.reason: "draft_conflict"`, so reload and decide again. A new
+        anchor must be a line inside the diff on its side, or the edit is `422` with
+        `details.reason: "draft_anchor_outside_diff"`. Only the session's owner may edit.
+        `PATCH /api/v1/guided-reviews/{sessionId}/comment-drafts/{draftId}` (operation
+        `editPublicGuidedReviewDraft`).
+        """
+        raw = self._transport.request(
+            "PATCH",
+            f"/api/v1/guided-reviews/{_quote(session_id)}/comment-drafts/{_quote(draft_id)}",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewCommentDraft.from_dict(raw)
+
+    def get(self, session_id: str, *, timeout: float | None = None) -> GuidedReviewSessionView:
+        """Get a guided review
+        The session with its overview, its threads (each naming the answer it is waiting on,
+        if any) and its comment drafts. The overview's `status` is `pending` or `running`
+        while it is generated; a `failed` one carries `failure.reason` (`budget_exhausted`,
+        `model_unavailable`, `repo_unavailable`, `generation_failed`, `unreadable_reply`, or
+        `head_moved` when the author pushed before it finished, which `POST
+        /api/v1/guided-reviews/{sessionId}/refresh` resolves) and the raw cause in
+        `failure.detail`.
+        `GET /api/v1/guided-reviews/{sessionId}` (operation `getPublicGuidedReview`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/guided-reviews/{_quote(session_id)}",
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewSessionView.from_dict(raw)
+
+    def get_thread(self, session_id: str, thread_id: str, *, timeout: float | None = None) -> GuidedReviewThreadView:
+        """Get a thread with its messages
+        The thread and its messages in order. An assistant message is `pending` or `running`
+        until answered, then `complete` with markdown `content` and the `citations` (file
+        spans) it rests on, or `failed` with a `failure`. A `comment-drafts` message's
+        drafts are on the session; its `draftReport` names every proposed comment that was
+        refused (`outside_diff`, `not_in_pr`, `incomplete`).
+        `GET /api/v1/guided-reviews/{sessionId}/threads/{threadId}` (operation
+        `getPublicGuidedReviewThread`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/guided-reviews/{_quote(session_id)}/threads/{_quote(thread_id)}",
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewThreadView.from_dict(raw)
+
+    def list(self, *, repo_id: str | None = None, pr_number: int | None = None, mine: ListPublicGuidedReviewsMine | None = None, limit: int | None = None, cursor: str | None = None, timeout: float | None = None) -> PublicGuidedReviewList:
+        """List the workspace's guided reviews
+        Guided review sessions in the workspace, newest created first, optionally narrowed
+        to one repository (`repoId`), one pull request (`prNumber`) or the calling key's own
+        (`mine=true`). Keyset-paginated: up to `limit` rows (default 50, at most 100) per
+        page, and `nextCursor` to pass back as `cursor` for the next page, null on the last.
+        A malformed cursor is `400` with `code: "invalid_cursor"`.
+        `GET /api/v1/guided-reviews` (operation `listPublicGuidedReviews`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/guided-reviews",
+            query={"repoId": repo_id, "prNumber": pr_number, "mine": mine, "limit": limit, "cursor": cursor},
+            timeout=timeout,
+        )
+        return PublicGuidedReviewList.from_dict(raw)
+
+    def list_all(self, *, repo_id: str | None = None, pr_number: int | None = None, mine: ListPublicGuidedReviewsMine | None = None, limit: int | None = None, cursor: str | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `sessions` across every page of `list()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `PublicGuidedReviewList.sessions`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list(repo_id=repo_id, pr_number=pr_number, mine=mine, limit=limit, cursor=page_cursor, timeout=timeout)
+            yield from page.sessions
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
+
+    def open(self, body: OpenGuidedReview, *, timeout: float | None = None) -> GuidedReviewSessionView:
+        """Open a guided review of a pull request
+        Open a guided review of one pull request in a repository linked to the workspace, or
+        return the one the calling key's identity already has for it. A guided review
+        explains the PR (what it does, its meaningful changes, consequences, risks, where to
+        focus, and suggested questions) and holds question threads answered by a model that
+        reads the PR at the commit under review. Answers with the session at once; its
+        overview is generated in the background, so follow `GET
+        /api/v1/guided-reviews/{sessionId}/events` or re-read it. A key bound to a person
+        acts as that person; an unbound key owns its own sessions and runs on the
+        workspace's credentials, never a person's; `createdByKind` says which of the two
+        owns a session. An unlinked repository is `404` with `details.reason:
+        "repo_not_linked"`, and a PR the host cannot find is `404` with `details.reason:
+        "pr_not_found"`.
+        `POST /api/v1/guided-reviews` (operation `openPublicGuidedReview`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/guided-reviews",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewSessionView.from_dict(raw)
+
+    def open_thread(self, session_id: str, body: OpenGuidedReviewThread | None = None, *, timeout: float | None = None) -> GuidedReviewThreadView:
+        """Open an exploration thread
+        Open a thread in the session, optionally asking its first question in the same call.
+        A thread is an independent line of questioning: waiting on an answer in one never
+        blocks another. Pass a suggested question from the overview verbatim to ask it.
+        `POST /api/v1/guided-reviews/{sessionId}/threads` (operation
+        `openPublicGuidedReviewThread`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/guided-reviews/{_quote(session_id)}/threads",
+            body={} if body is None else _encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewThreadView.from_dict(raw)
+
+    def post_drafts(self, session_id: str, body: PostGuidedReviewDrafts, *, timeout: float | None = None) -> GuidedReviewPostResult:
+        """Post comment drafts to the pull request
+        Publish the named drafts as review comments on the pull request, as the key's
+        identity, with an optional summary comment. Each comment posts on its own, so a
+        partial post is normal: the result counts `posted` and `failed` drafts (a failed one
+        carries `postError` and can be posted again) and lists in `skipped` the named drafts
+        this call did not claim because they were already posted, discarded or being posted,
+        so a retried call never posts a comment twice. The summary posts only alongside a
+        draft this call claimed, so an identical retry after a complete post publishes
+        nothing. Refused `409` with `details.reason: "session_stale"` when the pull request
+        has commits past `reviewedHeadSha`: refresh the review and check the drafts first.
+        Posting never approves or requests changes.
+        `POST /api/v1/guided-reviews/{sessionId}/comment-drafts/post` (operation
+        `postPublicGuidedReviewDrafts`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/guided-reviews/{_quote(session_id)}/comment-drafts/post",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewPostResult.from_dict(raw)
+
+    def refresh(self, session_id: str, *, timeout: float | None = None) -> GuidedReviewSessionView:
+        """Point a guided review at the PR's current head
+        Re-read the pull request and regenerate the overview at its current head commit,
+        keeping every thread. Use it after the author pushes: the overview, answers and
+        draft anchors are computed against the commit recorded as `reviewedHeadSha`.
+        `POST /api/v1/guided-reviews/{sessionId}/refresh` (operation
+        `refreshPublicGuidedReview`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/guided-reviews/{_quote(session_id)}/refresh",
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewSessionView.from_dict(raw)
+
+    def request_drafts(self, session_id: str, thread_id: str, body: RequestGuidedReviewDrafts | None = None, *, timeout: float | None = None) -> GuidedReviewExchange:
+        """Draft review comments from a thread's conclusions
+        Ask the model to turn what the thread concluded into review comments, each placed on
+        the line it is about. Optional `instructions` narrow which ones. Drafts are kept
+        only on lines inside the PR's diff; posting them is a separate, explicit call. Busy
+        like a question: `409` with `details.reason: "thread_busy"` while the thread is
+        waiting on an answer.
+        `POST /api/v1/guided-reviews/{sessionId}/threads/{threadId}/comment-drafts`
+        (operation `requestPublicGuidedReviewDrafts`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/guided-reviews/{_quote(session_id)}/threads/{_quote(thread_id)}/comment-drafts",
+            body={} if body is None else _encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewExchange.from_dict(raw)
+
+    def stream(self, session_id: str, *, timeout: float | None = None) -> EventStream:
+        """Stream a guided review (SSE)
+        Server-sent events for one guided review: a `state` frame carrying the session view
+        (the same body `GET /api/v1/guided-reviews/{sessionId}` returns) whenever it
+        changes, `deleted` when the session is removed, and `timeout` when the connection
+        cap is reached (reconnect to continue). A thread whose `pendingMessageId` clears has
+        an answer to fetch with `GET /api/v1/guided-reviews/{sessionId}/threads/{threadId}`.
+        Authenticated by the API key header.
+        `GET /api/v1/guided-reviews/{sessionId}/events` (operation
+        `streamPublicGuidedReview`).
+        """
+        return self._transport.stream(
+            "GET",
+            f"/api/v1/guided-reviews/{_quote(session_id)}/events",
+            query=None,
+            timeout=timeout,
+        )
+
+
+class PrAssessmentsResource:
+    """Assess a pull request in a linked repository: the merger's complexity, risk and impact
+    scores with a rationale, the change class its paths fall in, and whether a risk policy
+    would let it land with no person. The verdict is given without publishing the policy's
+    ceilings. Takes a `write` key: each assessment is one model call. Nothing is persisted
+    and no run starts.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def assess(self, body: AssessPublicPullRequest, *, timeout: float | None = None) -> PublicPrAssessment:
+        """Assess a pull request against a risk policy
+        Score one pull request in a repository linked to the workspace on the merger’s three
+        axes (complexity, risk, impact, each 0..1, with a rationale), classify it by its
+        changed paths, and say whether a risk policy would let it land with no person. The
+        policy is the one named by `riskPolicyId` from `GET /api/v1/risk-policies`, else the
+        workspace’s unattended default (the one a run started through this API resolves); an
+        unknown id is `422` with `details.reason: "risk_policy_not_found"`, and a workspace
+        with no unattended default is `503` `risk_policy_default_missing`. The verdict comes
+        from the same decision the merge step makes, so the policy’s ceilings are never
+        published: `verdict.reason` and `verdict.exceededAxes` say why. A key bound to a
+        person is judged under that person’s workspace role, as a task it creates is
+        admitted, so the role-scoped rules (`classRulesByRole`, `dryRunRoles`,
+        `submissionClassesByRole`) apply to it; a key bound to nobody has no role and they
+        do not. Synchronous: one inline model call, nothing persisted, no run. An unlinked
+        repository is `404` `repo_not_linked`, a PR the host cannot find is `404`
+        `pr_not_found`, a PR that received commits while it was read is `503`
+        `pr_head_moved` (retry), an exhausted budget is `429` `budget_exhausted`, no
+        configured model is `503` `model_unavailable`, a failed model call is `503`
+        `generation_failed`, a call that runs out of time is `503` `generation_timeout`, and
+        a reply that is not an assessment is `503` `unreadable_reply`. A key bound to a
+        person reads the PR and calls the model as that person. Requires a `write` key.
+        `POST /api/v1/pr-assessments` (operation `assessPublicPullRequest`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/pr-assessments",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicPrAssessment.from_dict(raw)
+
+
 class KeysResource:
     """The workspace's own API keys: provision one headlessly, list them, revoke one (and what
     it minted).
@@ -2836,10 +3455,13 @@ class KeysResource:
 
     def create(self, body: CreateHeadlessPublicApiKey, *, timeout: float | None = None) -> CreatedPublicApiKey:
         """Provision an API key
-        Mint a key for the calling key’s own workspace and return its raw secret EXACTLY
-        ONCE, so store it now: it is not recoverable. Omitting `scope` mints a `write` key.
-        `admin` cannot be minted here: a key provisioned over the API can never itself
-        provision, which keeps the chain one link long. Requires an `admin`-scope key.
+        Mint a key in the calling key’s account and return its raw secret EXACTLY ONCE, so
+        store it now: it is not recoverable. Omitting `workspaceIds` mints a key for the
+        workspace this request acts on; a list or `null` (every workspace) can never reach
+        further than the calling key, refused as `403` with `reason:
+        "workspace_reach_exceeded"`. Omitting `scope` mints a `write` key. `admin` cannot be
+        minted here: a key provisioned over the API can never itself provision, which keeps
+        the chain one link long. Requires an `admin`-scope key.
         `POST /api/v1/keys` (operation `createPublicKey`).
         """
         raw = self._transport.request(
@@ -2853,9 +3475,11 @@ class KeysResource:
 
     def list(self, *, timeout: float | None = None) -> PublicApiKeyList:
         """List the workspace's API keys
-        The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret
-        is never readable back. `createdByKeyId` names the key that provisioned a key
-        headlessly; `createdByUserId` names the person who minted one in the app.
+        The account’s live (non-revoked) keys that reach the workspace this request acts on,
+        account-wide ones included, metadata only; a secret is never readable back.
+        `workspaceIds` is each key’s reach (`null` for every workspace). `createdByKeyId`
+        names the key that provisioned a key headlessly; `createdByUserId` names the person
+        who minted one in the app.
         `GET /api/v1/keys` (operation `listPublicKeys`).
         """
         raw = self._transport.request(
@@ -2870,7 +3494,8 @@ class KeysResource:
         """Revoke an API key
         Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive
         its own revocation through the credentials it left behind. Idempotent, and it may
-        name the calling key. Requires an `admin`-scope key.
+        name the calling key. A key reaching workspaces the calling key does not is refused
+        with `reason: "workspace_reach_exceeded"`. Requires an `admin`-scope key.
         `DELETE /api/v1/keys/{keyId}` (operation `revokePublicKey`).
         """
         self._transport.request_no_content(
@@ -2909,10 +3534,14 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "webhook": WebhookResource(transport),
         "usage": UsageResource(transport),
         "me": MeResource(transport),
+        "deployment": DeploymentResource(transport),
         "decisions": DecisionsResource(transport),
         "debug": DebugResource(transport),
         "evidence": EvidenceResource(transport),
         "merge_records": MergeRecordsResource(transport),
+        "directory": DirectoryResource(transport),
         "kaizen": KaizenResource(transport),
+        "guided_reviews": GuidedReviewsResource(transport),
+        "pr_assessments": PrAssessmentsResource(transport),
         "keys": KeysResource(transport),
     }

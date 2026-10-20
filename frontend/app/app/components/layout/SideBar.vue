@@ -13,12 +13,15 @@
 // independently from the role / tier switchers at the top and the rail toggle.
 import { useEventListener, useScrollLock } from '@vueuse/core'
 import BoardSwitcher from '~/components/layout/BoardSwitcher.vue'
+import AppearanceSwitcher from '~/components/layout/AppearanceSwitcher.vue'
 import LanguageSwitcher from '~/components/layout/LanguageSwitcher.vue'
 import UiModeSwitcher from '~/components/layout/UiModeSwitcher.vue'
 import UiRoleSwitcher from '~/components/layout/UiRoleSwitcher.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
 import { useViewport } from '~/composables/useViewport'
 import type { NavContribution } from '~/modular/nav-contributions'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import WorkViewSwitcher from '~/components/layout/WorkViewSwitcher.vue'
 
 const { t } = useI18n()
 
@@ -152,9 +155,10 @@ watch(
     enter-from-class="opacity-0"
     leave-to-class="opacity-0"
   >
+    <!-- safe-area-ok: a scrim with no content; the drawer below pads its own edges -->
     <div
       v-if="ui.mobileNavOpen"
-      class="fixed inset-0 z-30 bg-slate-950/60 backdrop-blur-sm lg:hidden"
+      class="fixed inset-0 z-30 bg-elevated/75 backdrop-blur-sm lg:hidden"
       data-testid="sidebar-backdrop"
       role="button"
       tabindex="-1"
@@ -163,6 +167,8 @@ watch(
     />
   </Transition>
 
+  <!-- safe-area-ok: below lg, an edge drawer that pads the top, bottom and inline-start insets
+       itself. The start side is physical left in LTR and right in RTL, hence the `rtl:` override. -->
   <aside
     ref="aside"
     data-testid="sidebar"
@@ -171,7 +177,7 @@ watch(
     :aria-modal="drawerOpen ? 'true' : undefined"
     :aria-label="isCompact ? t('nav.menu') : undefined"
     :inert="isCompact && !ui.mobileNavOpen"
-    class="fixed inset-y-0 start-0 z-40 flex h-full w-64 shrink-0 flex-col gap-4 overflow-y-auto border-e border-slate-800 bg-slate-900/95 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur transition-transform duration-200 focus:outline-none lg:static lg:z-auto lg:translate-x-0 lg:bg-slate-900/80"
+    class="fixed inset-y-0 start-0 z-40 flex h-full w-64 shrink-0 flex-col gap-4 overflow-y-auto border-e border-default bg-default/95 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-lg:ps-[calc(0.75rem+env(safe-area-inset-left))] max-lg:pt-[calc(0.75rem+env(safe-area-inset-top))] max-lg:rtl:ps-[calc(0.75rem+env(safe-area-inset-right))] backdrop-blur transition-transform duration-200 focus:outline-none lg:static lg:z-auto lg:translate-x-0 lg:bg-default/80"
     :class="[
       ui.mobileNavOpen
         ? 'translate-x-0'
@@ -222,11 +228,16 @@ watch(
     </div>
 
     <div class="contents" @click="onNavAction">
+      <!-- The two views of the board (issue #2258), first because they decide what the main
+           area shows. -->
+      <WorkViewSwitcher :collapsed="railed" />
+
       <!-- Command bar launcher (⌘K) — the primary way to create blocks / pipelines
          and reach every action below. -->
-      <button
-        type="button"
-        class="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 py-2 text-start text-sm text-slate-400 transition hover:border-slate-500 hover:bg-slate-800"
+      <UButton
+        color="neutral"
+        variant="ghost"
+        class="flex items-center gap-2 rounded-lg border border-muted bg-elevated/60 py-2 text-start text-sm text-muted transition hover:border-app-500 hover:bg-elevated"
         :class="railed ? 'justify-center px-0' : 'px-2.5'"
         :aria-label="t('nav.commandBar')"
         :title="railed ? t('nav.commandBar') : undefined"
@@ -236,7 +247,7 @@ watch(
         <UIcon name="i-lucide-search" class="h-4 w-4 shrink-0" />
         <span v-if="!railed" class="flex-1 truncate">{{ t('nav.commandBar') }}</span>
         <UKbd v-if="!railed" value="⌘K" />
-      </button>
+      </UButton>
 
       <!-- Sections + items come from the shared nav manifest, already gated by the
          reactive slotFilter (backend/docs/adr/0049-modular-vue-adoption.md, slice 1) — which
@@ -247,18 +258,14 @@ watch(
       <template v-for="section in sidebarGroups" :key="section.group">
         <USeparator />
         <section>
-          <h2
-            v-if="!railed"
-            class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-          >
+          <SectionLabel v-if="!railed" as="h2" class="mb-2 px-1">
             {{ t(section.labelKey) }}
-          </h2>
+          </SectionLabel>
           <div class="space-y-1.5">
             <UButton
               v-for="item in section.items"
               :key="item.id"
               :block="!railed"
-              color="primary"
               variant="soft"
               size="sm"
               :icon="item.icon"
@@ -278,6 +285,7 @@ watch(
     </div>
 
     <div class="mt-auto space-y-2">
+      <AppearanceSwitcher :collapsed="railed" />
       <LanguageSwitcher :collapsed="railed" />
       <UserMenu :collapsed="railed" />
     </div>

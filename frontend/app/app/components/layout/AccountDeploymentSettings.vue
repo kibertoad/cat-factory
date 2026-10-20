@@ -13,7 +13,7 @@ const props = defineProps<{ accountId: string }>()
 
 const store = useAccountSettingsStore()
 const ui = useUiStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirmAction } = useConfirmAction()
@@ -178,10 +178,7 @@ async function saveStorage() {
   }
   if (backend === 's3') {
     if (!cs.region.trim() || !cs.bucket.trim()) {
-      toast.add({
-        title: t('layout.accountDeployment.contentStorage.regionBucketValidation'),
-        color: 'error',
-      })
+      actionToast.error('layout.accountDeployment.contentStorage.regionBucketValidation')
       return
     }
     config.s3 = {
@@ -203,16 +200,10 @@ async function saveStorage() {
     if (id && key) {
       input.secrets = { s3: { accessKeyId: id, secretAccessKey: key } }
     } else if (id || key) {
-      toast.add({
-        title: t('layout.accountDeployment.contentStorage.bothKeysValidation'),
-        color: 'error',
-      })
+      actionToast.error('layout.accountDeployment.contentStorage.bothKeysValidation')
       return
     } else if (!storageSummary.value?.s3CredentialsConfigured) {
-      toast.add({
-        title: t('layout.accountDeployment.contentStorage.keysValidation'),
-        color: 'error',
-      })
+      actionToast.error('layout.accountDeployment.contentStorage.keysValidation')
       return
     }
     // else: keys already stored and none re-entered → leave them unchanged.
@@ -224,11 +215,7 @@ async function saveStorage() {
   try {
     await store.save(props.accountId, input)
     hydrateStorage()
-    toast.add({
-      title: t('layout.accountDeployment.contentStorage.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.contentStorage.saved')
   } catch (e) {
     present(e, 'layout.accountDeployment.contentStorage.saveFailed')
   } finally {
@@ -238,7 +225,7 @@ async function saveStorage() {
 
 async function saveSlack() {
   if (!slack.clientId.trim() || !slack.clientSecret.trim() || !slack.redirectUrl.trim()) {
-    toast.add({ title: t('layout.accountDeployment.slack.validation'), color: 'error' })
+    actionToast.error('layout.accountDeployment.slack.validation')
     return
   }
   savingSlack.value = true
@@ -255,11 +242,7 @@ async function saveSlack() {
     slack.clientId = ''
     slack.clientSecret = ''
     slack.redirectUrl = ''
-    toast.add({
-      title: t('layout.accountDeployment.slack.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.slack.saved')
   } catch (e) {
     present(e, 'layout.accountDeployment.slack.saveFailed')
   } finally {
@@ -272,11 +255,7 @@ async function clearSlack() {
   savingSlack.value = true
   try {
     await store.save(props.accountId, { secrets: { slackOAuth: null } })
-    toast.add({
-      title: t('layout.accountDeployment.slack.cleared'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.slack.cleared')
   } catch (e) {
     present(e, 'layout.accountDeployment.slack.clearFailed')
   } finally {
@@ -286,7 +265,7 @@ async function clearSlack() {
 
 async function saveLinear() {
   if (!linear.clientId.trim() || !linear.clientSecret.trim() || !linear.redirectUrl.trim()) {
-    toast.add({ title: t('layout.accountDeployment.linear.validation'), color: 'error' })
+    actionToast.error('layout.accountDeployment.linear.validation')
     return
   }
   savingLinear.value = true
@@ -303,11 +282,7 @@ async function saveLinear() {
     linear.clientId = ''
     linear.clientSecret = ''
     linear.redirectUrl = ''
-    toast.add({
-      title: t('layout.accountDeployment.linear.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.linear.saved')
   } catch (e) {
     present(e, 'layout.accountDeployment.linear.saveFailed')
   } finally {
@@ -320,11 +295,7 @@ async function clearLinear() {
   savingLinear.value = true
   try {
     await store.save(props.accountId, { secrets: { linearOAuth: null } })
-    toast.add({
-      title: t('layout.accountDeployment.linear.cleared'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.linear.cleared')
   } catch (e) {
     present(e, 'layout.accountDeployment.linear.clearFailed')
   } finally {
@@ -334,7 +305,7 @@ async function clearLinear() {
 
 async function saveFigma() {
   if (!figma.clientId.trim() || !figma.clientSecret.trim() || !figma.redirectUrl.trim()) {
-    toast.add({ title: t('layout.accountDeployment.figma.validation'), color: 'error' })
+    actionToast.error('layout.accountDeployment.figma.validation')
     return
   }
   savingFigma.value = true
@@ -351,11 +322,7 @@ async function saveFigma() {
     figma.clientId = ''
     figma.clientSecret = ''
     figma.redirectUrl = ''
-    toast.add({
-      title: t('layout.accountDeployment.figma.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.figma.saved')
   } catch (e) {
     present(e, 'layout.accountDeployment.figma.saveFailed')
   } finally {
@@ -368,11 +335,7 @@ async function clearFigma() {
   savingFigma.value = true
   try {
     await store.save(props.accountId, { secrets: { figmaOAuth: null } })
-    toast.add({
-      title: t('layout.accountDeployment.figma.cleared'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.figma.cleared')
   } catch (e) {
     present(e, 'layout.accountDeployment.figma.clearFailed')
   } finally {
@@ -384,7 +347,7 @@ async function saveWeb() {
   const brave = web.braveApiKey.trim()
   const searxng = web.searxngUrl.trim()
   if (!brave && !searxng) {
-    toast.add({ title: t('layout.accountDeployment.web.validation'), color: 'error' })
+    actionToast.error('layout.accountDeployment.web.validation')
     return
   }
   savingWeb.value = true
@@ -401,11 +364,7 @@ async function saveWeb() {
     web.braveApiKey = ''
     web.searxngUrl = ''
     web.searxngApiKey = ''
-    toast.add({
-      title: t('layout.accountDeployment.web.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.web.saved')
   } catch (e) {
     present(e, 'layout.accountDeployment.web.saveFailed')
   } finally {
@@ -418,11 +377,7 @@ async function clearWeb() {
   savingWeb.value = true
   try {
     await store.save(props.accountId, { secrets: { webSearch: null } })
-    toast.add({
-      title: t('layout.accountDeployment.web.cleared'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('layout.accountDeployment.web.cleared')
   } catch (e) {
     present(e, 'layout.accountDeployment.web.clearFailed')
   } finally {
@@ -434,8 +389,8 @@ async function clearWeb() {
 <template>
   <div v-if="store.available !== false" class="space-y-6">
     <div>
-      <h3 class="mb-1 font-semibold text-white">{{ t('layout.accountDeployment.title') }}</h3>
-      <p class="text-[11px] text-slate-400">
+      <h3 class="mb-1 font-semibold text-highlighted">{{ t('layout.accountDeployment.title') }}</h3>
+      <p class="text-2xs text-muted">
         {{ t('layout.accountDeployment.intro') }}
       </p>
     </div>
@@ -443,7 +398,7 @@ async function clearWeb() {
     <!-- Slack app OAuth -->
     <section class="space-y-2">
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">
+        <h4 class="text-sm font-semibold text-default">
           {{ t('layout.accountDeployment.slack.title') }}
         </h4>
         <UBadge
@@ -458,7 +413,7 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-2xs text-muted">
         {{ t('layout.accountDeployment.slack.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -479,19 +434,13 @@ async function clearWeb() {
         />
       </div>
       <div class="flex gap-2">
-        <UButton
-          color="primary"
-          size="xs"
-          icon="i-lucide-save"
-          :loading="savingSlack"
-          @click="saveSlack"
-        >
+        <UButton size="xs" icon="i-lucide-save" :loading="savingSlack" @click="saveSlack">
           {{ t('common.save') }}
         </UButton>
         <UButton
+          color="error"
+          variant="soft"
           v-if="summary?.slackOAuthConfigured"
-          color="neutral"
-          variant="ghost"
           size="xs"
           :loading="savingSlack"
           @click="clearSlack"
@@ -502,9 +451,9 @@ async function clearWeb() {
     </section>
 
     <!-- Linear app OAuth -->
-    <section class="space-y-2 border-t border-slate-800 pt-6">
+    <section class="space-y-2 border-t border-default pt-6">
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">
+        <h4 class="text-sm font-semibold text-default">
           {{ t('layout.accountDeployment.linear.title') }}
         </h4>
         <UBadge
@@ -519,7 +468,7 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-2xs text-muted">
         {{ t('layout.accountDeployment.linear.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -540,19 +489,13 @@ async function clearWeb() {
         />
       </div>
       <div class="flex gap-2">
-        <UButton
-          color="primary"
-          size="xs"
-          icon="i-lucide-save"
-          :loading="savingLinear"
-          @click="saveLinear"
-        >
+        <UButton size="xs" icon="i-lucide-save" :loading="savingLinear" @click="saveLinear">
           {{ t('common.save') }}
         </UButton>
         <UButton
+          color="error"
+          variant="soft"
           v-if="summary?.linearOAuthConfigured"
-          color="neutral"
-          variant="ghost"
           size="xs"
           :loading="savingLinear"
           @click="clearLinear"
@@ -563,9 +506,9 @@ async function clearWeb() {
     </section>
 
     <!-- Figma app OAuth (the document source's designer-doable connect) -->
-    <section class="space-y-2 border-t border-slate-800 pt-6">
+    <section class="space-y-2 border-t border-default pt-6">
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">
+        <h4 class="text-sm font-semibold text-default">
           {{ t('layout.accountDeployment.figma.title') }}
         </h4>
         <UBadge
@@ -580,7 +523,7 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-2xs text-muted">
         {{ t('layout.accountDeployment.figma.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -601,19 +544,13 @@ async function clearWeb() {
         />
       </div>
       <div class="flex gap-2">
-        <UButton
-          color="primary"
-          size="xs"
-          icon="i-lucide-save"
-          :loading="savingFigma"
-          @click="saveFigma"
-        >
+        <UButton size="xs" icon="i-lucide-save" :loading="savingFigma" @click="saveFigma">
           {{ t('common.save') }}
         </UButton>
         <UButton
+          color="error"
+          variant="soft"
           v-if="summary?.figmaOAuthConfigured"
-          color="neutral"
-          variant="ghost"
           size="xs"
           :loading="savingFigma"
           @click="clearFigma"
@@ -624,9 +561,9 @@ async function clearWeb() {
     </section>
 
     <!-- Web search keys -->
-    <section class="space-y-2 border-t border-slate-800 pt-6">
+    <section class="space-y-2 border-t border-default pt-6">
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">
+        <h4 class="text-sm font-semibold text-default">
           {{ t('layout.accountDeployment.web.title') }}
         </h4>
         <UBadge :color="summary?.webSearch ? 'success' : 'neutral'" variant="subtle" size="xs">
@@ -637,7 +574,7 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-2xs text-muted">
         {{ t('layout.accountDeployment.web.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -658,19 +595,13 @@ async function clearWeb() {
         />
       </div>
       <div class="flex gap-2">
-        <UButton
-          color="primary"
-          size="xs"
-          icon="i-lucide-save"
-          :loading="savingWeb"
-          @click="saveWeb"
-        >
+        <UButton size="xs" icon="i-lucide-save" :loading="savingWeb" @click="saveWeb">
           {{ t('common.save') }}
         </UButton>
         <UButton
+          color="error"
+          variant="soft"
           v-if="summary?.webSearch"
-          color="neutral"
-          variant="ghost"
           size="xs"
           :loading="savingWeb"
           @click="clearWeb"
@@ -685,10 +616,10 @@ async function clearWeb() {
       v-if="storageCapability"
       id="content-storage"
       ref="storageSection"
-      class="space-y-2 border-t border-slate-800 pt-6"
+      class="space-y-2 border-t border-default pt-6"
     >
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">
+        <h4 class="text-sm font-semibold text-default">
           {{ t('layout.accountDeployment.contentStorage.title') }}
         </h4>
         <UBadge
@@ -706,16 +637,16 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-2xs text-muted">
         {{ t('layout.accountDeployment.contentStorage.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <USelect v-model="csBackend" :items="backendItems" value-key="value" size="sm" />
       </div>
-      <p v-if="selectedCustomStore?.summary" class="text-[11px] text-slate-400">
+      <p v-if="selectedCustomStore?.summary" class="text-2xs text-muted">
         {{ selectedCustomStore.summary }}
       </p>
-      <p v-if="unregisteredStoreId" class="text-[11px] text-amber-400">
+      <p v-if="unregisteredStoreId" class="text-2xs text-app-warning-400">
         {{
           t('layout.accountDeployment.contentStorage.unregisteredStoreWarning', {
             store: unregisteredStoreId,
@@ -762,7 +693,7 @@ async function clearWeb() {
           size="sm"
         />
         <div class="flex items-center gap-2">
-          <span class="text-[11px] text-slate-400">
+          <span class="text-2xs text-muted">
             {{ t('layout.accountDeployment.contentStorage.accessKeys') }}
           </span>
           <UBadge
@@ -789,19 +720,13 @@ async function clearWeb() {
             size="sm"
           />
         </div>
-        <p class="text-[11px] text-slate-400">
+        <p class="text-2xs text-muted">
           {{ t('layout.accountDeployment.contentStorage.keysHint') }}
         </p>
       </template>
 
       <div class="flex gap-2">
-        <UButton
-          color="primary"
-          size="xs"
-          icon="i-lucide-save"
-          :loading="savingStorage"
-          @click="saveStorage"
-        >
+        <UButton size="xs" icon="i-lucide-save" :loading="savingStorage" @click="saveStorage">
           {{ t('common.save') }}
         </UButton>
       </div>

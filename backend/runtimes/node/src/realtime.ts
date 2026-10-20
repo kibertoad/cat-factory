@@ -7,6 +7,7 @@ import type {
   ConsensusSession,
   ClarityReview,
   DocInterviewSession,
+  GuidedReviewChange,
   EnvConfigRepairJob,
   EnvironmentTestRun,
   ExecutionInstance,
@@ -280,6 +281,10 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
 
   async docInterviewChanged(workspaceId: string, session: DocInterviewSession): Promise<void> {
     this.publish(workspaceId, { type: 'docInterview', session, at: Date.now() })
+  }
+
+  async guidedReviewChanged(workspaceId: string, change: GuidedReviewChange): Promise<void> {
+    this.publish(workspaceId, { type: 'guidedReview', change, at: Date.now() })
   }
 
   private publish(

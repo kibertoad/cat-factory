@@ -64,6 +64,7 @@ import {
   type RepoUseByRepoId,
 } from './publicBoardReads.js'
 import { buildReviewDescription, resolveReviewTaskTarget } from './reviewTaskTarget.js'
+import { resolveAttachedPullRequest } from './attachedPullRequest.js'
 import type { BlockPatchNarrowing } from './blockPatchNarrowing.js'
 import { createBlockPatchNarrowing } from './blockPatchNarrowing.js'
 import { applyTaskTypeFieldsPatch } from './taskTypeFieldsPatch.js'
@@ -415,14 +416,22 @@ export class BoardService {
           () => null,
         ),
     })
-    // The per-type fields patch reaches for creation's OWN two collaborators rather than
-    // re-stating either: the same validator the create form runs, and the same review-target
-    // resolution `addServiceTask` makes.
+    // The per-type fields patch reaches for creation's OWN collaborators rather than re-stating
+    // any: the same validator the create form runs, and the same review-target and attached-PR
+    // resolutions `addServiceTask` makes.
     this.taskTypeFieldsPatch = {
       validatedFields: (taskType, fields) =>
         this.taskTypeDefaults.validatedFields(taskType, fields),
       resolveReviewTarget: (workspaceId, blockId, taskType, fields) =>
         resolveReviewTaskTarget(
+          { resolveRunRepoContext: this.resolveRunRepoContext, logger: this.log },
+          workspaceId,
+          blockId,
+          taskType,
+          fields,
+        ),
+      attachPullRequest: (workspaceId, blockId, taskType, fields) =>
+        resolveAttachedPullRequest(
           { resolveRunRepoContext: this.resolveRunRepoContext, logger: this.log },
           workspaceId,
           blockId,
@@ -908,6 +917,17 @@ export class BoardService {
       taskType,
       block.taskTypeFields,
     )
+    // A task that ATTACHES an existing pull request records it as its own, refusing one its run
+    // could not push onto (closed, merged, from a fork, another repo).
+    const attached = await resolveAttachedPullRequest(
+      { resolveRunRepoContext: this.resolveRunRepoContext, logger: this.log },
+      homeWorkspaceId,
+      containerId,
+      taskType,
+      block.taskTypeFields,
+    )
+    if (attached)
+      Object.assign(block, { taskTypeFields: attached.fields, pullRequest: attached.pullRequest })
     // Fold the (now canonical) PR reference + focus into the description, so the read-only
     // `pr-reviewer` knows WHICH PR to review from its prompt.
     block.description = buildReviewDescription(taskType, block.taskTypeFields, block.description)

@@ -52,7 +52,11 @@ import type {} from '@cat-factory/kernel'
 
 import type {} from '@cat-factory/kernel'
 
-import type { EnvironmentHandlerSeeder, SharedStackSeeder } from '@cat-factory/kernel'
+import type {
+  EnvironmentHandlerSeeder,
+  RunnerPoolSeeder,
+  SharedStackSeeder,
+} from '@cat-factory/kernel'
 
 import type {} from '@cat-factory/kernel'
 import type {} from '@cat-factory/kernel'
@@ -65,12 +69,15 @@ import { ExecutionService } from './modules/execution/ExecutionService.js'
 import { PipelineService } from './modules/pipelines/PipelineService.js'
 import { WorkspaceService } from '@cat-factory/workspaces'
 import type { AssistantModule } from './container/assistant-module.js'
+import type { GuidedReviewModule } from './container/guided-review-module.js'
+import type { PrAssessmentModule } from './container/pr-assessment-module.js'
 import { WorkspaceMemberService } from '@cat-factory/workspaces'
 import { AccountService } from '@cat-factory/workspaces'
+import { DirectoryService } from '@cat-factory/workspaces'
 import { UserService } from '@cat-factory/workspaces'
 import { InvitationService } from '@cat-factory/workspaces'
 import { PasswordResetService } from '@cat-factory/workspaces'
-import { EmailConnectionService } from '@cat-factory/integrations'
+import { DirectoryWebhookService, EmailConnectionService } from '@cat-factory/integrations'
 import type { SpendService } from '@cat-factory/spend'
 
 import { LlmObservabilityService } from './modules/observability/LlmObservabilityService.js'
@@ -120,6 +127,7 @@ import type {
   BinaryGeneratorRegistry,
   BinaryGeneratorSource,
   BinaryStoreRegistry,
+  DelegatedExecutorRegistry,
   FoundationalBuiltinSource,
   FoundationalServiceRegistry,
   GateRegistry,
@@ -337,6 +345,8 @@ export type { FoundationalServiceModule, FragmentLibraryModule, SkillLibraryModu
 // same reason, and is re-exported here so a facade's HTTP layer resolves it off `Core` like any
 // other optional module.
 export type { AssistantModule } from './container/assistant-module.js'
+export type { GuidedReviewModule } from './container/guided-review-module.js'
+export type { PrAssessmentModule } from './container/pr-assessment-module.js'
 
 /**
  * The always-present core services every facade wires — the composition root's SPINE. These
@@ -372,6 +382,13 @@ export interface CoreSpine {
    * `validateRegistrations` at boot.
    */
   judgeRegistry: JudgeRegistry
+  /**
+   * The app-owned DELEGATED-EXECUTOR registry the engine resolved (the facade's injected instance,
+   * else the empty default). Re-exposed so the dispatch path builds each executor from the SAME
+   * instance the boot validation graded, and so the HTTP layer's workspace-snapshot projection can
+   * tell the pipeline builder which steps leave the platform.
+   */
+  delegatedExecutorRegistry: DelegatedExecutorRegistry
   /**
    * The app-owned pipeline registry the engine resolved (the facade's injected instance, else the
    * empty default). Re-exposed so the facade passes the SAME instance to `validateRegistrations` at
@@ -510,6 +527,10 @@ export interface CoreSpine {
    * naming the missing capability rather than as an empty log.
    */
   auditLogReader?: AuditLogReader
+  /** The public directory read side: snapshots and the change feed an external mirror follows. */
+  directory: DirectoryService
+  /** Directory webhook management and delivery; absent when no key can seal signing secrets. */
+  directoryWebhooks?: DirectoryWebhookService
   /**
    * Counts in-app tutorial funnel events. On the SPINE rather than in the optional set, and
    * unconditional, for the same reason `operationalMetrics` is required: an un-wired counter
@@ -591,6 +612,10 @@ export interface OptionalCoreModules {
    * the module's own capability read rather than as an absent module the controller 503s on.
    */
   assistant?: AssistantModule
+  /** Guided PR review; present when a `guidedReviewRepository` is wired. */
+  guidedReview?: GuidedReviewModule
+  /** Public PR assessment; present when the risk-policy library is wired. */
+  prAssessment?: PrAssessmentModule
   /** Present only when the environment integration is configured (see CoreDependencies). */
   environments?: EnvironmentsModule
   /**
@@ -607,6 +632,12 @@ export interface OptionalCoreModules {
   sharedStackSeeder?: SharedStackSeeder
   /** Present only when the self-hosted runner-pool integration is configured. */
   runners?: RunnersModule
+  /**
+   * The deployment-declared runner-pool seeder, present only when the runners module is wired. Read
+   * by the runtime to boot-backfill every existing workspace, and late-bound into `WorkspaceService`
+   * for the on-create hook. A no-op when no seed was declared.
+   */
+  runnerPoolSeeder?: RunnerPoolSeeder
   /** Present only when the provisioning event-log store is wired (see CoreDependencies). */
   provisioningLogs?: ProvisioningLogsModule
   /** Present only when the repo-bootstrap repositories are wired (see CoreDependencies). */
@@ -728,6 +759,7 @@ export function createCore(injected: CoreDependencies): Core {
     agentKindRegistry,
     gateRegistry,
     judgeRegistry,
+    delegatedExecutorRegistry,
     pipelineRegistry,
     taskTypeRegistry,
     inlineUseCaseRegistry,
@@ -752,6 +784,16 @@ export function createCore(injected: CoreDependencies): Core {
   // browser-supplied tour id from minting an unbounded number of metric series, and a cap with a
   // request-scoped lifetime would bound nothing.
   const tutorialTelemetry = new TutorialTelemetryService({ metrics: operationalMetrics, logger })
+  const directory = new DirectoryService({ directoryRepository: dependencies.directoryRepository })
+  const directoryWebhooks = dependencies.directoryWebhooks
+    ? new DirectoryWebhookService({
+        ...dependencies.directoryWebhooks,
+        feed: directory,
+        clock: dependencies.clock,
+        logger,
+        operationalMetrics,
+      })
+    : undefined
   // The optional-module registry: every feature that is wired only when its prerequisites are
   // configured is `build`-declared through this, instead of a scattered `const x = createX(...)`
   // + a matching `...(x ? { x } : {})` return spread. Registration order below IS dependency
@@ -784,6 +826,9 @@ export function createCore(injected: CoreDependencies): Core {
       getSpendService: () => spendServiceRef,
       getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
       getSharedStackSeeder: () => sharedStackSeederRef,
+      // Built with the runners module (after the foundation), and read through the registry at call
+      // time, so no separate ref is needed.
+      getRunnerPoolSeeder: () => modules.get('runnerPoolSeeder'),
     })
   // All three registries are passed from the RESOLVED set, not spread in from `injected`: a facade
   // may leave any unset and `resolveCoreRuntime` supplies the default. That matters most for
@@ -912,6 +957,8 @@ export function createCore(injected: CoreDependencies): Core {
     // The audit log's READ seam, straight off the injected bag: the viewer's controller resolves
     // it here, while the WRITE seam goes only to the services that record through it.
     auditLogReader: dependencies.auditLogReader,
+    directory,
+    ...(directoryWebhooks ? { directoryWebhooks } : {}),
     tutorialTelemetry,
     workspaceService,
     accountService,
@@ -923,6 +970,7 @@ export function createCore(injected: CoreDependencies): Core {
     agentKindRegistry,
     gateRegistry,
     judgeRegistry,
+    delegatedExecutorRegistry,
     pipelineRegistry,
     taskTypeRegistry,
     inlineUseCaseRegistry,

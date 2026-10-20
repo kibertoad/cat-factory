@@ -15,7 +15,9 @@ The SPA source lives under `app/` (the Nuxt srcDir).
 - [What it is](#what-it-is)
 - [Tech stack](#tech-stack)
 - [Layout](#layout)
+- [Nuxt UI: agent tooling and overrides](#nuxt-ui-agent-tooling-and-where-the-spa-overrides-the-skill)
 - [Task swimlanes](#task-swimlanes)
+- [Queue view](#queue-view)
 - [Roles (engineer / product manager / designer)](#roles-engineer--product-manager--designer)
 - [Interface modes (basic / advanced)](#interface-modes-basic--advanced)
 - [Agent tiers (basic / intermediate / advanced)](#agent-tiers-basic--intermediate--advanced)
@@ -32,7 +34,8 @@ A spatial planning surface. You lay out a system as a **board** of frames
 (services), modules and tasks on a [Vue Flow](https://vueflow.dev) canvas, wire up
 dependencies, attach requirements, and apply **agent pipelines** to blocks.
 Execution streams back in real time (step/subtask progress bars, decision
-prompts, failures with retry) so the canvas doubles as a live dashboard.
+prompts, failures with retry) so the canvas doubles as a live dashboard. The board's second view,
+the [queue](#queue-view), lists the same tasks by what each one needs.
 
 It is a thin client: there is **no business logic here**. Every mutation calls the
 Worker API and the stores hydrate from server snapshots and live updates pushed
@@ -41,7 +44,8 @@ over the WebSocket. How that sync works is written up in
 
 ## Tech stack
 
-- **Nuxt 4 / Vue 3** SPA: single route (`pages/index.vue`).
+- **Nuxt 4 / Vue 3** SPA: the board and its queue view are `pages/index.vue`, beside three
+  standalone routes (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-password.vue`).
 - **Pinia** (+ `pinia-plugin-persistedstate`): feature stores.
 - **Vue Flow** (`core`, `background`, `controls`, `node-resizer`): the canvas.
 - **Nuxt UI** + Tailwind: components and styling.
@@ -50,15 +54,15 @@ over the WebSocket. How that sync works is written up in
 
 ## Layout
 
-| Path              | Contents                                                                                                                                              |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app.vue`         | Root; wraps the page in `AuthGate`.                                                                                                                   |
-| `pages/index.vue` | The only route: mounts the sidebar, canvas, toolbar, inspector, focus view, and all modals.                                                           |
-| `components/`     | UI grouped by area (see [Key UI surfaces](#key-ui-surfaces)).                                                                                         |
-| `composables/`    | `useApi` (typed client), `useWorkspaceStream` (WebSocket sync), `useBlockDrag`, `useBlockQueries`, `useBoardFlow`, `useSemanticZoom`, `useDepLabels`. |
-| `stores/`         | Pinia stores, one per feature domain.                                                                                                                 |
-| `types/`          | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                        |
-| `utils/`          | Small pure helpers.                                                                                                                                   |
+| Path           | Contents                                                                                                                                                                     |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app.vue`      | Root; wraps the page in `AuthGate`.                                                                                                                                          |
+| `pages/`       | The board (`index.vue`: sidebar, canvas, toolbar, inspector, focus view, all modals), plus the standalone `mcp-authorize`, `mcp-oauth-callback` and `reset-password` routes. |
+| `components/`  | UI grouped by area (see [Key UI surfaces](#key-ui-surfaces)).                                                                                                                |
+| `composables/` | `useApi` (typed client), `useWorkspaceStream` (WebSocket sync), `useBlockDrag`, `useBlockQueries`, `useBoardFlow`, `useSemanticZoom`, `useDepLabels`.                        |
+| `stores/`      | Pinia stores, one per feature domain.                                                                                                                                        |
+| `types/`       | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                                               |
+| `utils/`       | Small pure helpers.                                                                                                                                                          |
 
 ### The board's top overlay region has ONE owner
 
@@ -255,13 +259,71 @@ a recognised refusal keeps that branch and drains only its fallback into the fun
 answered, so a local check that never left the browser must not be dressed up as one: a synthesized
 `new Error(t('...'))` has no envelope and no status, which is precisely the input `describeGenericFailure`
 reads as a network fault. A blank required field then renders as "The server could not be reached",
-with the real sentence hidden behind a disclosure. Client-side validation stays a plain
-`toast.add` with translated title and description (`components/settings/ModelConfigurationPanel.vue`).
+with the real sentence hidden behind a disclosure. Client-side validation is
+`useActionToast().error(titleKey, { description })` instead (see below). A failure the backend
+reports as DATA (a job row with `status: 'failed'` and its `error`, a probe verdict's `message`) is
+`presentReported(detail, titleKey, { descriptionKey })`: translated copy as the headline, the
+backend's prose behind "Show details" and in the copied report, the same as a failed call.
 
 The still-open remainder is the INLINE family: `error.value = e.message` rendered in a panel, and
 `testResult = { ok: false, message }` rendered by `ConnectionTestVerdict`. Those need a render
 surface rather than a toast, and are tracked as G4 in
 [`error-message-coverage.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/error-message-coverage.md).
+
+#### Every other toast goes through the second funnel, `useActionToast`
+
+**`toast.add` is called from exactly two composables**: `usePipelineErrorToast` (with its
+`pipelineErrorToast/` factory) for a failed call, and `useActionToast` for everything else. A call
+site picks a TONE and supplies a title KEY; the tone fixes the colour, the icon and the duration, so
+two toasts of one tone render identically wherever they come from. Before this, some success toasts
+were green with a check and the next was grey with no icon, depending on who wrote the site.
+
+| Tone      | For                                                                                                      | Dismisses   |
+| --------- | -------------------------------------------------------------------------------------------------------- | ----------- |
+| `success` | The action the user asked for completed (saved, connected, removed, copied, moved).                      | After 5s    |
+| `info`    | Progress or a state report that asks nothing ("drafting", "up to date").                                 | After 5s    |
+| `warning` | The action ran, but the outcome is partial or needs a look.                                              | When closed |
+| `error`   | A refusal in translated copy that is NOT a failed call: client-side validation, a mapped refusal reason. | When closed |
+
+`warning` and `error` stay for the same reason the failure funnel's toast does: they ask the reader
+to do something. Options are content, never styling: `params` and `plural` for the title key, a
+resolved `description`, `actions` for a call-to-action, and `undo: { run, windowMs }` for a write
+held open behind an Undo (the board's delete and move), which keeps the toast exactly as long as
+the window. A toast is action feedback. Something the reader must act on later belongs in an inline
+`UAlert` or the notification inbox, not a toast.
+
+#### Loading: the component's `loading` prop, `USkeleton` for content, `Spinner` for a glyph
+
+- **A Nuxt UI component with a `loading` prop takes `:loading`.** Never spin its icon by hand
+  (`:ui="{ leadingIcon: 'animate-spin' }"`, or an `:icon` swapped to a loader while busy). One
+  exception: `UButton`'s `loading` also DISABLES it (`disabled || isLoading`). A button that must
+  stay clickable while its work runs (a tab whose thread is mid-reply, a "planning in progress"
+  button that opens the planning window) puts `<Spinner>` in its `#leading` slot instead, with a
+  comment saying why. `UInput` and the other inputs do not disable on `loading`.
+- **A panel or list waiting on its first fetch shows `USkeleton` rows sized like the content they
+  replace**, so it does not show nothing and then everything. Its fill is `bg-accented`, set once
+  in `app.config.ts`: Nuxt UI's default skeleton is `bg-elevated`, which disappears on the
+  `bg-elevated` and `app-950` window bodies and cards many panels paint. An ACTION in progress (a button
+  press, a sync) is not a content load and keeps `:loading` or a spinner.
+- **A bare glyph showing work in progress is `<Spinner>`** (`components/common/Spinner.vue`), the
+  one file that writes `animate-spin`. `:spinning` covers a status icon that spins in one state
+  only (a running step), and `name` defaults to Nuxt UI's own loading icon so it matches the one
+  `:loading` draws. It spins under `motion-safe:` only.
+
+#### Empty states: `EmptyState`, always
+
+**A list, panel or section with nothing to show renders `common/EmptyState.vue`**, with its copy as
+`title` / `description` and any button that fills the list in its default slot. `compact` is the
+inline size for an inspector section or a picker. It wraps Nuxt UI's `UEmpty` (the structure, the
+action row and the tokens) and decides once what each `UEmpty` caller would otherwise pick: the
+`naked` variant, because an empty state sits inside a panel that already draws its border; the
+spacing, because `UEmpty` pads `p-4 sm:p-6 lg:p-8` for a page body; and plain text for the title,
+because `UEmpty` renders it as an `<h2>`, which would put a heading into every picker. An inline
+value placeholder ("None", a dash in a table cell) is not an empty state.
+
+`scripts/check-frontend-feedback.mjs` (CI's `repo-guards` job) bans `useToast(` and `toast.add(`
+outside the two funnels and `animate-spin` outside `Spinner.vue`. Its `PENDING` list names files another open
+change is rewriting, and fails once one of them is clean so the entry cannot outlive the reason.
 
 ### A panel that seeds state on open uses `onModalOpen`, never a bare `watch(open)`
 
@@ -287,6 +349,159 @@ it has nothing to do at mount, and running it there would announce a close that 
 ### Type a chip map with `BadgeColor`, never `string`
 
 A status → chip map feeding a `<UBadge :color="…">` types its values as `BadgeColor` (`utils/badge.ts`), which is derived from `UBadge`'s own prop type rather than restated as a literal union. Typed `string`, the binding does not compile and the reflex is `as any` at each call site: seven of them had accumulated. That cast also accepts a colour Nuxt UI does not define, which renders as an unstyled badge with nothing failing.
+
+### Colour through theme tokens, never a fixed palette shade
+
+Every colour in the SPA is a token that follows the THEME and the colour MODE. Three kinds exist:
+
+- **Nuxt UI role tokens** for greys (`bg-default`, `bg-elevated`, `bg-accented`, `text-default`, `text-toned`, `text-muted`, `text-dimmed`, `text-highlighted`, `border-default`, `border-muted`) and the **bare aliases** for an accent at Nuxt UI's own shade (`text-primary`, `bg-warning/10`, `ring-error/25`).
+- **The app's mirrored numbered tokens** (`app/assets/css/tokens.css`) for a STATUS surface painted in a specific ramp shade: `bg-app-950` / `text-app-100` / `text-app-600` / `bg-app-500` / `ring-app-400` for the five grey shades with no role token, `bg-app-canvas` for the board canvas (the one surface below the page background; in light the page surface `app-950` sits at neutral-100 rather than the mirror's 50 and the canvas at 200, so the ~350 translucent `bg-default/NN` panels keep an edge), and `text-app-warning-300` / `bg-app-error-950/40` / `border-app-success-800` for the five status ramps (`secondary`, `success`, `info`, `warning`, `error`). Each token's dark value is the exact ramp shade and its light value is the MIRRORED shade (`50↔950`, `100↔900`, `200↔800`, `300↔700`, `400↔600`, `500` its own midpoint), so a `300` text on a `950/40` fill reads on both surfaces from one class list. Every value is a reference into the `--ui-color-<alias>-<n>` ramps, so a theme that remaps `warning` recolours every warning surface. `primary` has NO numbered token: brand accents use the bare alias, which is what the editor's primary slider and `blackAsPrimary` address.
+- **Category hues** (`text-app-hue-pink`, `var(--app-hue-teal)` in an inline style) for an IDENTITY colour: an agent kind, a task type, a pipeline step kind (`utils/catalog.ts`). One token per Tailwind hue, `400` in dark and `600` in light (Nuxt UI's own alias convention), referencing Tailwind's ramps because a category is not a status. A STATUS (task status, step state, test verdict, finding severity) is not a category and takes the alias directly (`var(--ui-warning)`, `var(--ui-success)`, `var(--ui-text-muted)` for planned / done / skipped), so the halo, the badge and the dot recolour together. A translucent tile behind a category glyph goes through `tint()` (`utils/colorTint.ts`), which also accepts the hex a deployment-registered kind may send. A theme recolours a hue through its `tokens` block.
+- **Never** a raw Tailwind hue (`bg-slate-900`, `text-amber-300`, `text-pink-300`) nor a fixed numbered alias (`text-primary-400`, `bg-warning-950/40`): the first is welded to one palette and one mode, the second follows the palette but not the mode. `scripts/check-frontend-palette.mjs` (CI) bans both. `red` and `rose` both mean `error`.
+- **Never** a fixed `white` / `black` utility (`bg-white`, `text-black`, `border-white/5`, `bg-white/[0.02]`): invisible or wrong in light mode. Use `border-inverted` (a selection ring), `border-default` / `bg-muted` (faint chrome) or `text-inverted` (text over a filled surface). A line that genuinely needs a fixed value says why with a `fixed-colour-ok:` comment, on that line or the one above it.
+
+### Type through named steps, never a pixel literal
+
+Every font size in the SPA is a NAMED step, so it scales with the theme and lines up with the sizes Nuxt UI gives its own components. Two sources of steps:
+
+- **Tailwind's own** from `text-xs` up (`text-xs`, `text-sm`, `text-base`, ...), each paired with a line height.
+- **The app's two steps below them** (`app/assets/css/type.css`), for the dense surfaces Tailwind's scale bottoms out above: `text-2xs` (0.6875rem, 11px at the default root) for the dense body size that panel rows, node metadata and inline detail are written at, and `text-3xs` (0.625rem, 10px) for the caption tier below it: pill and badge text on a board node, a quoted source excerpt, an axis or legend caption. The section eyebrow is `text-2xs`, not `text-3xs`, and is not written by hand at all (see the last bullet). Neither declares a paired LINE HEIGHT: dense text inherits its rhythm from the surrounding block, and a block that wants a specific rhythm says `leading-*`, which wins over a step's paired value anyway.
+- **Never** a literal size (`text-[11px]`, `text-[0.6875rem]`). A theme document's `fontSize` is applied as a root `font-size` (`utils/theme/css.ts`), so every rem step follows it and a pixel literal does not: raising the font size would grow Nuxt UI's components while the app's own text sat still. A literal is also unnameable, so a `UBadge size="sm"` beside one is sized by a system the label cannot refer to. `scripts/check-frontend-type-scale.mjs` (CI) bans the utility forms (`text-[length:11px]`, `[font-size:11px]`, `[font:…]`), a px declaration in CSS (`font-size: 11px`, the `font:` shorthand) and a px JS style property (`fontSize: '11px'`, `style.fontSize = …`); its header lists exactly what it matches. A line that genuinely needs one says why with a `type-literal-ok:` comment, on that line or the one above.
+- **A section eyebrow is [`common/SectionLabel.vue`](./app/components/common/SectionLabel.vue)**, not a hand-written class list. The label that titles a group inside a panel, window, inspector section or dropdown is one recipe, `text-2xs font-semibold uppercase tracking-wide text-muted`, and the component owns all five: they are not overridable, because a caller wanting a different size or colour wants a different thing. The caller picks the ELEMENT with `as` (`div` by default; `h3` / `h4` for a real heading, `label` with an `:id` for a field; a collapsing section is a `UButton` around `as="span"`) and owns SPACING through the ordinary `class` attribute. An ACCENT-coloured uppercase label (`text-primary`, `text-app-info-400`) is not this component: it is signalling state or category rather than titling a section, so it keeps its own classes. Nor is a pill, a chip, a metadata row that merely shares the uppercase styling (`BlockNode.vue`'s composition line), or a caption inside a control (a switcher trigger's label line, a slider's end labels): the test is whether the text TITLES the block after it. The colour is `text-muted` and not the fainter `text-dimmed` for contrast: at 11px `text-dimmed` is 2.63:1 on a light surface, under WCAG AA, where `text-muted` is 4.76:1. (The SPA's wider use of `text-dimmed` outside this component is a separate problem.)
+
+### Radius through the theme scale
+
+Every `rounded-*` utility in the SPA derives from `--ui-radius`, so a theme document's `radius` reaches all of them. Nuxt UI rebuilds seven of Tailwind's steps on it (`rounded-xs` is half it, `rounded-sm` is it, then 1.5x, 2x, 3x, 4x and 6x), and [`main.css`](./app/assets/css/main.css) binds the two spellings that sat outside that: `--radius`, which the bare `rounded` alias and its side and corner forms resolve through, and `--radius-4xl`. Tailwind declares both `@theme default`, so the app's own `@theme inline` block wins, and `inline` is what makes the utility compile to `var(--ui-radius)` rather than to a value frozen at build time. Neither number moves on the default theme.
+
+That is the whole mechanism, and it is why there is no rule here about WHICH step to pick. Two things still name a number instead of the scale:
+
+- **Never an arbitrary value**: `rounded-[10px]`, `rounded-t-[0.6rem]`, or Tailwind v4's CSS-variable shorthand `rounded-(--x)`. Welded to one number the way a pixel font size is, and unnameable besides, so a `UBadge` beside one is shaped by a system the box cannot refer to. The SPA has none.
+- **In CSS, reach the scale through `var(--ui-radius)`**, on its own or inside a `calc()`: `calc(var(--ui-radius) * 2)` is the `rounded-lg` step, and `calc(var(--ui-radius) - 1px)` is an inner box kept concentric with its parent, which follows the theme just as well. **Never a `--radius-*` theme variable**, even though one works today: Tailwind declares that scale in a `@theme default inline` block and emits a variable only where the COMPILED stylesheet graph references it, so `var(--radius-lg)` is correct until the last other reference is deleted and then silently computes to 0. `--ui-radius` is an ordinary custom property on `:root`, so it is there in a scoped SFC `<style>` block too, where the `--radius-*` scale never is. **Never a raw literal** in px, pt, rem or em, the per-corner longhands (`border-top-left-radius`, the logical `border-start-start-radius`) and the JS `borderRadius` / `'border-radius'` spelling a `:style` binding uses included. The pill spellings (`9999px`, `50%`) and `0` are exempt, and a shorthand is read value by value, so `50% 50% 8px 8px` is still caught on the `8px`.
+- `scripts/check-frontend-radius.mjs` (CI) bans both. It needs no notion of where a class list lives, because `rounded-[` and `rounded-(` are not English words. A line that genuinely needs a fixed radius says why with a `radius-literal-ok:` comment, on that line or the one above.
+
+The default `radius` lives on the `Cat Factory` document in `app/utils/theme/builtins.ts`. It equals `THEME_DEFAULTS.radius` and so writes no CSS, which is the point: changing the number there is the whole edit.
+
+### Full-screen overlays bind their root class
+
+A phone's notch and home indicator cover whatever sits at the screen edge, and on a screen without them nothing looks wrong. So a full-screen overlay never spells `fixed inset-0` itself. Its root binds one of the two class lists in [`utils/safeArea.ts`](./app/utils/safeArea.ts), which carry the positioning, the `100dvh` cap and the safe-area padding, and the site adds only its stacking, direction and backdrop:
+
+- **`FULL_BLEED_TAKEOVER_CLASS`** for a takeover that fills the screen (`AgentStepDetail`, the model configuration takeover, the observability, reports, operator dashboard and Kaizen panels, the artifact lightbox). It pads by the inset alone, so a screen without one keeps the edge-to-edge layout.
+- **`WINDOWED_OVERLAY_CLASS`** for a window on a backdrop (`ResultWindowShell`). Its gutter is 1rem or the inset, whichever is larger.
+
+Each class list belongs to ONE shell, and a surface renders inside that shell instead of binding the class itself: a takeover inside [`common/TakeoverShell.vue`](./app/components/common/TakeoverShell.vue), a window inside [`panels/ResultWindowShell.vue`](./app/components/panels/ResultWindowShell.vue). The shell binds the padding AND the modal behaviour (`useModalBehavior`: a focus trap, focus return, a body-scroll lock, and a ticket on the shared overlay stack), so focus stays inside and Escape closes only the top overlay. A takeover gates the shell with its own `v-if` inside its own `Teleport` and `Transition`, passes a `label` (the dialog's accessible name), and handles the shell's `close` event; it never adds an Escape listener of its own. A Nuxt UI menu, select, popover or modal opened inside a shell holds its own ticket on the same stack while it is open ([`utils/foreignLayers.ts`](./app/utils/foreignLayers.ts), wired by a client plugin), so Escape and Tab are its keys until it closes. No site pushes a ticket by hand. Why this is not `UModal fullscreen`, and the rest of the overlay consolidation: [`docs/initiatives/overlay-shells.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/overlay-shells.md).
+
+`scripts/check-frontend-safe-area.mjs` (CI) refuses any other `fixed` surface that spans a whole side of the viewport, in `.vue`, `.ts` and `.css`. A surface with no edge content (a scrim, a drawing layer) or one that pads its own edges (the sidebar drawer, the inspector's bottom sheet) says why with a `safe-area-ok:` comment, on the line or the one above it, or above the element's opening tag. The same guard refuses either class list named outside its owning shell, with no waiver.
+
+### Modals open at a named width
+
+A modal states what KIND of content it holds, and the width follows from that in one place. Before this, each modal picked its own `max-w-*`: five widths for three kinds of content, and no rule for which one a new modal takes.
+
+- **`<AppModal size="prompt">`** (448px): a confirmation, a decision, a short read such as the keyboard help, or a dialog with one or two fields.
+- **`<AppModal size="form">`** (576px): a form, a list or a hub to work through.
+- **`<AppModal size="wide">`** (672px): cards that each carry a paragraph and an action beside it, a row of tabs over a form, or three pickers side by side (the AI provider onboarding, the vendor credentials, the setup checklist, describe new work).
+- [`common/AppModal.vue`](./app/components/common/AppModal.vue) is `UModal` with the width applied through `ui.content`; every other prop, listener and slot passes through, and a call site still passes other `ui` slots and non-width content classes (a stacked dialog's `z-[70]`). The widths live in [`utils/overlaySize.ts`](./app/utils/overlaySize.ts). It is a wrapper rather than an `app.config.ts` variant because `UModal` has no `size` prop and passes only `transition`, `fullscreen`, `overlay` and `scrollable` into its variant function, so a `size` variant would never be selected.
+- **An always-`fullscreen` modal has no width** and stays a plain `UModal`. A modal bound fullscreen only sometimes (`:fullscreen="isPhone"`) is centered everywhere else, so it takes an `AppModal` size, which `AppModal` drops while the modal is fullscreen.
+- **A workbench surface keeps its own width for now**: the libraries, settings panels, bug hunt, adoption review and environment wizard at 768px, the sandbox and the agent prompt editor above that. Their shell is the open decision in [#2359](https://github.com/kibertoad/cat-factory/issues/2359), so a named width for them now would be dead work. Each says why in a `<!-- workbench-width-ok: … -->` comment directly above its tag.
+- `scripts/check-frontend-geometry.mjs` (CI) refuses a raw `UModal` (or `LazyUModal`) outside the wrapper, an `AppModal` that names its own width utility (`max-w-*`, `min-w-*`, `w-*`) in `class` or in the `content` slot of `:ui`, or reads either from a variable or a spread it cannot see through, a waiver with no reason, and a waiver with no raw modal directly below it. A `USlideover` is a side panel with no named width, so the guard does not read it.
+
+### A control is its Nuxt UI component
+
+Every CONTROL in the SPA is the Nuxt UI component for it, never the raw HTML element. A raw `<button>` beside a `UButton` is the same control rendered twice, and only one of the two follows the theme, the focus ring, the disabled state and the size scale; the SPA carried 152 of them, 24 raw `<input>`, five hand-built tables and six hand-rolled `<details>`, each with its own border, background and hover recipe.
+
+- **The mapping**: `<button>` → `UButton`; `<input>` → `UInput` / `UInputNumber` / `UCheckbox` / `URadioGroup` / `USlider` / `UFileUpload`, by what the control IS rather than by its `type=`; `<select>` → `USelect` (`USelectMenu` when it needs searching, `UInputMenu` when the list is open-ended); `<textarea>` → `UTextarea`; `<table>` → `UTable` with column definitions; `<details>` → `UCollapsible`; `<form>` → `UForm`; `<a href>` → `ULink`; `<datalist>` → `UInputMenu` with `mode="autocomplete"`, which is what a datalist was (the DEFAULT combobox mode writes its model only on SELECT, so a typed free-text value is dropped). Which input for which job is the skill's [component-selection matrix](https://github.com/nuxt/ui/blob/v4/skills/nuxt-ui/references/component-selection.md), not restated here.
+- **An icon-only button is [`common/IconButton.vue`](./app/components/common/IconButton.vue)**, which wraps `UButton` in a `UTooltip` and applies `label` as the tooltip text AND `aria-label`. A `title` attribute is not a tooltip: it never fires on touch, is unstyled, waits about a second, and looks nothing like the app's other hints. `IconButton` and `CopyButton` own their tooltip, so passing either a `title` renders a second hint over the first. A `title` on a LABELLED `UButton` is still fine: there it is a hover hint beside the control's own name rather than the name itself. `class` on `IconButton` lands on the wrapper the tooltip needs, which is the box the parent lays out, so it carries layout (`ms-auto`, `shrink-0`, `nodrag`); the button's own look goes through its props and `:ui="{ base: '…' }"`. The guard refuses an icon-only `UButton` whose only name is a `title`.
+- **Prose and layout markup is not in scope.** `<p>`, `<h1>`-`<h6>`, `<ul>`, `<li>`, `<dl>`, `<pre>`, `<code>`, `<img>`, `<nav>`, `<div>` and `<span>` are not controls and have no Nuxt UI component; heading typography is the type scale's rule above.
+- `scripts/check-frontend-primitives.mjs` (CI) holds the count at zero. There is deliberately **no allow-list**: the migration expected two exceptions (a Vue Flow gesture handle, a full-bleed media tile) and both converted cleanly, so the exception table would have had more surface than the thing it governed. A site that genuinely cannot convert says why with a `raw-control-ok:` comment, on that line or the one above; nothing in the tree needs one, and a second one appearing is the signal that the rule needs revisiting rather than the site.
+
+### Buttons and badges follow one variant policy
+
+What a primary, a secondary or a destructive action looks like is decided once, here, and not per call site. The weights are Nuxt UI's own [variant table](https://github.com/nuxt/ui/blob/v4/skills/nuxt-ui/references/design-system.md) (`solid` highest, then `outline`, `soft`, `subtle`, `ghost`, and `link` for a text link inside content), mapped onto the app's kinds of action:
+
+| Kind                                                                  | Props                                                                                                                                                                                   |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Primary action, ONE per view                                          | none (the default, `primary solid`)                                                                                                                                                     |
+| Dismissal in a dialog or form (Cancel, Close)                         | `color="neutral" variant="ghost"`                                                                                                                                                       |
+| Real secondary action (Save draft, Back)                              | `color="neutral" variant="outline"`                                                                                                                                                     |
+| Bulk action in a dialog footer, beside Close (Reseed all, Update all) | `variant="ghost"` (primary colour): the dialog's main action, kept light because each row above it has its own button                                                                   |
+| Send-back on a gate (bounce, request a fix)                           | `color="warning" variant="soft"`, so the approve beside it stays the one primary                                                                                                        |
+| Inline, navigation and chrome actions                                 | `color="neutral" variant="ghost"`, usually with `size="xs"`                                                                                                                             |
+| Icon-only action                                                      | `IconButton` with `color="neutral" variant="ghost"`                                                                                                                                     |
+| Destructive action, labelled                                          | `color="error" variant="soft"`; `color="error"` alone (solid) only as the confirm step of a destructive action (a dialog's confirm, or an armed inline confirm such as a step's reject) |
+| Destructive action, icon-only (a row's trash icon)                    | `IconButton` with `color="error" variant="ghost"`                                                                                                                                       |
+| A banner's call to action                                             | solid, in the banner's colour (`color="warning"`, `color="error"`)                                                                                                                      |
+| Status chip                                                           | `UBadge` with `variant="subtle" size="sm"`, and a `BadgeColor` map for the colour                                                                                                       |
+
+- **The defaults are Nuxt UI's own**: `primary solid md` for both `UButton` and `UBadge`, stated in `app.config.ts` (`ui.button.defaultVariants`, `ui.badge.defaultVariants`) so the value has one visible home and the guard can read it. A call site states only what DIFFERS.
+- **One solid button per view.** Two solid buttons side by side compete for the same attention, so the second action takes a lighter variant from the table. The guard refuses two solid buttons under one parent element; it counts a `v-if` chain as one button and a `v-for` list as one, looks through a plain `<template>` wrapper, and treats a slot `<template #name>` as its own region. A file holding several forms that each end in a Save is several views and passes. A site that genuinely needs two says why with a `solid-ok:` comment on its own line, directly above the second button.
+- **The unstyled group is the one a theme restyles, so it is the primary tier.** A theme document's `style.defaults` (a size, a button variant, a button colour) REPLACES the default for every control that does not state that prop; it does not scale or shift the others. So whichever group is unstyled is the group a theme moves. With the primary actions unstyled, a theme with `size: 'lg'` or `variants: { buttons: 'outline' }` restyles the actions and leaves the chrome alone. With the quiet chrome unstyled, the same theme would grow or fill every toolbar and icon button past the actions and invert the hierarchy. This is why the dense, quiet chrome carries its props and the primary action carries none, and why Nuxt UI's own internal buttons (a modal's close button, a toast's actions) agree with the app's.
+- **A restated default is a bug, not noise.** It pins the value against a theme that changes the default, and it hides which props are the reason a control looks the way it does. `scripts/check-frontend-variants.mjs` (CI) refuses a value equal to the default on `UButton` and `UBadge` (either casing, either quote style, or a key of a `v-bind="{ … }"` object) and on every component that spreads its attributes into one (`IconButton`; the list is derived, so a new wrapper is covered), reading the defaults from `app.config.ts` itself. Inside a `UFieldGroup` or `UButtonGroup` it does not check `size`: the group sets the size there, so an explicit `size` overrides the group rather than restating the default. It reads template tags only, so a `ButtonProps` object (a toast's `actions`, a modal's `:close`) is not checked. A site that must keep a literal says why with a `variant-default-ok:` comment on its own line, directly above the tag; it waives that tag only.
+
+### Themes and colour mode
+
+A **theme** is a Nuxt UI theme editor document (https://ui.nuxt.com/theme): the sparse `ThemeDoc` the editor edits and shares as a `?doc=` link, decoded by `utils/theme/link.ts` and typed in `utils/theme/doc.ts` (a port of the editor engine's tables). The app speaks THAT format rather than one of its own, so a theme built in the editor imports as-is and a built-in theme is a document a user could have exported. `utils/theme/builtins.ts` ships `Cat Factory` (the default; its `colors` MUST equal `app.config.ts`'s `ui.colors`, which paints the first frame) and the editor's own `Mono` preset, referenced from the preset table rather than copied. The `theme` store persists the pick and the user's imported documents in this browser; `plugins/theme.client.ts` applies the active document at runtime: aliases onto `appConfig.ui.colors` (Nuxt UI's own colours plugin re-emits the ramps), default variants and component overrides onto `appConfig.ui.<component>` merged INTO the layer's own overrides, and tokens / radius / fonts onto one `<style id="app-theme">` whose selectors anchor on the `data-theme` attribute on `<html>` (`utils/theme/css.ts`, which is also the write boundary for untrusted values). The faces the built-in themes name (Geist, Geist Mono) are self-hosted through `@nuxt/fonts` (`fonts.families` in `nuxt.config.ts`, pinned by `builtins.spec.ts`); a font an IMPORTED theme names is applied as a family name only, so it renders when the device or the deployment provides it. A editor link whose document equals one of the editor's presets collapses to `{ preset: 'mono' }`; `utils/theme/presets.ts` is a copy of the editor's preset table so such a link rebuilds (a decode table, not menu entries).
+
+**Colour mode** (system / light / dark) is `@nuxtjs/color-mode`'s, registered by Nuxt UI, with its own persistence; `nuxt.config.ts` follows the system preference and falls back to dark. `AppearanceSwitcher` at the sidebar bottom is the one control for both axes. The pre-JS loading shell (`spa-loading-template.html`) cannot resolve a token (no stylesheet is loaded yet), so the plugin caches the computed colours of the four tokens the shell paints with, per colour mode, in `localStorage` (`utils/theme/bootPalette.ts`), and a two-line inline script in the shell applies the entry for the mode the `<head>` colour-mode script has already put on `<html>`. The hardcoded defaults are the default theme's, used only until a theme has been seen in that mode.
+
+## Nuxt UI: agent tooling and where the SPA overrides the skill
+
+The SPA runs on Nuxt UI 4. Two first-party sources carry the rules this repo does not restate:
+
+- **The vendored [`nuxt-ui` skill](https://github.com/kibertoad/cat-factory/tree/main/.claude/skills/nuxt-ui)** teaches WHEN to reach for which
+  component (Modal vs Slideover vs Drawer, Tabs vs NavigationMenu, Toast vs Alert) and HOW to build
+  well (the variant-weight table, one solid primary per view, semantic utility roles). It is
+  vendored under `.claude/skills/nuxt-ui/`, beside the project's own skills, so the rules version
+  with the code and every contributor on Claude Code reads the same text. This is the Claude Code
+  surface: `.claude/skills/` auto-loads for a local Claude Code session, and the repo `.mcp.json` is
+  offered once for approval on the first session in the repo (re-offered when the file changes); a
+  decline is remembered, and `claude mcp reset-project-choices` un-sticks it. Another tool that reads
+  `AGENTS.md` (Codex, for one) gets the pointers below but not an auto-loaded skill or an auto-wired
+  server. Making the platform's OWN coder agents (Claude Code, Codex, Pi in
+  the runner image) apply the skill is a separate, backend change: they stage skills and tool
+  servers per run through the agent-capabilities system (ADR 0024 /
+  [`custom-agents.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/custom-agents.md)), not from these repo files. The `@nuxt/ui` npm
+  package does not ship the skill, so it cannot move with `pnpm update`: it is vendored from the
+  `v4` branch of `nuxt/ui` (which tracks the 4.x line) and pinned by convention to the Nuxt UI
+  major in [`package.json`](./package.json) (`@nuxt/ui@^4.11`). Refresh it by re-vendoring
+  `skills/nuxt-ui/` from that branch (or `npx skills add nuxt/ui`) when the major moves. The
+  vendored files are kept byte-for-byte as upstream: `.oxfmtrc.json` exempts them from the
+  formatter and `scripts/check-doc-links.mjs` skips them, so a refresh stays a clean diff even when
+  upstream ships a link this repo's own doc rules would reject.
+- **The [`nuxt-ui` MCP server](https://github.com/kibertoad/cat-factory/blob/main/.mcp.json)** (`https://ui.nuxt.com/mcp`, declared repo-level)
+  answers WHAT a component accepts: props, slots, events, theme files and examples per component.
+  The skill defers to it for every API question.
+
+The SPA's own rules win where they and the skill disagree. Each entry below links the rule it
+protects, so the two never contradict silently:
+
+- **Visible copy is an i18n key, never a literal string.** The skill's examples hard-code labels and
+  placeholders (`label="Email"`, `placeholder="you@example.com"`); here every user-facing string
+  goes through `@nuxtjs/i18n` and lands in the catalog. [Rule](#internationalization-i18n-authoring).
+- **Schema validation goes through valibot, never zod.** The skill's `forms.md` recipe opens with
+  `import * as z from 'zod'` and validates through `z.object({...})`; this package depends on
+  `valibot` (and `@toad-contracts/valibot`) and has no `zod`, so a `zod` import fails typecheck and
+  "fixing" it pulls in a dependency the repo deliberately lacks (which then has to clear the 24h
+  `minimumReleaseAge` gate). Validate with valibot, mirroring the wire contracts
+  ([`@cat-factory/contracts`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/contracts)).
+- **A backend-declared form renders through `DescriptorFields.vue`, not a hand-built `UForm`.** The
+  skill teaches the hand-rolled `UForm` + `UFormField` shape for every form; when the backend
+  declares the fields and the SPA only collects them, that shape is forbidden here.
+  [Rule](#a-backend-declared-form-renders-through-descriptorfieldsvue).
+- **Toasts go through the two funnels, never a bare `toast.add`.** The skill uses `useToast()`
+  freely; here a failed backend call is reported with `usePipelineErrorToast().present(error, key)`
+  and every other toast with `useActionToast().success|info|warning|error(key, opts)`.
+  [Rule](#every-failure-toast-goes-through-one-funnel).
+- **Loading is `:loading`, `USkeleton` or `<Spinner>`; empty is `<EmptyState>`.** Never a
+  hand-written `animate-spin`. [Rule](#loading-the-components-loading-prop-uskeleton-for-content-spinner-for-a-glyph).
+- **Icon-only buttons carry an accessible name.** Use `common/IconButton.vue`
+  ([source](./app/components/common/IconButton.vue)), which applies `label` as both the tooltip
+  and `aria-label`, rather than a bare `<UButton icon>`.
+- **Colour goes through theme tokens, never a fixed palette shade.** The skill bans raw Tailwind
+  hues; this repo also bans fixed numbered aliases, enforced by
+  [`scripts/check-frontend-palette.mjs`](https://github.com/kibertoad/cat-factory/blob/main/scripts/check-frontend-palette.mjs).
+  [Rule](#colour-through-theme-tokens-never-a-fixed-palette-shade).
+- **Confirmation dialogs use the shared `useConfirm`.** The skill shows `useOverlay()` per call
+  site; here callers `await useConfirm().confirm({...})`
+  ([source](./app/composables/useConfirm.ts)) against one app-mounted `<ConfirmDialog />`.
 
 ## Task swimlanes
 
@@ -425,6 +640,32 @@ does not visibly jump when the response lands. "No module" is the EMPTY STRING o
 every other clearable field spells a clear; `undefined` is dropped by `JSON.stringify` and reaches
 the server as an empty patch.
 
+## Queue view
+
+A board has two views (issue [#2258](https://github.com/kibertoad/cat-factory/issues/2258)): the
+**queue**, which lists every task across every service in the column that says what it needs, and
+the **board**, the canvas where the work is planned. They are two views of one board, not two
+products. The sidebar's Views switcher (`components/layout/WorkViewSwitcher.vue`) moves between
+them, and so do the palette entries and a `?view=queue` / `?view=board` link. The initiative it
+starts, with the slices after it: [`delivery-surface.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/delivery-surface.md).
+
+- **Which view opens is the person's own choice**: the view they used last in this browser
+  (`stores/workView.ts`, a cookie persisted like the interface tier, so two accounts on one browser
+  share it). A person who has not chosen
+  lands on the queue, because it answers the first question a person opens the app with. Both
+  views exist in every tier and every role: neither is an override of the other.
+- **The queue states the canvas's verdict, regrouped.** `useTaskLaneClassifier` is the one
+  classifier the frame swimlanes and the queue share; `utils/queueSections.ts` only regroups its
+  output (a waiting pull request gets its own column), and no task crosses a lane. The
+  workspace-wide walk lives on one store (`stores/workspaceQueue.ts`), per the swimlane rule on
+  workspace-wide derivations.
+- **A card's actions are the board card's** (`useTaskActions`), so Start, Resolve and Merge
+  cannot drift between the two views.
+- **The queue sits over the canvas**, which stays mounted, so switching back keeps its camera and
+  selection. The advisory banners render in the page flow above the queue's columns
+  (`BoardTopOverlays` with `in-flow`), and the canvas toolbar does not, being the canvas's own
+  chrome. The canvas's decision counter opens the queue view.
+
 ## Roles (engineer / product manager / designer)
 
 The outermost of the three narrowing axes, and the only one the app **asks about**: on a first-ever
@@ -482,6 +723,14 @@ The seams, and what a new feature should use rather than reading the store ad ho
 - **A surface that narrows inline** reads `useUiRoleStore().fullSurface` (the frame header's bug-hunt
   button, the palette's per-connection integration commands). Same rule as the tier: what remains
   must be exactly what the full surface would have shown, only less of it.
+- **A setup prompt** (a "configure this" card over the board) goes through `canActOnSetup`
+  (`app/utils/setupAudience.ts`) with the caller from `useSetupActor()`: it combines the role's
+  surface with the board and account grants and the owner the server reports for the gap
+  (`infraSetupOwners`). A caller who cannot act gets no card. If the gap stops runs they could start,
+  it reaches them as one line saying how it gets fixed (`blockingSetupNotice`): the owner to ask, or
+  the role switch when they hold the grant and only the designer surface hides the card. A viewer
+  gets nothing, and the line honours the card's dismissals. Never a button that opens a screen the
+  caller's save is refused on.
 - **A tutorial tour whose step clicks a non-`intake` nav entry declares
   `TUTORIAL_REQUIREMENTS.fullSurface`.** Which tours those are is not a judgement call:
   `tutorial-tours.spec.ts` derives the pairing from `navItemVisible`, so a tour that gains such a
@@ -1246,7 +1495,8 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
 
 - **Board canvas** (`components/board`): `BoardCanvas` + `nodes/` (`BlockNode`,
   `FrameSwimlanes` / `TaskLane` / `LaneGroup` / `LaneTask`, `TaskCard`), dependency edges,
-  the per-block `AgentFailureCard` /
+  the per-block `AgentFailureCard` (the ONE failure block per task view: a cause line from
+  `utils/failureCause.ts`, one action, and the backend's text behind Details) /
   `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`. Tasks are laid out in status
   lanes rather than at coordinates (see [Task swimlanes](#task-swimlanes)); the board-level
   order/grouping override is `LaneViewControl` in the toolbar. A running task card expands
@@ -1255,9 +1505,29 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
   `taskExpansion` store and driven by `useTaskExpansion`.
 - **Sidebar & chrome** (`components/layout`): board/account switchers, palettes
   entry points, the language + [interface-mode](#interface-modes-basic--advanced)
-  switchers, the `SpendWarningBanner`, and the toolbar (zoom, LOD, decision queue).
+  switchers, the Views switcher (`WorkViewSwitcher`), the `SpendWarningBanner`, and the toolbar
+  (zoom, LOD, and the decision counter, which opens the queue view).
+- **Queue view** (`components/queue`): `QueueView` and `QueueCard`, the board's second view. It
+  regroups the swimlane verdict and reuses the board card's actions; see [Queue view](#queue-view).
 - **Palettes** (`components/palettes`): drag blocks, pipelines and agents onto
   the board.
+- **Describe new work** (`components/queue/DescribeWorkModal.vue`, `utils/describeWork.ts`): the
+  one-sentence intake, from Create, the palette and the queue header. It files a feature or a bug
+  from a sentence and a service, titled by the first sentence; the overrides sit behind one
+  disclosure, and the merge policy and model preset follow the full form's tier rule
+  (`showOverrideField`), so basic mode and the designer role see the pipeline only.
+  It rebuilds no other kind: "More kinds" and "Attach context" hand the text to `AddTaskModal`,
+  which stays the one home of those rules. Both share `utils/reviewFriction.ts` for the review-debt 409.
+- **Setup checklist** (`components/setup/SetupChecklistPanel.vue`, `utils/setupChecklist.ts`):
+  every prerequisite for "a task can run and merge" in one list, for people who can change the
+  setup. It adds no probe of its own: each row reads what its banner or startup dialog already
+  reads (`useSetupChecklist`) and opens the same surface. "Checking" and "missing" are separate
+  states, because an unanswered probe and an absent capability are opposite facts.
+- **Notifications inbox** (`components/layout/NotificationsInbox.vue`, `utils/notificationRoutes.ts`):
+  a card that asks for a person carries its verb ("Answer", "Review", ...) as the primary button,
+  and "Mark read" is secondary. `NOTIFICATION_ROUTES` is exhaustive over the notification types and
+  holds each one's verb and destination, so the title link and the button cannot open different
+  places. A route that can only select the task is named "Open".
 - **Inspector** (`components/panels` + `panels/inspector`): per-block tabs:
   structure, dependencies, model + fragment picker, live execution, and linked
   docs/issues/scenarios. Decisions resolve via `DecisionModal`. A `review` task
@@ -1341,13 +1611,34 @@ wrong place is invisible until a user cannot find it:
 
 ## Develop & test
 
+This package has no `dev` or `lint` script of its own: it is a layer, consumed through `extends`,
+and linting is whole-tree from the repo root (AGENTS.md). The `AGENTS.md` verify checklist carries
+the same list, plus the install-free frontend guards.
+
 ```bash
+# From the repo root:
 pnpm install
-pnpm dev          # Nuxt dev server (expects the Worker running; set NUXT_PUBLIC_API_BASE)
-pnpm test         # vitest
-pnpm typecheck    # nuxt typecheck
-pnpm lint         # oxlint + oxfmt --check
+pnpm dev:frontend                                    # Nuxt dev server via deploy/frontend; set NUXT_PUBLIC_API_BASE to a running backend
+pnpm exec turbo run typecheck --filter=@cat-factory/app   # typecheck goes through Turbo
+pnpm lint                                            # oxlint + oxfmt over the whole tree
+
+# From frontend/app:
+pnpm exec vitest run <file>                          # run the spec your change touched
+pnpm i18n:check                                      # catalog is well-formed
+pnpm i18n:parity                                     # locales are in parity
+
+# Component stories, from the repo root:
+pnpm --filter @cat-factory/storybook run storybook      # http://localhost:6006
+pnpm --filter @cat-factory/storybook run test:stories   # every story in headless Chromium
 ```
+
+A component's stories sit beside it as `Foo.stories.ts`; the fixtures and helpers they share are in
+`app/stories/` (neither ships in the package). Conventions, helpers and the traps the setup already
+paid for: [Component stories](https://github.com/kibertoad/cat-factory/blob/main/docs/internal/storybook.md).
+
+To see the SPA with data while you work on it, run it against the e2e backend: it needs only a
+Postgres, fakes the LLM, the agent runner and GitHub, and can seed boards. See
+[Running the SPA against the e2e backend](https://github.com/kibertoad/cat-factory/blob/main/backend/internal/e2e/README.md#running-the-spa-against-the-e2e-backend-ui-development).
 
 > Building/deploying the static site is covered in the deployment docs: see the
 > [top-level README → Deployment](https://github.com/kibertoad/cat-factory/blob/main/README.md#deployment) and

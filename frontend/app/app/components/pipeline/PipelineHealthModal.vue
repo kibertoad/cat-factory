@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppModal from '~/components/common/AppModal.vue'
 // Startup advisory for unhealthy pipelines. Opened once per session from the board page when
 // `usePipelineHealth` reports any issue. Lists:
 //   • new built-in pipelines the workspace doesn't have yet (ADD them);
@@ -121,10 +122,10 @@ const reseedableCount = computed(
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('pipeline.health.title')" :ui="{ content: 'max-w-2xl' }">
+  <AppModal size="form" v-model:open="open" :title="t('pipeline.health.title')">
     <template #body>
-      <div v-if="!hasIssues" class="py-6 text-center text-sm text-slate-400">
-        <UIcon name="i-lucide-check-circle-2" class="mx-auto mb-2 h-8 w-8 text-emerald-400" />
+      <div v-if="!hasIssues" class="py-6 text-center text-sm text-muted">
+        <UIcon name="i-lucide-check-circle-2" class="mx-auto mb-2 h-8 w-8 text-app-success-400" />
         {{ t('pipeline.health.allValid') }}
       </div>
 
@@ -132,26 +133,25 @@ const reseedableCount = computed(
         <!-- New built-in pipelines the workspace can add. -->
         <section v-if="newPipelines.length" class="space-y-2">
           <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-sparkles" class="h-4 w-4 text-emerald-400" />
-            <h3 class="text-sm font-semibold text-slate-200">
+            <UIcon name="i-lucide-sparkles" class="h-4 w-4 text-app-success-400" />
+            <h3 class="text-sm font-semibold text-default">
               {{ t('pipeline.health.newHeading') }}
             </h3>
           </div>
-          <p class="text-[11px] text-slate-500">{{ t('pipeline.health.newDescription') }}</p>
+          <p class="text-2xs text-dimmed">{{ t('pipeline.health.newDescription') }}</p>
           <ul class="space-y-2">
             <li
               v-for="p in newPipelines"
               :key="p.id"
-              class="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3"
+              class="flex items-center justify-between gap-3 rounded-lg border border-default bg-default/40 p-3"
             >
               <div class="min-w-0">
-                <span class="truncate text-sm font-medium text-slate-100 capitalize">{{
+                <span class="truncate text-sm font-medium text-app-100 capitalize">{{
                   p.name
                 }}</span>
               </div>
               <UButton
                 size="xs"
-                color="primary"
                 variant="subtle"
                 icon="i-lucide-plus"
                 :loading="isBusy(p.id)"
@@ -167,24 +167,24 @@ const reseedableCount = computed(
         <!-- Invalid: unknown agent kinds or a broken shape. -->
         <section v-if="invalid.length" class="space-y-2">
           <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-triangle-alert" class="h-4 w-4 text-rose-400" />
-            <h3 class="text-sm font-semibold text-slate-200">
+            <UIcon name="i-lucide-triangle-alert" class="h-4 w-4 text-app-error-400" />
+            <h3 class="text-sm font-semibold text-default">
               {{ t('pipeline.health.invalidHeading') }}
             </h3>
           </div>
-          <p class="text-[11px] text-slate-500">
+          <p class="text-2xs text-dimmed">
             {{ t('pipeline.health.invalidDescription') }}
           </p>
           <ul class="space-y-2">
             <li
               v-for="h in invalid"
               :key="h.pipeline.id"
-              class="rounded-lg border border-slate-800 bg-slate-900/40 p-3"
+              class="rounded-lg border border-default bg-default/40 p-3"
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
                   <div class="flex items-center gap-2">
-                    <span class="truncate text-sm font-medium text-slate-100">
+                    <span class="truncate text-sm font-medium text-app-100">
                       {{ h.pipeline.name }}
                     </span>
                     <UBadge v-if="h.pipeline.builtin" color="neutral" variant="subtle" size="xs">
@@ -195,8 +195,10 @@ const reseedableCount = computed(
                     <li
                       v-for="(p, i) in h.problems"
                       :key="i"
-                      class="text-[11px]"
-                      :class="p.type === 'outdated' ? 'text-amber-400/80' : 'text-rose-400/90'"
+                      class="text-2xs"
+                      :class="
+                        p.type === 'outdated' ? 'text-app-warning-400/80' : 'text-app-error-400/90'
+                      "
                     >
                       {{ p.message }}
                     </li>
@@ -205,7 +207,6 @@ const reseedableCount = computed(
                 <UButton
                   v-if="h.pipeline.builtin"
                   size="xs"
-                  color="primary"
                   variant="subtle"
                   icon="i-lucide-rotate-ccw"
                   :loading="isBusy(h.pipeline.id)"
@@ -218,7 +219,7 @@ const reseedableCount = computed(
                   v-else
                   size="xs"
                   color="error"
-                  variant="subtle"
+                  variant="soft"
                   icon="i-lucide-trash-2"
                   :loading="isBusy(h.pipeline.id)"
                   :disabled="locked"
@@ -234,23 +235,21 @@ const reseedableCount = computed(
         <!-- Retired built-ins: withdrawn from the catalog, so the only action is removal. -->
         <section v-if="retired.length" class="space-y-2">
           <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-archive-x" class="h-4 w-4 text-slate-400" />
-            <h3 class="text-sm font-semibold text-slate-200">
+            <UIcon name="i-lucide-archive-x" class="h-4 w-4 text-muted" />
+            <h3 class="text-sm font-semibold text-default">
               {{ t('pipeline.health.retiredHeading') }}
             </h3>
           </div>
-          <p class="text-[11px] text-slate-500">{{ t('pipeline.health.retiredDescription') }}</p>
+          <p class="text-2xs text-dimmed">{{ t('pipeline.health.retiredDescription') }}</p>
           <ul class="space-y-2">
             <li
               v-for="r in retired"
               :key="r.pipeline.id"
-              class="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3"
+              class="flex items-center justify-between gap-3 rounded-lg border border-default bg-default/40 p-3"
             >
               <div class="min-w-0">
-                <span class="truncate text-sm font-medium text-slate-100">{{
-                  r.pipeline.name
-                }}</span>
-                <p class="text-[11px] text-slate-400/80">
+                <span class="truncate text-sm font-medium text-app-100">{{ r.pipeline.name }}</span>
+                <p class="text-2xs text-muted/80">
                   {{
                     r.replacement
                       ? t('pipeline.health.retiredReplacedBy', { name: r.replacement.name })
@@ -261,7 +260,7 @@ const reseedableCount = computed(
               <UButton
                 size="xs"
                 color="error"
-                variant="subtle"
+                variant="soft"
                 icon="i-lucide-trash-2"
                 :loading="isBusy(r.pipeline.id)"
                 :disabled="locked"
@@ -276,29 +275,26 @@ const reseedableCount = computed(
         <!-- Outdated built-ins: a newer catalog version is available. -->
         <section v-if="outdated.length" class="space-y-2">
           <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-arrow-up-circle" class="h-4 w-4 text-amber-400" />
-            <h3 class="text-sm font-semibold text-slate-200">
+            <UIcon name="i-lucide-arrow-up-circle" class="h-4 w-4 text-app-warning-400" />
+            <h3 class="text-sm font-semibold text-default">
               {{ t('pipeline.health.updatesHeading') }}
             </h3>
           </div>
-          <p class="text-[11px] text-slate-500">
+          <p class="text-2xs text-dimmed">
             {{ t('pipeline.health.updatesDescription') }}
           </p>
           <ul class="space-y-2">
             <li
               v-for="h in outdated"
               :key="h.pipeline.id"
-              class="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3"
+              class="flex items-center justify-between gap-3 rounded-lg border border-default bg-default/40 p-3"
             >
               <div class="min-w-0">
-                <span class="truncate text-sm font-medium text-slate-100">{{
-                  h.pipeline.name
-                }}</span>
-                <p class="text-[11px] text-amber-400/80">{{ h.problems[0]?.message }}</p>
+                <span class="truncate text-sm font-medium text-app-100">{{ h.pipeline.name }}</span>
+                <p class="text-2xs text-app-warning-400/80">{{ h.problems[0]?.message }}</p>
               </div>
               <UButton
                 size="xs"
-                color="primary"
                 variant="subtle"
                 icon="i-lucide-rotate-ccw"
                 :loading="isBusy(h.pipeline.id)"
@@ -317,7 +313,6 @@ const reseedableCount = computed(
       <div class="flex w-full items-center justify-between gap-2">
         <UButton
           v-if="reseedableCount > 1"
-          color="primary"
           variant="ghost"
           icon="i-lucide-rotate-ccw"
           :loading="anyBusy"
@@ -337,5 +332,5 @@ const reseedableCount = computed(
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

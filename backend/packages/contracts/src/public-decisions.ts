@@ -63,7 +63,7 @@ import {
 // WHAT MAY BE REUSED FROM AN INTERNAL SCHEMA, AND WHAT MUST BE PROJECTED.
 //
 // `/api/v1` is frozen and internals explicitly are not (see the compatibility section of
-// `CLAUDE.md`), so every internal schema named in a `public*` shape below silently promotes that
+// `AGENTS.md`), so every internal schema named in a `public*` shape below silently promotes that
 // internal to the stable surface. The line this file draws:
 //
 //  - A CLOSED PICKLIST is reused as-is (`requirementReviewStatusSchema`, `prReviewStatusSchema`,

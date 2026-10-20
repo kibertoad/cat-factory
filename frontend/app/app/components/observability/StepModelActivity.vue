@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { StepMetrics } from '~/types/execution'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The shared "Model activity" block: the LLM observability rollup (StepMetricsBar) under
 // a labelled header with a "View all calls →" link into the full per-call panel. Used by
@@ -31,16 +32,19 @@ function openObservability() {
 <template>
   <div v-if="instanceId || hasCalls">
     <div class="mb-1 flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <SectionLabel as="span">
         {{ t('observability.modelActivity') }}
-      </span>
-      <button
+      </SectionLabel>
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-if="instanceId"
-        class="text-[11px] text-sky-400 hover:text-sky-300"
+        data-testid="step-view-all-calls"
+        class="p-0 text-2xs text-app-info-400 hover:bg-transparent hover:text-app-info-300"
         @click="openObservability"
       >
         {{ t('observability.viewAllCalls') }}
-      </button>
+      </UButton>
     </div>
     <StepMetricsBar
       v-if="hasCalls && metrics"

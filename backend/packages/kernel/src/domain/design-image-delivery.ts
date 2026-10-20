@@ -40,7 +40,7 @@ import type { HarnessKind, ModelRef } from '../ports/model-provider.js'
  *   half of this feature is files on disk plus a prompt that names them: the CLI composes the
  *   image content part, exactly as it does for a screenshot a human pastes at it.
  * - `codex` and `pi` are `false` today. Codex's pinned CLI has no verified file-to-turn path in
- *   this image, and Pi has no image input at all (the same reason it has no MCP client). Flip an
+ *   this image, and Pi is driven over the proxy's text-only completions path. Flip an
  *   entry here in the change that teaches the image to carry the bytes, never ahead of it.
  */
 export const HARNESS_IMAGE_INPUT: Record<HarnessKind, boolean> = {

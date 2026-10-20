@@ -44,7 +44,7 @@ export type ServiceRecord = {
    *
    * There is no URL beside it, deliberately. Neither the repository list nor the service read
    * publishes one, and deriving `https://github.com/owner/name` here would hard-code the provider
-   * this platform is explicitly neutral about (CLAUDE.md, "never re-hardcode GitHub"). A field that
+   * this platform is explicitly neutral about (AGENTS.md, "never re-hardcode GitHub"). A field that
    * could only ever hold null is worse than its absence.
    */
   repoName: string

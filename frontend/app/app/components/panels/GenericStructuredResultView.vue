@@ -11,6 +11,8 @@ import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -58,7 +60,7 @@ const customJson = computed<string | null>(() => {
   <ResultWindowShell
     :open="open"
     :icon="meta?.icon ?? 'i-lucide-braces'"
-    icon-class="bg-cyan-500/15 text-cyan-300"
+    icon-class="bg-app-hue-cyan/15 text-app-hue-cyan"
     :title="headerTitle"
     :subtitle="meta?.description ?? t('panels.structuredResult.fallbackDescription')"
     :step-ref="{ instanceId, stepIndex }"
@@ -71,36 +73,32 @@ const customJson = computed<string | null>(() => {
         <MarkdownProse
           v-if="step?.output"
           :text="step.output"
-          class="mb-4 text-[13px] leading-relaxed text-slate-300"
+          class="mb-4 text-sm leading-relaxed text-toned"
         />
 
         <template v-if="customJson">
           <div class="mb-2 flex items-center gap-2">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <SectionLabel as="h3">
               {{ t('panels.structuredResult.structuredOutput') }}
-            </h3>
+            </SectionLabel>
             <CopyButton :text="customJson" class="-my-1" />
           </div>
           <pre
-            class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-[12px] leading-relaxed text-slate-200"
+            class="overflow-x-auto rounded-lg border border-default bg-app-950/60 p-3 text-xs leading-relaxed text-default"
           ><code>{{ customJson }}</code></pre>
         </template>
 
-        <div
+        <EmptyState
           v-else-if="!step?.output"
-          class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
-        >
-          <UIcon name="i-lucide-braces" class="h-8 w-8 opacity-40" />
-          <p class="text-sm">{{ t('panels.structuredResult.noResult') }}</p>
-          <p class="max-w-sm text-[11px] text-slate-500">
-            {{ t('panels.structuredResult.noResultHint') }}
-          </p>
-        </div>
+          icon="i-lucide-braces"
+          :title="t('panels.structuredResult.noResult')"
+          :description="t('panels.structuredResult.noResultHint')"
+        />
       </div>
 
       <!-- Sidebar: shared run metadata + observability rollup -->
       <aside
-        class="hidden w-60 shrink-0 flex-col gap-4 border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+        class="hidden w-60 shrink-0 flex-col gap-4 border-s border-default bg-default/50 px-4 py-4 lg:flex"
       >
         <StepRunMeta
           v-if="step"

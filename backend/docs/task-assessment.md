@@ -133,7 +133,7 @@ revising anchors on it, and the delta is arithmetic the platform does from the t
 What a replacement must NOT drop is the account of what the work was, so the prompt re-states the
 task description and runs `ownServiceSection` itself. The impact axis is a blast radius, and a bare
 title names no software for one to be judged against: a model given none supplies one, which is the
-rule CLAUDE.md states for `ownService` generally.
+rule AGENTS.md states for `ownService` generally.
 
 ## Placement rules
 

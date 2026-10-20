@@ -2,12 +2,12 @@
 import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
 const fragments = useFragmentsStore()
-const toast = useToast()
 const { t } = useI18n()
 
 // ---- module assignment -----------------------------------------------------
@@ -83,9 +83,9 @@ function setFragments(ids: string[]) {
   <InspectorSection :title="t('inspector.structure.title')" :hint="t('inspector.structure.hint')">
     <!-- module assignment -->
     <div>
-      <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <SectionLabel class="mb-1">
         {{ t('inspector.structure.module') }}
-      </div>
+      </SectionLabel>
       <USelectMenu
         :model-value="selectedModule"
         :items="moduleOptions"
@@ -99,7 +99,7 @@ function setFragments(ids: string[]) {
         @update:model-value="setModule"
         @create="setModule"
       />
-      <p class="mt-1 text-[11px] leading-snug text-slate-500">
+      <p class="mt-1 text-2xs leading-snug text-dimmed">
         {{ t('inspector.structure.moduleHint') }}
       </p>
     </div>
@@ -113,7 +113,7 @@ function setFragments(ids: string[]) {
         :empty-text="t('inspector.structure.bestPracticesEmpty')"
         @update:model-value="setFragments"
       />
-      <p class="mt-1 text-[11px] leading-snug text-slate-500">
+      <p class="mt-1 text-2xs leading-snug text-dimmed">
         {{ t('inspector.structure.bestPracticesHint') }}
       </p>
     </div>

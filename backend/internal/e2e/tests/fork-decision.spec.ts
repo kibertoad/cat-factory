@@ -74,10 +74,12 @@ test.describe('implementation-fork decision', () => {
     await expect(item).toBeVisible({ timeout: LIVE_TIMEOUT })
     await item.locator('button').first().click()
 
-    // The fork-decision window shows both surfaced approaches.
+    // The fork-decision window shows both surfaced approaches. The forks and "my own approach"
+    // are ONE radio group, so the count is the two forks plus the custom entry.
     const window = page.getByTestId('fork-decision-window')
     await expect(window).toBeVisible()
-    await expect(window.getByTestId('fork-option-card')).toHaveCount(2)
+    const forkOptions = window.getByTestId('fork-options').getByRole('radio')
+    await expect(forkOptions).toHaveCount(3)
 
     // Chat about the forks: the human turn appears immediately, and the (canned, no-model) reply
     // is pushed live once the durable driver computes it — proving the chat re-park round-trips.
@@ -92,7 +94,7 @@ test.describe('implementation-fork decision', () => {
     // Choose the first surfaced approach; the window flips to its read-only "chosen" record and
     // the Coder (Phase B) runs to a terminal state (the card status is a DOM attribute, readable
     // even while the window overlay is still mounted).
-    await window.getByTestId('fork-option-card').first().click()
+    await forkOptions.first().click()
     await window.getByTestId('fork-option-choose').click()
 
     await expect

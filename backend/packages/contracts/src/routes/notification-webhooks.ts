@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   notificationWebhookSchema,
@@ -14,7 +14,7 @@ import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 //     tracker/Slack settings. These are writes to an integration's configuration, so they sit
 //     behind the `integrations.manage` workspace permission like every other admin controller.
 //  2. `/api/v1/notification-webhook`, on absolute paths, authenticated in-controller by an
-//     `admin`-scope public-API key. Same three verbs against the same service.
+//     public-API key carrying the `webhooks` scope or above. Same three verbs against the same service.
 //
 // The endpoints they configure are consumed by `WebhookNotificationChannel` and the run-lifecycle
 // / platform-alert sinks beside it, not by these routes.
@@ -54,7 +54,7 @@ export const putNotificationWebhookContract = defineApiContract({
 export const deleteNotificationWebhookContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/notification-webhook',
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- the session surface's COLLECTION (every named endpoint) ----
@@ -91,7 +91,7 @@ export const deleteNamedNotificationWebhookContract = defineApiContract({
   method: 'delete',
   pathResolver: (p: { webhookId: string }) => `/notification-webhooks/${p.webhookId}`,
   requestPathParamsSchema: singleStringParam('webhookId'),
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- the external `/api/v1` surface (absolute paths, key-authenticated) ----
@@ -102,7 +102,7 @@ export const deleteNamedNotificationWebhookContract = defineApiContract({
  * response shape instead of branching on a status the surface also uses for a bad path.
  */
 export const getPublicNotificationWebhookContract = withMinScope(
-  'admin',
+  'webhooks',
   defineApiContract({
     method: 'get',
     pathResolver: () => '/api/v1/notification-webhook',
@@ -116,11 +116,11 @@ export const getPublicNotificationWebhookContract = withMinScope(
  * would hand every client a null to check that cannot occur.
  *
  * `secret` is write-only on this surface exactly as it is on the session one: supplied here,
- * never returned by the read. An `admin` key can therefore ROTATE the signing secret but can
+ * never returned by the read. A `webhooks` key can therefore ROTATE the signing secret but can
  * never exfiltrate the one already stored.
  */
 export const putPublicNotificationWebhookContract = withMinScope(
-  'admin',
+  'webhooks',
   defineApiContract({
     method: 'put',
     pathResolver: () => '/api/v1/notification-webhook',
@@ -131,11 +131,11 @@ export const putPublicNotificationWebhookContract = withMinScope(
 
 /** Remove the endpoint (deliveries stop). Idempotent: 204 whether or not one was registered. */
 export const deletePublicNotificationWebhookContract = withMinScope(
-  'admin',
+  'webhooks',
   defineApiContract({
     method: 'delete',
     pathResolver: () => '/api/v1/notification-webhook',
-    responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+    responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
   }),
 )
 
@@ -153,7 +153,7 @@ export const deletePublicNotificationWebhookContract = withMinScope(
  * (`MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE`) rather than by a cursor: see the schema.
  */
 export const listPublicNotificationWebhooksContract = withMinScope(
-  'admin',
+  'webhooks',
   defineApiContract({
     method: 'get',
     pathResolver: () => '/api/v1/notification-webhooks',
@@ -167,7 +167,7 @@ export const listPublicNotificationWebhooksContract = withMinScope(
  * chose for itself is not a resource it can mistype into somebody else's.
  */
 export const getPublicNamedNotificationWebhookContract = withMinScope(
-  'admin',
+  'webhooks',
   defineApiContract({
     method: 'get',
     requestPathParamsSchema: singleStringParam('webhookId'),
@@ -183,7 +183,7 @@ export const getPublicNamedNotificationWebhookContract = withMinScope(
  * `reason: 'invalid_webhook_id'`.
  */
 export const putPublicNamedNotificationWebhookContract = withMinScope(
-  'admin',
+  'webhooks',
   defineApiContract({
     method: 'put',
     requestPathParamsSchema: singleStringParam('webhookId'),
@@ -198,11 +198,11 @@ export const putPublicNamedNotificationWebhookContract = withMinScope(
  * receiver down can never take a sibling integration's registration with it.
  */
 export const deletePublicNamedNotificationWebhookContract = withMinScope(
-  'admin',
+  'webhooks',
   defineApiContract({
     method: 'delete',
     requestPathParamsSchema: singleStringParam('webhookId'),
     pathResolver: ({ webhookId }) => `/api/v1/notification-webhooks/${webhookId}`,
-    responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+    responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
   }),
 )

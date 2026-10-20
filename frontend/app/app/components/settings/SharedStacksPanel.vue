@@ -15,8 +15,8 @@ import type {
 
 const { t } = useI18n()
 const store = useSharedStacksStore()
-const toast = useToast()
-const { present } = usePipelineErrorToast()
+const actionToast = useActionToast()
+const { present, presentReported } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
 const stacks = computed(() => store.stacks)
@@ -150,11 +150,8 @@ async function autodetect() {
       ...(form.directory.trim() ? { directory: form.directory.trim() } : {}),
     })
     if (!rec.detected) {
-      toast.add({
-        title: t('settings.sharedStacks.detect.nothing'),
+      actionToast.warning('settings.sharedStacks.detect.nothing', {
         description: rec.notes[0]?.message ?? '',
-        icon: 'i-lucide-info',
-        color: 'warning',
       })
       return
     }
@@ -163,11 +160,8 @@ async function autodetect() {
     form.composeProfiles = rec.composeProfiles.join(', ')
     form.managedNetworks = rec.managedNetworks.join(', ')
     detectedEnvFiles.value = rec.envFiles
-    toast.add({
-      title: t('settings.sharedStacks.detect.detected'),
+    actionToast.success('settings.sharedStacks.detect.detected', {
       description: t('settings.sharedStacks.detect.detectedBody'),
-      icon: 'i-lucide-wand-sparkles',
-      color: 'success',
     })
   } catch (e) {
     present(e, 'settings.sharedStacks.detect.failed')
@@ -207,13 +201,9 @@ async function saveStack() {
       await store.create(payload)
     }
     resetForm()
-    toast.add({
-      title: t(
-        editing ? 'settings.sharedStacks.toast.updated' : 'settings.sharedStacks.toast.created',
-      ),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success(
+      editing ? 'settings.sharedStacks.toast.updated' : 'settings.sharedStacks.toast.created',
+    )
   } catch (e) {
     present(
       e,
@@ -233,7 +223,7 @@ async function start(stack: SharedStack) {
     // surface that as an error toast too — not only a thrown transport/unavailable error.
     const updated = await store.ensureUp(stack.id)
     if (updated.status === 'failed') {
-      present(updated.lastError ?? '', 'settings.sharedStacks.toast.startFailed')
+      presentReported(updated.lastError, 'settings.sharedStacks.toast.startFailed')
     }
   } catch (e) {
     present(e, 'settings.sharedStacks.toast.startFailed')
@@ -270,14 +260,14 @@ async function remove(stack: SharedStack) {
 
 <template>
   <div class="space-y-4" data-testid="shared-stacks-panel">
-    <p class="text-sm text-slate-400">{{ t('settings.sharedStacks.intro') }}</p>
+    <p class="text-sm text-muted">{{ t('settings.sharedStacks.intro') }}</p>
 
-    <section v-if="stacks.length" class="space-y-2 rounded-lg border border-slate-700 p-3">
+    <section v-if="stacks.length" class="space-y-2 rounded-lg border border-muted p-3">
       <h3 class="text-sm font-semibold">{{ t('settings.sharedStacks.list.heading') }}</h3>
       <div
         v-for="stack in stacks"
         :key="stack.id"
-        class="space-y-2 rounded-md border border-slate-800 px-3 py-2"
+        class="space-y-2 rounded-md border border-default px-3 py-2"
         :data-testid="`shared-stack-${stack.id}`"
       >
         <div class="flex items-center justify-between gap-2">
@@ -288,7 +278,7 @@ async function remove(stack: SharedStack) {
                 {{ statusLabel(stack.status) }}
               </UBadge>
             </div>
-            <p class="truncate text-[11px] text-slate-500">{{ stack.cloneUrl }}</p>
+            <p class="truncate text-2xs text-dimmed">{{ stack.cloneUrl }}</p>
             <div v-if="stack.managedNetworks.length" class="flex flex-wrap gap-1">
               <UBadge
                 v-for="net in stack.managedNetworks"
@@ -347,14 +337,11 @@ async function remove(stack: SharedStack) {
             />
           </div>
         </div>
-        <p v-if="stack.lastError" class="text-[11px] text-rose-400">{{ stack.lastError }}</p>
+        <p v-if="stack.lastError" class="text-2xs text-app-error-400">{{ stack.lastError }}</p>
       </div>
     </section>
 
-    <section
-      class="space-y-3 rounded-lg border border-slate-700 p-3"
-      data-testid="shared-stack-form"
-    >
+    <section class="space-y-3 rounded-lg border border-muted p-3" data-testid="shared-stack-form">
       <h3 class="text-sm font-semibold">
         {{
           t(editingId ? 'settings.sharedStacks.edit.heading' : 'settings.sharedStacks.add.heading')
@@ -410,12 +397,12 @@ async function remove(stack: SharedStack) {
         >
           {{ t('settings.sharedStacks.detect.button') }}
         </UButton>
-        <span class="text-[11px] text-slate-500">{{ t('settings.sharedStacks.detect.hint') }}</span>
+        <span class="text-2xs text-dimmed">{{ t('settings.sharedStacks.detect.hint') }}</span>
       </div>
 
       <p
         v-if="detectedEnvFiles.length"
-        class="text-[11px] text-slate-500"
+        class="text-2xs text-dimmed"
         data-testid="shared-stack-env-files"
       >
         {{ t('settings.sharedStacks.detect.envFiles') }}
@@ -431,7 +418,7 @@ async function remove(stack: SharedStack) {
           <li
             v-for="(label, index) in layerLabels"
             :key="index"
-            class="font-mono text-[11px] text-slate-500"
+            class="font-mono text-2xs text-dimmed"
           >
             {{ label }}
           </li>

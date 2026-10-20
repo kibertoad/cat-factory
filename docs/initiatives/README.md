@@ -30,12 +30,12 @@ When the committed scope completes, the tracker becomes an ADR under
 Consequences, checklists dropped) and is `git rm`'d in the same PR. So the ADR
 set is the record of what was decided and shipped, and this directory is
 strictly the set of things still open. Several documents here are already cited
-by [`CLAUDE.md`](../../CLAUDE.md) as the authority for a flow's design; that
+by [`AGENTS.md`](../../AGENTS.md) as the authority for a flow's design; that
 makes them the best available account of the intent, not evidence the work is
 done.
 
-Full rules for when work earns a tracker: [`CLAUDE.md` → Bigger initiatives get
-a tracker document](../../CLAUDE.md).
+Full rules for when work earns a tracker: [`AGENTS.md` → Bigger initiatives get
+a tracker document](../../AGENTS.md).
 
 ## Open initiatives
 
@@ -105,14 +105,17 @@ a tracker document](../../CLAUDE.md).
 
 ### Frontend and UX
 
+- [A delivery surface shaped like the job (queue view, intake, setup checklist)](./delivery-surface.md)
 - [Error-message coverage](./error-message-coverage.md)
 - [Frontend extension mechanism](./frontend-extension-mechanism.md)
 - [GitLab product-surface parity](./gitlab-ui-parity.md)
 - [Global search and deep-linkable routing](./global-search-and-deep-links.md)
 - [Framework-neutral app core (shared client, reducer and contribution vocabulary)](./headless-app-core.md)
 - [Mobile-friendly frontend](./mobile-friendly-frontend.md)
+- [One overlay shell per job (the SPA macro layer)](./overlay-shells.md)
 - [UX papercuts](./ux-papercuts.md) ·
-  [quality-of-life pass](./ux-qol-pass.md)
+  [quality-of-life pass](./ux-qol-pass.md) ·
+  [UX assessment 2026-09 (core loop by persona)](./ux-assessment-2026-09.md)
 
 The modular-vue adoption closed with slice 5, and its four upstream request specs all shipped
 and were re-adopted, so the whole family converted to

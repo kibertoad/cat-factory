@@ -33,7 +33,7 @@ export const SECRET_KEYS: ReadonlySet<string> = new Set([
  * here rather than silently taking GitHub's link. GitLab answers NULL on purpose: a project
  * creation form takes no name parameter, and `GET /api/v1/vcs/connection` publishes no instance
  * URL, so the only link this code could build is `gitlab.com`, which for a self-hosted deployment
- * is a stranger's server. CLAUDE.md's rule for exactly this ("null ⇒ WITHHOLD the affordance,
+ * is a stranger's server. AGENTS.md's rule for exactly this ("null ⇒ WITHHOLD the affordance,
  * never fall back to the public instance") is why the caller prints instructions instead.
  *
  * The GitHub link carries the same residual caveat, which is why the caller PRINTS it before

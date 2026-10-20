@@ -30,6 +30,10 @@ export {
   type RecognisedDataIntegrityError,
 } from './domain/data-integrity.js'
 export { sameSubtasks, sameSubtaskItems, parseSubtasks } from './domain/subtasks.logic.js'
+// The per-dispatch job id, shared by the three layers that must produce the same string from the
+// same three facts: the container executor, the deployer's dispatch logic, and the engine minting
+// a delegated step's correlation key.
+export { stepJobId } from './domain/job-id.js'
 // The prompt-caching policy lives in `@cat-factory/contracts` (the SPA has to agree about it
 // too); re-exported here so kernel's own consumers keep one import.
 export {
@@ -253,6 +257,7 @@ export {
   DOCUMENT_PIPELINE_ID,
   DOCUMENT_QUICK_PIPELINE_ID,
   REVIEW_PIPELINE_ID,
+  RESOLVE_CONFLICTS_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
   MEDIA_PIPELINE_ID,
@@ -495,6 +500,39 @@ export {
   defaultBinaryStoreRegistry,
 } from './domain/binary-store-registry.js'
 
+// The THIRD executor class, beside inline and container: an external system a deployment already
+// runs takes one pipeline step, while cat-factory keeps the intake, the context, the policy, the
+// merge and the notifications around it. The port declares what such a system must be able to do
+// (start, be observed, be linked to); the registry is the by-reference seam a deployment puts its
+// own on. See `docs/initiatives/delegated-executors.md`.
+export type {
+  DelegatedExecutor,
+  DelegatedExecutorDefinition,
+  DelegatedFetch,
+  DelegatedFetchResponse,
+  DelegatedExecutorDeps,
+  DelegatedExecutorPresentation,
+  DelegatedExecutorTelemetry,
+  DelegatedPollPolicy,
+  DelegatedRepoFilesResolver,
+  DelegatedWorkBranchPolicy,
+  DelegationBrief,
+  DelegationHandle,
+  DelegationResult,
+  DelegationStart,
+  DelegationUpdate,
+} from './ports/delegated-executor.js'
+export {
+  DELEGATED_USAGE_PROVIDER,
+  DELEGATED_WORK_BRANCH_POLICIES,
+  DelegatedExecutorRegistrationError,
+} from './ports/delegated-executor.js'
+export {
+  type DelegatedExecutorView,
+  DelegatedExecutorRegistry,
+  defaultDelegatedExecutorRegistry,
+} from './domain/delegated-executor-registry.js'
+
 // Where those integrations are READ from: the in-process registry by default, the MOTHERSHIP's
 // over `/internal/binary-generators` on a mothership-mode node (whose own build can only hold a
 // second, drifting copy of what the builder's picker offered). See
@@ -678,6 +716,7 @@ export {
 // the three-state answer a dispatch draws from that. See `domain/harness-capabilities.ts`.
 export {
   HARNESS_BODY_CAPABILITIES,
+  HARNESS_BODY_CAPABILITY_FIELDS,
   type BlindJobStopOutcome,
   type HarnessBodyCapability,
   type HarnessCapabilitySupport,
@@ -1095,6 +1134,16 @@ export {
   WORKSPACE_CASCADE_SPECIAL_TABLES,
   type WorkspaceScopedTable,
 } from './domain/workspace-cascade.js'
+export { changedDirectoryRepoIds, type StoredDirectoryRepo } from './domain/directory-repos.js'
+export {
+  DIRECTORY_ACCOUNT_PROVIDERS,
+  directoryChangeFromRow,
+  isDirectoryAccountProvider,
+  type StoredDirectoryChange,
+  type StoredUserIdentity,
+  withDirectoryAccounts,
+  WORKSPACE_DIRECTORY_ENTITY_TYPES,
+} from './domain/directory-changes.js'
 
 // The account ⊕ workspace risk-policy merge (ADR 0055): the ONE precedence the editor, every
 // picker and the engine's own resolution all read. See `domain/risk-policy-tiers.ts`.

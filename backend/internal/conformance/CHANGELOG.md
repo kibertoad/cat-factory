@@ -1,5 +1,536 @@
 # @cat-factory/conformance
 
+## 0.66.0
+
+### Minor Changes
+
+- e9b24a1: A runner pool can now be set once per ACCOUNT, and every board of the account that has no pool of
+  its own dispatches to it. A deployment declares it with `seedAccountRunnerPool` on the Node
+  `start()`: a callback `(account) => { config, secrets } | undefined`, called for personal and org
+  accounts alike. The server inserts the result for each account that has none, at boot and when a
+  board is created. At boot it also replaces an account's pool when the callback's answer differs from
+  the stored one (config, or the decrypted secrets), so a rotated token reaches every account on the
+  next boot; board creation never replaces. On stock Node, where a runner pool is the only
+  executor, a new board then runs an agent with no Infrastructure step. A legacy board with no account
+  gets nothing.
+  
+  A board resolves its pool through one resolver: its own live row, then its account's row, then none.
+  The new workspace setting `inheritAccountRunnerPool` (default `true`) is the explicit "none" marker.
+  `DELETE /workspaces/:id/runner-pool/connection` now sets it to `false` unless the call carries
+  `fallBackToAccount=true`, so removing a board's own pool no longer silently re-routes its work to the
+  account's pool. The query parameter and the setting are additive.
+  
+  The seed is validated like an admin registration (backend kind registered, URL safe, referenced
+  secrets present) through a shared `RunnerPoolConnectionService.validate`. A seed that fails is logged
+  at `error` naming the account on every boot, and a failed read never fails board creation.
+  
+  New storage, mirrored on both runtimes: the `account_runner_pools` table (D1 migration 0110 and a
+  Drizzle migration) with an `AccountRunnerPoolRepository` kernel port (`insertIfAbsent`, and
+  `replace` for a changed seed), a unique key making the insert race safe, `AccountRepository.listAll`, and the `inherit_account_runner_pool` settings column. The
+  account repository is on the mothership allow-list for reads; mothership nodes and `startLocal()` do
+  not seed. The Worker does not take the option: there a pool is an optional target beside the built-in
+  containers.
+
+### Patch Changes
+
+- Updated dependencies [e9b24a1]
+  - @cat-factory/kernel@0.363.0
+  - @cat-factory/contracts@0.374.0
+  - @cat-factory/integrations@0.178.0
+  - @cat-factory/orchestration@0.323.0
+  - @cat-factory/server@0.341.0
+  - @cat-factory/agents@0.172.8
+  - @cat-factory/gates@0.12.13
+  - @cat-factory/prompt-fragments@1.1.73
+
+## 0.65.1
+
+### Patch Changes
+
+- 5c17395: Dependency refresh, direct and transitive (the lockfile is re-resolved from scratch), held to the
+  24h `minimumReleaseAge` window.
+  
+  Majors, each taken because its whole peer group could move together:
+  
+  - **Vitest 5** (`vitest`, `@vitest/coverage-v8`, `@vitest/browser`, `@vitest/browser-playwright`
+    at `5.0.5`), now that `@cloudflare/vitest-plugin@1.4.4`, `@storybook/addon-vitest`,
+    `@nuxt/test-utils` and `vitest-browser-vue` all accept `^5`. The Worker suite turns Vitest 5's
+    new default `fsModuleCache` off: the Workers pool inlines every warm module into one WebSocket
+    reply, and this suite's graph (~80MB) exceeds workerd's message limit (`1009 Message is too
+    large`).
+  - **msw 3**, for the component stories. `onUnhandledRequest` became `onUnhandledFrame`, which
+    also receives WebSocket frames, and the bundled `mockServiceWorker.js` is regenerated.
+  - **happy-dom 21** for the SPA's unit tests.
+  
+  The Workers test pool moves to `@cloudflare/vitest-plugin@1.4.4`, which pins `wrangler@4.151.1`, so
+  the Cloudflare stack moves with it: workerd `1.20261012.1`, miniflare `5.20261012.1-beta`,
+  `@cloudflare/workers-types` `5.20261012.1` (the resolved workerd's date) and esbuild `0.28.2`
+  (the version wrangler and the plugin now pin, so the scoped esbuild overrides follow).
+  
+  Also the Vercel AI SDK family as one set (`ai@7.0.142`, `@ai-sdk/anthropic@4.0.81`,
+  `@ai-sdk/openai@4.0.95`, `@ai-sdk/openai-compatible@3.0.70`, `@ai-sdk/amazon-bedrock@5.0.117`,
+  `@ai-sdk/provider@4.0.28`), the Vue family at `3.5.44`, `@nuxt/ui@4.12.0`, `pinia@4.1.0`,
+  `storybook@10.6.2`, `undici@8.12.2`, `pg-boss@12.38.0`, `@aws-sdk/client-s3@3.1152.0`,
+  `@hono/node-server@2.1.5`, `@playwright/test@1.64.1`, and the root toolchain (`turbo@2.11.8`,
+  `oxlint@1.88.0`, `oxfmt@0.73.0`, `knip@6.41.0`).
+  
+  Held: the frontend stays on TypeScript 6 (TypeScript 7 ships no classic compiler API for
+  `vue-tsc`); `@nuxt/fonts` stays on 0.14 because `@nuxt/ui@4.12.0` depends on `^0.14.0`; Drizzle
+  stays on `1.0.0-rc.4`, still its `rc` tag; `nuxt@4.6.2` is inside the window.
+- Updated dependencies [5c17395]
+- Updated dependencies [5c17395]
+  - @cat-factory/kernel@0.362.0
+  - @cat-factory/agents@0.172.7
+  - @cat-factory/contracts@0.373.1
+  - @cat-factory/gates@0.12.12
+  - @cat-factory/integrations@0.177.1
+  - @cat-factory/orchestration@0.322.7
+  - @cat-factory/prompt-fragments@1.1.72
+  - @cat-factory/server@0.340.1
+
+## 0.65.0
+
+### Minor Changes
+
+- 83f6b0c: A personal API key can follow its person's workspaces. Minted with `followsMemberships: true`
+  (beside `actsAsSelf: true`, and no `workspaceIds`), it reaches every workspace that person can act
+  in, resolved on each call: joining a workspace grants it on the next call and leaving takes it
+  away, with nothing to re-mint. In each workspace its scope is lowered to what the person's role
+  there allows (`read` for a viewer, `decide` for a member, `admin` for an admin), and on account-level
+  routes it acts with `read`, so it can never do more over `/api/v1` than its person can in the app.
+  That is also why anyone with `runs.execute` may mint one, list it and revoke it; an account admin
+  manages anyone's.
+  
+  `followsMemberships` is new on a listed or minted key (whose `workspaceIds` is then `[]`), on
+  `GET /api/v1/me` and on `GET /api/v1/directory/reach`, which answer the reach as of the call.
+  OpenAPI 1.89.0. The API tokens window offers "My workspaces (follows my memberships)", the default
+  for a personal token, and `?newApiKey` takes `reach=memberships`. New migrations: D1
+  `0110_public_api_key_follows_memberships.sql`, Drizzle
+  `20261016160143_public_api_key_follows_memberships`.
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/contracts@0.373.0
+  - @cat-factory/kernel@0.361.0
+  - @cat-factory/integrations@0.177.0
+  - @cat-factory/server@0.340.0
+  - @cat-factory/agents@0.172.6
+  - @cat-factory/gates@0.12.11
+  - @cat-factory/orchestration@0.322.6
+  - @cat-factory/prompt-fragments@1.1.71
+
+## 0.64.12
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+  - @cat-factory/server@0.339.0
+  - @cat-factory/agents@0.172.5
+  - @cat-factory/gates@0.12.10
+  - @cat-factory/integrations@0.176.6
+  - @cat-factory/kernel@0.360.4
+  - @cat-factory/orchestration@0.322.5
+  - @cat-factory/prompt-fragments@1.1.70
+
+## 0.64.11
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+  - @cat-factory/server@0.338.0
+  - @cat-factory/agents@0.172.4
+  - @cat-factory/gates@0.12.9
+  - @cat-factory/integrations@0.176.5
+  - @cat-factory/kernel@0.360.3
+  - @cat-factory/orchestration@0.322.4
+  - @cat-factory/prompt-fragments@1.1.69
+
+## 0.64.10
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+  - @cat-factory/server@0.337.0
+  - @cat-factory/integrations@0.176.4
+  - @cat-factory/kernel@0.360.2
+  - @cat-factory/agents@0.172.3
+  - @cat-factory/gates@0.12.8
+  - @cat-factory/orchestration@0.322.3
+  - @cat-factory/prompt-fragments@1.1.68
+
+## 0.64.9
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+  - @cat-factory/integrations@0.176.3
+  - @cat-factory/agents@0.172.2
+  - @cat-factory/gates@0.12.7
+  - @cat-factory/kernel@0.360.1
+  - @cat-factory/orchestration@0.322.2
+  - @cat-factory/prompt-fragments@1.1.67
+  - @cat-factory/server@0.336.1
+
+## 0.64.8
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/contracts@0.368.0
+  - @cat-factory/kernel@0.360.0
+  - @cat-factory/server@0.336.0
+  - @cat-factory/agents@0.172.1
+  - @cat-factory/gates@0.12.6
+  - @cat-factory/integrations@0.176.2
+  - @cat-factory/orchestration@0.322.1
+  - @cat-factory/prompt-fragments@1.1.66
+
+## 0.64.7
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/contracts@0.367.0
+  - @cat-factory/agents@0.172.0
+  - @cat-factory/orchestration@0.322.0
+  - @cat-factory/server@0.335.0
+  - @cat-factory/gates@0.12.5
+  - @cat-factory/integrations@0.176.1
+  - @cat-factory/kernel@0.359.1
+  - @cat-factory/prompt-fragments@1.1.65
+
+## 0.64.6
+
+### Patch Changes
+
+- @cat-factory/server@0.334.1
+
+## 0.64.5
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+  - @cat-factory/kernel@0.359.0
+  - @cat-factory/integrations@0.176.0
+  - @cat-factory/server@0.334.0
+  - @cat-factory/orchestration@0.321.0
+  - @cat-factory/agents@0.171.7
+  - @cat-factory/gates@0.12.4
+  - @cat-factory/prompt-fragments@1.1.64
+
+## 0.64.4
+
+### Patch Changes
+
+- 91dedb6: Setup advisories now go to the people who can act on them. The workspace snapshot carries
+  `infraSetupOwners` beside `infraSetup`, naming who can close each gap: a board admin
+  (`workspace_admin`), an account admin (`account_admin`) or the deployment operator (`operator`).
+  Content storage falls to the operator when the deployment gives an account admin no backend to
+  select (`AccountSettingsService.canSelectContentStorage`).
+  
+  In the SPA, the infra-setup and provider-config cards render only for a caller who can save the
+  fix, and never on the designer surface. A caller who cannot act, but whose runs the gap stops (today,
+  a missing or unreachable runner pool), gets one compact line instead: it names who can fix it, or
+  tells an admin on the designer surface to switch role. A viewer gets nothing. The line honours the
+  card's session and permanent dismissals. The default test-environment prompt is also kept off the
+  designer surface, and the account-admin check now lives once in the accounts store
+  (`isActiveAccountAdmin`).
+  
+  On the repository-host gate, a caller without `integrations.manage` reads that a board admin can
+  connect the host, instead of "this deployment has nothing configured, ask an operator", and the
+  gate offers the board switcher without the items that need the board page's dialogs. The AI setup
+  dialog sends a member to the direct keys on their own
+  "My keys" scope, where their save lands, instead of the workspace pool they cannot write. That
+  default follows the active board's grant until the user picks a scope by hand.
+  
+  The new snapshot field is optional and internal: an older SPA ignores it, and this SPA falls back
+  to "a board admin" when a backend does not send it.
+- Updated dependencies [91dedb6]
+  - @cat-factory/contracts@0.365.0
+  - @cat-factory/server@0.333.0
+  - @cat-factory/integrations@0.175.3
+  - @cat-factory/agents@0.171.6
+  - @cat-factory/gates@0.12.3
+  - @cat-factory/kernel@0.358.1
+  - @cat-factory/orchestration@0.320.4
+  - @cat-factory/prompt-fragments@1.1.63
+
+## 0.64.3
+
+### Patch Changes
+
+- Updated dependencies [22b6812]
+  - @cat-factory/server@0.332.3
+  - @cat-factory/agents@0.171.5
+  - @cat-factory/orchestration@0.320.3
+
+## 0.64.2
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/contracts@0.364.0
+  - @cat-factory/kernel@0.358.0
+  - @cat-factory/agents@0.171.4
+  - @cat-factory/gates@0.12.2
+  - @cat-factory/integrations@0.175.2
+  - @cat-factory/orchestration@0.320.2
+  - @cat-factory/prompt-fragments@1.1.62
+  - @cat-factory/server@0.332.2
+
+## 0.64.1
+
+### Patch Changes
+
+- Updated dependencies [1a42f34]
+- Updated dependencies [3c04dfa]
+  - @cat-factory/kernel@0.357.1
+  - @cat-factory/server@0.332.1
+  - @cat-factory/agents@0.171.3
+  - @cat-factory/gates@0.12.1
+  - @cat-factory/integrations@0.175.1
+  - @cat-factory/orchestration@0.320.1
+  - @cat-factory/prompt-fragments@1.1.61
+
+## 0.64.0
+
+### Minor Changes
+
+- e3c4b3c: A new built-in `resolve-conflicts` task type points the conflict resolver at an existing open pull request the platform did not open (surface version 1.79.0). The task names it with `fields.prNumber` or `fields.prUrl`, and creation records it as the block's own `pullRequest`, refusing one the run could not push onto with a `422` and an `attached_pr_*` reason: not found, another repository, closed or merged, from a fork, targeting a branch other than the repository's base, or unreadable. When the repository provider fails to answer, creation is refused with a retryable `503` and reason `attached_pr_provider_unreachable` instead of a `500`.
+  
+  The task is pinned to the new `pl_resolve_conflicts` pipeline, the `conflicts` gate alone, under a new `maintenance` pipeline purpose that only this task type is offered. It parks nowhere, so a `write` key starts it with an empty body. A clean pull request finishes `done` with nothing pushed; one the resolver cannot clear fails the run with a message saying the conflicts could not be resolved automatically and carrying the resolver's last account. A run of a task that attached its pull request finishes `done` without a confirm-and-merge card, and the pre-dispatch input gate does not judge its description. Run admission refuses a pipeline with a merge step for such a task, and a fields patch cannot move its attachment to another pull request while its run is working.
+  
+  `OpenedPullRequest` gains an optional `crossRepository`, filled by the GitHub and GitLab clients, and `AgentRunContext.block` gains `taskType`, which the container executor reads to skip creating the per-task work branch for an attached pull request. The conflicts gate's give-up message now includes the last resolver attempt's summary.
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/contracts@0.363.0
+  - @cat-factory/kernel@0.357.0
+  - @cat-factory/gates@0.12.0
+  - @cat-factory/orchestration@0.320.0
+  - @cat-factory/integrations@0.175.0
+  - @cat-factory/server@0.332.0
+  - @cat-factory/agents@0.171.2
+  - @cat-factory/prompt-fragments@1.1.60
+
+## 0.63.1
+
+### Patch Changes
+
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+  - @cat-factory/agents@0.171.1
+  - @cat-factory/integrations@0.174.12
+  - @cat-factory/orchestration@0.319.1
+  - @cat-factory/server@0.331.1
+  - @cat-factory/gates@0.11.63
+  - @cat-factory/prompt-fragments@1.1.59
+
+## 0.63.0
+
+### Minor Changes
+
+- 97175f8: Guided review questions asked with `depth: "deep"` are answered from a read-only checkout of the repository (surface version 1.78.0). A new `guided-review-investigator` container-explore kind runs per question, with its own preset model; `ContainerGuidedReviewInvestigator` dispatches it standalone, the way the environment dry run's prober is dispatched, and files its spend through the same accounting a pipeline step uses. The job clones the target branch with full history, fetches the PR head and checks out the reviewed commit.
+  
+  A deep answer is driven as a state machine on its message: claim, dispatch, record the dispatch, poll. `GuidedReviewService.runJob` now returns `GuidedReviewJobProgress`, and the Workflow, pg-boss and local `node:sqlite` drivers loop on it within `GUIDED_REVIEW_MAX_PASSES`. Each poll refreshes the claim, so the stale scan never mistakes a live investigation for a dead one; a container still working after 45 minutes is stopped and its question reported failed. `GuidedReviewRepository` gains `recordInvestigation`, `getInvestigation` and `heartbeatMessage` (migration 0106 and its Drizzle mirror).
+  
+  The two standalone container flows now share one dispatch builder per facade. The single-kind model resolver accepts a job with no board frame, which resolves on the workspace's default preset. The local guided-review queue now wakes at its earliest due job, so a re-queued job can no longer wait for the periodic sweep when a timer fires early. The review window gains a "Deep dive" switch.
+
+### Patch Changes
+
+- Updated dependencies [97175f8]
+  - @cat-factory/contracts@0.362.0
+  - @cat-factory/kernel@0.355.0
+  - @cat-factory/agents@0.171.0
+  - @cat-factory/orchestration@0.319.0
+  - @cat-factory/server@0.331.0
+  - @cat-factory/gates@0.11.62
+  - @cat-factory/integrations@0.174.11
+  - @cat-factory/prompt-fragments@1.1.58
+
+## 0.62.2
+
+### Patch Changes
+
+- Updated dependencies [a3a10b8]
+- Updated dependencies [0966666]
+  - @cat-factory/contracts@0.361.0
+  - @cat-factory/orchestration@0.318.0
+  - @cat-factory/server@0.330.0
+  - @cat-factory/agents@0.170.1
+  - @cat-factory/gates@0.11.61
+  - @cat-factory/integrations@0.174.10
+  - @cat-factory/kernel@0.354.2
+  - @cat-factory/prompt-fragments@1.1.57
+
+## 0.62.1
+
+### Patch Changes
+
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+  - @cat-factory/agents@0.170.0
+  - @cat-factory/orchestration@0.317.1
+  - @cat-factory/gates@0.11.60
+  - @cat-factory/integrations@0.174.9
+  - @cat-factory/kernel@0.354.1
+  - @cat-factory/prompt-fragments@1.1.56
+  - @cat-factory/server@0.329.1
+
+## 0.62.0
+
+### Minor Changes
+
+- 0ea28b8: Guided PR review is reachable from the SPA. `/workspaces/:workspaceId/guided-reviews` opens, lists, reads, refreshes and deletes sessions, and its `threads` sub-routes open threads, ask questions and request comment drafts. Writes return at once; the overview and each answer arrive through a new `guidedReview` workspace event, which carries ids only so a member who is not viewing a review learns nothing more than that it moved. The routes are member tier and only a session's creator may change it.
+  
+  `ExecutionEventPublisher` gains `guidedReviewChanged`, implemented on the Durable Object, Node and fan-out publishers. Thread routes are addressed under their session, and a thread of another session is answered as absent. The SPA gains the API client and a `guidedReview` store that follows the event. A conformance assertion checks every facade wires the module.
+- 0ea28b8: The guided review store binds every settle to the claim that won it. `claimOverview` and `claimMessage` return a `GuidedReviewClaim` (or null), and `settleOverview`, `settleMessage` and `settleDrafts` require it, so a driver whose lease lapsed cannot land over the driver that took the work over. Every write is checked against the contracts schema the reads decode with, so an oversized outcome is refused at its writer instead of making the thread unreadable; `guidedReviewFailure` builds a failure whose raw detail fits. `settleDrafts` takes `GuidedReviewDraftProposal` and the store fills in the ids it owns. Deleting a session removes threads before messages and drafts on both runtimes, and a node recovers its own jobs from its local durable queue.
+
+### Patch Changes
+
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/contracts@0.359.0
+  - @cat-factory/kernel@0.354.0
+  - @cat-factory/agents@0.169.0
+  - @cat-factory/orchestration@0.317.0
+  - @cat-factory/server@0.329.0
+  - @cat-factory/gates@0.11.59
+  - @cat-factory/integrations@0.174.8
+  - @cat-factory/prompt-fragments@1.1.55
+
+## 0.61.0
+
+### Minor Changes
+
+- 075ff13: Guided PR review gets its persistence foundation: the session, thread, message and comment-draft contracts, kernel's `GuidedReviewRepository` port, D1 migration 0104 and its Drizzle mirror, and both repositories, wired as `CoreDependencies.guidedReviewRepository` on every facade so a mothership serves it to its nodes. No service reads or writes the tables yet; the service, the durable answering driver and the routes land in later slices (`docs/initiatives/guided-pr-review.md`).
+  
+  Concurrent threads write disjoint rows. A thread admits one live answer through a partial unique index, so a second question while one is pending returns `thread_busy` without writing, and a question on a thread that is missing or belongs to another session returns `thread_not_found`. The store writes the queued state itself (a pending overview on open, a pending placeholder per question), so a caller cannot create work no driver can claim. Driver claims, overview generations and draft posts are conditional writes that report whether they won. Every repository method is `remote` in mothership mode except the cross-workspace stale-job scan, which is a sweeper read. Queued work records which host drives it (`deployment` or `node:<nodeId>`), and the stale scan lists only one driver's jobs, so a hosted sweeper never answers a laptop's question with the deployment's credentials.
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/orchestration@0.316.0
+  - @cat-factory/server@0.328.0
+  - @cat-factory/agents@0.168.4
+  - @cat-factory/gates@0.11.58
+  - @cat-factory/integrations@0.174.7
+  - @cat-factory/prompt-fragments@1.1.54
+
+## 0.60.0
+
+### Minor Changes
+
+- 57d9db3: A delegated executor's reported usage now reaches the step it belongs to. The step's metrics, the run totals and the "usage not reported by <executor>" gap all read `llm_call_metrics`, while a result's `usage` was written only to the usage ledger, so a `self-reported` executor's step still read as unreported. The delegated arm now files the figure as one job-level call metric through the same recorder a subscription harness uses (`standsForJob`, counted as the job's call), keyed on the dispatch's job id so a replayed poll records nothing twice.
+  
+  That row is filed under kernel's new `DELEGATED_USAGE_PROVIDER` and is never priced: `LlmObservabilityService` answers no rate for it, so the step and the run totals show the tokens with an unknown cost instead of the deployment's fallback rate.
+  
+  `DelegationUpdate`'s `failed` arm gains `usage`, with the meaning it has on a result. A run that fails late has usually spent most of its tokens, and it previously had no way to say so. `AgentJobUpdate`'s `failed` arm gains `usage` and `usageBilling` to carry it, and the failed-poll path meters it into the usage ledger and stamps the step's `usageBilling`, as the completion path does for a result.
+  
+  Each settled delegation attempt records `usageReported`, and `delegatedSpendUnreported` reports a gap when the FINAL attempt reported nothing, even if an earlier attempt's row put calls in the step's metrics.
+  
+  `RecordHarnessCalls` is exported from `@cat-factory/orchestration` as the one recorder type. `buildDelegatedAgentExecutor` takes a required `recordHarnessCalls` (its value may be `undefined`), so a facade cannot wire it on one runtime and forget it on the other. The Worker builds one recorder and hands it to both the container and the delegated arm; `buildWorkerJobAccountingDeps` now takes that recorder instead of building its own. Conformance's `withDelegatedArm` takes the facade's recorder, and a new conformance assertion checks on every runtime that a self-reported usage lands on the step unpriced.
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/contracts@0.357.0
+  - @cat-factory/orchestration@0.315.0
+  - @cat-factory/server@0.327.0
+  - @cat-factory/agents@0.168.3
+  - @cat-factory/gates@0.11.57
+  - @cat-factory/integrations@0.174.6
+  - @cat-factory/prompt-fragments@1.1.53
+
+## 0.59.3
+
+### Patch Changes
+
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/agents@0.168.2
+  - @cat-factory/integrations@0.174.5
+  - @cat-factory/kernel@0.351.0
+  - @cat-factory/orchestration@0.314.3
+  - @cat-factory/server@0.326.3
+  - @cat-factory/gates@0.11.56
+  - @cat-factory/prompt-fragments@1.1.52
+
+## 0.59.2
+
+### Patch Changes
+
+- Updated dependencies [c046707]
+- Updated dependencies [c046707]
+  - @cat-factory/kernel@0.350.0
+  - @cat-factory/orchestration@0.314.2
+  - @cat-factory/integrations@0.174.4
+  - @cat-factory/agents@0.168.1
+  - @cat-factory/server@0.326.2
+  - @cat-factory/gates@0.11.55
+  - @cat-factory/prompt-fragments@1.1.51
+
+## 0.59.1
+
+### Patch Changes
+
+- Updated dependencies [7760397]
+  - @cat-factory/agents@0.168.0
+  - @cat-factory/orchestration@0.314.1
+  - @cat-factory/server@0.326.1
+
+## 0.59.0
+
+### Minor Changes
+
+- bc073ab: Delegated executors: a pipeline step can now run in a system the deployment already operates (its own GitHub-Actions loop, job runner or PR bot) while cat-factory keeps the intake, the standards, the CI gate, the merge policy and the notifications around it.
+  
+  A deployment registers a `DelegatedExecutorDefinition` on the new app-owned `DelegatedExecutorRegistry` and points an agent kind at it with `agent: { surface: 'delegated', executor }`. The executor is handed the same brief the container harness composes, so a workspace's prompt overrides and agreed standards reach both identically; its credentials resolve per call through the existing `ToolSecretResolver` port and never touch the brief.
+  
+  Each definition declares who creates the work branch its dispatches name. `workBranch: 'platform-creates'` has the engine create it at the base head just before `start`, idempotently, which is what an external CI runner needs: `actions/checkout` on a branch that is not there fails the job before any of the work begins, and a runner that quietly substitutes a branch of its own publishes to a ref the platform never recorded. `workBranch: 'executor-creates'` writes nothing, so a run whose external work never landed leaves no empty ref behind. Either way the branch is the one the rest of the run uses: a task's own apriori working branch when it declared one (probed, never created, exactly as the container dispatch treats it), else `cat-factory/<blockId>`.
+  
+  Two things the platform states rather than guesses. A delegated step's model calls never reach this deployment's proxy, so the step card says "usage not reported by <executor>" and the run rollups carry `llm.reporting.delegatedStepsWithoutUsage` instead of rendering a zero. And a run stopped while external work is still running records whether it actually stopped: an executor that declares no `cancel` leaves its run alive, and the record says so.
+  
+  Ships with `@cat-factory/delegation-github-actions` (a `DelegatedExecutor` over Actions: correlation by run name, since `workflow_dispatch` returns no run id) and a runnable example under `backend/internal/example-delegated-executor`. Its `workflow` is a location or a function of the dispatch, so one registration can dispatch against every repository a deployment onboards; the resolver sees only facts a brief and a handle both carry, because `poll` and `cancel` run hours later holding just the handle.
+  
+  A failure the executor calls `retryable` (a cancelled run, a runner-pool restart, a rate limit) buys one fresh dispatch on an engine-set budget, and everything else is terminal. Registered executors reach their own systems through a fetch the platform has already guarded: the deployment's outbound-URL policy on the first URL and on every redirect hop (the same guard the notification webhook sender uses), a deadline so a hung endpoint cannot hold a poll open indefinitely, and a running byte cap on what one response may return.
+  
+  Two declaration-time refusals, because neither has a reading under which it does something. A definition whose credentials resolve to the same injection name is refused at registration: the bag an executor is handed is keyed by the name it reads, so one name can carry only one value. And a delegated kind naming an executor this process does not register is refused by name at dispatch rather than falling through to the container harness, which is the mothership-mode case where nothing boot-validates the kinds a node resolves.
+  
+  Public API 1.75.0, both additive: `AgentFailureKind` gains `delegated_failed`, so an external system's verdict is classified as its own thing rather than as a container that was shut down, and the `llm` totals on the two debug run surfaces gain `reporting`, saying how many of a run's steps ran on an executor that files no usage.
+  
+  Internals: `AgentSurface` gains `delegated`, `AsyncAgentExecutor.reclaimRun` may return a `RunReclaimReport`, `AgentJobHandle` and `DelegationHandle` carry the run's block (so a poll and a cancel resolve credentials in the scope the dispatch used), and `PipelineStep` gains `delegated` plus `delegatedRetries`. Five new `error.details.reason` values, all additive: `delegated_executor_unwired` (409), `delegated_step_async_only` (409), `delegated_claim_missing` (409), `delegated_executor_failed` (503) and `delegated_work_branch_unprepared` (503, the platform's own VCS write rather than the executor's system).
+
+### Patch Changes
+
+- Updated dependencies [1fc4ff1]
+- Updated dependencies [bc073ab]
+- Updated dependencies [09bd94b]
+  - @cat-factory/orchestration@0.314.0
+  - @cat-factory/integrations@0.174.3
+  - @cat-factory/contracts@0.356.0
+  - @cat-factory/kernel@0.349.0
+  - @cat-factory/agents@0.167.0
+  - @cat-factory/server@0.326.0
+  - @cat-factory/gates@0.11.54
+  - @cat-factory/prompt-fragments@1.1.50
+
 ## 0.58.3
 
 ### Patch Changes

@@ -19,6 +19,7 @@ import type {
   EnvironmentBackendRegistry,
   RegisterHandlerInput,
   RunnerBackendRegistry,
+  RunnerPoolSeedSource,
   UserSecretKindRegistry,
   VcsPatConnectionService,
 } from '@cat-factory/integrations'
@@ -49,6 +50,7 @@ import type {
   CustomManifestTypeRepository,
   DeployCloneTarget,
   DocInterviewRepository,
+  GuidedReviewInvestigator,
   DocumentConnectionRepository,
   DocumentConnectionStore,
   DocumentRepository,
@@ -73,12 +75,15 @@ import type {
   GitHubInstallation,
   GitHubInstallationRepository,
   GitHubProvisioningClient,
+  GuidedReviewRepository,
+  GuidedReviewRunner,
   IdGenerator,
   IncidentEnrichmentConnectionRepository,
   InitiativePresetRegistry,
   InitiativeRepository,
   IssueProjectionRepository,
   IssueWritebackProvider,
+  DelegatedExecutorRegistry,
   EnvironmentInvestigator,
   JudgeAssessor,
   JudgeRegistry,
@@ -130,6 +135,7 @@ import type {
   RiskPolicySuppressionRepository,
   RunInitiatorScope,
   RunLifecycleSink,
+  AccountRunnerPoolRepository,
   RunnerPoolConnectionRepository,
   RunnerPoolProvider,
   SandboxExperimentRepository,
@@ -178,6 +184,7 @@ import type {
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
+import type { DirectoryRepository, DirectoryWebhookRepository } from '@cat-factory/kernel'
 import type { SpendPricing } from '@cat-factory/spend'
 import type { TesterQualityReviewer } from '../modules/execution/TesterQualityReviewService.js'
 import type { AgentContextObservabilityService } from '../modules/observability/AgentContextObservabilityService.js'
@@ -207,6 +214,22 @@ export interface CoreDependencies extends ContentLibraryDependencies {
   membershipRepository: MembershipRepository
   /** Canonical user identity (`users` + `user_identities`); keyed off by everything. */
   userRepository: UserRepository
+  /**
+   * The directory read side and change feed (backend/docs/adr/0067-directory-sync.md). Required: the
+   * feed rows are written by the repositories above on every facade, and a facade that wired no
+   * reader would publish an API that 503s over data it is recording anyway.
+   */
+  directoryRepository: DirectoryRepository
+  /**
+   * Directory webhook endpoints and the cipher sealing their signing secrets. Present only when the
+   * facade has an `ENCRYPTION_KEY` to seal with; absent, the management routes 503 and nothing is
+   * pushed (the change feed still serves every change to a poller).
+   */
+  directoryWebhooks?: {
+    repository: DirectoryWebhookRepository
+    secretCipher: SecretCipher
+    urlSafetyPolicy?: UrlSafetyPolicy
+  }
   /** Hashes/verifies email-password credentials (WebCrypto PBKDF2). */
   passwordHasher: PasswordHasher
   /** Account invitations (email-based org onboarding). Optional: opt-in feature. */
@@ -335,6 +358,15 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * registers its judges on. See `docs/initiatives/judge-registry.md`.
    */
   judgeRegistry?: JudgeRegistry
+  /**
+   * The app-owned DELEGATED-EXECUTOR registry: the external systems a deployment plugs in as the
+   * executor of a pipeline step (see `docs/initiatives/delegated-executors.md`). Optional +
+   * defaulted to `defaultDelegatedExecutorRegistry()` (EMPTY: the platform ships none, because
+   * shipping one would make the seam about that one). Each facade injects the SAME instance a
+   * deployment registers on, and passes it to `validateRegistrations` so a kind naming an
+   * unregistered executor fails boot rather than failing its first dispatch.
+   */
+  delegatedExecutorRegistry?: DelegatedExecutorRegistry
   /**
    * The verdict producer behind every judge step. Optional: `createCore` builds the inline
    * `JudgeService` from the model-provider dependencies the facade already wires, so judges need
@@ -921,6 +953,21 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    */
   runnerBackendRegistry?: RunnerBackendRegistry
   /**
+   * The ACCOUNT tier of the runner pool: one row per account that every board of it falls back to
+   * when it has no pool of its own. Wired with {@link runnerPoolConnectionRepository} (the service
+   * reads both through one resolver); absent ⇒ the previous per-workspace-only behaviour.
+   */
+  accountRunnerPoolRepository?: AccountRunnerPoolRepository
+  /**
+   * A deployment's DECLARED runner pools: `(account) => { config, secrets } | undefined`, the
+   * runner-pool sibling of {@link seedEnvironmentHandlers}. When supplied (and the runners module
+   * and {@link accountRunnerPoolRepository} are wired), `createCore` builds a `RunnerPoolSeeder`:
+   * the runtime boot-backfills every account that has no pool and `WorkspaceService.create` seeds
+   * the account of a new board. Personal and org accounts both inherit; a legacy board with no
+   * account gets nothing. An account that already has a pool keeps it. Absent ⇒ no seeding.
+   */
+  seedAccountRunnerPool?: RunnerPoolSeedSource
+  /**
    * The app-owned registry of per-user secret KINDS (a GitHub PAT built-in today). Carried on
    * the dependency bag so each facade reads the SAME instance off `overrides` and threads it
    * into its `UserSecretService` (an integrations service built directly by the facade, not by
@@ -967,6 +1014,28 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * the raw outline when no model is wired).
    */
   docInterviewRepository?: DocInterviewRepository
+  /**
+   * Persistence for guided PR review sessions (backend/docs/adr/0066-guided-pr-review.md). Both
+   * runtime facades wire it unconditionally, so the mothership persistence registry, which
+   * reflects these dependencies, serves it to a mothership-mode node.
+   */
+  guidedReviewRepository?: GuidedReviewRepository
+  /**
+   * Durably drives guided-review jobs (the Worker's `GuidedReviewWorkflow`, Node's pg-boss queue,
+   * a mothership-mode node's `node:sqlite` queue). Absent ⇒ queued work waits for a test or a
+   * sweeper to call `GuidedReviewService.runJob` directly.
+   */
+  guidedReviewRunner?: GuidedReviewRunner
+  /**
+   * Runs DEEP guided-review answers in a read-only container (the server's
+   * `ContainerGuidedReviewInvestigator`). Absent ⇒ a deep question settles as `depth_unavailable`.
+   */
+  guidedReviewInvestigator?: GuidedReviewInvestigator
+  /**
+   * Which host this engine drives guided-review work as: `deployment`, or `node:<nodeId>` on a
+   * mothership-mode node. Absent ⇒ `deployment`.
+   */
+  guidedReviewDriver?: string
   /**
    * Persistence for the Kaizen agent (post-run grading of agent steps + the verified-combo
    * library). Both runtime facades wire both repos unconditionally. The Kaizen module

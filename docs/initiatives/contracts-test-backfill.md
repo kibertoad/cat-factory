@@ -75,7 +75,7 @@ spec) and are included as the final row rather than a separate tracker.
   visible commit (possibly a flagged breaking change in the changeset), never a silent
   by-product of adding tests.
 - **Tests are excluded from build configs**: run them via `pnpm exec turbo run typecheck
---filter=@cat-factory/contracts` + the root `test:run`, per the repo convention that
+  --filter=@cat-factory/contracts` + the root `test:run`, per the repo convention that
   typecheck covers tests.
 - **Changesets**: test-only slices take an empty changeset; any slice that also changes a
   schema's behaviour needs a real one (contracts is a published package consumed by the

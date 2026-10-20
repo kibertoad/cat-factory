@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import {
   recordTutorialEventSchema,
   tutorialProgressSchema,
@@ -50,5 +50,5 @@ export const recordTutorialEventContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/tutorial/events',
   requestBodySchema: recordTutorialEventSchema,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

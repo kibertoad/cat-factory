@@ -151,7 +151,7 @@ export const useAgentsStore = defineStore('agents', () => {
       label: input.label.trim() || 'Custom Agent',
       description: input.description?.trim() || 'Custom agent.',
       icon: input.icon || 'i-lucide-sparkles',
-      color: input.color || '#22d3ee',
+      color: input.color || 'var(--app-hue-cyan)',
     }
     runtimeAgents.value = [...runtimeAgents.value, archetype]
     return archetype

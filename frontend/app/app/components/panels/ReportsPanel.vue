@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onKeyStroke } from '@vueuse/core'
 import { lastCompleteRollupDay } from '@cat-factory/contracts'
 import type {
   ReportActivityDimension,
@@ -19,6 +18,10 @@ import {
   trendMagnitude,
 } from './ReportsPanel.logic'
 import ReportsSpendBreakdown from '~/components/panels/ReportsSpendBreakdown.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 // Reports: cross-cutting usage analytics for the active account — where the spend and the
 // work actually go. Spend per model and agent kind, spend + run activity per workspace /
@@ -136,6 +139,14 @@ const maxRuns = computed(() => maxOf(activityByDimension.value, (row) => row.run
 
 /** Boards the filter offers — the active account's, since the report is account-scoped. */
 const boards = computed(() => workspace.accountWorkspaces)
+// "Every board" is a NAMED sentinel, not an empty string: an empty string is what a Select
+// reserves for "nothing selected", and Reka throws on an item that carries one. The store holds
+// the same state as null, so the two are mapped at the boundary below.
+const ALL_BOARDS = 'all'
+const boardFilterItems = computed(() => [
+  { label: t('reports.filter.allBoards'), value: ALL_BOARDS },
+  ...boards.value.map((board) => ({ label: board.name, value: board.id })),
+])
 
 function trendTooltip(point: { start: number; meteredCost: number; subscriptionCost: number }) {
   return `${d(new Date(point.start), 'short')} · ${t('reports.legend.metered')} ${money(point.meteredCost)} · ${t('reports.legend.subscription')} ${money(point.subscriptionCost)}`
@@ -150,10 +161,10 @@ const STATUS_KEYS: Record<'done' | 'failed' | 'running' | 'other', string> = {
   other: 'reports.status.other',
 }
 const STATUS_CLASSES: Record<'done' | 'failed' | 'running' | 'other', string> = {
-  done: 'bg-emerald-500',
-  failed: 'bg-rose-500',
-  running: 'bg-sky-500',
-  other: 'bg-slate-500',
+  done: 'bg-app-success-500',
+  failed: 'bg-app-error-500',
+  running: 'bg-app-info-500',
+  other: 'bg-app-500',
 }
 /** `te`-guarded so a locale missing the key shows the raw status, never a raw message key. */
 function statusLabel(status: 'done' | 'failed' | 'running' | 'other'): string {
@@ -167,9 +178,6 @@ function refresh() {
 function close() {
   ui.closeReports()
 }
-onKeyStroke('Escape', () => {
-  if (open.value) close()
-})
 
 // Load (and refresh) whenever the panel opens.
 watch(
@@ -184,98 +192,101 @@ watch(
 <template>
   <Teleport to="body">
     <Transition name="reports-fade">
-      <div
+      <TakeoverShell
         v-if="open"
-        class="fixed inset-0 z-[60] flex flex-col bg-slate-950/96 backdrop-blur-sm"
-        role="dialog"
-        aria-modal="true"
+        :label="t('reports.title')"
+        class="flex-col bg-app-950/96 backdrop-blur-sm"
         data-testid="reports-panel"
+        @close="close"
       >
-        <header class="flex flex-wrap items-center gap-3 border-b border-slate-800 px-6 py-4">
+        <header class="flex flex-wrap items-center gap-3 border-b border-default px-6 py-4">
           <div
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/15"
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-app-secondary-500/15"
           >
-            <UIcon name="i-lucide-chart-column" class="h-5 w-5 text-violet-400" />
+            <UIcon name="i-lucide-chart-column" class="h-5 w-5 text-app-secondary-400" />
           </div>
           <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">{{ t('reports.title') }}</h1>
-            <p v-if="accountName" class="truncate text-xs text-slate-500">{{ accountName }}</p>
+            <h1 class="truncate text-base font-semibold text-highlighted">
+              {{ t('reports.title') }}
+            </h1>
+            <p v-if="accountName" class="truncate text-xs text-dimmed">{{ accountName }}</p>
           </div>
           <!-- Filters in ONE row above the charts: window, then board scope. -->
           <div class="ms-auto flex flex-wrap items-center gap-1.5">
-            <select
-              class="rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-[12px] text-slate-200"
-              :value="reports.workspaceFilter ?? ''"
+            <USelect
+              :model-value="reports.workspaceFilter ?? ALL_BOARDS"
+              :items="boardFilterItems"
+              size="xs"
               :aria-label="t('reports.filter.board')"
               data-testid="reports-board-filter"
-              @change="
-                reports.setWorkspaceFilter(($event.target as HTMLSelectElement).value || null)
+              @update:model-value="
+                reports.setWorkspaceFilter($event === ALL_BOARDS ? null : String($event))
               "
+            />
+            <UTabs
+              :model-value="reports.window"
+              :items="WINDOWS"
+              :content="false"
+              size="xs"
+              class="me-1"
+              @update:model-value="reports.setWindow($event as ReportWindow)"
             >
-              <option value="">{{ t('reports.filter.allBoards') }}</option>
-              <option v-for="board in boards" :key="board.id" :value="board.id">
-                {{ board.name }}
-              </option>
-            </select>
-            <div class="me-1 flex rounded-lg border border-slate-800 p-0.5 text-[12px]">
-              <button
-                v-for="opt in WINDOWS"
-                :key="opt.value"
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  reports.window === opt.value
-                    ? 'bg-slate-800 text-slate-100'
-                    : 'text-slate-400 hover:text-slate-200'
-                "
-                :data-testid="`reports-window-${opt.value}`"
-                @click="reports.setWindow(opt.value)"
-              >
-                {{ opt.label }}
-              </button>
-            </div>
-            <button
-              class="rounded-lg border border-slate-800 p-1.5 text-slate-400 transition hover:text-slate-200"
-              :aria-label="t('reports.refresh')"
-              :title="t('reports.refresh')"
+              <!-- UTabs renders its own triggers and forwards nothing from an item, so this
+                   slot is the one place a stable per-window selector can live. -->
+              <template #default="{ item }">
+                <span :data-testid="`reports-window-${item.value}`">{{ item.label }}</span>
+              </template>
+            </UTabs>
+            <IconButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-refresh-cw"
+              :loading="loading"
+              :label="t('reports.refresh')"
+              :ui="{
+                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+                leadingIcon: 'h-4 w-4',
+              }"
               @click="refresh"
-            >
-              <UIcon
-                name="i-lucide-refresh-cw"
-                class="h-4 w-4"
-                :class="{ 'animate-spin': loading }"
-              />
-            </button>
-            <button
-              class="rounded-lg border border-slate-800 p-1.5 text-slate-400 transition hover:text-slate-200"
-              :aria-label="t('common.close')"
+            />
+            <IconButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-x"
+              :label="t('common.close')"
+              :ui="{
+                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+                leadingIcon: 'h-4 w-4',
+              }"
               @click="close"
-            >
-              <UIcon name="i-lucide-x" class="h-4 w-4" />
-            </button>
+            />
           </div>
         </header>
 
         <div class="flex-1 overflow-y-auto px-6 py-5">
           <div
             v-if="failed"
-            class="mx-auto max-w-2xl rounded-lg border border-rose-800/60 bg-rose-950/40 p-4 text-sm text-rose-200"
+            class="mx-auto max-w-2xl rounded-lg border border-app-error-800/60 bg-app-error-950/40 p-4 text-sm text-app-error-200"
           >
             <p>{{ t('reports.error') }}</p>
-            <p v-if="error" class="mt-1 text-xs text-rose-300/80">{{ error }}</p>
-            <button
-              class="mt-2 rounded-md border border-rose-700 px-3 py-1 text-xs hover:bg-rose-900/40"
+            <p v-if="error" class="mt-1 text-xs text-app-error-300/80">{{ error }}</p>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              class="mt-2 rounded-md border border-app-error-700 px-3 py-1 text-xs hover:bg-app-error-900/40"
               @click="refresh"
             >
               {{ t('reports.retry') }}
-            </button>
+            </UButton>
           </div>
 
-          <div v-else-if="loading && !view" class="py-16 text-center text-sm text-slate-400">
-            {{ t('reports.loading') }}
+          <div v-else-if="loading && !view" class="mx-auto flex max-w-5xl flex-col gap-6">
+            <USkeleton class="h-20 w-full rounded-lg" />
+            <USkeleton v-for="n in 2" :key="n" class="h-36 w-full rounded-lg" />
           </div>
 
           <div v-else-if="view" class="mx-auto flex max-w-5xl flex-col gap-6">
-            <p class="text-[11px] text-slate-500">
+            <p class="text-2xs text-dimmed">
               {{
                 t('reports.period', {
                   from: d(new Date(view.since), 'short'),
@@ -288,14 +299,14 @@ watch(
                  account that spent nothing produce the same empty breakdown. -->
             <p
               v-if="rollupState === 'none'"
-              class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+              class="rounded-lg border border-app-warning-800/60 bg-app-warning-950/30 px-3 py-2 text-xs text-app-warning-200"
               data-testid="reports-rollup-none"
             >
               {{ t('reports.rollup.none') }}
             </p>
             <p
               v-else-if="rollupState === 'stale'"
-              class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+              class="rounded-lg border border-app-warning-800/60 bg-app-warning-950/30 px-3 py-2 text-xs text-app-warning-200"
               data-testid="reports-rollup-stale"
             >
               {{
@@ -306,7 +317,7 @@ watch(
             </p>
             <p
               v-else-if="rollupState === 'current'"
-              class="text-[11px] text-slate-500"
+              class="text-2xs text-dimmed"
               data-testid="reports-rollup-current"
             >
               {{
@@ -318,49 +329,55 @@ watch(
 
             <!-- Headline totals. A stat tile, not a chart: these are single numbers. -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('reports.totals.title') }}
-              </h2>
+              </SectionLabel>
               <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-                  <p class="text-2xl font-semibold text-violet-300" data-testid="reports-metered">
+                <div class="rounded-lg border border-default bg-default/40 p-3">
+                  <p
+                    class="text-2xl font-semibold text-app-secondary-300"
+                    data-testid="reports-metered"
+                  >
                     {{ money(view.totals.meteredCost) }}
                   </p>
-                  <p class="text-xs text-slate-500">{{ t('reports.totals.metered') }}</p>
+                  <p class="text-xs text-dimmed">{{ t('reports.totals.metered') }}</p>
                 </div>
-                <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-                  <p class="text-2xl font-semibold text-amber-300">
+                <div class="rounded-lg border border-default bg-default/40 p-3">
+                  <p class="text-2xl font-semibold text-app-warning-300">
                     {{ money(view.totals.subscriptionCost) }}
                   </p>
-                  <p class="text-xs text-slate-500">{{ t('reports.totals.subscription') }}</p>
+                  <p class="text-xs text-dimmed">{{ t('reports.totals.subscription') }}</p>
                 </div>
-                <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-                  <p class="text-2xl font-semibold text-white">
+                <div class="rounded-lg border border-default bg-default/40 p-3">
+                  <p class="text-2xl font-semibold text-highlighted">
                     {{ n(view.totals.calls, 'decimal') }}
                   </p>
-                  <p class="text-xs text-slate-500">{{ t('reports.totals.calls') }}</p>
+                  <p class="text-xs text-dimmed">{{ t('reports.totals.calls') }}</p>
                 </div>
-                <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-                  <p class="text-2xl font-semibold text-white">
+                <div class="rounded-lg border border-default bg-default/40 p-3">
+                  <p class="text-2xl font-semibold text-highlighted">
                     {{ formatTokens(view.totals.inputTokens + view.totals.outputTokens) }}
                   </p>
-                  <p class="text-xs text-slate-500">{{ t('reports.totals.tokens') }}</p>
+                  <p class="text-xs text-dimmed">{{ t('reports.totals.tokens') }}</p>
                 </div>
               </div>
-              <p class="mt-1.5 text-[10px] text-slate-500">
+              <p class="mt-1.5 text-3xs text-dimmed">
                 {{ t('reports.totals.illustrative') }}
               </p>
             </section>
 
             <!-- Spend over time. One axis, two stacked series, legend always present. -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('reports.trend.title') }}
-              </h2>
-              <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-                <div v-if="!hasSpend" class="py-6 text-center text-xs text-slate-500">
-                  {{ t('reports.trend.empty') }}
-                </div>
+              </SectionLabel>
+              <div class="rounded-lg border border-default bg-default/40 p-4">
+                <EmptyState
+                  v-if="!hasSpend"
+                  compact
+                  icon="i-lucide-chart-column"
+                  :title="t('reports.trend.empty')"
+                />
                 <div v-else class="flex h-28 items-end gap-0.5" data-testid="reports-trend">
                   <div
                     v-for="point in view.trend.points"
@@ -369,18 +386,18 @@ watch(
                     :title="trendTooltip(point)"
                   >
                     <div
-                      class="w-full rounded-t-sm bg-amber-600"
+                      class="w-full rounded-t-sm bg-app-warning-600"
                       :style="{ height: `${columnPct(point.subscriptionCost, maxTrend)}%` }"
                     />
                     <div
-                      class="w-full rounded-sm bg-violet-500"
+                      class="w-full rounded-sm bg-app-secondary-500"
                       :style="{ height: `${columnPct(point.meteredCost, maxTrend)}%` }"
                     />
                   </div>
                 </div>
-                <div class="mt-2 flex items-center gap-4 text-[11px] text-slate-500">
+                <div class="mt-2 flex items-center gap-4 text-2xs text-dimmed">
                   <span class="flex items-center gap-1" :title="t('reports.legend.meteredHint')">
-                    <span class="h-2 w-2 rounded-sm bg-violet-500" />{{
+                    <span class="h-2 w-2 rounded-sm bg-app-secondary-500" />{{
                       t('reports.legend.metered')
                     }}
                   </span>
@@ -388,7 +405,7 @@ watch(
                     class="flex items-center gap-1"
                     :title="t('reports.legend.subscriptionHint')"
                   >
-                    <span class="h-2 w-2 rounded-sm bg-amber-600" />{{
+                    <span class="h-2 w-2 rounded-sm bg-app-warning-600" />{{
                       t('reports.legend.subscription')
                     }}
                   </span>
@@ -399,9 +416,9 @@ watch(
             <!-- Spend by model + by agent kind: the two axes a run has no single value for. -->
             <div class="grid gap-6 md:grid-cols-2">
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('reports.spend.byModel') }}
-                </h2>
+                </SectionLabel>
                 <ReportsSpendBreakdown
                   :rows="view.spend.byModel"
                   :currency="currency"
@@ -410,9 +427,9 @@ watch(
                 />
               </section>
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('reports.spend.byAgentKind') }}
-                </h2>
+                </SectionLabel>
                 <ReportsSpendBreakdown
                   :rows="view.spend.byAgentKind"
                   :currency="currency"
@@ -429,9 +446,9 @@ watch(
                  breakdowns the projection caps, and each says so under its own card. -->
             <div class="grid gap-6 md:grid-cols-2">
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('reports.spend.byTicket') }}
-                </h2>
+                </SectionLabel>
                 <ReportsSpendBreakdown
                   :rows="view.spend.byTicket"
                   :currency="currency"
@@ -441,9 +458,9 @@ watch(
                 />
               </section>
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('reports.spend.byRun') }}
-                </h2>
+                </SectionLabel>
                 <ReportsSpendBreakdown
                   :rows="view.spend.byRun"
                   :currency="currency"
@@ -457,29 +474,26 @@ watch(
             <!-- The shared axis: spend AND activity for the same grouping, side by side. -->
             <section class="flex flex-col gap-3">
               <div class="flex flex-wrap items-center gap-2">
-                <h2 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SectionLabel as="h2">
                   {{ t('reports.breakdown.title') }}
-                </h2>
-                <div class="flex rounded-lg border border-slate-800 p-0.5 text-[12px]">
-                  <button
-                    v-for="opt in DIMENSIONS"
-                    :key="opt.value"
-                    class="rounded-md px-2.5 py-1 transition"
-                    :class="
-                      dimension === opt.value
-                        ? 'bg-slate-800 text-slate-100'
-                        : 'text-slate-400 hover:text-slate-200'
-                    "
-                    :data-testid="`reports-dimension-${opt.value}`"
-                    @click="dimension = opt.value"
-                  >
-                    {{ opt.label }}
-                  </button>
-                </div>
+                </SectionLabel>
+                <UTabs
+                  :model-value="dimension"
+                  :items="DIMENSIONS"
+                  :content="false"
+                  size="xs"
+                  @update:model-value="dimension = $event as ReportActivityDimension"
+                >
+                  <template #default="{ item }">
+                    <span :data-testid="`reports-dimension-${item.value}`">{{ item.label }}</span>
+                  </template>
+                </UTabs>
               </div>
               <div class="grid gap-6 md:grid-cols-2">
                 <div>
-                  <h3 class="mb-2 text-[11px] text-slate-500">{{ t('reports.spend.heading') }}</h3>
+                  <h3 class="mb-2 text-2xs text-dimmed">
+                    {{ t('reports.spend.heading') }}
+                  </h3>
                   <ReportsSpendBreakdown
                     :rows="spendByDimension"
                     :currency="currency"
@@ -488,16 +502,16 @@ watch(
                   />
                 </div>
                 <div>
-                  <h3 class="mb-2 text-[11px] text-slate-500">
+                  <h3 class="mb-2 text-2xs text-dimmed">
                     {{ t('reports.activity.heading') }}
                   </h3>
-                  <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-                    <div
+                  <div class="rounded-lg border border-default bg-default/40 p-4">
+                    <EmptyState
                       v-if="!activityByDimension.length"
-                      class="py-4 text-center text-xs text-slate-500"
-                    >
-                      {{ t('reports.activity.empty') }}
-                    </div>
+                      compact
+                      icon="i-lucide-activity"
+                      :title="t('reports.activity.empty')"
+                    />
                     <template v-else>
                       <ul class="flex flex-col gap-3" data-testid="reports-activity">
                         <li
@@ -507,10 +521,8 @@ watch(
                           data-testid="reports-activity-row"
                         >
                           <div class="mb-1 flex items-baseline justify-between gap-2">
-                            <span class="min-w-0 truncate text-slate-300">{{
-                              sliceLabel(row)
-                            }}</span>
-                            <span class="shrink-0 tabular-nums text-slate-400">
+                            <span class="min-w-0 truncate text-toned">{{ sliceLabel(row) }}</span>
+                            <span class="shrink-0 tabular-nums text-muted">
                               {{ t('reports.activity.runs', { count: row.runs }, row.runs) }}
                             </span>
                           </div>
@@ -527,7 +539,7 @@ watch(
                           </div>
                           <!-- The status counts in text: the reserved status hues are
                                red-green adjacent, so identity is never colour alone. -->
-                          <p class="mt-1 flex flex-wrap gap-x-2 text-[10px] text-slate-500">
+                          <p class="mt-1 flex flex-wrap gap-x-2 text-3xs text-dimmed">
                             <span v-for="segment in activitySegments(row)" :key="segment.status">
                               {{ n(segment.count, 'decimal') }} {{ statusLabel(segment.status) }}
                             </span>
@@ -540,9 +552,7 @@ watch(
                           </p>
                         </li>
                       </ul>
-                      <div
-                        class="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-500"
-                      >
+                      <div class="mt-3 flex flex-wrap items-center gap-3 text-2xs text-dimmed">
                         <span
                           v-for="status in ['done', 'failed', 'running', 'other'] as const"
                           :key="status"
@@ -560,7 +570,7 @@ watch(
             </section>
           </div>
         </div>
-      </div>
+      </TakeoverShell>
     </Transition>
   </Teleport>
 </template>

@@ -22,6 +22,7 @@ import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusP
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import { runIsActive } from '~/utils/pipelineRender'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -145,13 +146,17 @@ const STATUS_META = computed<
 >(() => ({
   passed: {
     icon: 'i-lucide-circle-check',
-    text: 'text-emerald-400',
+    text: 'text-app-success-400',
     label: t('testing.status.passed'),
   },
-  failed: { icon: 'i-lucide-circle-x', text: 'text-rose-400', label: t('testing.status.failed') },
+  failed: {
+    icon: 'i-lucide-circle-x',
+    text: 'text-app-error-400',
+    label: t('testing.status.failed'),
+  },
   skipped: {
     icon: 'i-lucide-circle-minus',
-    text: 'text-slate-500',
+    text: 'text-dimmed',
     label: t('testing.status.skipped'),
   },
 }))
@@ -167,10 +172,18 @@ const SEVERITY_LABELS = computed<Record<TestConcern['severity'], string>>(() => 
 
 const SEVERITY_META: Record<TestConcern['severity'], { text: string; chip: string; rank: number }> =
   {
-    critical: { text: 'text-rose-300', chip: 'bg-rose-500/15 text-rose-300', rank: 0 },
-    high: { text: 'text-rose-300', chip: 'bg-rose-500/15 text-rose-300', rank: 1 },
-    medium: { text: 'text-amber-300', chip: 'bg-amber-500/15 text-amber-300', rank: 2 },
-    low: { text: 'text-slate-300', chip: 'bg-slate-500/15 text-slate-300', rank: 3 },
+    critical: {
+      text: 'text-app-error-300',
+      chip: 'bg-app-error-500/15 text-app-error-300',
+      rank: 0,
+    },
+    high: { text: 'text-app-error-300', chip: 'bg-app-error-500/15 text-app-error-300', rank: 1 },
+    medium: {
+      text: 'text-app-warning-300',
+      chip: 'bg-app-warning-500/15 text-app-warning-300',
+      rank: 2,
+    },
+    low: { text: 'text-toned', chip: 'bg-app-500/15 text-toned', rank: 3 },
   }
 
 /** Case-insensitive "these two labels refer to the same thing" heuristic. */
@@ -318,11 +331,11 @@ function toggle(key: string) {
 }
 
 const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: string }> = {
-  passed: { icon: 'i-lucide-circle-check', text: 'text-emerald-400' },
-  failed: { icon: 'i-lucide-circle-x', text: 'text-rose-400' },
-  skipped: { icon: 'i-lucide-circle-minus', text: 'text-slate-500' },
-  mixed: { icon: 'i-lucide-circle-dot', text: 'text-amber-400' },
-  empty: { icon: 'i-lucide-circle-dashed', text: 'text-slate-500' },
+  passed: { icon: 'i-lucide-circle-check', text: 'text-app-success-400' },
+  failed: { icon: 'i-lucide-circle-x', text: 'text-app-error-400' },
+  skipped: { icon: 'i-lucide-circle-minus', text: 'text-dimmed' },
+  mixed: { icon: 'i-lucide-circle-dot', text: 'text-app-warning-400' },
+  empty: { icon: 'i-lucide-circle-dashed', text: 'text-dimmed' },
 }
 </script>
 
@@ -330,7 +343,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
   <ResultWindowShell
     :open="open"
     icon="i-lucide-flask-conical"
-    icon-class="bg-amber-500/15 text-amber-300"
+    icon-class="bg-app-warning-500/15 text-app-warning-300"
     :title="headerTitle"
     :subtitle="t('testing.subtitle')"
     :step-ref="{ instanceId, stepIndex }"
@@ -349,7 +362,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
       </UBadge>
       <span
         v-if="testState && testState.attempts > 0"
-        class="text-[11px] text-slate-400"
+        class="text-2xs text-muted"
         :title="t('testing.fixerAttempts')"
       >
         {{ t('testing.fixCount', { attempts: testState.attempts, max: testState.maxAttempts }) }}
@@ -357,9 +370,12 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
       </span>
     </template>
 
-    <div class="flex min-h-0 flex-1">
+    <!-- Below `lg` the body is ONE scroller: the report, then the metadata section under it.
+         Giving each half its own scroller lets the tall, unshrinkable metadata take the whole
+         body on a phone and squeeze the report to zero height. -->
+    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
       <!-- Main: infrastructure observability + scenarios → outcomes → concerns tree -->
-      <div class="min-w-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+      <div class="min-w-0 flex-1 space-y-4 px-5 py-4 lg:min-h-0 lg:overflow-y-auto">
         <!-- Infrastructure: container lifecycle (where + what it's doing), the
                  ephemeral environment, and the run's infra attempts + logs — parity with
                  the Coder's step detail. Shown even before a report lands, so the infra
@@ -372,9 +388,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
           data-testid="tester-infrastructure"
           class="space-y-3"
         >
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <SectionLabel as="h3">
             {{ t('testing.infrastructure') }}
-          </h3>
+          </SectionLabel>
           <StepContainerStatus :step="step" :run-failed="runFailed" :run-active="runActive" />
           <EnvironmentStatusPanel
             v-if="stepEnvironment"
@@ -392,20 +408,20 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
             class="rounded-lg border px-3 py-2"
             :class="
               infraSetup.started
-                ? 'border-slate-800 bg-slate-900/60'
-                : 'border-rose-500/40 bg-rose-500/10'
+                ? 'border-default bg-default/60'
+                : 'border-app-error-500/40 bg-app-error-500/10'
             "
           >
             <div class="flex items-center gap-2">
               <UIcon
                 :name="infraSetup.started ? 'i-lucide-container' : 'i-lucide-circle-x'"
                 class="h-3.5 w-3.5 shrink-0"
-                :class="infraSetup.started ? 'text-emerald-400' : 'text-rose-400'"
+                :class="infraSetup.started ? 'text-app-success-400' : 'text-app-error-400'"
               />
-              <span class="text-[13px] font-medium text-slate-200">
+              <span class="text-sm font-medium text-default">
                 {{ standupHeadline }}
               </span>
-              <span v-if="infraSetup.durationMs != null" class="ms-auto text-[11px] text-slate-500">
+              <span v-if="infraSetup.durationMs != null" class="ms-auto text-2xs text-dimmed">
                 {{
                   t('testing.standup.took', {
                     seconds: n(infraSetup.durationMs / 1000, 'decimal'),
@@ -413,18 +429,19 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                 }}
               </span>
             </div>
-            <p v-if="infraSetup.composePath" class="mt-1 font-mono text-[11px] text-slate-500">
+            <p v-if="infraSetup.composePath" class="mt-1 font-mono text-2xs text-dimmed">
               {{ infraSetup.composePath }}
             </p>
             <p
               v-if="infraSetup.error"
-              class="mt-1 text-[12px] leading-snug text-rose-300"
+              class="mt-1 text-xs leading-snug text-app-error-300"
               data-testid="tester-infra-setup-error"
             >
               {{ infraSetup.error }}
             </p>
             <template v-if="infraSetup.logs">
               <UButton
+                color="neutral"
                 :icon="showInfraSetupLogs ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
                 variant="ghost"
                 size="xs"
@@ -443,7 +460,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
               <pre
                 v-if="showInfraSetupLogs"
                 data-testid="tester-infra-setup-logs"
-                class="mt-2 max-h-64 overflow-auto rounded bg-slate-950/70 p-2 font-mono text-[11px] leading-relaxed text-slate-300"
+                class="mt-2 max-h-64 overflow-auto rounded-sm bg-app-950/70 p-2 font-mono text-2xs leading-relaxed text-toned"
                 >{{ infraSetup.logs }}</pre>
             </template>
           </div>
@@ -455,14 +472,15 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
           <div
             v-if="infraReady"
             data-testid="tester-env-ready"
-            class="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[13px] text-emerald-200"
+            class="flex items-center gap-2 rounded-lg border border-app-success-500/30 bg-app-success-500/10 px-3 py-2 text-sm text-app-success-200"
           >
-            <UIcon name="i-lucide-rocket" class="h-4 w-4 shrink-0 text-emerald-400" />
+            <UIcon name="i-lucide-rocket" class="h-4 w-4 shrink-0 text-app-success-400" />
             <span>{{ t('testing.readyBanner') }}</span>
           </div>
 
           <div v-if="executionId">
             <UButton
+              color="neutral"
               :icon="showProvisioning ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
               variant="ghost"
               size="xs"
@@ -492,15 +510,15 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                  how it ended), so the otherwise-opaque fixer sub-jobs have a surface — the
                  analogue of the polling gate's attempt history. -->
         <section v-if="fixerAttempts.length" data-testid="tester-fixer-attempts" class="space-y-2">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <SectionLabel as="h3">
             {{ t('testing.fixerAttempts') }}
-          </h3>
+          </SectionLabel>
           <ol class="space-y-2">
             <li
               v-for="a in fixerAttempts"
               :key="a.attempt"
               data-testid="tester-fixer-attempt"
-              class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
+              class="rounded-lg border border-default bg-default/60 px-3 py-2"
             >
               <AttemptEntryHeader
                 :label="t('testing.fixerTimeline.attempt', { n: a.attempt })"
@@ -512,25 +530,27 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                 "
                 :at="a.at"
                 :icon="a.outcome === 'completed' ? 'i-lucide-wrench' : 'i-lucide-circle-x'"
-                :icon-class="a.outcome === 'completed' ? 'text-amber-300' : 'text-rose-400'"
+                :icon-class="
+                  a.outcome === 'completed' ? 'text-app-warning-300' : 'text-app-error-400'
+                "
               />
               <MarkdownProse
                 v-if="a.summary"
                 :text="a.summary"
-                class="mt-1 max-w-3xl text-[12px] leading-snug text-slate-400"
+                class="mt-1 max-w-3xl text-xs leading-snug text-muted"
               />
               <div v-if="a.concerns && a.concerns.length" class="mt-1.5">
-                <p class="text-[11px] text-slate-500">
+                <p class="text-2xs text-dimmed">
                   {{ t('testing.fixerTimeline.addressed') }}
                 </p>
                 <ul class="mt-1 space-y-0.5">
                   <li
                     v-for="(c, ci) in a.concerns"
                     :key="`fa${a.attempt}-c${ci}`"
-                    class="flex items-center gap-1.5 text-[12px] text-slate-300"
+                    class="flex items-center gap-1.5 text-xs text-toned"
                   >
                     <span
-                      class="rounded px-1 text-[10px] uppercase"
+                      class="rounded-sm px-1 text-3xs uppercase"
                       :class="SEVERITY_META[c.severity].chip"
                       >{{ SEVERITY_LABELS[c.severity] }}</span
                     >
@@ -552,12 +572,12 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
           class="space-y-2"
         >
           <div class="flex items-center gap-2">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <SectionLabel as="h3">
               {{ t('testing.quality.heading') }}
-            </h3>
+            </SectionLabel>
             <span
               v-if="quality.attempts"
-              class="text-[11px] text-slate-400"
+              class="text-2xs text-muted"
               :title="t('testing.quality.reruns')"
             >
               {{
@@ -582,40 +602,43 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
               v-for="(vd, vi) in qualityVerdicts"
               :key="`qc${vi}`"
               data-testid="tester-quality-verdict"
-              class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
+              class="rounded-lg border border-default bg-default/60 px-3 py-2"
             >
               <div class="flex items-center gap-2">
                 <UIcon
                   :name="vd.adequate ? 'i-lucide-shield-check' : 'i-lucide-shield-alert'"
                   class="h-3.5 w-3.5 shrink-0"
-                  :class="vd.adequate ? 'text-emerald-400' : 'text-amber-300'"
+                  :class="vd.adequate ? 'text-app-success-400' : 'text-app-warning-300'"
                 />
-                <span class="text-[13px] font-medium text-slate-200">
+                <span class="text-sm font-medium text-default">
                   {{
                     vd.adequate ? t('testing.quality.adequate') : t('testing.quality.inadequate')
                   }}
                 </span>
-                <span v-if="vd.model" class="ms-auto font-mono text-[10px] text-slate-500">{{
+                <span v-if="vd.model" class="ms-auto font-mono text-3xs text-dimmed">{{
                   vd.model
                 }}</span>
-                <span class="text-[11px] text-slate-500" :class="{ 'ms-auto': !vd.model }">{{
+                <span class="text-2xs text-dimmed" :class="{ 'ms-auto': !vd.model }">{{
                   d(new Date(vd.at), 'short')
                 }}</span>
               </div>
               <MarkdownProse
                 v-if="vd.feedback"
                 :text="vd.feedback"
-                class="mt-1 text-[12px] leading-snug text-slate-400"
+                class="mt-1 text-xs leading-snug text-muted"
               />
               <div v-if="vd.gaps.length" class="mt-1.5">
-                <p class="text-[11px] text-slate-500">{{ t('testing.quality.gaps') }}</p>
+                <p class="text-2xs text-dimmed">{{ t('testing.quality.gaps') }}</p>
                 <ul class="mt-1 space-y-0.5">
                   <li
                     v-for="(gap, gi) in vd.gaps"
                     :key="`qc${vi}-g${gi}`"
-                    class="flex items-start gap-1.5 text-[12px] text-slate-300"
+                    class="flex items-start gap-1.5 text-xs text-toned"
                   >
-                    <UIcon name="i-lucide-dot" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+                    <UIcon
+                      name="i-lucide-dot"
+                      class="mt-0.5 h-3.5 w-3.5 shrink-0 text-app-warning-400"
+                    />
                     <span>{{ gap }}</span>
                   </li>
                 </ul>
@@ -626,11 +649,11 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
 
         <div
           v-if="!report"
-          class="flex flex-col items-center justify-center gap-2 py-12 text-center text-slate-400"
+          class="flex flex-col items-center justify-center gap-2 py-12 text-center text-muted"
         >
           <UIcon name="i-lucide-flask-conical" class="h-8 w-8 opacity-40" />
           <p class="text-sm">{{ t('testing.empty.title') }}</p>
-          <p class="max-w-sm text-[11px] text-slate-500">
+          <p class="max-w-sm text-2xs text-dimmed">
             {{ t('testing.empty.hint') }}
           </p>
         </div>
@@ -642,25 +665,27 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
           <MarkdownProse
             v-if="report.summary"
             :text="report.summary"
-            class="mb-4 max-w-3xl text-[13px] leading-relaxed text-slate-300"
+            class="mb-4 max-w-3xl text-sm leading-relaxed text-toned"
           />
 
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('testing.scenariosOutcomes') }}
-          </h3>
+          </SectionLabel>
           <ul class="space-y-2">
             <li
               v-for="g in groups"
               :key="g.key"
-              class="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/60"
+              class="overflow-hidden rounded-lg border border-default bg-default/60"
             >
-              <button
-                class="flex w-full items-center gap-2 px-3 py-2 text-start hover:bg-slate-800/40"
+              <UButton
+                color="neutral"
+                variant="ghost"
+                class="flex w-full items-center gap-2 px-3 py-2 text-start hover:bg-elevated/40"
                 @click="toggle(g.key)"
               >
                 <UIcon
                   :name="collapsed.has(g.key) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
-                  class="h-3.5 w-3.5 shrink-0 text-slate-500"
+                  class="h-3.5 w-3.5 shrink-0 text-dimmed"
                 />
                 <UIcon
                   :name="GROUP_STATUS_META[g.status].icon"
@@ -668,15 +693,15 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   :class="GROUP_STATUS_META[g.status].text"
                 />
                 <span
-                  class="min-w-0 flex-1 truncate text-[13px]"
-                  :class="g.other ? 'text-slate-400' : 'font-medium text-slate-200'"
+                  class="min-w-0 flex-1 truncate text-sm"
+                  :class="g.other ? 'text-muted' : 'font-medium text-default'"
                 >
                   {{ g.title }}
                 </span>
                 <UIcon
                   v-if="g.screenshots.length"
                   name="i-lucide-camera"
-                  class="h-3.5 w-3.5 shrink-0 text-slate-500"
+                  class="h-3.5 w-3.5 shrink-0 text-dimmed"
                   :title="
                     t(
                       'testing.screenshotCount',
@@ -685,14 +710,14 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                     )
                   "
                 />
-                <span class="shrink-0 text-[11px] text-slate-500">
+                <span class="shrink-0 text-2xs text-dimmed">
                   {{ t('testing.checkCount', { count: g.outcomes.length }, g.outcomes.length) }}
                   <template v-if="g.concerns.length">
                     ·
                     {{ t('testing.concernCount', { count: g.concerns.length }, g.concerns.length) }}
                   </template>
                 </span>
-              </button>
+              </UButton>
 
               <div v-if="!collapsed.has(g.key)" class="space-y-1 px-3 pb-3 ps-9">
                 <!-- Outcomes -->
@@ -707,15 +732,15 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                     :class="STATUS_META[o.status].text"
                   />
                   <div class="min-w-0">
-                    <span class="text-[13px] text-slate-200">{{ o.name }}</span>
+                    <span class="text-sm text-default">{{ o.name }}</span>
                     <MarkdownProse
                       v-if="o.detail"
                       :text="o.detail"
-                      class="max-w-3xl text-[12px] leading-snug text-slate-400"
+                      class="max-w-3xl text-xs leading-snug text-muted"
                     />
                   </div>
                 </div>
-                <p v-if="!g.outcomes.length" class="py-0.5 text-[12px] italic text-slate-500">
+                <p v-if="!g.outcomes.length" class="py-0.5 text-xs italic text-dimmed">
                   {{ t('testing.noDiscreteCheck') }}
                 </p>
 
@@ -723,7 +748,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                 <div
                   v-for="(c, ci) in g.concerns"
                   :key="`c${ci}`"
-                  class="mt-1 flex items-start gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1.5"
+                  class="mt-1 flex items-start gap-2 rounded-md border border-default bg-app-950/40 px-2 py-1.5"
                 >
                   <UIcon
                     name="i-lucide-alert-triangle"
@@ -732,9 +757,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   />
                   <div class="min-w-0">
                     <div class="flex items-center gap-1.5">
-                      <span class="text-[12px] font-medium text-slate-200">{{ c.title }}</span>
+                      <span class="text-xs font-medium text-default">{{ c.title }}</span>
                       <span
-                        class="rounded px-1 text-[10px] uppercase"
+                        class="rounded-sm px-1 text-3xs uppercase"
                         :class="SEVERITY_META[c.severity].chip"
                       >
                         {{ SEVERITY_LABELS[c.severity] }}
@@ -743,18 +768,20 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                     <MarkdownProse
                       v-if="c.detail"
                       :text="c.detail"
-                      class="max-w-3xl text-[12px] leading-snug text-slate-400"
+                      class="max-w-3xl text-xs leading-snug text-muted"
                     />
                   </div>
                 </div>
 
                 <!-- Screenshots captured for this scenario -->
                 <div v-if="g.screenshots.length" class="mt-2 flex flex-wrap gap-2">
-                  <button
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
                     v-for="(s, si) in g.screenshots"
                     :key="`shot${si}`"
                     data-testid="tester-screenshot"
-                    class="group relative h-20 w-28 shrink-0 overflow-hidden rounded border border-slate-800 bg-slate-950/60 hover:border-slate-600"
+                    class="group relative block h-20 w-28 shrink-0 overflow-hidden rounded-sm border border-default bg-app-950/60 hover:bg-app-950/60 focus-visible:bg-app-950/60 disabled:bg-app-950/60 p-0 hover:border-app-600"
                     :title="s.view"
                     @click="openShot(s.artifactId)"
                   >
@@ -765,20 +792,17 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                       class="h-full w-full object-cover object-top"
                     />
                     <span
-                      v-else
-                      class="flex h-full w-full items-center justify-center text-[10px] text-slate-600"
+                      v-else-if="blobs.statusFor(s.artifactId) === 'error'"
+                      class="flex h-full w-full items-center justify-center text-3xs text-app-600"
                     >
-                      {{
-                        blobs.statusFor(s.artifactId) === 'error'
-                          ? t('testing.shot.failed')
-                          : t('testing.shot.loading')
-                      }}
+                      {{ t('testing.shot.failed') }}
                     </span>
+                    <USkeleton v-else class="h-full w-full rounded-none" />
                     <span
-                      class="absolute inset-x-0 bottom-0 truncate bg-slate-950/80 px-1 py-0.5 text-[9px] text-slate-300"
+                      class="absolute inset-x-0 bottom-0 truncate bg-app-950/80 px-1 py-0.5 text-3xs text-toned"
                       >{{ s.view }}</span
                     >
-                  </button>
+                  </UButton>
                 </div>
               </div>
             </li>
@@ -786,14 +810,16 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
 
           <!-- Standalone gallery: any captures not mapped to a scenario above -->
           <section v-if="ungroupedScreenshots.length" class="mt-5">
-            <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <SectionLabel as="h3" class="mb-2">
               {{ t('testing.screenshots') }}
-            </h3>
+            </SectionLabel>
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <button
+              <UButton
+                color="neutral"
+                variant="ghost"
                 v-for="(s, si) in ungroupedScreenshots"
                 :key="`gal${si}`"
-                class="group relative aspect-video overflow-hidden rounded-lg border border-slate-800 bg-slate-950/60 hover:border-slate-600"
+                class="group relative block aspect-video overflow-hidden rounded-lg border border-default bg-app-950/60 hover:bg-app-950/60 focus-visible:bg-app-950/60 disabled:bg-app-950/60 p-0 hover:border-app-600"
                 :title="s.view"
                 @click="openShot(s.artifactId)"
               >
@@ -804,65 +830,64 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   class="h-full w-full object-cover object-top"
                 />
                 <span
-                  v-else
-                  class="flex h-full w-full items-center justify-center text-[11px] text-slate-600"
+                  v-else-if="blobs.statusFor(s.artifactId) === 'error'"
+                  class="flex h-full w-full items-center justify-center text-2xs text-app-600"
                 >
-                  {{
-                    blobs.statusFor(s.artifactId) === 'error'
-                      ? t('testing.shot.failedToLoad')
-                      : t('testing.shot.loading')
-                  }}
+                  {{ t('testing.shot.failedToLoad') }}
                 </span>
+                <USkeleton v-else class="h-full w-full rounded-none" />
                 <span
-                  class="absolute inset-x-0 bottom-0 truncate bg-slate-950/80 px-1.5 py-0.5 text-[10px] text-slate-300"
+                  class="absolute inset-x-0 bottom-0 truncate bg-app-950/80 px-1.5 py-0.5 text-3xs text-toned"
                   >{{ s.view }}</span
                 >
-              </button>
+              </UButton>
             </div>
           </section>
         </template>
       </div>
 
-      <!-- Sidebar: metadata -->
+      <!-- Sidebar: metadata. A right-hand column on wide screens, a full-width section below
+           the report on mobile (outcome counts / environment / run metadata are not redundant
+           with the header verdict badge, so they reflow rather than hide). -->
       <aside
-        class="hidden w-60 shrink-0 flex-col gap-4 border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+        class="flex w-full shrink-0 flex-col gap-4 border-t border-default bg-default/50 px-4 py-4 lg:w-60 lg:overflow-y-auto lg:border-s lg:border-t-0"
       >
         <div v-if="report">
-          <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <SectionLabel as="h4" class="mb-2">
             {{ t('testing.verdict.heading') }}
-          </h4>
-          <div class="flex items-center gap-2 text-[13px]">
+          </SectionLabel>
+          <div class="flex items-center gap-2 text-sm">
             <UIcon
               :name="report.greenlight ? 'i-lucide-circle-check' : 'i-lucide-circle-x'"
               class="h-4 w-4"
-              :class="report.greenlight ? 'text-emerald-400' : 'text-rose-400'"
+              :class="report.greenlight ? 'text-app-success-400' : 'text-app-error-400'"
             />
-            <span :class="report.greenlight ? 'text-emerald-300' : 'text-rose-300'">
+            <span :class="report.greenlight ? 'text-app-success-300' : 'text-app-error-300'">
               {{ report.greenlight ? t('testing.verdict.safe') : t('testing.verdict.withheld') }}
             </span>
           </div>
         </div>
 
         <div v-if="report">
-          <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <SectionLabel as="h4" class="mb-2">
             {{ t('testing.outcomes.heading') }}
-          </h4>
-          <dl class="space-y-1 text-[12px]">
+          </SectionLabel>
+          <dl class="space-y-1 text-xs">
             <div class="flex items-center justify-between">
-              <dt class="text-slate-400">{{ t('testing.outcomes.passed') }}</dt>
-              <dd class="text-emerald-300">{{ counts.passed }}</dd>
+              <dt class="text-muted">{{ t('testing.outcomes.passed') }}</dt>
+              <dd class="text-app-success-300">{{ counts.passed }}</dd>
             </div>
             <div class="flex items-center justify-between">
-              <dt class="text-slate-400">{{ t('testing.outcomes.failed') }}</dt>
-              <dd class="text-rose-300">{{ counts.failed }}</dd>
+              <dt class="text-muted">{{ t('testing.outcomes.failed') }}</dt>
+              <dd class="text-app-error-300">{{ counts.failed }}</dd>
             </div>
             <div class="flex items-center justify-between">
-              <dt class="text-slate-400">{{ t('testing.outcomes.skipped') }}</dt>
-              <dd class="text-slate-300">{{ counts.skipped }}</dd>
+              <dt class="text-muted">{{ t('testing.outcomes.skipped') }}</dt>
+              <dd class="text-toned">{{ counts.skipped }}</dd>
             </div>
-            <div class="flex items-center justify-between border-t border-slate-800 pt-1">
-              <dt class="text-slate-400">{{ t('testing.outcomes.concerns') }}</dt>
-              <dd class="text-amber-300">
+            <div class="flex items-center justify-between border-t border-default pt-1">
+              <dt class="text-muted">{{ t('testing.outcomes.concerns') }}</dt>
+              <dd class="text-app-warning-300">
                 {{ counts.concerns
                 }}<template v-if="counts.blocking">
                   {{
@@ -875,10 +900,10 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
         </div>
 
         <div v-if="report?.environment">
-          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <SectionLabel as="h4" class="mb-1">
             {{ t('testing.environment') }}
-          </h4>
-          <p class="text-[12px] capitalize text-slate-300">{{ report.environment }}</p>
+          </SectionLabel>
+          <p class="text-xs capitalize text-toned">{{ report.environment }}</p>
         </div>
 
         <!-- Shared run metadata + embedded observability (model, run id, timing,
@@ -893,7 +918,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
           :failure-at="instance?.failure?.occurredAt"
         />
 
-        <p class="mt-auto text-[10px] leading-relaxed text-slate-600">
+        <p class="mt-auto text-3xs leading-relaxed text-app-600">
           {{ t('testing.footer') }}
         </p>
       </aside>

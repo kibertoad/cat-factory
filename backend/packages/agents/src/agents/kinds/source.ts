@@ -48,6 +48,10 @@ export interface AgentKindCapabilityView {
  * Deliberately ONE method returning the whole (small, bounded) set rather than a per-kind read:
  * the callers are a dispatch's skill resolution and its tool-server resolution, which want
  * different kinds at different moments, and a per-kind remote read would put a round trip on each.
+ *
+ * "Small" holds in bytes as well as kinds: over the wire a `bundled` skill rides by reference,
+ * each distinct body once however many kinds declare it (`@cat-factory/server`'s
+ * `agentKindsWire.ts`).
  */
 export interface AgentKindSource {
   capabilities(): Promise<AgentKindCapabilityView[]>

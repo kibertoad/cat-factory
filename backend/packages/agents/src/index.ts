@@ -49,6 +49,27 @@ export {
   normalizeSkillRefs,
   normalizeToolRefs,
 } from './agents/kinds/capabilities.js'
+// The SHAPE of those definitions as valibot schemas, held equal to the types at compile time:
+// checked at boot (`validateRegistrations`) and by a mothership-mode node reading them off the wire.
+export {
+  bundledSkillDefinitionSchema,
+  catalogSkillRefSchema,
+  definitionIssues,
+  type Equals,
+  exactly,
+  mcpServerDefinitionSchema,
+} from './agents/kinds/definition-schemas.js'
+// The Nuxt UI capability: an OPT-IN bundled skill + MCP tool server a facade attaches to the coder
+// kinds. Not in `defaultAgentKindRegistry()` — the framework default stays stack-agnostic. See
+// `backend/packages/agents/src/agents/kinds/nuxt-ui/index.ts`.
+export {
+  NUXT_UI_CAPABILITY_KINDS,
+  NUXT_UI_SKILL_ID,
+  NUXT_UI_TOOL_SERVER_ID,
+  nuxtUiSkill,
+  nuxtUiToolServer,
+  registerNuxtUiCapability,
+} from './agents/kinds/nuxt-ui/index.js'
 // Where the deployment's capability LAYER is read from when it is not this process's own registry
 // (a mothership-mode node reads the mothership's, over `GET /internal/agent-kinds`). The kind
 // catalog itself stays node-local: only the data half can cross a wire.
@@ -254,10 +275,15 @@ export { BUILTIN_GATABLE_KINDS, isGatableKind } from './agents/kinds/gatable.js'
 // composite executor's ROUTING and the engine's preOp context preparation so the two can never
 // disagree about whether an agent can read files or run git.
 export {
+  delegatedExecutorFor,
   deliverableIsReply,
   dispatchDeliversCheckout,
+  runsDelegated,
   runsInContainer,
 } from './agents/kinds/container-surface.js'
+// What a declared surface IMPLIES, as a total table: adding a surface fails the build there rather
+// than falling through to whatever each call site's `else` happened to be.
+export { SURFACE_TRAITS, type SurfaceTraits, surfaceTraits } from './agents/kinds/surface-traits.js'
 export { companionSystemPrompt } from './agents/prompts/companion.js'
 // The document-authoring agent kinds (doc-researcher / doc-outliner / doc-writer /
 // doc-finalizer), registered as a SIDE EFFECT of importing this module so they are
@@ -414,7 +440,6 @@ export {
   registerPrReviewerAgent,
   renderPriorReviewContext,
   resolvePrHeadNumber,
-  resolvePrNumber,
 } from './agents/kinds/pr-reviewer.js'
 export {
   CHALLENGE_INVESTIGATOR_KIND,
@@ -424,6 +449,12 @@ export {
   type PrReviewChallengeOutput,
   registerChallengeInvestigatorAgent,
 } from './agents/kinds/challenge-investigator.js'
+export {
+  GUIDED_REVIEW_INVESTIGATOR_KIND,
+  GUIDED_REVIEW_INVESTIGATOR_SYSTEM_PROMPT,
+  guidedReviewInvestigation,
+  registerGuidedReviewInvestigatorAgent,
+} from './agents/kinds/guided-review-investigator.js'
 export {
   FORK_CHAT_AGENT_KIND,
   FORK_CHAT_SYSTEM_PROMPT,
@@ -473,6 +504,31 @@ export {
   renderSurveyFile,
 } from './agents/prompts/monorepo-adoption.js'
 export { monorepoExplorationTools } from './agents/runtime/monorepo-exploration-tools.js'
+export {
+  guidedReviewTools,
+  type GuidedReviewExplorer,
+  type GuidedReviewFileRequest,
+} from './agents/runtime/guided-review-tools.js'
+export {
+  GUIDED_REVIEW_AGENT_KIND,
+  GUIDED_REVIEW_ANSWER_SYSTEM_PROMPT,
+  GUIDED_REVIEW_DRAFTS_SYSTEM_PROMPT,
+  GUIDED_REVIEW_OVERVIEW_SYSTEM_PROMPT,
+  renderGuidedReviewAnswerPrompt,
+  renderGuidedReviewDraftsPrompt,
+  renderGuidedReviewOverviewPrompt,
+  type GuidedReviewChangedFileSummary,
+  type GuidedReviewOverviewPromptInput,
+  type GuidedReviewPrHeader,
+  type GuidedReviewThreadPromptInput,
+  type GuidedReviewTurn,
+} from './agents/prompts/guided-review.js'
+export {
+  PR_ASSESSMENT_SYSTEM_PROMPT,
+  PR_ASSESSOR_AGENT_KIND,
+  renderPrAssessmentPrompt,
+  type PrAssessmentPromptInput,
+} from './agents/prompts/pr-assessment.js'
 export {
   FRAGMENT_TITLE_AGENT_KIND,
   FRAGMENT_TITLE_SYSTEM_PROMPT,

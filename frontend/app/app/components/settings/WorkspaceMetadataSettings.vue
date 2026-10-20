@@ -17,11 +17,13 @@ import {
 } from '~/modular/workspace-metadata'
 import type { WorkspaceMetadataFieldDefinition } from '~/modular/workspace-metadata'
 import type { AppSlots } from '~/modular/slots'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const slots = useReactiveSlots<AppSlots>()
 const store = useWorkspaceSettingsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 /**
@@ -66,11 +68,7 @@ async function save() {
     await store.update({
       metadata: metadataPatchFrom(fields.value, draft, store.settings.metadata),
     })
-    toast.add({
-      title: t('settings.workspaceSettings.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.workspaceSettings.toast.saved')
   } catch (e) {
     present(e, 'settings.workspaceSettings.toast.saveFailed')
   } finally {
@@ -90,25 +88,28 @@ function selectItems(field: WorkspaceMetadataFieldDefinition) {
 <template>
   <div class="space-y-6" data-testid="workspace-metadata-settings">
     <section class="space-y-2">
-      <h3 class="text-sm font-semibold text-slate-200">
+      <h3 class="text-sm font-semibold text-default">
         {{ t('settings.workspaceSettings.metadata.heading') }}
       </h3>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-2xs text-muted">
         {{ t('settings.workspaceSettings.metadata.body') }}
       </p>
     </section>
 
-    <p v-if="fields.length === 0" class="text-[11px] text-slate-500">
-      {{ t('settings.workspaceSettings.metadata.empty') }}
-    </p>
+    <EmptyState
+      v-if="fields.length === 0"
+      compact
+      icon="i-lucide-tags"
+      :title="t('settings.workspaceSettings.metadata.empty')"
+    />
 
     <template v-else>
       <div class="space-y-4">
         <label v-for="field in fields" :key="field.key" class="block">
           <!-- Field labels are deployment DATA, rendered verbatim (see the module docs). -->
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+          <SectionLabel as="span" class="mb-1 block">
             {{ field.label }}
-          </span>
+          </SectionLabel>
           <USelect
             v-if="field.type === 'select'"
             v-model="draft[field.key]"
@@ -124,7 +125,7 @@ function selectItems(field: WorkspaceMetadataFieldDefinition) {
             size="sm"
             :data-testid="`workspace-metadata-${field.key}`"
           />
-          <span v-if="field.description" class="mt-1 block text-[11px] text-slate-500">
+          <span v-if="field.description" class="mt-1 block text-2xs text-dimmed">
             {{ field.description }}
           </span>
         </label>
@@ -132,7 +133,6 @@ function selectItems(field: WorkspaceMetadataFieldDefinition) {
 
       <div class="flex justify-end">
         <UButton
-          color="primary"
           size="sm"
           icon="i-lucide-save"
           :loading="saving"

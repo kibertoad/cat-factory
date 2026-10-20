@@ -90,7 +90,7 @@ If you'd rather wire it by hand (or the guided flow can't run on your host), do 
      cluster created with `--disable=traefik` has none, and kind ships none at all. Second a
      **host port published into it**: every local distribution runs the cluster inside Docker and
      forwards only the ports it was asked for at CREATE time (`k3d cluster create -p
-"80:80@loadbalancer"`, kind's `extraPortMappings`), and neither can be added to a cluster that
+     "80:80@loadbalancer"`, kind's `extraPortMappings`), and neither can be added to a cluster that
      already exists. Without the port, a name that does resolve to loopback (see the third
      requirement for which ones do) finds nothing listening, environments still reach `ready`
      (readiness is workload readiness, not an HTTP probe), and the failure surfaces much later at
@@ -387,7 +387,7 @@ ongoing lifecycle**: a cluster adapter analogous to the per-run `ContainerRuntim
   cluster CA, and seed the workspace's `kubernetes` connection automatically (a `linkCluster`
   helper, analogous to local mode's `linkRepo`).
 - **Image loading**: a local image the PR built must be importable into the cluster (`k3d image
-import`) rather than pulled from a registry; wire the provision flow to load `{{image}}` when
+  import`) rather than pulled from a registry; wire the provision flow to load `{{image}}` when
   it's a local tag.
 - **URL exposure**: settled for the guided path (`cat-factory k3s` publishes the host port at
   cluster-create time and probes both halves before promising a template; see above). What is

@@ -118,11 +118,11 @@ harness path via a widened `peerRepos` job body, with no runner-image bump. `ste
   uses the home workspace's block list and may miss a cross-home REVERSE edge, a known
   phase-1 limitation to revisit when shared-service usage grows.
 - Phases 2 and 3 touch the executor-harness (`AgentInfraSpec` / `peerRepos`): bump
-  `@cat-factory/executor-harness` + the three pinned image tags per the CLAUDE.md rules.
+  `@cat-factory/executor-harness` + the three pinned image tags per the AGENTS.md rules.
 - An involved frame with no linked repo provisions an env but is skipped for coding;
   the asymmetry is deliberate.
 - Two branches adding Drizzle migrations merge into "Non-commutative migrations": re-root
-  with `node scripts/rebase-migration-snapshot.mjs <later-folder>` (see CLAUDE.md).
+  with `node scripts/rebase-migration-snapshot.mjs <later-folder>` (see AGENTS.md).
 - **Phase 3 carried-forward notes:**
   - `resolveRepoTargets` (`@cat-factory/server`, beside the singular resolver) shares the same
     store deps, hoists the installation + projection reads ONCE and batches involved frames via

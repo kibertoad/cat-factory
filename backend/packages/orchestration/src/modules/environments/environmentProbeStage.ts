@@ -96,7 +96,7 @@ function probeFailureCause(kind: AgentFailureKind): string {
 }
 
 export class EnvironmentProbeStage {
-  /** The injected logger, normalised once so every site can log unconditionally (CLAUDE.md). */
+  /** The injected logger, normalised once so every site can log unconditionally (AGENTS.md). */
   private readonly log: Logger
 
   constructor(private readonly deps: EnvironmentProbeStageDependencies) {

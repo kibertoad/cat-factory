@@ -9,6 +9,7 @@ import { isStandardsContextFile } from './runtime/fragments.js'
 import { companionCheckoutSection, companionSystemPrompt } from './prompts/companion.js'
 import { companionTargets } from './kinds/companions.js'
 import { READ_ONLY_GUARDRAIL, isReadOnlyAgentKind } from './kinds/read-only.js'
+import { surfaceTraits } from './kinds/surface-traits.js'
 import { SPIKE_AGENT_KIND, spikeContextSection } from './kinds/spike.js'
 import { businessLogicSystemPrompt } from './prompts/business-logic.js'
 import { mockFrontendSection, mockSystemPrompt } from './prompts/mock.js'
@@ -254,10 +255,10 @@ function applySurfaceDirectives(
   // tester installs dependencies and runs a suite). The surface still means "never pushes"; the
   // guardrail's wording ("must not create files") does not, and reads to that agent as a refusal
   // to run the suite. See {@link AgentStepSpec.localWrites}.
+  const traits = surfaceTraits(surface)
   const needsGuardrail =
-    isReadOnlyAgentKind(kind) || (surface === 'container-explore' && !step?.localWrites)
-  const needsFinalAnswer =
-    usedRegisteredPrompt && (surface === 'inline' || surface === 'container-explore')
+    isReadOnlyAgentKind(kind) || (traits?.readOnlyGuardrail === true && !step?.localWrites)
+  const needsFinalAnswer = usedRegisteredPrompt && traits?.deliverableIsReply === true
   let result = prompt
   if (needsGuardrail) result = `${result}\n\n${READ_ONLY_GUARDRAIL}`
   if (needsFinalAnswer) result = `${result}\n\n${FINAL_ANSWER_IN_REPLY}`

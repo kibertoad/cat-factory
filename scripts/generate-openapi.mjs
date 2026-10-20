@@ -16,6 +16,8 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { toJsonSchema, toJsonSchemaDefs } from '@valibot/to-json-schema'
 import { addHandDocumentedRoutes } from './openapi/hand-documented-routes.mjs'
+import { DIRECTORY_OPERATION_DOCS } from './openapi/directory-docs.mjs'
+import { WEBHOOKS } from './openapi/webhooks.mjs'
 import { API_PREFIX, STATUS_DESCRIPTIONS } from './openapi/spec-constants.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -52,7 +54,7 @@ export const SERVED_OPENAPI_PATH = resolve(
 // `docs/openapi.json` go stale on every release, so the drift guard (`check:openapi`) would fail
 // spuriously on the next PR that merges a release even when no contract changed.
 //
-// The public API is STABLE (see CLAUDE.md "The public API does not break"): an additive change
+// The public API is STABLE (see AGENTS.md "The public API does not break"): an additive change
 // bumps the minor here, and a breaking one is not allowed on `/api/v1` at all (it means a new
 // `/api/v2` prefix served beside v1 through a deprecation window, and a new spec version with it).
 //
@@ -62,7 +64,7 @@ export const SERVED_OPENAPI_PATH = resolve(
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.74.0'
+const API_VERSION = '1.89.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -71,6 +73,27 @@ const API_VERSION = '1.74.0'
  */
 const COMPONENT_SCHEMAS = {
   ErrorResponse: 'errorResponseSchema',
+  DirectoryWorkspace: 'directoryWorkspaceSchema',
+  DirectoryUser: 'directoryUserSchema',
+  DirectoryUserAccount: 'directoryUserAccountSchema',
+  DirectoryAccountMembership: 'directoryAccountMembershipSchema',
+  DirectoryWorkspaceMembership: 'directoryWorkspaceMembershipSchema',
+  DirectoryRepo: 'directoryRepoSchema',
+  DirectoryChange: 'directoryChangeSchema',
+  DirectoryChangePage: 'directoryChangePageSchema',
+  DirectoryWorkspacePage: 'directoryWorkspacePageSchema',
+  DirectoryUserPage: 'directoryUserPageSchema',
+  DirectoryAccountMembershipPage: 'directoryAccountMembershipPageSchema',
+  DirectoryWorkspaceMembershipPage: 'directoryWorkspaceMembershipPageSchema',
+  DirectoryRepoPage: 'directoryRepoPageSchema',
+  DirectoryWebhook: 'directoryWebhookSchema',
+  DirectoryWebhookList: 'directoryWebhookListSchema',
+  DirectoryReach: 'directoryReachSchema',
+  PutDirectoryWebhook: 'putDirectoryWebhookSchema',
+  DirectoryWebhookDelivery: 'directoryWebhookDeliverySchema',
+  NotificationWebhookDelivery: 'notificationWebhookDeliverySchema',
+  RunWebhookDelivery: 'runWebhookDeliverySchema',
+  PlatformAlertWebhookDelivery: 'platformAlertWebhookDeliverySchema',
   PublicJob: 'publicJobSchema',
   PublicJobAccepted: 'publicJobAcceptedSchema',
   CreatePublicJob: 'createPublicJobSchema',
@@ -97,6 +120,32 @@ const COMPONENT_SCHEMAS = {
   PublicKaizenEntryCombo: 'publicKaizenEntryComboSchema',
   PublicKaizenEntryList: 'publicKaizenEntryListSchema',
   AcknowledgeKaizenEntry: 'acknowledgeKaizenEntrySchema',
+  // Guided PR review: every shape a session view nests is hoisted, so clients get named types.
+  GuidedReviewSessionView: 'guidedReviewSessionViewSchema',
+  GuidedReviewThreadView: 'guidedReviewThreadViewSchema',
+  GuidedReviewExchange: 'guidedReviewExchangeSchema',
+  GuidedReviewSession: 'guidedReviewSessionSchema',
+  GuidedReviewOverview: 'guidedReviewOverviewSchema',
+  GuidedReviewOverviewContent: 'guidedReviewOverviewContentSchema',
+  GuidedReviewFailure: 'guidedReviewFailureSchema',
+  GuidedReviewThread: 'guidedReviewThreadSchema',
+  GuidedReviewThreadSummary: 'guidedReviewThreadSummarySchema',
+  GuidedReviewMessage: 'guidedReviewMessageSchema',
+  GuidedReviewAnchor: 'guidedReviewAnchorSchema',
+  GuidedReviewDraftReport: 'guidedReviewDraftReportSchema',
+  GuidedReviewCommentDraft: 'guidedReviewCommentDraftSchema',
+  PublicGuidedReviewList: 'publicGuidedReviewListSchema',
+  OpenGuidedReview: 'openGuidedReviewSchema',
+  OpenGuidedReviewThread: 'openGuidedReviewThreadSchema',
+  AskGuidedReview: 'askGuidedReviewSchema',
+  RequestGuidedReviewDrafts: 'requestGuidedReviewDraftsSchema',
+  EditGuidedReviewDraft: 'editGuidedReviewDraftSchema',
+  PostGuidedReviewDrafts: 'postGuidedReviewDraftsSchema',
+  GuidedReviewPostResult: 'guidedReviewPostResultSchema',
+  AssessPublicPullRequest: 'assessPublicPullRequestSchema',
+  PublicPrAssessment: 'publicPrAssessmentSchema',
+  PublicPrAssessmentPolicy: 'publicPrAssessmentPolicySchema',
+  PublicPrAssessmentVerdict: 'publicPrAssessmentVerdictSchema',
   PublicPipeline: 'publicPipelineSchema',
   PublicPipelineList: 'publicPipelineListSchema',
   // The best-practice standard a task pins, hoisted for the reason the spend rows are: it is a
@@ -125,6 +174,7 @@ const COMPONENT_SCHEMAS = {
   PublicSpendTotals: 'publicSpendTotalsSchema',
   PublicSpend: 'publicSpendSchema',
   PublicIdentity: 'publicIdentitySchema',
+  PublicDeployment: 'publicDeploymentSchema',
   // Parked decisions. `PublicDecisionList` is the response of EVERY decision route, and it
   // transitively carries the full finding + fork-option + PR-finding shapes — hoisting it (and the
   // members of its variant) keeps the spec from inlining tens of KB per operation.
@@ -584,6 +634,12 @@ const OPERATION_DOCS = {
     description:
       'Group the board\u2019s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`, `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` / `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage, so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a dropped row, never dropped from the breakdown. `rows` is the heaviest `limit` slices (default 100, max 500) and `truncated` says when there was a tail, while `totals` aggregates the WHOLE window either way, so a capped answer still reports what the board spent. `source` says which store answered: the short windows scan the live ledger, which resolves a repository or a ticket through today\u2019s links, while the long ones read the durable daily rollup, which froze that attribution while the money was spent and is never pruned. Read `rolledUpThrough` before reporting a quiet quarter, since a rollup that has never run and a board that spent nothing look identical. Workspace-scoped: the account-wide view is not reachable through this surface.',
   },
+  getPublicDeployment: {
+    tag: 'Identity',
+    summary: 'Describe the deployment',
+    description:
+      'Report where this deployment serves its web app (`appUrl`): `APP_BASE_URL` when the operator set one, otherwise the origin this API was reached on. An integration uses it to send a person to one of the app’s deep links, such as the prefilled add-service screen (`?addRepo=<owner>/<name>`). Account-level, so a key reaching several workspaces calls it without naming one. `read` scope.',
+  },
   getPublicIdentity: {
     tag: 'Identity',
     summary: 'Describe the calling key',
@@ -974,6 +1030,78 @@ const OPERATION_DOCS = {
     description:
       'Record that this entry has been triaged, optionally with a note (a ticket id, why it was dismissed), and take it out of the `acknowledged=false` backlog. Send `{"acknowledged": false}` to undo. A `write` key, not an `admin` one: acknowledging starts nothing and merges nothing. Acknowledging twice is a no-op that returns the row unchanged, so `acknowledgedAt` keeps naming the FIRST triage rather than the last retry. An entry whose grading has not settled yet is refused `409` with `details.reason: "kaizen_entry_not_settled"` (there are no recommendations to have read), and an unknown id is `404` with `details.reason: "kaizen_entry_not_found"`.',
   },
+  openPublicGuidedReview: {
+    tag: 'Guided review',
+    summary: 'Open a guided review of a pull request',
+    description:
+      'Open a guided review of one pull request in a repository linked to the workspace, or return the one the calling key\'s identity already has for it. A guided review explains the PR (what it does, its meaningful changes, consequences, risks, where to focus, and suggested questions) and holds question threads answered by a model that reads the PR at the commit under review. Answers with the session at once; its overview is generated in the background, so follow `GET /api/v1/guided-reviews/{sessionId}/events` or re-read it. A key bound to a person acts as that person; an unbound key owns its own sessions and runs on the workspace\'s credentials, never a person\'s; `createdByKind` says which of the two owns a session. An unlinked repository is `404` with `details.reason: "repo_not_linked"`, and a PR the host cannot find is `404` with `details.reason: "pr_not_found"`.',
+  },
+  listPublicGuidedReviews: {
+    tag: 'Guided review',
+    summary: "List the workspace's guided reviews",
+    description:
+      'Guided review sessions in the workspace, newest created first, optionally narrowed to one repository (`repoId`), one pull request (`prNumber`) or the calling key\'s own (`mine=true`). Keyset-paginated: up to `limit` rows (default 50, at most 100) per page, and `nextCursor` to pass back as `cursor` for the next page, null on the last. A malformed cursor is `400` with `code: "invalid_cursor"`.',
+  },
+  getPublicGuidedReview: {
+    tag: 'Guided review',
+    summary: 'Get a guided review',
+    description:
+      "The session with its overview, its threads (each naming the answer it is waiting on, if any) and its comment drafts. The overview's `status` is `pending` or `running` while it is generated; a `failed` one carries `failure.reason` (`budget_exhausted`, `model_unavailable`, `repo_unavailable`, `generation_failed`, `unreadable_reply`, or `head_moved` when the author pushed before it finished, which `POST /api/v1/guided-reviews/{sessionId}/refresh` resolves) and the raw cause in `failure.detail`.",
+  },
+  deletePublicGuidedReview: {
+    tag: 'Guided review',
+    summary: 'Delete a guided review',
+    description:
+      'Delete the session with its threads, messages and drafts. Only the identity that opened it may; anyone else is `403` with `details.reason: "not_session_owner"`. Nothing on the pull request is touched.',
+  },
+  refreshPublicGuidedReview: {
+    tag: 'Guided review',
+    summary: "Point a guided review at the PR's current head",
+    description:
+      'Re-read the pull request and regenerate the overview at its current head commit, keeping every thread. Use it after the author pushes: the overview, answers and draft anchors are computed against the commit recorded as `reviewedHeadSha`.',
+  },
+  openPublicGuidedReviewThread: {
+    tag: 'Guided review',
+    summary: 'Open an exploration thread',
+    description:
+      'Open a thread in the session, optionally asking its first question in the same call. A thread is an independent line of questioning: waiting on an answer in one never blocks another. Pass a suggested question from the overview verbatim to ask it.',
+  },
+  getPublicGuidedReviewThread: {
+    tag: 'Guided review',
+    summary: 'Get a thread with its messages',
+    description:
+      "The thread and its messages in order. An assistant message is `pending` or `running` until answered, then `complete` with markdown `content` and the `citations` (file spans) it rests on, or `failed` with a `failure`. A `comment-drafts` message's drafts are on the session; its `draftReport` names every proposed comment that was refused (`outside_diff`, `not_in_pr`, `incomplete`).",
+  },
+  askPublicGuidedReview: {
+    tag: 'Guided review',
+    summary: 'Ask a question in a thread',
+    description:
+      'Append a question and the placeholder that will answer it, and answer with both at once; the answer is produced in the background. A thread holds one unanswered question at a time: asking again before it is answered is `409` with `details.reason: "thread_busy"`, and other threads are unaffected. `depth: "deep"` answers from a read-only checkout of the repository instead, so it can search the whole tree and run read-only commands; it takes minutes rather than seconds and stays `running` meanwhile, and a deployment with no runner settles it as `depth_unavailable`.',
+  },
+  requestPublicGuidedReviewDrafts: {
+    tag: 'Guided review',
+    summary: "Draft review comments from a thread's conclusions",
+    description:
+      'Ask the model to turn what the thread concluded into review comments, each placed on the line it is about. Optional `instructions` narrow which ones. Drafts are kept only on lines inside the PR\'s diff; posting them is a separate, explicit call. Busy like a question: `409` with `details.reason: "thread_busy"` while the thread is waiting on an answer.',
+  },
+  editPublicGuidedReviewDraft: {
+    tag: 'Guided review',
+    summary: 'Edit, re-anchor or discard a comment draft',
+    description:
+      'Change a draft\'s body or the line it sits on, or discard it with `discard: true`. Send the `rev` you loaded: a draft edited, posted or discarded since is refused `409` with `details.reason: "draft_conflict"`, so reload and decide again. A new anchor must be a line inside the diff on its side, or the edit is `422` with `details.reason: "draft_anchor_outside_diff"`. Only the session\'s owner may edit.',
+  },
+  postPublicGuidedReviewDrafts: {
+    tag: 'Guided review',
+    summary: 'Post comment drafts to the pull request',
+    description:
+      'Publish the named drafts as review comments on the pull request, as the key\'s identity, with an optional summary comment. Each comment posts on its own, so a partial post is normal: the result counts `posted` and `failed` drafts (a failed one carries `postError` and can be posted again) and lists in `skipped` the named drafts this call did not claim because they were already posted, discarded or being posted, so a retried call never posts a comment twice. The summary posts only alongside a draft this call claimed, so an identical retry after a complete post publishes nothing. Refused `409` with `details.reason: "session_stale"` when the pull request has commits past `reviewedHeadSha`: refresh the review and check the drafts first. Posting never approves or requests changes.',
+  },
+  assessPublicPullRequest: {
+    tag: 'PR assessment',
+    summary: 'Assess a pull request against a risk policy',
+    description:
+      'Score one pull request in a repository linked to the workspace on the merger’s three axes (complexity, risk, impact, each 0..1, with a rationale), classify it by its changed paths, and say whether a risk policy would let it land with no person. The policy is the one named by `riskPolicyId` from `GET /api/v1/risk-policies`, else the workspace’s unattended default (the one a run started through this API resolves); an unknown id is `422` with `details.reason: "risk_policy_not_found"`, and a workspace with no unattended default is `503` `risk_policy_default_missing`. The verdict comes from the same decision the merge step makes, so the policy’s ceilings are never published: `verdict.reason` and `verdict.exceededAxes` say why. A key bound to a person is judged under that person’s workspace role, as a task it creates is admitted, so the role-scoped rules (`classRulesByRole`, `dryRunRoles`, `submissionClassesByRole`) apply to it; a key bound to nobody has no role and they do not. Synchronous: one inline model call, nothing persisted, no run. An unlinked repository is `404` `repo_not_linked`, a PR the host cannot find is `404` `pr_not_found`, a PR that received commits while it was read is `503` `pr_head_moved` (retry), an exhausted budget is `429` `budget_exhausted`, no configured model is `503` `model_unavailable`, a failed model call is `503` `generation_failed`, a call that runs out of time is `503` `generation_timeout`, and a reply that is not an assessment is `503` `unreadable_reply`. A key bound to a person reads the PR and calls the model as that person. Requires a `write` key.',
+  },
   getPublicServiceSpec: {
     tag: 'Spec',
     summary: "Get a service's in-repo specification",
@@ -986,23 +1114,24 @@ const OPERATION_DOCS = {
     description:
       'The same in-repo specification the service read serves, read at the branch THIS RUN pushed its work to rather than at the repository default. That is the tree a run’s verdicts were made against: while its pull request is open, every requirement the run itself ADDED is absent from the default branch, so joining `requirements` rows from `GET /api/v1/runs/{runId}/report` or `…/outcome` against the service read leaves exactly those rows without a criterion. `provenance` names the branch and the commit, so a caller can see which tree it got. `anchor` carries one value the service read cannot answer, `not_read`: nothing was read, because the run’s spec read is gated on a tester having reported so that the tree served is the one the verdicts were made against, and `provenance` is null there and only there. The refusals are the service read’s: a `503` with `reason: "spec_read_failed"` for a repository that could not be read, `"spec_ref_unresolved"` for a branch that would not resolve, `"vcs_not_configured"` for a deployment or workspace that wired no version control. An outage never reaches a `200`.',
   },
+  ...DIRECTORY_OPERATION_DOCS,
   listPublicKeys: {
     tag: 'Keys',
     summary: "List the workspace's API keys",
     description:
-      'The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret is never readable back. `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.',
+      'The account’s live (non-revoked) keys that reach the workspace this request acts on, account-wide ones included, metadata only; a secret is never readable back. `workspaceIds` is each key’s reach (`null` for every workspace). `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.',
   },
   createPublicKey: {
     tag: 'Keys',
     summary: 'Provision an API key',
     description:
-      'Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE, so store it now: it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.',
+      'Mint a key in the calling key’s account and return its raw secret EXACTLY ONCE, so store it now: it is not recoverable. Omitting `workspaceIds` mints a key for the workspace this request acts on; a list or `null` (every workspace) can never reach further than the calling key, refused as `403` with `reason: "workspace_reach_exceeded"`. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.',
   },
   revokePublicKey: {
     tag: 'Keys',
     summary: 'Revoke an API key',
     description:
-      'Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive its own revocation through the credentials it left behind. Idempotent, and it may name the calling key. Requires an `admin`-scope key.',
+      'Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive its own revocation through the credentials it left behind. Idempotent, and it may name the calling key. A key reaching workspaces the calling key does not is refused with `reason: "workspace_reach_exceeded"`. Requires an `admin`-scope key.',
   },
   listDebugLogs: {
     tag: 'Debug',
@@ -1014,6 +1143,8 @@ const OPERATION_DOCS = {
 
 /** Descriptions for the operation tags (groups). */
 const TAG_DESCRIPTIONS = {
+  Directory:
+    'The account’s workspaces, users, memberships and linked repositories, as keyset-paged snapshots and an ordered change feed for keeping a copy in sync.',
   Jobs: 'Headless runs of a public, inline pipeline (start, poll, stream).',
   Services: 'The workspace’s board services.',
   Tasks: 'Board tasks under a service (create, list, read, edit, start, stop, retry, stream).',
@@ -1284,7 +1415,7 @@ export async function buildOpenApiDoc() {
       title: 'cat-factory Public API',
       version: API_VERSION,
       description:
-        'The external, key-authenticated API (`/api/v1`). Authenticate every request with a public-API key: `Authorization: Bearer cf_live_<keyId>.<secret>`. Every call is scoped to the key’s workspace.',
+        'The external, key-authenticated API (`/api/v1`). Authenticate every request with a public-API key: `Authorization: Bearer cf_live_<keyId>.<secret>`. A key belongs to an account and reaches all of its workspaces or a listed subset. A workspace-scoped call acts on the workspace named by the `x-cat-factory-workspace` header, which may be omitted when the key reaches exactly one workspace.',
       license: { name: 'MIT', identifier: 'MIT' },
     },
     servers: [{ url: '/', description: 'The deployment base URL' }],
@@ -1294,12 +1425,14 @@ export async function buildOpenApiDoc() {
       ...(TAG_DESCRIPTIONS[name] ? { description: TAG_DESCRIPTIONS[name] } : {}),
     })),
     paths,
+    webhooks: WEBHOOKS,
     components: {
       securitySchemes: {
         bearerAuth: {
           type: 'http',
           scheme: 'bearer',
-          description: 'A public-API key of the form `cf_live_<keyId>.<secret>`.',
+          description:
+            'A public-API key of the form `cf_live_<keyId>.<secret>`. A key reaching more than one workspace also sends `x-cat-factory-workspace: <workspaceId>` on every workspace-scoped call.',
         },
       },
       schemas: componentSchemas,

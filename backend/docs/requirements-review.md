@@ -105,7 +105,7 @@ its JSON output contract.
 - Prompt overrides and the role/directives split:
   [`agent-prompt-overrides.md`](./agent-prompt-overrides.md).
 - The preset the two knobs above live on: `RiskPolicySeed` in kernel's `domain/catalog.ts`. The
-  merge policy it belongs to (auto-merge ceilings, `classRules`, who may land what): CLAUDE.md,
+  merge policy it belongs to (auto-merge ceilings, `classRules`, who may land what): AGENTS.md,
   "Merge lifecycle".
 - The precheck-first sibling: `hasNotesToIncorporate` short-circuits `runIncorporationCycle` so
   the rework + re-review LLM calls are skipped when the human left nothing to fold in.

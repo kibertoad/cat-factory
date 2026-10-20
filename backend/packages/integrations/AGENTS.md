@@ -68,6 +68,13 @@ prerequisites are configured.
   stack whose layers are all inline / from other repos needs NO repo of its own and materializes an
   empty working tree instead of cloning. `SharedStackSeeder.ts` is the deployment-declared side:
   `startNode`/`startLocal`'s `seedSharedStacks` flows through it, idempotently by NAME.
+- `runners/RunnerPoolSeeder.ts`: the deployment-declared runner pool (Node's
+  `seedAccountRunnerPool` callback), the third seeder beside the handler and shared-stack ones but
+  keyed by ACCOUNT: it inserts the account's pool when it has none (`seedAccount`, validated by the
+  same `RunnerPoolConnectionService.validate` as an admin registration), and the boot backfill alone
+  replaces one whose seed changed (`reseedAccount`, compared by content). A bad seed is an `error`
+  log, a failed read a `warn`. Dispatch reads go through the service's single
+  `effective` resolver (board row, else account row, unless the board opted out).
 - `serviceCatalog/`: the workspace's DEVELOPER PORTAL connection (Backstage), whose services are
   imported into the foundational-services catalog as `workspace`-tier rows.
   `ServiceCatalogConnectionService.ts` owns the sealed connection plus the probe and is the only
@@ -111,9 +118,14 @@ prerequisites are configured.
 - `testSecrets/`: sealed per-service test credentials; `validation/`: per-service PRE-PR
   validation checks (the commands the harness runs before a PR opens; frame-chain resolved) plus
   the DEPENDENCY PREPOPULATION install on the same row (run before the agent's first turn, and
-  independently settable; see `CLAUDE.md` → "Dependency prepopulation"),
+  independently settable; see `AGENTS.md` → "Dependency prepopulation"),
   plus `detectValidationChecksFromRepo` (the repo-root read behind the inspector's "Detect"
   button: one listing, then only the manifests it proved exist; the rules are pure kernel).
+- `directoryWebhook/`: the account-level directory webhooks, a SWEEP over the directory change feed
+  rather than an emission per write. Each endpoint's delivery position is claimed by
+  compare-and-swap before a push and released after a failed one; it reuses
+  `notificationWebhook/`'s signing and SSRF-guarded delivery. Design:
+  [ADR 0067](../../docs/adr/0067-directory-sync.md).
 - `slack/`, `email/`, `notificationWebhook/`: notification channels (`email/` carries both the
   per-account sender connection and the `EmailNotificationChannel` over it; the last one is the
   outbound HMAC-signed HTTP channel a headless integration registers to be pushed parked decisions).
@@ -136,5 +148,5 @@ prerequisites are configured.
   because an empty page and an unreachable store are opposite facts.
 - `backend-registries.ts`: a loose registration file sitting among the module dirs.
 
-**See also:** `CLAUDE.md` → "Post-release health flow", "Pre-PR validation flow", "Inbound tracker webhooks", "Bug hunt"; `backend/docs/`
+**See also:** `AGENTS.md` → "Post-release health flow", "Pre-PR validation flow", "Inbound tracker webhooks", "Bug hunt"; `backend/docs/`
 {`runner-pool-integration`, `environments-integration`, `github-integration`, `document-sources`, `bug-hunt`}`.md`.

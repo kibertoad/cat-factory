@@ -9,12 +9,14 @@ import { computed, ref, watch } from 'vue'
 import type { SubscriptionVendor } from '~/types/domain'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t, n } = useI18n()
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
 const creds = useVendorCredentialsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
@@ -126,11 +128,7 @@ async function add() {
     })
     token.value = ''
     label.value = ''
-    toast.add({
-      title: t('providers.vendorCredentials.toast.connected'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('providers.vendorCredentials.toast.connected')
   } catch (e) {
     present(e, 'providers.vendorCredentials.toast.connectFailed')
   } finally {
@@ -176,11 +174,7 @@ function vendorLabel(v: SubscriptionVendor): string {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('providers.vendorCredentials.title')"
-    :ui="{ content: 'max-w-2xl' }"
-  >
+  <AppModal size="wide" v-model:open="open" :title="t('providers.vendorCredentials.title')">
     <template #title>
       <IntegrationBackTitle :title="t('providers.vendorCredentials.title')" @back="back" />
     </template>
@@ -199,24 +193,18 @@ function vendorLabel(v: SubscriptionVendor): string {
                  `personal` tab — point them there before they read a pool form that can't
                  take their credential. -->
             <div
-              class="flex items-center gap-3 rounded-lg border border-indigo-500/30 bg-indigo-950/30 px-3 py-2.5"
+              class="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2.5"
             >
-              <UIcon name="i-lucide-user" class="h-5 w-5 shrink-0 text-indigo-300" />
-              <p class="min-w-0 flex-1 text-[13px] text-slate-300">
+              <UIcon name="i-lucide-user" class="h-5 w-5 shrink-0 text-primary" />
+              <p class="min-w-0 flex-1 text-sm text-toned">
                 {{ t('providers.vendorCredentials.personalCallout.text') }}
               </p>
-              <UButton
-                size="xs"
-                color="primary"
-                variant="subtle"
-                class="shrink-0"
-                @click="activeTab = 'personal'"
-              >
+              <UButton size="xs" variant="subtle" class="shrink-0" @click="activeTab = 'personal'">
                 {{ t('providers.vendorCredentials.personalCallout.cta') }}
               </UButton>
             </div>
 
-            <p class="text-sm text-slate-400">
+            <p class="text-sm text-muted">
               {{ t('providers.vendorCredentials.poolIntro') }}
             </p>
 
@@ -233,7 +221,7 @@ function vendorLabel(v: SubscriptionVendor): string {
 
             <!-- guided steps -->
             <ol
-              class="list-decimal space-y-1.5 rounded-lg border border-slate-700 bg-slate-900/60 p-4 ps-8 text-sm text-slate-300"
+              class="list-decimal space-y-1.5 rounded-lg border border-muted bg-default/60 p-4 ps-8 text-sm text-toned"
             >
               <li v-for="(step, i) in steps" :key="i">{{ step }}</li>
             </ol>
@@ -267,24 +255,24 @@ function vendorLabel(v: SubscriptionVendor): string {
 
             <!-- connected pool -->
             <div v-if="creds.credentials.length" class="space-y-2">
-              <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SectionLabel as="h4">
                 {{
                   t('providers.vendorCredentials.connected', { count: creds.credentials.length })
                 }}
-              </h4>
+              </SectionLabel>
               <div
                 v-for="c in creds.credentials"
                 :key="c.id"
-                class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+                class="flex items-center justify-between rounded-md border border-muted bg-default/50 px-3 py-2 text-sm"
                 :class="{ 'opacity-55': !c.enabled }"
               >
                 <div>
-                  <span class="font-medium text-slate-200">{{ c.label }}</span>
-                  <span class="ms-2 text-xs text-slate-500">{{ vendorLabel(c.vendor) }}</span>
+                  <span class="font-medium text-default">{{ c.label }}</span>
+                  <span class="ms-2 text-xs text-dimmed">{{ vendorLabel(c.vendor) }}</span>
                   <UBadge v-if="!c.enabled" color="neutral" variant="subtle" size="sm" class="ms-2">
                     {{ t('providers.vendorCredentials.disabledBadge') }}
                   </UBadge>
-                  <div class="text-[11px] tabular-nums text-slate-500">
+                  <div class="text-2xs tabular-nums text-dimmed">
                     {{
                       t(
                         'providers.vendorCredentials.usage',
@@ -346,5 +334,5 @@ function vendorLabel(v: SubscriptionVendor): string {
         </template>
       </UTabs>
     </template>
-  </UModal>
+  </AppModal>
 </template>

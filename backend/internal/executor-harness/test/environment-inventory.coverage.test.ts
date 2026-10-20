@@ -97,7 +97,7 @@ describe('the environment inventory is composed exactly once', () => {
   it('is carried into all three CLIs from the spec, not re-derived per CLI', async () => {
     // `pi-workspace.ts` is where the harness picks a CLI, and it holds the last place the system
     // prompt could be dropped: the subscription branch hands it to claude-code/codex, the Pi
-    // branch writes it to `~/.pi/agent/AGENTS.md`. Both must start from the spec's own field,
+    // branch writes it to the AGENTS.md of Pi's per-pass config dir. Both must start from the spec's own field,
     // which is the field `handleAgent` folded the inventory onto.
     //
     // Asserted over the MODULE, not inside `runAgentInWorkspace`: WHICH function holds a sink is

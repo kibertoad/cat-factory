@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import { recordDispatchedJob } from './step-fold.logic.js'
+import type { AgentJobHandle, Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
 import { DeployFixController, describeDeployFailure } from './DeployFixController.js'
 
 // The remediation loop is pure state transition over an in-memory instance plus one dispatch, so
@@ -50,6 +51,28 @@ function controller(overrides: Record<string, unknown> = {}) {
     agentExecutor: { runsAsync: () => true, startJob, pollJob: vi.fn(), reclaimRun: vi.fn() },
     contextBuilder: { buildContext: vi.fn(async () => ({ priorOutputs: [], block })) },
     runStateMachine: { persistAndEmit: vi.fn(async () => {}) },
+    // The shared async dispatch, which the fixer now goes through like every other site: it
+    // stamps the record before the executor is called and folds the handle after.
+    startStepDispatch: vi.fn(
+      async ({
+        step,
+        context,
+        executor,
+      }: {
+        step: PipelineStep
+        context: { agentKind?: string }
+        // The executor the controller resolved, so a suite that overrides it with a throwing
+        // `startJob` exercises the dispatch failure rather than this fake's happy path.
+        executor: { startJob: (context: never) => Promise<AgentJobHandle> }
+      }) => {
+        // The cold boot the real seam commits before the executor is called.
+        step.container = { status: 'starting' }
+        const handle = await executor.startJob(context as never)
+        // The REAL fold, not a copy of it: the attribution a poll site cannot re-derive is what
+        // these suites assert, and a hand-written stub of it would assert the stub.
+        return { jobId: recordDispatchedJob(step, handle, context.agentKind ?? ''), handle }
+      },
+    ),
     clock: { now: () => 1_700_000_000_000 },
     notificationService: { raise: vi.fn(async (_ws: string, _input: unknown) => {}) },
     ...overrides,

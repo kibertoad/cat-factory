@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import { recordDispatchedJob } from './step-fold.logic.js'
+import type { AgentJobHandle, Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
 import { NotFoundError } from '@cat-factory/kernel'
 import { HumanTestController, type HumanTestControllerDeps } from './HumanTestController.js'
 
@@ -65,6 +66,26 @@ function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControl
     executionRepository: { get: vi.fn(async () => null), upsert: vi.fn(async () => {}) } as never,
     workRunner: { signalDecision: vi.fn(async () => {}) } as never,
     agentExecutor: fakeExecutor(),
+    // The shared async dispatch: this suite drives no delegated kind, so it takes the container
+    // path and answers with the handle its fake executor returned.
+    startStepDispatch: async ({
+      step,
+      context,
+      executor,
+    }: {
+      step: PipelineStep
+      context: { agentKind?: string }
+      // The executor the controller resolved, so a suite that overrides it with a throwing
+      // `startJob` exercises the dispatch failure rather than this fake's happy path.
+      executor: { startJob: (context: never) => Promise<AgentJobHandle> }
+    }) => {
+      // The cold boot the real seam commits before the executor is called.
+      step.container = { status: 'starting' }
+      const handle = await executor.startJob(context as never)
+      // The REAL fold, not a copy of it: the attribution a poll site cannot re-derive is what
+      // these suites assert, and a hand-written stub of it would assert the stub.
+      return { jobId: recordDispatchedJob(step, handle, context.agentKind ?? ''), handle }
+    },
     contextBuilder: {
       buildContext: vi.fn(async () => ({ agentKind: 'human-test', priorOutputs: [] })),
     } as never,

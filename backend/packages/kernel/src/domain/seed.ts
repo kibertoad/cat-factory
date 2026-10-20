@@ -757,6 +757,24 @@ function buildSpecialtyPipelines(): Pipeline[] {
         'A read-only deep review of an open pull request that returns prioritized findings — no code is written and no PR is opened. Built for large PRs: it slices the diff into cohesive chunks and reviews each one, so it can work through a big change over a longer run rather than choking on it in a single pass.',
       agentKinds: ['pr-reviewer'],
     },
+    // The DEFAULT for a `resolve-conflicts` task: the `conflicts` gate alone, run against the pull
+    // request the task attached at creation. A PR that already merges cleanly passes straight
+    // through with nothing pushed; a conflicted one loops the `conflict-resolver` onto its own head
+    // branch until the gate re-probes clean, or fails the run once the attempt budget is spent. No
+    // merge tail, because the PR belongs to whoever opened it: the run ends `done` and leaves it
+    // open (see `taskTypeAttachesPullRequest`).
+    {
+      id: 'pl_resolve_conflicts',
+      name: 'Resolve pull request conflicts',
+      purpose: 'maintenance',
+      // A schedule fires on a fresh recurring block that has attached no pull request, so the gate
+      // would pass on "no open PR" every time.
+      availability: 'one-off',
+      version: 1,
+      description:
+        'Bring an existing pull request back to mergeable by resolving its conflicts with the base branch on the pull request’s own branch. Opens no new pull request and merges nothing.',
+      agentKinds: ['conflicts'],
+    },
     definePipeline({
       // The Initiative Planning pipeline — the ONLY pipeline runnable on an
       // `initiative`-level block (and initiative blocks accept no other; see the
@@ -1293,6 +1311,12 @@ export const DOCUMENT_QUICK_PIPELINE_ID = 'pl_document_quick'
  */
 export const REVIEW_PIPELINE_ID = 'pl_review'
 
+/**
+ * Pipeline id of the conflict-resolution preset (the `conflicts` gate alone). The DEFAULT a
+ * `taskType: 'resolve-conflicts'` task is pinned to at creation ({@link defaultPipelineIdForTaskType}).
+ */
+export const RESOLVE_CONFLICTS_PIPELINE_ID = 'pl_resolve_conflicts'
+
 /** Pipeline id of the Ralph loop (a persistent retry-until-done build; see backend/docs/ralph-loop.md). */
 export const RALPH_PIPELINE_ID = 'pl_ralph'
 
@@ -1305,9 +1329,10 @@ export const MEDIA_PIPELINE_ID = 'pl_media'
 /**
  * The pipeline a task of the given task type should default to when the creator pins none.
  * `document` → `pl_document`, `spike` → `pl_spike`, `review` → `pl_review`, `media` →
- * `pl_media` and `bug-fishing` → `pl_bug_fishing` (the full-build `pl_full` is wrong for all
- * five: a document has no code, a spike has no code, a review opens no PR, a media task's
- * deliverable is a stored binary, and an expedition changes nothing at all); every
+ * `pl_media`, `bug-fishing` → `pl_bug_fishing` and `resolve-conflicts` → `pl_resolve_conflicts`
+ * (the full-build `pl_full` is wrong for all six: a document has no code, a spike has no code, a
+ * review opens no PR, a media task's deliverable is a stored binary, an expedition changes
+ * nothing at all, and a conflict resolution works on a pull request somebody else opened); every
  * other BUILT-IN task type falls through to the workspace's positional default.
  * A CUSTOM (namespaced) task type consults the injected {@link TaskTypeRegistry} AFTER the
  * built-in map, so a deployment-registered type can pin its own default pipeline. Returns
@@ -1320,6 +1345,7 @@ export function defaultPipelineIdForTaskType(
   if (taskType === 'document') return DOCUMENT_PIPELINE_ID
   if (taskType === 'spike') return SPIKE_PIPELINE_ID
   if (taskType === 'review') return REVIEW_PIPELINE_ID
+  if (taskType === 'resolve-conflicts') return RESOLVE_CONFLICTS_PIPELINE_ID
   if (taskType === 'ralph') return RALPH_PIPELINE_ID
   if (taskType === 'media') return MEDIA_PIPELINE_ID
   if (taskType === 'bug-fishing') return BUG_FISHING_PIPELINE_ID

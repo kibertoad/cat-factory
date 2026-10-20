@@ -195,7 +195,7 @@ Independent changes; suggested order by value and blast radius:
    (after the container is built) and on the Worker's daily cron, next to the D6.1 fingerprint
    check. **D6.3:** dropping is explicit + per-secret: the `key_drift` card's action drops every
    credential it lists ("drop all stale"), the `pnpm --filter @cat-factory/node-server
-key-drift:drop --source … --id …` operator CLI drops one, and both route through
+   key-drift:drop --source … --id …` operator CLI drops one, and both route through
    `inventory.drop` (env connection → soft-delete tombstone; observability → row delete, since the
    sealed columns are NOT NULL and can't be nulled in place). The value stays unrecoverable, so the
    card + CLI both state that restoring the previous ENCRYPTION_KEY recovers them instead: the drop

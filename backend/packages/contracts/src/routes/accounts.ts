@@ -1,4 +1,9 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import {
+  ContractNoBody,
+  defineApiContract,
+  noBodyResponse,
+  withObjectKeys,
+} from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   accountInvitationSchema,
@@ -113,7 +118,7 @@ export const revokeMemberSessionsContract = defineApiContract({
   pathResolver: ({ accountId, userId }) =>
     `/accounts/${accountId}/members/${userId}/revoke-sessions`,
   requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- audit log ------------------------------------------------------------
@@ -161,7 +166,7 @@ export const revokeInvitationContract = defineApiContract({
   ),
   pathResolver: ({ accountId, invitationId }) =>
     `/accounts/${accountId}/invitations/${invitationId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- account-scoped provider API keys -------------------------------------
@@ -193,7 +198,7 @@ export const removeAccountApiKeyContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: withObjectKeys(v.object({ accountId: v.string(), id: v.string() })),
   pathResolver: ({ accountId, id }) => `/accounts/${accountId}/api-keys/${id}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- email sender connection ----------------------------------------------
@@ -217,7 +222,7 @@ export const disconnectEmailContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: accountIdParams,
   pathResolver: ({ accountId }) => `/accounts/${accountId}/email-connection`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const testEmailContract = defineApiContract({

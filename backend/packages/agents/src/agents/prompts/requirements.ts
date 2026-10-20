@@ -1,5 +1,5 @@
 // Prompt text for the requirements-review flow (see the requirements-review flow
-// in CLAUDE.md). These are consumed directly by `RequirementReviewService` for the
+// in AGENTS.md). These are consumed directly by `RequirementReviewService` for the
 // inline reviewer / rework LLM calls, and are also entered into the versioned prompt
 // registry (see ../kinds/versions.ts) so the benchmark harness can pin them.
 

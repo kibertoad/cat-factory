@@ -16,7 +16,7 @@ details stay verifiable.
 
 > The domain only ever names a model by a provider-agnostic
 > [`ModelRef`](../packages/kernel/src/ports/model-provider.ts) (`{ provider, model,
-harness?, contextTokens? }`). Concrete SDKs and API keys live behind the
+> harness?, contextTokens? }`). Concrete SDKs and API keys live behind the
 > `ModelProvider` port in each facade, never in the core.
 
 ---
@@ -185,10 +185,12 @@ Several shapes of entry fall out of this:
   `contextTokens` on the `ModelRef` surfaces this in the picker. `glm-5.3` joined this shape
   once Z.ai published the weights and Workers AI picked the model up; it shipped
   subscription-only, which is the usual path into this list.
-- **No Cloudflare floor**: `gemini`, `gemini-flash`, `gemini-3.8-flash`, `kimi-k3`,
-  `qwen3.8-max`, `qwen3.8-max-0902`, `qwen3.8-flash`, `muse-spark`, `muse-spark-contributor`.
+- **No Cloudflare floor**: `gemini-4-argon`, `gemini`, `gemini-3.8-flash`, `kimi-k3`,
+  `qwen3.8-max`, `qwen3.8-max-0902`, `qwen3.8-max-prime`, `qwen3.8-flash`, `glm-5.3-prime`,
+  `glm-5.3-flashx`, `grok`, `grok-4.7`, `muse-wonder`, `muse-spark`, `muse-spark-contributor`.
   Nothing serves these on the binding, so each stays unavailable until a key is pooled: the
-  Gemini and Muse Spark entries through OpenRouter alone; `kimi-k3`, `qwen3.8-max-0902` and
+  Gemini, Muse and speed-tier (`-prime`, `-flashx`) entries through OpenRouter alone;
+  `grok` and `grok-4.7` direct (xAI) or through OpenRouter; `kimi-k3`, `qwen3.8-max-0902` and
   `qwen3.8-flash` direct (Moonshot / DashScope) or through OpenRouter; and `qwen3.8-max` on
   DashScope alone, because OpenRouter withdrew the undated Qwen alias in favour of the dated
   snapshot. A vendor's newest flagship lands here first, because Workers AI serves the open
@@ -199,6 +201,11 @@ Several shapes of entry fall out of this:
   an operator has to make with the price in front of them, and one entry could only make it
   silently. The SPA's "enable recommended" OpenRouter set deliberately omits the contributor
   slug for the same reason.
+- **Two entries for one model, split by SPEED**: `qwen3.8-max-prime`, `glm-5.3-prime` and
+  `glm-5.3-flashx` are faster serving of a model the catalog already carries, at roughly twice
+  its price. Same reasoning as the terms split: the rate-against-latency trade is a per-block
+  choice made with the price in view. A variant at the SAME price (OpenRouter's `-pro` GPT-6
+  slugs, which only set a reasoning mode) gets no entry.
 - **Operator-hosted-gateway entries**: `bifrost-default`, `litellm-default`. One generic entry
   each for the two self-hosted gateways (Bifrost, LiteLLM), because what such a gateway serves
   is its operator's configuration and no catalog here can enumerate it. Both are `direct`-flavour
@@ -210,8 +217,9 @@ Several shapes of entry fall out of this:
   carries it. It is a **separate entry rather than a `bedrock` flavour on `claude-opus`**,
   because Bedrock lags Anthropic: folding it in would silently run 4.8 for a block pinned
   to Opus 5. Any entry whose model Bedrock serves at the SAME generation (`gpt-5.5`,
-  `gpt-oss-120b`, `claude-fable-5-1`) does carry the flavour directly. Fable 5.1 is the case
-  where that lag closed: Bedrock listed `anthropic.claude-fable-5-1` on Anthropic's own launch
+  `gpt-oss-120b`, `claude-fable-5-1`, `claude-opus-5-5`, `claude-sonnet-5-5`,
+  `claude-haiku-5-5`) does carry the flavour directly.
+  Fable 5.1 is the case where that lag closed: Bedrock listed `anthropic.claude-fable-5-1` on Anthropic's own launch
   day, which is why it is the first Claude entry here to carry subscription, OpenRouter and
   Bedrock arms at once. It is also now the most expensive model this catalog can select on
   Bedrock, so the bare `bedrock` price row (which cannot match per model, because a Bedrock ref
@@ -223,11 +231,14 @@ Several shapes of entry fall out of this:
 - **Subscription-only**: `claude-sonnet`. No Cloudflare/direct/OpenRouter base; the
   subscription harness is the _only_ way to run it, so it requires a connected vendor
   token (§6) and there is **no inline fallback** (§5). `claude-fable`, `claude-fable-5-1`,
-  `claude-opus` and the GPT-6 Astra / GPT-5.6 / GPT-5.5 tiers pair their subscription flavour
-  with an OpenRouter pay-as-you-go base, so they are dual-mode rather than subscription-only.
+  `claude-opus`, `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5` and the GPT-6.1 /
+  GPT-6 / GPT-5.6 / GPT-5.5 tiers pair their subscription flavour with an OpenRouter
+  pay-as-you-go base, so they are dual-mode rather than subscription-only. `claude-sonnet` stays subscription-only beside
+  `claude-sonnet-5-5`, so a block pinned to Sonnet 5 keeps running Sonnet 5.
   `gpt-6-astra` carries one more constraint the others do not: Codex resolves that slug only
   from CLI 0.153.0 onward, so a deployment running an older executor image gets `Unknown model`
-  rather than a fallback.
+  rather than a fallback. `gpt-6-sol` and `gpt-6-luna` carry the same trap with a 0.156.1 floor,
+  and `gpt-6.1-sol` with a 0.159.0 floor.
 - **Local (per-user)**: locally-run models on a user's own runner (Ollama / LM Studio /
   llama.cpp / vLLM / custom OpenAI-compatible). NOT static catalog entries: each user
   configures runners in the UI ("My local runners", stored per-user in
@@ -475,7 +486,7 @@ Two kinds of run incur **no** metered cost and so are **never** blocked by it:
 
 - **Subscription** runs are **flat-rate quota** (a fixed-price plan), not billed per token.
   The picker marks them `quotaBased: true` (kernel `models.ts`); `ContainerAgentExecutor.
-isQuotaBased` returns true iff the _effective_ ref carries a `claude-code`/`codex` harness
+  isQuotaBased` returns true iff the _effective_ ref carries a `claude-code`/`codex` harness
   (shared with dispatch so the two agree).
 - **Local-runner** models (Ollama / LM Studio / llama.cpp / vLLM / custom) are **keyless**
   and run on the _user's own_ endpoint, so they cost the deployment nothing. Detected off
@@ -655,7 +666,7 @@ Block.modelId ──► resolveStepModelRef
 - Using and configuring models (the user-facing authority):
   [catfactory.ai → Model Providers](https://www.catfactory.ai/guide/model-providers.html).
 - Runtime flows (execution, merge lifecycle, requirements review):
-  [`CLAUDE.md`](../../CLAUDE.md).
+  [`AGENTS.md`](../../AGENTS.md).
 - Backend layering & the `GET /models` endpoint: [`backend/README.md`](../README.md).
 - Spend safeguard: `@cat-factory/spend`.
 - Self-hosted runner pool (where container steps dispatch off-Cloudflare):

@@ -17,6 +17,7 @@ import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import CommandBar from '~/components/layout/CommandBar.vue'
 import PersonalCredentialModal from '~/components/providers/PersonalCredentialModal.vue'
 import ConfirmDialog from '~/components/common/ConfirmDialog.vue'
+import Spinner from '~/components/common/Spinner.vue'
 import { defineAsyncView } from '~/utils/asyncView'
 import KeyboardShortcutsHelp from '~/components/common/KeyboardShortcutsHelp.vue'
 
@@ -49,6 +50,9 @@ const TaskSourceConnectModal = defineAsyncView(
 const TaskImportModal = defineAsyncView(() => import('~/components/tasks/TaskImportModal.vue'))
 const BugHuntModal = defineAsyncView(() => import('~/components/tasks/BugHuntModal.vue'))
 const AssistantModal = defineAsyncView(() => import('~/components/assistant/AssistantModal.vue'))
+const GuidedReviewModal = defineAsyncView(
+  () => import('~/components/guidedReview/GuidedReviewModal.vue'),
+)
 const RecurringPipelineModal = defineAsyncView(
   () => import('~/components/board/RecurringPipelineModal.vue'),
 )
@@ -99,6 +103,9 @@ const IntegrationsHub = defineAsyncView(() => import('~/components/layout/Integr
 const ModelProvidersHub = defineAsyncView(() => import('~/components/layout/ModelProvidersHub.vue'))
 const PersonalSetupModal = defineAsyncView(
   () => import('~/components/layout/PersonalSetupModal.vue'),
+)
+const SetupChecklistPanel = defineAsyncView(
+  () => import('~/components/setup/SetupChecklistPanel.vue'),
 )
 const WorkspaceSettingsPanel = defineAsyncView(
   () => import('~/components/settings/WorkspaceSettingsPanel.vue'),
@@ -155,12 +162,16 @@ const TutorialNudge = defineAsyncView(() => import('~/components/tutorial/Tutori
 // The first-run role question (Engineer / Product manager / Designer). Same shape as the tutorial
 // launch prompt: mounted only while its store flag is set, so an answered question costs nothing.
 const RolePrompt = defineAsyncView(() => import('~/components/layout/RolePrompt.vue'))
+// The queue: the board's second view (issue #2258), loaded the first time someone opens it.
+const QueueView = defineAsyncView(() => import('~/components/queue/QueueView.vue'))
+const DescribeWorkModal = defineAsyncView(() => import('~/components/queue/DescribeWorkModal.vue'))
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
 const models = useModelsStore()
 const ui = useUiStore()
 const aiReadiness = useAiReadiness()
+const views = useWorkViewStore()
 
 // App-wide keyboard shortcuts (Escape to deselect, Delete to remove the selected block, ?
 // for the cheatsheet). Registered ONCE here so a single global listener owns them.
@@ -172,6 +183,12 @@ onMounted(() => {
   // board it names is the one that opens. This is what makes the observability link on an
   // engine-published PR verification report resolve.
   useRunDeepLink()
+  // `?addRepo=<owner>/<name>`: an integration sending a person to add a service for a repository.
+  useAddRepoDeepLink()
+  // `?newApiKey=1`: an integration sending a person to mint a key bound to them.
+  useNewApiKeyDeepLink()
+  // `?view=queue` / `?view=board`: a link that opens one of the board's two views.
+  views.consumeDeepLink()
   void workspace.init()
   // Honour a `cat-factory k3s` CLI hand-off (`?infraSetup=local-k3s&…`): open the Infrastructure
   // window pre-seeded with the provisioned connection so the user only pastes the token + saves.
@@ -397,6 +414,14 @@ useTutorialNudge()
 // plus the funnel counters. Unconditional and best-effort: with no accounts or no store wired it
 // simply has nothing to talk to, and the browser-persisted store carries on alone.
 useTutorialSync()
+// Starting a tour switches to the canvas, which every tour walks (the view store holds it for the
+// tour's length), and the canvas is then the view used last.
+watch(
+  () => tutorial.touring,
+  (touring) => {
+    if (touring) views.show('board')
+  },
+)
 
 // Subscribe to the backend's real-time event stream and (re)connect whenever the
 // active workspace changes. Runs advance durably server-side; progress arrives as
@@ -425,7 +450,7 @@ watch(
   <!-- A COLUMN, so the translation strip below takes its own height instead of covering the
        row: page chrome that overlays the app is how the board's top controls came to be
        buried. Everything else lives in the row beneath it. -->
-  <div class="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
+  <div class="flex h-screen w-screen flex-col overflow-hidden bg-app-950 text-app-100">
     <!-- Non-English locale warning (unofficial translation); slim full-width strip above
          everything, in flow. -->
     <TranslationWarningBanner />
@@ -433,9 +458,9 @@ watch(
       <!-- Resolving whether the GitHub App is installed, before we decide what to show. -->
       <div
         v-if="workspace.ready && githubProbePending"
-        class="m-auto flex flex-col items-center gap-3 text-slate-400"
+        class="m-auto flex flex-col items-center gap-3 text-muted"
       >
-        <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
+        <Spinner class="h-8 w-8" />
         <span class="text-sm">{{ $t('app.loading') }}</span>
       </div>
 
@@ -458,12 +483,32 @@ watch(
         <main class="relative min-w-0 flex-1">
           <BoardCanvas />
           <!-- Toolbar, nav trigger and every advisory banner, in ONE stacked region that owns
-               their placement, so no two of them can cover each other. -->
-          <BoardTopOverlays
-            :connected="streamConnected"
-            :ever-connected="streamEverConnected"
-            :connection-failed="streamConnectionFailed"
-          />
+               their placement, so no two of them can cover each other.
+
+               The queue view sits OVER the canvas rather than replacing it, so switching back keeps
+               the canvas's camera and selection. Below the inspector (z-20), so a task opened from
+               the queue shows its panel beside it. The same advisories render IN FLOW above its
+               columns, so they push the queue down instead of covering its header.
+
+               ONE overlay instance serves both views, at the same place in this template: two
+               instances would remount every banner on each switch, and a banner whose dismissal
+               is its own component state would come back. On the canvas the wrapper is
+               `display: contents`, so it adds no box and the overlays float over the canvas as
+               before. -->
+          <div
+            :class="
+              views.view === 'queue' ? 'absolute inset-0 z-10 flex flex-col bg-app-950' : 'contents'
+            "
+            :data-testid="views.view === 'queue' ? 'queue-view-host' : undefined"
+          >
+            <BoardTopOverlays
+              :in-flow="views.view === 'queue'"
+              :connected="streamConnected"
+              :ever-connected="streamEverConnected"
+              :connection-failed="streamConnectionFailed"
+            />
+            <QueueView v-if="views.view === 'queue'" class="min-h-0 flex-1" />
+          </div>
           <InspectorPanel />
           <!-- Code-split focus view. The fade lives here (not inside the component) so the
                leave animation still plays when `focusBlockId` clears and the v-if unmounts
@@ -492,6 +537,7 @@ watch(
         <AddTaskModal />
         <ReviewFrictionDialog v-if="ui.reviewFrictionContext" />
         <CreateInitiativeModal />
+        <DescribeWorkModal v-if="ui.describeWorkOpen" />
         <CommandBar />
         <PersonalCredentialModal />
         <ConfirmDialog />
@@ -503,6 +549,7 @@ watch(
         <TaskImportModal v-if="ui.taskImport" />
         <BugHuntModal v-if="ui.bugHunt" />
         <AssistantModal v-if="ui.assistantOpen" />
+        <GuidedReviewModal v-if="ui.guidedReview" />
         <RecurringPipelineModal v-if="ui.addRecurringFrameId" />
         <ObservabilityPanel v-if="ui.observabilityInstanceId" />
         <OperatorDashboardPanel v-if="ui.operatorDashboardOpen" />
@@ -526,6 +573,7 @@ watch(
         <IntegrationsHub v-if="ui.integrationsOpen" />
         <ModelProvidersHub v-if="ui.modelProvidersOpen" />
         <PersonalSetupModal v-if="ui.personalSetupOpen" />
+        <SetupChecklistPanel v-if="ui.setupChecklistOpen" />
         <WorkspaceSettingsPanel v-if="ui.workspaceSettingsOpen" />
         <AccountSettingsPanel v-if="ui.accountSettingsOpen" />
         <ObservabilityConnectionPanel v-if="ui.observabilityConnectionOpen" />
@@ -553,17 +601,17 @@ watch(
 
       <!-- Backend unreachable / bootstrap failed -->
       <div v-else-if="workspace.error" class="m-auto max-w-md p-8 text-center">
-        <UIcon name="i-lucide-plug-zap" class="mx-auto mb-3 h-10 w-10 text-amber-400" />
+        <UIcon name="i-lucide-plug-zap" class="mx-auto mb-3 h-10 w-10 text-app-warning-400" />
         <h1 class="mb-1 text-lg font-semibold">{{ $t('app.backendUnreachable') }}</h1>
-        <p class="mb-4 text-sm text-slate-400">{{ workspace.error }}</p>
-        <UButton color="primary" icon="i-lucide-rotate-ccw" @click="workspace.init()">
+        <p class="mb-4 text-sm text-muted">{{ workspace.error }}</p>
+        <UButton icon="i-lucide-rotate-ccw" @click="workspace.init()">
           {{ $t('common.retry') }}
         </UButton>
       </div>
 
       <!-- Initial load -->
-      <div v-else class="m-auto flex flex-col items-center gap-3 text-slate-400">
-        <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
+      <div v-else class="m-auto flex flex-col items-center gap-3 text-muted">
+        <Spinner class="h-8 w-8" />
         <span class="text-sm">{{ $t('app.loadingBoard') }}</span>
       </div>
     </div>

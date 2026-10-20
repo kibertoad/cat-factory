@@ -79,6 +79,37 @@ export {
 } from './operational-metrics.js'
 export type { RequirementReviewRepository } from './requirement-review-repositories.js'
 export type { DocInterviewRepository } from './doc-interview-repositories.js'
+export type {
+  GuidedReviewClaim,
+  GuidedReviewDraftEdit,
+  GuidedReviewDriver,
+  GuidedReviewExchange,
+  GuidedReviewInvestigationRecord,
+  GuidedReviewDraftPostOutcome,
+  GuidedReviewDraftProposal,
+  GuidedReviewMessageOutcome,
+  GuidedReviewNewSession,
+  GuidedReviewOverviewOutcome,
+  GuidedReviewRefresh,
+  GuidedReviewRepository,
+  GuidedReviewSessionFilter,
+  GuidedReviewSessionPage,
+  GuidedReviewStaleJob,
+} from './guided-review-repositories.js'
+export {
+  guidedReviewJobKey,
+  GUIDED_REVIEW_MAX_PASSES,
+  type GuidedReviewJob,
+  type GuidedReviewJobProgress,
+  type GuidedReviewRunner,
+} from './guided-review-runner.js'
+export type {
+  GuidedReviewInvestigationDispatch,
+  GuidedReviewInvestigationHandle,
+  GuidedReviewInvestigationRequest,
+  GuidedReviewInvestigationUpdate,
+  GuidedReviewInvestigator,
+} from './guided-review-investigator.js'
 export type { InitiativeRepository } from './initiative-repositories.js'
 export type {
   KaizenGradingRepository,
@@ -227,6 +258,7 @@ export type {
   AgentTokenUsage,
   AsyncAgentExecutor,
   ReviewedPoint,
+  RunReclaimReport,
   RunReclaimTarget,
 } from './agent-executor.js'
 export { isAsyncAgentExecutor } from './agent-executor.js'
@@ -707,8 +739,11 @@ export type {
   RunnerPoolConnectionTestRequest,
 } from './runner-pool-provider.js'
 export type {
+  AccountRunnerPoolRecord,
+  AccountRunnerPoolRepository,
   RunnerPoolConnectionRecord,
   RunnerPoolConnectionRepository,
+  RunnerPoolSeeder,
 } from './runner-pool-repositories.js'
 export type {
   SubscriptionVendor,
@@ -753,6 +788,15 @@ export type {
   AuditRecorder,
 } from './audit.js'
 export { noopAuditRecorder } from './audit.js'
+export type {
+  DirectoryChangeRecord,
+  DirectoryFeedReader,
+  DirectoryRepoKey,
+  DirectoryRepository,
+  DirectoryWebhookRecord,
+  DirectoryWebhookRepository,
+  WorkspaceMembershipKey,
+} from './directory-changes.js'
 export type {
   UserSecretRecord,
   UserSecretRepository,

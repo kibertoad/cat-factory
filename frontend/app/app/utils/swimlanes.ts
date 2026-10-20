@@ -147,25 +147,25 @@ export const LANE_META: Record<
     labelKey: 'board.lanes.notStarted.label',
     emptyKey: 'board.lanes.notStarted.empty',
     icon: 'i-lucide-circle-dashed',
-    color: '#64748b',
+    color: 'var(--ui-text-muted)',
   },
   in_progress: {
     labelKey: 'board.lanes.inProgress.label',
     emptyKey: 'board.lanes.inProgress.empty',
     icon: 'i-lucide-loader',
-    color: '#6366f1',
+    color: 'var(--ui-primary)',
   },
   needs_you: {
     labelKey: 'board.lanes.needsYou.label',
     emptyKey: 'board.lanes.needsYou.empty',
     icon: 'i-lucide-hand',
-    color: '#f59e0b',
+    color: 'var(--ui-warning)',
   },
   done: {
     labelKey: 'board.lanes.done.label',
     emptyKey: 'board.lanes.done.empty',
     icon: 'i-lucide-circle-check',
-    color: '#16a34a',
+    color: 'var(--ui-text-muted)',
   },
 }
 

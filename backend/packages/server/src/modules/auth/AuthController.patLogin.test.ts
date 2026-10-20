@@ -40,7 +40,7 @@ function appWith(container: Partial<ServerContainer>) {
     await next()
   })
   app.route('/auth', authController())
-  // Without this every refusal would read as a 500 (CLAUDE.md → "A controller REFUSES by throwing").
+  // Without this every refusal would read as a 500 (AGENTS.md → "A controller REFUSES by throwing").
   app.onError(handleError)
   return app
 }

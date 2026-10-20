@@ -1,5 +1,7 @@
 import {
   AsyncFakeAgentExecutor,
+  withDelegatedArm,
+  lateHarnessCallRecorder,
   type ConformanceApp,
   FakeAgentExecutor,
   type FakeAgentOptions,
@@ -18,6 +20,7 @@ import {
   makeOnboardingProbe,
   makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
+  mintMachineToken,
   mintSession,
   seedFrameRepoLink,
   type FrameRepoLinkRepositories,
@@ -26,6 +29,7 @@ import {
   type DrizzleDb,
   DrizzleAccountRiskPolicyRepository,
   DrizzleDocInterviewRepository,
+  DrizzleGuidedReviewRepository,
   DrizzleAccountSettingsRepository,
   DrizzleDocumentRepository,
   DrizzleNotificationRepository,
@@ -61,7 +65,7 @@ import type {
   UpsertLocalModelEndpointInput,
   UserSecretKind,
 } from '@cat-factory/contracts'
-import type { CoreDependencies } from '@cat-factory/orchestration'
+import type { CoreDependencies, RecordHarnessCalls } from '@cat-factory/orchestration'
 import { buildLocalContainer } from '../src/container.js'
 
 const BASE = 'https://cat-factory.test'
@@ -186,6 +190,7 @@ type ConformanceAppOpts = {
   agentKindRegistry?: AgentKindRegistry
   gateRegistry?: CoreDependencies['gateRegistry']
   judgeRegistry?: CoreDependencies['judgeRegistry']
+  delegatedExecutorRegistry?: CoreDependencies['delegatedExecutorRegistry']
   judgeAssessor?: CoreDependencies['judgeAssessor']
   bugHuntAssessor?: CoreDependencies['bugHuntAssessor']
   monorepoAdoptionAdvisor?: CoreDependencies['monorepoAdoptionAdvisor']
@@ -229,6 +234,7 @@ function buildConformanceOverrides(
   recorder: RecordingEventPublisher,
   agentOptions: FakeAgentOptions | undefined,
   opts: ConformanceAppOpts | undefined,
+  recordHarnessCalls: RecordHarnessCalls,
 ): Partial<CoreDependencies> {
   const o = opts ?? {}
   // The custom-kind suite injects a pre-loaded registry: thread it into BOTH the fake executor
@@ -238,9 +244,17 @@ function buildConformanceOverrides(
     ...(o.agentKindRegistry ? { agentKindRegistry: o.agentKindRegistry } : {}),
   }
   return {
-    agentExecutor: agentOptions?.asyncKinds?.length
-      ? new AsyncFakeAgentExecutor(agentExecutorOptions)
-      : new FakeAgentExecutor(agentExecutorOptions),
+    // The deterministic agent, WRAPPED in the production composite when the suite registered an
+    // external executor, so a delegated kind reaches the real `DelegatedAgentExecutor` while
+    // everything else stays on the fake. Overriding `agentExecutor` wholesale is right for every
+    // other assertion and would make the delegated ones vacuous.
+    agentExecutor: withDelegatedArm(
+      agentOptions?.asyncKinds?.length
+        ? new AsyncFakeAgentExecutor(agentExecutorOptions)
+        : new FakeAgentExecutor(agentExecutorOptions),
+      o,
+      recordHarnessCalls,
+    ),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
     // Run the shared conformance suite with the merger UNWIRED, exactly like the Node/Worker
@@ -328,6 +342,7 @@ function buildContainerRegistryOptions(opts: ConformanceAppOpts | undefined) {
     agentKindRegistry: o.agentKindRegistry,
     gateRegistry: o.gateRegistry,
     judgeRegistry: o.judgeRegistry,
+    delegatedExecutorRegistry: o.delegatedExecutorRegistry,
     stepResolverRegistry: o.stepResolverRegistry,
     initiativePresetRegistry: o.initiativePresetRegistry,
     taskTypeRegistry: o.taskTypeRegistry,
@@ -371,7 +386,10 @@ export function makeConformanceApp(
   opts?: ConformanceAppOpts,
 ): ConformanceApp {
   const recorder = new RecordingEventPublisher()
-  const overrides = buildConformanceOverrides(recorder, agentOptions, opts)
+  // The arm files a delegated step's reported usage through the container's OWN observability
+  // service, which exists only once the container is built.
+  const harnessCalls = lateHarnessCallRecorder()
+  const overrides = buildConformanceOverrides(recorder, agentOptions, opts, harnessCalls.record)
   const env: NodeJS.ProcessEnv = { ...TEST_ENV, ...opts?.env }
   const container = buildLocalContainer({
     db,
@@ -394,6 +412,7 @@ export function makeConformanceApp(
     // matching suites) so buildLocalContainer forwards each into buildNodeContainer by reference.
     ...buildContainerRegistryOptions(opts),
   })
+  harnessCalls.bind(container.llmObservability)
   const app = createApp(container, env)
 
   async function call<T>(
@@ -548,6 +567,7 @@ export function makeConformanceApp(
     createOrgWorkspace,
     authEnabled: Boolean(TEST_ENV.AUTH_SESSION_SECRET),
     session: (user) => mintSession(TEST_ENV.AUTH_SESSION_SECRET!, user),
+    machineToken: () => mintMachineToken(TEST_ENV.AUTH_SESSION_SECRET!),
     createWorkspaceInAccount: (accountId, ownerUserId, options) =>
       container.workspaceService.create(
         { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
@@ -580,6 +600,7 @@ export function makeConformanceApp(
     documentRepository: () => new DrizzleDocumentRepository(db),
     taskRepository: () => new DrizzleTaskRepository(db),
     docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
+    guidedReviewRepository: () => new DrizzleGuidedReviewRepository(db),
     accountSettingsRepository: () => new DrizzleAccountSettingsRepository(db),
     accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
     seedService,

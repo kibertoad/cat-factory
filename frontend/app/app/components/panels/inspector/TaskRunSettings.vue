@@ -9,6 +9,8 @@ import InspectorSection from '~/components/panels/inspector/InspectorSection.vue
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import TaskAprioriBranches from '~/components/panels/inspector/TaskAprioriBranches.vue'
 import DocReferenceRepos from '~/components/panels/inspector/DocReferenceRepos.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -283,9 +285,9 @@ const technicalLabel = computed(() => {
     <!-- pipeline -->
     <div>
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.pipeline') }}
-        </span>
+        </SectionLabel>
         <PipelinePicker
           :model-value="block.pipelineId ?? ''"
           :options="selectablePipelines"
@@ -304,20 +306,14 @@ const technicalLabel = computed(() => {
         </PipelinePicker>
       </div>
       <div v-if="selectedPipeline" class="flex items-center gap-1">
-        <UBadge
-          color="primary"
-          variant="subtle"
-          size="sm"
-          class="cursor-pointer"
-          @click="setPipeline('')"
-        >
+        <UBadge variant="subtle" size="sm" class="cursor-pointer" @click="setPipeline('')">
           {{ selectedPipeline.name }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
         </UBadge>
       </div>
-      <div v-else class="text-[11px] text-slate-500">
+      <div v-else class="text-2xs text-dimmed">
         {{ t('inspector.runSettings.pipelineEmpty') }}
       </div>
-      <p class="mt-1 text-[11px] leading-snug text-slate-500">
+      <p class="mt-1 text-2xs leading-snug text-dimmed">
         {{ t('inspector.runSettings.pipelineHint') }}
       </p>
     </div>
@@ -325,9 +321,9 @@ const technicalLabel = computed(() => {
     <!-- merge policy preset (advanced, or basic with an override already set) -->
     <div v-if="showOverrideField(uiMode.isAdvanced, block.riskPolicyId)">
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.mergePolicy') }}
-        </span>
+        </SectionLabel>
         <RiskPolicyPicker
           :model-value="block.riskPolicyId ?? ''"
           :options="riskPolicies.presets"
@@ -347,7 +343,7 @@ const technicalLabel = computed(() => {
           </template>
         </RiskPolicyPicker>
       </div>
-      <div v-if="selectedPreset" class="text-[11px] text-slate-400">
+      <div v-if="selectedPreset" class="text-2xs text-muted">
         <i18n-t
           v-if="selectedPreset.autoMergeEnabled"
           keypath="inspector.runSettings.riskPolicyDetail"
@@ -355,7 +351,7 @@ const technicalLabel = computed(() => {
           scope="global"
         >
           <template #name>
-            <span class="text-slate-300">{{ selectedPreset.name }}</span>
+            <span class="text-toned">{{ selectedPreset.name }}</span>
           </template>
           <template #risk>{{ n(selectedPreset.maxRisk, { key: 'percent' }) }}</template>
           <template #impact>{{ n(selectedPreset.maxImpact, { key: 'percent' }) }}</template>
@@ -365,18 +361,18 @@ const technicalLabel = computed(() => {
         <!-- Auto-merge off: the ceilings never apply, so quoting them would misdescribe it. -->
         <i18n-t v-else keypath="inspector.runSettings.riskPolicyManual" tag="span" scope="global">
           <template #name>
-            <span class="text-slate-300">{{ selectedPreset.name }}</span>
+            <span class="text-toned">{{ selectedPreset.name }}</span>
           </template>
           <template #attempts>{{ selectedPreset.ciMaxAttempts }}</template>
         </i18n-t>
-        <span v-if="!block.riskPolicyId" class="text-slate-500">{{
+        <span v-if="!block.riskPolicyId" class="text-dimmed">{{
           t('inspector.runSettings.workspaceDefaultParen')
         }}</span>
       </div>
-      <div v-else class="text-[11px] text-slate-500">
+      <div v-else class="text-2xs text-dimmed">
         {{ t('inspector.runSettings.riskPolicyEmpty') }}
       </div>
-      <p class="mt-1 text-[11px] leading-snug text-slate-500">
+      <p class="mt-1 text-2xs leading-snug text-dimmed">
         {{ t('inspector.runSettings.mergePolicyHint') }}
       </p>
     </div>
@@ -384,9 +380,9 @@ const technicalLabel = computed(() => {
     <!-- model preset (advanced, or basic with an override already set) -->
     <div v-if="showOverrideField(uiMode.isAdvanced, block.modelPresetId)">
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.modelPreset') }}
-        </span>
+        </SectionLabel>
         <UDropdownMenu :items="modelPresetMenu">
           <UButton
             size="xs"
@@ -397,8 +393,8 @@ const technicalLabel = computed(() => {
           />
         </UDropdownMenu>
       </div>
-      <div v-if="selectedModelPreset" class="text-[11px] text-slate-400">
-        <span class="text-slate-300">{{ selectedModelPreset.name }}</span>
+      <div v-if="selectedModelPreset" class="text-2xs text-muted">
+        <span class="text-toned">{{ selectedModelPreset.name }}</span>
         {{ t('inspector.runSettings.modelPresetBase', { model: selectedModelPreset.baseModelId })
         }}<span v-if="Object.keys(selectedModelPreset.overrides).length">{{
           t(
@@ -408,48 +404,52 @@ const technicalLabel = computed(() => {
           )
         }}</span
         >.
-        <span v-if="!block.modelPresetId" class="text-slate-500">{{
+        <span v-if="!block.modelPresetId" class="text-dimmed">{{
           t('inspector.runSettings.workspaceDefaultParen')
         }}</span>
       </div>
-      <div v-else class="text-[11px] text-slate-500">
+      <div v-else class="text-2xs text-dimmed">
         {{ t('inspector.runSettings.modelPresetEmpty') }}
       </div>
       <div
         v-if="unavailablePresetModels.length"
-        class="mt-2 rounded-md border border-amber-500/40 bg-amber-950/40 p-2 text-[11px] text-amber-200/90"
+        class="mt-2 rounded-md border border-app-warning-500/40 bg-app-warning-950/40 p-2 text-2xs text-app-warning-200/90"
       >
         <div class="flex items-start gap-1.5">
           <UIcon
             name="i-lucide-triangle-alert"
-            class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400"
+            class="mt-0.5 h-3.5 w-3.5 shrink-0 text-app-warning-400"
           />
           <div class="min-w-0">
             <p>
               <i18n-t keypath="inspector.runSettings.unavailableModels" tag="span" scope="global">
                 <template #models>
-                  <span class="text-amber-100">{{ unavailablePresetModels.join(', ') }}</span>
+                  <span class="text-app-warning-100">{{ unavailablePresetModels.join(', ') }}</span>
                 </template>
               </i18n-t>
             </p>
             <div class="mt-1.5 flex flex-wrap gap-2">
-              <button
-                class="font-medium text-amber-100 underline-offset-2 hover:underline"
+              <UButton
+                color="neutral"
+                variant="link"
+                class="p-0 text-xs font-medium text-app-warning-100 underline-offset-2 hover:underline"
                 @click="ui.openModelConfig()"
               >
                 {{ t('inspector.runSettings.editPresets') }}
-              </button>
-              <button
-                class="font-medium text-amber-100 underline-offset-2 hover:underline"
+              </UButton>
+              <UButton
+                color="neutral"
+                variant="link"
+                class="p-0 text-xs font-medium text-app-warning-100 underline-offset-2 hover:underline"
                 @click="ui.openVendorCredentials()"
               >
                 {{ t('inspector.runSettings.configureVendors') }}
-              </button>
+              </UButton>
             </div>
           </div>
         </div>
       </div>
-      <p class="mt-1 text-[11px] text-slate-500">
+      <p class="mt-1 text-2xs text-dimmed">
         {{ t('inspector.runSettings.modelPresetHint') }}
         {{ t('inspector.runSettings.modelPresetChangeHint') }}
       </p>
@@ -458,9 +458,9 @@ const technicalLabel = computed(() => {
     <!-- technical label (tri-state) — unset lets the engine infer it -->
     <div v-if="showOverrideField(uiMode.isAdvanced, block.technical)">
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.taskKind') }}
-        </span>
+        </SectionLabel>
         <UDropdownMenu :items="technicalMenu">
           <UButton
             size="xs"
@@ -473,7 +473,7 @@ const technicalLabel = computed(() => {
           </UButton>
         </UDropdownMenu>
       </div>
-      <div class="text-[11px] text-slate-500">
+      <div class="text-2xs text-dimmed">
         <template v-if="block.technical === true">
           {{ t('inspector.runSettings.technicalHint.technical') }}
         </template>
@@ -489,9 +489,9 @@ const technicalLabel = computed(() => {
     <!-- involved services: connected services this task spans (envs + possible code changes) -->
     <div data-testid="involved-services">
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.involvedServices') }}
-        </span>
+        </SectionLabel>
       </div>
       <div v-if="connectedServices.length" class="space-y-1">
         <UCheckbox
@@ -504,9 +504,12 @@ const technicalLabel = computed(() => {
           @update:model-value="(v: boolean | 'indeterminate') => toggleInvolved(s.id, v === true)"
         />
       </div>
-      <div v-else class="text-[11px] text-slate-500">
-        {{ t('inspector.runSettings.involvedServicesEmpty') }}
-      </div>
+      <EmptyState
+        v-else
+        compact
+        icon="i-lucide-plug"
+        :title="t('inspector.runSettings.involvedServicesEmpty')"
+      />
       <div v-if="staleInvolvedServices.length" class="mt-1 flex flex-wrap gap-1">
         <UBadge
           v-for="id in staleInvolvedServices"
@@ -519,7 +522,7 @@ const technicalLabel = computed(() => {
           {{ board.getBlock(id)?.title ?? id }}
         </UBadge>
       </div>
-      <div class="mt-1 text-[11px] text-slate-500">
+      <div class="mt-1 text-2xs text-dimmed">
         {{ t('inspector.runSettings.involvedServicesHint') }}
       </div>
     </div>
@@ -543,15 +546,13 @@ const technicalLabel = computed(() => {
       "
     >
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.issueWriteback') }}
-        </span>
+        </SectionLabel>
       </div>
       <div class="space-y-1.5">
         <div class="flex items-center justify-between">
-          <span class="text-[11px] text-slate-400">{{
-            t('inspector.runSettings.commentOnPrOpen')
-          }}</span>
+          <span class="text-2xs text-muted">{{ t('inspector.runSettings.commentOnPrOpen') }}</span>
           <UDropdownMenu :items="writebackMenu(setCommentOnPrOpen)">
             <UButton
               size="xs"
@@ -564,9 +565,7 @@ const technicalLabel = computed(() => {
           </UDropdownMenu>
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-[11px] text-slate-400">{{
-            t('inspector.runSettings.closeOnMerge')
-          }}</span>
+          <span class="text-2xs text-muted">{{ t('inspector.runSettings.closeOnMerge') }}</span>
           <UDropdownMenu :items="writebackMenu(setResolveOnMerge)">
             <UButton
               size="xs"
@@ -579,9 +578,7 @@ const technicalLabel = computed(() => {
           </UDropdownMenu>
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-[11px] text-slate-400">{{
-            t('inspector.runSettings.questionsOnPark')
-          }}</span>
+          <span class="text-2xs text-muted">{{ t('inspector.runSettings.questionsOnPark') }}</span>
           <UDropdownMenu :items="writebackMenu(setQuestionsOnPark)">
             <UButton
               size="xs"
@@ -594,7 +591,7 @@ const technicalLabel = computed(() => {
           </UDropdownMenu>
         </div>
       </div>
-      <div class="mt-1 text-[11px] text-slate-500">
+      <div class="mt-1 text-2xs text-dimmed">
         {{ t('inspector.runSettings.writebackHint') }}
       </div>
     </div>
@@ -602,9 +599,9 @@ const technicalLabel = computed(() => {
     <!-- responsible product person -->
     <div>
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.responsibleProduct') }}
-        </span>
+        </SectionLabel>
         <UDropdownMenu :items="responsibleMenu">
           <UButton
             size="xs"
@@ -616,17 +613,11 @@ const technicalLabel = computed(() => {
         </UDropdownMenu>
       </div>
       <div v-if="responsibleLabel" class="flex items-center gap-1">
-        <UBadge
-          color="primary"
-          variant="subtle"
-          size="sm"
-          class="cursor-pointer"
-          @click="setResponsible('')"
-        >
+        <UBadge variant="subtle" size="sm" class="cursor-pointer" @click="setResponsible('')">
           {{ responsibleLabel }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
         </UBadge>
       </div>
-      <div v-else class="text-[11px] text-slate-500">
+      <div v-else class="text-2xs text-dimmed">
         {{ t('inspector.runSettings.responsibleEmpty') }}
       </div>
     </div>
@@ -634,16 +625,16 @@ const technicalLabel = computed(() => {
     <!-- auto-start dependents: when this task merges, start the tasks that depend on it -->
     <div>
       <div class="flex items-center justify-between gap-2">
-        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.autoStartDependents') }}
-        </span>
+        </SectionLabel>
         <USwitch
           size="sm"
           :model-value="block.autoStartDependents ?? false"
           @update:model-value="setAutoStartDependents"
         />
       </div>
-      <div class="mt-1 text-[11px] text-slate-500">
+      <div class="mt-1 text-2xs text-dimmed">
         {{ t('inspector.runSettings.autoStartHint') }}
       </div>
     </div>

@@ -6,7 +6,7 @@
 // and the migration tags are part of what this package asks a deployment for, so a suite that
 // declared them differently would stop testing the arrangement it documents.
 //
-// JSONC rather than TOML because THREE runtimes read it: `@cloudflare/vitest-pool-workers` for the
+// JSONC rather than TOML because THREE runtimes read it: `@cloudflare/vitest-plugin` for the
 // hermetic and live suites, and Cloudflare OS's own integration harness for the nightly OS leg,
 // which reads a gatekeeper package's `wrangler.jsonc` by name. A second file for that reader would
 // be a second declaration of one Worker, free to drift from this one on exactly the bindings a

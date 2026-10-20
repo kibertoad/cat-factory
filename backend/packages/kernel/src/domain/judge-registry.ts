@@ -12,7 +12,7 @@ import {
 
 // ---------------------------------------------------------------------------
 // The JUDGE abstraction — the FOURTH bucket of the step taxonomy (agents / polling gates /
-// one-shot engine steps / JUDGES; see `CLAUDE.md`).
+// one-shot engine steps / JUDGES; see `AGENTS.md`).
 //
 // A judge step runs an LLM assessment of the run's work against a RUBRIC, producing a
 // structured verdict. The engine compares the verdict's score to a PER-TASK threshold (a

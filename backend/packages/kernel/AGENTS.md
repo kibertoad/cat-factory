@@ -42,7 +42,7 @@ else imports its **ports** and domain types from here.
   `registerVcsProvider` seams live here: a gate/agent package never depends on orchestration.
   `judge-registry.ts` is the FOURTH step-taxonomy bucket (an LLM verdict against a rubric vs a
   per-task threshold → advance / park / bounce / fail); its pure disposition rules are
-  `judge-logic.ts` (`disposeJudgeVerdict` / `renderJudgeRework`). See CLAUDE.md → "Gates vs
+  `judge-logic.ts` (`disposeJudgeVerdict` / `renderJudgeRework`). See AGENTS.md → "Gates vs
   agents" and `docs/initiatives/judge-registry.md`. Its COMPANION sibling is
   `companion-logic.ts` (`disposeCompanionVerdict`, `companionParkReasonFor`, `CompanionParkReason`):
   the same shape of decision from a rework pair's inputs, where a `blocker` finding holds the step
@@ -53,7 +53,7 @@ else imports its **ports** and domain types from here.
   `TaskSourceProvider.webhook` capability a provider implements to verify + parse its vendor's
   deliveries. Its dedup marker port is `ports/tracker-comment-ingest-repositories.ts`, the
   `review_question_posts` claim shape, applied to the other direction of the same loop. See
-  CLAUDE.md → "Inbound tracker webhooks".
+  AGENTS.md → "Inbound tracker webhooks".
 - `domain/mount-layout.ts`: `applyMountLayout`, the projection that puts a service frame where
   THIS board mounts it. A frame's position (and any size override) lives on the `WorkspaceMount`,
   never on the shared block, so the block row's own coordinates are frozen at creation. Both the
@@ -306,7 +306,7 @@ else imports its **ports** and domain types from here.
   `firstPresent`/`allPresent`, `readYamlDoc`, `listFiles`, + the `CustomManifestDetection` /
   `CustomManifestDetectionContext` authoring types).
 
-**See also:** [`docs/step-taxonomy.md`](../../docs/step-taxonomy.md), `CLAUDE.md` → "Custom agents",
+**See also:** [`docs/step-taxonomy.md`](../../docs/step-taxonomy.md), `AGENTS.md` → "Custom agents",
 "Merge track record", "Logging goes through the kernel `Logger` port".
 
 **Mutation-tested** (`stryker.config.mjs`): nightly, non-blocking, never run locally. Scope and

@@ -205,6 +205,30 @@ export {
   type JudgeAssessor,
   type JudgeContext,
 } from '@cat-factory/kernel'
+// Installation-level extension point for DELEGATED EXECUTORS: an external system this deployment
+// already runs (a GitHub-Actions implement/review/test loop, an internal job runner, a vendor's
+// autonomous PR bot), taking ONE pipeline step while cat-factory keeps the intake, the context,
+// the policy, the merge and the notifications around it. Empty by default: the platform ships
+// none, because shipping one would make the seam about that one.
+export {
+  DelegatedExecutorRegistry,
+  defaultDelegatedExecutorRegistry,
+  DelegatedExecutorRegistrationError,
+  type DelegatedExecutor,
+  type DelegatedExecutorDefinition,
+  type DelegatedExecutorDeps,
+  type DelegatedExecutorPresentation,
+  type DelegatedExecutorTelemetry,
+  type DelegatedExecutorView,
+  type DelegatedFetch,
+  type DelegatedFetchResponse,
+  type DelegatedPollPolicy,
+  type DelegationBrief,
+  type DelegationHandle,
+  type DelegationResult,
+  type DelegationStart,
+  type DelegationUpdate,
+} from '@cat-factory/kernel'
 // Installation-level extension point for VCS PROVIDERS: the neutral seam a deployment adds a git
 // host through, rather than re-hardcoding GitHub in a shared path.
 export {
@@ -295,6 +319,7 @@ export {
   DOCUMENT_PIPELINE_ID,
   DOCUMENT_QUICK_PIPELINE_ID,
   REVIEW_PIPELINE_ID,
+  RESOLVE_CONFLICTS_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
   BUG_FISHING_PIPELINE_ID,
@@ -334,6 +359,11 @@ export { DEFAULT_MODEL_PRESET_ID, MODEL_PRESET_SEED_IDS } from '@cat-factory/ker
 // wrapper can type its `seedSharedStacks` (and hand-write an inline compose layer) without a
 // direct `@cat-factory/kernel` / `@cat-factory/contracts` import.
 export type { ComposeFileRef, ComposeSource, CreateSharedStackInput } from '@cat-factory/kernel'
+// The shape of a declared runner pool and of the callback that declares it, for
+// `seedAccountRunnerPool`: the `{ config, secrets }` an admin would submit through Infrastructure →
+// Runner pool, with the backend config types it is built from.
+export type { RunnerPoolSeed, RunnerPoolSeedSource } from '@cat-factory/integrations'
+export type { RunnerBackendConfig } from '@cat-factory/kernel'
 export { SystemClock, CryptoIdGenerator } from './runtime.js'
 // Re-exported so the local facade can build its own provisioning-log recorder for the
 // per-workspace transport chooser without taking a direct @cat-factory/integrations dep.
@@ -358,6 +388,7 @@ export {
 } from './repositories/drizzle.js'
 export {
   DrizzleGitHubInstallationRepository,
+  DrizzleAccountRunnerPoolRepository,
   DrizzleRunnerPoolConnectionRepository,
 } from './repositories/containerExecution.js'
 // The Drizzle GitHub projection repositories, re-exported so a test harness (the e2e backend)
@@ -375,6 +406,7 @@ export { DrizzleNotificationRepository } from './repositories/notifications.js'
 export { DrizzleDocumentRepository } from './repositories/documents.js'
 export { DrizzleTaskRepository } from './repositories/tasks.js'
 export { DrizzleDocInterviewRepository } from './repositories/drizzle.js'
+export { DrizzleGuidedReviewRepository } from './repositories/drizzle.js'
 export { DrizzleEnvironmentUserHandlerRepository } from './repositories/environmentUserHandler.js'
 export * as schema from './db/schema.js'
 export {

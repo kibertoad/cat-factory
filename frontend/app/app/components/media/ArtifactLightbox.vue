@@ -7,8 +7,10 @@
 // Zoom is pure CSS `transform` (GPU, no canvas), so even large PNGs stay smooth. Keyboard:
 // Esc close · ←/→ prev/next · +/- zoom · 0 reset · double-click toggle fit↔2×.
 import { computed, ref, watch } from 'vue'
-import { useModalBehavior } from '@modular-vue/core'
 import type { ArtifactBlobs } from '~/composables/useArtifactBlobs'
+import IconButton from '~/components/common/IconButton.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 interface LightboxItem {
   artifactId: string
@@ -36,19 +38,15 @@ const scale = ref(1)
 const tx = ref(0)
 const ty = ref(0)
 
-// Modal behaviour via the shared overlay stack (`@modular-vue/core`, the slice-5 release):
-// focus-trap + return, body-scroll lock, and — because it pushes onto the shared stack while
-// open — it becomes the TOP overlay over an owning review window (`ResultWindowShell`), so
-// Escape closes the lightbox first and the owner's trap goes inert until it closes. This is
-// the reconciliation that replaces the old `active: open && !lightboxOpen` guard the windows
-// used to fight over Tab.
+// Modal behaviour comes from `TakeoverShell` (the shared overlay stack): focus-trap + return,
+// body-scroll lock, and, because it pushes onto the shared stack while open, it becomes the TOP
+// overlay over an owning review window (`ResultWindowShell`), so Escape closes the lightbox first
+// and the owner's trap goes inert until it closes.
 function close() {
   emit('update:open', false)
 }
-const { dialogRef, isTop } = useModalBehavior({
-  active: () => props.open,
-  onClose: close,
-})
+const shell = ref<InstanceType<typeof TakeoverShell> | null>(null)
+const isTop = computed(() => shell.value?.isTop ?? false)
 
 const current = computed(() => props.items[props.index] ?? null)
 const total = computed(() => props.items.length)
@@ -156,63 +154,77 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
 
 <template>
   <Teleport to="body">
-    <div
+    <TakeoverShell
       v-if="open"
-      ref="dialogRef"
-      tabindex="-1"
-      class="fixed inset-0 z-[60] flex flex-col bg-slate-950/95 backdrop-blur-sm focus:outline-none"
-      role="dialog"
-      aria-modal="true"
+      ref="shell"
+      class="flex-col bg-app-950/95 backdrop-blur-sm"
       data-testid="artifact-lightbox"
-      :aria-label="
+      :label="
         current
           ? t('media.lightbox.ariaLabel', { label: current.label })
           : t('media.lightbox.ariaLabelFallback')
       "
-      @click.self="close"
+      @close="close"
     >
       <!-- Toolbar -->
-      <div class="flex items-center gap-3 border-b border-slate-800/60 px-4 py-2.5">
-        <span class="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-200">
+      <div class="flex items-center gap-3 border-b border-default/60 px-4 py-2.5">
+        <span class="min-w-0 flex-1 truncate text-sm font-medium text-default">
           {{ current?.label ?? t('media.lightbox.fallbackTitle') }}
         </span>
-        <span v-if="total > 1" class="shrink-0 text-[12px] tabular-nums text-slate-400">
+        <span v-if="total > 1" class="shrink-0 text-xs tabular-nums text-muted">
           {{ t('media.lightbox.counter', { current: index + 1, total }) }}
         </span>
         <div class="flex shrink-0 items-center gap-1">
-          <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-40"
-            :title="t('media.lightbox.zoomOut')"
+          <IconButton
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-zoom-out"
+            :label="t('media.lightbox.zoomOut')"
+            :ui="{
+              base: 'rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default disabled:opacity-40',
+              leadingIcon: 'h-4 w-4',
+            }"
             :disabled="scale <= MIN_SCALE"
             @click="zoomBy(1 / 1.25)"
-          >
-            <UIcon name="i-lucide-zoom-out" class="h-4 w-4" />
-          </button>
-          <span class="w-10 text-center text-[11px] tabular-nums text-slate-500">{{
+          />
+          <span class="w-10 text-center text-2xs tabular-nums text-dimmed">{{
             n(scale, 'percent')
           }}</span>
-          <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-40"
-            :title="t('media.lightbox.zoomIn')"
+          <IconButton
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-zoom-in"
+            :label="t('media.lightbox.zoomIn')"
+            :ui="{
+              base: 'rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default disabled:opacity-40',
+              leadingIcon: 'h-4 w-4',
+            }"
             :disabled="scale >= MAX_SCALE"
             @click="zoomBy(1.25)"
-          >
-            <UIcon name="i-lucide-zoom-in" class="h-4 w-4" />
-          </button>
-          <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-            :title="t('media.lightbox.reset')"
+          />
+          <IconButton
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-maximize"
+            :label="t('media.lightbox.reset')"
+            :ui="{
+              base: 'rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default',
+              leadingIcon: 'h-4 w-4',
+            }"
             @click="resetView"
-          >
-            <UIcon name="i-lucide-maximize" class="h-4 w-4" />
-          </button>
-          <button
-            class="ms-1 rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-            :title="t('media.lightbox.close')"
+          />
+          <IconButton
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-x"
+            class="ms-1"
+            :label="t('media.lightbox.close')"
+            :ui="{
+              base: 'rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default',
+              leadingIcon: 'h-4 w-4',
+            }"
             @click="close"
-          >
-            <UIcon name="i-lucide-x" class="h-4 w-4" />
-          </button>
+          />
         </div>
       </div>
 
@@ -222,21 +234,26 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
         @wheel="onWheel"
         @click.self="close"
       >
-        <button
+        <IconButton
           v-if="total > 1"
-          class="absolute start-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
-          :title="t('media.lightbox.prev')"
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-chevron-left"
+          class="absolute start-3 top-1/2 z-10 -translate-y-1/2"
+          :label="t('media.lightbox.prev')"
+          :ui="{
+            base: 'rounded-full bg-default/80 p-2 text-toned hover:bg-elevated hover:text-highlighted',
+            leadingIcon: 'h-5 w-5 rtl:-scale-x-100',
+          }"
           @click="go(-1)"
-        >
-          <UIcon name="i-lucide-chevron-left" class="h-5 w-5 rtl:-scale-x-100" />
-        </button>
+        />
 
         <img
           v-if="url"
           :src="url"
           :alt="current?.alt ?? ''"
           draggable="false"
-          class="max-h-full max-w-full select-none rounded shadow-2xl"
+          class="max-h-full max-w-full select-none rounded-sm shadow-2xl"
           :class="[
             scale > 1 ? (dragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in',
             dragging ? '' : 'transition-transform duration-100',
@@ -248,33 +265,40 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           @pointerup="onPointerUp"
           @pointercancel="onPointerUp"
         />
-        <div v-else class="flex flex-col items-center gap-2 text-slate-500">
-          <UIcon
-            :name="state === 'error' ? 'i-lucide-image-off' : 'i-lucide-loader'"
+        <div v-else class="flex flex-col items-center gap-2 text-dimmed">
+          <Spinner
+            :name="state === 'error' ? 'i-lucide-image-off' : undefined"
+            :spinning="state !== 'error'"
             class="h-8 w-8"
-            :class="state === 'error' ? '' : 'animate-spin'"
           />
-          <p class="text-[12px]">
+          <p class="text-xs">
             {{ state === 'error' ? t('media.lightbox.failed') : t('media.lightbox.loading') }}
           </p>
-          <button
+          <UButton
+            color="neutral"
+            variant="link"
             v-if="state === 'error' && current"
-            class="text-[12px] text-amber-300 hover:underline"
+            class="p-0 text-xs text-app-warning-300 hover:underline"
             @click="props.blobs.retry(current.artifactId)"
           >
             {{ t('common.retry') }}
-          </button>
+          </UButton>
         </div>
 
-        <button
+        <IconButton
           v-if="total > 1"
-          class="absolute end-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
-          :title="t('media.lightbox.next')"
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-chevron-right"
+          class="absolute end-3 top-1/2 z-10 -translate-y-1/2"
+          :label="t('media.lightbox.next')"
+          :ui="{
+            base: 'rounded-full bg-default/80 p-2 text-toned hover:bg-elevated hover:text-highlighted',
+            leadingIcon: 'h-5 w-5 rtl:-scale-x-100',
+          }"
           @click="go(1)"
-        >
-          <UIcon name="i-lucide-chevron-right" class="h-5 w-5 rtl:-scale-x-100" />
-        </button>
+        />
       </div>
-    </div>
+    </TakeoverShell>
   </Teleport>
 </template>

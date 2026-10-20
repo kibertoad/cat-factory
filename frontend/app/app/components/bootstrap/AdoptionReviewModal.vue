@@ -9,12 +9,13 @@
 // is no suggestion at all as its own state, because "the two repositories agreed on everything"
 // and "the analysis never ran" would otherwise look identical and lead to opposite conclusions.
 import type { AdoptionSource, BootstrapJob } from '~/types/domain'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{ job: BootstrapJob }>()
 const emit = defineEmits<{ close: [] }>()
 
 const agentRuns = useAgentRunsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -145,13 +146,10 @@ async function submit() {
       })),
       ...(overallNotes.value.trim() ? { notes: overallNotes.value.trim() } : {}),
     })
-    toast.add({
-      title: t('bootstrap.adoption.toast.approved'),
+    actionToast.success('bootstrap.adoption.toast.approved', {
       description: t('bootstrap.adoption.toast.approvedDesc', {
         directory: props.job.monorepo?.directory ?? '',
       }),
-      icon: 'i-lucide-check',
-      color: 'success',
     })
     open.value = false
     emit('close')
@@ -168,6 +166,8 @@ watch(open, (isOpen) => {
 </script>
 
 <template>
+  <!-- workbench-width-ok: a review that puts the evidence files beside every suggestion (768px).
+       Its shell waits on #2359. -->
   <UModal
     v-model:open="open"
     :title="t('bootstrap.adoption.title')"
@@ -182,11 +182,14 @@ watch(open, (isOpen) => {
              presenting an empty list, which would read as "there was nothing to decide". -->
         <div
           v-if="unavailable"
-          class="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"
+          class="space-y-2 rounded-md border border-app-warning-500/30 bg-app-warning-500/5 p-3"
         >
           <div class="flex items-start gap-2">
-            <UIcon name="i-lucide-triangle-alert" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-            <p class="text-sm text-amber-200/90">
+            <UIcon
+              name="i-lucide-triangle-alert"
+              class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400"
+            />
+            <p class="text-sm text-app-warning-200/90">
               {{
                 t(
                   `bootstrap.adoption.unavailable.${plan?.unavailableReason ?? 'analysis_unusable'}`,
@@ -194,7 +197,7 @@ watch(open, (isOpen) => {
               }}
             </p>
           </div>
-          <p v-if="plan?.unavailableDetail" class="pl-6 text-xs text-slate-400">
+          <p v-if="plan?.unavailableDetail" class="pl-6 text-xs text-muted">
             {{ plan.unavailableDetail }}
           </p>
         </div>
@@ -204,7 +207,7 @@ watch(open, (isOpen) => {
              exhausted budget is called out rather than left for someone to infer from a short
              list: it is the difference between a thin read and a thin reading. -->
         <div v-if="surveyReads.length" class="space-y-2 text-xs">
-          <p class="text-slate-400">
+          <p class="text-muted">
             {{
               t('bootstrap.adoption.survey.summary', {
                 read: readSummary.read,
@@ -212,40 +215,49 @@ watch(open, (isOpen) => {
               })
             }}
           </p>
-          <p v-if="readSummary.missed > 0" class="text-slate-500">
+          <p v-if="readSummary.missed > 0" class="text-dimmed">
             {{ t('bootstrap.adoption.survey.missed', { count: readSummary.missed }) }}
           </p>
-          <p v-if="exhausted" class="text-amber-300/90">
+          <p v-if="exhausted" class="text-app-warning-300/90">
             {{ t(`bootstrap.adoption.survey.exhausted.${exhausted}`) }}
           </p>
-          <p v-if="recordsDropped > 0" class="text-amber-300/90">
+          <p v-if="recordsDropped > 0" class="text-app-warning-300/90">
             {{ t('bootstrap.adoption.survey.truncated', { count: recordsDropped }) }}
           </p>
-          <details>
-            <summary class="cursor-pointer text-slate-500 hover:text-slate-300">
-              {{ t('bootstrap.adoption.survey.show') }}
-            </summary>
-            <ul class="mt-2 space-y-1">
-              <!-- Keyed by POSITION: the transcript is append-only and rendered in order, and
+          <UCollapsible>
+            <template #default="{ open }">
+              <UButton
+                variant="link"
+                color="neutral"
+                size="xs"
+                :icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                :label="t('bootstrap.adoption.survey.show')"
+                :ui="{ base: 'w-full justify-start gap-1 p-0 text-dimmed hover:text-toned' }"
+              />
+            </template>
+            <template #content>
+              <ul class="mt-2 space-y-1">
+                <!-- Keyed by POSITION: the transcript is append-only and rendered in order, and
                    the same path legitimately appears twice (a body refused by the seed and then
                    served to the model, a path the model retried). Keying on the path patched
                    those two rows against each other and rendered a note beside the wrong one. -->
-              <li
-                v-for="(entry, index) in surveyReads"
-                :key="index"
-                class="flex items-baseline gap-2"
-              >
-                <span
-                  class="shrink-0 font-mono text-[10px] uppercase"
-                  :class="entry.outcome === 'read' ? 'text-slate-500' : 'text-amber-400/80'"
+                <li
+                  v-for="(entry, index) in surveyReads"
+                  :key="index"
+                  class="flex items-baseline gap-2"
                 >
-                  {{ t(`bootstrap.adoption.survey.outcome.${entry.outcome}`) }}
-                </span>
-                <span class="font-mono text-slate-400">{{ entry.path }}</span>
-                <span v-if="entry.note" class="text-slate-600">{{ entry.note }}</span>
-              </li>
-            </ul>
-          </details>
+                  <span
+                    class="shrink-0 font-mono text-3xs uppercase"
+                    :class="entry.outcome === 'read' ? 'text-dimmed' : 'text-app-warning-400/80'"
+                  >
+                    {{ t(`bootstrap.adoption.survey.outcome.${entry.outcome}`) }}
+                  </span>
+                  <span class="font-mono text-muted">{{ entry.path }}</span>
+                  <span v-if="entry.note" class="text-app-600">{{ entry.note }}</span>
+                </li>
+              </ul>
+            </template>
+          </UCollapsible>
         </div>
 
         <!-- The reviewer's own instructions, on BOTH paths. With no suggestion to answer this is
@@ -260,7 +272,7 @@ watch(open, (isOpen) => {
 
         <template v-else>
           <div class="flex items-center justify-between gap-3">
-            <p class="text-sm text-slate-400">{{ t('bootstrap.adoption.intro') }}</p>
+            <p class="text-sm text-muted">{{ t('bootstrap.adoption.intro') }}</p>
             <UButton
               color="neutral"
               variant="subtle"
@@ -279,16 +291,16 @@ watch(open, (isOpen) => {
               class="space-y-3 rounded-md border p-3"
               :class="
                 touched.has(decision.id)
-                  ? 'border-slate-700 bg-slate-900/40'
-                  : 'border-amber-500/40 bg-amber-500/5'
+                  ? 'border-muted bg-default/40'
+                  : 'border-app-warning-500/40 bg-app-warning-500/5'
               "
             >
               <div class="flex items-start justify-between gap-3">
                 <div>
-                  <p class="text-sm font-medium text-slate-100">{{ decision.title }}</p>
-                  <p class="text-[11px] uppercase tracking-wide text-slate-500">
+                  <p class="text-sm font-medium text-app-100">{{ decision.title }}</p>
+                  <SectionLabel as="p">
                     {{ t(`bootstrap.adoption.area.${decision.area}`) }}
-                  </p>
+                  </SectionLabel>
                 </div>
                 <UBadge v-if="!touched.has(decision.id)" color="warning" variant="subtle" size="sm">
                   {{ t('bootstrap.adoption.needsYou') }}
@@ -296,29 +308,29 @@ watch(open, (isOpen) => {
               </div>
 
               <div class="grid gap-2 text-xs sm:grid-cols-2">
-                <div class="rounded bg-slate-900/60 p-2">
-                  <p class="mb-1 font-semibold text-slate-300">
+                <div class="rounded-sm bg-elevated/60 p-2">
+                  <p class="mb-1 font-semibold text-toned">
                     {{ t('bootstrap.adoption.side.monorepo') }}
                   </p>
-                  <p class="text-slate-400">
+                  <p class="text-muted">
                     {{ decision.monorepoPractice ?? t('bootstrap.adoption.side.nothing') }}
                   </p>
                 </div>
-                <div class="rounded bg-slate-900/60 p-2">
-                  <p class="mb-1 font-semibold text-slate-300">
+                <div class="rounded-sm bg-elevated/60 p-2">
+                  <p class="mb-1 font-semibold text-toned">
                     {{ t('bootstrap.adoption.side.template') }}
                   </p>
-                  <p class="text-slate-400">
+                  <p class="text-muted">
                     {{ decision.templatePractice ?? t('bootstrap.adoption.side.nothing') }}
                   </p>
                 </div>
               </div>
 
-              <p class="text-xs text-slate-400">{{ decision.rationale }}</p>
+              <p class="text-xs text-muted">{{ decision.rationale }}</p>
 
               <!-- The evidence is what makes the suggestion checkable rather than an assertion,
                    so it is shown, not tucked away. -->
-              <p v-if="decision.evidence.length" class="text-[11px] text-slate-500">
+              <p v-if="decision.evidence.length" class="text-2xs text-dimmed">
                 {{ t('bootstrap.adoption.evidence') }}
                 <span class="font-mono">{{ decision.evidence.join(', ') }}</span>
               </p>
@@ -365,7 +377,7 @@ watch(open, (isOpen) => {
 
     <template #footer>
       <div class="flex w-full items-center justify-between gap-3">
-        <p v-if="!unavailable && remaining > 0" class="text-xs text-amber-300/90">
+        <p v-if="!unavailable && remaining > 0" class="text-xs text-app-warning-300/90">
           {{ t('bootstrap.adoption.remaining', { count: remaining }) }}
         </p>
         <span v-else />
@@ -374,7 +386,6 @@ watch(open, (isOpen) => {
             {{ t('common.cancel') }}
           </UButton>
           <UButton
-            color="primary"
             icon="i-lucide-play"
             :loading="submitting"
             :disabled="!canSubmit"

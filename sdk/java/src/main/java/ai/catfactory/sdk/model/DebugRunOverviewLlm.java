@@ -4,6 +4,7 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -13,6 +14,7 @@ import org.jspecify.annotations.Nullable;
  * @param byAgentKind the {@code byAgentKind} field.
  * @param byPhase the {@code byPhase} field.
  * @param costCurrency Always present; {@code null} when the server has no value for it.
+ * @param reporting May be absent entirely.
  * @param totals the {@code totals} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -23,6 +25,9 @@ public record DebugRunOverviewLlm(
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("costCurrency") @Nullable String costCurrency,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("reporting") @Nullable DebugRunOverviewLlmReporting reporting,
 
     @JsonProperty("totals") DebugLlmTotals totals
 ) {
@@ -42,6 +47,7 @@ public record DebugRunOverviewLlm(
         private @Nullable List<DebugLlmAgentKindRollup> byAgentKind;
         private @Nullable List<DebugLlmPhaseRollup> byPhase;
         private @Nullable String costCurrency;
+        private @Nullable DebugRunOverviewLlmReporting reporting;
         private @Nullable DebugLlmTotals totals;
 
         /** Set {@code byAgentKind}. */
@@ -62,6 +68,12 @@ public record DebugRunOverviewLlm(
             return this;
         }
 
+        /** Set {@code reporting}. */
+        public Builder reporting(@Nullable DebugRunOverviewLlmReporting reporting) {
+            this.reporting = reporting;
+            return this;
+        }
+
         /** Set {@code totals}. */
         public Builder totals(@Nullable DebugLlmTotals totals) {
             this.totals = totals;
@@ -70,7 +82,7 @@ public record DebugRunOverviewLlm(
 
         /** Build the {@link DebugRunOverviewLlm}. */
         public DebugRunOverviewLlm build() {
-            return new DebugRunOverviewLlm(byAgentKind, byPhase, costCurrency, totals);
+            return new DebugRunOverviewLlm(byAgentKind, byPhase, costCurrency, reporting, totals);
         }
     }
 }

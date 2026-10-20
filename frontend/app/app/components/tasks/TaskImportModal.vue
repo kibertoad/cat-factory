@@ -17,11 +17,14 @@ import type { PendingContext } from '~/composables/useContextLinking'
 import { type AddSourceLabels, addChoicesOf, buildSourceChoices } from '~/utils/sourcePicker'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const tasks = useTasksStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 const open = computed({
@@ -105,10 +108,9 @@ async function doSpawnEpic() {
     ref_.value = ''
     ui.closeTaskImport()
     ui.select(epic.id)
-    toast.add({
-      title: t('tasks.import.epicSpawned', { title: epic.title }),
+    actionToast.success('tasks.import.epicSpawned', {
+      params: { title: epic.title },
       description: t('tasks.import.epicChildren', { count: spawned.length }, spawned.length),
-      icon: 'i-lucide-layers',
     })
   } catch (e) {
     present(e, 'tasks.import.epicFailed')
@@ -119,20 +121,21 @@ async function doSpawnEpic() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="title">
+  <AppModal size="form" v-model:open="open" :title="title">
     <template #title>
       <IntegrationBackTitle :title="title" @back="back" />
     </template>
     <template #body>
       <!-- Empty state: no source offered (none connected/installed, or all disabled) -->
-      <div v-if="!tasks.anyOffered" class="space-y-3 text-center">
-        <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-slate-500" />
-        <p class="text-sm text-slate-400">{{ t('tasks.import.connectFirst') }}</p>
+      <EmptyState
+        v-if="!tasks.anyOffered"
+        icon="i-lucide-plug"
+        :title="t('tasks.import.connectFirst')"
+      >
         <div class="flex justify-center gap-2">
           <UButton
             v-for="choice in addableSources"
             :key="choice.source"
-            color="primary"
             variant="soft"
             :icon="choice.icon"
             @click="ui.openTaskConnect(choice.source)"
@@ -140,10 +143,10 @@ async function doSpawnEpic() {
             {{ ADD_LABEL[choice.action](choice.label) }}
           </UButton>
         </div>
-      </div>
+      </EmptyState>
 
       <!-- No service frame yet → nowhere to create a task. -->
-      <p v-else-if="!containerItems.length" class="text-center text-xs text-slate-500">
+      <p v-else-if="!containerItems.length" class="text-center text-xs text-dimmed">
         {{ t('tasks.import.needFrameFirst') }}
       </p>
 
@@ -152,10 +155,10 @@ async function doSpawnEpic() {
         <!-- Where the new task lands. Stated when there is one legal target (opened from a service
              frame that has no modules); otherwise a real choice, scoped to that frame when the
              modal was opened from one. -->
-        <p v-if="containerStated" class="text-xs text-slate-400">
+        <p v-if="containerStated" class="text-xs text-muted">
           <i18n-t keypath="tasks.import.creatingIn" tag="span" scope="global">
             <template #container>
-              <span class="font-medium text-slate-200">{{ pinnedContainer!.title }}</span>
+              <span class="font-medium text-default">{{ pinnedContainer!.title }}</span>
             </template>
           </i18n-t>
         </p>
@@ -182,10 +185,10 @@ async function doSpawnEpic() {
         </UFormField>
 
         <!-- Secondary: spawn a parent/epic issue as a whole linked task group. -->
-        <div class="space-y-2 border-t border-slate-800 pt-3">
-          <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div class="space-y-2 border-t border-default pt-3">
+          <SectionLabel as="span">
             {{ t('tasks.import.asEpic') }}
-          </span>
+          </SectionLabel>
           <div class="flex items-end gap-2">
             <UFormField :label="descriptor?.refLabel ?? t('tasks.import.refLabel')" class="flex-1">
               <UInput
@@ -196,7 +199,6 @@ async function doSpawnEpic() {
               />
             </UFormField>
             <UButton
-              color="primary"
               variant="soft"
               icon="i-lucide-layers"
               :loading="importing"
@@ -214,5 +216,5 @@ async function doSpawnEpic() {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

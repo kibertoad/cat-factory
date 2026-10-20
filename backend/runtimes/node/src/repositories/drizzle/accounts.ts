@@ -35,10 +35,19 @@ import type {
   UserRepository,
 } from '@cat-factory/kernel'
 import {
+  accountMembershipSource,
+  appendDirectoryChanges,
+  identityOwnerSource,
+  lockDirectoryFeed,
+  lockIdentityLink,
+  userSource,
+} from '../directoryFeed.js'
+import {
   auditEventColumns,
   auditPageLimit,
   decodeAuditCursor,
   encodeAuditCursor,
+  isDirectoryAccountProvider,
   rowToAuditEventView,
 } from '@cat-factory/kernel'
 import { and, count, desc, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
@@ -78,6 +87,11 @@ export class DrizzleAccountRepository implements AccountRepository {
   async get(id: string): Promise<AccountRecord | null> {
     const [row] = await this.db.select().from(accounts).where(eq(accounts.id, id))
     return row ? rowToAccount(row) : null
+  }
+
+  async listAll(): Promise<AccountRecord[]> {
+    const rows = await this.db.select().from(accounts)
+    return rows.map(rowToAccount)
   }
 
   async listByIds(ids: string[]): Promise<AccountRecord[]> {
@@ -160,8 +174,7 @@ export class DrizzleAccountRepository implements AccountRepository {
 }
 
 /** Parse the CSV `roles` column into a non-empty role set (defaults to developer). */
-
-function parseRoles(csv: string | null): AccountRole[] {
+export function parseRoles(csv: string | null): AccountRole[] {
   const roles = (csv ?? '')
     .split(',')
     .map((r) => r.trim())
@@ -208,24 +221,32 @@ export class DrizzleMembershipRepository implements MembershipRepository {
   }
 
   async upsert(membership: Membership): Promise<void> {
-    await this.db
-      .insert(memberships)
-      .values({
-        account_id: membership.accountId,
-        user_id: membership.userId,
-        roles: membership.roles.join(','),
-        created_at: membership.createdAt,
-      })
-      .onConflictDoUpdate({
-        target: [memberships.account_id, memberships.user_id],
-        set: { roles: membership.roles.join(',') },
-      })
+    await this.db.transaction(async (tx) => {
+      const source = accountMembershipSource(membership.accountId, membership.userId)
+      await lockDirectoryFeed(tx, source)
+      await tx
+        .insert(memberships)
+        .values({
+          account_id: membership.accountId,
+          user_id: membership.userId,
+          roles: membership.roles.join(','),
+          created_at: membership.createdAt,
+        })
+        .onConflictDoUpdate({
+          target: [memberships.account_id, memberships.user_id],
+          set: { roles: membership.roles.join(',') },
+        })
+      await appendDirectoryChanges(tx, source, Date.now())
+    })
   }
 
   async remove(accountId: string, userId: string): Promise<void> {
-    await this.db
-      .delete(memberships)
-      .where(and(eq(memberships.account_id, accountId), eq(memberships.user_id, userId)))
+    await this.db.transaction(async (tx) => {
+      await appendDirectoryChanges(tx, accountMembershipSource(accountId, userId), Date.now())
+      await tx
+        .delete(memberships)
+        .where(and(eq(memberships.account_id, accountId), eq(memberships.user_id, userId)))
+    })
   }
 }
 
@@ -277,7 +298,11 @@ export class DrizzleUserRepository implements UserRepository {
     if ('email' in patch) set.email = patch.email
     if ('avatarUrl' in patch) set.avatar_url = patch.avatarUrl
     if (Object.keys(set).length === 0) return
-    await this.db.update(users).set(set).where(eq(users.id, id))
+    await this.db.transaction(async (tx) => {
+      await lockDirectoryFeed(tx, userSource(id))
+      await tx.update(users).set(set).where(eq(users.id, id))
+      await appendDirectoryChanges(tx, userSource(id), Date.now())
+    })
   }
 
   async findByIdentity(provider: IdentityProvider, subject: string): Promise<UserRecord | null> {
@@ -315,7 +340,29 @@ export class DrizzleUserRepository implements UserRepository {
   }
 
   async linkIdentity(identity: UserIdentityRecord): Promise<void> {
-    await this.db
+    if (!isDirectoryAccountProvider(identity.provider)) {
+      await this.upsertIdentity(this.db, identity)
+      return
+    }
+    // A host identity is one of the user's directory accounts, so linking it changes the `user`
+    // entity of the new owner and, when it moves, of the user it is taken from.
+    const previousOwner = identityOwnerSource(identity.provider, identity.subject, identity.userId)
+    const owner = userSource(identity.userId)
+    await this.db.transaction(async (tx) => {
+      const now = Date.now()
+      await lockIdentityLink(tx, identity.provider, identity.subject)
+      await lockDirectoryFeed(tx, sql`${previousOwner} UNION ALL ${owner}`)
+      await appendDirectoryChanges(tx, previousOwner, now)
+      await this.upsertIdentity(tx, identity)
+      await appendDirectoryChanges(tx, owner, now)
+    })
+  }
+
+  private async upsertIdentity(
+    db: Pick<DrizzleDb, 'insert'>,
+    identity: UserIdentityRecord,
+  ): Promise<void> {
+    await db
       .insert(userIdentities)
       .values({
         user_id: identity.userId,

@@ -64,7 +64,7 @@ Well-known paths and dynamic client registration are exactly the spec surface ve
   `workers-ai-provider`) is a finding for the dependency sweep, and this record may point at it in
   one line.
 - **Our own surfaces**: `/api/v1`, `/internal/*`, the runner and container HTTP, the persistence
-  RPC. Those are governed by the public-API stability rules in CLAUDE.md.
+  RPC. Those are governed by the public-API stability rules in AGENTS.md.
 - **Build-time supply chain**: the `download.docker.com` apt repo, `repo1.maven.org`,
   `https://get.k3s.io`, and the registries a job's own `npm install` hits (the harness only WRITES
   the npmrc that routes them; it reads no registry itself). They break a build rather than a run,
@@ -194,7 +194,7 @@ One per integration, and the last two are not decoration:
   legacy.
 - **Unverifiable.** The vendor doc is gated, gone, or does not describe this endpoint. Say WHICH,
   and say what would settle it. Never fold one of these into Current: an unchecked call and a
-  checked-and-correct call are precisely the pair CLAUDE.md's degrade-loudly rule is about, and the
+  checked-and-correct call are precisely the pair AGENTS.md's degrade-loudly rule is about, and the
   next sweep pays for collapsing them.
 
 Severity is ours: breaks a run path with no fallback is High; an optional integration degrading
@@ -217,7 +217,7 @@ no-N+1 rule already demands" is a finding.
 
 The highest-value shapes, given how this platform works:
 
-- **A batch/bulk endpoint** replacing a per-item read. CLAUDE.md bans N+1 repository access for our
+- **A batch/bulk endpoint** replacing a per-item read. AGENTS.md bans N+1 repository access for our
   own store; an N+1 against a vendor costs latency AND rate limit.
 - **A webhook replacing a poll.** The polling gates (`ci`, `conflicts`) and the tracker sweeps are
   where this pays.
@@ -287,7 +287,7 @@ Two exceptions to how the handoff is made, neither of which changes that rule:
   description, and open the fix as its own PR immediately after this one lands. Do not let it wait
   for the next sweep.
 - **A fix touching `backend/internal/executor-harness/src/` bumps the runner image** and the pinned
-  tag everywhere it appears (see CLAUDE.md, Releases & changesets). That makes it a separate,
+  tag everywhere it appears (see AGENTS.md, Releases & changesets). That makes it a separate,
   heavier PR by construction, which is another reason a shared API's row lists every call site
   rather than the tidy few that share a constant.
 

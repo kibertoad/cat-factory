@@ -12,6 +12,7 @@
 // are one rule, not two. How a state RENDERS is `BOOTSTRAP_STEP_STYLE`, beside the vocabulary
 // it is keyed by.
 import type { BootstrapStepId, BootstrapStepState } from '@cat-factory/contracts'
+import Spinner from '~/components/common/Spinner.vue'
 
 const props = defineProps<{ runId: string }>()
 
@@ -34,17 +35,18 @@ function stateLabel(state: BootstrapStepState): string {
     <li
       v-for="step in steps"
       :key="step.id"
-      class="flex items-start gap-1.5 text-[11px]"
+      class="flex items-start gap-1.5 text-2xs"
       :data-step="step.id"
       :data-state="step.state"
     >
-      <UIcon
+      <Spinner
         :name="BOOTSTRAP_STEP_STYLE[step.state].icon"
+        :spinning="BOOTSTRAP_STEP_STYLE[step.state].spin"
         class="mt-px h-3 w-3 shrink-0"
         :class="BOOTSTRAP_STEP_STYLE[step.state].iconClass"
       />
       <span :class="BOOTSTRAP_STEP_STYLE[step.state].labelClass">{{ stepLabel(step.id) }}</span>
-      <span class="ms-auto shrink-0 text-slate-500">{{ stateLabel(step.state) }}</span>
+      <span class="ms-auto shrink-0 text-dimmed">{{ stateLabel(step.state) }}</span>
     </li>
   </ol>
 </template>

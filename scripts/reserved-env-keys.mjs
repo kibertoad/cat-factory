@@ -13,7 +13,7 @@
  *
  * Deliberately reads the DOC rather than scanning source for `env.FOO`. A textual source scan
  * cannot tell the platform's own `env.ENCRYPTION_KEY` from a test fixture's or an interpolated
- * name, and the doc is where CLAUDE.md's documentation sweep already requires a new variable to
+ * name, and the doc is where AGENTS.md's documentation sweep already requires a new variable to
  * appear — so this guard fails in the same PR that introduces one, which is the only moment the
  * reserved set can be updated without archaeology.
  */

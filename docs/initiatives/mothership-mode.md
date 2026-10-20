@@ -426,7 +426,7 @@
 - **Every org/durable repository method is now allow-listed or PERMANENTLY classified**, and the
   drift guard has retired `pending` from its reason vocabulary. That is the part worth keeping: as
   long as the word existed, "a new method picks its bucket in the same PR" had a landing pad, and
-  the rule CLAUDE.md states was enforceable only by a reviewer noticing. A method that belongs on
+  the rule AGENTS.md states was enforceable only by a reviewer noticing. A method that belongs on
   the machine API now fails the guard until it is actually proxied.
   - **The VCS sync + repo-write surface** (the slice five earlier entries deferred to). The premise
     that parked it was "the mothership owns GitHub sync, since the App and the webhooks live
@@ -522,6 +522,33 @@
   is SERVABLE here (harness, credentials), which is the split ADR 0029 states. Resolving in both
   places would have meant two network reads per dispatch.
 
+  **Definitions ride by reference, and the reply carries a `version`.** Each distinct bundled
+  skill and tool server is emitted once (`bundledSkills`, `toolServers`) and each kind lists
+  indexes into them (`bundledRefs`, `serverRefs`), deduplicated by content because two kinds may
+  declare different inline definitions under one id. The Nuxt UI capability alone is ~99 KB on
+  three kinds, and this read runs per dispatch. Every definition is checked against a valibot
+  schema held equal to its type (`@cat-factory/agents`' `definition-schemas.ts`), at boot on the
+  mothership and again by the node, so a malformed definition fails the mothership's boot by name
+  rather than reaching a node. Shape: `packages/server/src/persistence/agentKindsWire.ts`.
+
+  **Build skew across this change, per direction.** `resolveKindCapabilities` does not catch a
+  refused read, so a refusal fails every container dispatch on that node until the builds match.
+  - A node NEWER than its mothership: an empty layer (`{ kinds: [] }`, the stock product) is read
+    as empty and dispatches normally. Any other reply is refused with
+    `details.cause: 'mothership_version_mismatch'`, which names the fix.
+  - A node OLDER than its mothership: an empty layer passes the older node's check and dispatches
+    normally. A non-empty layer is refused as unreadable, and the older node cannot name the cause.
+  - From this change on, every reply carries `version`, and a node refuses any version but its own
+    with the named cause, so a LATER shape change names itself in both directions.
+
+  **Why this break is accepted against "a node one build behind is NORMAL".** That rule (AGENTS.md)
+  forbids designs that only work when both processes run the same build, and this one does not
+  silently misbehave under skew: it refuses, by name where the node can know it. Serving both
+  shapes for one release would be the dual-format shim the pre-1.0 rule bans, kept alive on the
+  hottest read in mothership mode. The cost is bounded to deployments with assigned capabilities,
+  for the one release window in which nodes lag their mothership, and the operator step is stated
+  here and in the changeset: update the nodes together with the mothership (#2269, #2313).
+
   Transport mirrors its three siblings exactly: machine-token pin checked FIRST, no account scope
   (the layer is one deployment-wide set), its own endpoint rather than a persistence hole, reads
   this process's OWN registry so a satellite cannot answer for a satellite, and THROWS on every
@@ -529,7 +556,7 @@
   `packages/server/test/agentKinds.spec.ts` (the serve/merge/refusal properties incl. the
   server-side id resolution, since a registered id means nothing to the reader),
   `runtimes/local/src/mothership.test.ts` (the wire shape + wiring) and the shared cross-runtime
-  suite (mounted + machine-gated on BOTH facades).
+  suite (mounted + machine-gated on BOTH facades, plus the by-reference reply on every runtime).
 
 **Secrets delegation (the residual every earlier slice deferred to)**
 
@@ -1318,7 +1345,7 @@ re-derive). It is a **local-facade-only differentiator**, no symmetry obligation
   (`providerApiKeyRepository`, and PR 3's `providerSubscriptionTokenRepository` /
   `personalSubscriptionRepository` / `subscriptionActivationRepository`). Each `buildNode*Service`
   takes a `repositoryOverride?` and builds even without a `db` (`override ?? (db ? new Drizzle… :
-undefined)`; off only when neither is present), so the feature turns ON in mothership mode. When
+  undefined)`; off only when neither is present), so the feature turns ON in mothership mode. When
   ONE repo has TWO consumers (e.g. `subscriptionActivationRepository` feeds both the
   personal-subscription service's mint AND the engine core's clear-on-completion), thread the ONE
   injected instance into both so they agree. `buildLocalContainer` reads the repos off
@@ -1327,7 +1354,7 @@ undefined)`; off only when neither is present), so the feature turns ON in mothe
   the Drizzle repo when `options.db` is present, else `mothership.localSettingsStore.localSettingsRepository`.
 - **composeMothership** opens each store, exposes it on `MothershipComposition`, and closes it in
   `close()` (called from `onShutdown`). Each store's file path is `localDbPath(env.LOCAL_MOTHERSHIP_*_DB,
-'<name>.sqlite')`: an env override (incl. `:memory:` for tests) else `~/.cat-factory/<name>.sqlite`.
+  '<name>.sqlite')`: an env override (incl. `:memory:` for tests) else `~/.cat-factory/<name>.sqlite`.
   **Tests that build a mothership container MUST set every `LOCAL_MOTHERSHIP_*_DB` to `:memory:`**
   (incl. `LOCAL_MOTHERSHIP_SETTINGS_DB` and `LOCAL_MOTHERSHIP_TELEMETRY_DB`) or they write real
   files under `~/.cat-factory`.

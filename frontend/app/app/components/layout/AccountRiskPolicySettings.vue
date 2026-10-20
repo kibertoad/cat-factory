@@ -14,12 +14,13 @@ import type {
 } from '~/types/merge'
 import RiskPolicyCreateForm from '~/components/settings/RiskPolicyCreateForm.vue'
 import RiskPolicyEditorRow from '~/components/settings/RiskPolicyEditorRow.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ accountId: string }>()
 
 const { t } = useI18n()
 const store = useAccountRiskPoliciesStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
@@ -47,11 +48,7 @@ async function save(policy: RiskPolicyLibraryEntry, patch: UpdateRiskPolicyInput
   busy.value = policy.id
   try {
     await store.update(props.accountId, policy.id, patch)
-    toast.add({
-      title: t('settings.riskPolicy.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.riskPolicy.toast.saved')
   } catch (e) {
     present(e, 'settings.riskPolicy.toast.saveFailed')
   } finally {
@@ -84,11 +81,7 @@ async function create(input: CreateRiskPolicyInput) {
   creating.value = true
   try {
     await store.create(props.accountId, input)
-    toast.add({
-      title: t('settings.riskPolicy.toast.created'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.riskPolicy.toast.created')
   } catch (e) {
     present(e, 'settings.riskPolicy.toast.createFailed')
   } finally {
@@ -99,11 +92,17 @@ async function create(input: CreateRiskPolicyInput) {
 
 <template>
   <div class="space-y-4 text-sm" data-testid="account-risk-policy-panel">
-    <p class="text-[11px] text-slate-400">{{ t('layout.accountRiskPolicies.intro') }}</p>
+    <p class="text-2xs text-muted">{{ t('layout.accountRiskPolicies.intro') }}</p>
 
-    <p v-if="!store.loading && policies.length === 0" class="text-[11px] text-slate-500">
-      {{ t('layout.accountRiskPolicies.empty') }}
-    </p>
+    <div v-if="store.loading && policies.length === 0" class="space-y-2">
+      <USkeleton v-for="i in 2" :key="i" class="h-20 w-full" />
+    </div>
+    <EmptyState
+      v-else-if="policies.length === 0"
+      compact
+      icon="i-lucide-shield"
+      :title="t('layout.accountRiskPolicies.empty')"
+    />
 
     <RiskPolicyEditorRow
       v-for="policy in policies"

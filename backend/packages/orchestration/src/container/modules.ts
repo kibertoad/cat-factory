@@ -680,6 +680,14 @@ export function createRunnersModule(deps: CoreDependencies): RunnersModule | und
     clock: deps.clock,
     logger: deps.logger,
     runnerBackendRegistry: deps.runnerBackendRegistry ?? defaultRunnerBackendRegistry(),
+    ...(deps.accountRunnerPoolRepository && deps.workspaceSettingsRepository
+      ? {
+          accountRunnerPool: {
+            repository: deps.accountRunnerPoolRepository,
+            workspaceSettingsRepository: deps.workspaceSettingsRepository,
+          },
+        }
+      : {}),
     ...(deps.runnerPoolProvider ? { runnerPoolProvider: deps.runnerPoolProvider } : {}),
     ...(deps.runnerUrlSafetyPolicy ? { urlPolicy: deps.runnerUrlSafetyPolicy } : {}),
     ...(deps.runnerCustomTlsSupported !== undefined

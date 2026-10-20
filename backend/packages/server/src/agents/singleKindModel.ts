@@ -41,8 +41,11 @@ export interface SingleKindModel {
 /** Resolve {@link SingleKindModel} for one dispatch. */
 export type ResolveSingleKindModel = (input: {
   workspaceId: string
-  /** The frame (board block) the job runs against: whatever it pins, and its preset. */
-  blockId: string
+  /**
+   * The frame (board block) the job runs against: whatever it pins, and its preset. Absent for a
+   * job that runs against no frame, which then resolves on the workspace's default preset.
+   */
+  blockId?: string
   /** The kind whose preset entry decides the model, and whose spend the calls are filed under. */
   agentKind: string
   /** Whoever started it: whose personal (individual-usage) subscription may be leased. */
@@ -86,7 +89,7 @@ export function buildSingleKindModelResolver(
 ): ResolveSingleKindModel {
   const router = new ModelRouter(deps)
   return async (input) => {
-    const block = await readFrame(deps, input.workspaceId, input.blockId)
+    const block = input.blockId ? await readFrame(deps, input.workspaceId, input.blockId) : null
     const providerPreference = deps.resolvePresetProviderPreference
       ? await deps.resolvePresetProviderPreference(input.workspaceId, block?.modelPresetId)
       : undefined

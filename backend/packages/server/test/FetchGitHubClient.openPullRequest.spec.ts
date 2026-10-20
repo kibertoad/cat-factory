@@ -127,3 +127,20 @@ describe('FetchGitHubClient.openPullRequest', () => {
     ).rejects.toThrow()
   })
 })
+
+describe('FetchGitHubClient.getPullRequest', () => {
+  const read = async (head: Record<string, unknown>) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ ...PR_PAYLOAD, head: { ...PR_PAYLOAD.head, ...head } })),
+    )
+    return makeClient().getPullRequest(1, ref, 7)
+  }
+
+  it('says whether the head branch lives in a fork', async () => {
+    expect((await read({ repo: { id: 1 } }))?.crossRepository).toBe(false)
+    expect((await read({ repo: { id: 2 } }))?.crossRepository).toBe(true)
+    // A deleted fork: GitHub reports no head repository, and nothing can push to it.
+    expect((await read({ repo: null }))?.crossRepository).toBe(true)
+  })
+})

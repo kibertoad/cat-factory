@@ -64,7 +64,6 @@
     }
   },
   "common": {
-    "loading": "Loading…",
     "save": "Save",
     "cancel": "Cancel",
     "retry": "Retry",
@@ -153,6 +152,7 @@
     "commandBar": "Search or run a command…",
     "create": "Create",
     "assistant": "Assistant",
+    "guidedReview": "Guided review",
     "buildPipeline": "Build a pipeline",
     "repositories": "Repositories",
     "addFromRepo": "Add from existing repo",
@@ -180,7 +180,8 @@
     "reports": "Reports",
     "foundationalServices": "Foundational services",
     "tutorials": "Tutorials",
-    "help": "Help"
+    "help": "Help",
+    "setupChecklist": "Setup checklist"
   },
   "board": {
     "toast": {
@@ -255,7 +256,8 @@
         "recurring": "Recurring",
         "review": "Review",
         "ralph": "Ralph loop",
-        "bugFishing": "Bug fishing"
+        "bugFishing": "Bug fishing",
+        "resolveConflicts": "Resolve conflicts"
       },
       "recurringWithFrame": "A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.",
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
@@ -451,6 +453,7 @@
       "stalled": "Run stalled",
       "retryBootstrap": "Retry bootstrap",
       "retryRun": "Retry run",
+      "startNewRun": "Start a new run",
       "environmentSetup": "Set up environments",
       "deployRunnerSetup": "Set up runner pool",
       "environmentLocalHint": "Local ephemeral environments need a deploy runtime to run kubectl/kustomize/helm. Set {runtime} in your .env: native mode runs those tools on your host ({native}), container mode runs them in the deploy image ({container}).",
@@ -458,6 +461,36 @@
         "description": "Shown only in local mode. The {runtime}/{native}/{container} placeholders are injected literal environment-variable names (LOCAL_DEPLOY_RUNTIME etc.) — keep them as placeholders, do not translate. '.env' is a filename, keep it verbatim."
       },
       "showDetail": "Show detail",
+      "details": "Details",
+      "detailsMessage": "Message",
+      "detailsHint": "Notes for the operator",
+      "detailsFull": "Full output",
+      "cause": {
+        "preflight": "A check before the start failed, so no work was done. Open Details to see what to fix, then retry.",
+        "dispatch": "The agent's container did not start, so no work was done. This is usually temporary.",
+        "environment": "The test environment could not be made. Check the environment settings, then retry.",
+        "evicted": "The container stopped many times during the run. This usually occurs while the platform is updated, so retry when the update is complete.",
+        "harness_shutdown": "Something stopped the container during this step. Find the cause in Details before you retry, because a retry can stop again.",
+        "timeout": "The run stopped responding, or it took more time than its limit. See Details for which, then retry.",
+        "agent": "An agent step failed. See the failed step for the cause, then retry.",
+        "job_failed": "The agent's container reported a failure. A retry starts a new container.",
+        "delegated_failed": "The external system that ran this step reported a failure. The link on the step opens its run, which shows the cause.",
+        "rejected": "A step was rejected, so the run stopped. A retry starts again from that step.",
+        "companion_rejected": "A companion agent did not give a usable result. A retry runs it again.",
+        "stalled": "The platform lost contact with this run. A retry starts a new run.",
+        "state_unreadable": "The saved state of this run cannot be read, so a retry reads the same broken state. Start a new run.",
+        "cancelled": "This run was stopped. A retry starts it again.",
+        "unknown": "The run failed for an unknown cause. See Details, then retry.",
+        "deployRunnerUnwiredLocal": "This computer has no deploy runtime to make the test environment. Set {variable} in your .env file, then retry.",
+        "@deployRunnerUnwiredLocal": {
+          "description": "{variable} is an environment variable name (LOCAL_DEPLOY_RUNTIME). Keep the placeholder; do not translate it."
+        },
+        "singleJob": {
+          "evicted": "The container stopped before the job was complete. A retry starts a new container.",
+          "timeout": "The job had no activity for too long, or it took more time than its limit. A retry starts it again.",
+          "agent": "The agent or the git push failed. See Details for the cause, then retry."
+        }
+      },
       "retrying": "Retrying…",
       "history": {
         "previousErrors": "{count} previous error | {count} previous errors",
@@ -669,7 +702,8 @@
     "pastedLink": {
       "offer": "This description links a {source} page. Attach it as context?",
       "attach": "Attach"
-    }
+    },
+    "removePending": "Remove {name}"
   },
   "errors": {
     "generic": {
@@ -708,7 +742,10 @@
         "service_catalog_filter_missing": "This connection's entity filter could not be read, so there is nothing to import. Re-save the service-catalog connection to restore it.",
         "service_catalog_response_too_large": "The developer portal answered with more data than this platform will hold in one response. Open the service-catalog settings and lower the service cap, or turn off importing interface definitions, then import again.",
         "assistant_generation_failed": "The assistant's model provider did not answer. It is configured correctly and nothing here needs setting up: try the request again in a moment.",
-        "assistant_reply_unreadable": "The assistant's model answered with something that is not a decision this platform can act on. Rephrasing rarely helps: pick a different model for the assistant in the model settings."
+        "assistant_reply_unreadable": "The assistant's model answered with something that is not a decision this platform can act on. Rephrasing rarely helps: pick a different model for the assistant in the model settings.",
+        "delegated_executor_failed": "The external executor could not start this step. The problem is in the system that runs the work, not in this deployment: check its own logs and try again.",
+        "delegated_work_branch_unprepared": "The platform could not prepare the work branch this step's executor is dispatched onto, so nothing was started. Either the repository connection cannot write to it, or the task names a branch that does not exist yet: the details say which.",
+        "attached_pr_provider_unreachable": "The repository provider did not answer, so the pull request could not be checked and no task was created. Nothing needs setting up here: try again in a moment."
       }
     },
     "reason": {
@@ -798,7 +835,14 @@
         "expedition_settled": "This expedition has already finished",
         "not_awaiting_triage": "This expedition is not waiting on triage",
         "already_addressed": "Some findings already have a fix task",
-        "no_host_frame": "This expedition is not under a service"
+        "no_host_frame": "This expedition is not under a service",
+        "delegated_executor_unwired": "External executor not registered",
+        "delegated_step_async_only": "This step is polled, not awaited",
+        "delegated_claim_missing": "This step has no external work to check",
+        "thread_busy": "This thread is still answering",
+        "draft_conflict": "This draft changed",
+        "session_stale": "The pull request has moved on",
+        "cursor_expired": "The change feed moved past this cursor"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -855,7 +899,14 @@
         "expedition_settled": "The run has moved past its bug-fishing step, so there is nothing left to mark or dismiss. Reload the run to see what it caught and which findings were acted on.",
         "not_awaiting_triage": "It is either still fishing a later angle or it has already been finished. Refresh the run to see where it is.",
         "already_addressed": "A fix task was created for them earlier, so nothing was created again. Open the finding to reach the task it already has.",
-        "no_host_frame": "A fix task needs a service to live under and a repository to fix. Move the expedition task under a service frame and try again."
+        "no_host_frame": "A fix task needs a service to live under and a repository to fix. Move the expedition task under a service frame and try again.",
+        "delegated_executor_unwired": "A step in this pipeline runs on an external executor this deployment does not register, so there is nowhere to send the work. Register the executor in code, or change the step to one that runs here.",
+        "delegated_step_async_only": "This step runs on an external executor, which can take hours, so it is dispatched and then polled rather than run inside one request. Start the run from the board; if you reached this from your own code, drive the step through the async path.",
+        "delegated_claim_missing": "The run’s record of what it sent to the external executor is missing, so there is nothing to poll. Nothing is wrong with the executor itself. Reload the run, and re-run the step if it is still stuck.",
+        "thread_busy": "The previous question in this thread has not been answered yet. Wait for that answer, or ask in another thread.",
+        "draft_conflict": "Someone edited, posted or discarded this comment draft since you loaded it. Reload the drafts and make your change again.",
+        "session_stale": "New commits landed after this review was prepared, so its drafts may point at the wrong lines. Refresh the review, check the drafts, then post.",
+        "cursor_expired": "The changes after this cursor are no longer kept. Take a fresh snapshot of the directory, then follow the feed from the position it reports."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -867,6 +918,7 @@
       "providersUnconfigured": {
         "title": "No AI provider for this model",
         "body": "No provider is configured for {models}. Add a provider key, connect a subscription, or enable Cloudflare AI to run it.",
+        "cause": "No provider is configured for a model in this pipeline. Add a provider key, connect a subscription, or enable Cloudflare AI, then retry.",
         "@body": {
           "description": "Keep the named placeholder for the model list intact (a comma-separated list of model ids is injected at runtime)."
         },
@@ -906,6 +958,9 @@
       "title": "This view could not be loaded",
       "body": "Its code failed to load. That usually means the app was updated while this tab was open, so the files this page is asking for are no longer on the server. Reload to pick up the current version.",
       "reload": "Reload"
+    },
+    "reported": {
+      "description": "It ran and reported a failure. Show details to see what it said."
     }
   },
   "personalSubscriptions": {
@@ -1707,7 +1762,24 @@
       "promptVariant": "Prompt variant",
       "promptVariantAdditionOnly": "Only this variant's addition applied. The workspace prompt for this agent replaced its base text.",
       "promptVariantSuperseded": "This variant did not apply. The workspace prompt for this agent took precedence.",
-      "promptVariantWithdrawn": "This variant is no longer registered, so the step ran the shipped prompt."
+      "promptVariantWithdrawn": "This variant is no longer registered, so the step ran the shipped prompt.",
+      "delegated": {
+        "status": {
+          "cancelled": "Cancelled",
+          "done": "Finished externally",
+          "failed": "Failed externally",
+          "running": "Running externally",
+          "starting": "Starting externally",
+          "unrecognised": "Unrecognised status ({status})"
+        },
+        "run": "External run",
+        "branch": "Branch",
+        "copyUrl": "Copy external run link",
+        "openRun": "Open run",
+        "noOutcome": "No outcome recorded",
+        "earlierAttempts": "Earlier attempts",
+        "usageNotReported": "Token usage is not reported by {executor}, so this step is missing from the totals above."
+      }
     },
     "stepDetail": {
       "contents": "Contents",
@@ -1774,7 +1846,7 @@
         "allTools": "Every tool this server exposes.",
         "narrowed": "Narrowed to: {tools}",
         "reason": {
-          "harnessUnsupported": "was not available: the agent CLI this step ran on has no MCP client.",
+          "harnessUnsupported": "was not available: the agent CLI this step ran on could not serve it.",
           "transportUnsupported": "was not available: the agent CLI this step ran on cannot reach this kind of server.",
           "missingSecret": "was not available: a credential it needs is not set for this board.",
           "reservedSecret": "was not available: it asks for a variable the platform's own configuration owns, so the declaration has to change.",
@@ -1786,7 +1858,7 @@
           "unknown": "was not available ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Run the step on an agent CLI that speaks MCP, or widen the server's harness list. A Codex run signed in with your own CLI login has nowhere per-run to keep the server, so use a platform credential instead.",
+          "harnessUnsupported": "Widen the server's harness list to include the agent CLI this step ran on, or run the step on one it lists. A Pi step recorded before Pi could serve tool servers needs only a rerun on a current runner image. A Codex run signed in with your own CLI login has nowhere per-run to keep the server, so use a platform credential instead.",
           "transportUnsupported": "Declare a stdio server for it, or run the step on an agent CLI that reaches HTTP servers.",
           "missingSecret": "Set the credential it names, either as a deployment environment variable or under capability credentials in the Infrastructure window.",
           "reservedSecret": "Change the declaration to ask for another key; setting that variable is exactly what will not help.",
@@ -1941,8 +2013,6 @@
     "exportJson": "Export JSON",
     "exportHint": "Download an LLM-friendly JSON export of this run",
     "closeEsc": "Close (Esc)",
-    "loadingActivity": "Loading model activity…",
-    "loadingContext": "Loading provided context…",
     "noCalls": "No model calls recorded for this run.",
     "noContext": "No agent context stored for this run. It is captured per dispatch when the workspace has 'Store full agent context' enabled.",
     "contextError": "Could not load the provided context.",
@@ -2034,7 +2104,6 @@
       "details": "Details"
     },
     "webSearch": "Web search",
-    "loadingSearch": "Loading web searches…",
     "noSearch": "No web searches recorded for this run. Queries are captured when web search runs and the workspace has 'Store full agent context' enabled.",
     "search": {
       "available": "Available",
@@ -2073,7 +2142,6 @@
     "toolCalls": {
       "title": "Tool calls",
       "subtitle": "what the agents did, in the order they did it",
-      "loading": "Loading tool calls…",
       "error": "Could not load the tool calls.",
       "none": "No tool calls recorded for this run.",
       "noneMatching": "No tool calls match this filter.",
@@ -2094,7 +2162,6 @@
     "title": "Platform observability",
     "refresh": "Refresh",
     "close": "Close",
-    "loading": "Loading platform health…",
     "retry": "Retry",
     "window": {
       "oneHour": "Last hour",
@@ -2134,6 +2201,7 @@
       "timeout": "Timeout",
       "agent": "Agent",
       "job_failed": "Job failed",
+      "delegated_failed": "External executor failed",
       "rejected": "Rejected",
       "companion_rejected": "Companion rejected",
       "stalled": "Stalled",
@@ -2174,7 +2242,6 @@
   "reports": {
     "title": "Reports",
     "refresh": "Refresh",
-    "loading": "Loading reports…",
     "retry": "Retry",
     "error": "Reports could not be loaded.",
     "period": "{from} to {to}",
@@ -2580,7 +2647,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} more not shown",
-      "failingRunGone": "This run is no longer loaded and has no task to open."
+      "failingRunGone": "This run is no longer loaded and has no task to open.",
+      "goTo": {
+        "review": "Review",
+        "answer": "Answer",
+        "test": "Test",
+        "confirm": "Confirm",
+        "triage": "Triage",
+        "choose": "Choose",
+        "open": "Open"
+      }
     },
     "aiProvidersBanner": {
       "setup": {
@@ -2679,6 +2755,18 @@
         "action": "Check connection"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "Agents can't run on this board yet: no runner pool is connected.",
+        "outage": "Agents can't run right now: this board's runner pool is unreachable."
+      },
+      "owner": {
+        "workspace_admin": "A board admin can fix this.",
+        "account_admin": "An account admin can fix this.",
+        "operator": "Only the deployment operator can fix this."
+      },
+      "fullSurface": "You can fix this yourself: switch your role at the top of the sidebar."
+    },
     "spendWarningBanner": {
       "title": "Spend limit reached, agent execution paused",
       "body": "This month's token spend has hit the configured budget, so running pipelines were paused to avoid further cost. Execution resumes automatically when the budget rolls over next month, or once the limit is raised.",
@@ -2732,14 +2820,19 @@
       "cmd": {
         "newPipeline": "Build a pipeline",
         "assistant": "Open the assistant",
+        "guidedReview": "Explore a pull request",
         "addFromRepo": "Add service from existing repo",
         "bootstrapRepo": "Bootstrap a new repo",
         "githubManage": "Manage GitHub connection",
         "githubConnect": "Connect GitHub",
         "slackManage": "Manage Slack notifications",
         "slackConnect": "Connect Slack",
-        "sourceManage": "Manage {source}",
-        "sourceConnect": "Connect {source}",
+        "documentSourceManage": "Manage {source} (documents)",
+        "documentSourceConnect": "Connect {source} (documents)",
+        "designSourceManage": "Manage {source} (designs)",
+        "designSourceConnect": "Connect {source} (designs)",
+        "taskSourceManage": "Manage {source} (tracker)",
+        "taskSourceConnect": "Connect {source} (tracker)",
         "documentImport": "Import and spawn from documents",
         "taskImport": "Import issues",
         "fragments": "Context fragment library",
@@ -2755,11 +2848,15 @@
         "toggleUiMode": "Switch interface mode",
         "chooseRole": "Change your role",
         "foundationalServices": "Foundational services",
-        "notificationSettings": "Manage notification routing"
+        "notificationSettings": "Manage notification routing",
+        "setupChecklist": "Setup checklist",
+        "queueView": "Open the queue view",
+        "boardView": "Open the board view"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
         "assistant": "ai assistant ask prompt do it for me",
+        "guidedReview": "guided review pull request pr explore explain questions",
         "addFromRepo": "github import existing",
         "bootstrapRepo": "scaffold create reference architecture",
         "github": "git repos pull requests issues",
@@ -2782,7 +2879,11 @@
         "chooseRole": "role engineer product manager designer persona simpler view",
         "tutorial": "tutorial onboarding tour guide help learn basics",
         "foundationalServices": "shared capability platform service api contract openapi catalog",
-        "notificationSettings": "notifications email routing channels inbox"
+        "notificationSettings": "notifications email routing channels inbox",
+        "setupChecklist": "setup checklist runner model github storage environment configure",
+        "queueView": "queue view needs you inbox list waiting",
+        "boardView": "board canvas map view plan",
+        "describeWork": "describe new work task add create feature bug sentence"
       }
     },
     "shortcuts": {
@@ -3000,19 +3101,23 @@
     "scopeHint": "Each level includes the ones above it.",
     "scope": {
       "read": {
-        "label": "Read only",
+        "label": "Read",
         "description": "See services, tasks, pipelines and runs."
       },
+      "webhooks": {
+        "label": "Webhooks",
+        "description": "Also register webhooks that push changes to another system."
+      },
       "write": {
-        "label": "Read and write",
+        "label": "Write",
         "description": "Also create and start tasks."
       },
       "decide": {
-        "label": "Read, write and decide",
+        "label": "Decide",
         "description": "Also answer the questions a parked run is waiting on."
       },
       "admin": {
-        "label": "Full access",
+        "label": "Admin",
         "description": "Also delete tasks and act on notifications, which can merge a pull request."
       }
     },
@@ -3044,7 +3149,6 @@
         "intro": "Each preset sets a {baseModel} for every agent, with optional per-agent overrides. A model pinned on an individual task still overrides the preset.",
         "introBaseModel": "base model",
         "newPreset": "New preset",
-        "loadingCatalog": "Loading model catalog…",
         "default": "Default",
         "setDefaultTitle": "Set as workspace default",
         "editTitle": "Edit preset",
@@ -3053,7 +3157,8 @@
         "basePrefix": "Base:",
         "overrideCount": "{count} override | {count} overrides",
         "empty": "No presets yet. Create one to map models to your agents.",
-        "customRouteOrder": "custom route order"
+        "customRouteOrder": "custom route order",
+        "catalogFailed": "The model catalog did not load. Retry to see the presets."
       },
       "editor": {
         "useBaseModel": "Use base model",
@@ -3073,7 +3178,8 @@
         "deleteFailed": "Could not delete the preset",
         "nameRequiredTitle": "Name required",
         "nameRequiredBody": "Give the preset a name.",
-        "saveFailed": "Could not save the preset"
+        "saveFailed": "Could not save the preset",
+        "catalogFailed": "Could not load the model catalog"
       },
       "routes": {
         "direct": "The model's own provider API",
@@ -3228,7 +3334,6 @@
         "overrideActive": "Active",
         "personalOverrideHint": "Override the workspace handler for this provision type on your own machine. Stored per user.",
         "removeOverride": "Remove override",
-        "loading": "Loading infrastructure settings…",
         "kubeNoun": "the Kubernetes handler",
         "kubeOverrideNoun": "the Kubernetes override",
         "customNoun": "this handler",
@@ -3410,7 +3515,6 @@
     },
     "taskTypeSuppressions": {
       "intro": "Choose which of this deployment's reusable operations this board offers. Hiding one removes it from the create-task picker here and refuses creating work under it; other boards are unaffected.",
-      "loading": "Loading operations…",
       "empty": "This deployment registers no reusable operations.",
       "offer": "Offer on this board",
       "saveFailed": "Could not change which operations this board offers"
@@ -3846,7 +3950,10 @@
         "createdByKey": "API key {id}",
         "revoke": "Revoke token",
         "boundToYou": "Your subscription",
-        "boundToOther": "{user}'s subscription"
+        "boundToOther": "{user}'s subscription",
+        "reachAll": "All workspaces",
+        "reachMemberships": "Follows its owner's workspaces",
+        "reachCount": "{count} workspaces"
       },
       "add": {
         "heading": "Create a token",
@@ -3854,19 +3961,29 @@
         "labelHelp": "A name to recognize this token by later.",
         "labelPlaceholder": "e.g. CI pipeline",
         "scope": "Scope",
-        "scopeHelp": "What this token can do: read-only, read and write, or full access (which also allows deleting).",
+        "scopeHelp": "Each level includes everything the one before it allows. Read: view tasks, runs and their results. Webhooks: also register and remove webhooks that push changes to another system, such as directory and notification webhooks. Write: also create, edit, start, stop and retry tasks, and run reviews and assessments. Decide: also answer a run's human decisions (approvals, review findings, interview and clarifying questions, human tests); a token also needs this level to start a pipeline that can stop for one. Admin: also add, configure and delete services, delete tasks, link repositories, manage environment connections, and act on notifications.",
         "create": "Create token",
         "identity": "Runs as",
         "identitySystem": "This workspace (system token)",
         "identitySelf": "Me (personal token)",
         "identitySystemHelp": "Runs started with this token belong to the workspace and are attributed to no person. It cannot use anyone’s personal Claude / Codex / GLM subscription, so a task pinned to one of those models is refused rather than charged to someone who is not there. Use this for CI and shared integrations.",
-        "identitySelfHelp": "Runs started with this token count as yours and can use your personal Claude / Codex / GLM subscription. Every such call must also send your personal password in the X-Personal-Password header; it is never stored. Use this to drive your own headless runs."
+        "identitySelfHelp": "Runs started with this token count as yours and can use your personal Claude / Codex / GLM subscription. Every such call must also send your personal password in the X-Personal-Password header; it is never stored. Use this to drive your own headless runs.",
+        "reach": "Workspaces",
+        "reachHelp": "Which workspaces this token can act on. A token reaching more than one names the workspace on each call in the x-cat-factory-workspace header.",
+        "reachAdminOnly": "Only an account admin can create a token that reaches other workspaces, which directory webhooks need. Ask one to create it.",
+        "reachThis": "This workspace only",
+        "reachAll": "Every workspace in the account",
+        "reachSelected": "Selected workspaces",
+        "reachMemberships": "My workspaces (follows my memberships)",
+        "reachMembershipsHelp": "Reaches every workspace you can act in, on each call: joining or leaving one changes it, with nothing to re-create. In each workspace it can do no more than your role there allows.",
+        "reachPick": "Choose workspaces"
       },
       "scopes": {
-        "read": "Read only",
-        "write": "Read and write",
-        "decide": "Answer decisions",
-        "admin": "Full access"
+        "read": "Read",
+        "webhooks": "Webhooks (includes Read)",
+        "write": "Write (includes Webhooks)",
+        "decide": "Decide (includes Write)",
+        "admin": "Admin (includes Decide)"
       },
       "toast": {
         "loadFailed": "Could not load API tokens",
@@ -4028,9 +4145,7 @@
       "toast": {
         "connected": "OpenRouter key connected",
         "connectFailed": "Could not connect key",
-        "rejected": "OpenRouter rejected the key.",
         "unreachable": "Could not reach OpenRouter",
-        "connectFirst": "Connect an OpenRouter key first.",
         "saved": "OpenRouter catalog saved",
         "saveFailed": "Could not save catalog"
       }
@@ -4634,7 +4749,6 @@
     "connect": {
       "yourInstallations": "Your installations",
       "refresh": "Refresh",
-      "lookingForInstallations": "Looking for installations…",
       "noInstallations": "No installations found for the App yet. Install it below, or connect by ID.",
       "installationMeta": "{targetType} · installation {id}",
       "linked": "linked",
@@ -4651,6 +4765,7 @@
       },
       "errors": {
         "listInstallations": "Could not list GitHub installations",
+        "loadProjection": "Could not load repositories, pull requests and issues",
         "startInstall": "Could not start the GitHub App install",
         "connect": "Could not connect"
       }
@@ -4661,14 +4776,12 @@
       "resync": "Resync",
       "backfill": "Backfill",
       "disconnect": "Disconnect",
-      "loading": "Loading…",
       "tabs": {
         "repos": "Repositories",
         "issues": "Issues"
       },
       "linkedToBoard": "Linked to this board",
       "manageRepos": "Manage repos",
-      "loadingRepos": "Loading repositories…",
       "private": "private",
       "saveSelection": "Save selection",
       "noLinkedRepos": "No repositories linked yet. Use Manage repos to pick which repositories this board tracks.",
@@ -4756,11 +4869,11 @@
         },
         "frontendLinkedNote": "{directory} was added as the frontend and linked to the others. Name its backend URL environment variables in its inspector.",
         "frontendWiringFailedNote": "The frontend settings did not save. Open each frontend app's inspector to set its subdirectory and its backend services."
-      }
+      },
+      "prefillProviderMismatch": "The link asked for {repo} on a different host, and this board is connected to {connected}. Search for the repository by hand, or open the link on a board connected to its host."
     },
     "repoTree": {
       "root": "root",
-      "loading": "Loading…",
       "noSubdirectories": "No subdirectories here.",
       "empty": "Nothing here.",
       "select": "Select",
@@ -5017,7 +5130,8 @@
         "scopes": "You will be asked to grant: {scopes}",
         "fallback": "Prefer a token? Use the fields below instead.",
         "failed": "Could not start the {source} sign-in"
-      }
+      },
+      "disconnectFailed": "Could not disconnect"
     },
     "spawn": {
       "title": "Preview structure",
@@ -5168,7 +5282,8 @@
       "updateConnection": "Update connection",
       "connect": "Connect",
       "oauthButton": "Connect with {label}",
-      "oauthOr": "or connect with an API key"
+      "oauthOr": "or connect with an API key",
+      "disconnectFailed": "Could not disconnect"
     }
   },
   "bugHunt": {
@@ -5280,6 +5395,103 @@
       "unresolved_issue_service": "The assistant could not tell which service to file this under. Name the service in your request."
     }
   },
+  "guidedReview": {
+    "title": "Guided review",
+    "titleFor": "{repo} #{number}: {title}",
+    "outOfDate": "Live updates failed, so this view may be out of date.",
+    "openFromTask": "Explore with guided review",
+    "picker": {
+      "intro": "Pick a repository and a pull request. You get an overview of the change and can ask questions about it in separate threads.",
+      "noRepos": "No repositories are linked to this workspace yet.",
+      "repo": "Repository",
+      "openPulls": "Open pull requests",
+      "number": "Pull request number",
+      "open": "Open review"
+    },
+    "overview": {
+      "title": "Overview",
+      "stale": "The pull request has new commits",
+      "refresh": "Refresh",
+      "working": "Preparing the overview…",
+      "intent": "Intent",
+      "changes": "Meaningful changes",
+      "consequences": "Consequences",
+      "risks": "Risks",
+      "focus": "Worth reviewing",
+      "suggested": "Suggested questions"
+    },
+    "severity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "failure": {
+      "budget_exhausted": "This workspace has spent its model budget.",
+      "model_unavailable": "No model is available for guided review.",
+      "repo_unavailable": "The pull request could not be read from the repository.",
+      "generation_failed": "The model call failed.",
+      "unreadable_reply": "The model replied in a form that could not be read.",
+      "depth_unavailable": "Deep answers that use a checkout are not available yet.",
+      "head_moved": "The pull request moved past the reviewed commit. Refresh to review its latest commit.",
+      "detail": "Details"
+    },
+    "dropped": {
+      "outside_diff": "the line is outside the diff",
+      "not_in_pr": "the file is not part of this pull request",
+      "incomplete": "the proposal was incomplete"
+    },
+    "thread": {
+      "new": "New thread",
+      "untitled": "Untitled thread",
+      "empty": "Ask anything about this pull request.",
+      "waiting": "Working on an answer…",
+      "placeholder": "Ask a question about the change",
+      "busy": "Waiting for the answer to the previous question",
+      "send": "Ask",
+      "draftRequest": "Asked for review comments",
+      "deep": "Deep dive",
+      "deepHint": "Answer from a checkout of the repository: slower, but can search the whole tree.",
+      "investigating": "Investigating in a checkout of the repository. This can take several minutes."
+    },
+    "drafts": {
+      "title": "Comment drafts",
+      "request": "Draft review comments",
+      "summary": "{kept} of {proposed} proposed comments kept as drafts.",
+      "side": {
+        "RIGHT": "new code",
+        "LEFT": "old code"
+      },
+      "select": "Select this draft for posting",
+      "status": {
+        "proposed": "Draft",
+        "posting": "Posting",
+        "posted": "Posted",
+        "failed": "Not posted",
+        "discarded": "Discarded"
+      },
+      "edit": "Edit",
+      "save": "Save",
+      "cancel": "Cancel",
+      "discard": "Discard",
+      "line": "Line",
+      "sideLabel": "Side",
+      "postFailed": "The host refused this comment",
+      "summaryPlaceholder": "Optional summary comment for the pull request",
+      "summaryFailed": "The host refused the summary comment",
+      "post": "Post {count} to the pull request",
+      "postResult": "{posted} posted, {failed} not posted, {skipped} already handled."
+    },
+    "errors": {
+      "load": "Could not load the review",
+      "repos": "Could not load the linked repositories",
+      "open": "Could not open the review",
+      "ask": "Could not ask the question",
+      "drafts": "Could not request comment drafts",
+      "refresh": "Could not refresh the review",
+      "editDraft": "Could not save the draft",
+      "postDrafts": "Could not post the drafts"
+    }
+  },
   "pipeline": {
     "iterationCap": {
       "extraRound": "One more round",
@@ -5356,7 +5568,8 @@
         "review": "Review",
         "research": "Research",
         "planning": "Planning",
-        "media": "Media"
+        "media": "Media",
+        "maintenance": "PR maintenance"
       },
       "strategyOption": {
         "specialist-panel": "Specialist panel",
@@ -5534,7 +5747,8 @@
         "releaseInteractive": "Stop being the in-app default",
         "claimUnattended": "Make the unattended default",
         "releaseUnattended": "Stop being the unattended default"
-      }
+      },
+      "removeLabel": "Remove the {label} label"
     },
     "progress": {
       "status": {
@@ -5949,7 +6163,6 @@
     "answerVerb": "Answer",
     "dismissVerb": "dismiss",
     "empty": "No review yet. The reviewer runs automatically as the first step when this task's pipeline starts.",
-    "loadingReview": "Loading the review…",
     "reviewing": "Reviewing the requirements…",
     "settled": "The requirements are settled. The document below is what every downstream agent step uses.",
     "exceeded": {
@@ -6102,7 +6315,6 @@
       "description": "Imperative verb 'dismiss' (wave off as irrelevant), used as an inline emphasized span in the intro sentence."
     },
     "empty": "No review yet. The reviewer runs automatically as the first step when this task's pipeline starts.",
-    "loadingReview": "Loading the review…",
     "triaging": "Triaging the bug report…",
     "converged": "The bug report is clarified. The report below is what every downstream agent step uses.",
     "capHeading": "Reached the {max}-iteration limit with findings still open.",
@@ -6182,7 +6394,6 @@
   "consensus": {
     "titlePrefix": "Consensus",
     "participantCount": "no participants | one participant | {count} participants",
-    "loading": "Loading consensus session…",
     "empty": "No consensus session has run for this step yet.",
     "failed": "Consensus failed: {error}",
     "unknownError": "unknown error",
@@ -6230,7 +6441,6 @@
     "introChoose": "Choose",
     "introDismiss": "dismiss",
     "empty": "No brainstorm yet. It runs automatically when this task's pipeline reaches the brainstorm step.",
-    "loading": "Loading the brainstorm…",
     "generating": "Generating options…",
     "settledBanner": "The {doc} is settled. The document below is what the next stage uses.",
     "exceeded": {
@@ -6311,7 +6521,6 @@
   },
   "spec": {
     "title": "Requirements",
-    "loading": "Loading the specification…",
     "error": "Could not load the specification. Try reopening this window.",
     "overview": "Overview",
     "noFeatureGroups": "No feature groups",
@@ -6519,8 +6728,7 @@
     },
     "shot": {
       "failed": "Failed",
-      "failedToLoad": "Failed to load",
-      "loading": "Loading…"
+      "failedToLoad": "Failed to load"
     },
     "screenshotAlt": "{view} (screenshot)",
     "screenshots": "Screenshots",
@@ -6586,7 +6794,8 @@
       "heading": "Upload a reference design",
       "viewPlaceholder": "View name (e.g. login)",
       "tipReady": "Tip: drop an image straight onto a pair above to set its reference.",
-      "tipNeedView": "Enter a view name first, then choose a file. Or drop an image straight onto a pair above."
+      "tipNeedView": "Enter a view name first, then choose a file. Or drop an image straight onto a pair above.",
+      "choose": "Choose a file"
     },
     "requestFix": {
       "heading": "Request a fix",
@@ -7241,7 +7450,6 @@
       "awaiting": "{total} candidates were generated and are waiting to be compared."
     },
     "asset": {
-      "loading": "Loading the file…",
       "loadFailed": "The stored file could not be loaded.",
       "retry": "Try again",
       "open": "Open",
@@ -8149,6 +8357,7 @@
     "connect": {
       "or": "or",
       "noneConfigured": "No source-control connection is configured for this deployment. Ask an operator to set up a GitHub App or GitLab access.",
+      "adminRequired": "Only a board admin can connect a repository host. Ask an admin of this board.",
       "gitlab": {
         "intro": "Paste a GitLab personal access token to connect this workspace. cat-factory uses it to list your projects, push branches and open merge requests.",
         "tokenLabel": "Personal access token",
@@ -8166,7 +8375,8 @@
     "onboarding": {
       "title": "Connect cat-factory to {provider}",
       "titleAny": "Connect cat-factory to your repositories",
-      "intro": "cat-factory works by opening pull requests on your repositories. Connect your repository host to continue."
+      "intro": "cat-factory works by opening pull requests on your repositories. Connect your repository host to continue.",
+      "switchBoard": "Not the board you meant? Switch to another one, or create your own."
     },
     "addService": {
       "intro": "Pick an existing {provider} repository to add as a board service. No bootstrapping: the repo is linked to a new service frame as-is, and tasks you run on it target that repo.",
@@ -8297,6 +8507,10 @@
           "canvas": {
             "title": "The board",
             "body": "Services, modules, and tasks live on this canvas. Drag to pan, scroll to zoom, and click any card to inspect it."
+          },
+          "views": {
+            "title": "Two views",
+            "body": "The board has a second view. The queue lists what needs you across every service. Once the tour is over, switch between the queue and this canvas here. The app opens on the view you used last."
           },
           "sidebar": {
             "title": "The sidebar",
@@ -8579,11 +8793,11 @@
           },
           "banner": {
             "title": "What went wrong",
-            "body": "The card swaps its progress bar for this banner. It names the cause, the details hold the raw output, and some causes offer a button straight to the setting that fixes them."
+            "body": "The card swaps its progress bar for this banner. It names what failed and gives one action. Open the task to read the cause in one line, with the raw output behind Details."
           },
           "retry": {
-            "title": "Run it again",
-            "body": "Retry re-runs the work. Earlier errors stay on the task under Previous errors, so you can compare attempts instead of losing the trail."
+            "title": "The next step",
+            "body": "This button is the next step. Usually it is Retry, which runs the work again. When a setting causes the failure, it opens that setting. Earlier errors stay on the task under Previous errors, so you can compare attempts."
           },
           "finish": {
             "title": "A failure is information",
@@ -8707,6 +8921,7 @@
     "title": "Generated candidates",
     "titleWithBlock": "Generated candidates: {title}",
     "subtitle": "Compare what each integration produced, and keep what you want",
+    "pickOne": "Pick one. Choosing a candidate clears the one picked before.",
     "automatic": "Only one candidate was generated, so it was kept automatically. Nobody reviewed it.",
     "unlabelledSubject": "No subject declared",
     "noPreview": "No preview available",
@@ -8888,5 +9103,186 @@
     "territories": {
       "heading": "Territories"
     }
+  },
+  "appearance": {
+    "switcher": "Appearance",
+    "@switcher": {
+      "description": "Label above the sidebar picker that chooses the colour mode (system, light, dark) and the visual theme."
+    },
+    "mode": {
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "theme": {
+      "section": "Theme",
+      "import": "Import a Nuxt UI theme…",
+      "@import": {
+        "description": "Menu entry that opens the dialog for importing a theme built in the Nuxt UI theme editor (ui.nuxt.com/theme). Keep 'Nuxt UI' as a product name."
+      },
+      "remove": "Remove this theme"
+    },
+    "import": {
+      "title": "Import a theme",
+      "description": "Build a theme in the Nuxt UI theme editor, copy its share link and paste it here. The theme is stored in this browser only.",
+      "linkLabel": "Share link",
+      "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
+      "nameLabel": "Name",
+      "namePlaceholder": "My theme",
+      "nameTaken": "A theme called “{typed}” already exists. This one will be saved as “{name}”.",
+      "@nameTaken": {
+        "description": "Help text under the Name field of the theme import dialog when the typed name is already used. {typed} is what the user typed, {name} is the name that will be saved instead (e.g. 'Mono (2)')."
+      },
+      "fontNote": "A font the theme names is used only if this device or deployment provides it; otherwise the browser falls back to its default.",
+      "submit": "Import",
+      "cancel": "Cancel",
+      "error": {
+        "notALink": "Paste the share link from ui.nuxt.com/theme (or the theme's JSON).",
+        "malformed": "This link does not carry a readable theme. Copy it again from the editor.",
+        "presetShorthand": "This link names a Nuxt UI editor preset this app does not know. Change any setting in the editor so the link carries the whole theme, then copy it again.",
+        "unsupportedVersion": "This theme was made with a newer editor format than this app understands."
+      }
+    }
+  },
+  "setup": {
+    "title": "Setup",
+    "progress": "{done} of {total} done",
+    "intro": "What this workspace needs before a task can run and merge.",
+    "required": "required",
+    "optional": "optional",
+    "action": {
+      "change": "Change",
+      "connect": "Set up",
+      "fix": "Fix",
+      "review": "Review",
+      "retry": "Try again"
+    },
+    "rows": {
+      "checking": "Checking…",
+      "notNeeded": "This deployment does not use it.",
+      "model": {
+        "title": "Model",
+        "done": "A model is available.",
+        "missing": "No model is available. No agent can run until you connect a provider."
+      },
+      "sourceControl": {
+        "title": "Source control",
+        "done": "Connected. Agents can push branches and open pull requests.",
+        "missing": "Not connected. Agents cannot open pull requests."
+      },
+      "agentExecutor": {
+        "title": "Where agents run",
+        "done": "A runner is configured.",
+        "missing": "No runner is configured. Nothing can run until you connect one.",
+        "notNeeded": "This deployment runs agents without a runner."
+      },
+      "ephemeralEnvironments": {
+        "title": "Test environments",
+        "done": "Configured. Testers can use a live preview.",
+        "missing": "Not set up. Testers that need a live preview do not run. All other agents run."
+      },
+      "binaryStorage": {
+        "title": "Screenshot storage",
+        "done": "Configured. Visual checks are on.",
+        "missing": "Not set up. Visual checks are off."
+      }
+    },
+    "causes": {
+      "unreachable": "Configured, but unreachable right now.",
+      "incomplete": "Connected, but a required setting is missing.",
+      "rejected": "GitHub rejected the access token.",
+      "underscoped": "The access token cannot push or open pull requests.",
+      "presetBroken": "The default model preset names a model that is not available.",
+      "probeFailed": "The check did not answer.",
+      "notReported": "This deployment does not report it."
+    },
+    "also": {
+      "title": "Also here",
+      "pipelines": "Pipelines",
+      "riskPolicies": "Merge policies",
+      "modelPresets": "Model presets",
+      "counts": {
+        "repair": "To repair: {count}",
+        "outdated": "Outdated: {count}",
+        "new": "New: {count}"
+      },
+      "settings": "Settings and connections",
+      "workspaceSettings": "Workspace settings",
+      "integrations": "Integrations"
+    }
+  },
+  "queue": {
+    "title": "Queue",
+    "summary": "{needsYou} need you · {ready} ready to merge",
+    "filter": {
+      "allServices": "All services",
+      "service": "Filter by service"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Needs you",
+        "empty": "Nothing waits on you."
+      },
+      "inFlight": {
+        "label": "In flight",
+        "empty": "No agent is working now."
+      },
+      "readyToMerge": {
+        "label": "Ready to merge",
+        "empty": "No pull request waits to merge."
+      }
+    },
+    "waiting": {
+      "label": "Not started ({count})",
+      "empty": "Nothing waits to start."
+    },
+    "done": {
+      "count": "Merged since {date}: {count}",
+      "countAll": "Merged: {count}",
+      "show": "Show",
+      "hide": "Hide",
+      "capped": "Shows the newest {shown} of {total}."
+    },
+    "card": {
+      "waited": "waited {duration}",
+      "active": "active {duration} ago",
+      "merged": "merged {duration} ago",
+      "step": "step {current} of {total}",
+      "showOnBoard": "Show on the board",
+      "answer": "Answer",
+      "budgetPaused": "The spend limit paused this run. It continues when the limit goes up.",
+      "parked": "The run waits for a person. Open the task to see what it needs.",
+      "waitingOn": "Waits for {deps}",
+      "pr": "Pull request #{number}"
+    },
+    "describeWork": "Describe new work"
+  },
+  "views": {
+    "title": "Views",
+    "queue": "Queue",
+    "board": "Board",
+    "openQueue": "Open the queue view"
+  },
+  "describeWork": {
+    "title": "Describe new work",
+    "textLabel": "What must be done",
+    "textHint": "One sentence is enough. Add more detail if you have it.",
+    "textPlaceholder": "Add an audit log for sign-in events. Record each sign-in with the time, the user and the result.",
+    "savedAs": "Task title: {title}",
+    "serviceLabel": "Service",
+    "servicePlaceholder": "Select a service",
+    "kindLabel": "Kind",
+    "kind": {
+      "feature": "Feature",
+      "bug": "Bug"
+    },
+    "moreKinds": "More kinds…",
+    "changeHowItRuns": "Change how this runs",
+    "workspaceDefault": "Workspace default",
+    "defaultPipelineHint": "The workspace default: {name}. A pipeline pinned here replaces it for this task.",
+    "attachContext": "Attach context (opens the full form)",
+    "add": "Add to queue",
+    "addAndStart": "Add and start",
+    "addedToast": "Added “{title}” to the queue"
   }
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 import type { AgentFailureKind, PlatformFailureKindRule } from '~/types/execution'
 import {
   AGENT_FAILURE_KINDS,
@@ -144,10 +145,10 @@ const faults = computed(() => failureKindRuleFaults(rules.value))
 
 <template>
   <div class="space-y-2" data-testid="platform-alert-failure-kinds">
-    <label class="text-[11px] font-medium text-slate-300">
+    <label class="text-2xs font-medium text-toned">
       {{ t('settings.platformAlerts.failureKinds.label') }}
     </label>
-    <p class="text-[11px] text-slate-400">
+    <p class="text-2xs text-muted">
       {{ t('settings.platformAlerts.failureKinds.description') }}
     </p>
 
@@ -159,19 +160,19 @@ const faults = computed(() => failureKindRuleFaults(rules.value))
         data-testid="platform-alert-failure-kinds-override"
         @update:model-value="setOverriding(!!$event)"
       />
-      <p class="ps-6 text-[11px] text-slate-400">
+      <p class="ps-6 text-2xs text-muted">
         {{ t('settings.platformAlerts.failureKinds.overrideHint') }}
       </p>
     </div>
 
     <template v-if="overriding">
-      <p
+      <EmptyState
         v-if="rules.length === 0"
-        class="text-[11px] text-slate-500"
+        compact
+        icon="i-lucide-list-filter"
+        :title="t('settings.platformAlerts.failureKinds.empty')"
         data-testid="platform-alert-failure-kinds-empty"
-      >
-        {{ t('settings.platformAlerts.failureKinds.empty') }}
-      </p>
+      />
 
       <div
         v-for="(rule, index) in rules"
@@ -180,7 +181,7 @@ const faults = computed(() => failureKindRuleFaults(rules.value))
         :data-testid="`platform-alert-failure-kind-row-${index}`"
       >
         <div class="space-y-1">
-          <label class="block text-[11px] text-slate-300">
+          <label class="block text-2xs text-toned">
             {{ t('settings.platformAlerts.failureKinds.kindLabel') }}
           </label>
           <USelect
@@ -193,7 +194,7 @@ const faults = computed(() => failureKindRuleFaults(rules.value))
           />
         </div>
         <div class="space-y-1">
-          <label class="block text-[11px] text-slate-300">
+          <label class="block text-2xs text-toned">
             {{ t('settings.platformAlerts.failureKinds.shareLabel') }}
           </label>
           <UInput
@@ -204,12 +205,12 @@ const faults = computed(() => failureKindRuleFaults(rules.value))
             :data-testid="`platform-alert-failure-share-${index}`"
             @update:model-value="setShare(index, String($event))"
           />
-          <p v-if="index === 0" class="text-[11px] text-slate-500">
+          <p v-if="index === 0" class="text-2xs text-dimmed">
             {{ t('settings.platformAlerts.failureKinds.shareHint') }}
           </p>
         </div>
         <div class="space-y-1">
-          <label class="block text-[11px] text-slate-300">
+          <label class="block text-2xs text-toned">
             {{ t('settings.platformAlerts.failureKinds.minCountLabel') }}
           </label>
           <UInput
@@ -235,7 +236,7 @@ const faults = computed(() => failureKindRuleFaults(rules.value))
 
       <p
         v-if="faults.tooMany"
-        class="text-[11px] text-amber-300"
+        class="text-2xs text-app-warning-300"
         data-testid="platform-alert-failure-kinds-too-many"
       >
         {{
@@ -244,14 +245,14 @@ const faults = computed(() => failureKindRuleFaults(rules.value))
       </p>
       <p
         v-else-if="duplicateKinds.size > 0"
-        class="text-[11px] text-amber-300"
+        class="text-2xs text-app-warning-300"
         data-testid="platform-alert-failure-kinds-duplicate"
       >
         {{ t('settings.platformAlerts.failureKinds.duplicateKind') }}
       </p>
       <p
         v-else-if="faults.rows.length > 0"
-        class="text-[11px] text-amber-300"
+        class="text-2xs text-app-warning-300"
         data-testid="platform-alert-failure-kinds-invalid"
       >
         {{
@@ -272,12 +273,12 @@ const faults = computed(() => failureKindRuleFaults(rules.value))
       </UButton>
       <p
         v-if="nextFreeKind === undefined"
-        class="text-[11px] text-slate-500"
+        class="text-2xs text-dimmed"
         data-testid="platform-alert-failure-kinds-all-covered"
       >
         {{ t('settings.platformAlerts.failureKinds.allKindsCovered') }}
       </p>
-      <p class="text-[11px] text-slate-500">
+      <p class="text-2xs text-dimmed">
         {{ t('settings.platformAlerts.failureKinds.minCountHint') }}
       </p>
     </template>

@@ -36,6 +36,7 @@ import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
 import ReviewSkillQueue from '~/components/skills/ReviewSkillQueue.vue'
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
+import { isReviewDebtConflict, reviewFrictionContext } from '~/utils/reviewFriction'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { ReviewTargetReason } from '@cat-factory/contracts'
 import {
@@ -46,6 +47,8 @@ import {
 import { descriptorFieldDefaults } from '@cat-factory/contracts'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import { buildTaskTypePickerRows } from '~/utils/taskTypePicker'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 // Interface tier. In BASIC mode this form asks for the task itself (type, title,
@@ -64,7 +67,7 @@ const modelPresets = useModelPresetsStore()
 const pipelines = usePipelinesStore()
 const agentConfig = useAgentConfigStore()
 const fragments = useFragmentsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -141,6 +144,11 @@ const timeboxHours = ref<number | undefined>(undefined)
 // default — an expedition exists to cover ground nobody thought to look at, so narrowing it is
 // the deliberate act) plus an optional focus folded into every angle's prompt.
 const fishingPhaseIds = ref<string[]>([])
+function toggleFishingPhase(id: string, checked: boolean) {
+  fishingPhaseIds.value = checked
+    ? [...fishingPhaseIds.value, id]
+    : fishingPhaseIds.value.filter((x) => x !== id)
+}
 const fishingFocus = ref('')
 /** Held as a string because the input is a text field; parsed at submit, blank ⇒ the default. */
 const fishingMaxPasses = ref('')
@@ -520,6 +528,8 @@ function defaultPipelineIdFor(type: TaskTypeChoice): string {
   return offered ? preset : ''
 }
 
+// Set while a prefill's type is being seeded with a carried pipeline (see `onModalOpen` below).
+let seedingPrefill = false
 watch(taskType, (next) => {
   const custom = customTaskTypes.value.find((tt) => tt.taskType === next)
   // A custom type owns a fresh field bag on every switch (its descriptors differ per type), seeded
@@ -527,6 +537,10 @@ watch(taskType, (next) => {
   customFieldValues.value = descriptorFieldDefaults(custom?.fields ?? [])
   // An unresolvable preset leaves the current selection alone rather than blanking it: a type
   // switch is an edit to a form the user is already filling in, not a reset.
+  if (seedingPrefill) {
+    seedingPrefill = false
+    return
+  }
   const preset = defaultPipelineIdFor(next)
   if (preset) pipelineId.value = preset
 })
@@ -661,13 +675,23 @@ onModalOpen(open, () => {
   agentConfigValues.value = {}
   pendingContext.value = []
   // Seed from a prefill when opened from another surface (e.g. "create task from
-  // issue" sets the title + stages the issue as linked context). Pipeline / preset
-  // are intentionally left at their defaults so the user confirms them here.
+  // issue" sets the title + stages the issue as linked context). Pipeline / preset stay at their
+  // defaults unless the opener carries a choice the person already made (the one-sentence
+  // intake's kind and overrides), which the hand-off must not reset.
   const prefill = ui.addTaskPrefill
   if (prefill) {
     if (prefill.title) title.value = prefill.title
     if (prefill.description) description.value = prefill.description
     if (prefill.context?.length) pendingContext.value = [...prefill.context]
+    if (prefill.taskType && prefill.taskType !== taskType.value) {
+      taskType.value = prefill.taskType
+      // The type watcher runs after this block and would replace a carried pipeline with the
+      // new type's default; a seeded type is not the edit that watcher is for.
+      seedingPrefill = !!prefill.pipelineId
+    }
+    if (prefill.pipelineId) pipelineId.value = prefill.pipelineId
+    if (prefill.riskPolicyId) riskPolicyId.value = prefill.riskPolicyId
+    if (prefill.modelPresetId) modelPresetId.value = prefill.modelPresetId
   }
   documents.loadDocuments().catch(() => {})
   tasks.loadTasks().catch(() => {})
@@ -783,9 +807,7 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
     const { resolved, failures } = await resolvePending(pendingContext.value)
     pendingContext.value = resolved
     if (failures.length) {
-      presentLinkFailures(failures, undefined, {
-        title: (count) => t('board.addTask.contextFailed', { count }, count),
-      })
+      presentLinkFailures(failures, undefined, { titleKey: 'board.addTask.contextFailed' })
       return
     }
     const typeFields = buildTypeFields()
@@ -827,18 +849,20 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
     ui.closeAddTask()
   } catch (e) {
     const conflict = parseConflict(e)
-    if (conflict?.reason === 'review_debt_warn' || conflict?.reason === 'review_debt_blocked') {
-      openReviewFrictionDialog(conflict)
+    if (isReviewDebtConflict(conflict)) {
+      ui.openReviewFriction(
+        reviewFrictionContext(
+          conflict,
+          () => void submitCreate(true),
+          () => saving.value,
+          () => ui.closeAddTask(),
+        ),
+      )
       return
     }
     const refusal = createRefusalMessage(e)
     if (refusal) {
-      toast.add({
-        title: t('board.addTask.addFailedTitle'),
-        description: refusal,
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      actionToast.error('board.addTask.addFailedTitle', { description: refusal })
     } else present(e, 'board.addTask.addFailedTitle')
   } finally {
     saving.value = false
@@ -884,42 +908,16 @@ function createRefusalMessage(error: unknown): string | null {
   if (reason === 'task_type_fields_invalid') return t('board.addTask.customFieldsInvalid')
   return REVIEW_TARGET_MESSAGES[reason as ReviewTargetReason]?.(details) ?? null
 }
-
-/** Turn a parsed review-debt friction 409 into the dialog context (see ReviewFrictionDialog.vue). */
-function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseConflict>>) {
-  const details = conflict.details
-  const rawDebt = Array.isArray(details.debt) ? details.debt : []
-  const debt = rawDebt.map((d) => {
-    const row = (d ?? {}) as { blockId?: unknown; title?: unknown; waitingMinutes?: unknown }
-    return {
-      blockId: typeof row.blockId === 'string' ? row.blockId : '',
-      title: typeof row.title === 'string' ? row.title : null,
-      waitingMinutes: typeof row.waitingMinutes === 'number' ? row.waitingMinutes : 0,
-    }
-  })
-  const isWarn = conflict.reason === 'review_debt_warn'
-  ui.openReviewFriction({
-    kind: isWarn ? 'warn' : 'blocked',
-    reason:
-      details.friction === 'count' || details.friction === 'stuck' ? details.friction : undefined,
-    threshold: typeof details.threshold === 'number' ? details.threshold : null,
-    debt,
-    onConfirm: isWarn ? () => void submitCreate(true) : null,
-    // A getter, not a snapshot: the dialog reads it inside a computed so its button spins and
-    // locks for as long as the retry actually runs (UX-78).
-    pending: () => saving.value,
-  })
-}
 </script>
 
 <template>
-  <UModal v-model:open="modalOpen" :title="t('board.addTask.title')">
+  <AppModal size="form" v-model:open="modalOpen" :title="t('board.addTask.title')">
     <template #body>
       <div class="space-y-4" data-testid="add-task-modal">
-        <p v-if="container" class="text-xs text-slate-400">
+        <p v-if="container" class="text-xs text-muted">
           <i18n-t keypath="board.addTask.newTaskIn" tag="span" scope="global">
             <template #container>
-              <span class="font-medium text-slate-200">{{ container.title }}</span>
+              <span class="font-medium text-default">{{ container.title }}</span>
             </template>
           </i18n-t>
         </p>
@@ -938,13 +936,14 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
               data-testid="task-type-row"
               :data-task-type-row="row.id"
             >
-              <p
+              <SectionLabel
                 v-if="row.caption"
-                class="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+                as="p"
+                class="mb-1 px-1"
                 data-testid="task-type-category"
               >
                 {{ row.caption }}
-              </p>
+              </SectionLabel>
               <div class="flex flex-wrap gap-1">
                 <UButton
                   v-for="ty in row.choices"
@@ -954,6 +953,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                   :icon="ty.icon"
                   size="xs"
                   :title="ty.description"
+                  :aria-pressed="taskType === ty.value"
                   :data-testid="`task-type-${ty.value}`"
                   @click="
                     () => {
@@ -981,10 +981,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
         </UFormField>
 
         <!-- Recurring tasks are configured as a schedule on the service frame. -->
-        <div
-          v-if="isRecurring"
-          class="rounded-lg border border-slate-800 p-3 text-[11px] text-slate-400"
-        >
+        <div v-if="isRecurring" class="rounded-lg border border-default p-3 text-2xs text-muted">
           <template v-if="recurringFrameId">
             {{ t('board.addTask.recurringWithFrame') }}
           </template>
@@ -1023,10 +1020,10 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                 autoresize
                 readonly
                 class="w-full"
-                :ui="{ base: 'cursor-default text-slate-300' }"
+                :ui="{ base: 'cursor-default text-toned' }"
               />
             </UFormField>
-            <p v-if="resolvingIssueBodies" class="text-[11px] text-slate-500">
+            <p v-if="resolvingIssueBodies" class="text-2xs text-dimmed">
               {{ t('board.addTask.loadingIssue') }}
             </p>
 
@@ -1054,17 +1051,17 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
 
           <UCheckbox v-if="uiMode.isAdvanced" v-model="technical" name="technical">
             <template #label>
-              <span class="text-sm text-slate-200">{{ t('board.addTask.technical') }}</span>
+              <span class="text-sm text-default">{{ t('board.addTask.technical') }}</span>
             </template>
             <template #description>
-              <span class="text-[11px] text-slate-500">
+              <span class="text-2xs text-dimmed">
                 {{ t('board.addTask.technicalHint') }}
               </span>
             </template>
           </UCheckbox>
 
           <!-- Per-type fields. -->
-          <div v-if="taskType === 'bug'" class="grid grid-cols-2 gap-3">
+          <div v-if="taskType === 'bug'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <UFormField :label="t('board.addTask.severity')">
               <div class="flex flex-wrap gap-1">
                 <UButton
@@ -1084,7 +1081,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                 </UButton>
               </div>
             </UFormField>
-            <UFormField :label="t('board.addTask.stepsToReproduce')" class="col-span-2">
+            <UFormField :label="t('board.addTask.stepsToReproduce')" class="sm:col-span-2">
               <UTextarea
                 v-model="stepsToReproduce"
                 :rows="2"
@@ -1106,25 +1103,21 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
               :description="t('board.addTask.bugFishingFields.angles.hint')"
             >
               <div class="grid gap-1.5 sm:grid-cols-2">
-                <label
+                <!-- Each angle keeps its own test hook, so the boolean is derived from the id
+                     list rather than bound through a checkbox group. -->
+                <UCheckbox
                   v-for="phase in BUG_FISHING_PHASES"
                   :key="phase.id"
-                  class="flex items-start gap-2 rounded-md px-1.5 py-1 text-[12px] hover:bg-slate-800/40"
-                >
-                  <input
-                    v-model="fishingPhaseIds"
-                    type="checkbox"
-                    :value="phase.id"
-                    class="mt-0.5 accent-sky-500"
-                    :data-testid="`add-task-fishing-angle-${phase.id}`"
-                  />
-                  <span class="min-w-0">
-                    <span class="block text-slate-200">{{ phase.title }}</span>
-                    <span class="block text-[11px] text-slate-500">{{ phase.goal }}</span>
-                  </span>
-                </label>
+                  size="xs"
+                  :model-value="fishingPhaseIds.includes(phase.id)"
+                  :label="phase.title"
+                  :description="phase.goal"
+                  class="rounded-md px-1.5 py-1 hover:bg-elevated/40"
+                  :data-testid="`add-task-fishing-angle-${phase.id}`"
+                  @update:model-value="toggleFishingPhase(phase.id, $event === true)"
+                />
               </div>
-              <p v-if="fishingPhaseIds.length === 0" class="mt-1.5 text-[11px] text-slate-500">
+              <p v-if="fishingPhaseIds.length === 0" class="mt-1.5 text-2xs text-dimmed">
                 {{ t('board.addTask.bugFishingFields.angles.allSelected') }}
               </p>
             </UFormField>
@@ -1239,7 +1232,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                 </UButton>
               </div>
             </UFormField>
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <UFormField :label="t('board.addTask.audience')" :hint="t('board.addTask.optional')">
                 <UInput
                   v-model="docAudience"
@@ -1344,7 +1337,10 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
 
           <!-- One column in basic mode, where the pipeline picker is the only survivor and a
                two-column grid would leave it stranded beside an empty cell. -->
-          <div class="grid gap-3" :class="uiMode.isAdvanced ? 'grid-cols-2' : 'grid-cols-1'">
+          <div
+            class="grid gap-3"
+            :class="uiMode.isAdvanced ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'"
+          >
             <UFormField :label="t('board.addTask.pipeline')">
               <PipelinePicker
                 :model-value="pipelineId"
@@ -1388,11 +1384,11 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
           </div>
 
           <div v-if="configDescriptors.length" class="space-y-3">
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <SectionLabel as="span">
               {{ t('board.addTask.agentConfiguration') }}
-            </span>
+            </SectionLabel>
             <div v-for="d in configDescriptors" :key="d.id" class="space-y-1">
-              <div class="text-[11px] text-slate-400">{{ d.label }}</div>
+              <div class="text-2xs text-muted">{{ d.label }}</div>
               <div v-if="d.type === 'select'" class="flex flex-wrap gap-1">
                 <UButton
                   v-for="opt in d.options"
@@ -1414,7 +1410,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                 :data-testid="`agent-config-${d.id}`"
                 @update:model-value="(v: string | number) => setConfig(d.id, String(v))"
               />
-              <p class="text-[11px] leading-snug text-slate-500">{{ d.description }}</p>
+              <p class="text-2xs leading-snug text-dimmed">{{ d.description }}</p>
             </div>
           </div>
 
@@ -1443,7 +1439,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
             :issues-hint="t('board.addTask.noIssuesHint')"
           />
 
-          <p class="text-[11px] text-slate-500">
+          <p class="text-2xs text-dimmed">
             {{ t('board.addTask.plannedHint') }}
           </p>
         </template>
@@ -1456,7 +1452,6 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
           t('common.cancel')
         }}</UButton>
         <UButton
-          color="primary"
           data-testid="add-task-submit"
           :icon="isRecurring ? 'i-lucide-arrow-right' : 'i-lucide-plus'"
           :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
@@ -1468,5 +1463,5 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

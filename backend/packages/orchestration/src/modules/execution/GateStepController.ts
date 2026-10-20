@@ -17,6 +17,8 @@ import type { GateHelperDispatcher } from './GateHelperDispatcher.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { RunPolicyScope } from './policy-types.js'
 import type { SettledGate } from '../observability/GateOutcomeRecorder.js'
+import { awaitingJob } from './awaitingJob.logic.js'
+import { liveJobId } from './step-fold.logic.js'
 
 // ---------------------------------------------------------------------------
 // The polling-gate STATE MACHINE: one generic evaluation shared by every registered gate
@@ -97,9 +99,13 @@ export class GateStepController {
     isFinalStep: boolean,
     gate: GateDefinition,
   ): Promise<AdvanceResult> {
-    // Re-attach after a replay: a helper is already in flight for this gate.
-    if (step.gate?.phase === 'working' && step.jobId) {
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    // Re-attach after a replay: a helper is already in flight for this gate. Asked of
+    // {@link liveJobId} rather than of `step.jobId`, because a delegated helper's claim is
+    // committed before its executor is called: a bare read re-attaches to a job that may never
+    // have been started and polls it until the budget is spent.
+    const attached = liveJobId(step)
+    if (step.gate?.phase === 'working' && attached) {
+      return awaitingJob(step, instance.currentStep, attached)
     }
 
     // Provider not wired: the gate is a pass-through so the engine works without it.

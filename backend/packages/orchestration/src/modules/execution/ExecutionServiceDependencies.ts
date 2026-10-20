@@ -25,6 +25,7 @@ import type {
   IssueWritebackProvider,
   EnvironmentInvestigator,
   JudgeAssessor,
+  DelegatedExecutorRegistry,
   JudgeRegistry,
   LocalModelDeclarationsCacheValue,
   LocalModelEndpointRepository,
@@ -163,6 +164,13 @@ export interface ExecutionServiceDependencies {
    */
   judgeRegistry: JudgeRegistry
   judgeAssessor?: JudgeAssessor
+  /**
+   * The app-owned DELEGATED-EXECUTOR registry: the external systems a deployment plugs in as the
+   * executor of a step. `createCore` defaults it to an empty one, so a facade that registers none
+   * needs no wiring and no built-in kind is affected. See
+   * `docs/initiatives/delegated-executors.md`.
+   */
+  delegatedExecutorRegistry: DelegatedExecutorRegistry
   /**
    * The inline diagnosis behind the deployer's environment-investigation loop; see
    * {@link RunDispatcherDependencies.environmentInvestigator}.

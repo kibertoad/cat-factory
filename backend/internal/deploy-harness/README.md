@@ -51,4 +51,4 @@ pnpm --filter @cat-factory/deploy-harness run image:publish  # multi-arch → GH
 
 Bump the package `version` (and the deployment's pinned image tag) whenever you change
 `src/**`, the `Dockerfile`, `tsconfig.json`, or the pinned CLI versions; a fresh,
-immutable tag is what forces the rollout (see CLAUDE.md).
+immutable tag is what forces the rollout (see AGENTS.md).

@@ -19,6 +19,7 @@ import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.v
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import KubernetesEnvironmentForm from '~/components/settings/KubernetesEnvironmentForm.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{
   kind: ProviderConnectionKind
@@ -35,7 +36,7 @@ const emit = defineEmits<{ connected: [] }>()
 
 const { t } = useI18n()
 const store = useProviderConnectionsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
@@ -207,11 +208,7 @@ function buildFlatPayload() {
 }
 
 function toastSaved() {
-  toast.add({
-    title: t('settings.providerConnection.toast.saved', { title: title.value }),
-    icon: 'i-lucide-check',
-    color: 'success',
-  })
+  actionToast.success('settings.providerConnection.toast.saved', { params: { title: title.value } })
 }
 
 // --- Native flat-form actions (both manifest-overlay and config-overlay flavours) ---
@@ -329,7 +326,7 @@ async function remove() {
   try {
     await store.remove(props.kind)
     resetDraft()
-    toast.add({ title: t('settings.providerConnection.toast.removed'), icon: 'i-lucide-check' })
+    actionToast.success('settings.providerConnection.toast.removed')
   } catch (e) {
     present(e, 'settings.providerConnection.toast.removeFailed')
   } finally {
@@ -353,8 +350,9 @@ function fieldHelp(key: string): string | undefined {
 <template>
   <div v-if="descriptor" class="space-y-4">
     <div class="flex items-start justify-between gap-3">
-      <p class="text-xs text-slate-400">{{ blurb }}</p>
+      <p class="text-xs text-muted">{{ blurb }}</p>
       <UButton
+        color="neutral"
         :icon="showLogs ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
         variant="ghost"
         size="xs"
@@ -379,11 +377,11 @@ function fieldHelp(key: string): string | undefined {
     <!-- Saved connection summary -->
     <div
       v-if="connection"
-      class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+      class="flex items-center justify-between rounded-md border border-muted bg-default/50 px-3 py-2 text-sm"
     >
       <div>
-        <span class="font-medium text-slate-200">{{ connection.label }}</span>
-        <div class="text-[11px] text-emerald-400">
+        <span class="font-medium text-default">{{ connection.label }}</span>
+        <div class="text-2xs text-app-success-400">
           {{ t('settings.providerConnection.connectedAt', { baseUrl: connection.baseUrl }) }}
         </div>
       </div>
@@ -400,7 +398,7 @@ function fieldHelp(key: string): string | undefined {
     <!-- Mandatory-fields warning (mirrors the banner) -->
     <div
       v-if="descriptor.missingRequired.length"
-      class="rounded-md border border-amber-500/40 bg-amber-950/40 px-3 py-2 text-xs text-amber-200"
+      class="rounded-md border border-app-warning-500/40 bg-app-warning-950/40 px-3 py-2 text-xs text-app-warning-200"
     >
       {{
         t('settings.providerConnection.missingConfig', {
@@ -425,18 +423,15 @@ function fieldHelp(key: string): string | undefined {
     />
 
     <!-- NATIVE provider: the friendly, descriptor-driven flat field form. -->
-    <div
-      v-else-if="isNative"
-      class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3"
-    >
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+    <div v-else-if="isNative" class="rounded-lg border border-dashed border-muted p-3 space-y-3">
+      <SectionLabel as="p">
         {{
           connection
             ? t('settings.providerConnection.form.updateConfiguration')
             : t('settings.providerConnection.form.connect')
         }}
-      </p>
-      <p v-if="connection && hasSecretFields" class="text-[11px] text-amber-300/80">
+      </SectionLabel>
+      <p v-if="connection && hasSecretFields" class="text-2xs text-app-warning-300/80">
         {{
           t(
             'settings.providerConnection.form.reenterSecrets',
@@ -508,13 +503,7 @@ function fieldHelp(key: string): string | undefined {
       <ConnectionWarnings :warnings="testResult?.warnings" />
 
       <div class="flex justify-end">
-        <UButton
-          color="primary"
-          size="sm"
-          :loading="busy"
-          :disabled="!canSave"
-          @click="saveNative()"
-        >
+        <UButton size="sm" :loading="busy" :disabled="!canSave" @click="saveNative()">
           {{ connection ? t('common.save') : t('settings.providerConnection.form.connect') }}
         </UButton>
       </div>

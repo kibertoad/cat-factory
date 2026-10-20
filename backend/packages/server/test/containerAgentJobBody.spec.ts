@@ -154,6 +154,30 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     expect(captured[0]).toMatchSnapshot()
   })
 
+  it('resolves an ATTACHED pull request on its own branch and creates no work branch', async () => {
+    const created: string[] = []
+    const made = makeExecutor({
+      ensureWorkBranch: async (_repo, branch, options) => {
+        if (options.create) created.push(branch)
+        return true
+      },
+    })
+    const attached = {
+      url: 'https://github.com/acme/widgets/pull/12',
+      number: 12,
+      branch: 'theirs',
+    }
+    await made.executor.startJob(
+      context('conflict-resolver', { taskType: 'resolve-conflicts', pullRequest: attached }),
+    )
+    expect(created).toEqual([])
+    expect(made.captured[0]!.spec).toMatchObject({
+      branch: 'theirs',
+      pushBranch: 'theirs',
+      mergeBase: 'main',
+    })
+  })
+
   it('merger', async () => {
     await executor.startJob(context('merger', { pullRequest: PR }))
     expect(captured[0]).toMatchSnapshot()

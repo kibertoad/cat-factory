@@ -58,7 +58,7 @@ export interface EnvironmentDiagnosticLog {
   /**
    * Whether `text` is the TAIL of a longer log rather than the whole of it. Stated because a
    * reader who assumes a prefix would conclude the rest was never produced, and a reader who
-   * assumes a tail would conclude the start was hidden. See CLAUDE.md's cap rule.
+   * assumes a tail would conclude the start was hidden. See AGENTS.md's cap rule.
    */
   truncated?: boolean
 }

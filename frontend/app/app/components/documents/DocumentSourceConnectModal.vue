@@ -13,11 +13,12 @@
 // remedy belongs to an admin in a different surface and a dead control states nothing.
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
@@ -82,10 +83,8 @@ async function submit() {
   saving.value = true
   try {
     await documents.connect(source.value, credentials)
-    toast.add({
-      title: t('documents.connect.connected', { source: descriptor.value!.label }),
-      icon: 'i-lucide-check',
-      color: 'success',
+    actionToast.success('documents.connect.connected', {
+      params: { source: descriptor.value!.label },
     })
     ui.closeDocumentConnect()
   } catch (e) {
@@ -99,17 +98,23 @@ async function disconnect() {
   if (!source.value) return
   const label = descriptor.value?.label ?? t('documents.connect.sourceFallback')
   if (!(await confirmAction('disconnect', label))) return
-  await documents.disconnect(source.value)
-  toast.add({
-    title: t('documents.connect.disconnected', { source: label }),
-    icon: 'i-lucide-unplug',
-  })
+  try {
+    await documents.disconnect(source.value)
+  } catch (e) {
+    present(e, 'documents.connect.disconnectFailed')
+    return
+  }
+  actionToast.success('documents.connect.disconnected', { params: { source: label } })
   ui.closeDocumentConnect()
 }
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="descriptor?.label ?? t('documents.connect.title')">
+  <AppModal
+    size="form"
+    v-model:open="open"
+    :title="descriptor?.label ?? t('documents.connect.title')"
+  >
     <template #title>
       <IntegrationBackTitle
         :title="descriptor?.label ?? t('documents.connect.title')"
@@ -118,13 +123,12 @@ async function disconnect() {
     </template>
     <template #body>
       <div v-if="descriptor" class="space-y-4">
-        <p class="text-sm text-slate-400">
+        <p class="text-sm text-muted">
           {{ t('documents.connect.intro', { source: descriptor.label }) }}
         </p>
 
         <div v-if="oauth" class="space-y-2">
           <UButton
-            color="primary"
             icon="i-lucide-shield-check"
             :loading="startingOAuth"
             data-testid="document-connect-oauth"
@@ -132,10 +136,10 @@ async function disconnect() {
           >
             {{ t('documents.connect.oauth.action', { source: descriptor.label }) }}
           </UButton>
-          <p class="text-[11px] text-slate-500">
+          <p class="text-2xs text-dimmed">
             {{ t('documents.connect.oauth.scopes', { scopes: oauth.scopes.join(', ') }) }}
           </p>
-          <p class="text-[11px] text-slate-500">{{ t('documents.connect.oauth.fallback') }}</p>
+          <p class="text-2xs text-dimmed">{{ t('documents.connect.oauth.fallback') }}</p>
         </div>
 
         <div class="space-y-3">
@@ -158,24 +162,18 @@ async function disconnect() {
           <UButton
             v-if="connected"
             color="error"
-            variant="ghost"
+            variant="soft"
             icon="i-lucide-unplug"
             @click="disconnect"
           >
             {{ t('documents.connect.disconnect') }}
           </UButton>
           <div v-else />
-          <UButton
-            color="primary"
-            icon="i-lucide-plug"
-            :loading="saving"
-            :disabled="!canSubmit"
-            @click="submit"
-          >
+          <UButton icon="i-lucide-plug" :loading="saving" :disabled="!canSubmit" @click="submit">
             {{ connected ? t('documents.connect.update') : t('documents.connect.connect') }}
           </UButton>
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

@@ -24,7 +24,7 @@ import { readSpecDocSchema, specReadIssueSchema } from './spec.js'
 //     is the join key onto the run report either way. The cost is real and stated rather than
 //     hidden: `SpecDoc` and everything under it become part of the STABLE `/api/v1` surface the
 //     moment this ships, so those schemas leave the "internals are freely breakable" half of
-//     CLAUDE.md and join the half that needs a migration path. That is a price worth paying once,
+//     AGENTS.md and join the half that needs a migration path. That is a price worth paying once,
 //     and cheaper than two shapes drifting.
 //  2. **A read has four outcomes and this shape refuses to fold them.** The internal view collapses
 //     "no spec on this branch" and "we could not read the repo" into one `present: false`, which

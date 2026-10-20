@@ -28,6 +28,7 @@ import {
 } from '~/utils/binaryCandidates'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StoredAssetView from '~/components/binaryOutput/StoredAssetView.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -190,7 +191,7 @@ const { requestClose } = useUnsavedGuard({
   <ResultWindowShell
     :open="open"
     icon="i-lucide-images"
-    icon-class="bg-sky-500/15 text-sky-300"
+    icon-class="bg-app-info-500/15 text-app-info-300"
     :title="headerTitle"
     :subtitle="t('binaryCandidates.subtitle')"
     width="5xl"
@@ -202,7 +203,7 @@ const { requestClose } = useUnsavedGuard({
            declared its candidates and one whose block was unreadable need different fixes. -->
       <p
         v-if="noChoiceKey"
-        class="mb-3 rounded border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-200"
+        class="mb-3 rounded-sm border border-app-warning-500/30 bg-app-warning-500/5 px-3 py-2 text-xs text-app-warning-200"
         data-testid="binary-candidates-no-choice"
       >
         {{ t(noChoiceKey) }}
@@ -211,7 +212,7 @@ const { requestClose } = useUnsavedGuard({
       <!-- An automatic keep is NOT a review, and must never render as one. -->
       <p
         v-if="view.automatic"
-        class="mb-3 rounded border border-slate-600/40 bg-slate-800/40 px-3 py-2 text-xs text-slate-300"
+        class="mb-3 rounded-sm border border-app-600/40 bg-elevated/40 px-3 py-2 text-xs text-toned"
         data-testid="binary-candidates-automatic"
       >
         {{ t('binaryCandidates.automatic') }}
@@ -221,7 +222,7 @@ const { requestClose } = useUnsavedGuard({
            over all five. -->
       <p
         v-if="warnings"
-        class="mb-3 text-xs text-amber-300"
+        class="mb-3 text-xs text-app-warning-300"
         data-testid="binary-candidates-warnings"
       >
         <span v-if="view.state.omitted">{{
@@ -235,19 +236,29 @@ const { requestClose } = useUnsavedGuard({
         >
       </p>
 
+      <!-- Single-select renders a checkbox per card, not one radio group, so this line is what
+           tells everyone (a screen reader through each box's description) that ticking one clears
+           the other. -->
+      <p
+        v-if="view.awaiting && !view.multiSelect"
+        id="binary-candidates-pick-one"
+        class="mb-3 text-xs text-muted"
+      >
+        {{ t('binaryCandidates.pickOne') }}
+      </p>
       <div v-for="group in view.groups" :key="group.subject ?? '·'" class="mb-6">
-        <h3 class="mb-2 text-xs font-medium text-slate-400">
+        <h3 class="mb-2 text-xs font-medium text-muted">
           {{ group.subject ?? t('binaryCandidates.unlabelledSubject') }}
         </h3>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div
             v-for="row in group.rows"
             :key="row.id"
-            class="rounded border p-2 transition"
+            class="rounded-sm border p-2 transition"
             :class="[
               selected.includes(row.id) || row.kept
-                ? 'border-sky-400/60 bg-sky-500/5'
-                : 'border-slate-700/60',
+                ? 'border-app-info-400/60 bg-app-info-500/5'
+                : 'border-muted/60',
               view.awaiting ? 'cursor-pointer' : '',
             ]"
             data-testid="binary-candidate-card"
@@ -255,33 +266,34 @@ const { requestClose } = useUnsavedGuard({
           >
             <!-- The REAL control, not the card's click handler: ticking a candidate is the only
                  way to keep an asset, so without a focusable input the gate could not be completed
-                 by keyboard at all (UX-80). The whole window is ONE radio group in single-select
-                 mode, because `toggle` replaces the selection across every subject rather than per
-                 group.
+                 by keyboard at all (UX-80). In single-select mode `toggle` replaces the selection
+                 across every subject rather than per group.
 
-                 `@click.stop` belongs on the LABEL, which is the element the card's own toggle has
-                 to be shielded from. On the input alone it stopped the wrong click: activating a
-                 label forwards a synthetic click to its input (which `.stop` there does not
-                 prevent, only its propagation), so a click on the label TEXT bubbled to the card
-                 and toggled, then the forwarded click toggled back. On a checkbox that nets to no
-                 change, which means no re-render, which leaves the box ticked over a candidate
-                 that is no longer selected. -->
-            <label
-              v-if="view.awaiting"
-              class="mb-1.5 flex cursor-pointer items-center gap-2 text-[11px] text-slate-400"
-              @click.stop
-            >
-              <input
-                :type="view.multiSelect ? 'checkbox' : 'radio'"
-                name="binary-candidate"
-                class="accent-sky-500"
-                :checked="selected.includes(row.id)"
+                 `@click.stop` belongs on the WRAPPER, which is what the card's own toggle has to
+                 be shielded from, and NOT on the control: activating a label forwards a synthetic
+                 click to its control (which `.stop` there does not prevent, only its
+                 propagation), so a click on the label TEXT bubbles to the card and toggles, then
+                 the forwarded click toggles back. On a checkbox that nets to no change, which
+                 means no re-render, which leaves the box ticked over a candidate that is no
+                 longer selected. UCheckbox is not the place for it either: Nuxt UI forwards
+                 `$attrs` onto the inner checkbox button rather than onto its root, so a listener
+                 put there is the same "on the control alone" mistake spelled differently. -->
+            <!-- One control either way. Single-select is a checkbox rather than a radio group,
+                 because the rows render per candidate across several subjects and a radio group
+                 needs the whole set in one place. So the box announces as a checkbox, and the
+                 "pick one" line above is its description: that is the cue that ticking it clears
+                 the previous pick. -->
+            <div v-if="view.awaiting" class="mb-1.5" @click.stop>
+              <UCheckbox
+                size="xs"
+                :model-value="selected.includes(row.id)"
+                :label="candidateLabel(row)"
                 :aria-label="candidateLabel(row)"
+                :aria-describedby="view.multiSelect ? undefined : 'binary-candidates-pick-one'"
                 data-testid="binary-candidate-select"
-                @change="toggle(row.id)"
+                @update:model-value="toggle(row.id)"
               />
-              <span class="truncate">{{ candidateLabel(row) }}</span>
-            </label>
+            </div>
             <!-- Staged through the platform's OWN asset storage: we hold the bytes, so the card
                  renders them (and offers to open or save one) rather than waiting for a public
                  link the shipped storage never issues. Checked first because a candidate can
@@ -297,29 +309,29 @@ const { requestClose } = useUnsavedGuard({
               v-else-if="row.previewUrl"
               :src="row.previewUrl"
               :alt="row.label ?? row.id"
-              class="mb-2 max-h-56 w-full rounded object-contain"
+              class="mb-2 max-h-56 w-full rounded-sm object-contain"
               data-testid="binary-candidate-preview"
             />
             <!-- No preview is ORDINARY (a private asset store issues no link), so it is stated
                  rather than left as an empty frame the reader reads as a failed generation. -->
             <p
               v-else
-              class="mb-2 flex h-24 items-center justify-center rounded bg-slate-800/60 px-2 text-center text-[10px] text-slate-400"
+              class="mb-2 flex h-24 items-center justify-center rounded-sm bg-elevated/60 px-2 text-center text-3xs text-muted"
               data-testid="binary-candidate-no-preview"
             >
               {{ t('binaryCandidates.noPreview') }}
             </p>
-            <p class="text-xs text-slate-200">
+            <p class="text-xs text-default">
               {{
                 row.generator
                   ? t('binaryCandidates.fromGenerator', { generator: row.generator })
                   : t('binaryCandidates.unattributed')
               }}
             </p>
-            <p v-if="row.note" class="mt-1 text-[11px] text-slate-400">{{ row.note }}</p>
-            <p class="mt-1 break-all text-[10px] text-slate-500">{{ row.location }}</p>
-            <p v-if="row.contentType" class="text-[10px] text-slate-500">{{ row.contentType }}</p>
-            <p v-if="row.kept" class="mt-1 text-[11px] text-emerald-300">
+            <p v-if="row.note" class="mt-1 text-2xs text-muted">{{ row.note }}</p>
+            <p class="mt-1 break-all text-3xs text-dimmed">{{ row.location }}</p>
+            <p v-if="row.contentType" class="text-3xs text-dimmed">{{ row.contentType }}</p>
+            <p v-if="row.kept" class="mt-1 text-2xs text-app-success-300">
               {{
                 row.storeAs
                   ? t('binaryCandidates.keptAs', { id: row.storeAs })
@@ -352,19 +364,21 @@ const { requestClose } = useUnsavedGuard({
         />
         <p
           v-if="missingAliases.length"
-          class="mt-1 text-[11px] text-amber-300"
+          class="mt-1 text-2xs text-app-warning-300"
           data-testid="binary-candidates-missing-alias"
         >
           {{ t('binaryCandidates.missingAlias') }}
         </p>
         <p
           v-else-if="duplicateAliases"
-          class="mt-1 text-[11px] text-amber-300"
+          class="mt-1 text-2xs text-app-warning-300"
           data-testid="binary-candidates-duplicate-alias"
         >
           {{ t('binaryCandidates.duplicateAlias') }}
         </p>
-        <p v-if="candidates.error" class="mt-1 text-[11px] text-red-300">{{ candidates.error }}</p>
+        <p v-if="candidates.error" class="mt-1 text-2xs text-app-error-300">
+          {{ candidates.error }}
+        </p>
         <div class="mt-2 flex justify-end">
           <UButton
             size="xs"
@@ -386,30 +400,29 @@ const { requestClose } = useUnsavedGuard({
          Retry), or the step genuinely compared nothing. Collapsing any of the first three into the
          last would put "nothing to compare" in front of a person whose candidates exist and were
          simply not fetched. -->
-    <div
+    <EmptyState
       v-else-if="absence === 'no_run'"
-      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-slate-400"
+      class="min-h-0 flex-1 px-5"
+      icon="i-lucide-unlink"
+      :title="t('binaryCandidates.noRun.title')"
+      :description="t('binaryCandidates.noRun.hint')"
       data-testid="binary-candidates-no-run"
-    >
-      <UIcon name="i-lucide-unlink" class="h-8 w-8 opacity-40" />
-      <p class="text-sm">{{ t('binaryCandidates.noRun.title') }}</p>
-      <p class="max-w-md text-[11px] text-slate-500">{{ t('binaryCandidates.noRun.hint') }}</p>
-    </div>
+    />
     <div
       v-else-if="absence === 'loading'"
-      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-slate-400"
+      class="grid min-h-0 flex-1 grid-cols-1 content-start gap-3 px-5 py-4 sm:grid-cols-2 lg:grid-cols-3"
       data-testid="binary-candidates-loading"
     >
-      <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+      <USkeleton v-for="n in 3" :key="n" class="h-48 w-full rounded-lg" />
     </div>
     <div
       v-else-if="absence === 'load_failed'"
-      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-slate-400"
+      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-muted"
       data-testid="binary-candidates-load-error"
     >
-      <UIcon name="i-lucide-triangle-alert" class="h-8 w-8 text-amber-400/70" />
+      <UIcon name="i-lucide-triangle-alert" class="h-8 w-8 text-app-warning-400/70" />
       <p class="text-sm">{{ t('binaryCandidates.loadFailed') }}</p>
-      <p class="max-w-md break-words text-[11px] text-slate-500">{{ candidates.error }}</p>
+      <p class="max-w-md break-words text-2xs text-dimmed">{{ candidates.error }}</p>
       <UButton
         size="xs"
         color="neutral"
@@ -421,13 +434,12 @@ const { requestClose } = useUnsavedGuard({
         {{ t('common.retry') }}
       </UButton>
     </div>
-    <div
+    <EmptyState
       v-else
-      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-slate-400"
+      class="min-h-0 flex-1 px-5"
+      icon="i-lucide-images"
+      :title="t('binaryCandidates.empty.title')"
       data-testid="binary-candidates-empty"
-    >
-      <UIcon name="i-lucide-images" class="h-8 w-8 opacity-40" />
-      <p class="text-sm">{{ t('binaryCandidates.empty.title') }}</p>
-    </div>
+    />
   </ResultWindowShell>
 </template>

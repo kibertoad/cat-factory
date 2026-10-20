@@ -122,6 +122,25 @@ export const BUILTIN_PUBLIC_TASK_FIELDS: Readonly<Record<string, readonly Descri
     // refuses against a catalog the caller was never shown. Adding it later (as its own
     // discovery read) is additive.
   ],
+  // Neither key is marked `required` because the rule is "one of the two", which no descriptor can
+  // state; creation refuses a task that names neither (`resolveAttachedPullRequest`).
+  'resolve-conflicts': [
+    {
+      key: 'prNumber',
+      label: 'Pull request number',
+      type: 'number',
+      help: 'The open PR whose conflicts to resolve, on the service’s linked repository.',
+      min: 1,
+      integer: true,
+    },
+    {
+      key: 'prUrl',
+      label: 'Pull request URL',
+      type: 'text',
+      help: 'The PR’s full web URL. Supply this or the number; the number wins when both are given.',
+      maxLength: 500,
+    },
+  ],
   'bug-fishing': [
     // The angle list is a CHECKBOX GROUP over the shipped catalog, and the empty selection is the
     // meaningful default (fish every angle), which is exactly what a checkbox group with nothing
@@ -185,12 +204,13 @@ export const BUILTIN_PUBLIC_TASK_FIELDS: Readonly<Record<string, readonly Descri
  */
 const BUILTIN_PUBLIC_FIELD_ALIASES: Readonly<Record<string, readonly (readonly string[])[]>> = {
   review: [['prNumber', 'prUrl']],
+  'resolve-conflicts': [['prNumber', 'prUrl']],
 }
 
 /**
  * The stored keys a patch NAMING `named` supersedes for this type: every other member of an alias
  * group one of the named keys belongs to. Empty for a type that declares no groups, which is all of
- * them but `review`.
+ * them but the two that name a pull request (`review`, `resolve-conflicts`).
  */
 export function supersededBuiltinFieldKeys(taskType: string, named: readonly string[]): string[] {
   const groups = BUILTIN_PUBLIC_FIELD_ALIASES[taskType]

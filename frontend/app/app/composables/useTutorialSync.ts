@@ -46,7 +46,7 @@ export function useTutorialServer() {
         // load re-runs the whole reconciliation, so there is nothing to report and nothing a user
         // could act on. Deliberately NOT re-armed here either: a refusal (the merged row would
         // exceed its cap) would otherwise retry forever. (The SPA has no logger seam — see
-        // CLAUDE.md's silent-catch scope.)
+        // AGENTS.md's silent-catch scope.)
       })
   }
 

@@ -13,6 +13,9 @@ import { computed, ref } from 'vue'
 import type { ConsensusGroup, ConsensusStrategy } from '~/types/consensus'
 import { isSelectable } from '~/stores/models'
 import { uid } from '~/utils/catalog'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const groups = useConsensusGroupsStore()
@@ -115,6 +118,17 @@ const selectableModelIds = computed(() => {
     .map((m) => ({ id: m.id, label: m.label }))
 })
 
+// "Inherit the step's model" is a NAMED sentinel in the picker, never an empty string and never
+// `undefined`: a Select reserves both for "nothing selected", so an item carrying one either
+// throws (empty string) or renders the placeholder over its own label (undefined). One item list
+// serves both pickers; each binding below maps the sentinel to what its field holds on the wire,
+// which is `undefined` for a participant and an empty string for the synthesizer.
+const STEP_MODEL = '__step__'
+const modelItems = computed(() => [
+  { label: t('settings.consensusGroups.editor.stepModel'), value: STEP_MODEL },
+  ...selectableModelIds.value.map((m) => ({ label: m.label, value: m.id })),
+])
+
 /**
  * A threshold field's value as the contract wants it, or undefined when the author left it blank.
  *
@@ -208,13 +222,13 @@ async function remove(group: ConsensusGroup) {
 </script>
 
 <template>
-  <section v-if="visible" class="space-y-3 border-t border-slate-800 pt-5">
+  <section v-if="visible" class="space-y-3 border-t border-default pt-5">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <h2 class="text-sm font-semibold text-slate-100">
+        <h2 class="text-sm font-semibold text-app-100">
           {{ t('settings.consensusGroups.title') }}
         </h2>
-        <p class="mt-1 text-xs leading-relaxed text-slate-500">
+        <p class="mt-1 text-xs leading-relaxed text-dimmed">
           {{ t('settings.consensusGroups.intro') }}
         </p>
       </div>
@@ -238,34 +252,34 @@ async function remove(group: ConsensusGroup) {
         <div
           v-for="g in groups.groups"
           :key="g.id"
-          class="rounded-xl border border-slate-800 bg-slate-900/50 p-3"
+          class="rounded-xl border border-default bg-default/50 p-3"
           data-testid="consensus-group-row"
         >
           <div class="flex items-center gap-2">
-            <span class="truncate text-sm font-semibold text-slate-100">{{ g.name }}</span>
+            <span class="truncate text-sm font-semibold text-app-100">{{ g.name }}</span>
             <UBadge color="neutral" variant="subtle" size="xs">{{ barLabel(g) }}</UBadge>
             <div class="ms-auto flex items-center gap-1">
-              <UButton
+              <IconButton
                 size="xs"
                 variant="ghost"
                 color="neutral"
                 icon="i-lucide-pencil"
-                :title="t('settings.consensusGroups.list.editTitle')"
+                :label="t('settings.consensusGroups.list.editTitle')"
                 @click="startEdit(g)"
               />
-              <UButton
+              <IconButton
                 size="xs"
                 variant="ghost"
                 color="error"
                 icon="i-lucide-trash-2"
                 :loading="busy"
-                :title="t('settings.consensusGroups.list.deleteTitle')"
+                :label="t('settings.consensusGroups.list.deleteTitle')"
                 @click="remove(g)"
               />
             </div>
           </div>
-          <p v-if="g.description" class="mt-1 text-[11px] text-slate-400">{{ g.description }}</p>
-          <div class="mt-1.5 text-[11px] text-slate-400">
+          <p v-if="g.description" class="mt-1 text-2xs text-muted">{{ g.description }}</p>
+          <div class="mt-1.5 text-2xs text-muted">
             {{ t(`pipeline.builder.strategyOption.${g.strategy}`) }}
             ·
             {{
@@ -278,20 +292,21 @@ async function remove(group: ConsensusGroup) {
           </div>
         </div>
       </div>
-      <p v-else class="py-4 text-center text-sm text-slate-500">
-        {{ t('settings.consensusGroups.list.empty') }}
-      </p>
+      <EmptyState
+        v-else
+        compact
+        icon="i-lucide-users"
+        :title="t('settings.consensusGroups.list.empty')"
+      />
     </template>
 
     <!-- ===== editor ===== -->
-    <div v-else class="space-y-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+    <div v-else class="space-y-4 rounded-xl border border-default bg-default/50 p-4">
       <div class="grid gap-3 sm:grid-cols-2">
         <div>
-          <label
-            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-          >
+          <SectionLabel as="label" class="mb-1 block">
             {{ t('settings.consensusGroups.editor.nameLabel') }}
-          </label>
+          </SectionLabel>
           <UInput
             v-model="editor.name"
             size="sm"
@@ -300,24 +315,17 @@ async function remove(group: ConsensusGroup) {
           />
         </div>
         <div>
-          <label
-            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-          >
+          <SectionLabel as="label" class="mb-1 block">
             {{ t('settings.consensusGroups.editor.strategyLabel') }}
-          </label>
-          <select
-            v-model="editor.strategy"
-            class="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
-          >
-            <option v-for="s in STRATEGIES" :key="s.value" :value="s.value">{{ s.label }}</option>
-          </select>
+          </SectionLabel>
+          <USelect v-model="editor.strategy" :items="STRATEGIES" size="sm" class="w-full" />
         </div>
       </div>
 
       <div>
-        <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <SectionLabel as="label" class="mb-1 block">
           {{ t('settings.consensusGroups.editor.descriptionLabel') }}
-        </label>
+        </SectionLabel>
         <UInput
           v-model="editor.description"
           size="sm"
@@ -329,9 +337,9 @@ async function remove(group: ConsensusGroup) {
       <!-- participants -->
       <div class="space-y-2">
         <div class="flex items-center justify-between">
-          <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <SectionLabel as="span">
             {{ t('settings.consensusGroups.editor.participantsLabel') }}
-          </span>
+          </SectionLabel>
           <UButton
             icon="i-lucide-plus"
             color="neutral"
@@ -341,7 +349,7 @@ async function remove(group: ConsensusGroup) {
             @click="addParticipant"
           />
         </div>
-        <p class="text-[11px] text-slate-500">
+        <p class="text-2xs text-dimmed">
           {{ t('settings.consensusGroups.editor.participantsHint') }}
         </p>
         <div
@@ -361,20 +369,20 @@ async function remove(group: ConsensusGroup) {
             class="min-w-40 flex-1"
             :placeholder="t('settings.consensusGroups.editor.framingPlaceholder')"
           />
-          <select
-            v-model="p.modelId"
-            class="w-44 rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-xs text-slate-300"
-          >
-            <option :value="undefined">{{ t('settings.consensusGroups.editor.stepModel') }}</option>
-            <option v-for="m in selectableModelIds" :key="m.id" :value="m.id">{{ m.label }}</option>
-          </select>
-          <UButton
+          <USelect
+            :model-value="p.modelId || STEP_MODEL"
+            :items="modelItems"
+            size="xs"
+            class="w-44"
+            @update:model-value="p.modelId = $event === STEP_MODEL ? undefined : String($event)"
+          />
+          <IconButton
             icon="i-lucide-x"
             color="error"
             variant="ghost"
             size="xs"
             :disabled="editor.participants.length <= 2"
-            :title="t('pipeline.builder.removeParticipant')"
+            :label="t('pipeline.builder.removeParticipant')"
             @click="removeParticipant(index)"
           />
         </div>
@@ -382,41 +390,40 @@ async function remove(group: ConsensusGroup) {
 
       <div class="grid gap-3 sm:grid-cols-2">
         <div>
-          <label
-            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-          >
+          <SectionLabel as="label" class="mb-1 block">
             {{ t('settings.consensusGroups.editor.synthesizerLabel') }}
-          </label>
-          <select
-            v-model="editor.synthesizerModelId"
-            class="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
-          >
-            <option value="">{{ t('settings.consensusGroups.editor.stepModel') }}</option>
-            <option v-for="m in selectableModelIds" :key="m.id" :value="m.id">{{ m.label }}</option>
-          </select>
+          </SectionLabel>
+          <USelect
+            :model-value="editor.synthesizerModelId || STEP_MODEL"
+            :items="modelItems"
+            size="sm"
+            class="w-full"
+            @update:model-value="
+              editor.synthesizerModelId = $event === STEP_MODEL ? '' : String($event)
+            "
+          />
         </div>
         <div v-if="editor.strategy === 'debate'">
-          <label
-            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-          >
+          <SectionLabel as="label" class="mb-1 block">
             {{ t('pipeline.builder.rounds') }}
-          </label>
+          </SectionLabel>
           <UInput v-model.number="editor.rounds" type="number" min="1" max="5" size="sm" />
         </div>
       </div>
 
       <!-- the estimate bar -->
-      <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-        <label class="flex items-center gap-2 text-xs text-slate-300">
-          <input v-model="editor.gated" type="checkbox" class="accent-emerald-500" />
-          {{ t('settings.consensusGroups.editor.gatedLabel') }}
-        </label>
-        <p class="text-[11px] text-slate-500">
+      <div class="space-y-2 rounded-lg border border-default bg-app-950/40 p-3">
+        <UCheckbox
+          v-model="editor.gated"
+          size="xs"
+          :label="t('settings.consensusGroups.editor.gatedLabel')"
+        />
+        <p class="text-2xs text-dimmed">
           {{ t('settings.consensusGroups.editor.gatedHint') }}
         </p>
         <div v-if="editor.gated" class="flex flex-wrap items-center gap-3 text-xs">
           <label
-            class="flex items-center gap-1.5 text-slate-400"
+            class="flex items-center gap-1.5 text-muted"
             :title="t('pipeline.builder.riskThresholdHint')"
           >
             {{ t('pipeline.builder.riskThreshold') }}
@@ -431,7 +438,7 @@ async function remove(group: ConsensusGroup) {
             />
           </label>
           <label
-            class="flex items-center gap-1.5 text-slate-400"
+            class="flex items-center gap-1.5 text-muted"
             :title="t('pipeline.builder.impactThresholdHint')"
           >
             {{ t('pipeline.builder.impactThreshold') }}
@@ -446,7 +453,7 @@ async function remove(group: ConsensusGroup) {
             />
           </label>
           <label
-            class="flex items-center gap-1.5 text-slate-400"
+            class="flex items-center gap-1.5 text-muted"
             :title="t('pipeline.builder.complexityThresholdHint')"
           >
             {{ t('settings.consensusGroups.editor.complexityThreshold') }}
@@ -461,7 +468,7 @@ async function remove(group: ConsensusGroup) {
             />
           </label>
         </div>
-        <p v-if="gatingIncomplete" class="text-[11px] text-amber-400">
+        <p v-if="gatingIncomplete" class="text-2xs text-app-warning-400">
           {{ t('settings.consensusGroups.editor.gatingIncomplete') }}
         </p>
       </div>
@@ -480,7 +487,6 @@ async function remove(group: ConsensusGroup) {
           {{ t('settings.consensusGroups.editor.cancel') }}
         </UButton>
         <UButton
-          color="primary"
           size="sm"
           :loading="busy"
           :disabled="!editor.name.trim() || gatingIncomplete"

@@ -34,6 +34,7 @@ export function useWorkspaceStream() {
   const kaizen = useKaizenStore()
   const initiatives = useInitiativesStore()
   const docInterview = useDocInterviewStore()
+  const guidedReview = useGuidedReviewStore()
   const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -89,6 +90,7 @@ export function useWorkspaceStream() {
     upsertKaizen: (g) => kaizen.upsert(g),
     upsertInitiative: (i) => initiatives.upsert(i),
     upsertDocInterview: (s) => docInterview.upsert(s),
+    guidedReviewChanged: (change) => void guidedReview.applyChange(change),
     refreshBoard: () => coarse.schedule(),
   }
 
@@ -148,6 +150,8 @@ export function useWorkspaceStream() {
       // failure (`coarse.withRetry`) so a reconnect no longer presents as fully live while
       // silently missing everything from the outage; `connected` is still set even if every
       // retry fails (we ARE connected; a refresh error must not wedge the indicator/tests).
+      // A guided review is not in the snapshot, so whatever this tab has loaded refetches itself.
+      void guidedReview.resync()
       void coarse.withRetry(workspaceId).finally(() => {
         // A workspace switch (or stop()) may have happened while the refresh was in
         // flight — don't announce a connection for a socket we've since abandoned.

@@ -15,7 +15,7 @@ Three engine paths already share exactly that shape:
 | `merger`               | `MergeAssessment` (complexity/risk/impact) | the merge preset ceilings      | merge / park for review |
 | `on-call`              | `OnCallAssessment` (culprit confidence)    | the gate's own handling        | notify / enrich         |
 
-`CLAUDE.md` names this "a latent 'verdict gate' family, not promoted to an abstraction until
+`AGENTS.md` names this "a latent 'verdict gate' family, not promoted to an abstraction until
 a second externally-authored member needs it". **That member has arrived.** Deployments want
 to insert their own rubric-based evaluator over a run's output (scope adherence, house
 engineering standards, doc completeness) that can block or bounce the run. Today they can
@@ -132,7 +132,7 @@ headless caller waits on forever. Choices are `proceed` (advance despite the ver
 **Decision: `merger` stays the privileged built-in.** It owns terminal block status and
 executes a real, policy-gated merge with backend credentials; it is the dual of a gate, not
 an instance of a judge. Rewriting it would hand the public seam `ownsTerminalStatus` and the
-real merge, which `CLAUDE.md` explicitly reserves.
+real merge, which `AGENTS.md` explicitly reserves.
 
 **Requirements auto-pass MAY be re-expressed on this machine later** (its
 `disposeReview` → threshold → park/advance is a genuine judge). That is deliberate strangler
@@ -222,7 +222,7 @@ the `(agentKind, phase)` rollup instead of every judge's landing on `judge`.
 | 8   | Frontend: `JudgeResultView.vue` in the `resultViews` slot + i18n (all locales)                                                                         | done   | this PR |
 | 9   | Conformance: evaluate / park / bounce / unwired pass-through on both runtimes                                                                          | done   | this PR |
 | 10  | Worked example: `scope-adherence` judge in `@cat-factory/example-custom-agent`                                                                         | done   | this PR |
-| 11  | Docs sweep: `CLAUDE.md` taxonomy (fourth bucket), `backend/docs/custom-agents.md`, package READMEs/AGENTS.md, root README                              | done   | this PR |
+| 11  | Docs sweep: `AGENTS.md` taxonomy (fourth bucket), `backend/docs/custom-agents.md`, package READMEs/AGENTS.md, root README                              | done   | this PR |
 | 12  | Strangler: re-express requirements auto-pass on the judge machine                                                                                      | todo   | —       |
 | 12a | E2E: the bounce loop + the parked verdict answered from the judge window (`judge-gate.spec.ts`), driving the worked example of slice 10                | done   | —       |
 | 13  | Convert this tracker to an ADR once slice 12 lands (or is formally dropped)                                                                            | todo   | —       |
@@ -236,4 +236,4 @@ the `(agentKind, phase)` rollup instead of every judge's landing on `judge`.
 - **A dedicated rubric table + editor UI** (D4): the fragment library is the authoring
   surface.
 - **A hard timeout on a parked judge.** A parked run waits for a human indefinitely by design
-  (`CLAUDE.md`); the backstops are the workspace in-flight cap and job cancellation.
+  (`AGENTS.md`); the backstops are the workspace in-flight cap and job cancellation.

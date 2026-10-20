@@ -20,6 +20,8 @@
 //    render identically. For a designer that widening IS the defect, not a detail.
 import { refRowFor, classifyRefFailure, type RefState } from './ContextDocumentPicker.logic'
 import type { DocumentSourceKind, ResolvedDocumentRef } from '~/types/domain'
+import Spinner from '~/components/common/Spinner.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -150,15 +152,15 @@ function stage() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('documents.startFromDesign.title')">
+  <AppModal size="form" v-model:open="open" :title="t('documents.startFromDesign.title')">
     <template #body>
       <div class="space-y-4">
-        <p class="text-sm text-slate-400">{{ t('documents.startFromDesign.intro') }}</p>
+        <p class="text-sm text-muted">{{ t('documents.startFromDesign.intro') }}</p>
 
         <!-- No connected design source: the flow cannot run, and saying which step is missing
              beats an input that refuses every paste. The connect route is withheld from a member
              for the same reason the picker's add tier is: connecting stores a credential. -->
-        <p v-if="sources.length === 0" class="text-sm text-amber-300">
+        <p v-if="sources.length === 0" class="text-sm text-app-warning-300">
           {{ t('documents.startFromDesign.noSource') }}
         </p>
 
@@ -176,40 +178,40 @@ function stage() {
 
           <div
             v-if="state.status === 'checking'"
-            class="flex items-center gap-2 text-sm text-slate-400"
+            class="flex items-center gap-2 text-sm text-muted"
           >
-            <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
+            <Spinner class="h-4 w-4" />
             {{ t('documents.startFromDesign.checking') }}
           </div>
 
           <div
             v-else-if="row"
-            class="space-y-1 rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+            class="space-y-1 rounded-lg border border-default bg-default/60 p-3"
             data-testid="start-from-design-resolved"
           >
-            <div class="flex items-center gap-2 text-sm text-white">
-              <UIcon name="i-lucide-frame" class="h-4 w-4 text-indigo-400" />
+            <div class="flex items-center gap-2 text-sm text-highlighted">
+              <UIcon name="i-lucide-frame" class="h-4 w-4 text-primary" />
               <span class="truncate">{{ row.label }}</span>
             </div>
-            <p v-if="row.trimmed" class="text-[11px] text-slate-400">
+            <p v-if="row.trimmed" class="text-2xs text-muted">
               {{ t('documents.startFromDesign.trimmed') }}
             </p>
             <!-- Its own line, in amber: a trim resolves the same page, a drop widens ONE frame to
                  the whole design file, and the second is what a designer needs to see. -->
-            <p v-if="row.droppedScope" class="text-[11px] text-amber-300">
+            <p v-if="row.droppedScope" class="text-2xs text-app-warning-300">
               {{ t('documents.startFromDesign.widened', { scope: row.droppedScope }) }}
             </p>
-            <p v-if="row.unchecked && target" class="text-[11px] text-slate-400">
+            <p v-if="row.unchecked && target" class="text-2xs text-muted">
               {{ t('documents.startFromDesign.unchecked') }}
             </p>
-            <p v-else-if="row.unchecked" class="text-[11px] text-amber-300">
+            <p v-else-if="row.unchecked" class="text-2xs text-app-warning-300">
               {{ t('documents.startFromDesign.uncheckedAmbiguous') }}
             </p>
           </div>
 
           <p
             v-else-if="state.status === 'rejected'"
-            class="text-sm text-amber-300"
+            class="text-sm text-app-warning-300"
             data-testid="start-from-design-rejected"
           >
             {{ t('documents.startFromDesign.rejected') }}
@@ -221,7 +223,6 @@ function stage() {
             {{ t('common.cancel') }}
           </UButton>
           <UButton
-            color="primary"
             icon="i-lucide-arrow-right"
             :disabled="!row || !target"
             data-testid="start-from-design-continue"
@@ -232,5 +233,5 @@ function stage() {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

@@ -1,5 +1,272 @@
 # @cat-factory/example-custom-agent
 
+## 0.4.201
+
+### Patch Changes
+
+- Updated dependencies [e9b24a1]
+  - @cat-factory/kernel@0.363.0
+  - @cat-factory/agents@0.172.8
+  - @cat-factory/prompt-fragments@1.1.73
+
+## 0.4.200
+
+### Patch Changes
+
+- 5c17395: Dependency refresh, direct and transitive (the lockfile is re-resolved from scratch), held to the
+  24h `minimumReleaseAge` window.
+  
+  Majors, each taken because its whole peer group could move together:
+  
+  - **Vitest 5** (`vitest`, `@vitest/coverage-v8`, `@vitest/browser`, `@vitest/browser-playwright`
+    at `5.0.5`), now that `@cloudflare/vitest-plugin@1.4.4`, `@storybook/addon-vitest`,
+    `@nuxt/test-utils` and `vitest-browser-vue` all accept `^5`. The Worker suite turns Vitest 5's
+    new default `fsModuleCache` off: the Workers pool inlines every warm module into one WebSocket
+    reply, and this suite's graph (~80MB) exceeds workerd's message limit (`1009 Message is too
+    large`).
+  - **msw 3**, for the component stories. `onUnhandledRequest` became `onUnhandledFrame`, which
+    also receives WebSocket frames, and the bundled `mockServiceWorker.js` is regenerated.
+  - **happy-dom 21** for the SPA's unit tests.
+  
+  The Workers test pool moves to `@cloudflare/vitest-plugin@1.4.4`, which pins `wrangler@4.151.1`, so
+  the Cloudflare stack moves with it: workerd `1.20261012.1`, miniflare `5.20261012.1-beta`,
+  `@cloudflare/workers-types` `5.20261012.1` (the resolved workerd's date) and esbuild `0.28.2`
+  (the version wrangler and the plugin now pin, so the scoped esbuild overrides follow).
+  
+  Also the Vercel AI SDK family as one set (`ai@7.0.142`, `@ai-sdk/anthropic@4.0.81`,
+  `@ai-sdk/openai@4.0.95`, `@ai-sdk/openai-compatible@3.0.70`, `@ai-sdk/amazon-bedrock@5.0.117`,
+  `@ai-sdk/provider@4.0.28`), the Vue family at `3.5.44`, `@nuxt/ui@4.12.0`, `pinia@4.1.0`,
+  `storybook@10.6.2`, `undici@8.12.2`, `pg-boss@12.38.0`, `@aws-sdk/client-s3@3.1152.0`,
+  `@hono/node-server@2.1.5`, `@playwright/test@1.64.1`, and the root toolchain (`turbo@2.11.8`,
+  `oxlint@1.88.0`, `oxfmt@0.73.0`, `knip@6.41.0`).
+  
+  Held: the frontend stays on TypeScript 6 (TypeScript 7 ships no classic compiler API for
+  `vue-tsc`); `@nuxt/fonts` stays on 0.14 because `@nuxt/ui@4.12.0` depends on `^0.14.0`; Drizzle
+  stays on `1.0.0-rc.4`, still its `rc` tag; `nuxt@4.6.2` is inside the window.
+- Updated dependencies [5c17395]
+- Updated dependencies [5c17395]
+  - @cat-factory/kernel@0.362.0
+  - @cat-factory/agents@0.172.7
+  - @cat-factory/prompt-fragments@1.1.72
+
+## 0.4.199
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/kernel@0.361.0
+  - @cat-factory/agents@0.172.6
+  - @cat-factory/prompt-fragments@1.1.71
+
+## 0.4.198
+
+### Patch Changes
+
+- @cat-factory/agents@0.172.5
+  - @cat-factory/kernel@0.360.4
+  - @cat-factory/prompt-fragments@1.1.70
+
+## 0.4.197
+
+### Patch Changes
+
+- @cat-factory/agents@0.172.4
+  - @cat-factory/kernel@0.360.3
+  - @cat-factory/prompt-fragments@1.1.69
+
+## 0.4.196
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/kernel@0.360.2
+  - @cat-factory/agents@0.172.3
+  - @cat-factory/prompt-fragments@1.1.68
+
+## 0.4.195
+
+### Patch Changes
+
+- @cat-factory/agents@0.172.2
+  - @cat-factory/kernel@0.360.1
+  - @cat-factory/prompt-fragments@1.1.67
+
+## 0.4.194
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/kernel@0.360.0
+  - @cat-factory/agents@0.172.1
+  - @cat-factory/prompt-fragments@1.1.66
+
+## 0.4.193
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/agents@0.172.0
+  - @cat-factory/kernel@0.359.1
+  - @cat-factory/prompt-fragments@1.1.65
+
+## 0.4.192
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/kernel@0.359.0
+  - @cat-factory/agents@0.171.7
+  - @cat-factory/prompt-fragments@1.1.64
+
+## 0.4.191
+
+### Patch Changes
+
+- @cat-factory/agents@0.171.6
+  - @cat-factory/kernel@0.358.1
+  - @cat-factory/prompt-fragments@1.1.63
+
+## 0.4.190
+
+### Patch Changes
+
+- Updated dependencies [22b6812]
+  - @cat-factory/agents@0.171.5
+
+## 0.4.189
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/kernel@0.358.0
+  - @cat-factory/agents@0.171.4
+  - @cat-factory/prompt-fragments@1.1.62
+
+## 0.4.188
+
+### Patch Changes
+
+- Updated dependencies [1a42f34]
+  - @cat-factory/kernel@0.357.1
+  - @cat-factory/agents@0.171.3
+  - @cat-factory/prompt-fragments@1.1.61
+
+## 0.4.187
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/kernel@0.357.0
+  - @cat-factory/agents@0.171.2
+  - @cat-factory/prompt-fragments@1.1.60
+
+## 0.4.186
+
+### Patch Changes
+
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+  - @cat-factory/agents@0.171.1
+  - @cat-factory/prompt-fragments@1.1.59
+
+## 0.4.185
+
+### Patch Changes
+
+- Updated dependencies [97175f8]
+  - @cat-factory/kernel@0.355.0
+  - @cat-factory/agents@0.171.0
+  - @cat-factory/prompt-fragments@1.1.58
+
+## 0.4.184
+
+### Patch Changes
+
+- @cat-factory/agents@0.170.1
+  - @cat-factory/kernel@0.354.2
+  - @cat-factory/prompt-fragments@1.1.57
+
+## 0.4.183
+
+### Patch Changes
+
+- Updated dependencies [8766c3f]
+  - @cat-factory/agents@0.170.0
+  - @cat-factory/kernel@0.354.1
+  - @cat-factory/prompt-fragments@1.1.56
+
+## 0.4.182
+
+### Patch Changes
+
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/kernel@0.354.0
+  - @cat-factory/agents@0.169.0
+  - @cat-factory/prompt-fragments@1.1.55
+
+## 0.4.181
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/agents@0.168.4
+  - @cat-factory/prompt-fragments@1.1.54
+
+## 0.4.180
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/agents@0.168.3
+  - @cat-factory/prompt-fragments@1.1.53
+
+## 0.4.179
+
+### Patch Changes
+
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/agents@0.168.2
+  - @cat-factory/kernel@0.351.0
+  - @cat-factory/prompt-fragments@1.1.52
+
+## 0.4.178
+
+### Patch Changes
+
+- Updated dependencies [c046707]
+- Updated dependencies [c046707]
+  - @cat-factory/kernel@0.350.0
+  - @cat-factory/agents@0.168.1
+  - @cat-factory/prompt-fragments@1.1.51
+
+## 0.4.177
+
+### Patch Changes
+
+- Updated dependencies [7760397]
+  - @cat-factory/agents@0.168.0
+
+## 0.4.176
+
+### Patch Changes
+
+- Updated dependencies [1fc4ff1]
+- Updated dependencies [bc073ab]
+- Updated dependencies [09bd94b]
+  - @cat-factory/kernel@0.349.0
+  - @cat-factory/agents@0.167.0
+  - @cat-factory/prompt-fragments@1.1.50
+
 ## 0.4.175
 
 ### Patch Changes

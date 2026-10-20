@@ -295,6 +295,36 @@ export const CONFLICT_REASONS = [
   // frame, so there is nowhere to put the fix task and no repository to fix. `details` names
   // nothing further: the remedy is to move the expedition under a service, which is a board edit.
   'no_host_frame',
+  // A step declared the `delegated` surface and names an external executor this deployment does
+  // not register, so there is nowhere to dispatch it. Boot validation catches this on a standalone
+  // deployment; the reason exists because a MOTHERSHIP-MODE node validates none of the kinds it
+  // resolves (they arrive per dispatch, from a process that may be a build ahead), and the only
+  // honest answer there is to refuse. `details.executor` names the id that did not resolve.
+  'delegated_executor_unwired',
+  // A caller tried to drive a DELEGATED step synchronously (`AgentExecutor.run`), which is a shape
+  // an external system answering in hours cannot serve. Its own reason rather than
+  // `delegated_executor_unwired`, which it borrowed: that copy sends an operator to register an
+  // executor they have already registered correctly, and nothing about a registration is wrong
+  // here. The remedy belongs to whoever wrote the caller, so the copy says the step is polled.
+  'delegated_step_async_only',
+  // A delegated poll arrived for a step carrying no delegation to address: the record is gone, or
+  // the step never committed a claim. Split from `delegated_executor_unwired` for the same reason
+  // as the pair above: the executor is registered and fine, and the thing that is wrong is this
+  // run's own state, so "register the executor" is advice about the wrong system entirely.
+  'delegated_claim_missing',
+  // A guided PR review thread admits one live answer; this question arrived while it waits on one.
+  // Other threads of the same review are unaffected, which is what the copy points at.
+  'thread_busy',
+  // A guided review draft was edited from a stale revision, or is no longer editable (posted,
+  // discarded or being posted). The client reloads the draft and decides again.
+  'draft_conflict',
+  // The pull request moved past the commit a guided review was computed against, so draft anchors
+  // may point at the wrong lines. Refreshing the review is the remedy.
+  'session_stale',
+  // A directory change-feed cursor older than the feed's retention: the changes after it were
+  // pruned, so replaying cannot bring the consumer's copy up to date. Reconciling from a snapshot
+  // is the remedy, which is what the directory-sync client does on its own.
+  'cursor_expired',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]
@@ -393,6 +423,23 @@ export const UNAVAILABLE_REASONS = [
   'service_catalog_response_too_large',
   'assistant_generation_failed',
   'assistant_reply_unreadable',
+  // A registered DELEGATED EXECUTOR could not start the step's work, or started it and could not
+  // say what it started (see `DelegationStart.externalId`). Its own reason rather than the generic
+  // 503, whose wording commits to "this deployment has not configured the capability", which is
+  // the misattribution itself here: the executor IS wired, and what failed is the system it talks
+  // to. `details.executor` names it, so the remedy points at that system rather than at this build.
+  'delegated_executor_failed',
+  // The platform could not create the WORK BRANCH an executor declaring `workBranch:
+  // 'platform-creates'` is dispatched onto, so the dispatch was refused instead of handing a CI
+  // system a ref that is not there. Split from the reason above because the side that failed is
+  // the opposite one: nothing was asked of the executor, and what did not answer is this
+  // deployment's own VCS provider. `details.branch` names the ref and `details.executor` the
+  // dispatch it was for.
+  'delegated_work_branch_unprepared',
+  // Creating a task that attaches an existing pull request could not confirm it, because the
+  // repository provider failed to answer (an outage, a rate limit, a revoked token). Its own
+  // reason because nothing is unconfigured: the same request succeeds once the provider answers.
+  'attached_pr_provider_unreachable',
 ] as const
 
 export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]
@@ -414,6 +461,36 @@ export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]
 export const REVIEW_TARGET_REASONS = ['review_pr_not_found', 'review_pr_repo_mismatch'] as const
 
 export type ReviewTargetReason = (typeof REVIEW_TARGET_REASONS)[number]
+
+/**
+ * Machine-readable reasons a task that ATTACHES an existing pull request (`resolve-conflicts`)
+ * is refused at creation (`error.details.reason` on the 422). Stricter than the review target:
+ * the run pushes onto the attached pull request's head branch, so every reference it cannot
+ * positively confirm is refused rather than created unchecked.
+ *
+ *  - `attached_pr_unresolvable`  the pull request could not be read at all (the service is not
+ *                                linked to a repository, or the provider cannot read one), or the
+ *                                provider did not report its head repository or its branches.
+ *  - `attached_pr_not_found`     the provider positively reports no such pull request.
+ *  - `attached_pr_repo_mismatch` the URL names a different repository than the service's.
+ *                                `details.expected` carries `owner/repo`.
+ *  - `attached_pr_not_open`      the pull request is closed or merged. `details.state` says which.
+ *  - `attached_pr_from_fork`     its head branch lives in another repository, which the run's
+ *                                push cannot reach.
+ *  - `attached_pr_base_mismatch` it targets a branch other than the repository's base branch,
+ *                                which is the branch the resolver merges in.
+ *                                `details.expected` carries that branch.
+ */
+export const ATTACHED_PR_REASONS = [
+  'attached_pr_unresolvable',
+  'attached_pr_not_found',
+  'attached_pr_repo_mismatch',
+  'attached_pr_not_open',
+  'attached_pr_from_fork',
+  'attached_pr_base_mismatch',
+] as const
+
+export type AttachedPrReason = (typeof ATTACHED_PR_REASONS)[number]
 
 /**
  * Machine-readable reasons a bootstrap run is refused because of the REFERENCE ARCHITECTURE it

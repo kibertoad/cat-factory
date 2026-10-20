@@ -1,5 +1,121 @@
 # @cat-factory/executor-harness
 
+## 1.163.6
+
+### Patch Changes
+
+- 5c17395: Update the runner image to Pi 1.3.0, Claude Code 2.1.302 and Codex 0.163.0, the latest npm releases
+  taken without the 24-hour age threshold, and the Pi extensions `rpiv-todo` / `rpiv-web-tools` to
+  2.13.8 inside it (the newest release past the window). The executor and UI image pins move to
+  1.163.5. The deploy image moves to 0.8.5 because the dependency refresh moved its toolchain.
+
+## 1.163.4
+
+### Patch Changes
+
+- ffe4356: Update the runner image to Pi 1.1.0, Claude Code 2.1.295 and Codex 0.162.0, the latest npm releases
+  taken without the 24-hour age threshold, and the Pi extensions `rpiv-todo` / `rpiv-web-tools` to
+  2.12.0 inside it. The executor and UI image pins move to 1.163.3. The deploy image moves to 0.8.3
+  because the dependency refresh raised its `@types/node` floor.
+
+## 1.163.2
+
+### Patch Changes
+
+- 072e027: Update the runner image to Pi 1.0.1, Claude Code 2.1.288, and Codex 0.160.0, using the latest npm releases without the 24-hour age threshold. Bump the executor and UI image pins to 1.163.1 so container runners use the updated CLIs.
+
+## 1.163.0
+
+### Minor Changes
+
+- e84b0d5: Runner image: take Pi to `0.99.1`, Claude Code to `2.1.285` and Codex to `0.159.0`, and the two Pi
+  extensions (`rpiv-todo`, `rpiv-web-tools`) to `2.11.0`.
+  
+  The three agent CLI pins are the documented exception to the 24h release-age window, so each is its
+  newest published release. Every flag the harness passes to each CLI is still accepted (checked
+  against the installed binaries). Codex `0.159.0` is the release that serves `gpt-6.1-sol`, which is
+  now its floor. The Pi extensions do not take the exemption: `2.11.0` is eight days old.
+  
+  Pi `0.99` ships a built-in MCP client, and the image now wires a Pi run's tool servers into it: see
+  the `@cat-factory/kernel` changeset. The image reports the new `piMcpServers` body capability for
+  that, but only after asking the installed binary for its version at startup, so an image built with
+  `PI_VERSION` overridden below `0.99.0` refuses those runs instead of running them blind.
+  
+  **Pi now runs against a config directory made for each pass** (`PI_CODING_AGENT_DIR`), seeded with
+  the extensions the image installed and removed after the pass, instead of the home-global
+  `~/.pi/agent`. The composed `AGENTS.md`, `models.json` and the tool-server `mcp.json` live there, so
+  no job's Pi state outlives it on a warm-pool container. The tool-server credentials are written into
+  that owner-only file with Pi's own literal escapes, and never into Pi's environment, which every
+  process Pi starts inherits.
+  
+  **Pi now runs with `--no-approve` instead of `--approve`.** The checkout is untrusted, and a trusted
+  project has Pi load its `.pi/` resources: its own `mcp.json` (servers started beside the declared
+  ones), extensions, skills, prompts and `SYSTEM.md`. A repository that relied on committed `.pi/`
+  resources or `.agents/skills` for Pi runs no longer has them applied; its `AGENTS.md` is still read.
+  
+  **Embedding API break (`@cat-factory/executor-harness/embed`):** `runPi`, `writeAgentsContext` and
+  `writePiModelsConfig` take a required `agentDir`, created with the newly exported
+  `createPiAgentDir`. The benchmark and smoketest harnesses moved to it and no longer rewrite
+  `process.env.HOME`.
+  
+  Image content changed, so the harness version and every tag pin move with it, which is what makes a
+  deployment's next `image:publish` actually roll out.
+  
+  The deploy image moves to `cat-factory-deploy:0.8.1` for the same reason: the dependency refresh
+  raised its `@types/node` floor, which is one of its declared sources.
+
+## 1.161.6
+
+### Patch Changes
+
+- c046707: Runner image: take Claude Code to `2.1.281`, Codex to `0.156.1` and Pi to `0.87.1`.
+  
+  The three agent CLI pins are the documented exception to the 24h release-age window the workspace
+  dependencies are held to, so this takes the newest published release of each rather than the newest
+  aged one. The Codex move keeps every flag the harness passes to `codex exec` (`--json`,
+  `--skip-git-repo-check`, `--dangerously-bypass-approvals-and-sandbox`, `--model`), and it stays
+  above the `0.153.0` floor the catalog depends on. Pi's `0.87` breaking changes are to its extension
+  and SDK surfaces, which the harness does not use; it drives Pi through `-p --mode json`, which is
+  unchanged. The two Pi extensions stay at `2.10.1`: they do not take the exemption, and `2.11.0`
+  differs from it only in its own version numbers.
+  
+  Image content changed, so the harness version and every tag pin move with it, which is what makes a
+  deployment's next `image:publish` actually roll out.
+
+## 1.161.4
+
+### Patch Changes
+
+- 09bd94b: Runner image: take Claude Code to `2.1.278`.
+  
+  The three agent CLI pins are the documented exception to the 24h release-age window the workspace
+  dependencies are held to, so this takes the newest published release rather than the newest aged
+  one. Pi stays at `0.85.1` and Codex at `0.154.0`, both of which are where they already were: Pi
+  because that is still its latest, Codex by request.
+  
+  Image content changed, so the harness version and every tag pin move with it, which is what makes a
+  deployment's next `image:publish` actually roll out.
+- 1fc4ff1: Runner image: take Pi to `0.86.0`.
+  
+  The three agent CLI pins are the documented exception to the 24h release-age window the workspace
+  dependencies are held to, so this takes the newest published release rather than the newest aged
+  one. Claude Code stays at `2.1.278`, which is still its newest, and Codex at `0.154.0` by request.
+  
+  Image content changed, so the harness version and every tag pin move with it, which is what makes a
+  deployment's next `image:publish` actually roll out.
+- 89112e4: Move the workspace to pnpm 12.5.1, in `packageManager` and in the UI runner image.
+  
+  pnpm 12 is the Rust rewrite: same commands, settings and lockfile format, so the main document of
+  `pnpm-lock.yaml` re-resolves byte-identical. What it adds is a second lockfile document recording
+  `packageManagerDependencies`, the platform binaries pnpm self-manages for the pinned version, which
+  the `minimumReleaseAge` gate vets like any other entry. Nothing this repo does hits the 12.0
+  removals: no `--frozen-lockfile false` call site, no `--resolution-only`, no `.pnpmfile`, no
+  `pnpm.overrides` block, and `pnpm-workspace.yaml` passes the newly strict settings validation as it
+  stands.
+  
+  The UI image's pnpm moves with the field, as it always has, so a repo under test builds with the
+  same manager CI does. Image content changed, so the harness version and every tag pin move with it.
+
 ## 1.161.0
 
 ### Minor Changes

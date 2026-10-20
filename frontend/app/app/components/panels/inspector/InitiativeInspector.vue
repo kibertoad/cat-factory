@@ -12,6 +12,7 @@ import {
   INITIATIVE_STATUS_LABEL_KEYS,
   initiativeProgress,
 } from '~/utils/initiative'
+import Spinner from '~/components/common/Spinner.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -49,15 +50,15 @@ function control(action: 'pause' | 'resume' | 'cancel') {
 <template>
   <div class="space-y-3" data-testid="initiative-inspector">
     <div class="flex items-center gap-2">
-      <UBadge color="primary" variant="subtle" size="sm">
+      <UBadge variant="subtle" size="sm">
         {{ t(INITIATIVE_STATUS_LABEL_KEYS[status]) }}
       </UBadge>
-      <span v-if="progress" class="text-[11px] text-slate-400">
+      <span v-if="progress" class="text-2xs text-muted">
         {{ t('initiative.card.progress', { done: progress.settled, total: progress.total }) }}
       </span>
     </div>
 
-    <p v-if="initiative?.goal" class="whitespace-pre-wrap text-[12px] text-slate-300">
+    <p v-if="initiative?.goal" class="whitespace-pre-wrap text-xs text-toned">
       {{ initiative.goal }}
     </p>
 
@@ -70,7 +71,6 @@ function control(action: 'pause' | 'resume' | 'cancel') {
         data-testid="initiative-review"
         :data-attention="attention.kind"
         color="warning"
-        variant="solid"
         size="sm"
         :icon="INITIATIVE_ATTENTION_ICONS[attention.kind]"
         @click="attention.open()"
@@ -80,8 +80,6 @@ function control(action: 'pause' | 'resume' | 'cancel') {
       <UButton
         v-else-if="awaitingAnswers"
         data-testid="initiative-answer-planning"
-        color="primary"
-        variant="solid"
         size="sm"
         icon="i-lucide-messages-square"
         @click="openPlanning"
@@ -96,15 +94,16 @@ function control(action: 'pause' | 'resume' | 'cancel') {
         color="neutral"
         variant="soft"
         size="sm"
-        icon="i-lucide-loader-circle"
-        :ui="{ leadingIcon: 'animate-spin' }"
         @click="openPlanning"
       >
+        <!-- Not `:loading`: that disables the button, and this one has to stay clickable. -->
+        <template #leading>
+          <Spinner class="size-4" />
+        </template>
         {{ t('initiative.inspector.planningInProgress') }}
       </UButton>
       <UButton
         data-testid="initiative-run-planning"
-        color="primary"
         variant="soft"
         size="sm"
         icon="i-lucide-play"
@@ -143,7 +142,6 @@ function control(action: 'pause' | 'resume' | 'cancel') {
       <UButton
         v-if="isPaused"
         data-testid="initiative-resume"
-        color="primary"
         variant="soft"
         size="sm"
         icon="i-lucide-play"
@@ -165,7 +163,7 @@ function control(action: 'pause' | 'resume' | 'cancel') {
       </UButton>
     </div>
 
-    <p class="text-[11px] text-slate-500">
+    <p class="text-2xs text-dimmed">
       {{ t('initiative.inspector.hint') }}
     </p>
   </div>

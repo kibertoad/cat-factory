@@ -103,6 +103,13 @@ test('detects a vendor endpoint DECLARED for something else to send to', () => {
     vendorEndpointHosts("const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'"),
     ['openrouter.ai'],
   )
+  // An MCP tool server declares its host under `transport: { kind: 'http', url: '…' }`. This is the
+  // first shipped `http` tool server in the tree and every later one has the same shape, so the
+  // sweep has to see the host through the `kind:` prefix.
+  assert.deepEqual(
+    vendorEndpointHosts("  transport: { kind: 'http', url: 'https://ui.nuxt.com/mcp' },"),
+    ['ui.nuxt.com'],
+  )
 })
 
 test('ignores a host no vendor page settles: a fixture, a placeholder, or ours', () => {

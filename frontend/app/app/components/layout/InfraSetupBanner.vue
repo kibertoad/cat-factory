@@ -6,6 +6,11 @@
 // runtime whose account picked no backend — incl. Cloudflare without an ARTIFACT_BUCKET binding;
 // ephemeral test environments on any runtime that wires the integration).
 //
+// Audience: a card renders only for a caller who can act on its area, per the server-reported
+// owner (`infraSetupOwners`) and `canActOnSetup`. A caller who cannot (a member, a viewer, the
+// designer surface, or anyone when the operator owns the gap) sees one compact line instead, and
+// only for a gap that stops every run (`InfraSetupNotice`).
+//
 // Positioning/stacking against the sibling advisory banners (AI-readiness, provider-config) is
 // owned by the shared, click-through banner column in `pages/index.vue` — so concurrent prompts
 // stack vertically instead of drawing on top of each other. This component only stacks its OWN
@@ -52,11 +57,16 @@ import {
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { InfraSetupArea, InfraSetupStatus } from '~/types/domain'
 import { infraSetupDismissalKey, type InfraSetupCardKind } from '~/utils/infraSetup'
+import { blockingSetupNotice, canActOnSetup } from '~/utils/setupAudience'
+import InfraSetupNotice from '~/components/layout/InfraSetupNotice.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const auth = useAuthStore()
 const workspace = useWorkspaceStore()
+const { actor } = useSetupActor()
+// Where each area is configured: the map the setup checklist opens through too.
+const remedies = useSetupRemedies()
 
 // Severity order: no executor blocks EVERY agent, so it leads; a missing test environment blocks
 // only testing agents; missing storage only degrades the UI-tester's screenshots.
@@ -65,32 +75,29 @@ const AREAS: InfraSetupArea[] = ['agentExecutor', 'ephemeralEnvironments', 'bina
 // Exhaustive per-area presentation (an exhaustive `Record<InfraSetupArea, …>`, so adding an area
 // without a meta entry fails typecheck — the tier-2 guard). The i18n keys are resolved
 // dynamically (`t(AREA_META[area].titleKey)`), so tier-1 typed-key checking doesn't cover them;
-// the `i18n:check` drift guard (tier 3) catches any that are absent from the catalog. `action`
-// deep-links into the relevant setup surface.
+// the `i18n:check` drift guard (tier 3) catches any that are absent from the catalog. The action
+// opens the area's setup surface through `useSetupRemedies`.
 const AREA_META: Record<
   InfraSetupArea,
-  { icon: string; titleKey: string; bodyKey: string; actionKey: string; onConfigure: () => void }
+  { icon: string; titleKey: string; bodyKey: string; actionKey: string }
 > = {
   agentExecutor: {
     icon: 'i-lucide-server-cog',
     titleKey: 'layout.infraSetupBanner.agentExecutor.title',
     bodyKey: 'layout.infraSetupBanner.agentExecutor.body',
     actionKey: 'layout.infraSetupBanner.agentExecutor.action',
-    onConfigure: () => ui.openProviderConnection('runner-pool'),
   },
   ephemeralEnvironments: {
     icon: 'i-lucide-flask-conical',
     titleKey: 'layout.infraSetupBanner.ephemeralEnvironments.title',
     bodyKey: 'layout.infraSetupBanner.ephemeralEnvironments.body',
     actionKey: 'layout.infraSetupBanner.ephemeralEnvironments.action',
-    onConfigure: () => ui.openProviderConnection('environment'),
   },
   binaryStorage: {
     icon: 'i-lucide-hard-drive',
     titleKey: 'layout.infraSetupBanner.binaryStorage.title',
     bodyKey: 'layout.infraSetupBanner.binaryStorage.body',
     actionKey: 'layout.infraSetupBanner.binaryStorage.action',
-    onConfigure: () => ui.openContentStorageSettings(),
   },
 }
 
@@ -140,6 +147,9 @@ const visible = computed<AreaCard[]>(() => {
   return AREAS.filter((area) => {
     const kind = cardKind(status[area])
     if (!kind) return false
+    // A card is for the people who can act on it. Everyone else hears about a gap only when it
+    // stops their own work, through the one line below (`blockingSetupNotice`).
+    if (!canActOnSetup(workspace.infraSetupOwners?.[area], actor.value)) return false
     // Both dismissals are keyed by the CLAIM, not by the area: silencing "you haven't configured
     // this" must not also silence "you configured it and it is now down". The permanent dismissal
     // only ever covers a setup gap (`dismissPermanently` is offered nowhere else).
@@ -150,6 +160,18 @@ const visible = computed<AreaCard[]>(() => {
     kind: cardKind(status[area])!,
     ...(workspace.infraSetupDetails[area] ? { detail: workspace.infraSetupDetails[area] } : {}),
   }))
+})
+
+// The one line for a caller who cannot act on a gap that stops every run. It honours BOTH
+// dismissals of the card it stands in for, keyed by the same claim: someone who said "don't
+// notify me again" on the card (before their role changed, say) is not nagged again by the line.
+const notice = computed(() => {
+  const found = blockingSetupNotice(workspace.infraSetup, workspace.infraSetupOwners, actor.value)
+  if (!found) return null
+  if (ui.infraSetupSessionDismissed.includes(infraSetupDismissalKey(found.area, found.kind))) {
+    return null
+  }
+  return found.kind === 'setup' && dismissedForUser.value.includes(found.area) ? null : found
 })
 
 /** Which card an area's status raises, or null when it raises none (`configured`/`not_applicable`). */
@@ -169,7 +191,7 @@ function titleKey(card: AreaCard): string {
  * The dismiss dropdown: the product wants the user asked WHICH kind of dismissal on close. An
  * outage offers the session option ONLY — see the fork note at the top of this file.
  */
-function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
+function dismissMenu(card: Pick<AreaCard, 'area' | 'kind'>): DropdownMenuItem[][] {
   const session = {
     label: t('layout.infraSetupBanner.dismiss.session'),
     icon: 'i-lucide-clock',
@@ -195,11 +217,12 @@ function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
          than an assertive `role="alert"` per card — an advisory setup nag shouldn't interrupt a
          screen reader, and up to three stacked alerts would spam it. -->
     <div
-      v-if="visible.length > 0"
+      v-if="visible.length > 0 || notice"
       class="flex w-full flex-col items-center gap-2"
       role="status"
       aria-live="polite"
     >
+      <InfraSetupNotice v-if="notice" :notice="notice" :dismiss-menu="dismissMenu(notice)" />
       <!-- An OUTAGE reads red, a setup gap amber: one is something breaking now, the other is
            something never switched on, and a reader has to be able to tell at a glance. -->
       <div
@@ -208,8 +231,8 @@ function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
         class="pointer-events-auto w-full max-w-3xl rounded-2xl border-2 p-5 shadow-2xl backdrop-blur"
         :class="
           card.kind === 'outage'
-            ? 'border-red-500/70 bg-red-950/95'
-            : 'border-amber-500/70 bg-amber-950/95'
+            ? 'border-app-error-500/70 bg-app-error-950/95'
+            : 'border-app-warning-500/70 bg-app-warning-950/95'
         "
         :data-testid="`infra-setup-banner-${card.area}`"
         :data-infra-status="card.kind === 'outage' ? 'unreachable' : 'not_defined'"
@@ -218,13 +241,13 @@ function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
           <UIcon
             :name="card.kind === 'outage' ? 'i-lucide-plug-zap' : AREA_META[card.area].icon"
             class="mt-0.5 h-9 w-9 shrink-0"
-            :class="card.kind === 'outage' ? 'text-red-400' : 'text-amber-400'"
+            :class="card.kind === 'outage' ? 'text-app-error-400' : 'text-app-warning-400'"
           />
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
               <h2
                 class="text-lg font-semibold"
-                :class="card.kind === 'outage' ? 'text-red-100' : 'text-amber-100'"
+                :class="card.kind === 'outage' ? 'text-app-error-100' : 'text-app-warning-100'"
               >
                 {{ t(titleKey(card)) }}
               </h2>
@@ -241,7 +264,7 @@ function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
             </div>
             <p
               class="mt-1 text-sm"
-              :class="card.kind === 'outage' ? 'text-red-200/90' : 'text-amber-200/90'"
+              :class="card.kind === 'outage' ? 'text-app-error-200/90' : 'text-app-warning-200/90'"
             >
               {{
                 card.kind === 'outage'
@@ -256,7 +279,7 @@ function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
                  never the only thing that explains the card. -->
             <p
               v-if="card.detail"
-              class="mt-2 truncate font-mono text-xs text-red-300/80"
+              class="mt-2 truncate font-mono text-xs text-app-error-300/80"
               :title="card.detail"
               :data-testid="`infra-setup-detail-${card.area}`"
             >
@@ -265,10 +288,9 @@ function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
             <div class="mt-4">
               <UButton
                 :color="card.kind === 'outage' ? 'error' : 'warning'"
-                variant="solid"
                 icon="i-lucide-settings"
                 :data-testid="`infra-setup-configure-${card.area}`"
-                @click="AREA_META[card.area].onConfigure()"
+                @click="remedies.openInfraArea(card.area)"
               >
                 {{
                   card.kind === 'outage'

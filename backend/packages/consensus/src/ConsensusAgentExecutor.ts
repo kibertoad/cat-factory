@@ -20,6 +20,7 @@ import {
   type ModelProvider,
   type ModelProviderResolver,
   type ModelRef,
+  type RunReclaimReport,
   type RunReclaimTarget,
 } from '@cat-factory/kernel'
 import type { DispatchToolServers } from '@cat-factory/contracts'
@@ -477,9 +478,19 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     return this.deps.standard.pollJob(handle)
   }
 
-  async reclaimRun(target: RunReclaimTarget): Promise<void> {
+  /**
+   * Forward the run-level reclaim, and ANSWER with what it achieved.
+   *
+   * The report is not optional plumbing on this path: it is how the engine tells "the external
+   * work was stopped" from "we asked and it is still running", and a wrapper that awaited the
+   * inner reclaim and returned nothing turned every successful delegated cancel into the second.
+   * With `CONSENSUS_ENABLED` this wrapper is the executor the engine holds, so the whole
+   * distinction died here and every stopped run sent its operator to chase work already dead.
+   */
+  async reclaimRun(target: RunReclaimTarget): Promise<RunReclaimReport | void> {
     if (isAsyncAgentExecutor(this.deps.standard) && this.deps.standard.reclaimRun) {
-      await this.deps.standard.reclaimRun(target)
+      return await this.deps.standard.reclaimRun(target)
     }
+    return undefined
   }
 }

@@ -23,7 +23,9 @@ import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { RunPolicyScope } from './policy-types.js'
 import type { StepGraph } from './StepGraph.js'
-import { recordDispatchedJob } from './step-fold.logic.js'
+import { liveJobId } from './step-fold.logic.js'
+import type { StartStepDispatch } from './delegation.logic.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 /** Render the human's findings as the resolved-context block handed to the fixer. */
 function renderFindingsForFixer(findings: string): string {
@@ -68,6 +70,12 @@ export interface VisualConfirmationControllerDeps {
   ) => Promise<{ ciMaxAttempts: number }>
   /** The async instance/block spine (park/advance/finalize/persist/emit/progress/stop). */
   stateMachine: RunStateMachine
+  /**
+   * Opens and commits this dispatch's record, calls the executor and folds what came back: a
+   * delegation claim for a helper kind whose work leaves the platform, a container cold boot
+   * otherwise. See {@link StartStepDispatch}.
+   */
+  startStepDispatch: StartStepDispatch
   /** The pure step mutators (start/finish a step). */
   stepGraph: StepGraph
   clockNow: () => number
@@ -113,9 +121,12 @@ export class VisualConfirmationController {
       return this.handleAction(workspaceId, instance, step, block, isFinalStep, action)
     }
     if (!vc) return this.begin(workspaceId, instance, step, block, isFinalStep)
-    // A fixer is in flight: re-attach to its job rather than re-parking.
-    if (vc.phase === 'fixing' && step.jobId) {
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    // A fixer is in flight: re-attach to its job rather than re-parking. LIVE, not merely
+    // stamped: a delegated fixer's claim is committed before its executor is called, so an
+    // unanswered one re-parks the human rather than polling work nobody started.
+    const attached = liveJobId(step)
+    if (vc.phase === 'fixing' && attached) {
+      return awaitingJob(step, instance.currentStep, attached)
     }
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step, this.proposal(vc))
   }
@@ -320,8 +331,16 @@ export class VisualConfirmationController {
         { agentKind: VISUAL_CONFIRM_AGENT_KIND, output: renderFindingsForFixer(findings) },
       ],
     }
-    const handle = await executor.startJob(context)
-    recordDispatchedJob(step, handle, context.agentKind)
+    // The fixer's record, opened and committed before the executor is called, and settled by the
+    // same seam if the call throws: a deployment whose fixer runs on its own external loop needs
+    // the same claim-before-effect every other dispatch takes.
+    const { jobId } = await this.deps.startStepDispatch({
+      workspaceId,
+      instance,
+      context,
+      step,
+      executor,
+    })
     step.subtasks = undefined
     // Leave the parked decision state: while the helper runs the step is `working` with a
     // live job, NOT parked on a stale approval (a re-drive would otherwise abandon the job).
@@ -336,13 +355,13 @@ export class VisualConfirmationController {
       {
         findings,
         helperKind: FIXER_AGENT_KIND,
-        jobId: handle.jobId,
+        jobId,
         outcome: null,
         at: this.deps.clockNow(),
       },
     ]
     await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: handle.jobId, stepIndex: instance.currentStep }
+    return awaitingJob(step, instance.currentStep, jobId)
   }
 
   /**

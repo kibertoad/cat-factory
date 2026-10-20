@@ -52,7 +52,6 @@
     }
   },
   "common": {
-    "loading": "Ładowanie…",
     "save": "Zapisz",
     "cancel": "Anuluj",
     "retry": "Ponów",
@@ -129,6 +128,7 @@
     "commandBar": "Wyszukaj lub uruchom polecenie…",
     "create": "Utwórz",
     "assistant": "Asystent",
+    "guidedReview": "Przegląd z przewodnikiem",
     "buildPipeline": "Zbuduj potok",
     "repositories": "Repozytoria",
     "addFromRepo": "Dodaj z istniejącego repozytorium",
@@ -150,7 +150,8 @@
     "infrastructure": "Infrastruktura",
     "foundationalServices": "Usługi fundamentalne",
     "tutorials": "Samouczki",
-    "help": "Pomoc"
+    "help": "Pomoc",
+    "setupChecklist": "Lista konfiguracji"
   },
   "board": {
     "toast": {
@@ -219,7 +220,8 @@
         "recurring": "Cykliczne",
         "review": "Przegląd",
         "ralph": "Pętla Ralph",
-        "bugFishing": "Polowanie na błędy"
+        "bugFishing": "Polowanie na błędy",
+        "resolveConflicts": "Rozwiąż konflikty"
       },
       "recurringWithFrame": "Zadanie cykliczne uruchamia pipeline w określonym rytmie. Kontynuuj, aby ustawić harmonogram i prompt.",
       "recurringNoFrame": "Zadanie cykliczne musi należeć do usługi. Dodaj je z ramki usługi (lub modułu w jej obrębie).",
@@ -406,10 +408,38 @@
       "stalled": "Uruchomienie utknęło",
       "retryBootstrap": "Ponów inicjalizację",
       "retryRun": "Ponów uruchomienie",
+      "startNewRun": "Rozpocznij nowe uruchomienie",
       "environmentSetup": "Skonfiguruj środowiska",
       "deployRunnerSetup": "Skonfiguruj pulę runnerów",
       "environmentLocalHint": "Lokalne środowiska tymczasowe wymagają środowiska uruchomieniowego wdrożenia do uruchomienia kubectl/kustomize/helm. Ustaw {runtime} w pliku .env: tryb natywny uruchamia te narzędzia na twoim hoście ({native}), tryb kontenerowy uruchamia je w obrazie wdrożeniowym ({container}).",
       "showDetail": "Pokaż szczegóły",
+      "details": "Szczegóły",
+      "detailsMessage": "Komunikat",
+      "detailsHint": "Uwagi dla operatora",
+      "detailsFull": "Pełne wyjście",
+      "cause": {
+        "preflight": "Kontrola przed startem nie powiodła się, więc żadna praca nie została wykonana. Otwórz Szczegóły, aby zobaczyć, co poprawić, a potem ponów.",
+        "dispatch": "Kontener agenta nie uruchomił się, więc żadna praca nie została wykonana. Zwykle jest to problem chwilowy.",
+        "environment": "Nie udało się utworzyć środowiska testowego. Sprawdź ustawienia środowiska, a potem ponów.",
+        "evicted": "Kontener zatrzymał się kilka razy podczas uruchomienia. Zwykle dzieje się tak podczas aktualizacji platformy, więc ponów po jej zakończeniu.",
+        "harness_shutdown": "Coś zatrzymało kontener podczas tego kroku. Znajdź przyczynę w Szczegółach, zanim ponowisz, bo ponowienie może znów się zatrzymać.",
+        "timeout": "Uruchomienie przestało odpowiadać lub przekroczyło swój limit czasu. Sprawdź w Szczegółach, które z nich, a potem ponów.",
+        "agent": "Krok agenta nie powiódł się. Sprawdź przyczynę przy nieudanym kroku, a potem ponów.",
+        "job_failed": "Kontener agenta zgłosił błąd. Ponowienie uruchamia nowy kontener.",
+        "delegated_failed": "Zewnętrzny system, który wykonał ten krok, zgłosił błąd. Link przy kroku otwiera jego uruchomienie z przyczyną.",
+        "rejected": "Krok został odrzucony, więc uruchomienie zostało zatrzymane. Ponowienie zaczyna od tego kroku.",
+        "companion_rejected": "Agent towarzyszący nie zwrócił użytecznego wyniku. Ponowienie uruchamia go jeszcze raz.",
+        "stalled": "Platforma straciła kontakt z tym uruchomieniem. Ponowienie rozpoczyna nowe uruchomienie.",
+        "state_unreadable": "Nie można odczytać zapisanego stanu tego uruchomienia, więc ponowienie odczyta ten sam uszkodzony stan. Rozpocznij nowe uruchomienie.",
+        "cancelled": "To uruchomienie zostało zatrzymane. Ponowienie uruchamia je jeszcze raz.",
+        "unknown": "Uruchomienie nie powiodło się z nieznanej przyczyny. Sprawdź Szczegóły, a potem ponów.",
+        "deployRunnerUnwiredLocal": "Ten komputer nie ma środowiska wdrożeniowego do utworzenia środowiska testowego. Ustaw {variable} w pliku .env, a potem ponów.",
+        "singleJob": {
+          "evicted": "Kontener zatrzymał się przed zakończeniem zadania. Ponowienie uruchamia nowy kontener.",
+          "timeout": "Zadanie zbyt długo nie wykazywało aktywności lub przekroczyło swój limit czasu. Ponowienie uruchamia je jeszcze raz.",
+          "agent": "Agent lub git push nie powiódł się. Sprawdź przyczynę w Szczegółach, a potem ponów."
+        }
+      },
       "retrying": "Ponawianie…",
       "history": {
         "previousErrors": "{count} poprzedni błąd | {count} poprzednie błędy | {count} poprzednich błędów"
@@ -606,7 +636,8 @@
     "pastedLink": {
       "offer": "Ten opis zawiera odnośnik do strony {source}. Dołączyć ją jako kontekst?",
       "attach": "Dołącz"
-    }
+    },
+    "removePending": "Usuń {name}"
   },
   "errors": {
     "generic": {
@@ -636,7 +667,10 @@
         "service_catalog_filter_missing": "Nie udało się odczytać filtra encji tego połączenia, więc nie ma czego importować. Zapisz połączenie katalogu usług ponownie, aby go przywrócić.",
         "service_catalog_response_too_large": "Portal deweloperski zwrócił więcej danych, niż ta platforma przyjmuje w jednej odpowiedzi. Otwórz ustawienia katalogu usług i obniż limit usług albo wyłącz importowanie definicji interfejsów, a następnie zaimportuj ponownie.",
         "assistant_generation_failed": "Dostawca modelu asystenta nie odpowiedział. Jest poprawnie skonfigurowany i nie ma tu nic do ustawienia: spróbuj ponowić żądanie za chwilę.",
-        "assistant_reply_unreadable": "Model asystenta odpowiedział czymś, czego ta platforma nie może wykonać jako decyzji. Przeformułowanie rzadko pomaga: wybierz inny model dla asystenta w ustawieniach modeli."
+        "assistant_reply_unreadable": "Model asystenta odpowiedział czymś, czego ta platforma nie może wykonać jako decyzji. Przeformułowanie rzadko pomaga: wybierz inny model dla asystenta w ustawieniach modeli.",
+        "delegated_executor_failed": "Zewnętrzny executor nie zdołał uruchomić tego kroku. Problem leży w systemie wykonującym pracę, a nie w tej instalacji: sprawdź jego własne logi i spróbuj ponownie.",
+        "delegated_work_branch_unprepared": "Platforma nie mogła przygotować gałęzi roboczej, na którą wysyłany jest executor tego kroku, więc nic nie zostało uruchomione. Albo połączenie z repozytorium nie ma prawa zapisu, albo zadanie wskazuje gałąź, która jeszcze nie istnieje: szczegóły mówią, co z tego.",
+        "attached_pr_provider_unreachable": "Dostawca repozytorium nie odpowiedział, więc nie udało się sprawdzić pull requesta i nie utworzono zadania. Nie trzeba tu niczego konfigurować: spróbuj ponownie za chwilę."
       }
     },
     "reason": {
@@ -720,7 +754,14 @@
         "expedition_settled": "Ta wyprawa już się zakończyła",
         "not_awaiting_triage": "Ta wyprawa nie czeka na segregację",
         "already_addressed": "Część znalezisk ma już zadanie naprawcze",
-        "no_host_frame": "Ta wyprawa nie znajduje się pod żadną usługą"
+        "no_host_frame": "Ta wyprawa nie znajduje się pod żadną usługą",
+        "delegated_executor_unwired": "Zewnętrzny executor nie jest zarejestrowany",
+        "delegated_step_async_only": "Ten krok jest odpytywany, a nie oczekiwany",
+        "delegated_claim_missing": "Ten krok nie ma zewnętrznej pracy do sprawdzenia",
+        "thread_busy": "Ten wątek wciąż odpowiada",
+        "draft_conflict": "Ten szkic się zmienił",
+        "session_stale": "Pull request poszedł dalej",
+        "cursor_expired": "Kanał zmian wyszedł poza ten kursor"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -774,7 +815,14 @@
         "expedition_settled": "Uruchomienie minęło już krok polowania na błędy, więc nie ma czego oznaczać ani odrzucać. Odśwież uruchomienie, aby zobaczyć, co znalazło i którymi ustaleniami się zajęto.",
         "not_awaiting_triage": "Albo wciąż przeszukuje kolejną perspektywę, albo zostało już zakończone. Odśwież uruchomienie, aby zobaczyć jego stan.",
         "already_addressed": "Zadanie naprawcze powstało dla nich wcześniej, więc nic nie utworzono ponownie. Otwórz znalezisko, aby przejść do istniejącego zadania.",
-        "no_host_frame": "Zadanie naprawcze potrzebuje usługi, pod którą będzie żyć, i repozytorium do naprawy. Przenieś zadanie wyprawy pod ramkę usługi i spróbuj ponownie."
+        "no_host_frame": "Zadanie naprawcze potrzebuje usługi, pod którą będzie żyć, i repozytorium do naprawy. Przenieś zadanie wyprawy pod ramkę usługi i spróbuj ponownie.",
+        "delegated_executor_unwired": "Krok tego potoku działa na zewnętrznym executorze, którego ta instalacja nie rejestruje, więc pracy nie ma dokąd wysłać. Zarejestruj executor w kodzie albo zmień krok na taki, który działa tutaj.",
+        "delegated_step_async_only": "Ten krok działa na zewnętrznym wykonawcy i może trwać godzinami, więc jest wysyłany, a następnie odpytywany, zamiast wykonywany w obrębie jednego żądania. Uruchom przebieg z tablicy; jeśli trafiłeś tu z własnego kodu, steruj krokiem ścieżką asynchroniczną.",
+        "delegated_claim_missing": "Brakuje zapisu tego, co przebieg wysłał do zewnętrznego wykonawcy, więc nie ma czego odpytywać. Z samym wykonawcą wszystko jest w porządku. Odśwież przebieg i uruchom krok ponownie, jeśli nadal stoi.",
+        "thread_busy": "Poprzednie pytanie w tym wątku nie ma jeszcze odpowiedzi. Poczekaj na nią albo zapytaj w innym wątku.",
+        "draft_conflict": "Od wczytania ten szkic komentarza został edytowany, opublikowany lub odrzucony. Wczytaj szkice ponownie i wprowadź zmianę jeszcze raz.",
+        "session_stale": "Po przygotowaniu tej recenzji pojawiły się nowe commity, więc szkice mogą wskazywać złe linie. Odśwież recenzję, sprawdź szkice i dopiero wtedy opublikuj.",
+        "cursor_expired": "Zmiany po tym kursorze nie są już przechowywane. Pobierz nowy zrzut katalogu, a potem śledź kanał od pozycji, którą zwróci."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -786,6 +834,7 @@
       "providersUnconfigured": {
         "title": "Brak dostawcy AI dla tego modelu",
         "body": "Dla {models} nie skonfigurowano żadnego dostawcy. Dodaj klucz dostawcy, połącz subskrypcję lub włącz Cloudflare AI, aby go uruchomić.",
+        "cause": "Dla modelu w tym potoku nie skonfigurowano dostawcy. Dodaj klucz dostawcy, połącz subskrypcję lub włącz Cloudflare AI, a potem ponów.",
         "action": "Skonfiguruj AI"
       },
       "binaryStorageUnconfigured": {
@@ -813,6 +862,9 @@
       "title": "Nie udało się wczytać tego widoku",
       "body": "Nie udało się wczytać jego kodu. Zwykle oznacza to, że aplikacja została zaktualizowana, gdy ta karta była otwarta, więc plików żądanych przez tę stronę nie ma już na serwerze. Odśwież, aby pobrać aktualną wersję.",
       "reload": "Odśwież"
+    },
+    "reported": {
+      "description": "Operacja została wykonana i zgłosiła błąd. Pokaż szczegóły, aby zobaczyć, co zgłosiła."
     }
   },
   "personalSubscriptions": {
@@ -1586,7 +1638,24 @@
       "promptVariant": "Wariant promptu",
       "promptVariantAdditionOnly": "Zastosowano tylko dodatek tego wariantu. Prompt przestrzeni roboczej dla tego agenta zastąpił jego tekst bazowy.",
       "promptVariantSuperseded": "Ten wariant nie został zastosowany. Prompt przestrzeni roboczej dla tego agenta miał pierwszeństwo.",
-      "promptVariantWithdrawn": "Ten wariant nie jest już zarejestrowany, więc krok wykonał się na wbudowanym promptcie."
+      "promptVariantWithdrawn": "Ten wariant nie jest już zarejestrowany, więc krok wykonał się na wbudowanym promptcie.",
+      "delegated": {
+        "status": {
+          "cancelled": "Anulowane",
+          "done": "Zakończone na zewnątrz",
+          "failed": "Niepowodzenie na zewnątrz",
+          "running": "Działa na zewnątrz",
+          "starting": "Uruchamianie na zewnątrz",
+          "unrecognised": "Nierozpoznany status ({status})"
+        },
+        "run": "Uruchomienie zewnętrzne",
+        "branch": "Gałąź",
+        "copyUrl": "Skopiuj link do uruchomienia zewnętrznego",
+        "openRun": "Otwórz uruchomienie",
+        "noOutcome": "Nie zapisano wyniku",
+        "earlierAttempts": "Wcześniejsze próby",
+        "usageNotReported": "{executor} nie raportuje zużycia tokenów, więc tego kroku brakuje w sumach powyżej."
+      }
     },
     "stepDetail": {
       "contents": "Zawartość",
@@ -1653,7 +1722,7 @@
         "allTools": "Wszystkie narzędzia udostępniane przez ten serwer.",
         "narrowed": "Ograniczone do: {tools}",
         "reason": {
-          "harnessUnsupported": "nie był dostępny: CLI agenta, na którym działał ten krok, nie ma klienta MCP.",
+          "harnessUnsupported": "nie był dostępny: CLI agenta, na którym działał ten krok, nie mogło go udostępnić.",
           "transportUnsupported": "nie był dostępny: CLI agenta, na którym działał ten krok, nie dosięga serwera tego rodzaju.",
           "missingSecret": "nie był dostępny: potrzebne mu poświadczenie nie jest ustawione dla tej tablicy.",
           "reservedSecret": "nie był dostępny: prosi o zmienną należącą do konfiguracji samej platformy, więc trzeba zmienić deklarację.",
@@ -1665,7 +1734,7 @@
           "unknown": "nie był dostępny ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Uruchom krok na CLI agenta, które zna MCP, albo poszerz listę harnessów serwera. Uruchomienie Codex z Twoim własnym logowaniem do CLI nie ma gdzie przechować serwera na czas przebiegu, więc użyj poświadczenia platformy.",
+          "harnessUnsupported": "Poszerz listę harnessów serwera o CLI agenta, na którym działał ten krok, albo uruchom krok na CLI z tej listy. Krok Pi zapisany, zanim Pi potrafił obsługiwać serwery narzędzi, wystarczy uruchomić ponownie na aktualnym obrazie runnera. Uruchomienie Codex z Twoim własnym logowaniem do CLI nie ma gdzie przechować serwera na czas przebiegu, więc użyj poświadczenia platformy.",
           "transportUnsupported": "Zadeklaruj dla niego serwer stdio albo uruchom krok na CLI agenta, które dosięga serwerów HTTP.",
           "missingSecret": "Ustaw wskazane poświadczenie jako zmienną środowiskową wdrożenia albo w poświadczeniach możliwości, w oknie Infrastruktura.",
           "reservedSecret": "Zmień deklarację tak, by prosiła o inny klucz; ustawienie tej zmiennej to właśnie to, co nie pomoże.",
@@ -1813,8 +1882,6 @@
     "exportJson": "Eksportuj JSON",
     "exportHint": "Pobierz przyjazny dla LLM eksport JSON tego uruchomienia",
     "closeEsc": "Zamknij (Esc)",
-    "loadingActivity": "Ładowanie aktywności modelu…",
-    "loadingContext": "Ładowanie dostarczonego kontekstu…",
     "noCalls": "Brak zarejestrowanych wywołań modelu dla tego uruchomienia.",
     "noContext": "Brak zapisanego kontekstu agenta dla tego uruchomienia. Jest on przechwytywany przy każdym wysłaniu, gdy w obszarze roboczym włączono opcję 'Przechowuj pełny kontekst agenta'.",
     "contextError": "Nie udało się załadować dostarczonego kontekstu.",
@@ -1906,7 +1973,6 @@
       "details": "Szczegóły"
     },
     "webSearch": "Wyszukiwanie w sieci",
-    "loadingSearch": "Ładowanie wyszukań w sieci…",
     "noSearch": "Nie zarejestrowano wyszukań w sieci dla tego uruchomienia. Zapytania są rejestrowane, gdy wyszukiwanie w sieci jest uruchomione, a przestrzeń robocza ma włączone „Przechowuj pełny kontekst agenta”.",
     "search": {
       "available": "Dostępne",
@@ -1945,7 +2011,6 @@
     "toolCalls": {
       "title": "Wywołania narzędzi",
       "subtitle": "co zrobiły agenty, w kolejności, w jakiej to robiły",
-      "loading": "Ładowanie wywołań narzędzi…",
       "error": "Nie udało się załadować wywołań narzędzi.",
       "none": "Brak zarejestrowanych wywołań narzędzi dla tego uruchomienia.",
       "noneMatching": "Żadne wywołanie narzędzia nie pasuje do tego filtra.",
@@ -1966,7 +2031,6 @@
     "title": "Obserwowalność platformy",
     "refresh": "Odśwież",
     "close": "Zamknij",
-    "loading": "Ładowanie stanu platformy…",
     "retry": "Ponów",
     "window": {
       "oneHour": "Ostatnia godzina",
@@ -2006,6 +2070,7 @@
       "timeout": "Przekroczono czas",
       "agent": "Agent",
       "job_failed": "Zadanie nieudane",
+      "delegated_failed": "Błąd zewnętrznego wykonawcy",
       "rejected": "Odrzucone",
       "companion_rejected": "Towarzysz odrzucony",
       "stalled": "Zawieszone",
@@ -2046,7 +2111,6 @@
   "reports": {
     "title": "Raporty",
     "refresh": "Odśwież",
-    "loading": "Wczytywanie raportów…",
     "retry": "Spróbuj ponownie",
     "error": "Nie udało się wczytać raportów.",
     "period": "Od {from} do {to}",
@@ -2443,7 +2507,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} więcej niepokazanych",
-      "failingRunGone": "To uruchomienie nie jest już wczytane i nie ma zadania do otwarcia."
+      "failingRunGone": "To uruchomienie nie jest już wczytane i nie ma zadania do otwarcia.",
+      "goTo": {
+        "review": "Przejrzyj",
+        "answer": "Odpowiedz",
+        "test": "Przetestuj",
+        "confirm": "Potwierdź",
+        "triage": "Posortuj",
+        "choose": "Wybierz",
+        "open": "Otwórz"
+      }
     },
     "aiProvidersBanner": {
       "setup": {
@@ -2524,6 +2597,18 @@
         "action": "Sprawdź połączenie"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "Na tej tablicy agenci nie mogą jeszcze działać: nie podłączono żadnej puli runnerów.",
+        "outage": "Agenci nie mogą teraz działać: pula runnerów tej tablicy jest nieosiągalna."
+      },
+      "owner": {
+        "workspace_admin": "Może to naprawić administrator tablicy.",
+        "account_admin": "Może to naprawić administrator konta.",
+        "operator": "Może to naprawić tylko operator wdrożenia."
+      },
+      "fullSurface": "Możesz to naprawić sam: zmień rolę u góry panelu bocznego."
+    },
     "spendWarningBanner": {
       "title": "Osiągnięto limit wydatków, wykonywanie agentów wstrzymane",
       "body": "Wydatki na tokeny w tym miesiącu osiągnęły skonfigurowany budżet, dlatego działające potoki zostały wstrzymane, aby uniknąć dalszych kosztów. Wykonywanie wznowi się automatycznie po odnowieniu budżetu w przyszłym miesiącu lub po podniesieniu limitu.",
@@ -2577,14 +2662,19 @@
       "cmd": {
         "newPipeline": "Zbuduj potok",
         "assistant": "Otwórz asystenta",
+        "guidedReview": "Zbadaj pull request",
         "addFromRepo": "Dodaj usługę z istniejącego repozytorium",
         "bootstrapRepo": "Zainicjuj nowe repozytorium",
         "githubManage": "Zarządzaj połączeniem GitHub",
         "githubConnect": "Połącz GitHub",
         "slackManage": "Zarządzaj powiadomieniami Slack",
         "slackConnect": "Połącz Slack",
-        "sourceManage": "Zarządzaj {source}",
-        "sourceConnect": "Połącz {source}",
+        "documentSourceManage": "Zarządzaj {source} (dokumenty)",
+        "documentSourceConnect": "Połącz {source} (dokumenty)",
+        "designSourceManage": "Zarządzaj {source} (projekty)",
+        "designSourceConnect": "Połącz {source} (projekty)",
+        "taskSourceManage": "Zarządzaj {source} (system zgłoszeń)",
+        "taskSourceConnect": "Połącz {source} (system zgłoszeń)",
         "documentImport": "Importuj i utwórz z dokumentów",
         "taskImport": "Importuj zgłoszenia",
         "fragments": "Biblioteka fragmentów kontekstu",
@@ -2600,11 +2690,15 @@
         "toggleUiMode": "Zmień tryb interfejsu",
         "chooseRole": "Zmień swoją rolę",
         "foundationalServices": "Usługi fundamentalne",
-        "notificationSettings": "Zarządzaj routingiem powiadomień"
+        "notificationSettings": "Zarządzaj routingiem powiadomień",
+        "setupChecklist": "Lista konfiguracji",
+        "queueView": "Otwórz widok kolejki",
+        "boardView": "Otwórz widok tablicy"
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
         "assistant": "ai asystent zapytaj polecenie zrób za mnie",
+        "guidedReview": "przegląd z przewodnikiem pull request pr zbadaj wyjaśnij pytania",
         "addFromRepo": "github importuj istniejące",
         "bootstrapRepo": "rusztowanie utwórz architektura referencyjna",
         "github": "git repozytoria pull requesty zgłoszenia",
@@ -2627,7 +2721,11 @@
         "chooseRole": "rola inżynier menedżer produktu projektant persona prostszy widok",
         "tutorial": "samouczek przewodnik pomoc nauka wprowadzenie",
         "foundationalServices": "wspólna możliwość platforma usługa api kontrakt openapi katalog",
-        "notificationSettings": "powiadomienia e-mail routing kanały skrzynka"
+        "notificationSettings": "powiadomienia e-mail routing kanały skrzynka",
+        "setupChecklist": "konfiguracja lista setup runner model github magazyn środowisko",
+        "queueView": "kolejka widok lista oczekuje",
+        "boardView": "tablica kanwa mapa widok planowanie",
+        "describeWork": "opisz nową pracę zadanie dodaj utwórz funkcja błąd"
       }
     },
     "integrationsHub": {
@@ -2845,19 +2943,23 @@
     "scopeHint": "Każdy poziom obejmuje poprzednie.",
     "scope": {
       "read": {
-        "label": "Tylko odczyt",
+        "label": "Odczyt · read",
         "description": "Podgląd usług, zadań, potoków i uruchomień."
       },
+      "webhooks": {
+        "label": "Webhooki · webhooks",
+        "description": "Dodatkowo rejestrowanie webhooków wysyłających zmiany do innego systemu."
+      },
       "write": {
-        "label": "Odczyt i zapis",
+        "label": "Zapis · write",
         "description": "Dodatkowo tworzenie i uruchamianie zadań."
       },
       "decide": {
-        "label": "Odczyt, zapis i decyzje",
+        "label": "Decyzje · decide",
         "description": "Dodatkowo odpowiadanie na pytania, na które czeka wstrzymane uruchomienie."
       },
       "admin": {
-        "label": "Pełny dostęp",
+        "label": "Pełny dostęp · admin",
         "description": "Dodatkowo usuwanie zadań i reagowanie na powiadomienia, co może scalić pull request."
       }
     },
@@ -2885,7 +2987,6 @@
         "intro": "Każde ustawienie wybiera {baseModel} dla każdego agenta, z opcjonalnymi nadpisaniami dla poszczególnych agentów. Model przypięty do pojedynczego zadania nadal ma pierwszeństwo przed ustawieniem.",
         "introBaseModel": "model bazowy",
         "newPreset": "Nowe ustawienie",
-        "loadingCatalog": "Wczytywanie katalogu modeli…",
         "default": "Domyślne",
         "setDefaultTitle": "Ustaw jako domyślne dla obszaru roboczego",
         "editTitle": "Edytuj ustawienie",
@@ -2894,7 +2995,8 @@
         "basePrefix": "Bazowy:",
         "overrideCount": "{count} nadpisanie | {count} nadpisania | {count} nadpisań",
         "empty": "Brak ustawień. Utwórz jedno, aby przypisać modele do swoich agentów.",
-        "customRouteOrder": "własna kolejność tras"
+        "customRouteOrder": "własna kolejność tras",
+        "catalogFailed": "Katalog modeli nie został wczytany. Ponów, aby zobaczyć ustawienia."
       },
       "editor": {
         "useBaseModel": "Użyj modelu bazowego",
@@ -2914,7 +3016,8 @@
         "deleteFailed": "Nie udało się usunąć ustawienia",
         "nameRequiredTitle": "Wymagana nazwa",
         "nameRequiredBody": "Nadaj ustawieniu nazwę.",
-        "saveFailed": "Nie udało się zapisać ustawienia"
+        "saveFailed": "Nie udało się zapisać ustawienia",
+        "catalogFailed": "Nie udało się wczytać katalogu modeli"
       },
       "confirmDelete": {
         "title": "Usunąć ten preset modelu?",
@@ -3110,7 +3213,6 @@
     },
     "taskTypeSuppressions": {
       "intro": "Wybierz, które operacje wielokrotnego użytku tego wdrożenia są dostępne na tej tablicy. Ukrycie usuwa operację z listy wyboru przy tworzeniu zadania i blokuje tworzenie pracy tego typu; inne tablice pozostają bez zmian.",
-      "loading": "Wczytywanie operacji…",
       "empty": "To wdrożenie nie rejestruje żadnych operacji wielokrotnego użytku.",
       "offer": "Udostępnij na tej tablicy",
       "saveFailed": "Nie udało się zmienić operacji dostępnych na tej tablicy"
@@ -3537,7 +3639,10 @@
         "createdByKey": "klucz API {id}",
         "revoke": "Unieważnij token",
         "boundToYou": "Twoja subskrypcja",
-        "boundToOther": "Subskrypcja użytkownika {user}"
+        "boundToOther": "Subskrypcja użytkownika {user}",
+        "reachAll": "Wszystkie obszary robocze",
+        "reachMemberships": "Śledzi obszary robocze swojej osoby",
+        "reachCount": "Obszary robocze: {count}"
       },
       "add": {
         "heading": "Utwórz token",
@@ -3545,19 +3650,29 @@
         "labelHelp": "Nazwa, po której później rozpoznasz ten token.",
         "labelPlaceholder": "np. potok CI",
         "scope": "Zakres",
-        "scopeHelp": "Co może ten token: tylko odczyt, odczyt i zapis lub pełny dostęp (który pozwala także na usuwanie).",
+        "scopeHelp": "Każdy poziom obejmuje wszystko, na co pozwala poprzedni. Odczyt: przeglądanie zadań, przebiegów i ich wyników. Webhooki: dodatkowo rejestrowanie i usuwanie webhooków wysyłających zmiany do innego systemu, takich jak webhooki katalogu i powiadomień. Zapis: dodatkowo tworzenie, edytowanie, uruchamianie, zatrzymywanie i ponawianie zadań oraz uruchamianie przeglądów i ocen. Decyzje: dodatkowo odpowiadanie na decyzje człowieka w przebiegu (zatwierdzenia, uwagi z przeglądu, pytania z wywiadu i pytania doprecyzowujące, testy ręczne); token potrzebuje tego poziomu także do uruchomienia potoku, który może się zatrzymać na takiej decyzji. Pełny dostęp (admin): dodatkowo dodawanie, konfigurowanie i usuwanie usług, usuwanie zadań, łączenie repozytoriów, zarządzanie połączeniami środowisk oraz reagowanie na powiadomienia.",
         "create": "Utwórz token",
         "identity": "Działa jako",
         "identitySystem": "Ten obszar roboczy (token systemowy)",
         "identitySelf": "Ja (token osobisty)",
         "identitySystemHelp": "Uruchomienia rozpoczęte tym tokenem należą do obszaru roboczego i nie są przypisywane do żadnej osoby. Token nie może korzystać z niczyjej osobistej subskrypcji Claude / Codex / GLM, więc zadanie przypięte do takiego modelu zostanie odrzucone, zamiast obciążyć kogoś nieobecnego. Użyj go do CI i wspólnych integracji.",
-        "identitySelfHelp": "Uruchomienia rozpoczęte tym tokenem są przypisywane Tobie i mogą korzystać z Twojej osobistej subskrypcji Claude / Codex / GLM. Każde takie wywołanie musi dodatkowo przesłać Twoje hasło osobiste w nagłówku X-Personal-Password; nie jest ono nigdzie zapisywane. Użyj go do własnych uruchomień headless."
+        "identitySelfHelp": "Uruchomienia rozpoczęte tym tokenem są przypisywane Tobie i mogą korzystać z Twojej osobistej subskrypcji Claude / Codex / GLM. Każde takie wywołanie musi dodatkowo przesłać Twoje hasło osobiste w nagłówku X-Personal-Password; nie jest ono nigdzie zapisywane. Użyj go do własnych uruchomień headless.",
+        "reach": "Obszary robocze",
+        "reachHelp": "W których obszarach roboczych ten token może działać. Token obejmujący więcej niż jeden wskazuje obszar roboczy przy każdym wywołaniu w nagłówku x-cat-factory-workspace.",
+        "reachAdminOnly": "Tylko administrator konta może utworzyć token obejmujący inne obszary robocze, którego wymagają webhooki katalogu. Poproś o to administratora.",
+        "reachThis": "Tylko ten obszar roboczy",
+        "reachAll": "Wszystkie obszary robocze konta",
+        "reachSelected": "Wybrane obszary robocze",
+        "reachMemberships": "Moje obszary robocze (śledzi moje członkostwa)",
+        "reachMembershipsHelp": "Przy każdym wywołaniu sięga do każdego obszaru roboczego, w którym możesz działać: dołączenie lub odejście to zmienia, bez tworzenia od nowa. W każdym może tyle, ile pozwala tam Twoja rola.",
+        "reachPick": "Wybierz obszary robocze"
       },
       "scopes": {
-        "read": "Tylko odczyt",
-        "write": "Odczyt i zapis",
-        "decide": "Odpowiadanie na decyzje",
-        "admin": "Pełny dostęp"
+        "read": "Odczyt · read",
+        "webhooks": "Webhooki · webhooks (obejmuje Odczyt)",
+        "write": "Zapis · write (obejmuje Webhooki)",
+        "decide": "Decyzje · decide (obejmuje Zapis)",
+        "admin": "Pełny dostęp · admin (obejmuje Decyzje)"
       },
       "toast": {
         "loadFailed": "Nie udało się załadować tokenów API",
@@ -3719,9 +3834,7 @@
       "toast": {
         "connected": "Klucz OpenRouter połączony",
         "connectFailed": "Nie udało się połączyć klucza",
-        "rejected": "OpenRouter odrzucił klucz.",
         "unreachable": "Nie udało się połączyć z OpenRouter",
-        "connectFirst": "Najpierw połącz klucz OpenRouter.",
         "saved": "Katalog OpenRouter zapisany",
         "saveFailed": "Nie udało się zapisać katalogu"
       }
@@ -4045,7 +4158,6 @@
         "overrideActive": "Aktywne",
         "personalOverrideHint": "Nadpisz handler przestrzeni roboczej dla tego typu provisioningu na własnej maszynie. Przechowywane na użytkownika.",
         "removeOverride": "Usuń nadpisanie",
-        "loading": "Ładowanie ustawień infrastruktury…",
         "kubeNoun": "obsługę Kubernetes",
         "kubeOverrideNoun": "nadpisanie Kubernetes",
         "customNoun": "tę obsługę",
@@ -4458,7 +4570,6 @@
     "connect": {
       "yourInstallations": "Twoje instalacje",
       "refresh": "Odśwież",
-      "lookingForInstallations": "Szukanie instalacji…",
       "noInstallations": "Nie znaleziono jeszcze żadnych instalacji aplikacji. Zainstaluj ją poniżej lub połącz za pomocą ID.",
       "installationMeta": "{targetType} · instalacja {id}",
       "linked": "powiązana",
@@ -4475,6 +4586,7 @@
       },
       "errors": {
         "listInstallations": "Nie udało się wyświetlić instalacji GitHub",
+        "loadProjection": "Nie udało się wczytać repozytoriów, pull requestów i zgłoszeń",
         "startInstall": "Nie udało się rozpocząć instalacji aplikacji GitHub",
         "connect": "Nie udało się połączyć"
       }
@@ -4485,14 +4597,12 @@
       "resync": "Zsynchronizuj ponownie",
       "backfill": "Uzupełnij",
       "disconnect": "Rozłącz",
-      "loading": "Ładowanie…",
       "tabs": {
         "repos": "Repozytoria",
         "issues": "Zgłoszenia"
       },
       "linkedToBoard": "Powiązane z tą tablicą",
       "manageRepos": "Zarządzaj repozytoriami",
-      "loadingRepos": "Ładowanie repozytoriów…",
       "private": "prywatne",
       "saveSelection": "Zapisz wybór",
       "noLinkedRepos": "Nie powiązano jeszcze żadnych repozytoriów. Użyj opcji Zarządzaj repozytoriami, aby wybrać, które repozytoria śledzi ta tablica.",
@@ -4571,11 +4681,11 @@
         "frontendWiringFailedNote": "Ustawienia frontendu nie zostały zapisane. Otwórz inspektor każdej aplikacji frontendowej, aby ustawić jej podkatalog i usługi backendowe."
       },
       "repoType": "Typ repozytorium",
-      "repoTypeHint": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i)."
+      "repoTypeHint": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i).",
+      "prefillProviderMismatch": "Link wskazywał {repo} u innego dostawcy, a ta tablica jest połączona z {connected}. Wyszukaj repozytorium ręcznie albo otwórz link na tablicy połączonej z jego dostawcą."
     },
     "repoTree": {
       "root": "katalog główny",
-      "loading": "Ładowanie…",
       "noSubdirectories": "Brak podkatalogów.",
       "empty": "Pusto.",
       "select": "Wybierz",
@@ -4832,7 +4942,8 @@
         "scopes": "Zostaniesz poproszony o uprawnienia: {scopes}",
         "fallback": "Wolisz token? Skorzystaj z pól poniżej.",
         "failed": "Nie udało się rozpocząć logowania do {source}"
-      }
+      },
+      "disconnectFailed": "Nie można rozłączyć"
     },
     "spawn": {
       "title": "Podgląd struktury",
@@ -4980,7 +5091,8 @@
       "updateConnection": "Zaktualizuj połączenie",
       "connect": "Połącz",
       "oauthButton": "Połącz z {label}",
-      "oauthOr": "lub połącz za pomocą klucza API"
+      "oauthOr": "lub połącz za pomocą klucza API",
+      "disconnectFailed": "Nie można rozłączyć"
     }
   },
   "bugHunt": {
@@ -5086,6 +5198,103 @@
       "unresolved_issue_service": "Asystent nie ustalił, pod którą usługą to utworzyć. Podaj usługę w swojej prośbie."
     }
   },
+  "guidedReview": {
+    "title": "Przegląd z przewodnikiem",
+    "titleFor": "{repo} #{number}: {title}",
+    "outOfDate": "Aktualizacje na żywo nie powiodły się, więc ten widok może być nieaktualny.",
+    "openFromTask": "Zbadaj w przeglądzie z przewodnikiem",
+    "picker": {
+      "intro": "Wybierz repozytorium i pull request. Dostaniesz przegląd zmiany i możesz zadawać pytania w osobnych wątkach.",
+      "noRepos": "Do tego obszaru roboczego nie podłączono jeszcze żadnych repozytoriów.",
+      "repo": "Repozytorium",
+      "openPulls": "Otwarte pull requesty",
+      "number": "Numer pull requesta",
+      "open": "Otwórz przegląd"
+    },
+    "overview": {
+      "title": "Podsumowanie",
+      "stale": "Pull request ma nowe commity",
+      "refresh": "Odśwież",
+      "working": "Przygotowywanie podsumowania…",
+      "intent": "Cel",
+      "changes": "Istotne zmiany",
+      "consequences": "Konsekwencje",
+      "risks": "Ryzyka",
+      "focus": "Warto sprawdzić",
+      "suggested": "Proponowane pytania"
+    },
+    "severity": {
+      "low": "Niskie",
+      "medium": "Średnie",
+      "high": "Wysokie"
+    },
+    "failure": {
+      "budget_exhausted": "Ten obszar roboczy wyczerpał budżet na modele.",
+      "model_unavailable": "Brak dostępnego modelu dla przeglądu z przewodnikiem.",
+      "repo_unavailable": "Nie udało się odczytać pull requesta z repozytorium.",
+      "generation_failed": "Wywołanie modelu nie powiodło się.",
+      "unreadable_reply": "Model odpowiedział w formie, której nie da się odczytać.",
+      "depth_unavailable": "Szczegółowe odpowiedzi z użyciem checkoutu nie są jeszcze dostępne.",
+      "head_moved": "Pull request wyszedł poza przeglądany commit. Odśwież, aby przejrzeć jego najnowszy commit.",
+      "detail": "Szczegóły"
+    },
+    "dropped": {
+      "outside_diff": "wiersz jest poza diffem",
+      "not_in_pr": "plik nie należy do tego pull requesta",
+      "incomplete": "propozycja była niekompletna"
+    },
+    "thread": {
+      "new": "Nowy wątek",
+      "untitled": "Wątek bez tytułu",
+      "empty": "Zapytaj o cokolwiek w tym pull requeście.",
+      "waiting": "Przygotowywanie odpowiedzi…",
+      "placeholder": "Zadaj pytanie o zmianę",
+      "busy": "Czekam na odpowiedź na poprzednie pytanie",
+      "send": "Zapytaj",
+      "draftRequest": "Poproszono o komentarze do przeglądu",
+      "deep": "Dogłębna analiza",
+      "deepHint": "Odpowiedź z kopii repozytorium: wolniej, ale można przeszukać całe drzewo.",
+      "investigating": "Trwa analiza w kopii repozytorium. Może to potrwać kilka minut."
+    },
+    "drafts": {
+      "title": "Szkice komentarzy",
+      "request": "Przygotuj komentarze do przeglądu",
+      "summary": "Zachowano {kept} z {proposed} proponowanych komentarzy jako szkice.",
+      "side": {
+        "RIGHT": "nowy kod",
+        "LEFT": "stary kod"
+      },
+      "select": "Wybierz ten szkic do opublikowania",
+      "status": {
+        "proposed": "Szkic",
+        "posting": "Publikowanie",
+        "posted": "Opublikowany",
+        "failed": "Nieopublikowany",
+        "discarded": "Odrzucony"
+      },
+      "edit": "Edytuj",
+      "save": "Zapisz",
+      "cancel": "Anuluj",
+      "discard": "Odrzuć",
+      "line": "Linia",
+      "sideLabel": "Strona",
+      "postFailed": "Host odrzucił ten komentarz",
+      "summaryPlaceholder": "Opcjonalny komentarz podsumowujący do pull requesta",
+      "summaryFailed": "Host odrzucił komentarz podsumowujący",
+      "post": "Opublikuj {count} w pull requeście",
+      "postResult": "Opublikowane: {posted}, nieopublikowane: {failed}, już obsłużone: {skipped}."
+    },
+    "errors": {
+      "load": "Nie udało się wczytać przeglądu",
+      "repos": "Nie udało się wczytać podłączonych repozytoriów",
+      "open": "Nie udało się otworzyć przeglądu",
+      "ask": "Nie udało się zadać pytania",
+      "drafts": "Nie udało się poprosić o szkice komentarzy",
+      "refresh": "Nie udało się odświeżyć przeglądu",
+      "editDraft": "Nie udało się zapisać szkicu",
+      "postDrafts": "Nie udało się opublikować szkiców"
+    }
+  },
   "pipeline": {
     "iterationCap": {
       "extraRound": "Jeszcze jedna runda",
@@ -5159,7 +5368,8 @@
         "review": "Przegląd",
         "research": "Badania",
         "planning": "Planowanie",
-        "media": "Multimedia"
+        "media": "Multimedia",
+        "maintenance": "Utrzymanie PR"
       },
       "strategyOption": {
         "specialist-panel": "Panel specjalistów",
@@ -5331,7 +5541,8 @@
         "releaseInteractive": "Przestań być domyślnym w aplikacji",
         "claimUnattended": "Ustaw jako domyślny bez nadzoru",
         "releaseUnattended": "Przestań być domyślnym bez nadzoru"
-      }
+      },
+      "removeLabel": "Usuń etykietę {label}"
     },
     "progress": {
       "status": {
@@ -5661,7 +5872,6 @@
     "answerVerb": "Odpowiedz",
     "dismissVerb": "odrzuć",
     "empty": "Brak przeglądu. Recenzent uruchamia się automatycznie jako pierwszy krok po starcie potoku tego zadania.",
-    "loadingReview": "Ładowanie przeglądu…",
     "reviewing": "Przeglądanie wymagań…",
     "settled": "Wymagania są ustalone. Poniższy dokument jest tym, którego używa każdy kolejny krok agenta.",
     "exceeded": {
@@ -5801,7 +6011,6 @@
     "introAnswer": "Odpowiedz",
     "introDismiss": "odrzuć",
     "empty": "Brak recenzji. Recenzent uruchamia się automatycznie jako pierwszy krok przy starcie potoku tego zadania.",
-    "loadingReview": "Wczytywanie recenzji…",
     "triaging": "Klasyfikowanie zgłoszenia błędu…",
     "converged": "Zgłoszenie błędu jest doprecyzowane. Poniższy raport jest tym, czego używa każdy kolejny krok agenta.",
     "capHeading": "Osiągnięto limit {max} iteracji z wciąż otwartymi uwagami.",
@@ -5875,7 +6084,6 @@
   "consensus": {
     "titlePrefix": "Konsensus",
     "participantCount": "jeden uczestnik | {count} uczestnicy | {count} uczestników",
-    "loading": "Ładowanie sesji konsensusu…",
     "empty": "Dla tego kroku nie uruchomiono jeszcze żadnej sesji konsensusu.",
     "failed": "Konsensus nie powiódł się: {error}",
     "unknownError": "nieznany błąd",
@@ -5923,7 +6131,6 @@
     "introChoose": "Wybierz",
     "introDismiss": "odrzuć",
     "empty": "Jeszcze nie ma burzy mózgów. Uruchamia się automatycznie, gdy pipeline tego zadania osiągnie krok burzy mózgów.",
-    "loading": "Wczytywanie burzy mózgów…",
     "generating": "Generowanie opcji…",
     "settledBanner": "{doc} jest ustalony. Dokument poniżej jest tym, czego używa następny etap.",
     "exceeded": {
@@ -6001,7 +6208,6 @@
   },
   "spec": {
     "title": "Wymagania",
-    "loading": "Ładowanie specyfikacji…",
     "error": "Nie udało się załadować specyfikacji. Spróbuj otworzyć to okno ponownie.",
     "overview": "Przegląd",
     "noFeatureGroups": "Brak grup funkcji",
@@ -6191,8 +6397,7 @@
     },
     "shot": {
       "failed": "Błąd",
-      "failedToLoad": "Błąd ładowania",
-      "loading": "Ładowanie…"
+      "failedToLoad": "Błąd ładowania"
     },
     "screenshotAlt": "{view} (zrzut ekranu)",
     "screenshots": "Zrzuty ekranu",
@@ -6255,7 +6460,8 @@
       "heading": "Prześlij projekt referencyjny",
       "viewPlaceholder": "Nazwa widoku (np. login)",
       "tipReady": "Wskazówka: przeciągnij obraz bezpośrednio na parę powyżej, aby ustawić jej referencję.",
-      "tipNeedView": "Najpierw wpisz nazwę widoku, a potem wybierz plik. Albo przeciągnij obraz bezpośrednio na parę powyżej."
+      "tipNeedView": "Najpierw wpisz nazwę widoku, a potem wybierz plik. Albo przeciągnij obraz bezpośrednio na parę powyżej.",
+      "choose": "Wybierz plik"
     },
     "requestFix": {
       "heading": "Poproś o poprawkę",
@@ -6903,7 +7109,6 @@
       "awaiting": "Wygenerowano {total} kandydatów i czekają na porównanie."
     },
     "asset": {
-      "loading": "Wczytywanie pliku…",
       "loadFailed": "Nie udało się wczytać zapisanego pliku.",
       "retry": "Spróbuj ponownie",
       "open": "Otwórz",
@@ -7845,6 +8050,7 @@
     "connect": {
       "or": "lub",
       "noneConfigured": "W tym wdrożeniu nie skonfigurowano połączenia z systemem kontroli źródeł. Poproś operatora o skonfigurowanie aplikacji GitHub lub dostępu do GitLab.",
+      "adminRequired": "Tylko administrator tablicy może podłączyć hosta repozytoriów. Poproś o to administratora tej tablicy.",
       "gitlab": {
         "intro": "Wklej osobisty token dostępu GitLab, aby połączyć ten obszar roboczy. cat-factory używa go do wyświetlania Twoich projektów, wypychania gałęzi i otwierania merge requestów.",
         "tokenLabel": "Osobisty token dostępu",
@@ -7862,7 +8068,8 @@
     "onboarding": {
       "title": "Połącz cat-factory z {provider}",
       "titleAny": "Połącz cat-factory ze swoimi repozytoriami",
-      "intro": "cat-factory działa, otwierając pull requesty w Twoich repozytoriach. Połącz swojego dostawcę repozytoriów, aby kontynuować."
+      "intro": "cat-factory działa, otwierając pull requesty w Twoich repozytoriach. Połącz swojego dostawcę repozytoriów, aby kontynuować.",
+      "switchBoard": "To nie ta tablica? Przełącz się na inną albo utwórz własną."
     },
     "addService": {
       "intro": "Wybierz istniejące repozytorium {provider}, aby dodać je jako usługę tablicy. Bez inicjowania: repozytorium jest wiązane bez zmian z nową ramką usługi, a uruchamiane na nim zadania celują w to repozytorium.",
@@ -7978,6 +8185,10 @@
           "canvas": {
             "title": "Tablica",
             "body": "Usługi, moduły i zadania żyją na tym płótnie. Przeciągaj, aby przesuwać widok, przewijaj, aby zmieniać powiększenie, i klikaj karty, aby zobaczyć szczegóły."
+          },
+          "views": {
+            "title": "Dwa widoki",
+            "body": "Tablica ma drugi widok. Kolejka pokazuje, co czeka na ciebie we wszystkich usługach. Po zakończeniu przewodnika przełączasz się tutaj między kolejką a tym obszarem roboczym. Aplikacja otwiera ostatnio używany widok."
           },
           "sidebar": {
             "title": "Pasek boczny",
@@ -8257,11 +8468,11 @@
           },
           "banner": {
             "title": "Co poszło nie tak",
-            "body": "Karta zamienia pasek postępu na ten komunikat. Nazywa przyczynę, szczegóły zawierają surowe wyjście, a niektóre przyczyny oferują przycisk prosto do ustawienia, które je naprawia."
+            "body": "Karta zastępuje pasek postępu tym banerem. Pokazuje, co się nie powiodło, i daje jedną akcję. Otwórz zadanie, aby przeczytać przyczynę w jednym wierszu, z pełnym wyjściem w Szczegółach."
           },
           "retry": {
-            "title": "Uruchomić ponownie",
-            "body": "Ponów uruchamia pracę od nowa. Wcześniejsze błędy zostają na zadaniu, w sekcji „Poprzednie błędy”, więc możesz porównywać próby, zamiast tracić ślad."
+            "title": "Następny krok",
+            "body": "Ten przycisk to następny krok. Zwykle jest to Ponów, które uruchamia pracę jeszcze raz. Gdy błąd powoduje ustawienie, przycisk otwiera to ustawienie. Wcześniejsze błędy zostają przy zadaniu w sekcji Poprzednie błędy, więc można porównać próby."
           },
           "finish": {
             "title": "Błąd to informacja",
@@ -8385,6 +8596,7 @@
     "title": "Wygenerowani kandydaci",
     "titleWithBlock": "Wygenerowani kandydaci: {title}",
     "subtitle": "Porównaj, co wytworzyła każda integracja, i zachowaj to, co chcesz",
+    "pickOne": "Wybierz jeden. Wybranie kandydata usuwa poprzedni wybór.",
     "automatic": "Wygenerowano tylko jednego kandydata, więc zachowano go automatycznie. Nikt go nie przejrzał.",
     "unlabelledSubject": "Nie zadeklarowano tematu",
     "noPreview": "Brak podglądu",
@@ -8566,5 +8778,177 @@
     "territories": {
       "heading": "Terytoria"
     }
+  },
+  "appearance": {
+    "switcher": "Wygląd",
+    "mode": {
+      "system": "Systemowy",
+      "light": "Jasny",
+      "dark": "Ciemny"
+    },
+    "theme": {
+      "section": "Motyw",
+      "import": "Importuj motyw Nuxt UI…",
+      "remove": "Usuń ten motyw"
+    },
+    "import": {
+      "title": "Importuj motyw",
+      "description": "Zbuduj motyw w edytorze motywów Nuxt UI, skopiuj jego link do udostępniania i wklej go tutaj. Motyw jest zapisywany tylko w tej przeglądarce.",
+      "linkLabel": "Link do udostępniania",
+      "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
+      "nameLabel": "Nazwa",
+      "namePlaceholder": "Mój motyw",
+      "nameTaken": "Motyw o nazwie „{typed}” już istnieje. Ten zostanie zapisany jako „{name}”.",
+      "fontNote": "Czcionka wskazana w motywie jest używana tylko wtedy, gdy udostępnia ją to urządzenie lub ta instalacja; w przeciwnym razie przeglądarka użyje domyślnej.",
+      "submit": "Importuj",
+      "cancel": "Anuluj",
+      "error": {
+        "notALink": "Wklej link do udostępniania z ui.nuxt.com/theme (lub JSON motywu).",
+        "malformed": "Ten link nie zawiera czytelnego motywu. Skopiuj go ponownie z edytora.",
+        "presetShorthand": "Ten link wskazuje ustawienie wstępne edytora Nuxt UI, którego ta aplikacja nie zna. Zmień dowolny parametr w edytorze, aby link zawierał cały motyw, i skopiuj go ponownie.",
+        "unsupportedVersion": "Ten motyw powstał w nowszym formacie edytora, niż rozumie ta aplikacja."
+      }
+    }
+  },
+  "setup": {
+    "title": "Konfiguracja",
+    "progress": "{done} z {total} gotowe",
+    "intro": "Czego ten workspace potrzebuje, aby zadanie mogło działać i zostać scalone.",
+    "required": "wymagane",
+    "optional": "opcjonalne",
+    "action": {
+      "change": "Zmień",
+      "connect": "Skonfiguruj",
+      "fix": "Napraw",
+      "review": "Sprawdź",
+      "retry": "Spróbuj ponownie"
+    },
+    "rows": {
+      "checking": "Sprawdzanie…",
+      "notNeeded": "To wdrożenie tego nie używa.",
+      "model": {
+        "title": "Model",
+        "done": "Model jest dostępny.",
+        "missing": "Brak dostępnego modelu. Żaden agent nie może działać, dopóki nie połączysz dostawcy."
+      },
+      "sourceControl": {
+        "title": "Kontrola wersji",
+        "done": "Połączono. Agenci mogą wypychać gałęzie i otwierać pull requesty.",
+        "missing": "Nie połączono. Agenci nie mogą otwierać pull requestów."
+      },
+      "agentExecutor": {
+        "title": "Gdzie działają agenci",
+        "done": "Runner jest skonfigurowany.",
+        "missing": "Brak skonfigurowanego runnera. Nic nie może działać, dopóki go nie połączysz.",
+        "notNeeded": "To wdrożenie uruchamia agentów bez runnera."
+      },
+      "ephemeralEnvironments": {
+        "title": "Środowiska testowe",
+        "done": "Skonfigurowano. Testerzy mogą używać podglądu na żywo.",
+        "missing": "Nie skonfigurowano. Testerzy, którzy potrzebują podglądu na żywo, nie działają. Pozostali agenci działają."
+      },
+      "binaryStorage": {
+        "title": "Magazyn zrzutów ekranu",
+        "done": "Skonfigurowano. Kontrole wizualne są włączone.",
+        "missing": "Nie skonfigurowano. Kontrole wizualne są wyłączone."
+      }
+    },
+    "causes": {
+      "unreachable": "Skonfigurowane, ale teraz nieosiągalne.",
+      "incomplete": "Połączone, ale brakuje wymaganego ustawienia.",
+      "rejected": "GitHub odrzucił token dostępu.",
+      "underscoped": "Token dostępu nie może wypychać zmian ani otwierać pull requestów.",
+      "presetBroken": "Domyślny preset modelu wskazuje model, który nie jest dostępny.",
+      "probeFailed": "Sprawdzenie nie odpowiedziało.",
+      "notReported": "To wdrożenie tego nie zgłasza."
+    },
+    "also": {
+      "title": "Także tutaj",
+      "pipelines": "Pipeline'y",
+      "riskPolicies": "Zasady scalania",
+      "modelPresets": "Presety modeli",
+      "counts": {
+        "repair": "Do naprawy: {count}",
+        "outdated": "Nieaktualne: {count}",
+        "new": "Nowe: {count}"
+      },
+      "settings": "Ustawienia i połączenia",
+      "workspaceSettings": "Ustawienia workspace'u",
+      "integrations": "Integracje"
+    }
+  },
+  "queue": {
+    "title": "Kolejka",
+    "summary": "Czeka na ciebie: {needsYou} · gotowe do scalenia: {ready}",
+    "filter": {
+      "allServices": "Wszystkie serwisy",
+      "service": "Filtruj według serwisu"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Czeka na ciebie",
+        "empty": "Nic na ciebie nie czeka."
+      },
+      "inFlight": {
+        "label": "W toku",
+        "empty": "Żaden agent teraz nie pracuje."
+      },
+      "readyToMerge": {
+        "label": "Gotowe do scalenia",
+        "empty": "Żaden pull request nie czeka na scalenie."
+      }
+    },
+    "waiting": {
+      "label": "Nierozpoczęte ({count})",
+      "empty": "Nic nie czeka na start."
+    },
+    "done": {
+      "count": "Scalone od {date}: {count}",
+      "countAll": "Scalone: {count}",
+      "show": "Pokaż",
+      "hide": "Ukryj",
+      "capped": "Pokazuje najnowsze {shown} z {total}."
+    },
+    "card": {
+      "waited": "czekało {duration}",
+      "active": "aktywne {duration} temu",
+      "merged": "scalone {duration} temu",
+      "step": "krok {current} z {total}",
+      "showOnBoard": "Pokaż na tablicy",
+      "answer": "Odpowiedz",
+      "budgetPaused": "Limit wydatków wstrzymał to uruchomienie. Będzie kontynuowane po podniesieniu limitu.",
+      "parked": "Uruchomienie czeka na człowieka. Otwórz zadanie, aby zobaczyć, czego potrzebuje.",
+      "waitingOn": "Czeka na {deps}",
+      "pr": "Pull request #{number}"
+    },
+    "describeWork": "Opisz nową pracę"
+  },
+  "views": {
+    "title": "Widoki",
+    "queue": "Kolejka",
+    "board": "Tablica",
+    "openQueue": "Otwórz widok kolejki"
+  },
+  "describeWork": {
+    "title": "Opisz nową pracę",
+    "textLabel": "Co trzeba zrobić",
+    "textHint": "Wystarczy jedno zdanie. Dodaj więcej szczegółów, jeśli je masz.",
+    "textPlaceholder": "Dodaj dziennik audytu dla zdarzeń logowania. Zapisuj każde logowanie z czasem, użytkownikiem i wynikiem.",
+    "savedAs": "Tytuł zadania: {title}",
+    "serviceLabel": "Serwis",
+    "servicePlaceholder": "Wybierz serwis",
+    "kindLabel": "Rodzaj",
+    "kind": {
+      "feature": "Funkcja",
+      "bug": "Błąd"
+    },
+    "moreKinds": "Więcej rodzajów…",
+    "changeHowItRuns": "Zmień sposób uruchomienia",
+    "workspaceDefault": "Domyślne dla workspace'u",
+    "defaultPipelineHint": "Domyślny dla workspace'u: {name}. Pipeline wybrany tutaj zastępuje go w tym zadaniu.",
+    "attachContext": "Dołącz kontekst (otwiera pełny formularz)",
+    "add": "Dodaj do kolejki",
+    "addAndStart": "Dodaj i uruchom",
+    "addedToast": "Dodano „{title}” do kolejki"
   }
 }

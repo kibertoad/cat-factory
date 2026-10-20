@@ -290,7 +290,7 @@ A direct consequence of 2.2, called out separately because the effect is user-vi
 > **Status: ADDRESSED.** The `act` endpoint now atomically claims the card BEFORE the side
 > effect: `NotificationService.act` flips `open` → `acted` via the new
 > `NotificationRepository.claimForAction` (a single conditional `UPDATE … WHERE status='open'
-RETURNING *`, the `PasswordResetTokenRepository.consume` shape), and only the writer that
+> RETURNING *`, the `PasswordResetTokenRepository.consume` shape), and only the writer that
 > wins the flip runs `mergePr`/`retry`; a concurrent act is handed `null` and returns the
 > settled row without re-firing. A failing side effect reverts the card to `open` (and
 > re-delivers) so the action stays retryable, without the double-fire window. Mirrored on both

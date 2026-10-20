@@ -12,10 +12,13 @@ import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '
 import { driveWorkspace } from '@cat-factory/conformance'
 import { createDocumentConnectionStore, createTaskConnectionStore } from '@cat-factory/integrations'
 import type { GateProviderOverrides } from '@cat-factory/gates'
-import type { CoreDependencies } from '@cat-factory/orchestration'
+import type { CoreDependencies, RecordHarnessCalls } from '@cat-factory/orchestration'
 import { env } from 'cloudflare:test'
 import { createApp } from '../src/app'
 import { buildContainer } from '../src/infrastructure/container'
+import { buildWorkerHarnessCallRecorder } from '../src/infrastructure/container-executor-deps'
+import { loadConfig } from '../src/infrastructure/config'
+import { SystemClock } from '../src/infrastructure/runtime'
 import { FakeAgentExecutor } from './fakes/FakeAgentExecutor'
 import { FakeGitHubClient } from '@cat-factory/conformance'
 import { FakeWebhookVerifier } from './fakes/FakeWebhookVerifier'
@@ -76,6 +79,20 @@ export function buildTestContainer(
   return buildContainer(testEnv, overrides, {
     cloudflareModelsEnabled: opts.cloudflareModelsEnabled ?? true,
     gateProviders: opts.gateProviders,
+  })
+}
+
+/**
+ * The Worker's own `llm_call_metrics` writer over the test env, built by the same function the
+ * container assembly uses, so a spec that composes an executor arm outside the assembly (the
+ * conformance harness's delegated arm) still files into the store the app reads.
+ */
+export function buildTestHarnessCallRecorder(): RecordHarnessCalls {
+  return buildWorkerHarnessCallRecorder({
+    env: testEnv,
+    config: loadConfig(testEnv),
+    db: testEnv.DB,
+    clock: new SystemClock(),
   })
 }
 

@@ -18,7 +18,7 @@ type CloudflareConfig = CloudflareHandlerConfig['cloudflare']
 
 const { t } = useI18n()
 const infra = useInfraConfigStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
@@ -101,11 +101,7 @@ async function save() {
     })
     token.value = ''
     editing.value = false
-    toast.add({
-      title: t('settings.infrastructure.handler.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.infrastructure.handler.saved')
   } catch (e) {
     present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
@@ -133,7 +129,7 @@ async function remove() {
   busy.value = true
   try {
     await infra.unregisterHandler('cloudflare')
-    toast.add({ title: t('settings.infrastructure.handler.removed'), icon: 'i-lucide-check' })
+    actionToast.success('settings.infrastructure.handler.removed')
   } catch (e) {
     present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
@@ -143,17 +139,17 @@ async function remove() {
 </script>
 
 <template>
-  <section class="space-y-2 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
-    <h3 class="text-sm font-semibold text-slate-200">
+  <section class="space-y-2 rounded-lg border border-muted bg-default/40 p-3">
+    <h3 class="text-sm font-semibold text-default">
       {{ t('inspector.testConfig.provisionTypes.cloudflare') }}
     </h3>
-    <p class="text-[11px] text-slate-400">
+    <p class="text-2xs text-muted">
       {{ t('settings.infrastructure.cloudflare.intro') }}
     </p>
 
     <div
       v-if="handler && !editing"
-      class="space-y-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2.5"
+      class="space-y-2 rounded-md border border-app-success-500/30 bg-app-success-500/5 p-2.5"
       data-testid="cloudflare-handler-connected"
     >
       <div class="flex items-start justify-between gap-2">
@@ -162,7 +158,7 @@ async function remove() {
           disabled
           size="lg"
           :label="t('settings.infrastructure.handler.connectionEstablished')"
-          :ui="{ label: 'text-[13px] font-semibold text-emerald-300' }"
+          :ui="{ label: 'text-sm font-semibold text-app-success-300' }"
         />
         <div class="flex items-center gap-1">
           <UButton
@@ -185,31 +181,31 @@ async function remove() {
           />
         </div>
       </div>
-      <p class="pl-7 text-[11px] text-slate-300">
+      <p class="pl-7 text-2xs text-toned">
         {{ t('settings.infrastructure.cloudflare.connectedAs', { subdomain: workersSubdomain }) }}
       </p>
     </div>
 
     <div v-else class="space-y-2" data-testid="cloudflare-handler-form">
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
+        <label class="text-2xs text-muted">{{
           t('settings.infrastructure.cloudflare.label')
         }}</label>
         <UInput v-model="label" size="xs" />
       </div>
 
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
+        <label class="text-2xs text-muted">{{
           t('settings.infrastructure.cloudflare.subdomain')
         }}</label>
         <UInput v-model="workersSubdomain" size="xs" placeholder="my-account" />
-        <p class="text-[11px] text-slate-500">
+        <p class="text-2xs text-dimmed">
           {{ t('settings.infrastructure.cloudflare.subdomainHint') }}
         </p>
       </div>
 
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
+        <label class="text-2xs text-muted">{{
           t('settings.infrastructure.cloudflare.token')
         }}</label>
         <UInput
@@ -222,55 +218,58 @@ async function remove() {
               : t('settings.infrastructure.cloudflare.tokenPlaceholder')
           "
         />
-        <p class="text-[11px] text-slate-500">
+        <p class="text-2xs text-dimmed">
           {{ t('settings.infrastructure.cloudflare.tokenHint') }}
         </p>
       </div>
 
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
+        <label class="text-2xs text-muted">{{
           t('settings.infrastructure.cloudflare.repo')
         }}</label>
         <UInput v-model="repo" size="xs" placeholder="owner/repo" />
-        <p class="text-[11px] text-slate-500">
+        <p class="text-2xs text-dimmed">
           {{ t('settings.infrastructure.cloudflare.repoHint') }}
         </p>
       </div>
 
-      <details class="rounded-md border border-slate-700/70 p-2">
-        <summary class="cursor-pointer text-[11px] text-slate-400">
-          {{ t('settings.infrastructure.cloudflare.advanced') }}
-        </summary>
-        <div class="mt-2 space-y-2">
-          <div class="space-y-1">
-            <label class="text-[11px] text-slate-400">{{
-              t('settings.infrastructure.cloudflare.workerTemplate')
-            }}</label>
+      <UCollapsible class="rounded-md border border-muted/70 p-2">
+        <template #default="{ open }">
+          <UButton
+            variant="link"
+            color="neutral"
+            size="xs"
+            :icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+            :label="t('settings.infrastructure.cloudflare.advanced')"
+            :ui="{ base: 'w-full justify-start gap-1 p-0 text-2xs text-muted' }"
+          />
+        </template>
+        <template #content>
+          <div class="mt-2 space-y-2">
             <!-- The placeholder is a FORMAT EXAMPLE containing vue-i18n metacharacters, so it
                  stays inline rather than becoming a catalog key. -->
-            <UInput
-              v-model="workerNameTemplate"
+            <UFormField size="xs" :label="t('settings.infrastructure.cloudflare.workerTemplate')">
+              <UInput
+                v-model="workerNameTemplate"
+                size="xs"
+                placeholder="cat-factory-pr-{{pullNumber}}"
+              />
+            </UFormField>
+            <UFormField
               size="xs"
-              placeholder="cat-factory-pr-{{pullNumber}}"
-            />
+              :label="t('settings.infrastructure.cloudflare.environmentTemplate')"
+            >
+              <UInput v-model="environmentNameTemplate" size="xs" placeholder="pr-{{pullNumber}}" />
+            </UFormField>
+            <p class="text-2xs text-dimmed">
+              {{ t('settings.infrastructure.cloudflare.templateHint') }}
+            </p>
+            <UFormField size="xs" :label="t('settings.infrastructure.cloudflare.apiBaseUrl')">
+              <UInput v-model="apiBaseUrl" size="xs" placeholder="https://api.github.com" />
+            </UFormField>
           </div>
-          <div class="space-y-1">
-            <label class="text-[11px] text-slate-400">{{
-              t('settings.infrastructure.cloudflare.environmentTemplate')
-            }}</label>
-            <UInput v-model="environmentNameTemplate" size="xs" placeholder="pr-{{pullNumber}}" />
-          </div>
-          <p class="text-[11px] text-slate-500">
-            {{ t('settings.infrastructure.cloudflare.templateHint') }}
-          </p>
-          <div class="space-y-1">
-            <label class="text-[11px] text-slate-400">{{
-              t('settings.infrastructure.cloudflare.apiBaseUrl')
-            }}</label>
-            <UInput v-model="apiBaseUrl" size="xs" placeholder="https://api.github.com" />
-          </div>
-        </div>
-      </details>
+        </template>
+      </UCollapsible>
 
       <div class="flex items-center gap-2">
         <UButton size="xs" :disabled="!canSave || busy" @click="save">
@@ -300,8 +299,8 @@ async function remove() {
 
       <p
         v-if="testResult"
-        class="text-[11px]"
-        :class="testResult.ok ? 'text-emerald-300' : 'text-rose-300'"
+        class="text-2xs"
+        :class="testResult.ok ? 'text-app-success-300' : 'text-app-error-300'"
       >
         {{ testResult.message }}
       </p>

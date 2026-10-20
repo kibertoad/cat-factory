@@ -229,7 +229,7 @@ view routes to it on the `30d` / `90d` windows and says so (`source`, `rolledUpT
 arithmetic stated rather than assumed:
 
 - **The grain is what makes that affordable**: one row per `(workspace, day, run, agent kind,
-provider:model, billing, vendor)`. A run writes hundreds of ledger rows and a handful of
+  provider:model, billing, vendor)`. A run writes hundreds of ledger rows and a handful of
   these, so the table grows with RUN volume, not call volume. At ~0.3 KB/row and ~8 rows per
   run, 1,000 runs/day is ~2.4 MB/day, ~0.9 GB/year, the same order as the audit log's
   multi-year budget in §"The audit log", and the reason the grain must not be widened to

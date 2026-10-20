@@ -4,6 +4,7 @@ import { groupCommands, groupSidebar, sortToolbar } from '~/modular/nav-contribu
 import { EXTERNAL_TOOL_UNAVAILABLE_KEYS, projectExternalTools } from '~/modular/external-tools'
 import { toMetadataBag } from '~/modular/workspace-metadata'
 import type { ExternalToolContext, ExternalToolContribution } from '~/modular/external-tools'
+import { useActionToast } from '~/composables/useActionToast'
 import type {
   AppSlots,
   CommandGroup,
@@ -30,7 +31,7 @@ export function useNavContributions() {
   // an active component instance) — the same handle, and the same reason, as
   // `usePipelineErrorToast`: nothing about this composable should depend on WHERE it is called.
   const { t } = useNuxtApp().$i18n as ReturnType<typeof useI18n>
-  const toast = useToast()
+  const actionToast = useActionToast()
   const auth = useAuthStore()
   const workspace = useWorkspaceStore()
   const workspaceSettings = useWorkspaceSettingsStore()
@@ -41,6 +42,7 @@ export function useNavContributions() {
   // Consumer items bypass this map entirely via their own `run` closure.
   const actions: Record<NavActionId, () => void> = {
     assistant: () => ui.openAssistant(),
+    guidedReview: () => ui.openGuidedReview(),
     buildPipeline: () => ui.openBuilder(),
     addFromRepo: () => ui.openAddService(),
     bootstrapRepo: () => ui.openBootstrap(),
@@ -53,6 +55,7 @@ export function useNavContributions() {
     foundationalServices: () => ui.openFoundationalServices(),
     mergeThresholds: () => ui.openWorkspaceSettings('merge'),
     workspaceSettings: () => ui.openWorkspaceSettings(),
+    setupChecklist: () => ui.openSetupChecklist(),
     modelConfiguration: () => ui.openModelConfig(),
     serviceFragmentDefaults: () => ui.openWorkspaceSettings('fragments'),
     localModels: () => ui.openLocalModels(),
@@ -70,6 +73,9 @@ export function useNavContributions() {
     // The QUESTION, not a toggle: with three roles there is no unambiguous "next one", and the
     // prompt is the one surface that states what each role gives you before you pick it.
     chooseRole: () => useUiRoleStore().openPrompt(),
+    describeWork: () => ui.openDescribeWork(),
+    queueView: () => useWorkViewStore().show('queue'),
+    boardView: () => useWorkViewStore().show('board'),
   }
 
   /** Run a contribution's action (consumer `run` closure wins over the id map). */
@@ -147,13 +153,11 @@ export function useNavContributions() {
               resolution.cause,
             )
           }
-          toast.add({
-            title: t('externalTools.unavailable.title', { tool: tool.title }),
+          actionToast.error('externalTools.unavailable.title', {
+            params: { tool: tool.title },
             description: t(EXTERNAL_TOOL_UNAVAILABLE_KEYS[resolution.reason], {
               fields: resolution.missing.join(', '),
             }),
-            icon: 'i-lucide-triangle-alert',
-            color: 'warning',
           })
         },
       },

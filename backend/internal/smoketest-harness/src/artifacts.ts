@@ -91,7 +91,7 @@ function promptDoc(prompts: { system: string; user: string }): string {
   return [
     '# Prompts given to the agent',
     '',
-    '## System prompt (written to Pi global `~/.pi/agent/AGENTS.md`)',
+    "## System prompt (written to the `AGENTS.md` of the run's own Pi config dir)",
     '',
     '```',
     prompts.system,

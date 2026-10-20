@@ -1,4 +1,4 @@
-import type { AgentFailureKind } from '@cat-factory/kernel'
+import { type AgentFailureKind, RunContendedError } from '@cat-factory/kernel'
 
 // The outcome of advancing a single run by one step. A durable driver (the
 // Cloudflare Workflows instance) inspects this to decide what to do next: loop
@@ -13,7 +13,22 @@ export type AdvanceResult =
    * parked: the durable driver polls {@link ExecutionService.pollAgentJob} between
    * sleeps until the job finishes, then records its result and continues.
    */
-  | { kind: 'awaiting_job'; jobId: string; stepIndex: number }
+  | {
+      kind: 'awaiting_job'
+      jobId: string
+      stepIndex: number
+      /**
+       * The cadence THIS job is polled on, when it is not the deployment's ordinary one. Present
+       * only for a DELEGATED step, whose executor declares its own interval and window: an
+       * external run of an hour is ordinary where a harness job of an hour is a stall, so neither
+       * number can be a platform default. Both durable drivers honour it in place of
+       * `jobPollIntervalMs`/`jobMaxPolls`; absent ⇒ those stand, which is every container job.
+       *
+       * It rides the RESULT because the driver's park loop has no step, no registry and no
+       * workspace in scope: it has a bound `poll()` callback and whatever the last advance said.
+       */
+      poll?: { intervalMs: number; maxPolls: number }
+    }
   /**
    * A polling **gate** step (`ci` / `conflicts`) is gating the PR on its precheck.
    * The run is parked: the durable driver sleeps, then polls
@@ -90,4 +105,26 @@ export interface AdvanceOptions {
    * leave it false to preserve the "never wedge" behaviour.
    */
   rethrowAgentErrors?: boolean
+}
+
+/**
+ * Run a durable-driver entry point, turning a lost optimistic-concurrency race into a
+ * re-drive. A driver write ({@link RunStateMachine.casPersist}) throws {@link RunContendedError}
+ * when a concurrent human action moved the row or a `cancel`/`stopRun` removed/terminated it;
+ * we swallow that and return `{ kind: 'continue' }` so the durable loop re-enters
+ * `advanceInstance`, reloads FRESH state, and either re-applies the mechanical step on the
+ * winning snapshot or no-ops on a gone/terminal run. It never clobbers the winner or
+ * resurrects a cancelled run (race-audit 2.2 driver-half / 2.3). This MUST run inside each
+ * entry point (ahead of the drivers' generic `catch`→`failRun` and Cloudflare's `step.do`
+ * retry); every other error propagates so real failures still fail the run.
+ */
+export async function redriveOnContention(
+  run: () => Promise<AdvanceResult>,
+): Promise<AdvanceResult> {
+  try {
+    return await run()
+  } catch (error) {
+    if (error instanceof RunContendedError) return { kind: 'continue' }
+    throw error
+  }
 }

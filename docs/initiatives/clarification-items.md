@@ -107,7 +107,7 @@ board-surfacing of requirements-review + clarity-review without merging the serv
   is the only route into the window while a run owns the block, so narrowing it to `working` would
   strand the human on a "Run planning" button for a run already running.
 - **The two states the entity cannot express get a SHARED panel.** `components/common/
-InterviewGateNotice.vue` renders the wait and the stopped-run notice for both windows (copy per
+  InterviewGateNotice.vue` renders the wait and the stopped-run notice for both windows (copy per
   feature, treatment shared): the same rule as `ClarificationItem`: reuse, don't clone.
 - **Name the two controls by what they DO, not by "forward".** "Continue" vs "Proceed to
   plan"/"Proceed to draft" both read as "go on" and were reported as indistinguishable; the pair

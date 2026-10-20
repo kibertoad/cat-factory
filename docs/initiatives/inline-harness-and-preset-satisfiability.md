@@ -78,7 +78,7 @@ everything to a subscription-only model (`claude-opus`)**:
   and adapts it to the SDK result shape (`doStream` wraps `doGenerate` as one text part).
   Pure; the subprocess lives in the facade.
 - **`runAmbientCliInline` (local facade)**: spawns `claude -p --output-format stream-json
---verbose --model <m> --append-system-prompt <sys>` (or the codex analogue) with the prompt
+  --verbose --model <m> --append-system-prompt <sys>` (or the codex analogue) with the prompt
   on stdin, ambient auth (no injected creds). The one-shot analogue of the harness's
   `runClaudeCode`, and it STREAMS for the same reason the harness does: the terminal `result`
   event carries what `--output-format json` used to print on its own (so the success path reads
@@ -169,7 +169,7 @@ so no runtime silently degrades.
 - **A run that ends BADLY still says what it spent**: `spawnCliExec` rejects with a
   `CliExecFailure` naming how it died (`timeout` / `aborted` / `exit`) plus a measured silence
   clause, and the vendor runner appends what its fold observed: `claude timed out after
-300000ms; silent for 69s; burned 1.45M tokens (1.40M cache-read) across 2 model calls`, or
+  300000ms; silent for 69s; burned 1.45M tokens (1.40M cache-read) across 2 model calls`, or
   `no model call completed` when the model was never reached. The evidence lives in the vendor's
   observer rather than on the error, because only the vendor can interpret its own stream, and
   because carrying the buffer is what the streaming switch exists to avoid. Codex gets the
@@ -219,7 +219,7 @@ Landed as designed below. Summary of what shipped:
 - **Transport**: `LocalContainerRunnerTransport.runInline(req)` leases a warm member (transient
   when pooling is off), POSTs the `inline` job, polls to completion (`pollInlineJob`), releases.
 - **Local resolver**: `wrapResolverWithInlineHarness({ inlineHarnesses, hostCliVendors, runInline,
-leasePersonal/leasePooled })`; host CLI when the native vendor's binary is present, else the
+  leasePersonal/leasePooled })`; host CLI when the native vendor's binary is present, else the
   container on a leased credential (personal per-run activation for an individual vendor, pooled
   token otherwise). `makeInlineHarnessPredicate` broadened to ANY subscription vendor whose
   harness is enabled (so GLM/Kimi/DeepSeek now qualify: previously host-CLI-only).

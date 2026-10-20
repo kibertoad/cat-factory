@@ -5,7 +5,7 @@ import {
   type SubscriptionQuotaTarget,
   isSubscriptionVendor,
 } from '@cat-factory/kernel'
-import type { HarnessCallsRecordInput } from '@cat-factory/orchestration'
+import type { RecordHarnessCalls } from '@cat-factory/orchestration'
 import { providerOf } from './containerJobAddressing.js'
 
 // What a SUBSCRIPTION-harness job's tokens are recorded against, once the job settles: the
@@ -28,7 +28,7 @@ const GUARD_CAP = 10_000
 /** The recorders this accounting fans out to; each absent ⇒ that channel is unwired. */
 export interface ContainerJobAccountingDeps {
   /** Record a settled subscription harness's per-call telemetry into `llm_call_metrics`. */
-  recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>
+  recordHarnessCalls?: RecordHarnessCalls
   /** Attribute usage to the leased POOL token (usage-aware rotation). */
   recordSubscriptionUsage?: (
     workspaceId: string,

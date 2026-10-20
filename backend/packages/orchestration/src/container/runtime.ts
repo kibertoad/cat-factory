@@ -6,6 +6,7 @@ import {
   defaultBinaryStoreRegistry,
   defaultGateRegistry,
   defaultJudgeRegistry,
+  defaultDelegatedExecutorRegistry,
   defaultPipelineRegistry,
   defaultProviderRegistry,
   defaultStepResolverRegistry,
@@ -51,6 +52,11 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     agentKindRegistry: dependencies.agentKindRegistry ?? defaultAgentKindRegistry(),
     gateRegistry: dependencies.gateRegistry ?? defaultGateRegistry(),
     judgeRegistry: dependencies.judgeRegistry ?? defaultJudgeRegistry(),
+    // The deployment's external executors. Empty by default for the reason the judge registry is:
+    // the platform ships none, so an empty registry is byte-for-byte today's behaviour: a
+    // delegated kind is the only thing that reads it, and no built-in is one.
+    delegatedExecutorRegistry:
+      dependencies.delegatedExecutorRegistry ?? defaultDelegatedExecutorRegistry(),
     stepResolverRegistry: dependencies.stepResolverRegistry ?? defaultStepResolverRegistry(),
     providerRegistry: dependencies.providerRegistry ?? defaultProviderRegistry(),
     pipelineRegistry: dependencies.pipelineRegistry ?? defaultPipelineRegistry(),

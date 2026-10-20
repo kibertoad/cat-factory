@@ -8,6 +8,7 @@ import type {
   EnvConfigRepairJob,
   EnvironmentTestRun,
   ExecutionInstance,
+  GuidedReviewChange,
   Initiative,
   KaizenGrading,
   LlmCallActivity,
@@ -139,6 +140,12 @@ export interface ExecutionEventPublisher {
    * with no real-time transport wired leaves it a no-op.
    */
   docInterviewChanged?(workspaceId: string, session: DocInterviewSession): Promise<void>
+  /**
+   * A guided PR review moved (overview settled, a thread's messages, its drafts, or it was
+   * deleted). Carries ids only, so the review window refetches what it has open. Optional; a
+   * runtime with no real-time transport wired leaves it a no-op.
+   */
+  guidedReviewChanged?(workspaceId: string, change: GuidedReviewChange): Promise<void>
 }
 
 /**
@@ -168,4 +175,5 @@ export class NoopEventPublisher implements Required<ExecutionEventPublisher> {
   async kaizenGradingChanged(): Promise<void> {}
   async initiativeChanged(): Promise<void> {}
   async docInterviewChanged(): Promise<void> {}
+  async guidedReviewChanged(): Promise<void> {}
 }

@@ -18,13 +18,14 @@ import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Block } from '~/types/domain'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ block: Block }>()
 
 const { t } = useI18n()
 const tasks = useTasksStore()
 const ui = useUiStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { linkPending, presentLinkFailures } = useContextLinking()
 
 onMounted(() => {
@@ -78,7 +79,7 @@ async function attach(item: PendingContext) {
   try {
     const failures = await linkPending(props.block.id, [item])
     if (failures.length) presentLinkFailures(failures, props.block.id)
-    else toast.add({ title: t('tasks.contextIssues.attached'), icon: 'i-lucide-link' })
+    else actionToast.success('tasks.contextIssues.attached')
   } finally {
     linking.value = false
   }
@@ -132,26 +133,25 @@ async function attach(item: PendingContext) {
     />
 
     <div v-if="linked.length" class="space-y-1">
-      <a
+      <ULink
+        raw
         v-for="issue in linked"
         :key="`${issue.source}:${issue.externalId}`"
-        :href="issue.url"
+        :to="issue.url"
         target="_blank"
         rel="noopener"
-        class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800/60"
+        class="flex items-center gap-1.5 rounded-md border border-default bg-default/60 px-2 py-1.5 text-xs text-toned hover:bg-elevated/60"
       >
         <UIcon
           :name="tasks.descriptorFor(issue.source)?.icon ?? 'i-lucide-square-check'"
-          class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+          class="h-3.5 w-3.5 shrink-0 text-primary"
         />
         <span class="truncate">{{ issue.externalId }} · {{ issue.title }}</span>
         <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">
           {{ issue.status }}
         </UBadge>
-      </a>
+      </ULink>
     </div>
-    <p v-else class="text-[11px] text-slate-500">
-      {{ emptyHint }}
-    </p>
+    <EmptyState v-else compact icon="i-lucide-ticket" :title="emptyHint" />
   </InspectorSection>
 </template>

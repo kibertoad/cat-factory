@@ -26,7 +26,7 @@ Prioritization is **hotness × scaling**:
 Each row below is a self-contained slice: most are one small PR; a few frontend ones can
 be grouped. Every persistence change lands on BOTH runtimes (D1 migration ⇄ Drizzle
 schema + `pnpm db:generate`) with a conformance assertion, per "Keep the runtimes
-symmetric" (CLAUDE.md).
+symmetric" (AGENTS.md).
 
 ## Target patterns (copy these, don't invent)
 
@@ -43,7 +43,7 @@ symmetric" (CLAUDE.md).
 - **Parallel waves** for independent awaits: group by true data dependency, then
   `Promise.all` each wave (see item 4's dependency analysis).
 - **Reuse the already-fetched list**: thread a loaded block list / pipeline catalog into
-  the loop body instead of re-reading per iteration (CLAUDE.md "No N+1").
+  the loop body instead of re-reading per iteration (AGENTS.md "No N+1").
 
 ## Per-item checklist
 
@@ -219,7 +219,7 @@ board the step outputs dominate snapshot bytes.
 **Fix:** serve the snapshot a lightweight execution projection (omit
 `output`/`custom`/`outputHistory`/`rework`/`verdicts` from steps); keep the full shape on
 the by-id endpoint the overlays already use. This is a wire-shape change: pre-1.0, no
-back-compat shim (CLAUDE.md); land contracts + backend projection + SPA consumption
+back-compat shim (AGENTS.md); land contracts + backend projection + SPA consumption
 together. Couples naturally with item 3's `detail`-free list projection.
 
 **Premise correction (2026-08, while landing item 11): "the by-id endpoint the overlays already
@@ -324,7 +324,7 @@ window.
 single-block reasons (`block-added`, `block-updated`, `dependency-toggled`,
 `epic-assigned`) and upsert it; reserve the full refresh for genuinely structural reasons
 (`cancel`, `block-removed`, reparent). MUST respect the live-push coherence rules in
-CLAUDE.md ("Real-time store coherence"): keep the monotonic refresh guard, never let a
+AGENTS.md ("Real-time store coherence"): keep the monotonic refresh guard, never let a
 targeted upsert be clobbered by a stale refresh, and pin the new path with a store-level
 unit test.
 
@@ -401,7 +401,7 @@ end-to-end by the conformance `/spend` budget test (warm → settings write → 
 ### 8. `AccountSettingsService` legacy 30s Map (P2)
 
 `backend/packages/integrations/src/modules/accountSettings/AccountSettingsService.ts:72`
-(TTL at `:34`, read `:83-99`, `invalidate` `:103`): the exact Map CLAUDE.md names as the
+(TTL at `:34`, read `:83-99`, `invalidate` `:103`): the exact Map AGENTS.md names as the
 anti-pattern this rule exists to stop. The hot non-secret read (model policy) was already
 migrated to `caches.accountModelPolicy`; what remains is `resolve()` decrypting the
 grouped secrets blob (Slack/Linear/web-search/S3) for runtime integrations,
@@ -893,7 +893,7 @@ DB/local. So this is a **defensiveness + de-duplication** slice, not a hot-loop 
 - **Global throttle + `Retry-After` honoring** (token-bucket / `p-limit`) on the client so a
   fleet-wide advance storm degrades gracefully instead of tripping abuse detection.
 
-Route cached reads through an `AppCaches` slice, NOT a homebrew `Map` (CLAUDE.md caching rule).
+Route cached reads through an `AppCaches` slice, NOT a homebrew `Map` (AGENTS.md caching rule).
 An installation token is self-expiring, so its slice may keep a real TTL even in
 `ISOLATE_SAFE_APP_CACHES_PROFILE` (like `fragmentDocumentBody`); the single-flight wrapper is a
 thin in-flight-promise map on the client, invalidated by nothing (it only lives for the call's
@@ -1217,7 +1217,7 @@ blocks in place across three modules.
 
 - **Every persistence change lands on BOTH runtimes in the same PR** (D1 migration ⇄
   Drizzle schema + `pnpm db:generate` migration), with a conformance assertion for any new
-  port method. A facade-parity gap is a showstopper (CLAUDE.md).
+  port method. A facade-parity gap is a showstopper (AGENTS.md).
 - **New batch/projection reads are PORT methods, not repo-internal helpers**: add to the
   kernel port, implement in both repos, copy the `listByIds` good citizens. Chunk `IN`
   lists like the existing repos do.
@@ -1231,7 +1231,7 @@ blocks in place across three modules.
   bus; per-process is the right scope) and the CI gate's `step.gate.maxAttempts` stamp.
   The `repoId` memo (item 2) joins this family: immutable mapping, process-level Map is
   fine (precedent: `ownerAppCache`).
-- **Frontend live-push changes must respect the coherence rules** (CLAUDE.md "Real-time
+- **Frontend live-push changes must respect the coherence rules** (AGENTS.md "Real-time
   store coherence"): monotonic refresh guard stays, REPLACE-hydrates must not drop
   live-only state, and every ordering fix ships a store-level unit test pinning the race.
   Item 6 is the highest-risk slice in this initiative for exactly that reason: treat the
@@ -1306,6 +1306,6 @@ blocks in place across three modules.
   Vue Flow, or a general snapshot-caching layer (the board is too mutable; verified not
   a clear win).
 - The executor-harness image (dependency/runtime changes there are deliberate,
-  image-bumping work; see CLAUDE.md).
+  image-bumping work; see AGENTS.md).
 - Coalescing/batching the event-publisher protocol itself (noted in item 14 as a design
   opportunity, not scheduled).

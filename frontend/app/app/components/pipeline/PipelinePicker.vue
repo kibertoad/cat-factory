@@ -22,6 +22,12 @@ const props = withDefaults(
      */
     noneLabel?: string
     /**
+     * What the preview pane says about the "none" row. Defaults to the full form's meaning ("no
+     * default; you choose when you run it"); a surface whose "none" row means the workspace default
+     * names what that default resolves to instead.
+     */
+    noneHint?: string
+    /**
      * Default-trigger text while nothing is selected. Defaults to {@link noneLabel}, which reads
      * correctly when the "none" row IS the empty state; a surface without that row supplies its
      * own prompt ("Pick a pipeline").
@@ -30,7 +36,7 @@ const props = withDefaults(
     /** Extra classes for the default trigger button (e.g. full-width in the modal). */
     triggerClass?: string
   }>(),
-  { noneLabel: undefined, placeholder: undefined, triggerClass: '' },
+  { noneLabel: undefined, noneHint: undefined, placeholder: undefined, triggerClass: '' },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [string] }>()
@@ -59,7 +65,7 @@ const previewPipeline = computed<Pipeline | null>(() => {
  */
 const emptyHint = computed(() =>
   props.noneLabel !== undefined && (hoverId.value ?? props.modelValue) === ''
-    ? t('pipeline.picker.noneHint')
+    ? (props.noneHint ?? t('pipeline.picker.noneHint'))
     : t('pipeline.picker.hoverHint'),
 )
 
@@ -92,49 +98,51 @@ function choose(id: string) {
         @mouseleave="hoverId = undefined"
       >
         <!-- left: selectable options -->
-        <ul class="w-1/2 shrink-0 overflow-y-auto border-e border-slate-800 p-1">
+        <ul class="w-1/2 shrink-0 overflow-y-auto border-e border-default p-1">
           <li v-if="noneLabel !== undefined">
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-slate-800/60"
-              :class="modelValue ? 'text-slate-300' : 'text-slate-100'"
+            <UButton
+              color="neutral"
+              variant="ghost"
+              class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
+              :class="modelValue ? 'text-toned' : 'text-app-100'"
               data-testid="pipeline-option-none"
               @mouseenter="hoverId = ''"
               @click="choose('')"
             >
-              <UIcon name="i-lucide-rotate-ccw" class="h-4 w-4 shrink-0 text-slate-400" />
+              <UIcon name="i-lucide-rotate-ccw" class="h-4 w-4 shrink-0 text-muted" />
               <span class="flex-1 truncate">{{ noneLabel }}</span>
               <UIcon
                 v-if="!modelValue"
                 name="i-lucide-check"
-                class="h-4 w-4 shrink-0 text-primary-400"
+                class="h-4 w-4 shrink-0 text-primary"
               />
-            </button>
+            </UButton>
           </li>
           <li v-for="p in options" :key="p.id">
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-slate-800/60"
-              :class="modelValue === p.id ? 'text-slate-100' : 'text-slate-300'"
+            <UButton
+              color="neutral"
+              variant="ghost"
+              class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
+              :class="modelValue === p.id ? 'text-app-100' : 'text-toned'"
               :data-testid="`pipeline-option-${p.id}`"
               @mouseenter="hoverId = p.id"
               @click="choose(p.id)"
             >
-              <UIcon name="i-lucide-workflow" class="h-4 w-4 shrink-0 text-slate-400" />
+              <UIcon name="i-lucide-workflow" class="h-4 w-4 shrink-0 text-muted" />
               <span class="flex-1 truncate">{{ p.name }}</span>
               <UIcon
                 v-if="modelValue === p.id"
                 name="i-lucide-check"
-                class="h-4 w-4 shrink-0 text-primary-400"
+                class="h-4 w-4 shrink-0 text-primary"
               />
-            </button>
+            </UButton>
           </li>
         </ul>
 
         <!-- right: preview of the hovered (or selected) pipeline -->
         <div class="w-1/2 overflow-y-auto p-3">
           <PipelinePreview v-if="previewPipeline" :pipeline="previewPipeline" />
-          <div v-else class="text-[12px] leading-snug text-slate-500">{{ emptyHint }}</div>
+          <div v-else class="text-xs leading-snug text-dimmed">{{ emptyHint }}</div>
         </div>
       </div>
     </template>

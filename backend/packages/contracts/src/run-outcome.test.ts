@@ -213,7 +213,7 @@ describe('composeRunOutcome', () => {
 })
 
 // The REQUIREMENT COVERAGE half, split out to keep each describe within the per-function line
-// budget (see CLAUDE.md: split, never raise). It is the section with the most states by a wide
+// budget (see AGENTS.md: split, never raise). It is the section with the most states by a wide
 // margin, because a coverage number carries three separate questions: which tester steps were
 // read, what the count was taken OVER, and what the spec could not place.
 describe('composeRunOutcome: requirement coverage', () => {

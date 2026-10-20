@@ -1,5 +1,258 @@
 # @cat-factory/observability-otel
 
+## 0.23.70
+
+### Patch Changes
+
+- Updated dependencies [e9b24a1]
+  - @cat-factory/kernel@0.363.0
+  - @cat-factory/contracts@0.374.0
+
+## 0.23.69
+
+### Patch Changes
+
+- 5c17395: Dependency refresh, direct and transitive (the lockfile is re-resolved from scratch), held to the
+  24h `minimumReleaseAge` window.
+  
+  Majors, each taken because its whole peer group could move together:
+  
+  - **Vitest 5** (`vitest`, `@vitest/coverage-v8`, `@vitest/browser`, `@vitest/browser-playwright`
+    at `5.0.5`), now that `@cloudflare/vitest-plugin@1.4.4`, `@storybook/addon-vitest`,
+    `@nuxt/test-utils` and `vitest-browser-vue` all accept `^5`. The Worker suite turns Vitest 5's
+    new default `fsModuleCache` off: the Workers pool inlines every warm module into one WebSocket
+    reply, and this suite's graph (~80MB) exceeds workerd's message limit (`1009 Message is too
+    large`).
+  - **msw 3**, for the component stories. `onUnhandledRequest` became `onUnhandledFrame`, which
+    also receives WebSocket frames, and the bundled `mockServiceWorker.js` is regenerated.
+  - **happy-dom 21** for the SPA's unit tests.
+  
+  The Workers test pool moves to `@cloudflare/vitest-plugin@1.4.4`, which pins `wrangler@4.151.1`, so
+  the Cloudflare stack moves with it: workerd `1.20261012.1`, miniflare `5.20261012.1-beta`,
+  `@cloudflare/workers-types` `5.20261012.1` (the resolved workerd's date) and esbuild `0.28.2`
+  (the version wrangler and the plugin now pin, so the scoped esbuild overrides follow).
+  
+  Also the Vercel AI SDK family as one set (`ai@7.0.142`, `@ai-sdk/anthropic@4.0.81`,
+  `@ai-sdk/openai@4.0.95`, `@ai-sdk/openai-compatible@3.0.70`, `@ai-sdk/amazon-bedrock@5.0.117`,
+  `@ai-sdk/provider@4.0.28`), the Vue family at `3.5.44`, `@nuxt/ui@4.12.0`, `pinia@4.1.0`,
+  `storybook@10.6.2`, `undici@8.12.2`, `pg-boss@12.38.0`, `@aws-sdk/client-s3@3.1152.0`,
+  `@hono/node-server@2.1.5`, `@playwright/test@1.64.1`, and the root toolchain (`turbo@2.11.8`,
+  `oxlint@1.88.0`, `oxfmt@0.73.0`, `knip@6.41.0`).
+  
+  Held: the frontend stays on TypeScript 6 (TypeScript 7 ships no classic compiler API for
+  `vue-tsc`); `@nuxt/fonts` stays on 0.14 because `@nuxt/ui@4.12.0` depends on `^0.14.0`; Drizzle
+  stays on `1.0.0-rc.4`, still its `rc` tag; `nuxt@4.6.2` is inside the window.
+- Updated dependencies [5c17395]
+- Updated dependencies [5c17395]
+  - @cat-factory/kernel@0.362.0
+  - @cat-factory/contracts@0.373.1
+
+## 0.23.68
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/contracts@0.373.0
+  - @cat-factory/kernel@0.361.0
+
+## 0.23.67
+
+### Patch Changes
+
+- Updated dependencies [f702a8e]
+  - @cat-factory/contracts@0.372.0
+  - @cat-factory/kernel@0.360.4
+
+## 0.23.66
+
+### Patch Changes
+
+- Updated dependencies [b3a13d3]
+  - @cat-factory/contracts@0.371.0
+  - @cat-factory/kernel@0.360.3
+
+## 0.23.65
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/contracts@0.370.0
+  - @cat-factory/kernel@0.360.2
+
+## 0.23.64
+
+### Patch Changes
+
+- Updated dependencies [96e7e3d]
+  - @cat-factory/contracts@0.369.0
+  - @cat-factory/kernel@0.360.1
+
+## 0.23.63
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/contracts@0.368.0
+  - @cat-factory/kernel@0.360.0
+
+## 0.23.62
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/contracts@0.367.0
+  - @cat-factory/kernel@0.359.1
+
+## 0.23.61
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/contracts@0.366.0
+  - @cat-factory/kernel@0.359.0
+
+## 0.23.60
+
+### Patch Changes
+
+- Updated dependencies [91dedb6]
+  - @cat-factory/contracts@0.365.0
+  - @cat-factory/kernel@0.358.1
+
+## 0.23.59
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/contracts@0.364.0
+  - @cat-factory/kernel@0.358.0
+
+## 0.23.58
+
+### Patch Changes
+
+- Updated dependencies [1a42f34]
+  - @cat-factory/kernel@0.357.1
+
+## 0.23.57
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/contracts@0.363.0
+  - @cat-factory/kernel@0.357.0
+
+## 0.23.56
+
+### Patch Changes
+
+- ffe4356: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Worker test pool moves from `@cloudflare/vitest-pool-workers@0.22.0` to its renamed successor
+  `@cloudflare/vitest-plugin@1.3.7`. The old package is deprecated and receives no further releases;
+  the new one exports the same `cloudflareTest`, `readD1Migrations` and `/types` entry, so only the
+  import specifiers change. It pins `wrangler@4.148.0`, so the Cloudflare stack moves with it:
+  wrangler `4.124.0` to `4.148.0`, workerd `1.20260815.1` to `1.20261006.1`, miniflare to
+  `5.20261006.0-alpha`, and `@cloudflare/workers-types` to `5.20261006.1`, the resolved workerd's
+  date. esbuild stays on `0.28.1`, which wrangler still pins.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.131`, `@ai-sdk/anthropic@4.0.75`,
+  `@ai-sdk/openai@4.0.87`, `@ai-sdk/openai-compatible@3.0.65`, `@ai-sdk/amazon-bedrock@5.0.109`,
+  `@ai-sdk/provider@4.0.24`), still one `@ai-sdk/provider` identity across every caller. Also
+  `nuxt@4.6.0` with `vue-router@5.4.0`, `@nuxt/ui@4.11.3`, `hono@4.13.13`,
+  `@modelcontextprotocol/sdk@1.32.1`, the OpenTelemetry SDK `2.12.0` / `0.223.0`, `pg-boss@12.37.0`,
+  `pino@10.4.0`, `@aws-sdk/client-s3@3.1147.0`, `@playwright/test@1.64.0`, and the root toolchain
+  (`turbo@2.11.7`, `oxlint@1.87.0`, `oxfmt@0.72.0`, `knip@6.40.0`).
+  
+  Held: vitest and `@vitest/coverage-v8` stay on 4, because the plugin release inside the window
+  peer-requires vitest `^4.1.0`. msw stays on 2 for the same reason: vitest 4's mocker peers
+  `msw@^2`. The frontend stays on TypeScript 6, since TypeScript 7 ships no classic compiler API for
+  `vue-tsc`.
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+
+## 0.23.55
+
+### Patch Changes
+
+- Updated dependencies [97175f8]
+  - @cat-factory/contracts@0.362.0
+  - @cat-factory/kernel@0.355.0
+
+## 0.23.54
+
+### Patch Changes
+
+- Updated dependencies [a3a10b8]
+- Updated dependencies [0966666]
+  - @cat-factory/contracts@0.361.0
+  - @cat-factory/kernel@0.354.2
+
+## 0.23.53
+
+### Patch Changes
+
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+  - @cat-factory/kernel@0.354.1
+
+## 0.23.52
+
+### Patch Changes
+
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/contracts@0.359.0
+  - @cat-factory/kernel@0.354.0
+
+## 0.23.51
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+  - @cat-factory/kernel@0.353.0
+
+## 0.23.50
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/contracts@0.357.0
+
+## 0.23.49
+
+### Patch Changes
+
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/kernel@0.351.0
+
+## 0.23.48
+
+### Patch Changes
+
+- Updated dependencies [c046707]
+- Updated dependencies [c046707]
+  - @cat-factory/kernel@0.350.0
+
+## 0.23.47
+
+### Patch Changes
+
+- Updated dependencies [1fc4ff1]
+- Updated dependencies [bc073ab]
+- Updated dependencies [09bd94b]
+  - @cat-factory/contracts@0.356.0
+  - @cat-factory/kernel@0.349.0
+
 ## 0.23.46
 
 ### Patch Changes

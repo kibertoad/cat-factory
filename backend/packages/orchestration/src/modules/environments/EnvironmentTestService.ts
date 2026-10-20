@@ -199,7 +199,7 @@ function toRun(record: EnvironmentTestRunRecord): EnvironmentTestRun {
 export class EnvironmentTestService {
   /**
    * The injected logger, normalised once so every site can log unconditionally (and so
-   * `runBestEffort`, which requires one, can be used at all). See CLAUDE.md's logging rules.
+   * `runBestEffort`, which requires one, can be used at all). See AGENTS.md's logging rules.
    */
   private readonly log: Logger
 

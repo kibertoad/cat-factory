@@ -259,7 +259,7 @@ carries it; "done" means that slice has landed.
 | Checklist granularity ((workspace, key) sharing, unscoped list)                   | Standing decisions, unchanged |
 | Env-fallback default `true`; `allowKeys` unset                                    | Tracked elsewhere (below)     |
 | No MCP resources/prompts/elicitation/progress notifications                       | Deferred (below)              |
-| Pi has no MCP client                                                              | Standing non-goal (ADR 0029)  |
+| Pi has no MCP client                                                              | Closed: Pi 0.99 built-in MCP  |
 
 From the 2026-08-05 external-servers review (dispositions follow the same vocabulary):
 
@@ -378,7 +378,7 @@ Recorded so the next iteration does not re-propose them.
   reads under `/api/v1`, so the full price of a member is: the contracts picklist, the per-cause
   reasoning on kernel's `UnavailableToolServer`, `UNAVAILABLE_REASONS`, the two SPA `Record`s, ten
   locales, the website's reason table, AND an OpenAPI `info.version` minor with `pnpm gen:openapi &&
-pnpm gen:sdk` behind it (`unusable_secret` was 1.37.0, `consensus_panel` 1.38.0). Additive, so it
+  pnpm gen:sdk` behind it (`unusable_secret` was 1.37.0, `consensus_panel` 1.38.0). Additive, so it
   ships freely, but a member added without the regeneration fails `check:sdk` rather than the
   typecheck that catches the rest. Slice 9's estimate omitted this half, which is why it is here.
 - **A boot refusal is HALF a rule; the dispatch is where a mothership node meets it.** Every

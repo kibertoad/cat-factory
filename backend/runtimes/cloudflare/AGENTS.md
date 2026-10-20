@@ -6,7 +6,7 @@
 
 One of **three runtime facades** that serve the same runtime-neutral `@cat-factory/server`
 Hono app. Keep them **symmetric**: any shared behaviour added here must land in the Node +
-local facades too (root `CLAUDE.md` → "Keep the runtimes symmetric"). This facade supplies the
+local facades too (root `AGENTS.md` → "Keep the runtimes symmetric"). This facade supplies the
 Cloudflare differentiators: D1 persistence, Durable Objects (real-time + per-run Containers),
 Cloudflare Workflows (durable execution), queues/cron, and the `workers-ai` binding.
 
@@ -125,6 +125,6 @@ reachability guard has nothing to say here; what still binds is constructibility
 `test/extension-surface.test.ts`. That list is a SYMMETRY copy of the Node facade's classification
 (no shared dependency could carry one), so a seam added there lands here in the same change.
 
-**See also:** `CLAUDE.md` → "Keep the runtimes symmetric";
+**See also:** `AGENTS.md` → "Keep the runtimes symmetric";
 [`docs/execution-state-machine.md`](../../../docs/execution-state-machine.md) and the "Repo
 bootstrap" entry of [`docs/flow-index.md`](../../../docs/flow-index.md).

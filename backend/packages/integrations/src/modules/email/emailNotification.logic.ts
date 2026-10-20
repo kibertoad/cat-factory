@@ -7,7 +7,7 @@ import type { Notification, NotificationType } from '@cat-factory/kernel'
 // Plain-text first, assembled from the notification's OWN machine-readable fields. There is
 // no template engine and no prose the backend invents: the card the inbox renders is the
 // source of truth, and an email that says something the card does not is a second version of
-// the truth to keep in step. The backend also does not localize (see CLAUDE.md), so this is
+// the truth to keep in step. The backend also does not localize (see AGENTS.md), so this is
 // deliberately English until per-user locale becomes a slice of its own.
 
 /** A short per-type subject prefix, so a mailbox reader can triage without opening. */

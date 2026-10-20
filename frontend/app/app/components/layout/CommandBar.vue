@@ -6,6 +6,11 @@
 // from the add-task flow.) Commands are assembled from the live stores so only
 // available actions (connected integrations, etc.) show.
 
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
+import { documentSourceKind, sourceCommandLabelKey } from './CommandBar.logic'
+
 interface Command {
   id: string
   label: string
@@ -91,9 +96,10 @@ const dynamicIntegrationCommands = computed<Command[]>(() => {
     for (const src of documents.sources) {
       list.push({
         id: `doc-connect-${src.source}`,
-        label: documents.isConnected(src.source)
-          ? t('layout.commandBar.cmd.sourceManage', { source: src.label })
-          : t('layout.commandBar.cmd.sourceConnect', { source: src.label }),
+        label: t(
+          sourceCommandLabelKey(documentSourceKind(src.source), documents.isConnected(src.source)),
+          { source: src.label },
+        ),
         group: groupIntegrations,
         icon: src.icon,
         keywords: t('layout.commandBar.keywords.documentSource'),
@@ -115,9 +121,7 @@ const dynamicIntegrationCommands = computed<Command[]>(() => {
     for (const src of tasks.sources) {
       list.push({
         id: `task-connect-${src.source}`,
-        label: src.available
-          ? t('layout.commandBar.cmd.sourceManage', { source: src.label })
-          : t('layout.commandBar.cmd.sourceConnect', { source: src.label }),
+        label: t(sourceCommandLabelKey('task', src.available), { source: src.label }),
         group: groupIntegrations,
         icon: src.icon,
         keywords: t('layout.commandBar.keywords.taskSource'),
@@ -253,11 +257,11 @@ function indexOf(cmd: Command) {
 </script>
 
 <template>
-  <UModal v-model:open="open" :ui="{ content: 'max-w-xl' }">
+  <AppModal size="form" v-model:open="open">
     <template #content>
       <div class="flex flex-col" data-testid="command-bar" @keydown="onKeydown">
-        <div class="flex items-center gap-2 border-b border-slate-800 px-3">
-          <UIcon name="i-lucide-search" class="h-4 w-4 shrink-0 text-slate-500" />
+        <div class="flex items-center gap-2 border-b border-default px-3">
+          <UIcon name="i-lucide-search" class="h-4 w-4 shrink-0 text-dimmed" />
           <UInput
             ref="inputRef"
             v-model="query"
@@ -271,36 +275,38 @@ function indexOf(cmd: Command) {
         </div>
 
         <div class="max-h-80 overflow-y-auto p-1.5">
-          <p v-if="filtered.length === 0" class="px-3 py-6 text-center text-sm text-slate-500">
-            {{ t('layout.commandBar.noMatches') }}
-          </p>
+          <EmptyState
+            v-if="filtered.length === 0"
+            compact
+            icon="i-lucide-search-x"
+            :title="t('layout.commandBar.noMatches')"
+          />
 
           <div v-for="group in groups" :key="group.name" class="mb-1">
-            <p
-              class="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
-            >
+            <SectionLabel as="p" class="px-2 pb-1 pt-2">
               {{ group.name }}
-            </p>
-            <button
+            </SectionLabel>
+            <UButton
+              color="neutral"
+              variant="ghost"
               v-for="cmd in group.items"
               :key="cmd.id"
-              type="button"
               :data-testid="`command-${cmd.id}`"
               class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-start text-sm transition"
               :class="
                 indexOf(cmd) === activeIndex
-                  ? 'bg-slate-800 text-slate-100'
-                  : 'text-slate-300 hover:bg-slate-800/60'
+                  ? 'bg-elevated text-app-100'
+                  : 'text-toned hover:bg-elevated/60'
               "
               @mousemove="activeIndex = indexOf(cmd)"
               @click="run(cmd)"
             >
-              <UIcon :name="cmd.icon" class="h-4 w-4 shrink-0 text-slate-400" />
+              <UIcon :name="cmd.icon" class="h-4 w-4 shrink-0 text-muted" />
               <span class="truncate">{{ cmd.label }}</span>
-            </button>
+            </UButton>
           </div>
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

@@ -23,7 +23,8 @@ import {
   RALPH_AGENT_KIND,
   RALPH_NO_PROGRESS_LIMIT,
 } from './ralph.logic.js'
-import { recordDispatchedJob } from './step-fold.logic.js'
+import type { StartStepDispatch } from './delegation.logic.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 /** The engine collaborators the ralph loop drives (kept on the engine, injected here). */
 export interface RalphControllerDeps {
@@ -33,6 +34,12 @@ export interface RalphControllerDeps {
   contextBuilder: AgentContextBuilder
   /** The async instance/block spine (container reclaim, instance persist + emit). */
   stateMachine: RunStateMachine
+  /**
+   * Opens and commits this dispatch's record, calls the executor and folds what came back: a
+   * delegation claim for a helper kind whose work leaves the platform, a container cold boot
+   * otherwise. See {@link StartStepDispatch}.
+   */
+  startStepDispatch: StartStepDispatch
   /** Current time (ms) for stamping attempts. Absent → `Date.now()`. */
   clockNow?: () => number
 }
@@ -167,16 +174,19 @@ export class RalphController {
         },
       ]
     }
-    // Surface the cold-boot window before the blocking dispatch (parity with the Coder/Tester):
-    // the ralph result view shows the container spinning up, then the live phase on first poll.
-    step.container = { status: 'starting' }
     step.subtasks = undefined
+    // Open and commit this iteration's record before the blocking dispatch (parity with the
+    // Coder/Tester): a container round shows the cold boot and then the live phase on first
+    // poll, a delegated one commits the claim its replay re-attaches to.
+    const { jobId } = await this.deps.startStepDispatch({
+      workspaceId,
+      instance,
+      context,
+      step,
+      executor,
+    })
     await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
-
-    const handle = await executor.startJob(context)
-    recordDispatchedJob(step, handle, context.agentKind)
-    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: handle.jobId, stepIndex: instance.currentStep }
+    return awaitingJob(step, instance.currentStep, jobId)
   }
 
   /**

@@ -1,5 +1,6 @@
 import {
   AsyncFakeAgentExecutor,
+  withDelegatedArm,
   type ConformanceHarness,
   FakeAgentExecutor,
   FakeEnvConfigRepairer,
@@ -11,11 +12,18 @@ import {
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
   makeToolServerDispatchProbe,
+  mintMachineToken,
   mintSession,
   seedFrameRepoLink,
 } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
-import { buildTestContainer, makeApp, fragmentLibraryDeps, tasksDeps } from '../helpers'
+import {
+  buildTestContainer,
+  buildTestHarnessCallRecorder,
+  makeApp,
+  fragmentLibraryDeps,
+  tasksDeps,
+} from '../helpers'
 import { FakeTaskSourceProvider } from '../fakes/FakeTaskSourceProvider'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
 import { D1ClarityReviewRepository } from '../../src/infrastructure/repositories/D1ClarityReviewRepository'
@@ -26,10 +34,12 @@ import { D1PipelineRepository } from '../../src/infrastructure/repositories/D1Pi
 import { D1BlockRepository } from '../../src/infrastructure/repositories/D1BlockRepository'
 import { D1WorkspaceRepository } from '../../src/infrastructure/repositories/D1WorkspaceRepository'
 import { D1WorkspaceMemberRepository } from '../../src/infrastructure/repositories/D1WorkspaceMemberRepository'
+import { D1PublicApiKeyRepository } from '../../src/infrastructure/repositories/D1PublicApiKeyRepository'
 import { D1InitiativeRepository } from '../../src/infrastructure/repositories/D1InitiativeRepository'
 import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
 import { D1DocumentRepository } from '../../src/infrastructure/repositories/D1DocumentRepository'
 import { D1DocInterviewRepository } from '../../src/infrastructure/repositories/D1DocInterviewRepository'
+import { D1GuidedReviewRepository } from '../../src/infrastructure/repositories/D1GuidedReviewRepository'
 import { D1AccountSettingsRepository } from '../../src/infrastructure/repositories/D1AccountSettingsRepository'
 import { D1AccountRiskPolicyRepository } from '../../src/infrastructure/repositories/D1AccountRiskPolicyRepository'
 import { D1TaskRepository } from '../../src/infrastructure/repositories/D1TaskRepository'
@@ -121,6 +131,11 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
       //   pass-through) is driven against real D1 with no model.
       judgeRegistry: o.judgeRegistry,
       judgeAssessor: o.judgeAssessor,
+      // - delegatedExecutorRegistry: a deployment-registered EXTERNAL executor, so the delegated
+      //   arm's dispatch / poll / settle / teardown is driven against real D1. The agent executor
+      //   above is wrapped in the production composite for the same suite (see `withDelegatedArm`),
+      //   because a wholesale override would have the fake answer for the delegated kind too.
+      delegatedExecutorRegistry: o.delegatedExecutorRegistry,
       bugHuntAssessor: o.bugHuntAssessor,
       monorepoAdoptionAdvisor: o.monorepoAdoptionAdvisor,
       inlineUseCaseGenerator: o.inlineUseCaseGenerator,
@@ -171,9 +186,17 @@ const harness: ConformanceHarness = {
       ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
     }
     const app = makeApp(
-      agentOptions?.asyncKinds?.length
-        ? new AsyncFakeAgentExecutor(fakeOptions)
-        : new FakeAgentExecutor(fakeOptions),
+      // The deterministic agent, WRAPPED in the production composite when the suite registered an
+      // external executor, so a delegated kind reaches the real `DelegatedAgentExecutor` while
+      // everything else stays on the fake. Overriding `agentExecutor` wholesale is right for every
+      // other assertion and would make the delegated ones vacuous.
+      withDelegatedArm(
+        agentOptions?.asyncKinds?.length
+          ? new AsyncFakeAgentExecutor(fakeOptions)
+          : new FakeAgentExecutor(fakeOptions),
+        opts ?? {},
+        buildTestHarnessCallRecorder(),
+      ),
       buildWorkerConformanceDeps(recorder, opts),
       // The Worker binds `AI` in tests; let the suite force the opt-in flag off so the
       // provider-key assertions behave identically to Node (which has no binding).
@@ -189,6 +212,7 @@ const harness: ConformanceHarness = {
       ...app,
       authEnabled: Boolean(sessionSecret),
       session: (user) => mintSession(sessionSecret, user),
+      machineToken: () => mintMachineToken(sessionSecret),
       createWorkspaceInAccount: (accountId, ownerUserId, options) =>
         buildTestContainer({ agentExecutor: new FakeAgentExecutor() }).workspaceService.create(
           { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
@@ -314,11 +338,13 @@ const harness: ConformanceHarness = {
       blockRepository: () => new D1BlockRepository({ db: env.DB }),
       workspaceRepository: () => new D1WorkspaceRepository({ db: env.DB }),
       workspaceMemberRepository: () => new D1WorkspaceMemberRepository({ db: env.DB }),
+      publicApiKeyRepository: () => new D1PublicApiKeyRepository({ db: env.DB }),
       initiativeRepository: () => new D1InitiativeRepository({ db: env.DB }),
       notificationRepository: () => new D1NotificationRepository({ db: env.DB }),
       documentRepository: () => new D1DocumentRepository({ db: env.DB }),
       taskRepository: () => new D1TaskRepository({ db: env.DB }),
       docInterviewRepository: () => new D1DocInterviewRepository({ db: env.DB }),
+      guidedReviewRepository: () => new D1GuidedReviewRepository({ db: env.DB }),
       accountSettingsRepository: () => new D1AccountSettingsRepository({ db: env.DB }),
       accountRiskPolicyRepository: () => new D1AccountRiskPolicyRepository({ db: env.DB }),
     }

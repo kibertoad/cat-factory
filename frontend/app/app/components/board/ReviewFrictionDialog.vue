@@ -6,6 +6,8 @@
 // flag); the hard `blocked` tier does not. Driven by `ui.reviewFrictionContext`, mounted in
 // pages/index.vue. See backend/docs/review-debt-friction.md.
 import { computed } from 'vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -52,17 +54,20 @@ const body = computed(() => {
 /** Deep-link to a waiting task's block and dismiss the whole friction flow. */
 function goToBlock(blockId: string) {
   if (blockId) ui.select(blockId)
+  leave()
+}
+
+/** Close the friction and the form that raised it. */
+function leave() {
+  const onLeave = ctx.value?.onLeave
   ui.closeReviewFriction()
-  ui.closeAddTask()
+  onLeave?.()
 }
 
 function goReview() {
   const first = ctx.value?.debt[0]
   if (first) goToBlock(first.blockId)
-  else {
-    ui.closeReviewFriction()
-    ui.closeAddTask()
-  }
+  else leave()
 }
 
 function createAnyway() {
@@ -72,36 +77,37 @@ function createAnyway() {
 </script>
 
 <template>
-  <UModal
+  <AppModal
+    size="prompt"
     v-model:open="open"
     :title="title"
     :dismissible="!pending"
     :close="{ disabled: pending }"
-    :ui="{ content: 'max-w-xl' }"
   >
     <template #body>
       <div v-if="ctx" class="space-y-5">
-        <p class="text-sm text-slate-300">{{ body }}</p>
+        <p class="text-sm text-toned">{{ body }}</p>
 
-        <div class="rounded-lg border border-slate-700 bg-slate-900/50 p-2">
-          <p class="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <div class="rounded-lg border border-muted bg-default/50 p-2">
+          <SectionLabel as="p" class="mb-1.5 px-1">
             {{ t('errors.reviewFriction.waitingHeading') }}
-          </p>
+          </SectionLabel>
           <ul class="space-y-1">
             <li v-for="item in ctx.debt" :key="item.blockId">
-              <button
-                type="button"
-                class="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm hover:bg-slate-800/60 disabled:opacity-50"
+              <UButton
+                color="neutral"
+                variant="ghost"
+                class="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm hover:bg-elevated/60 disabled:opacity-50"
                 :disabled="pending"
                 @click="goToBlock(item.blockId)"
               >
-                <span class="truncate text-slate-200">
+                <span class="truncate text-default">
                   {{ item.title || t('errors.reviewFriction.untitled') }}
                 </span>
-                <span class="shrink-0 text-[12px] text-slate-500">
+                <span class="shrink-0 text-xs text-dimmed">
                   {{ t('errors.reviewFriction.waiting', { minutes: item.waitingMinutes }) }}
                 </span>
-              </button>
+              </UButton>
             </li>
           </ul>
         </div>
@@ -133,17 +139,11 @@ function createAnyway() {
           >
             {{ t('errors.reviewFriction.createAnyway') }}
           </UButton>
-          <UButton
-            color="primary"
-            size="sm"
-            icon="i-lucide-list-checks"
-            :disabled="pending"
-            @click="goReview"
-          >
+          <UButton size="sm" icon="i-lucide-list-checks" :disabled="pending" @click="goReview">
             {{ t('errors.reviewFriction.goReview') }}
           </UButton>
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

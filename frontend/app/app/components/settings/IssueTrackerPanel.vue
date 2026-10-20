@@ -17,12 +17,13 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import type { TaskSourceKind, TaskSourceState, TrackerKind } from '~/types/domain'
 import TaskSourceCard from '~/components/settings/TaskSourceCard.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const tracker = useTrackerStore()
 const tasks = useTasksStore()
 const ui = useUiStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 // --- filing tracker + writeback (one Save, persisted on tracker settings) -----
@@ -114,11 +115,7 @@ async function save() {
       writebackResolveOnMerge: resolveOnMerge.value,
       writebackQuestionsOnPark: questionsOnPark.value,
     })
-    toast.add({
-      title: t('settings.issueTracker.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.issueTracker.toast.saved')
   } catch (e) {
     present(e, 'settings.issueTracker.toast.saveFailed')
   } finally {
@@ -201,13 +198,13 @@ async function checkSetup(source: TaskSourceKind) {
     <!-- 1. Filing tracker ----------------------------------------------------->
     <section class="space-y-3">
       <div>
-        <h3 class="text-sm font-semibold text-slate-200">
+        <h3 class="text-sm font-semibold text-default">
           {{ t('settings.issueTracker.filing.heading') }}
         </h3>
-        <p class="mt-1 text-[11px] text-slate-400">
+        <p class="mt-1 text-2xs text-muted">
           <i18n-t keypath="settings.issueTracker.filing.description" tag="span" scope="global">
             <template #none>
-              <span class="text-slate-300">{{ t('settings.issueTracker.filing.none') }}</span>
+              <span class="text-toned">{{ t('settings.issueTracker.filing.none') }}</span>
             </template>
           </i18n-t>
         </p>
@@ -269,33 +266,48 @@ async function checkSetup(source: TaskSourceKind) {
       </div>
 
       <!-- Inline readiness hints for the picked tracker. -->
-      <p v-if="trackerKind === 'github' && !githubAvailable" class="text-[11px] text-amber-400">
+      <p v-if="trackerKind === 'github' && !githubAvailable" class="text-2xs text-app-warning-400">
         <i18n-t keypath="settings.issueTracker.filing.githubHint" tag="span" scope="global">
           <template #link>
-            <button class="underline" @click="ui.openGitHub()">
+            <UButton
+              color="neutral"
+              variant="link"
+              class="p-0 text-2xs underline"
+              @click="ui.openGitHub()"
+            >
               {{ t('settings.issueTracker.filing.githubHintLink') }}
-            </button>
+            </UButton>
           </template>
         </i18n-t>
       </p>
-      <p v-else-if="trackerKind === 'jira' && !jiraConnected" class="text-[11px] text-amber-400">
+      <p v-else-if="trackerKind === 'jira' && !jiraConnected" class="text-2xs text-app-warning-400">
         <i18n-t keypath="settings.issueTracker.filing.jiraHint" tag="span" scope="global">
           <template #link>
-            <button class="underline" @click="ui.openTaskConnect('jira')">
+            <UButton
+              color="neutral"
+              variant="link"
+              class="p-0 text-2xs underline"
+              @click="ui.openTaskConnect('jira')"
+            >
               {{ t('settings.issueTracker.filing.connectLink') }}
-            </button>
+            </UButton>
           </template>
         </i18n-t>
       </p>
       <p
         v-else-if="trackerKind === 'linear' && !linearConnected"
-        class="text-[11px] text-amber-400"
+        class="text-2xs text-app-warning-400"
       >
         <i18n-t keypath="settings.issueTracker.filing.linearHint" tag="span" scope="global">
           <template #link>
-            <button class="underline" @click="ui.openTaskConnect('linear')">
+            <UButton
+              color="neutral"
+              variant="link"
+              class="p-0 text-2xs underline"
+              @click="ui.openTaskConnect('linear')"
+            >
               {{ t('settings.issueTracker.filing.connectLink') }}
-            </button>
+            </UButton>
           </template>
         </i18n-t>
       </p>
@@ -307,7 +319,7 @@ async function checkSetup(source: TaskSourceKind) {
       >
         <UInput v-model="jiraProjectKey" placeholder="ENG" size="sm" class="w-full" />
         <template #help>
-          <span class="text-[11px] text-slate-500">
+          <span class="text-2xs text-dimmed">
             {{ t('settings.issueTracker.filing.jiraProjectKeyHelp') }}
           </span>
         </template>
@@ -334,7 +346,7 @@ async function checkSetup(source: TaskSourceKind) {
         />
         <UInput v-else v-model="linearTeamId" placeholder="team_…" size="sm" class="w-full" />
         <template #help>
-          <span class="text-[11px] text-slate-500">
+          <span class="text-2xs text-dimmed">
             {{ t('settings.issueTracker.filing.linearTeamIdHelp') }}
           </span>
         </template>
@@ -344,10 +356,10 @@ async function checkSetup(source: TaskSourceKind) {
     <!-- 2. Linking sources ---------------------------------------------------->
     <section class="space-y-3">
       <div>
-        <h3 class="text-sm font-semibold text-slate-200">
+        <h3 class="text-sm font-semibold text-default">
           {{ t('settings.issueTracker.linking.heading') }}
         </h3>
-        <p class="mt-1 text-[11px] text-slate-400">
+        <p class="mt-1 text-2xs text-muted">
           {{ t('settings.issueTracker.linking.description') }}
         </p>
       </div>
@@ -364,57 +376,60 @@ async function checkSetup(source: TaskSourceKind) {
         @remedy="openRemedy(source)"
       />
 
-      <p v-if="tasks.sources.length === 0" class="text-[11px] text-slate-500">
-        {{ t('settings.issueTracker.linking.none') }}
-      </p>
+      <EmptyState
+        v-if="tasks.sources.length === 0"
+        compact
+        icon="i-lucide-list-todo"
+        :title="t('settings.issueTracker.linking.none')"
+      />
     </section>
 
     <!-- 3. Writeback ---------------------------------------------------------->
     <section class="space-y-3">
       <div>
-        <h3 class="text-sm font-semibold text-slate-200">
+        <h3 class="text-sm font-semibold text-default">
           {{ t('settings.issueTracker.writeback.heading') }}
         </h3>
-        <p class="mt-1 text-[11px] text-slate-400">
+        <p class="mt-1 text-2xs text-muted">
           <i18n-t keypath="settings.issueTracker.writeback.description" tag="span" scope="global">
             <template #done>
-              <span class="text-slate-300">{{ t('settings.issueTracker.writeback.done') }}</span>
+              <span class="text-toned">{{ t('settings.issueTracker.writeback.done') }}</span>
             </template>
           </i18n-t>
         </p>
       </div>
 
-      <label class="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-800/40 p-3">
+      <label class="flex items-start gap-3 rounded-lg border border-muted bg-elevated/40 p-3">
         <USwitch v-model="commentOnPrOpen" />
         <span class="text-sm">
-          <span class="block text-slate-200">
+          <span class="block text-default">
             {{ t('settings.issueTracker.writeback.commentOnOpen.label') }}
           </span>
-          <span class="block text-xs text-slate-500">
+          <span class="block text-xs text-dimmed">
             {{ t('settings.issueTracker.writeback.commentOnOpen.help') }}
           </span>
         </span>
       </label>
 
-      <label class="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-800/40 p-3">
+      <label class="flex items-start gap-3 rounded-lg border border-muted bg-elevated/40 p-3">
         <USwitch v-model="resolveOnMerge" />
         <span class="text-sm">
-          <span class="block text-slate-200">
+          <span class="block text-default">
             {{ t('settings.issueTracker.writeback.resolveOnMerge.label') }}
           </span>
-          <span class="block text-xs text-slate-500">
+          <span class="block text-xs text-dimmed">
             {{ t('settings.issueTracker.writeback.resolveOnMerge.help') }}
           </span>
         </span>
       </label>
 
-      <label class="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-800/40 p-3">
+      <label class="flex items-start gap-3 rounded-lg border border-muted bg-elevated/40 p-3">
         <USwitch v-model="questionsOnPark" />
         <span class="text-sm">
-          <span class="block text-slate-200">
+          <span class="block text-default">
             {{ t('settings.issueTracker.writeback.questionsOnPark.label') }}
           </span>
-          <span class="block text-xs text-slate-500">
+          <span class="block text-xs text-dimmed">
             {{ t('settings.issueTracker.writeback.questionsOnPark.help') }}
           </span>
         </span>
@@ -422,14 +437,7 @@ async function checkSetup(source: TaskSourceKind) {
     </section>
 
     <div class="flex justify-end">
-      <UButton
-        color="primary"
-        icon="i-lucide-save"
-        size="sm"
-        :loading="saving"
-        :disabled="!canSave"
-        @click="save"
-      >
+      <UButton icon="i-lucide-save" size="sm" :loading="saving" :disabled="!canSave" @click="save">
         {{ t('common.save') }}
       </UButton>
     </div>

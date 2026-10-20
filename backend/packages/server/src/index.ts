@@ -56,6 +56,10 @@ export {
 } from './modules/webSearch/upstreams.js'
 export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
 export { sweepPlatformHealth } from './runtime/platformHealth.js'
+export {
+  DIRECTORY_WEBHOOK_SWEEP_INTERVAL_MS,
+  sweepDirectoryWebhooks,
+} from './runtime/directoryWebhooks.js'
 export { SPEND_ALERT_INTERVAL_MS, sweepSpendAlerts } from './runtime/spendAlerts.js'
 export { sweepInfraReachability } from './runtime/infraReachability.js'
 export { sweepKeyDriftAndRaise } from './runtime/keyDrift.js'
@@ -106,6 +110,25 @@ export {
 // composite that routes repo-operating kinds to a sandbox, the container executor
 // that builds + dispatches the harness job, and the backend-polymorphic job client.
 export { CompositeAgentExecutor } from './agents/CompositeAgentExecutor.js'
+// The DELEGATED arm: a step whose work runs in a system the deployment already operates. Built by
+// one factory so the facades cannot wire it differently.
+export {
+  DelegatedAgentExecutor,
+  type DelegatedAgentExecutorDependencies,
+} from './agents/DelegatedAgentExecutor.js'
+export {
+  buildDelegatedAgentExecutor,
+  type DelegatedExecutorHostOptions,
+} from './agents/delegatedExecutorHost.js'
+// The executor-INDEPENDENT half of a dispatch's instructions, shared by the harness job body and
+// the delegated brief so the two can never tell an agent different things about one task.
+export {
+  type AgentBriefCore,
+  composeAgentBriefCore,
+  composeDelegationBrief,
+  composeRoleSystemPrompt,
+  type DelegationBriefTarget,
+} from './agents/brief.js'
 export {
   ContainerAgentExecutor,
   type ContainerAgentExecutorDependencies,
@@ -229,6 +252,10 @@ export {
   ContainerEnvironmentProbeAgent,
   type ContainerEnvironmentProbeAgentDependencies,
 } from './agents/ContainerEnvironmentProbeAgent.js'
+export {
+  ContainerGuidedReviewInvestigator,
+  type ContainerGuidedReviewInvestigatorDependencies,
+} from './agents/ContainerGuidedReviewInvestigator.js'
 export {
   ContainerJobAuthResolver,
   type ContainerJobAuth,
@@ -588,6 +615,7 @@ export {
 // the Drizzle/Postgres repos — both use the same column shapes).
 export * from './persistence/mappers.js'
 export * from './persistence/sandbox-mappers.js'
+export * from './persistence/guided-review-mappers.js'
 // Validate-on-read guards (enum/JSON) for the persistence boundary, shared by both facades'
 // repositories so a corrupt stored value surfaces loudly instead of via an erased `as` cast.
 export * from './persistence/decode.js'

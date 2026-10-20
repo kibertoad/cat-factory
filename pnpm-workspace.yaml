@@ -12,16 +12,16 @@
 # 500 page that hangs the whole e2e suite. One version = one singleton. Keep these
 # in lockstep with the `vue` range in frontend/app/package.json.
 # The floor is 3.5.40: `@modular-vue/*` peer-requires `vue@^3.5.40`, so the whole
-# family moves up together (3.5.43 today) to keep the single-singleton invariant while
+# family moves up together (3.5.44 today) to keep the single-singleton invariant while
 # satisfying the modular-vue adoption (backend/docs/adr/0049-modular-vue-adoption.md).
 # vue-router is likewise pinned to one version, for the same singleton reason: two copies
 # mean two route-matcher instances and a `useRoute()` that resolves against the wrong one.
-# Today Nuxt 4.5.2 and `@nuxtjs/i18n` 10.6.0 both want `vue-router@^5.2.0` and the
-# `@modular-vue/*` packages peer-require `^5.0.0`, so 5.3.1 satisfies every consumer. Keep
+# Today Nuxt 4.6.1 wants `vue-router@^5.4.0`, `@nuxtjs/i18n` wants `^5.2.0`, and the
+# `@modular-vue/*` packages peer-require `^5.0.0`, so 5.4.0 satisfies every consumer. Keep
 # it in lockstep with whatever `vue-router` Nuxt pulls on the next Nuxt bump.
 overrides:
-  vue: 3.5.43
-  vue-router: 5.3.1
+  vue: 3.5.44
+  vue-router: 5.4.0
   # Single neutral engine: the @modular-vue/* bindings and @modular-frontend/journeys-engine
   # each depend on @modular-frontend/core across overlapping-but-not-identical ranges, so
   # without a pin pnpm can resolve more than one core copy into the tree (distinct type
@@ -32,9 +32,9 @@ overrides:
   # Prune once every consumer's core range is bumped to include ^0.6.0 upstream.
   '@modular-frontend/core': 0.6.0
   # `esbuild` is an OPTIONAL PEER of vite (`^0.27.0 || ^0.28.0`) and a loose dep of tsx
-  # (`~0.28.0`) and nitropack (`^0.28.0`), while wrangler and @cloudflare/vitest-pool-workers
-  # both pin it EXACTLY at 0.28.1. Left to float, a re-resolve gives the peer slot the newer
-  # 0.28.2 and the tree gains a SECOND esbuild beside the exact-pinned one. That copy is not
+  # (`~0.28.0`) and nitropack (`^0.28.0`), while wrangler and @cloudflare/vitest-plugin
+  # both pin it EXACTLY at 0.28.2. Left to float, a re-resolve gives the peer slot whatever newer
+  # 0.28.x ships next and the tree gains a SECOND esbuild beside the exact-pinned one. That copy is not
   # merely redundant: pnpm resolves an auto-installed peer without its own optionalDependencies,
   # so the platform binary package (@esbuild/<os>-<arch>) is never installed and esbuild's own
   # postinstall validation aborts the whole install with `Expected "0.28.2" but got "<other>"`.
@@ -43,9 +43,9 @@ overrides:
   # (`^0.25.10`), @intlify/bundle-utils (`^0.25.4`) and fontless (`^0.27.0`) declare narrower
   # ranges a blanket override would force them out of. Move these in lockstep with whatever
   # wrangler pins on the next bump.
-  'vite>esbuild': 0.28.1
-  'tsx>esbuild': 0.28.1
-  'nitropack>esbuild': 0.28.1
+  'vite>esbuild': 0.28.2
+  'tsx>esbuild': 0.28.2
+  'nitropack>esbuild': 0.28.2
   # `@cloudflare/workers-types` is a singleton for the same reason, one layer up: its version IS a
   # workerd date (`5.20260815.1` <-> `workerd@1.20260815.1`), so a second copy means part of the
   # tree typechecks against a runtime the rest of it does not run. Two slots float it even with
@@ -56,19 +56,24 @@ overrides:
   # 5.20260815.1, eight days of API ahead of the workerd that runs.
   #
   # Top-level here, unlike wrangler below, and the difference is who the authority is. Wrangler's
-  # correct version belongs to `@cloudflare/vitest-pool-workers` and must be TRACKED, which an
+  # correct version belongs to `@cloudflare/vitest-plugin` and must be TRACKED, which an
   # override cannot do. The types' correct version is DERIVED from the workerd we already resolve,
   # and wrangler states it outright: its own peer range on this package is `^5.20260815.1`. So the
   # override asserts a fact we own rather than freezing someone else's decision, and
   # `scripts/check-cloudflare-runtime-pins.mjs` re-derives it from the lockfile every CI run.
   # Move it with workerd, never on its own.
-  '@cloudflare/workers-types': 5.20260815.1
+  '@cloudflare/workers-types': 5.20261012.1
+  # msw is held at the version the stories' committed `mockServiceWorker.js` is generated for
+  # (docs/internal/storybook.md). `@vitest/mocker` names msw as an optional peer, which
+  # `autoInstallPeers` fills from the newest major in every Vitest graph. Move it together with the
+  # worker script, never on its own.
+  msw: 2.15.0
   # NO `wrangler` override here, deliberately. The invariant is ONE wrangler (and through it one
   # workerd + one miniflare) across the stack, because the Worker suite runs inside the pool's
   # workerd and `wrangler deploy` ships wrangler's: two copies mean the runtime the tests prove is
   # a different build from the runtime that ships, on top of ~100MB of duplicated platform binary
   # per arch. A top-level override is the wrong tool for it: it OVERRIDES
-  # `@cloudflare/vitest-pool-workers`'s exact pin instead of TRACKING it, so the next pool bump is
+  # `@cloudflare/vitest-plugin`'s exact pin instead of TRACKING it, so the next pool bump is
   # silently forced back to our number and the pool runs against a wrangler it never pinned. What
   # holds the invariant instead is an exact `wrangler` version in each package that declares it,
   # plus `scripts/check-cloudflare-runtime-pins.mjs`, which fails CI the moment the lockfile holds
@@ -90,20 +95,21 @@ overrides:
   '@nuxt/vite-builder>@babel/plugin-syntax-jsx': 7.29.7
   '@nuxt/nitro-server>@babel/plugin-proposal-decorators': 7.29.7
   '@nuxt/nitro-server>@babel/plugin-syntax-typescript': 7.29.7
-  '@vue/compiler-core': 3.5.43
-  '@vue/compiler-dom': 3.5.43
-  '@vue/compiler-sfc': 3.5.43
-  '@vue/compiler-ssr': 3.5.43
-  '@vue/reactivity': 3.5.43
-  '@vue/runtime-core': 3.5.43
-  '@vue/runtime-dom': 3.5.43
-  '@vue/server-renderer': 3.5.43
-  '@vue/shared': 3.5.43
+  '@vue/compiler-core': 3.5.44
+  '@vue/compiler-dom': 3.5.44
+  '@vue/compiler-sfc': 3.5.44
+  '@vue/compiler-ssr': 3.5.44
+  '@vue/reactivity': 3.5.44
+  '@vue/runtime-core': 3.5.44
+  '@vue/runtime-dom': 3.5.44
+  '@vue/server-renderer': 3.5.44
+  '@vue/shared': 3.5.44
 packages:
   - 'backend/packages/*'
   - 'backend/runtimes/*'
   - 'backend/internal/*'
   - 'frontend/app'
+  - 'frontend/storybook'
   - 'deploy/backend'
   - 'deploy/frontend'
   - 'deploy/node'
@@ -119,6 +125,8 @@ packages:
   # Not a projection like its two neighbours: the hand-written Gatekeeper Worker machinery a
   # deployment installs, beside the generated table it enforces policy with.
   - 'sdk/gatekeeper-worker'
+  - 'sdk/webhooks'
+  - 'sdk/directory-sync'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true
@@ -156,3 +164,10 @@ minimumReleaseAgeExclude:
   - '@modular-frontend/*'
   - layered-loader
   - toad-scheduler
+
+# An upstream bug in the Storybook preset, patched until a release fixes it. Remove the patch
+# when one does. Under `@storybook/addon-vitest` the story's canvas has an empty `id`, which the
+# preset uses as its key, so every story test throws "StoryContext is not provided":
+# https://github.com/nuxt-modules/storybook/issues/1140.
+patchedDependencies:
+  '@storybook-vue/nuxt@10.0.2': patches/@storybook-vue__nuxt@10.0.2.patch

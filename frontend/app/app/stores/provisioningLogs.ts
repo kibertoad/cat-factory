@@ -33,7 +33,7 @@ export const useProvisioningLogsStore = defineStore('provisioningLogs', () => {
   // Monotonic load-ordering guard: the drawer's silent background poll and a manual/visible refresh
   // can be in flight at once, and each ends in a REPLACE-style `s.entries = entries`. Without ordering
   // a slower/staler fetch resolving AFTER a newer one clobbers the fresher timeline (the same
-  // out-of-order-overwrite hazard the CLAUDE.md live-push rules warn about, and that
+  // out-of-order-overwrite hazard the AGENTS.md live-push rules warn about, and that
   // stores/workspace.ts guards its full refresh with). Each load takes a ticket from a single
   // ever-increasing counter; `latestLoad` records the newest ticket issued per execution, and only
   // that load commits. The counter is GLOBAL (never reset on `evict`) so a drawer re-opened for an

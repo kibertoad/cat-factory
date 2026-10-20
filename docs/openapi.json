@@ -49,6 +49,62 @@
         "required": [],
         "type": "object"
       },
+      "AskGuidedReview": {
+        "properties": {
+          "content": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "depth": {
+            "enum": [
+              "inline",
+              "deep"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "type": "object"
+      },
+      "AssessPublicPullRequest": {
+        "properties": {
+          "owner": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "prNumber": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "gitlab"
+            ],
+            "type": "string"
+          },
+          "repo": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "riskPolicyId": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "owner",
+          "repo",
+          "prNumber"
+        ],
+        "type": "object"
+      },
       "CreateHeadlessPublicApiKey": {
         "properties": {
           "externalIdentity": {
@@ -65,10 +121,27 @@
           "scope": {
             "enum": [
               "read",
+              "webhooks",
               "write",
               "decide"
             ],
             "type": "string"
+          },
+          "workspaceIds": {
+            "anyOf": [
+              {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -175,6 +248,7 @@
                   "document",
                   "spike",
                   "review",
+                  "resolve-conflicts",
                   "ralph",
                   "media"
                 ],
@@ -212,6 +286,769 @@
         "required": [
           "key",
           "secret"
+        ],
+        "type": "object"
+      },
+      "DirectoryAccountMembership": {
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "roles": {
+            "items": {
+              "enum": [
+                "admin",
+                "developer",
+                "product"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "roles",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "DirectoryAccountMembershipPage": {
+        "properties": {
+          "asOfSeq": {
+            "type": "number"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryAccountMembership"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "asOfSeq"
+        ],
+        "type": "object"
+      },
+      "DirectoryChange": {
+        "oneOf": [
+          {
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "entity": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DirectoryWorkspace"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "workspace"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "workspaceId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "at",
+              "workspaceId",
+              "entityId",
+              "entityType",
+              "entity"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "entity": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DirectoryUser"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "user"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "workspaceId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "at",
+              "workspaceId",
+              "entityId",
+              "entityType",
+              "entity"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "entity": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DirectoryAccountMembership"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "account_membership"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "workspaceId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "at",
+              "workspaceId",
+              "entityId",
+              "entityType",
+              "entity"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "entity": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DirectoryWorkspaceMembership"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "workspace_membership"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "workspaceId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "at",
+              "workspaceId",
+              "entityId",
+              "entityType",
+              "entity"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "entity": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DirectoryRepo"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "repo"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "workspaceId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "at",
+              "workspaceId",
+              "entityId",
+              "entityType",
+              "entity"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "DirectoryChangePage": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryChange"
+            },
+            "type": "array"
+          },
+          "headSeq": {
+            "type": "number"
+          },
+          "nextAfter": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "changes",
+          "nextAfter",
+          "headSeq"
+        ],
+        "type": "object"
+      },
+      "DirectoryReach": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "followsMemberships": {
+            "type": "boolean"
+          },
+          "workspaceIds": {
+            "anyOf": [
+              {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "accountId",
+          "workspaceIds",
+          "followsMemberships"
+        ],
+        "type": "object"
+      },
+      "DirectoryRepo": {
+        "properties": {
+          "defaultBranch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "monorepo": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "private": {
+            "type": "boolean"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "gitlab"
+            ],
+            "type": "string"
+          },
+          "repoId": {
+            "type": "number"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "repoId",
+          "provider",
+          "owner",
+          "name",
+          "defaultBranch",
+          "private",
+          "monorepo"
+        ],
+        "type": "object"
+      },
+      "DirectoryRepoPage": {
+        "properties": {
+          "asOfSeq": {
+            "type": "number"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryRepo"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "asOfSeq"
+        ],
+        "type": "object"
+      },
+      "DirectoryUser": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryUserAccount"
+            },
+            "type": "array"
+          },
+          "avatarUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email",
+          "avatarUrl",
+          "accounts"
+        ],
+        "type": "object"
+      },
+      "DirectoryUserAccount": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "gitlab"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "id",
+          "login"
+        ],
+        "type": "object"
+      },
+      "DirectoryUserPage": {
+        "properties": {
+          "asOfSeq": {
+            "type": "number"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryUser"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "asOfSeq"
+        ],
+        "type": "object"
+      },
+      "DirectoryWebhook": {
+        "properties": {
+          "deliveredSeq": {
+            "type": "number"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hasSecret": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "number"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "enabled",
+          "hasSecret",
+          "deliveredSeq",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "DirectoryWebhookDelivery": {
+        "oneOf": [
+          {
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "changes": {
+                "items": {
+                  "$ref": "#/components/schemas/DirectoryChange"
+                },
+                "type": "array"
+              },
+              "deliveryId": {
+                "type": "string"
+              },
+              "event": {
+                "const": "directory.changed"
+              },
+              "headSeq": {
+                "type": "number"
+              },
+              "nextAfter": {
+                "type": "number"
+              },
+              "sentAt": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "deliveryId",
+              "sentAt",
+              "accountId",
+              "event",
+              "changes",
+              "nextAfter",
+              "headSeq"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "deliveryId": {
+                "type": "string"
+              },
+              "event": {
+                "const": "directory.resync_required"
+              },
+              "headSeq": {
+                "type": "number"
+              },
+              "sentAt": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "deliveryId",
+              "sentAt",
+              "accountId",
+              "event",
+              "headSeq"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "DirectoryWebhookList": {
+        "properties": {
+          "webhooks": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryWebhook"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "webhooks"
+        ],
+        "type": "object"
+      },
+      "DirectoryWorkspace": {
+        "properties": {
+          "accessMode": {
+            "enum": [
+              "account",
+              "restricted"
+            ],
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "accessMode"
+        ],
+        "type": "object"
+      },
+      "DirectoryWorkspaceMembership": {
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "role": {
+            "enum": [
+              "admin",
+              "member",
+              "viewer"
+            ],
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "userId",
+          "role",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "DirectoryWorkspaceMembershipPage": {
+        "properties": {
+          "asOfSeq": {
+            "type": "number"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryWorkspaceMembership"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "asOfSeq"
+        ],
+        "type": "object"
+      },
+      "DirectoryWorkspacePage": {
+        "properties": {
+          "asOfSeq": {
+            "type": "number"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryWorkspace"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "asOfSeq"
         ],
         "type": "object"
       },
@@ -308,6 +1145,53 @@
         ],
         "type": "object"
       },
+      "EditGuidedReviewDraft": {
+        "properties": {
+          "body": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "discard": {
+            "type": "boolean"
+          },
+          "line": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "path": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          },
+          "rev": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "side": {
+            "enum": [
+              "LEFT",
+              "RIGHT"
+            ],
+            "type": "string"
+          },
+          "startLine": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "rev"
+        ],
+        "type": "object"
+      },
       "ErrorResponse": {
         "properties": {
           "error": {
@@ -346,6 +1230,831 @@
         },
         "required": [
           "error"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewAnchor": {
+        "properties": {
+          "endLine": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "path": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "LEFT",
+              "RIGHT"
+            ],
+            "type": "string"
+          },
+          "startLine": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewCommentDraft": {
+        "properties": {
+          "body": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "line": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          },
+          "postError": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "postedUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rationale": {
+            "maxLength": 8000,
+            "type": "string"
+          },
+          "rev": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "LEFT",
+              "RIGHT"
+            ],
+            "type": "string"
+          },
+          "startLine": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "proposed",
+              "posting",
+              "posted",
+              "failed",
+              "discarded"
+            ],
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "sessionId",
+          "threadId",
+          "messageId",
+          "path",
+          "line",
+          "startLine",
+          "side",
+          "body",
+          "rationale",
+          "status",
+          "postError",
+          "postedUrl",
+          "rev",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewDraftReport": {
+        "properties": {
+          "dropped": {
+            "items": {
+              "properties": {
+                "line": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "path": {
+                  "type": "string"
+                },
+                "reason": {
+                  "enum": [
+                    "outside_diff",
+                    "not_in_pr",
+                    "incomplete"
+                  ],
+                  "type": "string"
+                },
+                "side": {
+                  "enum": [
+                    "LEFT",
+                    "RIGHT"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "line",
+                "side",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "proposed": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "proposed",
+          "dropped"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewExchange": {
+        "properties": {
+          "placeholder": {
+            "$ref": "#/components/schemas/GuidedReviewMessage"
+          },
+          "question": {
+            "$ref": "#/components/schemas/GuidedReviewMessage"
+          }
+        },
+        "required": [
+          "question",
+          "placeholder"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewFailure": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "enum": [
+              "budget_exhausted",
+              "model_unavailable",
+              "repo_unavailable",
+              "generation_failed",
+              "unreadable_reply",
+              "depth_unavailable",
+              "head_moved"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewMessage": {
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/GuidedReviewAnchor"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "content": {
+            "maxLength": 40000,
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "depth": {
+            "enum": [
+              "inline",
+              "deep"
+            ],
+            "type": "string"
+          },
+          "draftReport": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidedReviewDraftReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidedReviewFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "answer",
+              "comment-drafts"
+            ],
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "complete",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "threadId",
+          "sessionId",
+          "seq",
+          "role",
+          "kind",
+          "depth",
+          "content",
+          "status",
+          "citations",
+          "failure",
+          "draftReport",
+          "model",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewOverview": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidedReviewOverviewContent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidedReviewFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "generation": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "complete",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "generation",
+          "content",
+          "failure",
+          "model"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewOverviewContent": {
+        "properties": {
+          "consequences": {
+            "items": {
+              "properties": {
+                "detail": {
+                  "maxLength": 8000,
+                  "type": "string"
+                },
+                "title": {
+                  "maxLength": 200,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "detail"
+              ],
+              "type": "object"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "focusAreas": {
+            "items": {
+              "properties": {
+                "anchors": {
+                  "items": {
+                    "$ref": "#/components/schemas/GuidedReviewAnchor"
+                  },
+                  "maxItems": 40,
+                  "type": "array"
+                },
+                "title": {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "why": {
+                  "maxLength": 8000,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "why",
+                "anchors"
+              ],
+              "type": "object"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "intent": {
+            "maxLength": 8000,
+            "type": "string"
+          },
+          "meaningfulChanges": {
+            "items": {
+              "properties": {
+                "detail": {
+                  "maxLength": 8000,
+                  "type": "string"
+                },
+                "paths": {
+                  "items": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 40,
+                  "type": "array"
+                },
+                "title": {
+                  "maxLength": 200,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "detail",
+                "paths"
+              ],
+              "type": "object"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "risks": {
+            "items": {
+              "properties": {
+                "detail": {
+                  "maxLength": 8000,
+                  "type": "string"
+                },
+                "paths": {
+                  "items": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 40,
+                  "type": "array"
+                },
+                "severity": {
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high"
+                  ],
+                  "type": "string"
+                },
+                "title": {
+                  "maxLength": 200,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "detail",
+                "severity",
+                "paths"
+              ],
+              "type": "object"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "suggestedQuestions": {
+            "items": {
+              "properties": {
+                "id": {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "question": {
+                  "maxLength": 4000,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "question"
+              ],
+              "type": "object"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 8000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "intent",
+          "meaningfulChanges",
+          "consequences",
+          "risks",
+          "focusAreas",
+          "suggestedQuestions"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewPostResult": {
+        "properties": {
+          "drafts": {
+            "items": {
+              "$ref": "#/components/schemas/GuidedReviewCommentDraft"
+            },
+            "type": "array"
+          },
+          "failed": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "posted": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "properties": {
+              "error": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "posted": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "posted",
+              "error"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "drafts",
+          "posted",
+          "failed",
+          "skipped",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewSession": {
+        "properties": {
+          "baseRef": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "createdByKind": {
+            "enum": [
+              "user",
+              "api-key"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "overview": {
+            "$ref": "#/components/schemas/GuidedReviewOverview"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "prNumber": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "prTitle": {
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "gitlab"
+            ],
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "repoId": {
+            "type": "string"
+          },
+          "reviewedHeadSha": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "repoId",
+          "owner",
+          "repo",
+          "prNumber",
+          "prTitle",
+          "reviewedHeadSha",
+          "baseRef",
+          "createdBy",
+          "createdByKind",
+          "overview",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewSessionView": {
+        "properties": {
+          "drafts": {
+            "items": {
+              "$ref": "#/components/schemas/GuidedReviewCommentDraft"
+            },
+            "type": "array"
+          },
+          "session": {
+            "$ref": "#/components/schemas/GuidedReviewSession"
+          },
+          "threads": {
+            "items": {
+              "$ref": "#/components/schemas/GuidedReviewThreadSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "session",
+          "threads",
+          "drafts"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewThread": {
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "sessionId",
+          "title",
+          "createdBy",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewThreadSummary": {
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "pendingMessageId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "sessionId",
+          "title",
+          "createdBy",
+          "createdAt",
+          "updatedAt",
+          "pendingMessageId"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewThreadView": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/GuidedReviewMessage"
+            },
+            "type": "array"
+          },
+          "thread": {
+            "$ref": "#/components/schemas/GuidedReviewThread"
+          }
+        },
+        "required": [
+          "thread",
+          "messages"
         ],
         "type": "object"
       },
@@ -875,6 +2584,234 @@
           "enabled",
           "hasSecret",
           "updatedAt"
+        ],
+        "type": "object"
+      },
+      "NotificationWebhookDelivery": {
+        "properties": {
+          "deliveryId": {
+            "type": "string"
+          },
+          "notification": {
+            "$ref": "#/components/schemas/Notification"
+          },
+          "runId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sentAt": {
+            "type": "number"
+          },
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deliveryId",
+          "sentAt",
+          "workspaceId",
+          "runId",
+          "taskId",
+          "notification"
+        ],
+        "type": "object"
+      },
+      "OpenGuidedReview": {
+        "properties": {
+          "owner": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "prNumber": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "gitlab"
+            ],
+            "type": "string"
+          },
+          "repo": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "owner",
+          "repo",
+          "prNumber"
+        ],
+        "type": "object"
+      },
+      "OpenGuidedReviewThread": {
+        "properties": {
+          "question": {
+            "$ref": "#/components/schemas/AskGuidedReview"
+          },
+          "title": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "PlatformAlertWebhookDelivery": {
+        "properties": {
+          "alert": {
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "conditions": {
+                "items": {
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "threshold": {
+                      "type": "number"
+                    },
+                    "value": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "reason",
+                    "value",
+                    "threshold"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "failedTotal": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "failingRuns": {
+                "items": {
+                  "properties": {
+                    "blockId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "executionId": {
+                      "type": "string"
+                    },
+                    "failureKind": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "executionId",
+                    "blockId",
+                    "failureKind",
+                    "createdAt"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "occurredAt": {
+                "type": "number"
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountId",
+              "window",
+              "conditions",
+              "occurredAt",
+              "failingRuns",
+              "failedTotal"
+            ],
+            "type": "object"
+          },
+          "deliveryId": {
+            "type": "string"
+          },
+          "event": {
+            "enum": [
+              "platform_health.firing",
+              "platform_health.resolved"
+            ],
+            "type": "string"
+          },
+          "sentAt": {
+            "type": "number"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deliveryId",
+          "sentAt",
+          "workspaceId",
+          "event",
+          "alert"
+        ],
+        "type": "object"
+      },
+      "PostGuidedReviewDrafts": {
+        "properties": {
+          "draftIds": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 40,
+            "minItems": 1,
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 8000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "draftIds"
         ],
         "type": "object"
       },
@@ -2923,6 +4860,9 @@
               }
             ]
           },
+          "followsMemberships": {
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },
@@ -2952,6 +4892,7 @@
           "scope": {
             "enum": [
               "read",
+              "webhooks",
               "write",
               "decide",
               "admin"
@@ -2960,12 +4901,27 @@
           },
           "workspaceId": {
             "type": "string"
+          },
+          "workspaceIds": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "id",
           "accountId",
           "workspaceId",
+          "workspaceIds",
+          "followsMemberships",
           "label",
           "scope",
           "createdByUserId",
@@ -3897,6 +5853,17 @@
         ],
         "type": "object"
       },
+      "PublicDeployment": {
+        "properties": {
+          "appUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "appUrl"
+        ],
+        "type": "object"
+      },
       "PublicFollowUpItem": {
         "properties": {
           "answer": {
@@ -4099,6 +6066,31 @@
         ],
         "type": "object"
       },
+      "PublicGuidedReviewList": {
+        "properties": {
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/GuidedReviewSession"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sessions",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
       "PublicHumanTestDecision": {
         "properties": {
           "attempts": {
@@ -4210,6 +6202,9 @@
               }
             ]
           },
+          "followsMemberships": {
+            "type": "boolean"
+          },
           "keyId": {
             "type": "string"
           },
@@ -4219,6 +6214,7 @@
           "scope": {
             "enum": [
               "read",
+              "webhooks",
               "write",
               "decide",
               "admin"
@@ -4227,12 +6223,30 @@
           },
           "workspaceId": {
             "type": "string"
+          },
+          "workspaceIds": {
+            "anyOf": [
+              {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "keyId",
           "accountId",
           "workspaceId",
+          "workspaceIds",
+          "followsMemberships",
           "scope",
           "label",
           "externalIdentity",
@@ -4893,6 +6907,164 @@
         "required": [
           "pipelines",
           "unattendedDefaultPipelineId"
+        ],
+        "type": "object"
+      },
+      "PublicPrAssessment": {
+        "properties": {
+          "assessedAt": {
+            "type": "number"
+          },
+          "assessment": {
+            "properties": {
+              "complexity": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "impact": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "rationale": {
+                "type": "string"
+              },
+              "risk": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [
+              "complexity",
+              "risk",
+              "impact",
+              "rationale"
+            ],
+            "type": "object"
+          },
+          "changeClass": {
+            "enum": [
+              "docs",
+              "test",
+              "dependency",
+              "config",
+              "source",
+              "schema",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "changedFileCount": {
+            "type": "number"
+          },
+          "headSha": {
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "owner": {
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/PublicPrAssessmentPolicy"
+          },
+          "prNumber": {
+            "type": "number"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "gitlab"
+            ],
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/PublicPrAssessmentVerdict"
+          }
+        },
+        "required": [
+          "provider",
+          "owner",
+          "repo",
+          "prNumber",
+          "headSha",
+          "changeClass",
+          "changedFileCount",
+          "assessment",
+          "model",
+          "policy",
+          "verdict",
+          "assessedAt"
+        ],
+        "type": "object"
+      },
+      "PublicPrAssessmentPolicy": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "policyId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "policyId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "PublicPrAssessmentVerdict": {
+        "properties": {
+          "exceededAxes": {
+            "items": {
+              "enum": [
+                "complexity",
+                "risk",
+                "impact"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "outcome": {
+            "enum": [
+              "within_policy",
+              "requires_review"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "within_thresholds",
+              "exceeded_thresholds",
+              "auto_merge_disabled",
+              "no_rationale",
+              "class_auto_merge",
+              "class_requires_review",
+              "role_requires_review",
+              "submission_not_allowed",
+              "dry_run"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "reason",
+          "exceededAxes"
         ],
         "type": "object"
       },
@@ -6480,6 +8652,7 @@
                   "document",
                   "spike",
                   "review",
+                  "resolve-conflicts",
                   "ralph",
                   "media",
                   "recurring"
@@ -6840,6 +9013,26 @@
         ],
         "type": "object"
       },
+      "PutDirectoryWebhook": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "secret": {
+            "maxLength": 200,
+            "minLength": 16,
+            "type": "string"
+          },
+          "url": {
+            "format": "uri",
+            "maxLength": 2000,
+            "pattern": "^https?:\\/\\/",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
       "PutNotificationWebhook": {
         "properties": {
           "alertEvents": {
@@ -6912,7 +9105,17 @@
           "url": {
             "format": "uri",
             "maxLength": 2000,
-            "pattern": "^https://",
+            "pattern": "^https?:\\/\\/",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "RequestGuidedReviewDrafts": {
+        "properties": {
+          "instructions": {
+            "maxLength": 4000,
             "type": "string"
           }
         },
@@ -7015,6 +9218,162 @@
           "statement",
           "kind",
           "priority"
+        ],
+        "type": "object"
+      },
+      "RunWebhookDelivery": {
+        "properties": {
+          "deliveryId": {
+            "type": "string"
+          },
+          "event": {
+            "enum": [
+              "run.started",
+              "run.completed",
+              "run.failed",
+              "run.step_completed"
+            ],
+            "type": "string"
+          },
+          "run": {
+            "properties": {
+              "failure": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "kind": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "message",
+                      "reason"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "occurredAt": {
+                "type": "number"
+              },
+              "pipelineId": {
+                "type": "string"
+              },
+              "pipelineName": {
+                "type": "string"
+              },
+              "pullRequestUrl": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "runId": {
+                "type": "string"
+              },
+              "startedAt": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "step": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "agentKind": {
+                        "type": "string"
+                      },
+                      "attempt": {
+                        "type": "number"
+                      },
+                      "final": {
+                        "type": "boolean"
+                      },
+                      "index": {
+                        "type": "number"
+                      },
+                      "outcome": {
+                        "enum": [
+                          "completed",
+                          "skipped"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "index",
+                      "agentKind",
+                      "outcome",
+                      "attempt",
+                      "final"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "taskId": {
+                "type": "string"
+              },
+              "taskTitle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "runId",
+              "taskId",
+              "taskTitle",
+              "pipelineId",
+              "pipelineName",
+              "startedAt",
+              "occurredAt",
+              "pullRequestUrl",
+              "failure",
+              "step"
+            ],
+            "type": "object"
+          },
+          "sentAt": {
+            "type": "number"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deliveryId",
+          "sentAt",
+          "workspaceId",
+          "event",
+          "run"
         ],
         "type": "object"
       },
@@ -7170,20 +9529,20 @@
     },
     "securitySchemes": {
       "bearerAuth": {
-        "description": "A public-API key of the form `cf_live_<keyId>.<secret>`.",
+        "description": "A public-API key of the form `cf_live_<keyId>.<secret>`. A key reaching more than one workspace also sends `x-cat-factory-workspace: <workspaceId>` on every workspace-scoped call.",
         "scheme": "bearer",
         "type": "http"
       }
     }
   },
   "info": {
-    "description": "The external, key-authenticated API (`/api/v1`). Authenticate every request with a public-API key: `Authorization: Bearer cf_live_<keyId>.<secret>`. Every call is scoped to the key’s workspace.",
+    "description": "The external, key-authenticated API (`/api/v1`). Authenticate every request with a public-API key: `Authorization: Bearer cf_live_<keyId>.<secret>`. A key belongs to an account and reaches all of its workspaces or a listed subset. A workspace-scoped call acts on the workspace named by the `x-cat-factory-workspace` header, which may be omitted when the key reaches exactly one workspace.",
     "license": {
       "identifier": "MIT",
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.74.0"
+    "version": "1.89.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -8182,6 +10541,7 @@
                                       "timeout",
                                       "agent",
                                       "job_failed",
+                                      "delegated_failed",
                                       "rejected",
                                       "companion_rejected",
                                       "stalled",
@@ -8687,6 +11047,24 @@
                             }
                           ]
                         },
+                        "reporting": {
+                          "properties": {
+                            "delegatedStepsWithoutUsage": {
+                              "type": "number"
+                            },
+                            "executors": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "delegatedStepsWithoutUsage",
+                            "executors"
+                          ],
+                          "type": "object"
+                        },
                         "totals": {
                           "properties": {
                             "cacheHitRate": {
@@ -8821,6 +11199,7 @@
                                     "timeout",
                                     "agent",
                                     "job_failed",
+                                    "delegated_failed",
                                     "rejected",
                                     "companion_rejected",
                                     "stalled",
@@ -10940,6 +13319,24 @@
                             }
                           ]
                         },
+                        "reporting": {
+                          "properties": {
+                            "delegatedStepsWithoutUsage": {
+                              "type": "number"
+                            },
+                            "executors": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "delegatedStepsWithoutUsage",
+                            "executors"
+                          ],
+                          "type": "object"
+                        },
                         "totals": {
                           "properties": {
                             "cacheHitRate": {
@@ -11639,6 +14036,638 @@
         "summary": "List a run's tool calls",
         "tags": [
           "Debug"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/deployment": {
+      "get": {
+        "description": "Report where this deployment serves its web app (`appUrl`): `APP_BASE_URL` when the operator set one, otherwise the origin this API was reached on. An integration uses it to send a person to one of the app’s deep links, such as the prefilled add-service screen (`?addRepo=<owner>/<name>`). Account-level, so a key reaching several workspaces calls it without naming one. `read` scope.",
+        "operationId": "getPublicDeployment",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDeployment"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Describe the deployment",
+        "tags": [
+          "Identity"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/account-memberships": {
+      "get": {
+        "description": "A keyset-paged snapshot of the account’s memberships, each with the member’s account roles. Account-wide, so a key limited to some workspaces is refused with `403` and `reason: \"account_scope_required\"`.",
+        "operationId": "listDirectoryAccountMemberships",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryAccountMembershipPage"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the account's memberships",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/changes": {
+      "get": {
+        "description": "The account’s directory changes after `after`, in `seq` order, each carrying the CURRENT state of the entity it names, or `null` once that entity no longer exists or is outside the key’s reach. Store `nextAfter` and pass it back as `after`; it can move past the last change served, since changes the key cannot see are skipped. `nextAfter === headSeq` means caught up. A cursor whose following changes were pruned (see `DIRECTORY_CHANGE_RETENTION_DAYS`), or one ahead of the feed, is refused with `409` and `reason: \"cursor_expired\"`: reconcile from the snapshot endpoints and replay from their `asOfSeq`. Account-scoped: no `x-cat-factory-workspace` header is read. A key limited to some workspaces sees only workspace, workspace-membership and repository changes of those workspaces, plus the `workspace` change (with `entity: null`) of every deleted workspace in the account, since deleting a board also drops the key’s grant on it. Treat that change as the removal of the workspace and of every membership and repository under it.",
+        "operationId": "listDirectoryChanges",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryChangePage"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List directory changes",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/reach": {
+      "get": {
+        "description": "The calling key’s account and the workspaces it reaches, `null` for every workspace in the account (later ones included). Account-scoped like the rest of the directory: no `x-cat-factory-workspace` header is read, so a key reaching several workspaces gets an answer where `GET /api/v1/me` asks it to name one. A mirror reads this to filter what a directory push may write, and to tell an account-wide key from one limited to some workspaces.",
+        "operationId": "getDirectoryReach",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryReach"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Read the key's directory reach",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/repos": {
+      "get": {
+        "description": "A keyset-paged snapshot of the repositories linked to the account’s workspaces (the ones the key reaches). A repository is listed once per workspace that links it.",
+        "operationId": "listDirectoryRepos",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryRepoPage"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List linked repositories",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/users": {
+      "get": {
+        "description": "A keyset-paged snapshot of every user holding a membership in the account. Account-wide, so a key limited to some workspaces is refused with `403` and `reason: \"account_scope_required\"`.",
+        "operationId": "listDirectoryUsers",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryUserPage"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the account's users",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/webhooks": {
+      "get": {
+        "description": "The endpoints the directory change feed is pushed to, each with the feed position delivered through. The signing secret is write-only: `hasSecret` says whether one is set. Requires an `admin` key that reaches every workspace (`403` with `reason: \"account_scope_required\"` otherwise), because an endpoint receives every change in the account.",
+        "operationId": "listDirectoryWebhooks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryWebhookList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the account's directory webhooks",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "webhooks"
+      }
+    },
+    "/api/v1/directory/webhooks/{webhookId}": {
+      "delete": {
+        "description": "Stop pushing to an endpoint. Idempotent.",
+        "operationId": "deleteDirectoryWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webhookId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Remove a directory webhook",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "webhooks"
+      },
+      "put": {
+        "description": "Register an endpoint the directory change feed is pushed to, or edit one; an omitted field keeps its stored value, and `url` is required only when registering. A new endpoint starts at the feed head: it is pushed what changes from now on, and its receiver bootstraps the past from the snapshots. Pushes run every couple of minutes, signed like the notification webhooks, each a `DirectoryWebhookDelivery`. An account holds at most 10 (`409` with `reason: \"webhook_limit_reached\"`).",
+        "operationId": "putDirectoryWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webhookId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutDirectoryWebhook"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryWebhook"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Register or edit a directory webhook",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "webhooks"
+      }
+    },
+    "/api/v1/directory/workspace-memberships": {
+      "get": {
+        "description": "A keyset-paged snapshot of the explicit workspace memberships in the account’s workspaces (the ones the key reaches), each with its workspace role.",
+        "operationId": "listDirectoryWorkspaceMemberships",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryWorkspaceMembershipPage"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List workspace memberships",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/workspaces": {
+      "get": {
+        "description": "A keyset-paged snapshot of the account’s workspaces (the ones the key reaches). Every page of one walk reports the same `asOfSeq`; after the last page, replay the change feed from it to pick up anything that changed while paging.",
+        "operationId": "listDirectoryWorkspaces",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryWorkspacePage"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the account's workspaces",
+        "tags": [
+          "Directory"
         ],
         "x-min-scope": "read"
       }
@@ -12418,6 +15447,747 @@
         "x-min-scope": "admin"
       }
     },
+    "/api/v1/guided-reviews": {
+      "get": {
+        "description": "Guided review sessions in the workspace, newest created first, optionally narrowed to one repository (`repoId`), one pull request (`prNumber`) or the calling key's own (`mine=true`). Keyset-paginated: up to `limit` rows (default 50, at most 100) per page, and `nextCursor` to pass back as `cursor` for the next page, null on the last. A malformed cursor is `400` with `code: \"invalid_cursor\"`.",
+        "operationId": "listPublicGuidedReviews",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "repoId",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "prNumber",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mine",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicGuidedReviewList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the workspace's guided reviews",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "read"
+      },
+      "post": {
+        "description": "Open a guided review of one pull request in a repository linked to the workspace, or return the one the calling key's identity already has for it. A guided review explains the PR (what it does, its meaningful changes, consequences, risks, where to focus, and suggested questions) and holds question threads answered by a model that reads the PR at the commit under review. Answers with the session at once; its overview is generated in the background, so follow `GET /api/v1/guided-reviews/{sessionId}/events` or re-read it. A key bound to a person acts as that person; an unbound key owns its own sessions and runs on the workspace's credentials, never a person's; `createdByKind` says which of the two owns a session. An unlinked repository is `404` with `details.reason: \"repo_not_linked\"`, and a PR the host cannot find is `404` with `details.reason: \"pr_not_found\"`.",
+        "operationId": "openPublicGuidedReview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenGuidedReview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewSessionView"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Open a guided review of a pull request",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}": {
+      "delete": {
+        "description": "Delete the session with its threads, messages and drafts. Only the identity that opened it may; anyone else is `403` with `details.reason: \"not_session_owner\"`. Nothing on the pull request is touched.",
+        "operationId": "deletePublicGuidedReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Delete a guided review",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      },
+      "get": {
+        "description": "The session with its overview, its threads (each naming the answer it is waiting on, if any) and its comment drafts. The overview's `status` is `pending` or `running` while it is generated; a `failed` one carries `failure.reason` (`budget_exhausted`, `model_unavailable`, `repo_unavailable`, `generation_failed`, `unreadable_reply`, or `head_moved` when the author pushed before it finished, which `POST /api/v1/guided-reviews/{sessionId}/refresh` resolves) and the raw cause in `failure.detail`.",
+        "operationId": "getPublicGuidedReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewSessionView"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get a guided review",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/comment-drafts/post": {
+      "post": {
+        "description": "Publish the named drafts as review comments on the pull request, as the key's identity, with an optional summary comment. Each comment posts on its own, so a partial post is normal: the result counts `posted` and `failed` drafts (a failed one carries `postError` and can be posted again) and lists in `skipped` the named drafts this call did not claim because they were already posted, discarded or being posted, so a retried call never posts a comment twice. The summary posts only alongside a draft this call claimed, so an identical retry after a complete post publishes nothing. Refused `409` with `details.reason: \"session_stale\"` when the pull request has commits past `reviewedHeadSha`: refresh the review and check the drafts first. Posting never approves or requests changes.",
+        "operationId": "postPublicGuidedReviewDrafts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostGuidedReviewDrafts"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewPostResult"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Post comment drafts to the pull request",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/comment-drafts/{draftId}": {
+      "patch": {
+        "description": "Change a draft's body or the line it sits on, or discard it with `discard: true`. Send the `rev` you loaded: a draft edited, posted or discarded since is refused `409` with `details.reason: \"draft_conflict\"`, so reload and decide again. A new anchor must be a line inside the diff on its side, or the edit is `422` with `details.reason: \"draft_anchor_outside_diff\"`. Only the session's owner may edit.",
+        "operationId": "editPublicGuidedReviewDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draftId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditGuidedReviewDraft"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewCommentDraft"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Edit, re-anchor or discard a comment draft",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/events": {
+      "get": {
+        "description": "Server-sent events for one guided review: a `state` frame carrying the session view (the same body `GET /api/v1/guided-reviews/{sessionId}` returns) whenever it changes, `deleted` when the session is removed, and `timeout` when the connection cap is reached (reconnect to continue). A thread whose `pendingMessageId` clears has an answer to fetch with `GET /api/v1/guided-reviews/{sessionId}/threads/{threadId}`. Authenticated by the API key header.",
+        "operationId": "streamPublicGuidedReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "An event stream of session updates"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          }
+        },
+        "summary": "Stream a guided review (SSE)",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/refresh": {
+      "post": {
+        "description": "Re-read the pull request and regenerate the overview at its current head commit, keeping every thread. Use it after the author pushes: the overview, answers and draft anchors are computed against the commit recorded as `reviewedHeadSha`.",
+        "operationId": "refreshPublicGuidedReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewSessionView"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Point a guided review at the PR's current head",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/threads": {
+      "post": {
+        "description": "Open a thread in the session, optionally asking its first question in the same call. A thread is an independent line of questioning: waiting on an answer in one never blocks another. Pass a suggested question from the overview verbatim to ask it.",
+        "operationId": "openPublicGuidedReviewThread",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenGuidedReviewThread"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewThreadView"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Open an exploration thread",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/threads/{threadId}": {
+      "get": {
+        "description": "The thread and its messages in order. An assistant message is `pending` or `running` until answered, then `complete` with markdown `content` and the `citations` (file spans) it rests on, or `failed` with a `failure`. A `comment-drafts` message's drafts are on the session; its `draftReport` names every proposed comment that was refused (`outside_diff`, `not_in_pr`, `incomplete`).",
+        "operationId": "getPublicGuidedReviewThread",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "threadId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewThreadView"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get a thread with its messages",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/threads/{threadId}/comment-drafts": {
+      "post": {
+        "description": "Ask the model to turn what the thread concluded into review comments, each placed on the line it is about. Optional `instructions` narrow which ones. Drafts are kept only on lines inside the PR's diff; posting them is a separate, explicit call. Busy like a question: `409` with `details.reason: \"thread_busy\"` while the thread is waiting on an answer.",
+        "operationId": "requestPublicGuidedReviewDrafts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "threadId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestGuidedReviewDrafts"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewExchange"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Draft review comments from a thread's conclusions",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/threads/{threadId}/messages": {
+      "post": {
+        "description": "Append a question and the placeholder that will answer it, and answer with both at once; the answer is produced in the background. A thread holds one unanswered question at a time: asking again before it is answered is `409` with `details.reason: \"thread_busy\"`, and other threads are unaffected. `depth: \"deep\"` answers from a read-only checkout of the repository instead, so it can search the whole tree and run read-only commands; it takes minutes rather than seconds and stays `running` meanwhile, and a deployment with no runner settles it as `depth_unavailable`.",
+        "operationId": "askPublicGuidedReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "threadId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskGuidedReview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewExchange"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Ask a question in a thread",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      }
+    },
     "/api/v1/jobs": {
       "get": {
         "description": "List the headless runs THIS surface created, newest first and keyset-paginated. Scoped to internal-anchored runs exactly like the single-job read, so an external key can never enumerate the workspace’s ordinary board runs.",
@@ -12982,7 +16752,7 @@
     },
     "/api/v1/keys": {
       "get": {
-        "description": "The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret is never readable back. `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.",
+        "description": "The account’s live (non-revoked) keys that reach the workspace this request acts on, account-wide ones included, metadata only; a secret is never readable back. `workspaceIds` is each key’s reach (`null` for every workspace). `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.",
         "operationId": "listPublicKeys",
         "responses": {
           "200": {
@@ -13023,7 +16793,7 @@
         "x-min-scope": "admin"
       },
       "post": {
-        "description": "Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE, so store it now: it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.",
+        "description": "Mint a key in the calling key’s account and return its raw secret EXACTLY ONCE, so store it now: it is not recoverable. Omitting `workspaceIds` mints a key for the workspace this request acts on; a list or `null` (every workspace) can never reach further than the calling key, refused as `403` with `reason: \"workspace_reach_exceeded\"`. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.",
         "operationId": "createPublicKey",
         "requestBody": {
           "content": {
@@ -13076,7 +16846,7 @@
     },
     "/api/v1/keys/{keyId}": {
       "delete": {
-        "description": "Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive its own revocation through the credentials it left behind. Idempotent, and it may name the calling key. Requires an `admin`-scope key.",
+        "description": "Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive its own revocation through the credentials it left behind. Idempotent, and it may name the calling key. A key reaching workspaces the calling key does not is refused with `reason: \"workspace_reach_exceeded\"`. Requires an `admin`-scope key.",
         "operationId": "revokePublicKey",
         "parameters": [
           {
@@ -14046,7 +17816,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       },
       "get": {
         "description": "The endpoint this workspace delivers notifications, run-lifecycle events and platform-health alerts to, or `{ \"webhook\": null }` when none is registered. The signing secret is never returned; `hasSecret` reports only whether one is set.",
@@ -14087,7 +17857,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       },
       "put": {
         "description": "Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered. Every omitted field keeps its stored value, so subscribing to run events is a one-field call that re-sends neither the URL nor the secret. `url` is required only on the first call, when there is nothing registered to keep; omitting it otherwise leaves the endpoint alone. Supplying `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be `https:` and publicly routable unless the deployment widened its allow-list.",
@@ -14138,7 +17908,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       }
     },
     "/api/v1/notification-webhooks": {
@@ -14181,7 +17951,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       }
     },
     "/api/v1/notification-webhooks/{webhookId}": {
@@ -14227,7 +17997,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       },
       "get": {
         "description": "The endpoint registered under this id, or `{ \"webhook\": null }` when there is none — the same shape the unnamed read answers, so an integration's startup self-check does not branch on a status code. The signing secret is never returned.",
@@ -14278,7 +18048,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       },
       "put": {
         "description": "Register an endpoint under an id YOU choose (1-63 characters of lowercase letters, digits, `-` or `_`), or update the one already there. Idempotent by id, so an integration can enroll its own receiver on every cold start without tracking whether it has enrolled before, and without displacing anything else the workspace registered. Every field follows the same keep-on-omit rule as the unnamed route, `url` being required only when there is nothing under this id to keep, and a supplied `secret` rotating this endpoint's own signing secret. Refused with `reason: \"invalid_webhook_id\"` for an id that is not a slug, and `reason: \"webhook_limit_reached\"` (409) when registering a NEW id would exceed the per-workspace cap; editing an existing one is admitted either way.",
@@ -14339,7 +18109,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       }
     },
     "/api/v1/notifications": {
@@ -14560,6 +18330,59 @@
           "Pipelines"
         ],
         "x-min-scope": "read"
+      }
+    },
+    "/api/v1/pr-assessments": {
+      "post": {
+        "description": "Score one pull request in a repository linked to the workspace on the merger’s three axes (complexity, risk, impact, each 0..1, with a rationale), classify it by its changed paths, and say whether a risk policy would let it land with no person. The policy is the one named by `riskPolicyId` from `GET /api/v1/risk-policies`, else the workspace’s unattended default (the one a run started through this API resolves); an unknown id is `422` with `details.reason: \"risk_policy_not_found\"`, and a workspace with no unattended default is `503` `risk_policy_default_missing`. The verdict comes from the same decision the merge step makes, so the policy’s ceilings are never published: `verdict.reason` and `verdict.exceededAxes` say why. A key bound to a person is judged under that person’s workspace role, as a task it creates is admitted, so the role-scoped rules (`classRulesByRole`, `dryRunRoles`, `submissionClassesByRole`) apply to it; a key bound to nobody has no role and they do not. Synchronous: one inline model call, nothing persisted, no run. An unlinked repository is `404` `repo_not_linked`, a PR the host cannot find is `404` `pr_not_found`, a PR that received commits while it was read is `503` `pr_head_moved` (retry), an exhausted budget is `429` `budget_exhausted`, no configured model is `503` `model_unavailable`, a failed model call is `503` `generation_failed`, a call that runs out of time is `503` `generation_timeout`, and a reply that is not an assessment is `503` `unreadable_reply`. A key bound to a person reads the PR and calls the model as that person. Requires a `write` key.",
+        "operationId": "assessPublicPullRequest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssessPublicPullRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicPrAssessment"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Assess a pull request against a risk policy",
+        "tags": [
+          "PR assessment"
+        ],
+        "x-min-scope": "write"
       }
     },
     "/api/v1/prompt-fragments": {
@@ -14963,6 +18786,7 @@
                             "timeout",
                             "agent",
                             "job_failed",
+                            "delegated_failed",
                             "rejected",
                             "companion_rejected",
                             "stalled",
@@ -15209,6 +19033,7 @@
                             "timeout",
                             "agent",
                             "job_failed",
+                            "delegated_failed",
                             "rejected",
                             "companion_rejected",
                             "stalled",
@@ -23096,11 +26921,18 @@
       "name": "Decisions"
     },
     {
+      "description": "The account’s workspaces, users, memberships and linked repositories, as keyset-paged snapshots and an ordered change feed for keeping a copy in sync.",
+      "name": "Directory"
+    },
+    {
       "name": "Environments"
     },
     {
       "description": "What a run PROVED: the engine’s own verification report (the same bundle it writes onto the pull request) and the binary artifacts the run captured, bytes included. The surface for a consumer that has to judge a run (accept the change, score the fleet) rather than debug one. Read-only (`read` scope).",
       "name": "Evidence"
+    },
+    {
+      "name": "Guided review"
     },
     {
       "description": "What the calling key is and what it may do — the self-check an integration runs at startup, so “can I do this?” does not have to be answered by attempting it and reading the 403. `read` scope.",
@@ -23129,6 +26961,9 @@
     {
       "description": "The workspace’s human-actionable notifications (list, act on, or dismiss the run tails).",
       "name": "Notifications"
+    },
+    {
+      "name": "PR assessment"
     },
     {
       "description": "The workspace’s pipelines (discover a pipelineId to start a task with).",
@@ -23172,8 +27007,95 @@
       "name": "Webhook"
     }
   ],
+  "webhooks": {
+    "directoryDelivery": {
+      "post": {
+        "description": "Sent to each registered directory webhook endpoint: a page of directory changes, or word that the endpoint must resynchronize. Dedupe on `deliveryId`: a failed push is retried with the same id. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, \"<x-cat-factory-timestamp>.<raw body>\")>`) over the raw body before parsing, and refuse a timestamp outside your replay window.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectoryWebhookDelivery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Any 2xx acknowledges the push."
+          }
+        },
+        "summary": "A directory webhook push"
+      }
+    },
+    "notificationDelivery": {
+      "post": {
+        "description": "Sent to each notification webhook endpoint subscribed to the notification’s type, on every state edge of the card (raised, acted, dismissed); key on `notification.status`. Dedupe on `deliveryId`. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, \"<x-cat-factory-timestamp>.<raw body>\")>`) over the raw body before parsing, and refuse a timestamp outside your replay window.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationWebhookDelivery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Any 2xx acknowledges the push."
+          }
+        },
+        "summary": "A notification push"
+      }
+    },
+    "platformAlertDelivery": {
+      "post": {
+        "description": "Sent to each notification webhook endpoint subscribed to the event (`alertEvents`) when the account’s run health crosses, or clears, an operator threshold. Dedupe on `deliveryId`. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, \"<x-cat-factory-timestamp>.<raw body>\")>`) over the raw body before parsing, and refuse a timestamp outside your replay window.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformAlertWebhookDelivery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Any 2xx acknowledges the push."
+          }
+        },
+        "summary": "A platform health push"
+      }
+    },
+    "runLifecycleDelivery": {
+      "post": {
+        "description": "Sent to each notification webhook endpoint subscribed to the event (`runEvents`). `run.started` is sent once; the terminal and step events are at-least-once, so dedupe on `deliveryId`, never on the body, whose timestamps are re-stamped on a replay. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, \"<x-cat-factory-timestamp>.<raw body>\")>`) over the raw body before parsing, and refuse a timestamp outside your replay window.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunWebhookDelivery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Any 2xx acknowledges the push."
+          }
+        },
+        "summary": "A run lifecycle push"
+      }
+    }
+  },
   "x-public-api-scopes": [
     "read",
+    "webhooks",
     "write",
     "decide",
     "admin"

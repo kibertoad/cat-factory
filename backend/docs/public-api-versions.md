@@ -384,3 +384,175 @@ belongs with. The list's order is published: the Java client emits it as an enum
 an integration may have persisted, and three more clients expose a `*_VALUES` array in the same
 sequence. An insertion is therefore an in-place re-sequencing of four released clients, arriving as
 generated churn.
+
+## 1.75.0
+
+Two additions for DELEGATED steps, a run's work carried out in a system the deployment already
+operates rather than in this platform's own harness.
+
+`AgentFailureKind` gains `delegated_failed`: an external executor's terminal verdict. It is not a
+new failure so much as one that used to arrive under somebody else's name. The engine had one
+"terminal, do not retry" signal, `harness_shutdown`, so a consumer bucketing failures saw external
+CI verdicts filed under container eviction, and a human saw "Harness shut down" for a step that
+never had a harness. A consumer that maps the vocabulary exhaustively gains a member; one that
+does not keeps parsing, as the clients do by design.
+
+The `llm` totals on `GET /api/v1/debug/runs/{runId}` and `GET /api/v1/debug/runs/{runId}/llm-export`
+gain `reporting`: how many of the run's steps ran on an executor that files no usage, and which
+executors those were. The totals beside it are unchanged and remain correct for what they cover;
+this says what they do NOT cover, which is the whole point. A delegated step's model calls never
+reach this deployment's proxy or recorder, so its tokens are in no total here, and a missing number
+is invisible. A caller reading spend off this surface should treat a non-zero
+`delegatedStepsWithoutUsage` as "this run cost more than this number says", not as a zero.
+
+## 1.76.0
+
+`/api/v1/guided-reviews` is new: guided pull request review. A session explains one PR (what it
+does, its meaningful changes, consequences, risks, where to focus, suggested questions) and holds
+independent question threads answered by a model that reads the PR at the commit under review.
+A thread can also turn its conclusions into comment drafts placed on lines inside the diff.
+`GET /api/v1/guided-reviews/{sessionId}/events` streams the session view as it changes.
+
+Additive: nine contract operations, one hand-documented stream, and the shapes they carry. Three
+of those shapes reuse value sets other operations published first (a diff side, a VCS provider and
+a `true`/`false` query flag); the SDK generator pins the existing type names, so no released type
+is renamed. Nothing here posts to a pull request.
+
+## 1.77.0
+
+Guided review drafts can be edited and posted: `PATCH /api/v1/guided-reviews/{sessionId}/comment-drafts/{draftId}`
+edits, re-anchors or discards one, and `POST /api/v1/guided-reviews/{sessionId}/comment-drafts/post`
+publishes the chosen drafts on the pull request as plain review comments.
+
+Additive. What a consumer notices beyond the new operations: `ConflictError` reasons gain
+`draft_conflict` (an edit from a stale `rev`) and `session_stale` (a post after the pull request
+moved past the reviewed commit). The guided review group's `write` scope now also covers posting,
+which publishes on the host under the key's identity; it still never approves or requests changes.
+
+## 1.78.0
+
+A guided review question asked with `depth: "deep"` is now answered from a read-only checkout of
+the repository rather than refused. Its assistant message stays `running` for minutes rather than
+seconds while the container works, and a deployment with no runner still settles it as
+`failed` with `failure.reason: "depth_unavailable"`. No shape changes; the version records that a
+documented value started doing what it names.
+
+## 1.79.0
+
+The task-type vocabulary gains `resolve-conflicts`: a task that ATTACHES an existing open pull
+request (named by `fields.prNumber` or `fields.prUrl`, exactly as a `review` task names one) and
+runs the `conflicts` gate against it under the new built-in `pl_resolve_conflicts` pipeline. A
+pull request that already merges cleanly finishes `done` with nothing pushed; a conflicted one
+loops the conflict resolver onto its own head branch and fails the run once the attempt budget is
+spent, with a failure message saying the conflicts could not be resolved automatically.
+
+Additive: a new enum value and a new set of `details.reason` codes on the existing `422`
+(`attached_pr_unresolvable`, `attached_pr_not_found`, `attached_pr_repo_mismatch`,
+`attached_pr_not_open`, `attached_pr_from_fork`, `attached_pr_base_mismatch`). The pipeline parks
+nowhere, so a plain `write` key can start it with an empty body.
+
+## 1.80.0
+
+Public-API keys belong to an account and may reach every workspace in it or a listed subset.
+`PublicApiKey` and `GET /api/v1/me` gain `workspaceIds` (`null` meaning every workspace), and both
+key-minting bodies accept an optional `workspaceIds`. A workspace-scoped call names its workspace
+in the new `x-cat-factory-workspace` request header.
+
+Additive. Every key that existed before reaches exactly the one workspace it was minted for, so it
+keeps working with no header, and an omitted `workspaceIds` on a mint still produces a key for the
+workspace the request acts on. `workspaceId` stays on both shapes and means the workspace the
+listing, mint or request acted on. What a consumer notices only once it holds a wider key: a call
+that names no workspace is refused with 422 `details.reason: workspace_required`, and a workspace
+outside the key's reach answers 404 `workspace_not_found`. A key can never mint or revoke a key
+reaching further than itself (403 `workspace_reach_exceeded`).
+
+## 1.81.0
+
+`/api/v1/directory/*` is new: an account's workspaces, users, account memberships, workspace
+memberships and linked repositories, as keyset-paged snapshots plus an ordered change feed
+(`GET /api/v1/directory/changes?after=<seq>`), for an integration keeping its own copy in sync.
+
+Additive: six `read` operations and the shapes they carry. The routes are account-scoped and read no
+`x-cat-factory-workspace` header; a key limited to some workspaces sees those workspaces' entities
+and is refused users and account memberships (`403 account_scope_required`). Its feed also
+carries the `workspace` deletion of every board that no longer exists, since deleting a board drops
+the key's grant on it. `ConflictError` reasons gain `cursor_expired`, for a feed cursor older than
+the feed's retention.
+
+The number is 1.81.0 because 1.80.0 went to account-level keys while this branch was in flight.
+
+## 1.82.0
+
+Directory webhooks: `GET /api/v1/directory/webhooks`, `PUT` and `DELETE
+/api/v1/directory/webhooks/{webhookId}` register account-level endpoints the directory change feed
+is pushed to, every couple of minutes, signed like the notification webhooks. The document gains an
+OpenAPI 3.1 `webhooks` section naming every push body: `DirectoryWebhookDelivery`, and the existing
+`NotificationWebhookDelivery`, `RunWebhookDelivery` and `PlatformAlertWebhookDelivery`, which become
+generated types in every client.
+
+Additive. The management operations need an `admin` key that reaches every workspace. Pushes are
+at-least-once; a receiver dedupes on `deliveryId`, and the change feed stays the guarantee of
+completeness.
+
+## 1.83.0
+
+`POST /api/v1/pr-assessments` is new (`client.prAssessments.assess`): a pull request in a linked
+repository scored on the merger's complexity, risk and impact axes, its path-derived change class,
+and whether a risk policy would let it land with no person. The answer is a verdict
+(`within_policy` or `requires_review`, with the merge-decision reason and the exceeded axes), so
+the policy's ceilings stay unpublished, as `PublicRiskPolicy` already keeps them.
+
+Additive: one `write` operation and the shapes it carries (`AssessPublicPullRequest`,
+`PublicPrAssessment`, `PublicPrAssessmentPolicy`, `PublicPrAssessmentVerdict`). The call is
+synchronous and persists nothing.
+
+## 1.84.0
+
+A directory `DirectoryUser` gains `accounts`: the GitHub and GitLab accounts the user signed in
+with, each as `{ provider, id, login }`, where `id` is the host's numeric user id. A mirror matches
+people across systems on `(provider, id)`, which survives a rename on the host. Linking such an
+account to a user, or moving it to another user, records a `user` change for each user involved.
+
+Additive. A client built against an older document reads users as before.
+
+## 1.86.0
+
+The scope ladder gains a `webhooks` rung between `read` and `write`
+(`read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin`). It is `read` plus registering and removing push
+endpoints: the directory webhooks (`/api/v1/directory/webhooks`, still for a key reaching every
+workspace) and a workspace's notification webhooks (`/api/v1/notification-webhook[s]`). Those
+operations move from `admin` to `webhooks`.
+
+Additive: a new enum value on `scope`, and operations that admit more keys than before. Every key
+that could call them still can.
+
+## 1.87.0
+
+`GET /api/v1/deployment` is new (`client.deployment.get`): where the deployment serves its web
+app (`appUrl`), so an integration can send a person to one of its deep links, such as the
+add-service screen prefilled with a repository (`?addRepo=<owner>/<name>`). It is account-level, so
+a key reaching several workspaces calls it without naming one, and any `read` key may.
+
+Additive: one `read` operation and its `PublicDeployment` shape.
+
+## 1.88.0
+
+`GET /api/v1/directory/reach` is new (`client.directory.getReach`): the calling key's
+`accountId` and `workspaceIds` (`null` for every workspace), account-scoped like the rest of the
+directory, so it needs no `x-cat-factory-workspace` header. `GET /api/v1/me` names one workspace and
+refuses a key reaching several that sends none, which is every key a directory webhook accepts, so a
+mirror filtering a push by reach reads this instead.
+
+Additive: one `read` operation and its `DirectoryReach` shape.
+
+## 1.89.0
+
+A key can follow its person's workspaces. `followsMemberships` is new on the key a mint returns or
+`GET /api/v1/keys` lists, on `GET /api/v1/me` and on `GET /api/v1/directory/reach`. Such a key is
+bound to a person (`actsAsUserId`) and reaches every workspace that person can act in, decided on
+each call, with its scope in each lowered to what their role there allows. `/me` and
+`/directory/reach` answer that reach as of the call; a listed key carries `workspaceIds: []`, since
+its reach is not a list.
+
+Additive: a new boolean on three shapes. A listed key's `workspaceIds` may now be an empty list,
+which it never was before, and only ever for a key with `followsMemberships: true`.

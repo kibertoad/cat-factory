@@ -5,6 +5,7 @@ package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -12,10 +13,12 @@ import org.jspecify.annotations.Nullable;
  * @param accountId the {@code accountId} field.
  * @param createdAt the {@code createdAt} field.
  * @param externalIdentity Always present; {@code null} when the server has no value for it.
+ * @param followsMemberships the {@code followsMemberships} field.
  * @param keyId the {@code keyId} field.
  * @param label the {@code label} field.
  * @param scope the {@code scope} field.
  * @param workspaceId the {@code workspaceId} field.
+ * @param workspaceIds Always present; {@code null} when the server has no value for it.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicIdentity(
@@ -26,13 +29,18 @@ public record PublicIdentity(
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("externalIdentity") @Nullable String externalIdentity,
 
+    @JsonProperty("followsMemberships") Boolean followsMemberships,
+
     @JsonProperty("keyId") String keyId,
 
     @JsonProperty("label") String label,
 
     @JsonProperty("scope") PublicApiKeyScope scope,
 
-    @JsonProperty("workspaceId") String workspaceId
+    @JsonProperty("workspaceId") String workspaceId,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("workspaceIds") @Nullable List<String> workspaceIds
 ) {
 
     /** A new builder for {@link PublicIdentity}. */
@@ -50,10 +58,12 @@ public record PublicIdentity(
         private @Nullable String accountId;
         private @Nullable Double createdAt;
         private @Nullable String externalIdentity;
+        private @Nullable Boolean followsMemberships;
         private @Nullable String keyId;
         private @Nullable String label;
         private @Nullable PublicApiKeyScope scope;
         private @Nullable String workspaceId;
+        private @Nullable List<String> workspaceIds;
 
         /** Set {@code accountId}. */
         public Builder accountId(@Nullable String accountId) {
@@ -70,6 +80,12 @@ public record PublicIdentity(
         /** Set {@code externalIdentity}. */
         public Builder externalIdentity(@Nullable String externalIdentity) {
             this.externalIdentity = externalIdentity;
+            return this;
+        }
+
+        /** Set {@code followsMemberships}. */
+        public Builder followsMemberships(@Nullable Boolean followsMemberships) {
+            this.followsMemberships = followsMemberships;
             return this;
         }
 
@@ -97,9 +113,15 @@ public record PublicIdentity(
             return this;
         }
 
+        /** Set {@code workspaceIds}. */
+        public Builder workspaceIds(@Nullable List<String> workspaceIds) {
+            this.workspaceIds = workspaceIds;
+            return this;
+        }
+
         /** Build the {@link PublicIdentity}. */
         public PublicIdentity build() {
-            return new PublicIdentity(accountId, createdAt, externalIdentity, keyId, label, scope, workspaceId);
+            return new PublicIdentity(accountId, createdAt, externalIdentity, followsMemberships, keyId, label, scope, workspaceId, workspaceIds);
         }
     }
 }

@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 import { definePrReviewSuite } from './execution-pr-review.js'
 import { defineBugFishingSuite } from './execution-bug-fishing.js'
+import { defineResolveConflictsSuite } from './execution-resolve-conflicts.js'
 
 // Core conformance, slice 3: the planning surfaces — the public initiative-breakdown API,
 // pipeline versioning + reseed, service spec reads, task types + the per-service running-task
@@ -67,9 +68,10 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
   registerBoardPlanningTests(harness)
 
   // PR deep-review park → select → resolve — extracted to keep this function within its
-  // line budget (see CLAUDE.md: split, never raise the budget).
+  // line budget (see AGENTS.md: split, never raise the budget).
   definePrReviewSuite(harness)
   defineBugFishingSuite(harness)
+  defineResolveConflictsSuite(harness)
 }
 
 /**

@@ -81,7 +81,7 @@ export interface ApiContractRepository {
   /**
    * The whole tier's contract manifest — one query, no bodies. Indexed by the caller into a
    * `serviceId → entries` Map, so building a catalog of N services costs ONE read rather than
-   * N (see CLAUDE.md "No N+1 repository access").
+   * N (see AGENTS.md "No N+1 repository access").
    */
   listManifestByOwner(
     ownerKind: FoundationalServiceOwnerKind,

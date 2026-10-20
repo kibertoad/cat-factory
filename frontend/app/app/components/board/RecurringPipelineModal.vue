@@ -12,6 +12,8 @@ import { BUILTIN_TASK_SOURCE_KINDS } from '@cat-factory/contracts'
 import { apiErrorReason } from '~/composables/api/errors'
 import { pipelineAllowedForSchedule } from '~/utils/pipeline'
 import { appliesIntakePredicate } from '~/utils/intakePredicates'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -19,7 +21,7 @@ const pipelines = usePipelinesStore()
 const recurring = useRecurringPipelinesStore()
 const tracker = useTrackerStore()
 const tasks = useTasksStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const access = useWorkspaceAccess()
 const { t, te } = useI18n()
@@ -393,12 +395,7 @@ async function add() {
   } catch (e) {
     const refusal = intakeRefusalCopy(e)
     if (refusal) {
-      toast.add({
-        title: t('board.recurring.addFailedTitle'),
-        description: refusal,
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      actionToast.error('board.recurring.addFailedTitle', { description: refusal })
     } else present(e, 'board.recurring.addFailedTitle')
   } finally {
     saving.value = false
@@ -407,13 +404,13 @@ async function add() {
 </script>
 
 <template>
-  <UModal v-model:open="modalOpen" :title="t('board.recurring.title')">
+  <AppModal size="form" v-model:open="modalOpen" :title="t('board.recurring.title')">
     <template #body>
       <div class="space-y-4">
-        <p v-if="frame" class="text-xs text-slate-400">
+        <p v-if="frame" class="text-xs text-muted">
           <i18n-t keypath="board.recurring.on" tag="span" scope="global">
             <template #frame>
-              <span class="font-medium text-slate-200">{{ frame.title }}</span>
+              <span class="font-medium text-default">{{ frame.title }}</span>
             </template>
           </i18n-t>
         </p>
@@ -449,11 +446,11 @@ async function add() {
           />
         </UFormField>
 
-        <div class="flex items-start gap-2 rounded-lg border border-slate-800 p-3">
+        <div class="flex items-start gap-2 rounded-lg border border-default p-3">
           <USwitch v-model="onDemand" :disabled="onDemandLocked" size="sm" class="mt-0.5" />
           <div class="space-y-0.5">
-            <p class="text-xs font-medium text-slate-200">{{ t('board.recurring.onDemand') }}</p>
-            <p class="text-[11px] text-slate-500">
+            <p class="text-xs font-medium text-default">{{ t('board.recurring.onDemand') }}</p>
+            <p class="text-2xs text-dimmed">
               {{
                 onDemandLocked
                   ? t('board.recurring.onDemandLockedHint')
@@ -465,11 +462,11 @@ async function add() {
 
         <RecurringRecurrenceEditor v-if="!onDemand" v-model="recurrence" />
 
-        <div v-if="filesTicket" class="space-y-3 rounded-lg border border-slate-800 p-3">
-          <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div v-if="filesTicket" class="space-y-3 rounded-lg border border-default p-3">
+          <SectionLabel as="p">
             {{ t('board.recurring.issueTracker') }}
-          </p>
-          <p class="text-[11px] text-slate-500">
+          </SectionLabel>
+          <p class="text-2xs text-dimmed">
             {{ t('board.recurring.issueTrackerHint') }}
           </p>
           <div class="flex gap-1">
@@ -538,25 +535,25 @@ async function add() {
             @update:model-value="setTrackerTrigger"
           />
           <div>
-            <p class="text-xs font-medium text-slate-200">
+            <p class="text-xs font-medium text-default">
               {{ t('board.recurring.trackerTrigger') }}
             </p>
-            <p class="text-[11px] text-slate-500">
+            <p class="text-2xs text-dimmed">
               {{ t('board.recurring.trackerTriggerHint') }}
             </p>
           </div>
         </div>
 
-        <div v-if="showIntake" class="space-y-3 rounded-lg border border-slate-800 p-3">
-          <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div v-if="showIntake" class="space-y-3 rounded-lg border border-default p-3">
+          <SectionLabel as="p">
             {{ t('board.recurring.intake') }}
-          </p>
-          <p class="text-[11px] text-slate-500">
+          </SectionLabel>
+          <p class="text-2xs text-dimmed">
             {{ t('board.recurring.intakeHint') }}
           </p>
           <!-- Two different remedies: connect something, versus connect something ELSE. A source
                that is connected but cannot run a scheduled search is not an absent connection. -->
-          <p v-if="intakeSources.length === 0" class="text-[11px] text-amber-500">
+          <p v-if="intakeSources.length === 0" class="text-2xs text-app-warning-500">
             {{
               tasks.anyOffered
                 ? t('board.recurring.intakeNoIntakeSources')
@@ -626,7 +623,7 @@ async function add() {
           </UFormField>
 
           <template v-if="intakeSource">
-            <p class="text-[11px] text-slate-500">
+            <p class="text-2xs text-dimmed">
               {{
                 intakeDispatch === 'per-ticket'
                   ? t('board.recurring.intakeDispatchPerTicketHint')
@@ -659,7 +656,7 @@ async function add() {
                    still holding a value would read as a filter that is on. Stated here because a
                    schedule fires unattended — the only other evidence of the gap is a bugfix run
                    started on a docs chore. -->
-              <p v-else class="text-xs text-amber-400">
+              <p v-else class="text-xs text-app-warning-400">
                 {{
                   t('board.recurring.intakeIssueTypeUnsupported', {
                     tracker: intakeSourceLabel,
@@ -677,7 +674,7 @@ async function add() {
           </template>
         </div>
 
-        <p class="text-[11px] text-slate-500">
+        <p class="text-2xs text-dimmed">
           {{ t('board.recurring.footerHint') }}
         </p>
       </div>
@@ -688,16 +685,10 @@ async function add() {
         <UButton color="neutral" variant="ghost" @click="requestClose()">{{
           t('common.cancel')
         }}</UButton>
-        <UButton
-          color="primary"
-          icon="i-lucide-repeat"
-          :loading="saving"
-          :disabled="!canAdd"
-          @click="add"
-        >
+        <UButton icon="i-lucide-repeat" :loading="saving" :disabled="!canAdd" @click="add">
           {{ t('board.recurring.submit') }}
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

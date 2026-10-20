@@ -7,7 +7,7 @@ was withdrawn; see below) · Owner: platform · Started: 2026-07-27
 > and fill in the results table. Nothing in Phases 1–2 depends on the answer; it only decides
 > whether Phase 3 is ever worth revisiting.
 
-> **Conversion note:** the committed scope is complete, so per `CLAUDE.md` this tracker is due to
+> **Conversion note:** the committed scope is complete, so per `AGENTS.md` this tracker is due to
 > be converted into a numbered ADR under `backend/docs/adr/` and deleted. It is deliberately kept
 > for now because Phase 0's results table is still blank: the tracker is still doing work no ADR
 > would. Convert it once the numbers land (or once Phase 3 is formally closed out).
@@ -364,7 +364,7 @@ work out:
 > `aspirational` one is work that is not finished yet.**
 
 That sentence was already written into `prompts/testing.ts`, `prompts/standard.ts`,
-`repo-ops/render.ts` and `CLAUDE.md`: four places, all prose, none of them computed. On the PR
+`repo-ops/render.ts` and `AGENTS.md`: four places, all prose, none of them computed. On the PR
 report both readings arrived as the same `❌ not met` cell and were pooled into the same `notMet`
 tally, so telling them apart meant cross-referencing two columns of a table that may be capped.
 This is precisely the collapse `not_covered` was kept separate from `not_met` to prevent, one axis
@@ -403,7 +403,7 @@ Gotchas worth carrying:
   counts. The first draft asserted `(every regression kept)` unconditionally; a note that
   overstates what survived is the same false reassurance as no note at all, one level in.
 - **Evidence, not policy.** The report counts and marks a regression; it does not gate the merge,
-  fail the run, or bounce a step. The report is the engine's evidence surface (`CLAUDE.md` → PR
+  fail the run, or bounce a step. The report is the engine's evidence surface (`AGENTS.md` → PR
   verification report) and gating belongs to the gate/judge registries, which have their own
   attempt budgets and park semantics. A regression IS actionable (the tester already files an
   established break as a concern for the fixer), so the report's job is to make sure a human

@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import { serviceTestSecretsViewSchema, upsertServiceTestSecretsSchema } from '../test-secrets.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
@@ -30,5 +30,5 @@ export const deleteServiceTestSecretsContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: blockIdParams,
   pathResolver: ({ blockId }) => `/services/${blockId}/test-secrets`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

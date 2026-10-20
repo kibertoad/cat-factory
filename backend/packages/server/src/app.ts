@@ -105,6 +105,7 @@ import {
   taskSourceController,
 } from './modules/tasks/TaskSourceController.js'
 import { assistantController } from './modules/assistant/AssistantController.js'
+import { guidedReviewController } from './modules/guidedReview/GuidedReviewController.js'
 import { bugHuntController } from './modules/bugHunt/BugHuntController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
 import { workspaceMemberController } from './modules/workspaces/WorkspaceMemberController.js'
@@ -126,11 +127,14 @@ import { publicEvidenceController } from './modules/publicApi/PublicEvidenceCont
 import { publicSpecController } from './modules/publicApi/PublicSpecController.js'
 import { publicMergeEvidenceController } from './modules/publicApi/PublicMergeEvidenceController.js'
 import { publicKaizenController } from './modules/publicApi/PublicKaizenController.js'
+import { publicGuidedReviewController } from './modules/publicApi/PublicGuidedReviewController.js'
+import { publicPrAssessmentController } from './modules/publicApi/PublicPrAssessmentController.js'
 import { publicDiscoveryController } from './modules/publicApi/PublicDiscoveryController.js'
 import { publicFragmentController } from './modules/publicApi/PublicFragmentController.js'
 import { publicUseCaseController } from './modules/publicApi/PublicUseCaseController.js'
 import { publicSpendController } from './modules/publicApi/PublicSpendController.js'
 import { publicKeyController } from './modules/publicApi/PublicKeyController.js'
+import { publicDirectoryController } from './modules/publicApi/PublicDirectoryController.js'
 import { publicMcpController } from './modules/publicApi/PublicMcpController.js'
 import { publicNotificationWebhookController } from './modules/publicApi/PublicNotificationWebhookController.js'
 import { notificationWebhookController } from './modules/notificationWebhook/NotificationWebhookController.js'
@@ -202,6 +206,10 @@ function registerPublicApiControllers<E extends AppEnv>(app: Hono<E>): void {
   // takes one off the backlog. Reads are `read`; acknowledging is `write`, since recording that a
   // recommendation was triaged starts nothing. See backend/docs/public-api.md.
   app.route('/', publicKaizenController())
+  app.route('/', publicGuidedReviewController())
+  // The public PR ASSESSMENT (`POST /api/v1/pr-assessments`): a pull request's merger-style scores
+  // and whether a risk policy would land it, from one synchronous model call. `write` scope.
+  app.route('/', publicPrAssessmentController())
   // The public SPEND-ANALYTICS read (`/api/v1/usage/spend`): the workspace's money over a window
   // sliced by repository, ticket, run or step kind: the TCO question the period breakdown on
   // `/api/v1/usage` carries no axis for. `read` scope. See backend/docs/public-api.md.
@@ -215,6 +223,7 @@ function registerPublicApiControllers<E extends AppEnv>(app: Hono<E>): void {
   // key panel, `admin` scope, bounded so a minted key can never mint another and revoking a key
   // revokes what it minted.
   app.route('/', publicKeyController())
+  app.route('/', publicDirectoryController())
   // The public OUTBOUND-WEBHOOK management surface (`/api/v1/notification-webhook`): the enrolment
   // half of the push channel, so a deployment with no browser session can register the receiver
   // its notifications, run-lifecycle edges and health alerts are delivered to. `admin` scope; same
@@ -439,6 +448,8 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   // The in-app assistant: a prompt routed to one of the board actions above. Member-tier and
   // ungated, like the bug hunt beside it (see AssistantController for why).
   { name: 'assistant', mount: WORKSPACE_MOUNT, build: () => assistantController() },
+  // Guided PR review: member tier, the service lets only a session's creator change it.
+  { name: 'guidedReview', mount: WORKSPACE_MOUNT, build: () => guidedReviewController() },
   { name: 'environment', mount: WORKSPACE_MOUNT, build: () => environmentController() },
   { name: 'runnerPool', mount: WORKSPACE_MOUNT, build: () => runnerPoolController() },
   { name: 'provisioningLog', mount: WORKSPACE_MOUNT, build: () => provisioningLogController() },

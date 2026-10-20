@@ -101,8 +101,8 @@ mcp-maturation slice 7 landed OAuth for external MCP servers (`authorization_cod
 is exactly the shape of Figma's OAuth-first remote MCP endpoint; kernel's own capability docs
 name Figma as the worked example. A coder on a subscription harness could query the live file on
 demand (deep node reads past the materialisation caps) instead of relying entirely on the static
-snapshot. Two constraints bound the design: Pi has no MCP client (`MCP_HARNESS_TRANSPORTS.pi =
-[]`), so the materialised `.cat-context/` path stays the baseline for every kind, and a
+snapshot. Two constraints bound the design: Pi had no MCP client when this was written (it gained
+one in Pi 0.99), so the materialised `.cat-context/` path stays the baseline for every kind, and a
 capability that cannot be honoured must be STATED to the agent, never silently dropped.
 
 Smaller items the survey surfaced are folded into Track G below: first-claimer-wins ordering in

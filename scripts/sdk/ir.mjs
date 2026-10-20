@@ -160,6 +160,14 @@ const INLINE_ENUM_NAMES = {
   // three-member set this ordinary is a matter of time before something else carries it, and the
   // rename it would cause is the one this table exists to prevent.
   'account,builtin,workspace': 'PublicPromptFragmentTier',
+  // Three sets guided PR review shares with surfaces that shipped them first. Unpinned, the
+  // guided-review operations walk first and the deduped types take their names, deleting
+  // `PublicPrReviewDecisionFindingSide`, `PrReportRunProvider` and
+  // `ListPublicKaizenEntriesAcknowledged` from four released SDKs. Both halves pinned, for the
+  // ordinal reason `PublicReviewFindingSeverity` states.
+  'LEFT,RIGHT': { name: 'PublicPrReviewDecisionFindingSide', values: ['LEFT', 'RIGHT'] },
+  'github,gitlab': { name: 'PrReportRunProvider', values: ['github', 'gitlab'] },
+  'false,true': { name: 'ListPublicKaizenEntriesAcknowledged', values: ['true', 'false'] },
 }
 
 /**
@@ -179,6 +187,8 @@ const INLINE_ENUM_NAMES = {
  */
 const DISTINCT_ENUM_TYPES = {
   PublicBugFishingFindingConfidence: 'PublicBugFishingConfidence',
+  // A query flag spelled like the Kaizen `acknowledged` filter, and meaning something else.
+  ListPublicGuidedReviewsMine: 'ListPublicGuidedReviewsMine',
 }
 
 /** OpenAPI/JSON-Schema scalar → IR primitive. */

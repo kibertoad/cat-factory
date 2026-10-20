@@ -1,6 +1,7 @@
 import type { AgentKind } from '@cat-factory/kernel'
 import { isContainerBackedCompanion } from './companions.js'
 import type { AgentKindRegistry } from './registry.js'
+import { surfaceTraits } from './surface-traits.js'
 
 // ---------------------------------------------------------------------------
 // What a kind's declared `agent.surface` implies, stated once: whether a dispatch hands the agent
@@ -45,13 +46,22 @@ export function runsInContainer(kind: AgentKind, registry: AgentKindRegistry): b
  * which is the right answer for a container reviewer that slices the diff itself and an
  * unreviewable file list for an inline panel.
  *
- * DELIBERATELY FAIL-SAFE, and the asymmetry matters. A consensus-enabled step is treated as
- * checkout-less even though the executor may still fall through to the standard container agent
- * (an ineligible kind, fewer than two participants, an un-cleared gate). Being wrong that way
- * hands a container agent an inlined diff it did not need — it still has the checkout, so nothing
- * is lost. Being wrong the other way hands an inline panel a file list and tells it to run git,
- * which it cannot, and the panel reviews from filenames while sounding confident. Only one of
- * those two errors is recoverable, so the prediction leans at it.
+ * A DELEGATED kind answers TRUE, and that is the one place this parts company with
+ * {@link runsInContainer}. The two ask different questions: whether the work needs one of OUR
+ * containers, and whether the agent will be looking at a working tree. An external executor is
+ * handed a repository and a work branch and checks them out itself (whether the branch is already
+ * THERE is the executor's own `workBranch` declaration), which is exactly why
+ * `composeDelegationBrief` renders its prompt with `materialized: true` and a dispatch naming the
+ * branch. Deriving this from the container answer told the two halves of one dispatch opposite
+ * things: an inlined file list from the preOps, and a prompt about a checkout the agent does have.
+ *
+ * DELIBERATELY FAIL-SAFE about consensus, and the asymmetry matters. A consensus-enabled step is
+ * treated as checkout-less even though the executor may still fall through to the standard
+ * container agent (an ineligible kind, fewer than two participants, an un-cleared gate). Being
+ * wrong that way hands a container agent an inlined diff it did not need: it still has the
+ * checkout, so nothing is lost. Being wrong the other way hands an inline panel a file list and
+ * tells it to run git, which it cannot, and the panel reviews from filenames while sounding
+ * confident. Only one of those two errors is recoverable, so the prediction leans at it.
  */
 export function dispatchDeliversCheckout(
   kind: AgentKind,
@@ -59,7 +69,7 @@ export function dispatchDeliversCheckout(
   opts: { consensusEnabled?: boolean } = {},
 ): boolean {
   if (opts.consensusEnabled) return false
-  return runsInContainer(kind, registry)
+  return runsInContainer(kind, registry) || runsDelegated(kind, registry)
 }
 
 /**
@@ -81,6 +91,34 @@ export function dispatchDeliversCheckout(
  * us nothing to conclude from.
  */
 export function deliverableIsReply(kind: AgentKind, registry: AgentKindRegistry): boolean {
-  const surface = registry.agentStep(kind)?.surface
-  return surface === 'inline' || surface === 'container-explore'
+  return surfaceTraits(registry.agentStep(kind)?.surface)?.deliverableIsReply ?? false
+}
+
+/**
+ * Whether this kind's work leaves the platform: it declared the `delegated` surface, so a
+ * registered {@link DelegatedExecutor} does the implementing and the engine only observes it.
+ *
+ * A property of the KIND, like {@link runsInContainer}, and the question
+ * `CompositeAgentExecutor.pick` routes its third arm on. False for every built-in: the platform
+ * ships no delegated kind, because one would make the seam about that one executor.
+ */
+export function runsDelegated(kind: AgentKind, registry: AgentKindRegistry): boolean {
+  return surfaceTraits(registry.agentStep(kind)?.surface)?.delegated ?? false
+}
+
+/**
+ * The registered delegated executor's id for this kind, or undefined when the kind does not run
+ * on one.
+ *
+ * Reads BOTH halves rather than the `executor` field alone, so a stray `executor` on a container
+ * kind (which boot validation refuses, and which a mothership node never boot-validates at all)
+ * can never route a container dispatch to an external system.
+ */
+export function delegatedExecutorFor(
+  kind: AgentKind,
+  registry: AgentKindRegistry,
+): string | undefined {
+  const step = registry.agentStep(kind)
+  if (!surfaceTraits(step?.surface)?.delegated) return undefined
+  return step?.executor
 }

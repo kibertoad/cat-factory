@@ -12,6 +12,10 @@
 // `ui.openFromModelProviders(...)`, so opening one closes this hub and gives that panel a
 // "Back to Model providers" control (IntegrationBackTitle). Layout mirrors the Integrations
 // hub row-for-row so the two read as siblings.
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
+
 const { t } = useI18n()
 const ui = useUiStore()
 const apiKeys = useApiKeysStore()
@@ -164,28 +168,21 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('layout.modelProvidersHub.title')"
-    :ui="{ content: 'max-w-xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('layout.modelProvidersHub.title')">
     <template #body>
       <div class="space-y-5" data-testid="model-providers-hub">
-        <p class="text-xs text-slate-400">
+        <p class="text-xs text-muted">
           {{ t('layout.modelProvidersHub.intro') }}
         </p>
 
         <!-- Nothing connected at all is a hard stop, not a nudge: no provider means no agent
              step can run. Say so plainly rather than showing an empty list of options. -->
-        <div
-          v-if="!anyConnected"
-          class="rounded-lg border border-primary-500/40 bg-primary-500/10 p-3"
-        >
-          <div class="mb-1.5 flex items-center gap-2 text-sm font-medium text-primary-200">
+        <div v-if="!anyConnected" class="rounded-lg border border-primary/40 bg-primary/10 p-3">
+          <div class="mb-1.5 flex items-center gap-2 text-sm font-medium text-primary">
             <UIcon name="i-lucide-rocket" class="h-4 w-4 shrink-0" />
             <span>{{ t('layout.modelProvidersHub.getStarted.title') }}</span>
           </div>
-          <p class="text-xs text-slate-300">
+          <p class="text-xs text-toned">
             {{ t('layout.modelProvidersHub.getStarted.body') }}
           </p>
         </div>
@@ -198,53 +195,52 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
           class="w-full"
         />
 
-        <p v-if="!filteredGroups.length" class="px-1 py-6 text-center text-sm text-slate-500">
-          {{ t('layout.modelProvidersHub.noMatches', { query }) }}
-        </p>
+        <EmptyState
+          v-if="!filteredGroups.length"
+          compact
+          icon="i-lucide-search-x"
+          :title="t('layout.modelProvidersHub.noMatches', { query })"
+        />
 
         <section v-for="group in filteredGroups" :key="group.title">
-          <h3 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <SectionLabel as="h3" class="mb-2 px-1">
             {{ group.title }}
-          </h3>
+          </SectionLabel>
           <div class="space-y-1.5">
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               v-for="item in group.items"
               :key="item.key"
-              type="button"
-              class="flex w-full items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 text-start transition hover:border-slate-700 hover:bg-slate-900"
+              class="flex w-full items-center gap-3 rounded-lg border border-default bg-default/50 px-3 py-2.5 text-start transition hover:border-muted hover:bg-default"
               :data-testid="`model-provider-${item.key}`"
               @click="item.onClick()"
             >
-              <UIcon :name="item.icon" class="h-5 w-5 shrink-0 text-slate-300" />
+              <UIcon :name="item.icon" class="h-5 w-5 shrink-0 text-toned" />
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">
-                  <span class="truncate text-sm font-medium text-slate-100">{{ item.label }}</span>
+                  <span class="truncate text-sm font-medium text-app-100">{{ item.label }}</span>
                   <UBadge v-if="item.connected" color="success" variant="subtle" size="sm">
                     {{ item.status || t('layout.modelProvidersHub.status.connected') }}
                   </UBadge>
-                  <span v-else class="text-[11px] text-slate-500">{{
+                  <span v-else class="text-2xs text-dimmed">{{
                     t('layout.modelProvidersHub.status.notConnected')
                   }}</span>
-                  <UBadge
-                    v-if="!anyConnected && item.recommended"
-                    color="primary"
-                    variant="subtle"
-                    size="sm"
-                  >
+                  <UBadge v-if="!anyConnected && item.recommended" variant="subtle" size="sm">
                     {{ t('layout.modelProvidersHub.status.recommended') }}
                   </UBadge>
                 </div>
-                <p class="truncate text-xs text-slate-400">{{ item.description }}</p>
+                <p class="truncate text-xs text-muted">{{ item.description }}</p>
               </div>
               <UIcon
                 name="i-lucide-chevron-right"
-                class="h-4 w-4 shrink-0 text-slate-500 rtl:-scale-x-100"
+                class="h-4 w-4 shrink-0 text-dimmed rtl:-scale-x-100"
               />
-            </button>
+            </UButton>
           </div>
-          <p v-if="group.note" class="mt-1.5 px-1 text-[11px] text-slate-500">{{ group.note }}</p>
+          <p v-if="group.note" class="mt-1.5 px-1 text-2xs text-dimmed">{{ group.note }}</p>
         </section>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

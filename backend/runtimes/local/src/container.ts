@@ -3,6 +3,7 @@ import {
   DrizzleEnvironmentUserHandlerRepository,
   DrizzleGitHubInstallationRepository,
   DrizzleLocalSettingsRepository,
+  DrizzleAccountRunnerPoolRepository,
   DrizzleRunnerPoolConnectionRepository,
   LayeredEventPropagator,
   ProvisioningLogRecorder,
@@ -27,6 +28,7 @@ import {
   isMothershipMode,
 } from './mothership.js'
 import { startMothershipTelemetrySweeps } from './telemetrySweeps.js'
+import { SqliteGuidedReviewRunner } from './guidedReviewRunner.js'
 import {
   ConflictError,
   defaultProviderRegistry,
@@ -52,6 +54,7 @@ import {
 } from '@cat-factory/integrations'
 import type {
   HarnessKind,
+  AccountRunnerPoolRepository,
   RunnerPoolConnectionRepository,
   RunnerTransport,
 } from '@cat-factory/kernel'
@@ -346,6 +349,7 @@ interface LocalNodeOptionsBundle {
   localComposeRuntime: ReturnType<typeof setupLocalComposeRuntime>['localComposeRuntime']
   localPreflightProbes: ReturnType<typeof setupLocalComposeRuntime>['localPreflightProbes']
   inProcessRunner: SqliteWorkRunner | undefined
+  guidedReviewRunner: SqliteGuidedReviewRunner | undefined
   providerRegistry: ProviderRegistry
   credentials: LocalVcsCredentialSource
 }
@@ -378,6 +382,7 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
     localComposeRuntime,
     localPreflightProbes,
     inProcessRunner,
+    guidedReviewRunner,
     providerRegistry,
     credentials,
   } = bundle
@@ -555,6 +560,14 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
       // explicit test override still wins; in mothership boot there is no `boss`, so this is the
       // only runner wired.
       ...(inProcessRunner ? { workRunner: inProcessRunner } : {}),
+      // The node drives its own guided-review jobs under its own driver id, so the mothership's
+      // sweeper never re-drives them with the deployment's credentials.
+      ...(guidedReviewRunner && mothership
+        ? {
+            guidedReviewRunner,
+            guidedReviewDriver: `node:${mothership.machineTokenStore.read()?.nodeId ?? 'unregistered'}`,
+          }
+        : {}),
       // The local PAT carries the CI-config scope (GitHub `workflow` — pre-selected by the
       // creation URL; GitLab `api` covers it), so the connection isn't missing that grant —
       // report it granted to suppress the advisory banner. (The App-permissions probe this
@@ -915,6 +928,15 @@ function resolveLocalRunnerTransports(params: {
         }
       ).runnerPoolConnectionRepository
     : new DrizzleRunnerPoolConnectionRepository(options.db!)
+  // The account tier the pool resolver falls back to, resolved the same way (remote in mothership
+  // mode). Local mode never SEEDS it (that is Node-only); it only reads a row that exists.
+  const accountRunnerPoolRepository: AccountRunnerPoolRepository = mothership
+    ? (
+        mothership.repos as unknown as {
+          accountRunnerPoolRepository: AccountRunnerPoolRepository
+        }
+      ).accountRunnerPoolRepository
+    : new DrizzleAccountRunnerPoolRepository(options.db!)
   // Build the app-owned backend registries once and share them with BOTH the pool resolver
   // here AND `buildNodeContainer` below (via `backendRegistries`), so the runner backend a
   // workspace's `kind` resolves to is the same instance everywhere. Defaults to the built-ins.
@@ -933,7 +955,13 @@ function resolveLocalRunnerTransports(params: {
     repos.workspaceRepository,
     clock,
     backendRegistries.runnerBackendRegistry,
-    options.runnerPoolProvider,
+    {
+      injectedPoolProvider: options.runnerPoolProvider,
+      accountRunnerPool: {
+        repository: accountRunnerPoolRepository,
+        workspaceSettingsRepository: repos.workspaceSettingsRepository,
+      },
+    },
   )
 
   // Per-branch provisioning-log tagging: the per-run local container logs under the
@@ -1055,6 +1083,9 @@ function applyLocalInfrastructureCapabilities(params: {
   })
 }
 
+/** Longer than the service's own claim lease, so a live drive is never taken over locally. */
+const GUIDED_REVIEW_LOCAL_LEASE_MS = 15 * 60_000
+
 /**
  * The mothership-only runtime seams, split out of {@link buildLocalContainer} to keep that root
  * within the per-function line budget. Plain local mode gets `{ inProcessRunner: undefined }` and
@@ -1065,7 +1096,11 @@ function buildLocalMothershipRuntime(params: {
   config: AppConfig
   mothership: ReturnType<typeof resolveLocalPersistence>['mothership']
   realtimeSink: LocalEventSink | undefined
-}): { inProcessRunner: SqliteWorkRunner | undefined; realtimeSink: LocalEventSink | undefined } {
+}): {
+  inProcessRunner: SqliteWorkRunner | undefined
+  guidedReviewRunner: SqliteGuidedReviewRunner | undefined
+  realtimeSink: LocalEventSink | undefined
+} {
   const { env, config, mothership } = params
   // Mothership mode has no pg-boss: drive runs in-process through the SAME advance/poll loop with
   // real timer-backed sleeps, backed by the durable local-sqlite work queue (so a crash/restart
@@ -1090,6 +1125,20 @@ function buildLocalMothershipRuntime(params: {
           logger,
         )
       : undefined
+  const guidedReviewRunner =
+    mothership && runtime
+      ? new SqliteGuidedReviewRunner(
+          mothership.guidedReviewQueue,
+          {
+            leaseMs: GUIDED_REVIEW_LOCAL_LEASE_MS,
+            errorBackoffMs: Math.max(1000, runtime.drive.ciPollIntervalMs),
+            sweepIntervalMs: runtime.sweeper.intervalMs,
+            maxAttempts: runtime.queue.retryLimit,
+            concurrency: runtime.concurrency,
+          },
+          logger,
+        )
+      : undefined
 
   // Real-time UPSTREAM (docs/initiatives/mothership-mode.md, PR 2): in mothership mode, fan every
   // engine event to the laptop's own SPA (the injected local hub) AND to the mothership over
@@ -1103,7 +1152,7 @@ function buildLocalMothershipRuntime(params: {
       ? new LayeredEventPropagator(params.realtimeSink, [mothership.realtimeAdapter])
       : params.realtimeSink
 
-  return { inProcessRunner, realtimeSink }
+  return { inProcessRunner, guidedReviewRunner, realtimeSink }
 }
 
 /** {@link buildLocalContainer}'s options: the Node facade's, plus the local-only seams. */
@@ -1234,7 +1283,7 @@ export function buildLocalContainer(options: LocalContainerOptions): ServerConta
   // The two mothership-only runtime seams: the in-process durable work runner that stands in for
   // pg-boss, and the upstream-layered real-time sink. Both are `undefined` (the sink passed
   // through unchanged) in plain local mode.
-  const { inProcessRunner, realtimeSink } = buildLocalMothershipRuntime({
+  const { inProcessRunner, guidedReviewRunner, realtimeSink } = buildLocalMothershipRuntime({
     env,
     config,
     mothership,
@@ -1264,6 +1313,7 @@ export function buildLocalContainer(options: LocalContainerOptions): ServerConta
       localComposeRuntime,
       localPreflightProbes,
       inProcessRunner,
+      guidedReviewRunner,
       providerRegistry,
       credentials,
     }),
@@ -1297,6 +1347,7 @@ export function buildLocalContainer(options: LocalContainerOptions): ServerConta
   // agent-runs reader powers the storage-reconciliation backstop (re-drive a run still `running` in
   // storage that lost its queue row) — the no-pg-boss analogue of the stale-run sweeper.
   inProcessRunner?.bind(container.executionService, container.agentRunRepository)
+  guidedReviewRunner?.bind(container.guidedReview?.service)
 
   // Surface the local-mode settings service so the dedicated local-settings panel can
   // read/write the warm-pool + checkout config (the controller 503s when this is absent,
@@ -1340,6 +1391,7 @@ export function buildLocalContainer(options: LocalContainerOptions): ServerConta
     onShutdown: async () => {
       if (mothership) {
         inProcessRunner?.stop()
+        guidedReviewRunner?.stop()
         // Awaited, not fire-and-forget: an in-flight prune must finish touching the SQLite
         // handle before `close()` pulls it out from under it.
         await stopTelemetrySweeps?.()

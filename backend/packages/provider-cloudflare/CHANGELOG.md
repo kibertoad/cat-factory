@@ -1,5 +1,329 @@
 # @cat-factory/provider-cloudflare
 
+## 0.7.571
+
+### Patch Changes
+
+- Updated dependencies [e9b24a1]
+  - @cat-factory/kernel@0.363.0
+  - @cat-factory/agents@0.172.8
+
+## 0.7.570
+
+### Patch Changes
+
+- 5c17395: Dependency refresh, direct and transitive (the lockfile is re-resolved from scratch), held to the
+  24h `minimumReleaseAge` window.
+  
+  Majors, each taken because its whole peer group could move together:
+  
+  - **Vitest 5** (`vitest`, `@vitest/coverage-v8`, `@vitest/browser`, `@vitest/browser-playwright`
+    at `5.0.5`), now that `@cloudflare/vitest-plugin@1.4.4`, `@storybook/addon-vitest`,
+    `@nuxt/test-utils` and `vitest-browser-vue` all accept `^5`. The Worker suite turns Vitest 5's
+    new default `fsModuleCache` off: the Workers pool inlines every warm module into one WebSocket
+    reply, and this suite's graph (~80MB) exceeds workerd's message limit (`1009 Message is too
+    large`).
+  - **msw 3**, for the component stories. `onUnhandledRequest` became `onUnhandledFrame`, which
+    also receives WebSocket frames, and the bundled `mockServiceWorker.js` is regenerated.
+  - **happy-dom 21** for the SPA's unit tests.
+  
+  The Workers test pool moves to `@cloudflare/vitest-plugin@1.4.4`, which pins `wrangler@4.151.1`, so
+  the Cloudflare stack moves with it: workerd `1.20261012.1`, miniflare `5.20261012.1-beta`,
+  `@cloudflare/workers-types` `5.20261012.1` (the resolved workerd's date) and esbuild `0.28.2`
+  (the version wrangler and the plugin now pin, so the scoped esbuild overrides follow).
+  
+  Also the Vercel AI SDK family as one set (`ai@7.0.142`, `@ai-sdk/anthropic@4.0.81`,
+  `@ai-sdk/openai@4.0.95`, `@ai-sdk/openai-compatible@3.0.70`, `@ai-sdk/amazon-bedrock@5.0.117`,
+  `@ai-sdk/provider@4.0.28`), the Vue family at `3.5.44`, `@nuxt/ui@4.12.0`, `pinia@4.1.0`,
+  `storybook@10.6.2`, `undici@8.12.2`, `pg-boss@12.38.0`, `@aws-sdk/client-s3@3.1152.0`,
+  `@hono/node-server@2.1.5`, `@playwright/test@1.64.1`, and the root toolchain (`turbo@2.11.8`,
+  `oxlint@1.88.0`, `oxfmt@0.73.0`, `knip@6.41.0`).
+  
+  Held: the frontend stays on TypeScript 6 (TypeScript 7 ships no classic compiler API for
+  `vue-tsc`); `@nuxt/fonts` stays on 0.14 because `@nuxt/ui@4.12.0` depends on `^0.14.0`; Drizzle
+  stays on `1.0.0-rc.4`, still its `rc` tag; `nuxt@4.6.2` is inside the window.
+- Updated dependencies [5c17395]
+- Updated dependencies [5c17395]
+  - @cat-factory/kernel@0.362.0
+  - @cat-factory/agents@0.172.7
+
+## 0.7.569
+
+### Patch Changes
+
+- Updated dependencies [83f6b0c]
+  - @cat-factory/kernel@0.361.0
+  - @cat-factory/agents@0.172.6
+
+## 0.7.568
+
+### Patch Changes
+
+- @cat-factory/agents@0.172.5
+  - @cat-factory/kernel@0.360.4
+
+## 0.7.567
+
+### Patch Changes
+
+- @cat-factory/agents@0.172.4
+  - @cat-factory/kernel@0.360.3
+
+## 0.7.566
+
+### Patch Changes
+
+- Updated dependencies [6f574e9]
+  - @cat-factory/kernel@0.360.2
+  - @cat-factory/agents@0.172.3
+
+## 0.7.565
+
+### Patch Changes
+
+- @cat-factory/agents@0.172.2
+  - @cat-factory/kernel@0.360.1
+
+## 0.7.564
+
+### Patch Changes
+
+- Updated dependencies [58b57cc]
+  - @cat-factory/kernel@0.360.0
+  - @cat-factory/agents@0.172.1
+
+## 0.7.563
+
+### Patch Changes
+
+- Updated dependencies [918e977]
+  - @cat-factory/agents@0.172.0
+  - @cat-factory/kernel@0.359.1
+
+## 0.7.562
+
+### Patch Changes
+
+- Updated dependencies [04c1587]
+- Updated dependencies [f1b6c9a]
+- Updated dependencies [20d4f01]
+  - @cat-factory/kernel@0.359.0
+  - @cat-factory/agents@0.171.7
+
+## 0.7.561
+
+### Patch Changes
+
+- @cat-factory/agents@0.171.6
+  - @cat-factory/kernel@0.358.1
+
+## 0.7.560
+
+### Patch Changes
+
+- Updated dependencies [22b6812]
+  - @cat-factory/agents@0.171.5
+
+## 0.7.559
+
+### Patch Changes
+
+- Updated dependencies [5ec1794]
+  - @cat-factory/kernel@0.358.0
+  - @cat-factory/agents@0.171.4
+
+## 0.7.558
+
+### Patch Changes
+
+- Updated dependencies [1a42f34]
+  - @cat-factory/kernel@0.357.1
+  - @cat-factory/agents@0.171.3
+
+## 0.7.557
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/kernel@0.357.0
+  - @cat-factory/agents@0.171.2
+
+## 0.7.556
+
+### Patch Changes
+
+- ffe4356: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Worker test pool moves from `@cloudflare/vitest-pool-workers@0.22.0` to its renamed successor
+  `@cloudflare/vitest-plugin@1.3.7`. The old package is deprecated and receives no further releases;
+  the new one exports the same `cloudflareTest`, `readD1Migrations` and `/types` entry, so only the
+  import specifiers change. It pins `wrangler@4.148.0`, so the Cloudflare stack moves with it:
+  wrangler `4.124.0` to `4.148.0`, workerd `1.20260815.1` to `1.20261006.1`, miniflare to
+  `5.20261006.0-alpha`, and `@cloudflare/workers-types` to `5.20261006.1`, the resolved workerd's
+  date. esbuild stays on `0.28.1`, which wrangler still pins.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.131`, `@ai-sdk/anthropic@4.0.75`,
+  `@ai-sdk/openai@4.0.87`, `@ai-sdk/openai-compatible@3.0.65`, `@ai-sdk/amazon-bedrock@5.0.109`,
+  `@ai-sdk/provider@4.0.24`), still one `@ai-sdk/provider` identity across every caller. Also
+  `nuxt@4.6.0` with `vue-router@5.4.0`, `@nuxt/ui@4.11.3`, `hono@4.13.13`,
+  `@modelcontextprotocol/sdk@1.32.1`, the OpenTelemetry SDK `2.12.0` / `0.223.0`, `pg-boss@12.37.0`,
+  `pino@10.4.0`, `@aws-sdk/client-s3@3.1147.0`, `@playwright/test@1.64.0`, and the root toolchain
+  (`turbo@2.11.7`, `oxlint@1.87.0`, `oxfmt@0.72.0`, `knip@6.40.0`).
+  
+  Held: vitest and `@vitest/coverage-v8` stay on 4, because the plugin release inside the window
+  peer-requires vitest `^4.1.0`. msw stays on 2 for the same reason: vitest 4's mocker peers
+  `msw@^2`. The frontend stays on TypeScript 6, since TypeScript 7 ships no classic compiler API for
+  `vue-tsc`.
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+  - @cat-factory/agents@0.171.1
+
+## 0.7.555
+
+### Patch Changes
+
+- Updated dependencies [97175f8]
+  - @cat-factory/kernel@0.355.0
+  - @cat-factory/agents@0.171.0
+
+## 0.7.554
+
+### Patch Changes
+
+- @cat-factory/agents@0.170.1
+  - @cat-factory/kernel@0.354.2
+
+## 0.7.553
+
+### Patch Changes
+
+- Updated dependencies [8766c3f]
+  - @cat-factory/agents@0.170.0
+  - @cat-factory/kernel@0.354.1
+
+## 0.7.552
+
+### Patch Changes
+
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/kernel@0.354.0
+  - @cat-factory/agents@0.169.0
+
+## 0.7.551
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/agents@0.168.4
+
+## 0.7.550
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/agents@0.168.3
+
+## 0.7.549
+
+### Patch Changes
+
+- e84b0d5: Dependency refresh within current majors, each at the newest release older than the 24h
+  `minimumReleaseAge` window: the Vercel AI SDK family (`ai` 7.0.120, `@ai-sdk/*` 4.x, `openai-compatible`
+  3.0.58, `amazon-bedrock` 5.0.99), `@aws-sdk/client-s3`, `@modelcontextprotocol/sdk` 1.31.0, `pg-boss`
+  12.35.0, `ws` 8.22.0 and `undici` 8.11.2. `publicApiAuth.refuse` now declares its return type, because
+  hono 4.13.10 ships bundled declarations whose inferred `c.json` return type a declaration emit can no
+  longer name.
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/agents@0.168.2
+  - @cat-factory/kernel@0.351.0
+
+## 0.7.548
+
+### Patch Changes
+
+- c046707: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  One major moves with it: `layered-loader` goes `16.1.1` to `17.0.0`, whose only change is that
+  `getMany` now includes `null` in its return type. Nothing here calls `getMany`, so the caching layer
+  takes it with no source change.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.111` with `@ai-sdk/anthropic@4.0.60`,
+  `@ai-sdk/openai@4.0.72`, `@ai-sdk/amazon-bedrock@5.0.91`), staying inside the majors
+  `workers-ai-provider@4` pairs with. Every member resolves the same `@ai-sdk/provider@4.0.17` and
+  `@ai-sdk/provider-utils@5.0.45`, so the provider interface stays a single identity across the proxy
+  and the inline callers. Also `@aws-sdk/client-s3@3.1138.0`, `pg-boss@12.33.6`, `undici@8.11.0`,
+  `@nuxt/ui@4.11.2`, `turbo@2.11.3`, `oxlint@1.85.0` and `oxfmt@0.70.0`.
+  
+  Every hold was re-verified at HEAD rather than assumed, and all of them still bind.
+  `@cloudflare/vitest-pool-workers@0.22.0` is still its newest release, peer-requires vitest `^4.1.0`
+  and pins `wrangler@4.124.0` exactly, so vitest and `@vitest/coverage-v8` stay on 4 and wrangler,
+  workerd, miniflare and `@cloudflare/workers-types` stay where they are. The frontend stays on
+  TypeScript 6: TypeScript 7 ships no compiler API for `vue-tsc` to load. Drizzle stays on
+  `1.0.0-rc.4`, the newest non-snapshot release of its line, and the Vue family pins (`vue@3.5.43`,
+  `vue-router@5.3.1`, `esbuild@0.28.1`, `@modular-frontend/core@0.6.0`) are already what their
+  consumers need.
+- Updated dependencies [c046707]
+- Updated dependencies [c046707]
+  - @cat-factory/kernel@0.350.0
+  - @cat-factory/agents@0.168.1
+
+## 0.7.547
+
+### Patch Changes
+
+- Updated dependencies [7760397]
+  - @cat-factory/agents@0.168.0
+
+## 0.7.546
+
+### Patch Changes
+
+- 1fc4ff1: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  Three majors move with it. The `@toad-contracts/*` family goes `0.x` to `1.0.0`, which redesigns
+  how a contract declares a non-JSON response: a status code now carries a media-type content map
+  rather than a tagged marker, and the `ContractNoBody` symbol is request-body-only. Every response
+  declaring it becomes `noBodyResponse()`, the form that survives; the symbol stays where it already
+  meant a request. `@vueuse/core` goes to `15.0.0` and `@openrouter/ai-sdk-provider` to `3.1.0`.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.107` with `@ai-sdk/anthropic@4.0.58`,
+  `@ai-sdk/openai@4.0.71`, `@ai-sdk/openai-compatible@3.0.53`, `@ai-sdk/amazon-bedrock@5.0.88`),
+  staying inside the majors `workers-ai-provider@4` pairs with, so `@ai-sdk/provider` keeps a single
+  identity across the proxy and the inline callers. Also `@aws-sdk/client-s3@3.1136.0`,
+  `pg-boss@12.33.2`, `turbo@2.11.2` and `@types/node@26.6.2`.
+  
+  `vitest` stays on 4: `@cloudflare/vitest-pool-workers@0.22.0` peer-requires `^4.1.0`, so taking
+  vitest 5 would leave the Worker suite running against a pool that never declared it.
+  `wrangler` and `@cloudflare/workers-types` stay put for the same kind of reason: the pool still
+  pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date.
+- 09bd94b: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.102 → 7.0.106` with `@ai-sdk/anthropic@4.0.57`,
+  `@ai-sdk/openai@4.0.70`, `@ai-sdk/openai-compatible@3.0.52`, `@ai-sdk/amazon-bedrock@5.0.87`,
+  `@ai-sdk/provider@4.0.17`), staying inside the majors `workers-ai-provider@4` pairs with. Every
+  member resolves the same `@ai-sdk/provider@4.0.17` and `@ai-sdk/provider-utils@5.0.44`, so the
+  provider interface stays a single identity across the proxy and the inline callers.
+  
+  Also `@aws-sdk/client-s3@3.1135.0`, `pg-boss@12.33.1`, `knip@6.37.0`, and on the frontend the whole
+  pinned Vue family to `3.5.43` with `vue-router` to `5.3.1`.
+  
+  `wrangler` and `@cloudflare/workers-types` deliberately stay put: `@cloudflare/vitest-pool-workers`
+  still pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date, so moving
+  either alone splits the runtime the Worker suite proves from the one that ships.
+- Updated dependencies [1fc4ff1]
+- Updated dependencies [bc073ab]
+- Updated dependencies [09bd94b]
+  - @cat-factory/kernel@0.349.0
+  - @cat-factory/agents@0.167.0
+
 ## 0.7.545
 
 ### Patch Changes

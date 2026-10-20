@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { connectionTestResultSchema, providerDescriptorSchema } from '../provider-config.js'
 import {
@@ -7,6 +7,7 @@ import {
   testRunnerPoolConnectionSchema,
   updateRunnerPoolSecretsSchema,
 } from '../runners.js'
+import { booleanQuerySchema } from '../public-paging.js'
 import { errorResponses } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -42,7 +43,11 @@ export const updateRunnerPoolSecretsContract = defineApiContract({
 export const unregisterRunnerPoolContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/runner-pool/connection',
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  // Removing a board's own pool stops the board inheriting its account's pool, unless the admin
+  // asks to fall back (`fallBackToAccount=true`): a deletion must never silently re-route a
+  // board's work to a pool it did not choose. Omitted ⇒ `false`.
+  requestQuerySchema: v.object({ fallBackToAccount: v.optional(booleanQuerySchema) }),
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const describeRunnerPoolProviderContract = defineApiContract({

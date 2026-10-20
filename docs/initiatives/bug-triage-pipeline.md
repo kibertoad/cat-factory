@@ -86,7 +86,7 @@ Implemented on branch `claude/bug-triage-phase-2-5n1wu5`. Notes for later phases
   entity only, so it was dropped on save and the whole gate was inert after a DB round-trip.)
 
 - The launch gate is a single pure function, `assertPipelineLaunchable(agentKinds, availability,
-origin?)` in `orchestration/modules/pipelines/pipelineShape.ts`, NOT folded into the shared
+  origin?)` in `orchestration/modules/pipelines/pipelineShape.ts`, NOT folded into the shared
   `validatePipelineShape`/`assertRunnable` path. That path is re-run on retry/restart over stored
   steps (which carry no `availability` and no `origin`), so putting the `bug-intake`-requires-
   `recurring` check there would falsely fail a legitimate recurring retry. Instead the gate is
@@ -96,7 +96,7 @@ origin?)` in `orchestration/modules/pipelines/pipelineShape.ts`, NOT folded into
   `assertPipelineLaunchable(..., 'recurring', ...)` gate so there is one rule and one error type
   (`ValidationError`) across both boundaries.
 - The `bug-intake`-requires-`recurring` check is evaluated over the ENABLED subset (an `enabled?:
-boolean[]` arg), matching every other check in `pipelineShape.ts`: a disabled `bug-intake` step
+  boolean[]` arg), matching every other check in `pipelineShape.ts`: a disabled `bug-intake` step
   imposes no requirement.
 - Editing a pipeline to `'one-off'` while a schedule still references it is rejected up-front
   (`ConflictError`, via an optional `pipelineScheduleRepository` on `PipelineService`) instead of
@@ -360,14 +360,14 @@ the initiative is complete once it merges.
 | `task-estimator` placement + gating validation over the new shape (`pipelineShape.ts`)                  | done   |
 | End-to-end conformance: schedule fire → intake → investigate → clarity → repro → fix → merge (fakes)    | done   |
 | e2e spec (live pushed UI updates for the recurring run; `data-testid`s as needed)                       | done   |
-| Docs: glossary entries (`bug-intake`, `repro-test`), CLAUDE.md flow note if warranted                   | done   |
+| Docs: glossary entries (`bug-intake`, `repro-test`), AGENTS.md flow note if warranted                   | done   |
 
 Notes:
 
 - **The seed is the exact design §1 shape** (`bug-intake → bug-investigator → clarity-review →
-task-estimator → repro-test → coder → reviewer → tester-api → conflicts → ci → merger`), with
+  task-estimator → repro-test → coder → reviewer → tester-api → conflicts → ci → merger`), with
   only `clarity-review` a human gate (`gates[2]`), mirroring `pl_bugfix`. It is `availability:
-'recurring'`, so `assertPipelineLaunchable` refuses a one-off manual start and the SPA hides it
+  'recurring'`, so `assertPipelineLaunchable` refuses a one-off manual start and the SPA hides it
   from the add-task picker (`pipelineAllowedForManualStart`) while surfacing it in the recurring
   modal (`pipelineAllowedForSchedule`). A dedicated `pipelineShape.test.ts` case pins the shape +
   launch constraint + estimator-first placement; the pre-existing "every seed pipeline is valid"
@@ -410,7 +410,7 @@ task-estimator → repro-test → coder → reviewer → tester-api → conflict
   predicates are pushed into the vendor query (JQL / search qualifiers / GraphQL filter),
   never fetch-all-then-filter.
 - **Most phases are harness-free** (backend TypeScript + registered kinds), but a genuinely new
-  container CAPABILITY needs a harness change + image bump per the CLAUDE.md rules (bump
+  container CAPABILITY needs a harness change + image bump per the AGENTS.md rules (bump
   `@cat-factory/executor-harness` + `pnpm sync:image-tags`): Phase B (sibling checkouts), Phase F
   (read-only multi-repo explore), and Phase G (structured output on the coding surface). Phases
   C/D/E were harness-free.
@@ -422,7 +422,7 @@ task-estimator → repro-test → coder → reviewer → tester-api → conflict
 - Changeset per PR (empty for docs-only); SPA strings through i18n with all locales in
   the same PR (the locale-parity CI gate).
 - Two branches adding Drizzle migrations merge into "Non-commutative migrations": re-root
-  with `node scripts/rebase-migration-snapshot.mjs <later-folder>` (see CLAUDE.md).
+  with `node scripts/rebase-migration-snapshot.mjs <later-folder>` (see AGENTS.md).
 - **The multi-repo fan-out gate**: the executor keeps a small allow-list of PRE-REGISTRY
   built-ins (`coder`, `ci-fixer`), but a REGISTERED kind opts in via `fanOutMultiRepo: true` on
   its definition (the `bug-investigator` in Phase F, and now `repro-test` in Phase G), so neither

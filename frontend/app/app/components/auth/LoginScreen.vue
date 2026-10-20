@@ -5,7 +5,7 @@ import SecretInput from '~/components/common/SecretInput.vue'
 import type { VcsProvider } from '~/types/domain'
 import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS, vcsTokenCreateUrl } from '~/utils/vcs'
 import { SSO_ERROR_MESSAGE_KEYS } from '~/utils/sso'
-import { postSignInUrl } from '~/utils/postSignIn'
+import { signInThenReload } from '~/utils/postSignIn'
 
 const auth = useAuthStore()
 const { t } = useI18n()
@@ -62,8 +62,7 @@ async function submitPat(provider: PatProvider) {
   patError.value = null
   patBusy.value = true
   try {
-    await auth.patLogin({ provider })
-    if (typeof window !== 'undefined') window.location.assign(postSignInUrl(window.location))
+    await signInThenReload(() => auth.patLogin({ provider }))
   } catch (e) {
     patError.value = apiErrorEnvelope(e)?.message ?? t('auth.localMode.failed')
   } finally {
@@ -95,18 +94,17 @@ async function submitPassword() {
   error.value = null
   busy.value = true
   try {
-    if (mode.value === 'signup') {
-      await auth.signup({
-        email: email.value,
-        password: password.value,
-        name: name.value || undefined,
-        invite: invite.value,
-      })
-    } else {
-      await auth.passwordLogin({ email: email.value, password: password.value })
-    }
     // Reload so the app boots with the new session.
-    if (typeof window !== 'undefined') window.location.assign(postSignInUrl(window.location))
+    await signInThenReload(() =>
+      mode.value === 'signup'
+        ? auth.signup({
+            email: email.value,
+            password: password.value,
+            name: name.value || undefined,
+            invite: invite.value,
+          })
+        : auth.passwordLogin({ email: email.value, password: password.value }),
+    )
   } catch (e) {
     error.value = apiErrorEnvelope(e)?.message ?? t('auth.login.signInFailed')
   } finally {
@@ -177,8 +175,9 @@ async function submitRemotePat() {
   remotePatError.value = null
   remotePatBusy.value = true
   try {
-    await auth.patLogin({ provider: remotePatProvider.value, token: remotePatToken.value.trim() })
-    if (typeof window !== 'undefined') window.location.assign(postSignInUrl(window.location))
+    await signInThenReload(() =>
+      auth.patLogin({ provider: remotePatProvider.value, token: remotePatToken.value.trim() }),
+    )
   } catch (e) {
     remotePatError.value = apiErrorEnvelope(e)?.message ?? t('auth.login.signInFailed')
   } finally {
@@ -213,16 +212,14 @@ const noSignInMethod = computed(
 
 <template>
   <div
-    class="flex h-screen w-screen items-center justify-center bg-slate-950 text-slate-100"
+    class="flex h-screen w-screen items-center justify-center bg-app-950 text-app-100"
     data-testid="login-screen"
   >
-    <div
-      class="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900/80 p-8 backdrop-blur"
-    >
+    <div class="w-full max-w-sm rounded-xl border border-default bg-default/80 p-8 backdrop-blur">
       <div class="mb-6 text-center">
-        <UIcon name="i-lucide-layout-dashboard" class="mx-auto mb-3 h-10 w-10 text-indigo-400" />
-        <h1 class="mb-1 text-lg font-semibold text-white">{{ t('auth.login.appTitle') }}</h1>
-        <p class="text-sm text-slate-400">
+        <UIcon name="i-lucide-layout-dashboard" class="mx-auto mb-3 h-10 w-10 text-primary" />
+        <h1 class="mb-1 text-lg font-semibold text-highlighted">{{ t('auth.login.appTitle') }}</h1>
+        <p class="text-sm text-muted">
           <template v-if="mode === 'forgot'">{{ t('auth.login.forgotSubtitle') }}</template>
           <template v-else>{{
             invite ? t('auth.login.inviteSubtitle') : t('auth.login.subtitle')
@@ -236,17 +233,16 @@ const noSignInMethod = computed(
         <UButton
           block
           size="lg"
-          color="primary"
           icon="i-lucide-cloud"
           data-testid="mothership-signin"
           @click="auth.signInViaMothership()"
         >
           {{ t('auth.mothership.signIn') }}
         </UButton>
-        <p class="px-1 text-xs text-slate-400">{{ t('auth.mothership.hint') }}</p>
+        <p class="px-1 text-xs text-muted">{{ t('auth.mothership.hint') }}</p>
         <p
           v-if="auth.mothershipError"
-          class="px-1 text-xs text-rose-400"
+          class="px-1 text-xs text-app-error-400"
           data-testid="mothership-error"
         >
           {{ t('auth.mothership.error') }}
@@ -262,7 +258,6 @@ const noSignInMethod = computed(
           :key="p"
           block
           size="lg"
-          color="primary"
           :icon="PROVIDER_ICONS[p]"
           :loading="patBusy"
           @click="submitPat(p)"
@@ -288,28 +283,29 @@ const noSignInMethod = computed(
           <!-- Only when nothing can be installed here: the paste form below carries its own
                per-provider link, so showing these too would offer the same thing twice. -->
           <div v-if="installableProviders.length === 0" class="flex flex-wrap gap-3 px-1">
-            <a
+            <ULink
+              raw
               v-for="p in ALL_PROVIDERS"
               :key="p"
-              :href="tokenCreateUrl(p)"
+              :to="tokenCreateUrl(p)"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-xs text-indigo-400 hover:underline"
+              class="text-xs text-primary hover:underline"
             >
               {{ t('auth.localMode.createToken', { provider: PROVIDER_LABELS[p] }) }}
-            </a>
+            </ULink>
           </div>
         </template>
 
-        <p v-if="patError" class="text-sm text-rose-400">{{ patError }}</p>
+        <p v-if="patError" class="text-sm text-app-error-400">{{ patError }}</p>
       </div>
 
       <div
         v-if="isLocalMode && auth.providers.password && mode !== 'forgot'"
-        class="my-4 flex items-center gap-3 text-xs text-slate-500"
+        class="my-4 flex items-center gap-3 text-xs text-dimmed"
       >
-        <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.localMode.orDivider') }}
-        <span class="h-px flex-1 bg-slate-800" />
+        <span class="h-px flex-1 bg-elevated" /> {{ t('auth.localMode.orDivider') }}
+        <span class="h-px flex-1 bg-elevated" />
       </div>
 
       <!-- A refused SSO round-trip: name the rule that refused, don't return the user to an
@@ -330,7 +326,6 @@ const noSignInMethod = computed(
         <UButton
           block
           size="lg"
-          color="primary"
           icon="i-lucide-building-2"
           data-testid="sso-signin"
           @click="auth.loginWithSso(invite)"
@@ -341,10 +336,10 @@ const noSignInMethod = computed(
 
       <div
         v-if="showSsoDivider && mode !== 'forgot'"
-        class="my-4 flex items-center gap-3 text-xs text-slate-500"
+        class="my-4 flex items-center gap-3 text-xs text-dimmed"
       >
-        <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.login.or') }}
-        <span class="h-px flex-1 bg-slate-800" />
+        <span class="h-px flex-1 bg-elevated" /> {{ t('auth.login.or') }}
+        <span class="h-px flex-1 bg-elevated" />
       </div>
 
       <!-- OAuth providers -->
@@ -353,7 +348,6 @@ const noSignInMethod = computed(
           v-if="auth.providers.github"
           block
           size="lg"
-          color="primary"
           icon="i-lucide-github"
           @click="auth.login(invite)"
         >
@@ -374,17 +368,17 @@ const noSignInMethod = computed(
 
       <div
         v-if="showOAuthDivider && mode !== 'forgot'"
-        class="my-4 flex items-center gap-3 text-xs text-slate-500"
+        class="my-4 flex items-center gap-3 text-xs text-dimmed"
       >
-        <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.login.or') }}
-        <span class="h-px flex-1 bg-slate-800" />
+        <span class="h-px flex-1 bg-elevated" /> {{ t('auth.login.or') }}
+        <span class="h-px flex-1 bg-elevated" />
       </div>
 
       <!-- Email / password -->
-      <form
+      <UForm
         v-if="auth.providers.password && mode !== 'forgot'"
         class="space-y-3"
-        @submit.prevent="submitPassword"
+        @submit="submitPassword"
       >
         <UInput
           v-if="mode === 'signup'"
@@ -413,51 +407,48 @@ const noSignInMethod = computed(
           class="w-full"
           data-testid="login-password"
         />
-        <p v-if="error" class="text-sm text-rose-400" data-testid="login-error">{{ error }}</p>
-        <UButton
-          block
-          size="lg"
-          color="primary"
-          type="submit"
-          :loading="busy"
-          data-testid="login-submit"
-        >
+        <p v-if="error" class="text-sm text-app-error-400" data-testid="login-error">{{ error }}</p>
+        <UButton block size="lg" type="submit" :loading="busy" data-testid="login-submit">
           {{ mode === 'signup' ? t('auth.login.createAccount') : t('auth.login.signIn') }}
         </UButton>
-        <p class="text-center text-xs text-slate-400">
+        <p class="text-center text-xs text-muted">
           <template v-if="mode === 'login'">
             <i18n-t keypath="auth.login.needAccount" tag="span" scope="global">
               <template #signUp>
-                <button
-                  type="button"
-                  class="text-indigo-400 hover:underline"
+                <UButton
+                  variant="link"
+                  class="p-0 text-xs text-primary hover:underline"
                   @click="setMode('signup')"
                 >
                   {{ t('auth.login.signUp') }}
-                </button>
+                </UButton>
               </template>
             </i18n-t>
           </template>
           <template v-else>
             <i18n-t keypath="auth.login.haveAccount" tag="span" scope="global">
               <template #signIn>
-                <button
-                  type="button"
-                  class="text-indigo-400 hover:underline"
+                <UButton
+                  variant="link"
+                  class="p-0 text-xs text-primary hover:underline"
                   @click="setMode('login')"
                 >
                   {{ t('auth.login.signIn') }}
-                </button>
+                </UButton>
               </template>
             </i18n-t>
           </template>
         </p>
-        <p v-if="mode === 'login'" class="text-center text-xs text-slate-400">
-          <button type="button" class="text-indigo-400 hover:underline" @click="setMode('forgot')">
+        <p v-if="mode === 'login'" class="text-center text-xs text-muted">
+          <UButton
+            variant="link"
+            class="p-0 text-xs text-primary hover:underline"
+            @click="setMode('forgot')"
+          >
             {{ t('auth.login.forgotPassword') }}
-          </button>
+          </UButton>
         </p>
-      </form>
+      </UForm>
 
       <!-- Paste-a-token sign-in: your own PAT on a hosted node; on local mode the token this
            deployment will operate with (see `remotePatProviders`). -->
@@ -469,12 +460,12 @@ const noSignInMethod = computed(
             auth.providers.password ||
             hasConfiguredPat
           "
-          class="my-4 flex items-center gap-3 text-xs text-slate-500"
+          class="my-4 flex items-center gap-3 text-xs text-dimmed"
         >
-          <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.login.or') }}
-          <span class="h-px flex-1 bg-slate-800" />
+          <span class="h-px flex-1 bg-elevated" /> {{ t('auth.login.or') }}
+          <span class="h-px flex-1 bg-elevated" />
         </div>
-        <form class="space-y-3" @submit.prevent="submitRemotePat">
+        <UForm class="space-y-3" @submit="submitRemotePat">
           <div v-if="remotePatProviders.length > 1" class="flex gap-2">
             <UButton
               v-for="p in remotePatProviders"
@@ -502,11 +493,10 @@ const noSignInMethod = computed(
             size="lg"
             class="w-full"
           />
-          <p v-if="remotePatError" class="text-sm text-rose-400">{{ remotePatError }}</p>
+          <p v-if="remotePatError" class="text-sm text-app-error-400">{{ remotePatError }}</p>
           <UButton
             block
             size="lg"
-            color="primary"
             type="submit"
             :icon="PROVIDER_ICONS[remotePatProvider]"
             :loading="remotePatBusy"
@@ -515,22 +505,23 @@ const noSignInMethod = computed(
           </UButton>
           <!-- Local mode only: say what else the token is for BEFORE it is handed over, since it
                becomes the credential every agent step on this machine clones and pushes with. -->
-          <p v-if="isLocalMode" class="px-1 text-xs text-slate-400">
+          <p v-if="isLocalMode" class="px-1 text-xs text-muted">
             {{ t('auth.localMode.tokenBecomesCredential') }}
           </p>
           <p class="px-1 text-center">
-            <a
-              :href="tokenCreateUrl(remotePatProvider)"
+            <ULink
+              raw
+              :to="tokenCreateUrl(remotePatProvider)"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-xs text-indigo-400 hover:underline"
+              class="text-xs text-primary hover:underline"
             >
               {{
                 t('auth.localMode.createToken', { provider: PROVIDER_LABELS[remotePatProvider] })
               }}
-            </a>
+            </ULink>
           </p>
-        </form>
+        </UForm>
       </template>
 
       <!-- No sign-in method configured on a remote deployment: explain, don't show a blank card -->
@@ -544,13 +535,13 @@ const noSignInMethod = computed(
       />
 
       <!-- Forgot password: request a reset link by email -->
-      <form
+      <UForm
         v-if="auth.providers.password && mode === 'forgot'"
         class="space-y-3"
-        @submit.prevent="submitForgot"
+        @submit="submitForgot"
       >
         <template v-if="forgotSent">
-          <p class="text-sm text-slate-300">
+          <p class="text-sm text-toned">
             {{ t('auth.login.forgotSent') }}
           </p>
         </template>
@@ -564,17 +555,21 @@ const noSignInMethod = computed(
             size="lg"
             class="w-full"
           />
-          <p v-if="error" class="text-sm text-rose-400">{{ error }}</p>
-          <UButton block size="lg" color="primary" type="submit" :loading="busy">
+          <p v-if="error" class="text-sm text-app-error-400">{{ error }}</p>
+          <UButton block size="lg" type="submit" :loading="busy">
             {{ t('auth.login.sendResetLink') }}
           </UButton>
         </template>
-        <p class="text-center text-xs text-slate-400">
-          <button type="button" class="text-indigo-400 hover:underline" @click="setMode('login')">
+        <p class="text-center text-xs text-muted">
+          <UButton
+            variant="link"
+            class="p-0 text-xs text-primary hover:underline"
+            @click="setMode('login')"
+          >
             {{ t('auth.login.backToSignIn') }}
-          </button>
+          </UButton>
         </p>
-      </form>
+      </UForm>
     </div>
   </div>
 </template>

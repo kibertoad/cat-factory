@@ -15,6 +15,8 @@ import type {
 type HumanTestRoundOutcome = NonNullable<HumanTestRound['outcome']>
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -65,12 +67,12 @@ const ENV_STATUS_LABEL: Record<HumanTestEnvironmentStatus, string> = {
   torn_down: 'humanTest.envStatus.tornDown',
 }
 const ENV_STATUS_COLOR: Record<HumanTestEnvironmentStatus, string> = {
-  provisioning: 'text-amber-300',
-  ready: 'text-emerald-300',
-  failed: 'text-rose-300',
-  expired: 'text-slate-400',
-  tearing_down: 'text-slate-400',
-  torn_down: 'text-slate-400',
+  provisioning: 'text-app-warning-300',
+  ready: 'text-app-success-300',
+  failed: 'text-app-error-300',
+  expired: 'text-muted',
+  tearing_down: 'text-muted',
+  torn_down: 'text-muted',
 }
 
 const PHASE_LABEL: Record<NonNullable<HumanTestStepState['phase']>, string> = {
@@ -150,7 +152,7 @@ const canDestroy = computed(
   <ResultWindowShell
     :open="open"
     icon="i-lucide-user-check"
-    icon-class="bg-amber-500/15 text-amber-300"
+    icon-class="bg-app-warning-500/15 text-app-warning-300"
     :title="headerTitle"
     :subtitle="phase ? t(PHASE_LABEL[phase]) : t('humanTest.subtitle')"
     width="3xl"
@@ -159,7 +161,7 @@ const canDestroy = computed(
     <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
       <div
         v-if="!ht"
-        class="flex flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
+        class="flex flex-col items-center justify-center gap-2 py-10 text-center text-muted"
       >
         <UIcon name="i-lucide-user-check" class="h-8 w-8 opacity-40" />
         <p class="text-sm">{{ t('humanTest.notStarted') }}</p>
@@ -167,12 +169,12 @@ const canDestroy = computed(
 
       <template v-else>
         <!-- Environment -->
-        <section class="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <section class="rounded-lg border border-default bg-default/60 p-4">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('humanTest.environment.heading') }}
-          </h3>
+          </SectionLabel>
           <div v-if="env" class="space-y-2">
-            <div class="flex items-center gap-2 text-[13px]">
+            <div class="flex items-center gap-2 text-sm">
               <UIcon
                 name="i-lucide-circle-dot"
                 class="h-3.5 w-3.5"
@@ -182,27 +184,28 @@ const canDestroy = computed(
                 t(ENV_STATUS_LABEL[env.status])
               }}</span>
             </div>
-            <a
+            <ULink
+              raw
               v-if="env.url"
-              :href="env.url"
+              :to="env.url"
               target="_blank"
               rel="noopener"
-              class="inline-flex items-center gap-1.5 break-all text-[13px] text-sky-300 hover:underline"
+              class="inline-flex items-center gap-1.5 break-all text-sm text-app-info-300 hover:underline"
             >
               <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5 shrink-0" />
               {{ env.url }}
-            </a>
-            <p v-else class="text-[12px] italic text-slate-500">
+            </ULink>
+            <p v-else class="text-xs italic text-dimmed">
               {{ t('humanTest.environment.noUrl') }}
             </p>
-            <p v-if="env.expiresAt" class="text-[11px] text-slate-500">
+            <p v-if="env.expiresAt" class="text-2xs text-dimmed">
               {{ t('humanTest.environment.expires', { date: d(new Date(env.expiresAt), 'long') }) }}
             </p>
           </div>
-          <p v-else class="text-[12px] text-amber-300/90">
+          <p v-else class="text-xs text-app-warning-300/90">
             {{ ht.degradedReason ?? t('humanTest.environment.none') }}
           </p>
-          <p v-if="env && ht.degradedReason" class="mt-2 text-[12px] text-amber-300/90">
+          <p v-if="env && ht.degradedReason" class="mt-2 text-xs text-app-warning-300/90">
             {{ ht.degradedReason }}
           </p>
 
@@ -221,9 +224,9 @@ const canDestroy = computed(
               {{ t('humanTest.actions.recreate') }}
             </UButton>
             <UButton
-              size="xs"
+              color="error"
               variant="soft"
-              color="neutral"
+              size="xs"
               icon="i-lucide-trash-2"
               :disabled="busy || !canDestroy || !access.canExecuteRuns.value"
               :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
@@ -249,36 +252,37 @@ const canDestroy = computed(
         <!-- Working state -->
         <p
           v-if="working"
-          class="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-[12px] text-slate-300"
+          class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-xs text-toned"
         >
-          <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-amber-300" />
+          <Spinner class="h-3.5 w-3.5 text-app-warning-300" />
           {{ phase ? t(PHASE_LABEL[phase]) : '' }}
         </p>
 
         <!-- Findings / fix -->
-        <section
-          v-if="awaitingHuman"
-          class="rounded-lg border border-slate-800 bg-slate-900/60 p-4"
-        >
+        <section v-if="awaitingHuman" class="rounded-lg border border-default bg-default/60 p-4">
           <div class="flex items-center justify-between">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <SectionLabel as="h3">
               {{ t('humanTest.fix.heading') }}
-            </h3>
-            <button
-              class="text-[12px] text-slate-400 hover:text-slate-200"
+            </SectionLabel>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              class="p-0 text-xs text-muted hover:bg-transparent hover:text-default"
               @click="showFindings = !showFindings"
             >
               {{ showFindings ? t('humanTest.fix.cancel') : t('humanTest.fix.requestFix') }}
-            </button>
+            </UButton>
           </div>
           <div v-if="showFindings" class="mt-2 space-y-2">
-            <textarea
+            <UTextarea
               v-model="findings"
-              rows="4"
+              :rows="4"
               :placeholder="t('humanTest.fix.placeholder')"
-              class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+              size="sm"
+              class="w-full"
             />
             <UButton
+              variant="soft"
               size="sm"
               color="warning"
               icon="i-lucide-wrench"
@@ -295,31 +299,31 @@ const canDestroy = computed(
         <!-- Rounds history -->
         <section
           v-if="ht.rounds && ht.rounds.length"
-          class="rounded-lg border border-slate-800 bg-slate-900/60 p-4"
+          class="rounded-lg border border-default bg-default/60 p-4"
         >
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('humanTest.history.heading', { count: ht.attempts }, ht.attempts) }}
-          </h3>
+          </SectionLabel>
           <ol class="space-y-2">
-            <li v-for="(r, i) in ht.rounds" :key="i" class="flex items-start gap-2 text-[12px]">
+            <li v-for="(r, i) in ht.rounds" :key="i" class="flex items-start gap-2 text-xs">
               <UIcon
                 :name="r.kind === 'fix' ? 'i-lucide-wrench' : 'i-lucide-git-merge'"
-                class="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400"
+                class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted"
               />
               <div class="min-w-0 flex-1">
-                <span class="text-slate-200">{{
+                <span class="text-default">{{
                   r.kind === 'fix'
                     ? t('humanTest.history.fixRequested')
                     : t('humanTest.history.pulledMain')
                 }}</span>
                 <span
-                  class="ms-1.5 rounded px-1 text-[10px] uppercase"
+                  class="ms-1.5 rounded-sm px-1 text-3xs uppercase"
                   :class="
                     r.outcome === 'completed'
-                      ? 'bg-emerald-500/15 text-emerald-300'
+                      ? 'bg-app-success-500/15 text-app-success-300'
                       : r.outcome === 'failed'
-                        ? 'bg-rose-500/15 text-rose-300'
-                        : 'bg-slate-500/15 text-slate-300'
+                        ? 'bg-app-error-500/15 text-app-error-300'
+                        : 'bg-app-500/15 text-toned'
                   "
                 >
                   {{
@@ -328,7 +332,7 @@ const canDestroy = computed(
                       : t('humanTest.roundOutcome.inProgress')
                   }}
                 </span>
-                <p v-if="r.findings" class="leading-snug text-slate-400">{{ r.findings }}</p>
+                <p v-if="r.findings" class="leading-snug text-muted">{{ r.findings }}</p>
               </div>
             </li>
           </ol>
@@ -339,7 +343,7 @@ const canDestroy = computed(
     <!-- Footer: the primary confirm action -->
     <footer
       v-if="ht"
-      class="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-3"
+      class="flex items-center justify-between gap-3 border-t border-default px-5 py-3"
     >
       <StepRunMeta
         v-if="step"
@@ -351,7 +355,6 @@ const canDestroy = computed(
         :failure-at="instance?.failure?.occurredAt"
       />
       <UButton
-        color="primary"
         icon="i-lucide-circle-check"
         :loading="busy"
         :disabled="busy || !awaitingHuman || !access.canExecuteRuns.value"

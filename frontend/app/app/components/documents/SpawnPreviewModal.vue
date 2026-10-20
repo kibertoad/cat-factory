@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { isDesignSource } from '@cat-factory/contracts'
 import type { DocumentBoardPlan } from '~/types/domain'
+import Spinner from '~/components/common/Spinner.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 // Preview the structure an imported document expands into, then spawn it. The
 // plan is fetched fresh on open; a badge makes clear whether an LLM or the
@@ -16,7 +18,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const board = useBoardStore()
 const documents = useDocumentsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 /** Design documents are planned into an existing service; prose documents at the board root. */
@@ -102,16 +104,13 @@ async function spawn() {
       modules: t('documents.spawn.moduleCount', { count: result.modules }, result.modules),
       tasks: t('documents.spawn.taskCount', { count: result.tasks }, result.tasks),
     })
-    toast.add({
-      title: t('documents.spawn.spawned'),
+    actionToast.success('documents.spawn.spawned', {
       // A reused module is stated only when there was one, and never folded into the created
       // count: a spawn into a service that already had every planned module otherwise reports
       // "0 modules" beside its tasks, which reads as the modules having failed.
       description: result.reusedModules
         ? `${summary} · ${t('documents.spawn.reusedCount', { count: result.reusedModules }, result.reusedModules)}`
         : summary,
-      icon: 'i-lucide-check',
-      color: 'success',
     })
     ui.closeSpawnPreview()
     ui.closeDocumentImport()
@@ -124,7 +123,7 @@ async function spawn() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('documents.spawn.title')">
+  <AppModal size="form" v-model:open="open" :title="t('documents.spawn.title')">
     <template #body>
       <div class="space-y-4">
         <div v-if="plan" class="flex items-center justify-between gap-2">
@@ -139,7 +138,7 @@ async function spawn() {
                 : t('documents.spawn.plannerHeadings')
             }}
           </UBadge>
-          <span class="text-xs text-slate-400">{{
+          <span class="text-xs text-muted">{{
             plan.targetFrameId ? t('documents.spawn.intoService') : t('documents.spawn.asTopLevel')
           }}</span>
         </div>
@@ -161,14 +160,14 @@ async function spawn() {
 
         <p
           v-if="needsTarget && !targetFrameId"
-          class="text-xs text-slate-400"
+          class="text-xs text-muted"
           data-testid="spawn-target-required"
         >
           {{ t('documents.spawn.target.required') }}
         </p>
 
-        <div v-if="loadingPlan" class="flex items-center gap-2 text-sm text-slate-400">
-          <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
+        <div v-if="loadingPlan" class="flex items-center gap-2 text-sm text-muted">
+          <Spinner class="h-4 w-4" />
           {{ t('documents.spawn.buildingPlan') }}
         </div>
 
@@ -176,11 +175,11 @@ async function spawn() {
           <div
             v-for="(frame, fi) in plan.frames"
             :key="fi"
-            class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+            class="rounded-lg border border-default bg-default/60 p-3"
           >
             <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-box" class="h-4 w-4 text-indigo-400" />
-              <span class="text-sm font-semibold text-white">{{ frame.title }}</span>
+              <UIcon name="i-lucide-box" class="h-4 w-4 text-primary" />
+              <span class="text-sm font-semibold text-highlighted">{{ frame.title }}</span>
               <UBadge variant="subtle" size="sm" color="neutral">{{ frame.type }}</UBadge>
             </div>
 
@@ -188,25 +187,25 @@ async function spawn() {
               <li
                 v-for="(task, ti) in frame.tasks"
                 :key="`t-${ti}`"
-                class="flex items-center gap-1.5 text-xs text-slate-300"
+                class="flex items-center gap-1.5 text-xs text-toned"
               >
-                <UIcon name="i-lucide-square-check-big" class="h-3 w-3 text-slate-500" />
+                <UIcon name="i-lucide-square-check-big" class="h-3 w-3 text-dimmed" />
                 {{ task.title }}
               </li>
             </ul>
 
             <div v-for="(mod, mi) in frame.modules" :key="`m-${mi}`" class="mt-2 ps-4">
-              <div class="flex items-center gap-1.5 text-xs font-medium text-slate-200">
-                <UIcon name="i-lucide-folder" class="h-3.5 w-3.5 text-amber-400" />
+              <div class="flex items-center gap-1.5 text-xs font-medium text-default">
+                <UIcon name="i-lucide-folder" class="h-3.5 w-3.5 text-app-warning-400" />
                 {{ mod.name }}
               </div>
               <ul class="mt-1 space-y-1 ps-5">
                 <li
                   v-for="(task, ti) in mod.tasks"
                   :key="`mt-${ti}`"
-                  class="flex items-center gap-1.5 text-xs text-slate-300"
+                  class="flex items-center gap-1.5 text-xs text-toned"
                 >
-                  <UIcon name="i-lucide-square-check-big" class="h-3 w-3 text-slate-500" />
+                  <UIcon name="i-lucide-square-check-big" class="h-3 w-3 text-dimmed" />
                   {{ task.title }}
                 </li>
               </ul>
@@ -219,7 +218,6 @@ async function spawn() {
             t('common.cancel')
           }}</UButton>
           <UButton
-            color="primary"
             icon="i-lucide-wand-sparkles"
             :loading="spawning"
             :disabled="!plan || loadingPlan"
@@ -230,5 +228,5 @@ async function spawn() {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

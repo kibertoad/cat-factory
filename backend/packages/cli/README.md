@@ -129,7 +129,7 @@ Two failures it deliberately does **not** retry, because retrying either would r
 pathology this command exists to end, a restart loop that reads as progress:
 
 - **A cluster wedged by a stale cgroup** (`runc create failed: … cgroup.procs: device or resource
-busy`, a state a suspend can leave behind). Clearing that needs the container **engine** restarted,
+  busy`, a state a suspend can leave behind). Clearing that needs the container **engine** restarted,
   which would kill every other container, including the database the supervisor depends on. Reported
   once, with the fix.
 - **A supervised command that never serves.** Restarts that fail to reach a serving state are capped

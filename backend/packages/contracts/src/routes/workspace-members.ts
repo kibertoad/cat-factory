@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { workspaceSchema } from '../entities.js'
 import {
@@ -49,7 +49,7 @@ export const removeWorkspaceMemberContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: memberParams,
   pathResolver: ({ workspaceId, userId }) => `/workspaces/${workspaceId}/members/${userId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const setWorkspaceAccessModeContract = defineApiContract({

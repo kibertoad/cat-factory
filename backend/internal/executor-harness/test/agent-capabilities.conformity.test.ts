@@ -1,5 +1,6 @@
 import {
   HARNESS_BODY_CAPABILITIES as KERNEL_BODY_CAPABILITIES,
+  HARNESS_BODY_CAPABILITY_FIELDS as KERNEL_BODY_CAPABILITY_FIELDS,
   MCP_SERVER_ID_PATTERN,
   MCP_TOOL_NAME_PATTERN,
   isAllowedMcpHttpUrl,
@@ -172,7 +173,37 @@ describe('harness body-capability list conforms to kernel', () => {
       generateImages: true,
     })
     for (const capability of HARNESS_BODY_CAPABILITIES) {
-      expect((job as unknown as Record<string, unknown>)[capability]).toBeDefined()
+      expect(
+        (job as unknown as Record<string, unknown>)[
+          KERNEL_BODY_CAPABILITY_FIELDS[capability as keyof typeof KERNEL_BODY_CAPABILITY_FIELDS]
+        ],
+      ).toBeDefined()
     }
+  })
+
+  it('parses `mcpServers` off a Pi body, which is what `piMcpServers` promises', () => {
+    // The one member that names no field of its own: it is `mcpServers` on a Pi run. So the
+    // property above has a Pi half, a Pi body whose servers survive onto the parsed job for
+    // `runPiPass` to hand to `writePiMcpConfig`.
+    const job = parseAgentJob({
+      jobId: 'job-2',
+      mode: 'coding',
+      systemPrompt: 'sys',
+      userPrompt: 'user',
+      model: 'qwen',
+      harness: 'pi',
+      proxyBaseUrl: 'https://proxy.example.com/v1',
+      sessionToken: 'sess',
+      ghToken: 'gh',
+      branch: 'main',
+      repo: {
+        owner: 'o',
+        name: 'r',
+        cloneUrl: 'https://github.com/o/r.git',
+        baseBranch: 'main',
+      },
+      mcpServers: [{ id: 'docs', transport: 'http', url: 'https://mcp.example.com/mcp' }],
+    })
+    expect((job as unknown as { mcpServers?: unknown[] }).mcpServers).toHaveLength(1)
   })
 })

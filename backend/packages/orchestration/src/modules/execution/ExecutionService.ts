@@ -50,6 +50,7 @@ import {
   buildInputGateController,
   buildReviewSubjects,
 } from './gate-window-controllers.js'
+import { buildStartStepDispatch, type StartStepDispatch } from './delegation.logic.js'
 import { buildRunContextAndAdmission } from './run-context-admission.js'
 import { runDecisionSurfaces, type RunDecisionSurfaces } from './run-decision-surfaces.js'
 import {
@@ -206,6 +207,13 @@ export class ExecutionService {
    * a value that is only ever forwarded. See {@link buildGateWindowControllers}.
    */
   private readonly gateWindows: ReturnType<typeof buildGateWindowControllers>
+  /**
+   * The ONE async dispatch every site goes through, bound here because it is the only place that
+   * holds all of its collaborators. See {@link StartStepDispatch}: a delegated step's claim has to
+   * be committed before its executor is called and undone if that call throws, and a per-site copy
+   * of that rule held at exactly one of the eight sites.
+   */
+  private readonly startStepDispatch: StartStepDispatch
   /** The pre-dispatch input gate; see {@link InputGateController}. */
   private readonly inputGate: InputGateController
   /** Bound collaborators for the shared pre-dispatch preamble ({@link runStepPreamble}). */
@@ -405,6 +413,13 @@ export class ExecutionService {
       ...(dependencies.logger ? { logger: dependencies.logger } : {}),
       inferTechnicalLabel: (ws, block, producer, companionStep) =>
         this.inferBlockTechnical(ws, block, producer, companionStep),
+    })
+    this.startStepDispatch = buildStartStepDispatch({
+      agentKindRegistry,
+      delegatedExecutorRegistry: dependencies.delegatedExecutorRegistry,
+      clock,
+      persistAndEmit: (ws, instance) => this.runStateMachine.persistAndEmit(ws, instance),
+      ...(dependencies.logger ? { logger: dependencies.logger } : {}),
     })
     // The human-gate window controllers (Tester / Ralph / human-test / visual-confirmation /
     // review / fork-decision / PR-review / bug-fishing), built by the sibling factory over one
@@ -636,6 +651,7 @@ export class ExecutionService {
     return buildGateWindowControllers({
       ...leaves,
       contextBuilder: this.contextBuilder,
+      startStepDispatch: this.startStepDispatch,
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
       clockNow: () => this.clock.now(),
@@ -669,6 +685,7 @@ export class ExecutionService {
       stepGraph: this.stepGraph,
       runStateMachine: this.runStateMachine,
       contextBuilder: this.contextBuilder,
+      startStepDispatch: this.startStepDispatch,
       mergeResolver: this.mergeResolver,
       companionController: this.companionController,
       testerController: this.gateWindows.testerController,

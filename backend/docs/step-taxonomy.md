@@ -6,7 +6,7 @@ This page is the vocabulary the rest of the docs assume; the flows that use it a
 a gate are in [`custom-agent-gate-ergonomics.md`](./custom-agent-gate-ergonomics.md).
 
 The one rule that belongs to no single bucket, and so is stated in the root
-[`CLAUDE.md`](../../CLAUDE.md) instead: extending the engine means a REGISTRY ENTRY, never another
+[`AGENTS.md`](../../AGENTS.md) instead: extending the engine means a REGISTRY ENTRY, never another
 `evaluateX` / `pollX` / `awaiting_x` triple beside the generic machine.
 
 ## The four buckets

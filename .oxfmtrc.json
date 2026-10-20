@@ -4,10 +4,12 @@
   "semi": false,
   "ignorePatterns": [
     "**/*.generated.ts",
+    "**/mockServiceWorker.js",
     "**/CHANGELOG.md",
     "**/CHANGELOG-ARCHIVE.md",
     "backend/internal/executor-harness/README.md",
     "backend/runtimes/node/drizzle/**",
-    "docs/openapi.json"
+    "docs/openapi.json",
+    ".claude/skills/nuxt-ui/**"
   ]
 }

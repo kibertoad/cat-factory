@@ -13,6 +13,8 @@
 // is a five-minute flow that touches a repo and can trial-provision a stack, so "when you need
 // this / when you don't" has to be answerable BEFORE opening it — most services on most boards
 // never need it at all.
+import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const ui = useUiStore()
 
@@ -44,42 +46,42 @@ function start() {
 <template>
   <section class="space-y-3" data-testid="compose-env-setup-section">
     <div>
-      <h3 class="text-sm font-semibold text-slate-200">
+      <h3 class="text-sm font-semibold text-default">
         {{ t('settings.composeEnvSetup.title') }}
       </h3>
-      <p class="mt-1 text-xs leading-relaxed text-slate-400">
+      <p class="mt-1 text-xs leading-relaxed text-muted">
         {{ t('settings.composeEnvSetup.lead') }}
       </p>
     </div>
 
-    <div class="rounded border border-slate-800 bg-slate-900/40 p-3">
-      <p class="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+    <div class="rounded-sm border border-default bg-default/40 p-3">
+      <SectionLabel as="p">
         {{ t('settings.composeEnvSetup.how.title') }}
-      </p>
-      <ol class="mt-2 list-decimal space-y-1 ps-4 text-[11px] leading-relaxed text-slate-400">
+      </SectionLabel>
+      <ol class="mt-2 list-decimal space-y-1 ps-4 text-2xs leading-relaxed text-muted">
         <li v-for="(step, i) in steps" :key="`how-${i}`">{{ step }}</li>
       </ol>
-      <p class="mt-2 text-[11px] leading-relaxed text-slate-500">
+      <p class="mt-2 text-2xs leading-relaxed text-dimmed">
         {{ t('settings.composeEnvSetup.how.outcome') }}
       </p>
     </div>
 
     <div class="grid gap-2 sm:grid-cols-2">
-      <div class="rounded border border-emerald-900/50 bg-emerald-950/20 p-3">
-        <p class="flex items-center gap-1.5 text-[11px] font-medium text-emerald-200/90">
+      <div class="rounded-sm border border-app-success-900/50 bg-app-success-950/20 p-3">
+        <p class="flex items-center gap-1.5 text-2xs font-medium text-app-success-200/90">
           <UIcon name="i-lucide-check" class="h-3.5 w-3.5 shrink-0" />
           {{ t('settings.composeEnvSetup.needed.title') }}
         </p>
-        <ul class="mt-1.5 list-disc space-y-1 ps-4 text-[11px] leading-relaxed text-slate-400">
+        <ul class="mt-1.5 list-disc space-y-1 ps-4 text-2xs leading-relaxed text-muted">
           <li v-for="(item, i) in needed" :key="`need-${i}`">{{ item }}</li>
         </ul>
       </div>
-      <div class="rounded border border-slate-800 bg-slate-900/40 p-3">
-        <p class="flex items-center gap-1.5 text-[11px] font-medium text-slate-300">
+      <div class="rounded-sm border border-default bg-default/40 p-3">
+        <p class="flex items-center gap-1.5 text-2xs font-medium text-toned">
           <UIcon name="i-lucide-minus" class="h-3.5 w-3.5 shrink-0" />
           {{ t('settings.composeEnvSetup.notNeeded.title') }}
         </p>
-        <ul class="mt-1.5 list-disc space-y-1 ps-4 text-[11px] leading-relaxed text-slate-400">
+        <ul class="mt-1.5 list-disc space-y-1 ps-4 text-2xs leading-relaxed text-muted">
           <li v-for="(item, i) in notNeeded" :key="`skip-${i}`">{{ item }}</li>
         </ul>
       </div>
@@ -88,7 +90,6 @@ function start() {
     <div class="flex items-center gap-2">
       <UButton
         size="xs"
-        color="primary"
         variant="soft"
         icon="i-lucide-wand-sparkles"
         data-testid="compose-env-setup-start"
@@ -96,7 +97,7 @@ function start() {
       >
         {{ t('settings.composeEnvSetup.start') }}
       </UButton>
-      <span class="text-[11px] text-slate-500">{{ t('settings.composeEnvSetup.rerunHint') }}</span>
+      <span class="text-2xs text-dimmed">{{ t('settings.composeEnvSetup.rerunHint') }}</span>
     </div>
   </section>
 </template>

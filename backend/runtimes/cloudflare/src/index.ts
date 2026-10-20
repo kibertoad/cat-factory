@@ -6,6 +6,7 @@ import type {
 } from '@cloudflare/workers-types'
 import { type CreateAppOptions, createApp } from './app'
 import { loadConfig } from './infrastructure/config'
+import { defaultWorkerAgentKindRegistry } from './infrastructure/container-registries'
 import type {
   Env,
   ExecutionStartMessage,
@@ -38,6 +39,7 @@ import { D1GateOutcomeRepository } from './infrastructure/repositories/D1GateOut
 import { D1NotificationRepository } from './infrastructure/repositories/D1NotificationRepository'
 import { D1PlatformMetricsRepository } from './infrastructure/repositories/D1PlatformMetricsRepository'
 import { D1AuditEventRepository } from './infrastructure/repositories/D1AuditEventRepository'
+import { D1DirectoryRepository } from './infrastructure/repositories/D1DirectoryRepository'
 import { D1SpendRollupRepository } from './infrastructure/repositories/D1SpendRollupRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
 import { registeredBinaryStoreRegistry } from './infrastructure/binaryStores'
@@ -58,6 +60,7 @@ import {
   sweepInfraReachability,
   sweepPlatformHealth,
   sweepSpendAlerts,
+  sweepDirectoryWebhooks,
   SPEND_ALERT_INTERVAL_MS,
   operationalMetrics,
 } from '@cat-factory/server'
@@ -97,7 +100,7 @@ import {
 } from '@cat-factory/orchestration'
 import { binaryGeneratorRegistryWithBuiltins } from '@cat-factory/binary-generators'
 import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
-import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
+import { defaultInitiativePresetRegistry } from '@cat-factory/agents'
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
@@ -128,6 +131,7 @@ export { GitHubBackfillWorkflow } from './infrastructure/workflows/GitHubBackfil
 export { BootstrapWorkflow } from './infrastructure/workflows/BootstrapWorkflow'
 export { EnvironmentTestWorkflow } from './infrastructure/workflows/EnvironmentTestWorkflow'
 export { EnvConfigRepairWorkflow } from './infrastructure/workflows/EnvConfigRepairWorkflow'
+export { GuidedReviewWorkflow } from './infrastructure/workflows/GuidedReviewWorkflow'
 // Container-enabled Durable Object backing per-run implementation containers.
 export { ExecutionContainer } from './infrastructure/containers/ExecutionContainer'
 // Container-enabled Durable Object backing per-run DEPLOY containers (the deploy-harness
@@ -301,6 +305,30 @@ export {
   type JudgeAssessor,
   type JudgeContext,
 } from '@cat-factory/kernel'
+// Installation-level extension point for DELEGATED EXECUTORS: an external system this deployment
+// already runs (a GitHub-Actions implement/review/test loop, an internal job runner, a vendor's
+// autonomous PR bot), taking ONE pipeline step while cat-factory keeps the intake, the context,
+// the policy, the merge and the notifications around it. Empty by default: the platform ships
+// none, because shipping one would make the seam about that one.
+export {
+  DelegatedExecutorRegistry,
+  defaultDelegatedExecutorRegistry,
+  DelegatedExecutorRegistrationError,
+  type DelegatedExecutor,
+  type DelegatedExecutorDefinition,
+  type DelegatedExecutorDeps,
+  type DelegatedExecutorPresentation,
+  type DelegatedExecutorTelemetry,
+  type DelegatedExecutorView,
+  type DelegatedFetch,
+  type DelegatedFetchResponse,
+  type DelegatedPollPolicy,
+  type DelegationBrief,
+  type DelegationHandle,
+  type DelegationResult,
+  type DelegationStart,
+  type DelegationUpdate,
+} from '@cat-factory/kernel'
 // Installation-level extension point for VCS PROVIDERS: the neutral seam a deployment adds a git
 // host through, rather than re-hardcoding GitHub in a shared path.
 export {
@@ -382,6 +410,7 @@ export {
   DOCUMENT_PIPELINE_ID,
   DOCUMENT_QUICK_PIPELINE_ID,
   REVIEW_PIPELINE_ID,
+  RESOLVE_CONFLICTS_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
   BUG_FISHING_PIPELINE_ID,
@@ -432,10 +461,13 @@ export { DEFAULT_MODEL_PRESET_ID, MODEL_PRESET_SEED_IDS } from '@cat-factory/ker
  * seam: a deployment registers its kinds/gates/pipelines/estate on its own instance and passes it
  * in, exactly as it would through `start({ … })` / `startLocal({ … })` on the other two facades.
  */
-function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
+export function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
   return {
-    // Custom agent kinds (the built-ins plus anything a deployment registered by reference).
-    agentKindRegistry: overrides.agentKindRegistry ?? defaultAgentKindRegistry(),
+    // Custom agent kinds (the built-ins plus anything a deployment registered by reference). Our
+    // OWN default carries the opt-in Nuxt UI capability, and this is the instance both boot
+    // validation and `GET /internal/agent-kinds` read, so the request path must default through the
+    // same helper the override-less `buildContainer(env)` builders use, or the two disagree.
+    agentKindRegistry: overrides.agentKindRegistry ?? defaultWorkerAgentKindRegistry(),
     // Custom initiative presets — the same DI seam as `agentKindRegistry`.
     initiativePresetRegistry:
       overrides.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),
@@ -624,6 +656,7 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
       // prune here that does not read `env.DB`: audit retention is measured in years and must not
       // compete with live transactional state for the per-database ceiling.
       auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
+      directoryRepository: new D1DirectoryRepository({ db: env.DB }),
       // The durable cost-attribution rollup: this sweep is its only writer, and prunes it
       // nowhere (see `RetentionDeps`).
       spendRollupRepository: new D1SpendRollupRepository({ db: env.DB }),
@@ -849,6 +882,23 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
         }),
     )
   }
+}
+
+/** Re-wake guided-review jobs whose claim lapsed (a lost wake or a dead Workflows instance). */
+function redriveGuidedReviewJobs(env: Env, tick: SweepTick): void {
+  if (!env.GUIDED_REVIEW_WORKFLOW) return
+  tick.run(
+    { name: 'guided-review-sweeper', failureMessage: 'guided-review sweep failed' },
+    (async () => {
+      const service = buildContainer(env).guidedReview?.service
+      if (!service) return
+      const redriven = await service.redriveStale()
+      if (redriven > 0) {
+        logger.warn('guided-review sweep re-drove stale jobs', { redriven })
+        operationalMetrics.increment('sweep.run_redriven', { kind: 'guided-review' }, redriven)
+      }
+    })(),
+  )
 }
 
 /**
@@ -1133,6 +1183,16 @@ function runPeriodicBackstops(
     )
   }
 
+  // Push the directory change feed to registered webhook endpoints, on every frequent tick (the
+  // shared interval matches it). Built only when a key can seal endpoint secrets, since without one
+  // no endpoint can exist.
+  if (env.ENCRYPTION_KEY?.trim()) {
+    tick.run(
+      { name: 'directory-webhooks', failureMessage: 'directory webhook sweep failed' },
+      sweepDirectoryWebhooks(buildContainer(env), logger),
+    )
+  }
+
   // Raise a `budget_threshold` card while a workspace's (or its account's) spend is still
   // recoverable. The proactive half of the spend safeguard, whose only signal today is a run
   // pausing mid-pipeline. Not opt-in: a configured budget is the opt-in. It rides the stateless
@@ -1174,6 +1234,7 @@ async function runScheduled(
     // Frequent pass (every 2 min): time-sensitive backstops.
     redriveStuckAgentRuns(env, tick, clock)
     redriveStuckEnvTests(env, tick, clock)
+    redriveGuidedReviewJobs(env, tick)
     reclaimExpiredActivations(env, tick, clock)
     reapStaleContainers(env, tick, clock)
     runPeriodicBackstops(env, tick, clock, controller.scheduledTime)

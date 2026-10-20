@@ -13,7 +13,7 @@ a minimal deployment is just boards + pipelines.
 
 > For the end-to-end runtime flows (execution + events, bootstrap, blueprints,
 > requirements review, the board/repo-linkage model) read
-> [`../CLAUDE.md`](../CLAUDE.md). This README is the package-level map.
+> [`../AGENTS.md`](../AGENTS.md). This README is the package-level map.
 
 ## Table of contents
 
@@ -38,8 +38,8 @@ a minimal deployment is just boards + pipelines.
 ## Packages
 
 The **complete** package/runtime/deployment catalog (every published library, runtime facade,
-internal package, and example deployment) is the layout tables in the
-[root README](../README.md#repository-layout). The table below is the domain-layer summary; the
+internal package, and example deployment) is the layout tables in
+[`docs/repository-layout.md`](../docs/repository-layout.md). The table below is the domain-layer summary; the
 rows after it list the opt-in libraries and the runtime facades so this doc stays self-contained.
 
 | Package                                                                                             | Role                                                                                                            |
@@ -257,7 +257,7 @@ flow uses **no container and no durable driver**: it calls the `ModelProvider`
 port inline (like the document planner) and returns the updated entity, which the
 SPA patches directly. One live review per block; the model resolves exactly like
 an agent step (a block's pinned model wins, else the routing default, falling back
-to Workers AI). Full flow in [`../CLAUDE.md`](../CLAUDE.md).
+to Workers AI). Full flow in [`../AGENTS.md`](../AGENTS.md).
 
 ## Service blueprints
 
@@ -270,7 +270,7 @@ reuses the whole execution engine, runs on the prior `coder` step's PR branch wh
 present (else the repo default branch), and is also kicked off after a successful
 bootstrap to seed the initial map. There is **no** standalone "scan repository"
 command: repository decomposition is always this pipeline agent. Full flow in
-[`../CLAUDE.md`](../CLAUDE.md).
+[`../AGENTS.md`](../AGENTS.md).
 
 ## Ephemeral environments + the Deployer agent (optional)
 
@@ -521,7 +521,7 @@ pnpm dev
 pnpm test
 ```
 
-Integration tests run via `@cloudflare/vitest-pool-workers` inside the same runtime Wrangler uses,
+Integration tests run via `@cloudflare/vitest-plugin` inside the same runtime Wrangler uses,
 against a real local D1 database with the real migrations applied. Only the LLM is faked
 (deterministically); the storage and HTTP stack are real.
 
@@ -578,7 +578,7 @@ driven from the example **deployment** package
 [`deploy/backend`](../deploy/backend), which re-exports this library's handler
 and holds the `wrangler.toml`, the per-deployment `[vars]`, and the secrets. The
 end-to-end walkthrough (deploy order, migrations, the reference URLs) lives in the
-[top-level README → Deployment](../README.md#deployment) and
+[Deploy to Cloudflare](https://www.catfactory.ai/deploy/cloudflare.html) guide and
 [`deploy/backend/README.md`](../deploy/backend/README.md). **This section is the
 configuration reference**: what every var/secret does and how to turn each opt-in
 feature on. The canonical, fully-commented list of bindings + vars is the typed
@@ -724,7 +724,7 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"
 > **`WORKER_PUBLIC_URL` must be the `*.workers.dev` origin, _not_ an orange-clouded
 > custom domain.** A per-run Container egresses from inside Cloudflare's network, so
 > a zone's WAF / Bot-Fight rules block its POSTs to the LLM proxy with a `403 …
-blocked.` before the Worker even runs (browsers pass the bot checks, so the SPA is
+> blocked.` before the Worker even runs (browsers pass the bot checks, so the SPA is
 > unaffected). `workers.dev` isn't in that zone, so the container reaches the proxy
 > unblocked. The container image is pinned by the `[[containers]].image` GHCR tag:
 > use a version tag, not `latest`, for reproducible deploys.
@@ -792,7 +792,7 @@ provisional **service frame** on the board; a durable `BootstrapWorkflow` (bindi
 `BOOTSTRAP_WORKFLOW`, declared in `wrangler.toml` like `EXECUTION_WORKFLOW`) polls the container,
 streams live subtask progress over the WebSocket events hub, and on success links the new repo to
 that frame so it becomes a real, droppable service (on failure the frame is marked blocked). See
-[`CLAUDE.md`](../CLAUDE.md) for the end-to-end flow. Managing reference architectures (the CRUD
+[`AGENTS.md`](../AGENTS.md) for the end-to-end flow. Managing reference architectures (the CRUD
 under `/bootstrap/reference-architectures`) always works, but **kicking off a run** needs the same
 machinery as container implementation. When
 any prerequisite is missing the endpoint returns:
@@ -852,7 +852,7 @@ Register a GitHub App, then:
 # wrangler.toml [vars]
 GITHUB_APP_ID = "…"
 GITHUB_APP_SLUG = "your-app-slug"
-GITHUB_SETUP_REDIRECT_URL = "https://<your-spa>"   # where to land the browser after install
+GITHUB_SETUP_REDIRECT_URL = "https://<your-spa>" # where to land the browser after install
 ```
 
 ```sh
@@ -926,5 +926,5 @@ The **prompt-fragment library** is the one opt-in feature that needs **no** key
 
 ```toml
 PROMPT_LIBRARY_ENABLED = "true"
-PROMPT_LIBRARY_SELECTOR = "deterministic"   # or "llm" to pick relevant fragments per run
+PROMPT_LIBRARY_SELECTOR = "deterministic" # or "llm" to pick relevant fragments per run
 ```

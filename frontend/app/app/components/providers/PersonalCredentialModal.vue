@@ -6,11 +6,12 @@
 // password. The copy follows the pending vendor (Claude / GLM / ChatGPT-Codex).
 import { computed, ref } from 'vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const personal = usePersonalSubscriptionsStore()
 const ui = useUiStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 const password = ref('')
@@ -67,11 +68,7 @@ async function submit() {
   busy.value = true
   try {
     await pending.value.retry(password.value)
-    toast.add({
-      title: t('providers.personalCredential.toast.started'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('providers.personalCredential.toast.started')
   } catch (e) {
     // A fresh 428 (e.g. still-wrong password) re-arms `pending`, keeping the modal open.
     present(e, 'providers.personalCredential.toast.startFailed')
@@ -89,11 +86,11 @@ function goConnect() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="title" :ui="{ content: 'max-w-md' }">
+  <AppModal size="prompt" v-model:open="open" :title="title">
     <template #body>
       <div class="space-y-4">
         <template v-if="needsConnect">
-          <p class="text-sm text-slate-400">
+          <p class="text-sm text-muted">
             {{ t('providers.personalCredential.connectBody', { vendor: vendorLabel }) }}
           </p>
           <div class="flex justify-end gap-2">
@@ -115,7 +112,7 @@ function goConnect() {
         </template>
 
         <template v-else>
-          <p class="text-sm text-slate-400">
+          <p class="text-sm text-muted">
             {{ t('providers.personalCredential.passwordBody', { vendor: vendorLabel }) }}
           </p>
           <UFormField :label="t('providers.personalCredential.passwordField')">
@@ -145,5 +142,5 @@ function goConnect() {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

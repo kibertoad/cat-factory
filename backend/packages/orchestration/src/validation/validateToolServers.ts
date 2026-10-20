@@ -1,5 +1,5 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { runsInContainer } from '@cat-factory/agents'
+import { definitionIssues, mcpServerDefinitionSchema, runsInContainer } from '@cat-factory/agents'
 import type { AgentKind, McpSecretRef, McpServerDefinition } from '@cat-factory/kernel'
 import {
   MCP_OAUTH_DEFAULT_HEADER,
@@ -129,7 +129,7 @@ export function checkToolServerDefinitions(
  * whose blast radius is those five, and a message naming one of them reads as a narrower fault than
  * it is.
  */
-function declaredOn(kinds: readonly AgentKind[]): string {
+export function declaredOn(kinds: readonly AgentKind[]): string {
   const names = kinds.map((kind) => `"${kind}"`).join(', ')
   return kinds.length === 1 ? `(on agent kind ${names})` : `(on agent kinds ${names})`
 }
@@ -194,14 +194,29 @@ function checkToolServerBudget(
  *   unavailability vocabulary exists to prevent;
  * - a definition NO harness could ever serve is a WARNING, and it is the only check here a run
  *   structurally cannot report: an `http` server narrowed to `harnesses: ['codex']` (whose client
- *   is stdio-only), or anything narrowed to `['pi']` (which has no MCP client), is never dropped
- *   FOR A REASON on any run. It simply never applies, so no prompt and no log line ever mentions
+ *   is stdio-only), or narrowed to an empty `harnesses` list, is never dropped FOR A REASON on
+ *   any run. It simply never applies, so no prompt and no log line ever mentions
  *   it. A warning rather than an error because the declaration is inert rather than dangerous;
  * - a cleartext `http://` endpoint off loopback is an ERROR: a resolved credential rides that
  *   request as a header, and the harness refuses the same URL at the job boundary — so allowing
  *   it here only moves the failure to a place with no registration to point at.
  */
 function checkToolServerDefinition(on: string, server: McpServerDefinition): RegistrationProblem[] {
+  // The SHAPE first, and alone: every check below reads fields by their declared types, and a
+  // malformed definition is also one a mothership-mode node refuses to read at all.
+  const issues = definitionIssues(mcpServerDefinitionSchema, server)
+  if (issues.length) {
+    return [
+      {
+        severity: 'error',
+        code: 'invalid_tool_server_definition',
+        message:
+          `Tool server "${String(server.id)}" ${on} does not match the McpServerDefinition ` +
+          `shape: ${issues.join('; ')}. A mothership-mode node refuses the whole capability ` +
+          `layer that carries it, so fix the field rather than relying on this process running it.`,
+      },
+    ]
+  }
   const problems: RegistrationProblem[] = []
   if (!isValidMcpServerId(server.id)) {
     problems.push({
@@ -237,7 +252,7 @@ function checkToolServerDefinition(on: string, server: McpServerDefinition): Reg
         `Tool server "${server.id}" ${on} declares transport "${server.transport.kind}" for ` +
         `harnesses [${(server.harnesses ?? MCP_SUPPORTED_HARNESSES).join(', ')}], and no harness ` +
         `can serve that combination, so the server never applies to any run and no prompt or log ` +
-        `line will say why. Codex's MCP client is stdio-only and Pi has none at all. Widen the ` +
+        `line will say why. Codex's MCP client is stdio-only. Widen the ` +
         `harnesses, change the transport, or drop the declaration.`,
     })
   }

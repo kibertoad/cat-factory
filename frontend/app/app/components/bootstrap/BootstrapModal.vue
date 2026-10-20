@@ -21,14 +21,17 @@ import {
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import { appInstallationManageUrl, newRepoUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 const bootstrap = useBootstrapStore()
 const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 const board = useBoardStore()
-const toast = useToast()
-const { present } = usePipelineErrorToast()
+const actionToast = useActionToast()
+const { present, presentReported } = usePipelineErrorToast()
 const { freeFramePosition, focusFrame } = useFramePlacement()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -51,7 +54,7 @@ watch(
 async function loadGitHubRepos() {
   try {
     await github.probe()
-    if (github.connected) await github.load()
+    await github.refresh()
   } catch {
     // GitHub integration off / unreachable → the repo picker just isn't offered.
   }
@@ -365,11 +368,8 @@ async function openCreateRepo() {
       private: isPrivate.value,
       description: description.value.trim() || undefined,
     })
-    toast.add({
-      title: t('bootstrap.toast.repoCreated'),
+    actionToast.success('bootstrap.toast.repoCreated', {
       description: `${repo.owner}/${repo.name}`,
-      icon: 'i-lucide-check',
-      color: 'success',
     })
   } catch (e) {
     present(e, 'bootstrap.toast.repoCreateFailed')
@@ -424,26 +424,20 @@ async function launch() {
     if (job.status === 'failed') {
       // The container couldn't even start (pre-flight failure, e.g. the target
       // repo isn't empty) — surfaced synchronously, before any board frame.
-      toast.add({
-        title: t('bootstrap.toast.failed'),
-        description: job.error ?? t('bootstrap.toast.failedFallback'),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
+      presentReported(job.error, 'bootstrap.toast.failed', {
+        descriptionKey: 'bootstrap.toast.failedFallback',
       })
     } else {
       // Running: the container is spinning up. A provisional service card now
       // shows on the board and tracks live progress; the run continues in the
       // background and becomes a real, droppable service when it finishes.
-      toast.add({
-        title: t('bootstrap.toast.started'),
+      actionToast.info('bootstrap.toast.started', {
         // A monorepo run does not run straight through: it surveys, then waits for the
         // reviewer. Saying "bootstrapping…" there would set the wrong expectation about who
         // the next move belongs to.
         description: job.monorepo
           ? t('bootstrap.toast.startedMonorepoDesc', { directory: job.monorepo.directory })
           : t('bootstrap.toast.startedDesc', { repo: job.repoName }),
-        icon: 'i-lucide-loader-circle',
-        color: 'info',
       })
       repoName.value = ''
       description.value = ''
@@ -611,7 +605,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 </script>
 
 <template>
-  <UModal v-model:open="modalOpen" :title="t('bootstrap.title')" :ui="{ content: 'max-w-2xl' }">
+  <AppModal size="form" v-model:open="modalOpen" :title="t('bootstrap.title')">
     <template #body>
       <div class="space-y-6">
         <!-- Three states, because each promises the user something different about the repo.
@@ -619,7 +613,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
              the user creates it in one click on a host we can name; or the user creates it
              themselves somewhere we cannot name, where promising a click below would be a lie
              (the button is absent for exactly the same reason). -->
-        <p class="text-sm text-slate-400">
+        <p class="text-sm text-muted">
           {{
             intoMonorepo
               ? t('bootstrap.monorepo.intro')
@@ -635,11 +629,11 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
              whichever methods the deployment serves, never just the GitHub App. -->
         <div
           v-if="needsConnection"
-          class="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"
+          class="space-y-3 rounded-md border border-app-warning-500/30 bg-app-warning-500/5 p-3"
         >
           <div class="flex items-start gap-2">
-            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-            <p class="text-sm text-amber-200/90">
+            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400" />
+            <p class="text-sm text-app-warning-200/90">
               {{ t('vcs.bootstrap.connectPrompt') }}
             </p>
           </div>
@@ -648,9 +642,9 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 
         <!-- launch -->
         <section class="space-y-4">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <SectionLabel as="h3">
             {{ t('bootstrap.section.newRepo') }}
-          </h3>
+          </SectionLabel>
 
           <UFormField :label="t('bootstrap.target.label')" required>
             <URadioGroup v-model="target" :items="targetItems" />
@@ -676,7 +670,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
               :description="t('bootstrap.monorepo.repo.description')"
               required
             >
-              <div v-if="!monorepoRepoItems.length" class="text-sm text-slate-400">
+              <div v-if="!monorepoRepoItems.length" class="text-sm text-muted">
                 {{ t('bootstrap.monorepo.repo.empty') }}
               </div>
               <USelect
@@ -700,13 +694,12 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                     :placeholder="t('bootstrap.monorepo.directory.placeholder')"
                     class="flex-1"
                   />
-                  <UButton
+                  <IconButton
                     v-if="monorepoRepoId !== undefined"
                     variant="soft"
                     color="neutral"
                     icon="i-lucide-folder-search"
-                    :title="t('bootstrap.monorepo.directory.browse')"
-                    :aria-label="t('bootstrap.monorepo.directory.browse')"
+                    :label="t('bootstrap.monorepo.directory.browse')"
                     data-testid="bootstrap-directory-browse"
                     @click="toggleDirectoryBrowse()"
                   />
@@ -716,9 +709,9 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                      decide nothing, so say that instead of listing a repo for nothing. -->
                 <div
                   v-if="browsingDirectory && monorepoRepoId !== undefined"
-                  class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+                  class="rounded-md border border-default bg-default/40 p-2"
                 >
-                  <p class="mb-2 text-xs text-slate-400">
+                  <p class="mb-2 text-xs text-muted">
                     {{
                       directoryLeaf
                         ? t('bootstrap.monorepo.directory.browseHint')
@@ -749,7 +742,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
               :description="t('bootstrap.reference.description')"
               required
             >
-              <div v-if="!bootstrap.hasArchitectures" class="text-sm text-slate-400">
+              <div v-if="!bootstrap.hasArchitectures" class="text-sm text-muted">
                 {{ t('bootstrap.reference.empty') }}
               </div>
               <USelect
@@ -893,13 +886,12 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           <UFormField :label="t('bootstrap.visibility.label')">
             <div class="flex items-center gap-2">
               <USwitch v-model="isPrivate" />
-              <span class="text-sm text-slate-300">{{ t('bootstrap.visibility.private') }}</span>
+              <span class="text-sm text-toned">{{ t('bootstrap.visibility.private') }}</span>
             </div>
           </UFormField>
 
           <div class="flex justify-end">
             <UButton
-              color="primary"
               icon="i-lucide-rocket"
               :loading="launching"
               :disabled="!canLaunch"
@@ -912,17 +904,17 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 
         <!-- recent jobs -->
         <section v-if="agentRuns.bootstrapJobs.length" class="space-y-2">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <SectionLabel as="h3">
             {{ t('bootstrap.recent.title') }}
-          </h3>
+          </SectionLabel>
           <div
             v-for="job in agentRuns.bootstrapJobs.slice(0, 5)"
             :key="job.id"
-            class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm"
+            class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-3 py-2 text-sm"
           >
             <div class="min-w-0">
-              <div class="truncate text-slate-200">{{ job.repoName }}</div>
-              <div class="truncate text-[11px] text-slate-500">
+              <div class="truncate text-default">{{ job.repoName }}</div>
+              <div class="truncate text-2xs text-dimmed">
                 {{
                   job.referenceArchitectureName
                     ? t('bootstrap.recent.fromArch', { name: job.referenceArchitectureName })
@@ -935,7 +927,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 v-if="job.repoUrl"
                 :to="job.repoUrl"
                 target="_blank"
-                class="text-[11px] text-indigo-400 hover:underline"
+                class="text-2xs text-primary hover:underline"
               >
                 {{ t('bootstrap.recent.open') }}
               </ULink>
@@ -947,7 +939,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 v-if="job.prUrl"
                 :to="job.prUrl"
                 target="_blank"
-                class="text-[11px] text-indigo-400 hover:underline"
+                class="text-2xs text-primary hover:underline"
               >
                 {{ t('bootstrap.recent.openPr') }}
               </ULink>
@@ -963,9 +955,9 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
         <!-- reference architecture management -->
         <section class="space-y-3">
           <div class="flex items-center justify-between">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <SectionLabel as="h3">
               {{ t('bootstrap.arch.title') }}
-            </h3>
+            </SectionLabel>
             <UButton
               size="xs"
               color="neutral"
@@ -980,13 +972,11 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           <div
             v-for="a in bootstrap.architectures"
             :key="a.id"
-            class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2"
+            class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-3 py-2"
           >
             <div class="min-w-0">
-              <div class="truncate text-sm text-slate-200">{{ a.name }}</div>
-              <div class="truncate text-[11px] text-slate-500">
-                {{ a.repoOwner }}/{{ a.repoName }}
-              </div>
+              <div class="truncate text-sm text-default">{{ a.name }}</div>
+              <div class="truncate text-2xs text-dimmed">{{ a.repoOwner }}/{{ a.repoName }}</div>
             </div>
             <div class="flex items-center gap-1">
               <UButton
@@ -1009,7 +999,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           <!-- add / edit form -->
           <div
             v-if="showArchForm"
-            class="space-y-3 rounded-md border border-slate-700 bg-slate-900/80 p-3"
+            class="space-y-3 rounded-md border border-muted bg-default/80 p-3"
           >
             <!-- The options come from the connected projection, so a repo to pick means a
                  connection exists and `providerLabel` names it rather than guessing. -->
@@ -1037,7 +1027,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 class="w-full"
               />
             </UFormField>
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <UFormField :label="t('bootstrap.arch.repoOwner')" required>
                 <UInput
                   v-model="archForm.repoOwner"
@@ -1083,12 +1073,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
               >
                 {{ t('common.cancel') }}
               </UButton>
-              <UButton
-                color="primary"
-                :loading="savingArch"
-                :disabled="!canSaveArch"
-                @click="saveArch"
-              >
+              <UButton :loading="savingArch" :disabled="!canSaveArch" @click="saveArch">
                 {{ archForm.id ? t('common.save') : t('bootstrap.arch.add') }}
               </UButton>
             </div>
@@ -1096,5 +1081,5 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
         </section>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

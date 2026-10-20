@@ -49,7 +49,7 @@ Flow (`RalphController` + the `ralph-verdict` `StepCompletionInterceptor` in `Ru
    `validation` block.
 2. The harness runs the coding agent, commits, pushes, then runs `validation.command` in the
    checkout (bounded timeout + redacted output tail) and returns `{ validationPassed, exitCode,
-validationOutputTail }` on `RunnerJobResult.ralphVerdict` → `AgentRunResult.ralphVerdict`.
+   validationOutputTail }` on `RunnerJobResult.ralphVerdict` → `AgentRunResult.ralphVerdict`.
 3. The `ralph-verdict` interceptor calls `RalphController.resolveRalphResult`: it records the
    iteration on `step.ralph` (attempts++, attempt log, no-progress streak), then
    `decideRalphNext`:

@@ -12,6 +12,7 @@ import {
   type BackendRegistries,
   type DeployJobClient,
   type RegisterHandlerInput,
+  type RunnerPoolSeedSource,
 } from '@cat-factory/integrations'
 import {
   type CreateSharedStackInput,
@@ -29,6 +30,7 @@ import {
 import {
   type CoreDependencies,
   type GateRegistry,
+  type DelegatedExecutorRegistry,
   type JudgeRegistry,
   type StepResolverRegistry,
 } from '@cat-factory/orchestration'
@@ -123,6 +125,16 @@ export interface NodeContainerOptions {
    * code, with no repo of its own and no manual SPA step. Absent / empty ⇒ no seeding.
    */
   seedSharedStacks?: CreateSharedStackInput[]
+  /**
+   * A deployment's DECLARED runner pools, `(account) => { config, secrets } | undefined`, forwarded
+   * into `createCore`. The container exposes a `runnerPoolSeeder`, `start()` boot-backfills every
+   * account that has no pool, and `WorkspaceService.create` seeds the account of a new board.
+   * Personal and org accounts both inherit; a legacy board with no account gets nothing; an
+   * account that already has a pool keeps it. On stock Node a pool is the only executor, so this
+   * is what lets a new board run an agent with no manual step. Absent ⇒ no seeding. Node only:
+   * the local facade does not take it, and mothership mode does not seed.
+   */
+  seedAccountRunnerPool?: RunnerPoolSeedSource
   /**
    * Override the direct-vendor API-key pool's repository. When provided it REPLACES the
    * default Drizzle one, so a sibling facade can back the key pool with a different store
@@ -370,6 +382,15 @@ export interface NodeContainerOptions {
    * pre-loaded one to assert the seam is symmetric across runtimes.
    */
   judgeRegistry?: JudgeRegistry
+  /**
+   * The app-owned DELEGATED-EXECUTOR registry: the external systems this deployment plugs in as
+   * the executor of a pipeline step (a GitHub-Actions implement/review/test loop, an internal job
+   * runner, a vendor's autonomous PR bot). Rides its own option like `judgeRegistry`; defaults to
+   * an EMPTY registry, because the platform ships none. Threaded into `createCore` + re-exposed on
+   * Core (so `start()` passes it to `validateRegistrations`, which refuses a kind naming an
+   * executor nobody registered). See `docs/initiatives/delegated-executors.md`.
+   */
+  delegatedExecutorRegistry?: DelegatedExecutorRegistry
   /**
    * The app-owned step-completion-resolver registry (deployment-registered resolvers). Rides its
    * own option; defaults to an empty registry. Threaded into `createCore`; the conformance suite

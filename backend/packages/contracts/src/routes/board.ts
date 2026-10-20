@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import { blockSchema } from '../entities.js'
 import {
   addEpicSchema,
@@ -104,7 +104,7 @@ export const removeBlockContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: blockIdParams,
   pathResolver: ({ blockId }) => `/blocks/${blockId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const archiveBlockContract = defineApiContract({

@@ -27,7 +27,7 @@ Once PR 1 lands, reuse these rather than reinventing:
 
 - **Confirm-then-mutate**: `frontend/app/app/composables/useConfirm.ts` +
   `frontend/app/app/components/common/ConfirmDialog.vue`. Call `await confirm({ variant:
-'destructive', title, description })` and bail on `false` **before** any mutation. One
+  'destructive', title, description })` and bail on `false` **before** any mutation. One
   always-mounted dialog + a module-level singleton queue; dismiss (backdrop/Escape) resolves
   `false`.
 - **Shared block deletion**: `frontend/app/app/composables/useBlockDeletion.ts`; the single

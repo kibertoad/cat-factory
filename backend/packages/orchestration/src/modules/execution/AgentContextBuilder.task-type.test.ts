@@ -121,6 +121,11 @@ describe('AgentContextBuilder custom task-type parameters', () => {
     expect((await contextFor(task('bug', { severity: 'high' }))).customTaskType).toBeUndefined()
   })
 
+  it('threads the task type, so an executor can tell an ATTACHED pull request from its own', async () => {
+    expect((await contextFor(task('resolve-conflicts'))).block.taskType).toBe('resolve-conflicts')
+    expect((await contextFor(task(undefined))).block.taskType).toBeUndefined()
+  })
+
   it('is absent for a BUILT-IN type carrying a custom bag', async () => {
     // `createTaskSchema.taskTypeFields` accepts the bag for any type (slice 2 owns the creation
     // check), so this row is reachable. It is NOT drift: a built-in has no descriptor however

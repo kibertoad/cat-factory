@@ -303,6 +303,35 @@ export const llmExportTotalsSchema = v.object({
 export type LlmExportTotals = v.InferOutput<typeof llmExportTotalsSchema>
 
 /**
+ * What a run's model-activity totals DO NOT cover, stated beside them.
+ *
+ * A delegated step runs on an external executor: it bypasses the LLM proxy, the harness call
+ * recorder and the tool-trajectory drain, so its model calls are not in the sink and its tokens
+ * are not in the totals above. That is a fact about the RUN, and it is invisible in a number.
+ * Without this, a run whose implementing step ran on somebody else's CI reports a small, complete
+ * looking total, and every reader (a person, a cost dashboard, a model asked why a task was
+ * cheap) concludes the work was cheap rather than unmeasured.
+ *
+ * The two counts are two different facts and are never merged. A step whose executor declares
+ * `self-reported` and simply has not filed yet is not the same as one whose executor never will,
+ * and only the second is a permanent gap.
+ */
+export const llmReportingGapsSchema = v.object({
+  /**
+   * Delegated steps whose spend is absent from the totals. Zero is a real answer here (a run with
+   * no delegated step, or one whose executors all reported), which is exactly why the FIELD is
+   * what carries the meaning rather than a sentinel inside the totals.
+   */
+  delegatedStepsWithoutUsage: v.number(),
+  /**
+   * The executors those steps ran on, deduplicated, so a reader is told WHO is not reporting and
+   * can go and look there. Empty when the count is zero.
+   */
+  executors: v.array(v.string()),
+})
+export type LlmReportingGaps = v.InferOutput<typeof llmReportingGapsSchema>
+
+/**
  * One PHASE's slice of a run's model activity — the burn breakdown
  * (`docs/initiatives/token-burn-instrumentation.md`). Deliberately a SEPARATE shape from
  * {@link llmExportInsightSchema} rather than that shape with the key swapped: a phase has no

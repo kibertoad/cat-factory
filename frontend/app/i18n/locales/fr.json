@@ -52,7 +52,6 @@
     }
   },
   "common": {
-    "loading": "Chargement…",
     "save": "Enregistrer",
     "cancel": "Annuler",
     "retry": "Réessayer",
@@ -129,6 +128,7 @@
     "commandBar": "Rechercher ou exécuter une commande…",
     "create": "Créer",
     "assistant": "Assistant",
+    "guidedReview": "Revue guidée",
     "buildPipeline": "Créer un pipeline",
     "repositories": "Dépôts",
     "addFromRepo": "Ajouter depuis un dépôt existant",
@@ -150,7 +150,8 @@
     "infrastructure": "Infrastructure",
     "foundationalServices": "Services fondamentaux",
     "tutorials": "Tutoriels",
-    "help": "Aide"
+    "help": "Aide",
+    "setupChecklist": "Liste de configuration"
   },
   "board": {
     "toast": {
@@ -219,7 +220,8 @@
         "recurring": "Récurrent",
         "review": "Revue",
         "ralph": "Boucle Ralph",
-        "bugFishing": "Pêche aux bogues"
+        "bugFishing": "Pêche aux bogues",
+        "resolveConflicts": "Résoudre les conflits"
       },
       "recurringWithFrame": "Une tâche récurrente exécute une pipeline selon une cadence. Continuez pour définir le calendrier et le prompt.",
       "recurringNoFrame": "Une tâche récurrente doit appartenir à un service. Ajoutez-la depuis un cadre de service (ou un module à l’intérieur).",
@@ -406,10 +408,38 @@
       "stalled": "L’exécution est bloquée",
       "retryBootstrap": "Relancer l’initialisation",
       "retryRun": "Relancer l’exécution",
+      "startNewRun": "Démarrer une nouvelle exécution",
       "environmentSetup": "Configurer les environnements",
       "deployRunnerSetup": "Configurer le pool de runners",
       "environmentLocalHint": "Les environnements éphémères locaux nécessitent un runtime de déploiement pour exécuter kubectl/kustomize/helm. Définissez {runtime} dans votre .env : le mode natif exécute ces outils sur votre hôte ({native}), le mode conteneur les exécute dans l'image de déploiement ({container}).",
       "showDetail": "Afficher le détail",
+      "details": "Détails",
+      "detailsMessage": "Message",
+      "detailsHint": "Notes pour l’exploitant",
+      "detailsFull": "Sortie complète",
+      "cause": {
+        "preflight": "Une vérification avant le démarrage a échoué, aucun travail n’a donc été fait. Ouvrez Détails pour voir quoi corriger, puis réessayez.",
+        "dispatch": "Le conteneur de l’agent n’a pas démarré, aucun travail n’a donc été fait. C’est en général temporaire.",
+        "environment": "L’environnement de test n’a pas pu être créé. Vérifiez les paramètres de l’environnement, puis réessayez.",
+        "evicted": "Le conteneur s’est arrêté plusieurs fois pendant l’exécution. Cela arrive en général pendant une mise à jour de la plateforme : réessayez quand la mise à jour est terminée.",
+        "harness_shutdown": "Quelque chose a arrêté le conteneur pendant cette étape. Cherchez la cause dans Détails avant de réessayer, car une nouvelle tentative peut s’arrêter de nouveau.",
+        "timeout": "L’exécution a cessé de répondre ou a dépassé sa limite de temps. Consultez Détails pour savoir lequel, puis réessayez.",
+        "agent": "Une étape d’agent a échoué. Consultez la cause sur l’étape en échec, puis réessayez.",
+        "job_failed": "Le conteneur de l’agent a signalé un échec. Une nouvelle tentative démarre un nouveau conteneur.",
+        "delegated_failed": "Le système externe qui a exécuté cette étape a signalé un échec. Le lien de l’étape ouvre son exécution, qui montre la cause.",
+        "rejected": "Une étape a été rejetée, l’exécution s’est donc arrêtée. Une nouvelle tentative reprend à cette étape.",
+        "companion_rejected": "Un agent compagnon n’a pas donné de résultat utilisable. Une nouvelle tentative le relance.",
+        "stalled": "La plateforme a perdu le contact avec cette exécution. Une nouvelle tentative démarre une nouvelle exécution.",
+        "state_unreadable": "L’état enregistré de cette exécution est illisible, une nouvelle tentative relit donc le même état endommagé. Démarrez une nouvelle exécution.",
+        "cancelled": "Cette exécution a été arrêtée. Une nouvelle tentative la relance.",
+        "unknown": "L’exécution a échoué pour une cause inconnue. Consultez Détails, puis réessayez.",
+        "deployRunnerUnwiredLocal": "Cet ordinateur n’a pas de runtime de déploiement pour créer l’environnement de test. Définissez {variable} dans votre fichier .env, puis réessayez.",
+        "singleJob": {
+          "evicted": "Le conteneur s’est arrêté avant la fin de la tâche. Une nouvelle tentative démarre un nouveau conteneur.",
+          "timeout": "La tâche est restée trop longtemps sans activité, ou elle a dépassé sa limite de temps. Une nouvelle tentative la relance.",
+          "agent": "L’agent ou le git push a échoué. Consultez la cause dans Détails, puis réessayez."
+        }
+      },
       "retrying": "Nouvelle tentative…",
       "history": {
         "previousErrors": "{count} erreur précédente | {count} erreurs précédentes"
@@ -606,7 +636,8 @@
     "pastedLink": {
       "offer": "Cette description renvoie à une page {source}. L’attacher comme contexte ?",
       "attach": "Attacher"
-    }
+    },
+    "removePending": "Retirer {name}"
   },
   "errors": {
     "generic": {
@@ -636,7 +667,10 @@
         "service_catalog_filter_missing": "Le filtre d'entités de cette connexion n'a pas pu être lu, il n'y a donc rien à importer. Enregistrez à nouveau la connexion au catalogue de services pour le rétablir.",
         "service_catalog_response_too_large": "Le portail développeur a renvoyé plus de données que cette plateforme n'en accepte dans une seule réponse. Ouvrez les paramètres du catalogue de services et abaissez la limite de services, ou désactivez l'import des définitions d'interface, puis relancez l'import.",
         "assistant_generation_failed": "Le fournisseur de modèles de l'assistant n'a pas répondu. Il est correctement configuré et il n'y a rien à paramétrer ici : réessayez la demande dans un instant.",
-        "assistant_reply_unreadable": "Le modèle de l'assistant a répondu quelque chose que cette plateforme ne peut pas exécuter comme décision. Reformuler aide rarement : choisissez un autre modèle pour l'assistant dans les paramètres de modèles."
+        "assistant_reply_unreadable": "Le modèle de l'assistant a répondu quelque chose que cette plateforme ne peut pas exécuter comme décision. Reformuler aide rarement : choisissez un autre modèle pour l'assistant dans les paramètres de modèles.",
+        "delegated_executor_failed": "L’exécuteur externe n’a pas pu démarrer cette étape. Le problème vient du système qui effectue le travail, pas de ce déploiement : consultez ses propres journaux, puis réessayez.",
+        "delegated_work_branch_unprepared": "La plateforme n'a pas pu préparer la branche de travail vers laquelle l'exécuteur de cette étape est envoyé, donc rien n'a démarré. Soit la connexion au dépôt ne peut pas y écrire, soit la tâche nomme une branche qui n'existe pas encore : les détails indiquent laquelle des deux.",
+        "attached_pr_provider_unreachable": "Le fournisseur du dépôt n'a pas répondu, la pull request n'a donc pas pu être vérifiée et aucune tâche n'a été créée. Il n'y a rien à configurer ici : réessayez dans un instant."
       }
     },
     "reason": {
@@ -720,7 +754,14 @@
         "expedition_settled": "Cette expédition est déjà terminée",
         "not_awaiting_triage": "Cette expédition n'attend pas de tri",
         "already_addressed": "Certaines constatations ont déjà une tâche de correction",
-        "no_host_frame": "Cette expédition n'est sous aucun service"
+        "no_host_frame": "Cette expédition n'est sous aucun service",
+        "delegated_executor_unwired": "Exécuteur externe non enregistré",
+        "delegated_step_async_only": "Cette étape est interrogée, pas attendue",
+        "delegated_claim_missing": "Cette étape n’a aucun travail externe à interroger",
+        "thread_busy": "Ce fil répond encore",
+        "draft_conflict": "Ce brouillon a changé",
+        "session_stale": "La pull request a évolué",
+        "cursor_expired": "Le flux de modifications a dépassé ce curseur"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -774,7 +815,14 @@
         "expedition_settled": "L'exécution a dépassé son étape de pêche aux bogues : il n'y a plus rien à marquer ni à écarter. Rechargez l'exécution pour voir ce qu'elle a trouvé et quels constats ont été traités.",
         "not_awaiting_triage": "Soit elle explore encore un autre angle, soit elle est déjà terminée. Rechargez l'exécution pour voir où elle en est.",
         "already_addressed": "Une tâche de correction a déjà été créée pour elles ; rien n'a donc été recréé. Ouvrez la constatation pour rejoindre la tâche existante.",
-        "no_host_frame": "Une tâche de correction a besoin d'un service où vivre et d'un dépôt à corriger. Déplacez la tâche d'expédition sous un cadre de service et réessayez."
+        "no_host_frame": "Une tâche de correction a besoin d'un service où vivre et d'un dépôt à corriger. Déplacez la tâche d'expédition sous un cadre de service et réessayez.",
+        "delegated_executor_unwired": "Une étape de ce pipeline s’exécute sur un exécuteur externe que ce déploiement n’enregistre pas : le travail n’a donc nulle part où aller. Enregistrez l’exécuteur dans le code, ou remplacez l’étape par une qui s’exécute ici.",
+        "delegated_step_async_only": "Cette étape s’exécute sur un exécuteur externe et peut durer des heures : elle est donc lancée puis interrogée, au lieu d’être exécutée dans une seule requête. Démarrez l’exécution depuis le tableau ; si vous arrivez ici depuis votre propre code, pilotez l’étape par la voie asynchrone.",
+        "delegated_claim_missing": "L’enregistrement de ce que l’exécution a envoyé à l’exécuteur externe est absent : il n’y a donc rien à interroger. L’exécuteur lui-même n’a aucun problème. Rechargez l’exécution et relancez l’étape si elle reste bloquée.",
+        "thread_busy": "La question précédente de ce fil n'a pas encore reçu de réponse. Attends cette réponse ou pose ta question dans un autre fil.",
+        "draft_conflict": "Ce brouillon de commentaire a été modifié, publié ou abandonné depuis que tu l'as chargé. Recharge les brouillons et refais ta modification.",
+        "session_stale": "De nouveaux commits sont arrivés après la préparation de cette revue, donc ses brouillons peuvent viser les mauvaises lignes. Actualise la revue, vérifie les brouillons, puis publie.",
+        "cursor_expired": "Les modifications après ce curseur ne sont plus conservées. Prenez un nouvel instantané de l’annuaire, puis suivez le flux à partir de la position qu’il indique."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -786,6 +834,7 @@
       "providersUnconfigured": {
         "title": "Aucun fournisseur d’IA pour ce modèle",
         "body": "Aucun fournisseur n’est configuré pour {models}. Ajoutez une clé de fournisseur, connectez un abonnement ou activez Cloudflare AI pour l’exécuter.",
+        "cause": "Aucun fournisseur n’est configuré pour un modèle de ce pipeline. Ajoutez une clé de fournisseur, connectez un abonnement ou activez Cloudflare AI, puis réessayez.",
         "action": "Configurer l’IA"
       },
       "binaryStorageUnconfigured": {
@@ -813,6 +862,9 @@
       "title": "Cette vue n'a pas pu être chargée",
       "body": "Son code n'a pas pu être chargé. Cela signifie généralement que l'application a été mise à jour pendant que cet onglet était ouvert : les fichiers demandés par cette page ne sont plus sur le serveur. Rechargez pour obtenir la version actuelle.",
       "reload": "Recharger"
+    },
+    "reported": {
+      "description": "L'opération s'est exécutée et a signalé un échec. Affichez les détails pour voir ce qu'elle a indiqué."
     }
   },
   "personalSubscriptions": {
@@ -1586,7 +1638,24 @@
       "promptVariant": "Variante de prompt",
       "promptVariantAdditionOnly": "Seul l'ajout de cette variante a été appliqué. Le prompt de l'espace de travail pour cet agent a remplacé son texte de base.",
       "promptVariantSuperseded": "Cette variante n'a pas été appliquée. Le prompt de l'espace de travail pour cet agent a prévalu.",
-      "promptVariantWithdrawn": "Cette variante n'est plus enregistrée ; l'étape a donc utilisé le prompt d'origine."
+      "promptVariantWithdrawn": "Cette variante n'est plus enregistrée ; l'étape a donc utilisé le prompt d'origine.",
+      "delegated": {
+        "status": {
+          "cancelled": "Annulé",
+          "done": "Terminé à l’extérieur",
+          "failed": "Échec à l’extérieur",
+          "running": "Exécution à l’extérieur",
+          "starting": "Démarrage à l’extérieur",
+          "unrecognised": "Statut non reconnu ({status})"
+        },
+        "run": "Exécution externe",
+        "branch": "Branche",
+        "copyUrl": "Copier le lien de l’exécution externe",
+        "openRun": "Ouvrir l’exécution",
+        "noOutcome": "Aucun résultat enregistré",
+        "earlierAttempts": "Tentatives précédentes",
+        "usageNotReported": "La consommation de jetons n’est pas remontée par {executor} : cette étape manque donc dans les totaux ci-dessus."
+      }
     },
     "stepDetail": {
       "contents": "Contenu",
@@ -1653,7 +1722,7 @@
         "allTools": "Tous les outils exposés par ce serveur.",
         "narrowed": "Limité à : {tools}",
         "reason": {
-          "harnessUnsupported": "n'était pas disponible : la CLI d'agent de cette étape n'a pas de client MCP.",
+          "harnessUnsupported": "n'était pas disponible : la CLI d'agent de cette étape ne pouvait pas le fournir.",
           "transportUnsupported": "n'était pas disponible : la CLI d'agent de cette étape ne peut pas atteindre ce type de serveur.",
           "missingSecret": "n'était pas disponible : un identifiant dont il a besoin n'est pas renseigné pour ce tableau.",
           "reservedSecret": "n'était pas disponible : il demande une variable qui appartient à la configuration de la plateforme, la déclaration doit donc changer.",
@@ -1665,7 +1734,7 @@
           "unknown": "n'était pas disponible ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Exécutez l’étape sur une CLI d’agent qui parle MCP, ou élargissez la liste de harnesses du serveur. Une exécution Codex connectée avec votre propre session CLI n’a nulle part où conserver le serveur le temps de l’exécution : utilisez plutôt un identifiant de la plateforme.",
+          "harnessUnsupported": "Élargissez la liste de harnesses du serveur pour y inclure la CLI d’agent de cette étape, ou exécutez l’étape sur une CLI qui y figure. Une étape Pi enregistrée avant que Pi puisse servir des serveurs d’outils doit seulement être relancée sur une image de runner à jour. Une exécution Codex connectée avec votre propre session CLI n’a nulle part où conserver le serveur le temps de l’exécution : utilisez plutôt un identifiant de la plateforme.",
           "transportUnsupported": "Déclarez un serveur stdio à sa place, ou exécutez l’étape sur une CLI d’agent qui atteint les serveurs HTTP.",
           "missingSecret": "Renseignez l’identifiant qu’il nomme, soit comme variable d’environnement du déploiement, soit dans les identifiants de capacités, depuis la fenêtre Infrastructure.",
           "reservedSecret": "Modifiez la déclaration pour demander une autre clé ; définir cette variable est précisément ce qui n’aidera pas.",
@@ -1813,8 +1882,6 @@
     "exportJson": "Exporter en JSON",
     "exportHint": "Télécharger un export JSON de cette exécution adapté aux LLM",
     "closeEsc": "Fermer (Esc)",
-    "loadingActivity": "Chargement de l'activité du modèle…",
-    "loadingContext": "Chargement du contexte fourni…",
     "noCalls": "Aucun appel de modèle enregistré pour cette exécution.",
     "noContext": "Aucun contexte d'agent stocké pour cette exécution. Il est capturé à chaque dispatch lorsque l'espace de travail a activé 'Stocker le contexte complet de l'agent'.",
     "contextError": "Impossible de charger le contexte fourni.",
@@ -1906,7 +1973,6 @@
       "details": "Détails"
     },
     "webSearch": "Recherche web",
-    "loadingSearch": "Chargement des recherches web…",
     "noSearch": "Aucune recherche web enregistrée pour cette exécution. Les requêtes sont capturées lorsque la recherche web s'exécute et que l'espace de travail a activé « Stocker le contexte complet de l'agent ».",
     "search": {
       "available": "Disponible",
@@ -1945,7 +2011,6 @@
     "toolCalls": {
       "title": "Appels d'outils",
       "subtitle": "ce que les agents ont fait, dans l'ordre où ils l'ont fait",
-      "loading": "Chargement des appels d'outils…",
       "error": "Impossible de charger les appels d'outils.",
       "none": "Aucun appel d'outil enregistré pour cette exécution.",
       "noneMatching": "Aucun appel d'outil ne correspond à ce filtre.",
@@ -1966,7 +2031,6 @@
     "title": "Observabilité de la plateforme",
     "refresh": "Actualiser",
     "close": "Fermer",
-    "loading": "Chargement de l'état de la plateforme…",
     "retry": "Réessayer",
     "window": {
       "oneHour": "Dernière heure",
@@ -2006,6 +2070,7 @@
       "timeout": "Délai dépassé",
       "agent": "Agent",
       "job_failed": "Tâche échouée",
+      "delegated_failed": "Échec de l’exécuteur externe",
       "rejected": "Rejetée",
       "companion_rejected": "Compagnon rejeté",
       "stalled": "Bloquée",
@@ -2046,7 +2111,6 @@
   "reports": {
     "title": "Rapports",
     "refresh": "Actualiser",
-    "loading": "Chargement des rapports…",
     "retry": "Réessayer",
     "error": "Impossible de charger les rapports.",
     "period": "Du {from} au {to}",
@@ -2443,7 +2507,16 @@
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} de plus non affichées",
-      "failingRunGone": "Cette exécution n'est plus chargée et n'a aucune tâche à ouvrir."
+      "failingRunGone": "Cette exécution n'est plus chargée et n'a aucune tâche à ouvrir.",
+      "goTo": {
+        "review": "Relire",
+        "answer": "Répondre",
+        "test": "Tester",
+        "confirm": "Confirmer",
+        "triage": "Trier",
+        "choose": "Choisir",
+        "open": "Ouvrir"
+      }
     },
     "aiProvidersBanner": {
       "setup": {
@@ -2524,6 +2597,18 @@
         "action": "Vérifier la connexion"
       }
     },
+    "infraSetupNotice": {
+      "agentExecutor": {
+        "setup": "Les agents ne peuvent pas encore s'exécuter sur ce tableau : aucun pool de runners n'est connecté.",
+        "outage": "Les agents ne peuvent pas s'exécuter pour le moment : le pool de runners de ce tableau est injoignable."
+      },
+      "owner": {
+        "workspace_admin": "Un administrateur du tableau peut corriger cela.",
+        "account_admin": "Un administrateur du compte peut corriger cela.",
+        "operator": "Seul l'opérateur du déploiement peut corriger cela."
+      },
+      "fullSurface": "Vous pouvez corriger cela vous-même : changez de rôle en haut de la barre latérale."
+    },
     "spendWarningBanner": {
       "title": "Limite de dépense atteinte, exécution des agents en pause",
       "body": "La dépense en jetons de ce mois a atteint le budget configuré, les pipelines en cours ont donc été mis en pause pour éviter des coûts supplémentaires. L'exécution reprend automatiquement au renouvellement du budget le mois prochain, ou dès que la limite est relevée.",
@@ -2577,14 +2662,19 @@
       "cmd": {
         "newPipeline": "Créer un pipeline",
         "assistant": "Ouvrir l'assistant",
+        "guidedReview": "Explorer une pull request",
         "addFromRepo": "Ajouter un service depuis un dépôt existant",
         "bootstrapRepo": "Initialiser un nouveau dépôt",
         "githubManage": "Gérer la connexion GitHub",
         "githubConnect": "Connecter GitHub",
         "slackManage": "Gérer les notifications Slack",
         "slackConnect": "Connecter Slack",
-        "sourceManage": "Gérer {source}",
-        "sourceConnect": "Connecter {source}",
+        "documentSourceManage": "Gérer {source} (documents)",
+        "documentSourceConnect": "Connecter {source} (documents)",
+        "designSourceManage": "Gérer {source} (maquettes)",
+        "designSourceConnect": "Connecter {source} (maquettes)",
+        "taskSourceManage": "Gérer {source} (gestionnaire de tickets)",
+        "taskSourceConnect": "Connecter {source} (gestionnaire de tickets)",
         "documentImport": "Importer et générer depuis des documents",
         "taskImport": "Importer des tickets",
         "fragments": "Bibliothèque de fragments de contexte",
@@ -2600,11 +2690,15 @@
         "toggleUiMode": "Changer le mode d'interface",
         "chooseRole": "Changer de rôle",
         "foundationalServices": "Services fondamentaux",
-        "notificationSettings": "Gérer le routage des notifications"
+        "notificationSettings": "Gérer le routage des notifications",
+        "setupChecklist": "Liste de configuration",
+        "queueView": "Ouvrir la vue file d’attente",
+        "boardView": "Ouvrir la vue tableau"
       },
       "keywords": {
         "newPipeline": "pipeline agents chaîne",
         "assistant": "ia assistant demander invite fais-le pour moi",
+        "guidedReview": "revue guidée pull request pr explorer expliquer questions",
         "addFromRepo": "github importer existant",
         "bootstrapRepo": "échafaudage créer architecture de référence",
         "github": "git dépôts pull requests tickets",
@@ -2627,7 +2721,11 @@
         "chooseRole": "rôle ingénieur chef de produit designer profil vue simplifiée",
         "tutorial": "tutoriel visite guide aide apprendre découverte",
         "foundationalServices": "capacité partagée plateforme service api contrat openapi catalogue",
-        "notificationSettings": "notifications e-mail routage canaux boîte"
+        "notificationSettings": "notifications e-mail routage canaux boîte",
+        "setupChecklist": "configuration liste setup runner modèle github stockage environnement",
+        "queueView": "file attente vue liste en attente",
+        "boardView": "tableau canevas carte vue planifier",
+        "describeWork": "décrire nouveau travail tâche ajouter créer fonctionnalité bug"
       }
     },
     "integrationsHub": {
@@ -2845,19 +2943,23 @@
     "scopeHint": "Chaque niveau inclut les précédents.",
     "scope": {
       "read": {
-        "label": "Lecture seule",
+        "label": "Lecture · read",
         "description": "Voir les services, les tâches, les pipelines et les exécutions."
       },
+      "webhooks": {
+        "label": "Webhooks",
+        "description": "Et aussi enregistrer des webhooks qui envoient les changements à un autre système."
+      },
       "write": {
-        "label": "Lecture et écriture",
+        "label": "Écriture · write",
         "description": "Et aussi créer et lancer des tâches."
       },
       "decide": {
-        "label": "Lecture, écriture et décision",
+        "label": "Décision · decide",
         "description": "Et aussi répondre aux questions qu'attend une exécution en pause."
       },
       "admin": {
-        "label": "Accès complet",
+        "label": "Accès complet · admin",
         "description": "Et aussi supprimer des tâches et agir sur les notifications, ce qui peut fusionner une pull request."
       }
     },
@@ -2885,7 +2987,6 @@
         "intro": "Chaque préréglage définit un {baseModel} pour chaque agent, avec des remplacements facultatifs par agent. Un modèle épinglé sur une tâche individuelle prévaut tout de même sur le préréglage.",
         "introBaseModel": "modèle de base",
         "newPreset": "Nouveau préréglage",
-        "loadingCatalog": "Chargement du catalogue de modèles…",
         "default": "Par défaut",
         "setDefaultTitle": "Définir comme préréglage par défaut de l'espace de travail",
         "editTitle": "Modifier le préréglage",
@@ -2894,7 +2995,8 @@
         "basePrefix": "Base :",
         "overrideCount": "{count} remplacement | {count} remplacements",
         "empty": "Aucun préréglage pour l'instant. Créez-en un pour associer des modèles à vos agents.",
-        "customRouteOrder": "ordre de routes personnalisé"
+        "customRouteOrder": "ordre de routes personnalisé",
+        "catalogFailed": "Le catalogue de modèles ne s'est pas chargé. Réessayez pour voir les préréglages."
       },
       "editor": {
         "useBaseModel": "Utiliser le modèle de base",
@@ -2914,7 +3016,8 @@
         "deleteFailed": "Impossible de supprimer le préréglage",
         "nameRequiredTitle": "Nom requis",
         "nameRequiredBody": "Donnez un nom au préréglage.",
-        "saveFailed": "Impossible d'enregistrer le préréglage"
+        "saveFailed": "Impossible d'enregistrer le préréglage",
+        "catalogFailed": "Impossible de charger le catalogue de modèles"
       },
       "confirmDelete": {
         "title": "Supprimer ce préréglage de modèle ?",
@@ -3110,7 +3213,6 @@
     },
     "taskTypeSuppressions": {
       "intro": "Choisissez les opérations réutilisables de ce déploiement proposées sur ce tableau. En masquer une la retire du sélecteur de création de tâche ici et refuse la création de travail associée ; les autres tableaux ne sont pas affectés.",
-      "loading": "Chargement des opérations…",
       "empty": "Ce déploiement n'enregistre aucune opération réutilisable.",
       "offer": "Proposer sur ce tableau",
       "saveFailed": "Impossible de modifier les opérations proposées sur ce tableau"
@@ -3537,7 +3639,10 @@
         "createdByKey": "la clé d’API {id}",
         "revoke": "Révoquer le jeton",
         "boundToYou": "Votre abonnement",
-        "boundToOther": "Abonnement de {user}"
+        "boundToOther": "Abonnement de {user}",
+        "reachAll": "Tous les espaces de travail",
+        "reachMemberships": "Suit les espaces de travail de sa personne",
+        "reachCount": "{count} espaces de travail"
       },
       "add": {
         "heading": "Créer un jeton",
@@ -3545,19 +3650,29 @@
         "labelHelp": "Un nom pour reconnaître ce jeton plus tard.",
         "labelPlaceholder": "ex. pipeline CI",
         "scope": "Portée",
-        "scopeHelp": "Ce que ce jeton peut faire : lecture seule, lecture et écriture, ou accès complet (qui autorise aussi la suppression).",
+        "scopeHelp": "Chaque niveau inclut tout ce que permet le précédent. Lecture : consulter les tâches, les exécutions et leurs résultats. Webhooks : en plus, enregistrer et supprimer les webhooks qui envoient les changements à un autre système, comme les webhooks d'annuaire et de notification. Écriture : en plus, créer, modifier, démarrer, arrêter et relancer des tâches, et lancer des revues et des évaluations. Décision : en plus, répondre aux décisions humaines d'une exécution (approbations, constats de revue, questions d'entretien et de clarification, tests manuels) ; un jeton a aussi besoin de ce niveau pour démarrer un pipeline qui peut s'arrêter sur l'une d'elles. Accès complet (admin) : en plus, ajouter, configurer et supprimer des services, supprimer des tâches, lier des dépôts, gérer les connexions d'environnement, et agir sur les notifications.",
         "create": "Créer le jeton",
         "identity": "S'exécute en tant que",
         "identitySystem": "Cet espace de travail (jeton système)",
         "identitySelf": "Moi (jeton personnel)",
         "identitySystemHelp": "Les exécutions lancées avec ce jeton appartiennent à l'espace de travail et ne sont attribuées à personne. Il ne peut utiliser l'abonnement personnel Claude / Codex / GLM de qui que ce soit : une tâche fixée sur un tel modèle est refusée plutôt que facturée à quelqu'un d'absent. À utiliser pour la CI et les intégrations partagées.",
-        "identitySelfHelp": "Les exécutions lancées avec ce jeton vous sont attribuées et peuvent utiliser votre abonnement personnel Claude / Codex / GLM. Chaque appel doit aussi envoyer votre mot de passe personnel dans l'en-tête X-Personal-Password ; il n'est jamais conservé. À utiliser pour vos propres exécutions headless."
+        "identitySelfHelp": "Les exécutions lancées avec ce jeton vous sont attribuées et peuvent utiliser votre abonnement personnel Claude / Codex / GLM. Chaque appel doit aussi envoyer votre mot de passe personnel dans l'en-tête X-Personal-Password ; il n'est jamais conservé. À utiliser pour vos propres exécutions headless.",
+        "reach": "Espaces de travail",
+        "reachHelp": "Les espaces de travail sur lesquels ce jeton peut agir. Un jeton qui en couvre plusieurs indique l’espace de travail à chaque appel dans l’en-tête x-cat-factory-workspace.",
+        "reachAdminOnly": "Seul un administrateur du compte peut créer un jeton qui couvre d'autres espaces de travail, ce dont les webhooks d'annuaire ont besoin. Demandez-le à l'un d'eux.",
+        "reachThis": "Cet espace de travail uniquement",
+        "reachAll": "Tous les espaces de travail du compte",
+        "reachSelected": "Espaces de travail sélectionnés",
+        "reachMemberships": "Mes espaces de travail (suit mes adhésions)",
+        "reachMembershipsHelp": "Atteint à chaque appel chaque espace de travail où vous pouvez agir : en rejoindre ou en quitter un le change, sans rien recréer. Dans chacun, il ne peut pas faire plus que votre rôle ne le permet.",
+        "reachPick": "Choisir des espaces de travail"
       },
       "scopes": {
-        "read": "Lecture seule",
-        "write": "Lecture et écriture",
-        "decide": "Répondre aux décisions",
-        "admin": "Accès complet"
+        "read": "Lecture · read",
+        "webhooks": "Webhooks (inclut Lecture)",
+        "write": "Écriture · write (inclut Webhooks)",
+        "decide": "Décision · decide (inclut Écriture)",
+        "admin": "Accès complet · admin (inclut Décision)"
       },
       "toast": {
         "loadFailed": "Impossible de charger les jetons d'API",
@@ -3719,9 +3834,7 @@
       "toast": {
         "connected": "Clé OpenRouter connectée",
         "connectFailed": "Impossible de connecter la clé",
-        "rejected": "OpenRouter a rejeté la clé.",
         "unreachable": "Impossible de joindre OpenRouter",
-        "connectFirst": "Connectez d'abord une clé OpenRouter.",
         "saved": "Catalogue OpenRouter enregistré",
         "saveFailed": "Impossible d'enregistrer le catalogue"
       }
@@ -4045,7 +4158,6 @@
         "overrideActive": "Active",
         "personalOverrideHint": "Surchargez le gestionnaire de l'espace de travail pour ce type de provisionnement sur votre propre machine. Stocké par utilisateur.",
         "removeOverride": "Supprimer la surcharge",
-        "loading": "Chargement de la configuration de l'infrastructure…",
         "kubeNoun": "le gestionnaire Kubernetes",
         "kubeOverrideNoun": "le remplacement Kubernetes",
         "customNoun": "ce gestionnaire",
@@ -4458,7 +4570,6 @@
     "connect": {
       "yourInstallations": "Vos installations",
       "refresh": "Actualiser",
-      "lookingForInstallations": "Recherche d'installations…",
       "noInstallations": "Aucune installation trouvée pour l'App pour le moment. Installez-la ci-dessous, ou connectez-la par ID.",
       "installationMeta": "{targetType} · installation {id}",
       "linked": "liée",
@@ -4475,6 +4586,7 @@
       },
       "errors": {
         "listInstallations": "Impossible de lister les installations GitHub",
+        "loadProjection": "Impossible de charger les dépôts, les pull requests et les issues",
         "startInstall": "Impossible de démarrer l'installation de la GitHub App",
         "connect": "Connexion impossible"
       }
@@ -4485,14 +4597,12 @@
       "resync": "Resynchroniser",
       "backfill": "Reremplir",
       "disconnect": "Déconnecter",
-      "loading": "Chargement…",
       "tabs": {
         "repos": "Dépôts",
         "issues": "Tickets"
       },
       "linkedToBoard": "Lié à ce tableau",
       "manageRepos": "Gérer les dépôts",
-      "loadingRepos": "Chargement des dépôts…",
       "private": "privé",
       "saveSelection": "Enregistrer la sélection",
       "noLinkedRepos": "Aucun dépôt lié pour le moment. Utilisez Gérer les dépôts pour choisir les dépôts que ce tableau suit.",
@@ -4571,11 +4681,11 @@
         "frontendWiringFailedNote": "Les réglages du frontend n'ont pas été enregistrés. Ouvrez l'inspecteur de chaque application frontend pour définir son sous-répertoire et ses services backend."
       },
       "repoType": "Type de dépôt",
-      "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement)."
+      "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement).",
+      "prefillProviderMismatch": "Le lien visait {repo} chez un autre hébergeur, et ce tableau est connecté à {connected}. Cherchez le dépôt à la main, ou ouvrez le lien sur un tableau connecté à son hébergeur."
     },
     "repoTree": {
       "root": "racine",
-      "loading": "Chargement…",
       "noSubdirectories": "Aucun sous-répertoire ici.",
       "empty": "Rien ici.",
       "select": "Sélectionner",
@@ -4832,7 +4942,8 @@
         "scopes": "Les autorisations demandées seront : {scopes}",
         "fallback": "Vous préférez un jeton ? Utilisez plutôt les champs ci-dessous.",
         "failed": "Impossible de lancer la connexion à {source}"
-      }
+      },
+      "disconnectFailed": "Impossible de déconnecter"
     },
     "spawn": {
       "title": "Aperçu de la structure",
@@ -4980,7 +5091,8 @@
       "updateConnection": "Mettre à jour la connexion",
       "connect": "Connecter",
       "oauthButton": "Se connecter avec {label}",
-      "oauthOr": "ou connectez-vous avec une clé API"
+      "oauthOr": "ou connectez-vous avec une clé API",
+      "disconnectFailed": "Impossible de déconnecter"
     }
   },
   "bugHunt": {
@@ -5086,6 +5198,103 @@
       "unresolved_issue_service": "L'assistant n'a pas pu déterminer dans quel service créer la tâche. Nommez le service dans votre demande."
     }
   },
+  "guidedReview": {
+    "title": "Revue guidée",
+    "titleFor": "{repo} #{number} : {title}",
+    "outOfDate": "Les mises à jour en direct ont échoué, cette vue n'est peut-être plus à jour.",
+    "openFromTask": "Explorer avec la revue guidée",
+    "picker": {
+      "intro": "Choisis un dépôt et une pull request. Tu obtiens une vue d'ensemble du changement et peux poser des questions dans des fils séparés.",
+      "noRepos": "Aucun dépôt n'est encore lié à cet espace de travail.",
+      "repo": "Dépôt",
+      "openPulls": "Pull requests ouvertes",
+      "number": "Numéro de la pull request",
+      "open": "Ouvrir la revue"
+    },
+    "overview": {
+      "title": "Vue d'ensemble",
+      "stale": "La pull request a de nouveaux commits",
+      "refresh": "Actualiser",
+      "working": "Préparation de la vue d'ensemble…",
+      "intent": "Intention",
+      "changes": "Changements importants",
+      "consequences": "Conséquences",
+      "risks": "Risques",
+      "focus": "À examiner",
+      "suggested": "Questions suggérées"
+    },
+    "severity": {
+      "low": "Faible",
+      "medium": "Moyen",
+      "high": "Élevé"
+    },
+    "failure": {
+      "budget_exhausted": "Cet espace de travail a épuisé son budget de modèles.",
+      "model_unavailable": "Aucun modèle n'est disponible pour la revue guidée.",
+      "repo_unavailable": "La pull request n'a pas pu être lue depuis le dépôt.",
+      "generation_failed": "L'appel au modèle a échoué.",
+      "unreadable_reply": "Le modèle a répondu sous une forme illisible.",
+      "depth_unavailable": "Les réponses approfondies avec un checkout ne sont pas encore disponibles.",
+      "head_moved": "La pull request a avancé au-delà du commit revu. Actualise pour revoir son dernier commit.",
+      "detail": "Détails"
+    },
+    "dropped": {
+      "outside_diff": "la ligne est en dehors du diff",
+      "not_in_pr": "le fichier ne fait pas partie de cette pull request",
+      "incomplete": "la proposition était incomplète"
+    },
+    "thread": {
+      "new": "Nouveau fil",
+      "untitled": "Fil sans titre",
+      "empty": "Pose toutes tes questions sur cette pull request.",
+      "waiting": "Réponse en préparation…",
+      "placeholder": "Pose une question sur le changement",
+      "busy": "En attente de la réponse à la question précédente",
+      "send": "Demander",
+      "draftRequest": "Commentaires de revue demandés",
+      "deep": "Analyse approfondie",
+      "deepHint": "Répond depuis un checkout du dépôt : plus lent, mais peut chercher dans toute l'arborescence.",
+      "investigating": "Analyse dans un checkout du dépôt. Cela peut prendre plusieurs minutes."
+    },
+    "drafts": {
+      "title": "Brouillons de commentaires",
+      "request": "Rédiger des commentaires de revue",
+      "summary": "{kept} commentaires proposés sur {proposed} conservés comme brouillons.",
+      "side": {
+        "RIGHT": "nouveau code",
+        "LEFT": "ancien code"
+      },
+      "select": "Sélectionner ce brouillon pour le publier",
+      "status": {
+        "proposed": "Brouillon",
+        "posting": "Publication",
+        "posted": "Publié",
+        "failed": "Non publié",
+        "discarded": "Abandonné"
+      },
+      "edit": "Modifier",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "discard": "Abandonner",
+      "line": "Ligne",
+      "sideLabel": "Côté",
+      "postFailed": "L'hôte a refusé ce commentaire",
+      "summaryPlaceholder": "Commentaire de synthèse facultatif pour la pull request",
+      "summaryFailed": "L'hôte a refusé le commentaire de synthèse",
+      "post": "Publier {count} sur la pull request",
+      "postResult": "{posted} publiés, {failed} non publiés, {skipped} déjà traités."
+    },
+    "errors": {
+      "load": "Impossible de charger la revue",
+      "repos": "Impossible de charger les dépôts liés",
+      "open": "Impossible d'ouvrir la revue",
+      "ask": "Impossible de poser la question",
+      "drafts": "Impossible de demander des brouillons de commentaires",
+      "refresh": "Impossible d'actualiser la revue",
+      "editDraft": "Impossible d'enregistrer le brouillon",
+      "postDrafts": "Impossible de publier les brouillons"
+    }
+  },
   "pipeline": {
     "iterationCap": {
       "extraRound": "Un tour de plus",
@@ -5159,7 +5368,8 @@
         "review": "Revue",
         "research": "Recherche",
         "planning": "Planification",
-        "media": "Média"
+        "media": "Média",
+        "maintenance": "Maintenance de PR"
       },
       "strategyOption": {
         "specialist-panel": "Panel de spécialistes",
@@ -5331,7 +5541,8 @@
         "releaseInteractive": "Ne plus être le défaut dans l'application",
         "claimUnattended": "Définir comme défaut sans surveillance",
         "releaseUnattended": "Ne plus être le défaut sans surveillance"
-      }
+      },
+      "removeLabel": "Retirer le libellé {label}"
     },
     "progress": {
       "status": {
@@ -5661,7 +5872,6 @@
     "answerVerb": "Répondez à",
     "dismissVerb": "écartez",
     "empty": "Pas encore de revue. Le relecteur s'exécute automatiquement comme première étape au démarrage du pipeline de cette tâche.",
-    "loadingReview": "Chargement de la revue…",
     "reviewing": "Revue des exigences…",
     "settled": "Les exigences sont arrêtées. Le document ci-dessous est celui qu'utilise chaque étape d'agent en aval.",
     "exceeded": {
@@ -5801,7 +6011,6 @@
     "introAnswer": "Répondez à",
     "introDismiss": "écartez",
     "empty": "Pas encore de relecture. Le relecteur s'exécute automatiquement comme première étape au démarrage du pipeline de cette tâche.",
-    "loadingReview": "Chargement de la relecture…",
     "triaging": "Tri du rapport de bogue…",
     "converged": "Le rapport de bogue est clarifié. Le rapport ci-dessous est ce qu'utilise chaque étape d'agent en aval.",
     "capHeading": "Limite de {max} itérations atteinte avec des constats encore ouverts.",
@@ -5875,7 +6084,6 @@
   "consensus": {
     "titlePrefix": "Consensus",
     "participantCount": "aucun participant | un participant | {count} participants",
-    "loading": "Chargement de la session de consensus…",
     "empty": "Aucune session de consensus n'a encore été exécutée pour cette étape.",
     "failed": "Échec du consensus : {error}",
     "unknownError": "erreur inconnue",
@@ -5923,7 +6131,6 @@
     "introChoose": "Choisissez",
     "introDismiss": "écartez",
     "empty": "Pas encore de brainstorming. Il s'exécute automatiquement lorsque le pipeline de cette tâche atteint l'étape de brainstorming.",
-    "loading": "Chargement du brainstorming…",
     "generating": "Génération des options…",
     "settledBanner": "L'{doc} est arrêtée. Le document ci-dessous est ce qu'utilise l'étape suivante.",
     "exceeded": {
@@ -6001,7 +6208,6 @@
   },
   "spec": {
     "title": "Exigences",
-    "loading": "Chargement de la spécification…",
     "error": "Impossible de charger la spécification. Essayez de rouvrir cette fenêtre.",
     "overview": "Aperçu",
     "noFeatureGroups": "Aucun groupe de fonctionnalités",
@@ -6191,8 +6397,7 @@
     },
     "shot": {
       "failed": "Échec",
-      "failedToLoad": "Échec du chargement",
-      "loading": "Chargement…"
+      "failedToLoad": "Échec du chargement"
     },
     "screenshotAlt": "{view} (capture d'écran)",
     "screenshots": "Captures d'écran",
@@ -6255,7 +6460,8 @@
       "heading": "Importer une maquette de référence",
       "viewPlaceholder": "Nom de la vue (ex. login)",
       "tipReady": "Astuce : déposez une image directement sur une paire ci-dessus pour définir sa référence.",
-      "tipNeedView": "Saisissez d'abord un nom de vue, puis choisissez un fichier. Ou déposez une image directement sur une paire ci-dessus."
+      "tipNeedView": "Saisissez d'abord un nom de vue, puis choisissez un fichier. Ou déposez une image directement sur une paire ci-dessus.",
+      "choose": "Choisir un fichier"
     },
     "requestFix": {
       "heading": "Demander une correction",
@@ -6903,7 +7109,6 @@
       "awaiting": "{total} candidats ont été générés et attendent d’être comparés."
     },
     "asset": {
-      "loading": "Chargement du fichier…",
       "loadFailed": "Le fichier stocké n’a pas pu être chargé.",
       "retry": "Réessayer",
       "open": "Ouvrir",
@@ -7845,6 +8050,7 @@
     "connect": {
       "or": "ou",
       "noneConfigured": "Aucune connexion de gestion de code n'est configurée pour ce déploiement. Demandez à un opérateur de configurer une GitHub App ou un accès GitLab.",
+      "adminRequired": "Seul un administrateur du tableau peut connecter un hébergeur de dépôts. Demandez-le à un administrateur de ce tableau.",
       "gitlab": {
         "intro": "Collez un jeton d'accès personnel GitLab pour connecter cet espace de travail. cat-factory l'utilise pour lister vos projets, pousser des branches et ouvrir des merge requests.",
         "tokenLabel": "Jeton d'accès personnel",
@@ -7862,7 +8068,8 @@
     "onboarding": {
       "title": "Connecter cat-factory à {provider}",
       "titleAny": "Connecter cat-factory à vos dépôts",
-      "intro": "cat-factory fonctionne en ouvrant des pull requests sur vos dépôts. Connectez votre hébergeur de dépôts pour continuer."
+      "intro": "cat-factory fonctionne en ouvrant des pull requests sur vos dépôts. Connectez votre hébergeur de dépôts pour continuer.",
+      "switchBoard": "Ce n'est pas le bon tableau ? Passez à un autre, ou créez le vôtre."
     },
     "addService": {
       "intro": "Choisissez un dépôt {provider} existant à ajouter comme service du tableau. Sans amorçage : le dépôt est lié tel quel à un nouveau cadre de service, et les tâches que vous y exécutez ciblent ce dépôt.",
@@ -7978,6 +8185,10 @@
           "canvas": {
             "title": "Le tableau",
             "body": "Les services, modules et tâches vivent sur ce canevas. Faites glisser pour vous déplacer, faites défiler pour zoomer et cliquez sur une carte pour l'inspecter."
+          },
+          "views": {
+            "title": "Deux vues",
+            "body": "Le tableau a une deuxième vue. La file d’attente liste ce qui vous attend dans tous les services. Une fois la visite terminée, passez ici de la file d’attente à ce canevas. L’application s’ouvre sur la dernière vue utilisée."
           },
           "sidebar": {
             "title": "La barre latérale",
@@ -8257,11 +8468,11 @@
           },
           "banner": {
             "title": "Ce qui s’est mal passé",
-            "body": "La carte remplace sa barre de progression par ce bandeau. Il nomme la cause, les détails contiennent la sortie brute, et certaines causes proposent un bouton menant droit au réglage qui les corrige."
+            "body": "La carte remplace sa barre de progression par ce bandeau. Il indique ce qui a échoué et propose une action. Ouvrez la tâche pour lire la cause en une ligne, avec la sortie brute dans Détails."
           },
           "retry": {
-            "title": "Relancer",
-            "body": "Réessayer relance le travail. Les erreurs précédentes restent sur la tâche, sous « Erreurs précédentes », pour comparer les tentatives au lieu de perdre la trace."
+            "title": "L’étape suivante",
+            "body": "Ce bouton est l’étape suivante. En général c’est Réessayer, qui relance le travail. Quand un paramètre cause l’échec, il ouvre ce paramètre. Les erreurs précédentes restent sur la tâche, sous Erreurs précédentes, pour comparer les tentatives."
           },
           "finish": {
             "title": "Un échec est une information",
@@ -8385,6 +8596,7 @@
     "title": "Candidats générés",
     "titleWithBlock": "Candidats générés : {title}",
     "subtitle": "Comparez ce que chaque intégration a produit et conservez ce que vous voulez",
+    "pickOne": "Choisissez-en un. Choisir un candidat retire le choix précédent.",
     "automatic": "Un seul candidat a été généré, il a donc été conservé automatiquement. Personne ne l’a examiné.",
     "unlabelledSubject": "Aucun sujet déclaré",
     "noPreview": "Aucun aperçu disponible",
@@ -8566,5 +8778,177 @@
     "territories": {
       "heading": "Territoires"
     }
+  },
+  "appearance": {
+    "switcher": "Apparence",
+    "mode": {
+      "system": "Système",
+      "light": "Clair",
+      "dark": "Sombre"
+    },
+    "theme": {
+      "section": "Thème",
+      "import": "Importer un thème Nuxt UI…",
+      "remove": "Supprimer ce thème"
+    },
+    "import": {
+      "title": "Importer un thème",
+      "description": "Créez un thème dans l'éditeur de thèmes Nuxt UI, copiez son lien de partage et collez-le ici. Le thème est enregistré dans ce navigateur uniquement.",
+      "linkLabel": "Lien de partage",
+      "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
+      "nameLabel": "Nom",
+      "namePlaceholder": "Mon thème",
+      "nameTaken": "Un thème nommé « {typed} » existe déjà. Celui-ci sera enregistré sous « {name} ».",
+      "fontNote": "La police nommée par le thème n'est utilisée que si cet appareil ou ce déploiement la fournit ; sinon le navigateur utilise sa police par défaut.",
+      "submit": "Importer",
+      "cancel": "Annuler",
+      "error": {
+        "notALink": "Collez le lien de partage de ui.nuxt.com/theme (ou le JSON du thème).",
+        "malformed": "Ce lien ne contient pas de thème lisible. Copiez-le de nouveau depuis l'éditeur.",
+        "presetShorthand": "Ce lien nomme un préréglage de l'éditeur Nuxt UI que cette application ne connaît pas. Modifiez un réglage quelconque dans l'éditeur pour que le lien contienne tout le thème, puis copiez-le de nouveau.",
+        "unsupportedVersion": "Ce thème a été créé avec un format de l'éditeur plus récent que celui que cette application comprend."
+      }
+    }
+  },
+  "setup": {
+    "title": "Configuration",
+    "progress": "{done} sur {total} terminées",
+    "intro": "Ce dont ce workspace a besoin pour qu’une tâche s’exécute et soit fusionnée.",
+    "required": "obligatoire",
+    "optional": "facultatif",
+    "action": {
+      "change": "Modifier",
+      "connect": "Configurer",
+      "fix": "Corriger",
+      "review": "Examiner",
+      "retry": "Réessayer"
+    },
+    "rows": {
+      "checking": "Vérification…",
+      "notNeeded": "Ce déploiement ne l’utilise pas.",
+      "model": {
+        "title": "Modèle",
+        "done": "Un modèle est disponible.",
+        "missing": "Aucun modèle n’est disponible. Aucun agent ne peut s’exécuter tant que vous n’avez pas connecté un fournisseur."
+      },
+      "sourceControl": {
+        "title": "Gestion de versions",
+        "done": "Connecté. Les agents peuvent pousser des branches et ouvrir des pull requests.",
+        "missing": "Non connecté. Les agents ne peuvent pas ouvrir de pull requests."
+      },
+      "agentExecutor": {
+        "title": "Où les agents s’exécutent",
+        "done": "Un runner est configuré.",
+        "missing": "Aucun runner n’est configuré. Rien ne peut s’exécuter tant que vous n’en connectez pas un.",
+        "notNeeded": "Ce déploiement exécute les agents sans runner."
+      },
+      "ephemeralEnvironments": {
+        "title": "Environnements de test",
+        "done": "Configuré. Les testeurs peuvent utiliser un aperçu en direct.",
+        "missing": "Non configuré. Les testeurs qui ont besoin d’un aperçu en direct ne s’exécutent pas. Tous les autres agents s’exécutent."
+      },
+      "binaryStorage": {
+        "title": "Stockage des captures d’écran",
+        "done": "Configuré. Les vérifications visuelles sont activées.",
+        "missing": "Non configuré. Les vérifications visuelles sont désactivées."
+      }
+    },
+    "causes": {
+      "unreachable": "Configuré, mais injoignable pour le moment.",
+      "incomplete": "Connecté, mais un réglage obligatoire manque.",
+      "rejected": "GitHub a refusé le jeton d’accès.",
+      "underscoped": "Le jeton d’accès ne peut ni pousser ni ouvrir de pull requests.",
+      "presetBroken": "Le préréglage de modèle par défaut désigne un modèle qui n’est pas disponible.",
+      "probeFailed": "La vérification n’a pas répondu.",
+      "notReported": "Ce déploiement ne le signale pas."
+    },
+    "also": {
+      "title": "Aussi ici",
+      "pipelines": "Pipelines",
+      "riskPolicies": "Politiques de fusion",
+      "modelPresets": "Préréglages de modèle",
+      "counts": {
+        "repair": "À réparer : {count}",
+        "outdated": "Obsolètes : {count}",
+        "new": "Nouveaux : {count}"
+      },
+      "settings": "Réglages et connexions",
+      "workspaceSettings": "Réglages du workspace",
+      "integrations": "Intégrations"
+    }
+  },
+  "queue": {
+    "title": "File d’attente",
+    "summary": "{needsYou} vous attendent · {ready} prêtes à fusionner",
+    "filter": {
+      "allServices": "Tous les services",
+      "service": "Filtrer par service"
+    },
+    "columns": {
+      "needsYou": {
+        "label": "Vous attend",
+        "empty": "Rien ne vous attend."
+      },
+      "inFlight": {
+        "label": "En cours",
+        "empty": "Aucun agent ne travaille en ce moment."
+      },
+      "readyToMerge": {
+        "label": "Prête à fusionner",
+        "empty": "Aucune pull request n’attend d’être fusionnée."
+      }
+    },
+    "waiting": {
+      "label": "Pas commencé ({count})",
+      "empty": "Rien n’attend de démarrer."
+    },
+    "done": {
+      "count": "Fusionnées depuis le {date} : {count}",
+      "countAll": "Fusionnées : {count}",
+      "show": "Afficher",
+      "hide": "Masquer",
+      "capped": "Affiche les {shown} plus récentes sur {total}."
+    },
+    "card": {
+      "waited": "a attendu {duration}",
+      "active": "active il y a {duration}",
+      "merged": "fusionnée il y a {duration}",
+      "step": "étape {current} sur {total}",
+      "showOnBoard": "Afficher sur le tableau",
+      "answer": "Répondre",
+      "budgetPaused": "La limite de dépenses a mis cette exécution en pause. Elle reprend quand la limite augmente.",
+      "parked": "L’exécution attend une personne. Ouvrez la tâche pour voir ce qu’il faut.",
+      "waitingOn": "Attend {deps}",
+      "pr": "Pull request #{number}"
+    },
+    "describeWork": "Décrire un nouveau travail"
+  },
+  "views": {
+    "title": "Vues",
+    "queue": "File d’attente",
+    "board": "Tableau",
+    "openQueue": "Ouvrir la vue file d’attente"
+  },
+  "describeWork": {
+    "title": "Décrire un nouveau travail",
+    "textLabel": "Ce qu’il faut faire",
+    "textHint": "Une phrase suffit. Ajoutez plus de détails si vous en avez.",
+    "textPlaceholder": "Ajouter un journal d’audit pour les connexions. Enregistrer chaque connexion avec l’heure, l’utilisateur et le résultat.",
+    "savedAs": "Titre de la tâche : {title}",
+    "serviceLabel": "Service",
+    "servicePlaceholder": "Sélectionnez un service",
+    "kindLabel": "Type",
+    "kind": {
+      "feature": "Fonctionnalité",
+      "bug": "Bogue"
+    },
+    "moreKinds": "Plus de types…",
+    "changeHowItRuns": "Modifier le déroulement",
+    "workspaceDefault": "Défaut du workspace",
+    "defaultPipelineHint": "Le défaut du workspace : {name}. Un pipeline choisi ici le remplace pour cette tâche.",
+    "attachContext": "Joindre du contexte (ouvre le formulaire complet)",
+    "add": "Ajouter à la file",
+    "addAndStart": "Ajouter et démarrer",
+    "addedToast": "« {title} » a été ajoutée à la file"
   }
 }

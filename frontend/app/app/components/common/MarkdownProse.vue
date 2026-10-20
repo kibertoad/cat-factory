@@ -22,7 +22,8 @@ const html = computed(() => renderMarkdown(props.text))
 
 <style scoped>
 /* Prose styling for the sanitized markdown injected via v-html (out of scoped reach
-   without :deep), mirroring the inspector reader's prose styling. */
+   without :deep), mirroring the reader's `prose.css` token for token so both flip with the
+   theme and the mode. */
 .cf-prose :deep(p) {
   margin: 0.5rem 0;
 }
@@ -48,36 +49,42 @@ const html = computed(() => renderMarkdown(props.text))
 }
 .cf-prose :deep(strong) {
   font-weight: 600;
-  color: rgb(226 232 240);
+  color: var(--ui-text-highlighted);
 }
 .cf-prose :deep(em) {
   font-style: italic;
 }
 .cf-prose :deep(code) {
-  border-radius: 0.25rem;
-  background: rgb(30 41 59 / 0.8);
+  /* `--ui-radius` rather than `--radius-sm`: Nuxt UI declares the `--radius-*` scale in a
+   * `@theme default inline` block, so Tailwind emits those only when the COMPILED stylesheet
+   * graph references them. This scoped block is not part of that compile, and `--ui-radius` is
+   * an ordinary custom property on `:root`. `--radius-sm` is `var(--ui-radius)` (prose.css). */
+  border-radius: var(--ui-radius);
+  background: var(--ui-bg-elevated);
   padding: 0.1rem 0.3rem;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
-  color: rgb(199 210 254);
+  color: var(--ui-primary);
 }
 .cf-prose :deep(pre) {
   margin: 0.6rem 0;
   overflow: auto;
-  border-radius: 0.5rem;
-  background: rgb(2 6 23 / 0.6);
+  /* `--radius-lg` is `calc(var(--ui-radius) * 2)`; see the note on `code` above for why this
+   * block cannot name the scale variable. */
+  border-radius: calc(var(--ui-radius) * 2);
+  background: var(--app-bg-canvas);
   padding: 0.75rem 0.9rem;
 }
 .cf-prose :deep(pre code) {
   background: transparent;
   padding: 0;
-  color: rgb(203 213 225);
+  color: var(--ui-text-toned);
 }
 .cf-prose :deep(blockquote) {
   margin: 0.6rem 0;
-  border-left: 3px solid rgb(99 102 241 / 0.5);
+  border-left: 3px solid color-mix(in srgb, var(--ui-primary) 50%, transparent);
   padding-left: 0.75rem;
-  color: rgb(148 163 184);
+  color: var(--ui-text-muted);
 }
 .cf-prose :deep(h1),
 .cf-prose :deep(h2),
@@ -85,7 +92,7 @@ const html = computed(() => renderMarkdown(props.text))
 .cf-prose :deep(h4) {
   margin: 0.7rem 0 0.4rem;
   font-weight: 600;
-  color: rgb(226 232 240);
+  color: var(--ui-text-highlighted);
 }
 .cf-prose :deep(table) {
   margin: 0.6rem 0;
@@ -94,16 +101,16 @@ const html = computed(() => renderMarkdown(props.text))
 }
 .cf-prose :deep(th),
 .cf-prose :deep(td) {
-  border: 1px solid rgb(51 65 85);
+  border: 1px solid var(--ui-border-muted);
   padding: 0.3rem 0.6rem;
 }
 .cf-prose :deep(th) {
-  background: rgb(30 41 59 / 0.6);
+  background: var(--ui-bg-elevated);
   font-weight: 600;
 }
 .cf-prose :deep(hr) {
   margin: 1rem 0;
   border: none;
-  border-top: 1px solid rgb(51 65 85);
+  border-top: 1px solid var(--ui-border-muted);
 }
 </style>

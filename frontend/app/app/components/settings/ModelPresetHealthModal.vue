@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppModal from '~/components/common/AppModal.vue'
 // Startup advisory for built-in model presets that drifted from the catalog. Opened once per
 // session from the board page when `useModelPresetHealth` reports any issue. Lists:
 //   • new built-in presets the workspace doesn't have yet (ADD them);
@@ -57,10 +58,10 @@ const reseedableCount = computed(
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('modelPreset.health.title')" :ui="{ content: 'max-w-2xl' }">
+  <AppModal size="form" v-model:open="open" :title="t('modelPreset.health.title')">
     <template #body>
-      <div v-if="!hasIssues" class="py-6 text-center text-sm text-slate-400">
-        <UIcon name="i-lucide-check-circle-2" class="mx-auto mb-2 h-8 w-8 text-emerald-400" />
+      <div v-if="!hasIssues" class="py-6 text-center text-sm text-muted">
+        <UIcon name="i-lucide-check-circle-2" class="mx-auto mb-2 h-8 w-8 text-app-success-400" />
         {{ t('modelPreset.health.allValid') }}
       </div>
 
@@ -68,26 +69,25 @@ const reseedableCount = computed(
         <!-- New built-in presets the workspace can add. -->
         <section v-if="newPresets.length" class="space-y-2">
           <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-sparkles" class="h-4 w-4 text-emerald-400" />
-            <h3 class="text-sm font-semibold text-slate-200">
+            <UIcon name="i-lucide-sparkles" class="h-4 w-4 text-app-success-400" />
+            <h3 class="text-sm font-semibold text-default">
               {{ t('modelPreset.health.newHeading') }}
             </h3>
           </div>
-          <p class="text-[11px] text-slate-500">{{ t('modelPreset.health.newDescription') }}</p>
+          <p class="text-2xs text-dimmed">{{ t('modelPreset.health.newDescription') }}</p>
           <ul class="space-y-2">
             <li
               v-for="i in newPresets"
               :key="i.id"
-              class="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3"
+              class="flex items-center justify-between gap-3 rounded-lg border border-default bg-default/40 p-3"
             >
               <div class="min-w-0">
-                <span class="truncate text-sm font-medium text-slate-100 capitalize">{{
+                <span class="truncate text-sm font-medium text-app-100 capitalize">{{
                   i.name
                 }}</span>
               </div>
               <UButton
                 size="xs"
-                color="primary"
                 variant="subtle"
                 icon="i-lucide-plus"
                 :loading="isBusy(i.id)"
@@ -103,21 +103,23 @@ const reseedableCount = computed(
         <!-- Outdated built-ins: a newer catalog version is available. -->
         <section v-if="outdated.length" class="space-y-2">
           <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-arrow-up-circle" class="h-4 w-4 text-amber-400" />
-            <h3 class="text-sm font-semibold text-slate-200">
+            <UIcon name="i-lucide-arrow-up-circle" class="h-4 w-4 text-app-warning-400" />
+            <h3 class="text-sm font-semibold text-default">
               {{ t('modelPreset.health.updatesHeading') }}
             </h3>
           </div>
-          <p class="text-[11px] text-slate-500">{{ t('modelPreset.health.updatesDescription') }}</p>
+          <p class="text-2xs text-dimmed">
+            {{ t('modelPreset.health.updatesDescription') }}
+          </p>
           <ul class="space-y-2">
             <li
               v-for="i in outdated"
               :key="i.id"
-              class="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3"
+              class="flex items-center justify-between gap-3 rounded-lg border border-default bg-default/40 p-3"
             >
               <div class="min-w-0">
-                <span class="truncate text-sm font-medium text-slate-100">{{ i.name }}</span>
-                <p class="text-[11px] text-amber-400/80">
+                <span class="truncate text-sm font-medium text-app-100">{{ i.name }}</span>
+                <p class="text-2xs text-app-warning-400/80">
                   {{
                     t('modelPreset.health.versionAvailable', {
                       from: i.fromVersion ?? 0,
@@ -128,7 +130,6 @@ const reseedableCount = computed(
               </div>
               <UButton
                 size="xs"
-                color="primary"
                 variant="subtle"
                 icon="i-lucide-rotate-ccw"
                 :loading="isBusy(i.id)"
@@ -147,7 +148,6 @@ const reseedableCount = computed(
       <div class="flex w-full items-center justify-between gap-2">
         <UButton
           v-if="reseedableCount > 1"
-          color="primary"
           variant="ghost"
           icon="i-lucide-rotate-ccw"
           :loading="anyBusy"
@@ -166,5 +166,5 @@ const reseedableCount = computed(
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

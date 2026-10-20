@@ -16,7 +16,7 @@ structurally cannot reach.
 **Why now.** Two independent problems compound:
 
 1. **Seven build presets are the same spine with at most two toggles.** `coder → [reviewer] →
-[blueprints] → [mocker] → deployer → tester-* → conflicts → ci → [human gate] → merger`
+   [blueprints] → [mocker] → deployer → tester-* → conflicts → ci → [human gate] → merger`
    describes `pl_quick`, `pl_simple`, `pl_dep_update`, `pl_pr_review`, `pl_human_review`,
    `pl_frontend` and `pl_visual`. `pl_quick` and `pl_simple` differ by **reviewer-vs-blueprints**:
    nobody picks a pipeline on that axis. `pl_fullstack` is the same spine with every optional step
@@ -95,7 +95,7 @@ The genuine hard dependencies are four, and each already has its own guard:
 | `bug-intake` → schedule            | `assertPipelineLaunchable`                                  | never gatable             |
 
 So gatability is a **per-kind capability**, not a category test. Built-in kinds are not
-`AgentKindDefinition` entries (CLAUDE.md: "the built-in agents aren't migrated to this model"), so it
+`AgentKindDefinition` entries (AGENTS.md: "the built-in agents aren't migrated to this model"), so it
 follows the established per-concern idiom; a `BUILTIN_*` table beside a registry accessor, exactly
 like `read-only.ts` and `tuning.ts`. The one departure from that idiom is WHERE the table lives: in
 `@cat-factory/contracts`, because the SPA needs the same answer and cannot see `@cat-factory/agents`

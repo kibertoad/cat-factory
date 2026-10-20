@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   observabilityConnectionViewSchema,
@@ -34,7 +34,7 @@ export const setObservabilityConnectionContract = defineApiContract({
 export const deleteObservabilityConnectionContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/observability/connection',
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const listReleaseHealthConfigsContract = defineApiContract({
@@ -55,5 +55,5 @@ export const deleteReleaseHealthConfigContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: blockIdParams,
   pathResolver: ({ blockId }) => `/release-health-configs/${blockId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

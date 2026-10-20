@@ -27,7 +27,6 @@ import {
   renderStandardContext,
   renderStandardsIndex,
   resolvePrHeadNumber,
-  resolvePrNumber,
   standardsContextFileName,
 } from './pr-reviewer.js'
 
@@ -84,27 +83,6 @@ function ctxWithThreads(
     logger: noopLogger,
   }
 }
-
-describe('resolvePrNumber', () => {
-  it('prefers a valid prNumber', () => {
-    expect(resolvePrNumber({ prNumber: 42, prUrl: 'https://github.com/o/r/pull/7' })).toBe(42)
-  })
-  it('parses a GitHub pull URL', () => {
-    expect(resolvePrNumber({ prUrl: 'https://github.com/o/r/pull/123' })).toBe(123)
-  })
-  it('parses a GitLab merge-request URL', () => {
-    expect(resolvePrNumber({ prUrl: 'https://gitlab.com/o/r/-/merge_requests/55' })).toBe(55)
-  })
-  it('parses a trailing #<n>', () => {
-    expect(resolvePrNumber({ prUrl: 'o/r#88' })).toBe(88)
-  })
-  it('returns null for a missing/zero/non-numeric ref', () => {
-    expect(resolvePrNumber(undefined)).toBeNull()
-    expect(resolvePrNumber({})).toBeNull()
-    expect(resolvePrNumber({ prNumber: 0 })).toBeNull()
-    expect(resolvePrNumber({ prUrl: 'not a url' })).toBeNull()
-  })
-})
 
 describe('resolvePrHeadNumber', () => {
   // WHICH pull request a `prHead` step prefetches is the KIND's declaration, and both readers of

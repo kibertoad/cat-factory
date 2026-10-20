@@ -23,21 +23,22 @@ const { t } = useI18n()
       :key="`${c.name}-${i}`"
       class="flex items-center"
       :class="
-        dense ? 'gap-1.5' : 'gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-1.5'
+        dense ? 'gap-1.5' : 'gap-2 rounded-md border border-default bg-app-950/40 px-3 py-1.5'
       "
     >
       <UIcon
         name="i-lucide-circle-x"
-        class="shrink-0 text-rose-400"
+        class="shrink-0 text-app-error-400"
         :class="dense ? 'h-3 w-3' : 'h-3.5 w-3.5'"
       />
-      <a
+      <ULink
+        raw
         v-if="c.url"
-        :href="c.url"
+        :to="c.url"
         target="_blank"
         rel="noopener"
-        class="group min-w-0 flex-1 truncate text-sky-300 hover:text-sky-200 hover:underline"
-        :class="dense ? 'text-[12px]' : 'text-[13px]'"
+        class="group min-w-0 flex-1 truncate text-app-info-300 hover:text-app-info-200 hover:underline"
+        :class="dense ? 'text-xs' : 'text-sm'"
         :title="t('gates.ci.openOnGithub', { name: c.name })"
       >
         {{ c.name }}
@@ -45,16 +46,16 @@ const { t } = useI18n()
           name="i-lucide-external-link"
           class="ms-0.5 inline h-3 w-3 opacity-60 group-hover:opacity-100"
         />
-      </a>
+      </ULink>
       <span
         v-else
         class="min-w-0 flex-1 truncate"
-        :class="dense ? 'text-[12px] text-slate-300' : 'text-[13px] text-slate-200'"
+        :class="dense ? 'text-xs text-toned' : 'text-sm text-default'"
         >{{ c.name }}</span
       >
       <span
-        class="shrink-0 uppercase text-rose-300"
-        :class="dense ? 'text-[10px]' : 'text-[11px]'"
+        class="shrink-0 uppercase text-app-error-300"
+        :class="dense ? 'text-3xs' : 'text-2xs'"
         >{{ c.conclusion ?? t('gates.ci.conclusionFallback') }}</span
       >
     </li>

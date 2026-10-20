@@ -24,6 +24,7 @@ import type {
 import type { AgentExecutor } from '@cat-factory/kernel'
 import { noopLogger } from '@cat-factory/kernel'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
+import type { StartStepDispatch } from './delegation.logic.js'
 import type { Block } from '@cat-factory/contracts'
 import type { ExecutionServiceDependencies, ResolvedRunRiskPolicy } from './ExecutionService.js'
 import type { RunPolicyScope } from './policy-types.js'
@@ -55,6 +56,12 @@ import { defaultTaskTypeRegistry } from '@cat-factory/kernel'
  * bound to the live {@link ExecutionService}, so they resolve against its state at call time.
  */
 export interface GateWindowControllerDeps {
+  /**
+   * The shared async dispatch every site goes through, bound by the engine. Threaded in rather
+   * than rebuilt here, so the four controllers below and the dispatcher's own sites take the same
+   * claim-before-effect path. See {@link StartStepDispatch}.
+   */
+  startStepDispatch: StartStepDispatch
   blockRepository: BlockRepository
   executionRepository: ExecutionRepository
   workRunner: WorkRunner
@@ -124,6 +131,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     agentExecutor,
     notificationService,
     contextBuilder,
+    startStepDispatch,
     stateMachine,
     stepGraph,
     idGenerator,
@@ -146,6 +154,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     notificationService,
     agentExecutor,
     contextBuilder,
+    startStepDispatch,
     resolveRiskPolicy,
     stateMachine,
     // The test quality-control companion's inline reviewer (when wired); absent → QC
@@ -158,6 +167,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     notificationService,
     agentExecutor,
     contextBuilder,
+    startStepDispatch,
     stateMachine,
     clockNow,
   })
@@ -167,6 +177,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     workRunner,
     agentExecutor,
     contextBuilder,
+    startStepDispatch,
     notificationService,
     // The human-test gate READS the env the upstream `deployer` step provisioned (it no longer
     // stands up its own) — resolved by the block's OWN service frame, exactly as the tester
@@ -213,6 +224,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     workRunner,
     agentExecutor,
     contextBuilder,
+    startStepDispatch,
     notificationService,
     ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
     ...(documentRepository ? { documentRepository } : {}),

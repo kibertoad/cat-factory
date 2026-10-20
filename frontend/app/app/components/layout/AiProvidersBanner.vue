@@ -8,6 +8,7 @@ import { computed } from 'vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
+const remedies = useSetupRemedies()
 const { ready, hasUsableModel, defaultPresetBroken } = useAiReadiness()
 
 const showSetup = computed(() => ready.value && !hasUsableModel.value && !ui.aiSetupDismissed)
@@ -24,14 +25,14 @@ const show = computed(() => showSetup.value || showPreset.value)
       <!-- (1) No usable AI source -->
       <div
         v-if="showSetup"
-        class="w-full max-w-3xl rounded-2xl border-2 border-amber-500/70 bg-amber-950/95 p-5 shadow-2xl backdrop-blur"
+        class="w-full max-w-3xl rounded-2xl border-2 border-app-warning-500/70 bg-app-warning-950/95 p-5 shadow-2xl backdrop-blur"
         role="alert"
       >
         <div class="flex items-start gap-4">
-          <UIcon name="i-lucide-cpu" class="mt-0.5 h-9 w-9 shrink-0 text-amber-400" />
+          <UIcon name="i-lucide-cpu" class="mt-0.5 h-9 w-9 shrink-0 text-app-warning-400" />
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
-              <h2 class="text-lg font-semibold text-amber-100">
+              <h2 class="text-lg font-semibold text-app-warning-100">
                 {{ t('layout.aiProvidersBanner.setup.title') }}
               </h2>
               <UButton
@@ -43,16 +44,11 @@ const show = computed(() => showSetup.value || showPreset.value)
                 @click="ui.dismissAiSetup()"
               />
             </div>
-            <p class="mt-1 text-sm text-amber-200/90">
+            <p class="mt-1 text-sm text-app-warning-200/90">
               {{ t('layout.aiProvidersBanner.setup.body') }}
             </p>
             <div class="mt-4">
-              <UButton
-                color="warning"
-                variant="solid"
-                icon="i-lucide-settings"
-                @click="ui.openAiProviderSetup()"
-              >
+              <UButton color="warning" icon="i-lucide-settings" @click="remedies.openModelSetup()">
                 {{ t('layout.aiProvidersBanner.setup.action') }}
               </UButton>
             </div>
@@ -63,14 +59,17 @@ const show = computed(() => showSetup.value || showPreset.value)
       <!-- (2) Default preset references unavailable models -->
       <div
         v-else
-        class="w-full max-w-3xl rounded-2xl border border-amber-500/50 bg-amber-950/90 p-4 shadow-xl backdrop-blur"
+        class="w-full max-w-3xl rounded-2xl border border-app-warning-500/50 bg-app-warning-950/90 p-4 shadow-xl backdrop-blur"
         role="alert"
       >
         <div class="flex items-start gap-3">
-          <UIcon name="i-lucide-triangle-alert" class="mt-0.5 h-7 w-7 shrink-0 text-amber-400" />
+          <UIcon
+            name="i-lucide-triangle-alert"
+            class="mt-0.5 h-7 w-7 shrink-0 text-app-warning-400"
+          />
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
-              <h2 class="text-sm font-semibold text-amber-100">
+              <h2 class="text-sm font-semibold text-app-warning-100">
                 {{ t('layout.aiProvidersBanner.preset.title') }}
               </h2>
               <UButton
@@ -82,16 +81,15 @@ const show = computed(() => showSetup.value || showPreset.value)
                 @click="ui.dismissAiPresetMismatch()"
               />
             </div>
-            <p class="mt-1 text-[13px] text-amber-200/90">
+            <p class="mt-1 text-sm text-app-warning-200/90">
               {{ t('layout.aiProvidersBanner.preset.body') }}
             </p>
             <div class="mt-3">
               <UButton
                 size="sm"
                 color="warning"
-                variant="solid"
                 icon="i-lucide-cpu"
-                @click="ui.openAiPresetMismatch()"
+                @click="remedies.openPresetMismatch()"
               >
                 {{ t('layout.aiProvidersBanner.preset.action') }}
               </UButton>

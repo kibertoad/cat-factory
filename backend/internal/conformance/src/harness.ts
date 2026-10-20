@@ -11,6 +11,7 @@ import type {
   BlockRepository,
   BoardChange,
   DocInterviewRepository,
+  GuidedReviewRepository,
   AccountRiskPolicyRepository,
   AccountSettingsRepository,
   DocumentRepository,
@@ -27,6 +28,7 @@ import type {
   MonorepoAdoptionAdvisor,
   RepoBootstrapper,
   FragmentBriefGenerator,
+  DelegatedExecutorRegistry,
   JudgeRegistry,
   InitiativePresetRegistry,
   StepResolverRegistry,
@@ -37,6 +39,7 @@ import type {
   PipelineRegistry,
   PromptFragmentRegistry,
   PrVerificationReportPublisher,
+  RepoFiles,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
@@ -48,6 +51,7 @@ import type {
   InlineUseCaseRegistry,
   InlineUseCaseGenerator,
   WorkspaceMemberRepository,
+  PublicApiKeyRepository,
   WorkspaceRepository,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
@@ -154,6 +158,8 @@ export interface ConformanceApp {
    * RBAC suite can drive requests AS a specific member/viewer/admin. Requires {@link authEnabled}.
    */
   session(user: { id: string; login?: string; name?: string | null }): Promise<string>
+  /** Mint a real signed machine token for the `/internal/*` machine API. Requires {@link authEnabled}. */
+  machineToken(): Promise<string>
   /**
    * Create a workspace owned by `ownerUserId` inside `accountId`, straight through the facade's
    * `WorkspaceService` — the seam the RBAC suite needs to place a board in a SPECIFIC account
@@ -323,6 +329,13 @@ export interface ConformanceApp {
    */
   workspaceMemberRepository(): WorkspaceMemberRepository
   /**
+   * The facade's public-API key repository over its real store, so the key-reach suite can assert
+   * the per-account cap count (a key left with no workspace holds no slot) on D1 and Postgres. No
+   * HTTP route reads the count, and reaching the cap through one would take 200 mints. Supplied
+   * by the facades that run that suite; the local facades serve no `/api/v1` keys of their own.
+   */
+  publicApiKeyRepository?(): PublicApiKeyRepository
+  /**
    * The facade's initiative repository over its real store. Lets the suite seed an initiative
    * entity (with a registered preset) directly, so it can assert the engine folds that preset's
    * per-kind steering onto a SPAWNED run's agent context (D1) — a spawned run is a task carrying
@@ -360,6 +373,11 @@ export interface ConformanceApp {
    * through the repository directly rather than an HTTP flow.
    */
   docInterviewRepository(): DocInterviewRepository
+  /**
+   * The facade's guided-PR-review repository over its real store. Its contract is concurrency
+   * (one live answer per thread, single-claim drivers), so it is asserted at the repository layer.
+   */
+  guidedReviewRepository(): GuidedReviewRepository
   /**
    * The facade's account-settings repository over its real store, so the suite can assert the
    * NON-SECRET config read (`getConfigByAccount`) behaves identically on D1 and Postgres.
@@ -754,6 +772,24 @@ export interface ConformanceAppOptions {
    * container build. Absent → the facade's default (empty) judge registry.
    */
   judgeRegistry?: JudgeRegistry
+  /**
+   * Inject the app-owned DELEGATED-EXECUTOR registry, pre-loaded with a deterministic fake, so the
+   * suite can assert a deployment-registered EXTERNAL executor dispatches, polls, settles and is
+   * torn down identically on EVERY runtime. Each facade harness wraps its fake agent executor in
+   * the production `CompositeAgentExecutor` when this is present (see `withDelegatedArm`), because
+   * a harness that overrides `agentExecutor` wholesale would otherwise have the fake answer for the
+   * delegated kind too and assert nothing about the arm. Absent → the facade's default (empty)
+   * registry, and nothing changes.
+   */
+  delegatedExecutorRegistry?: DelegatedExecutorRegistry
+  /**
+   * Inject the checkout-free repo binding the DELEGATED arm creates a `platform-creates` work
+   * branch through (`fakeDelegationRepoFiles()`), so the engine's one VCS write on that path is
+   * driven on EVERY runtime. Read only by `withDelegatedArm`, beside the registry above. Absent →
+   * the arm is built with no binding, which is what a deployment with no VCS provider configured
+   * looks like, and such a dispatch is refused rather than started.
+   */
+  delegatedRepoFiles?: RepoFiles
   /**
    * Inject the judge's verdict producer (a deterministic fake in the suite) so the whole loop —
    * pass / park / bounce / fail — is driven on EVERY runtime without a real model, and so the

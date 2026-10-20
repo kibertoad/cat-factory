@@ -67,7 +67,7 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   libraries. It is the discovery half of `fragmentIds` on task creation, and `fragmentCatalog.ts`
   holds both halves so a list that offers an id and a create that refuses one cannot disagree),
   `publicApiAuth.ts` (the
-  shared bearer gate + `read ⊂ write ⊂ decide ⊂ admin` ladder, plus `authorizeOrThrow` for a route
+  shared bearer gate + `read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin` ladder, plus `authorizeOrThrow` for a route
   with no contract-declared response and `bearerToken` for the one that FORWARDS the key),
   `publicApiAdmission.ts` (what an external
   caller may launch: `parkSurfacesOf` reads the PIPELINE, and `publicRunParkSurfaces` composes in
@@ -356,4 +356,4 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
     ports, and memoizes the whole decision per scope (one probe boundary re-mints per request).
     See `backend/docs/security-model.md`.
 
-**See also:** `CLAUDE.md` → "Workspace RBAC enforcement", "Keep the runtimes symmetric", "Conventions".
+**See also:** `AGENTS.md` → "Workspace RBAC enforcement", "Keep the runtimes symmetric", "Conventions".

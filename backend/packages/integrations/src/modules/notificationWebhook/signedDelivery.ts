@@ -137,8 +137,8 @@ async function postSignedWebhook(
 
   // The endpoint is operator-supplied, and the body we are about to POST carries the workspace's
   // work descriptions signed with a deployment secret. So the URL is re-validated on EVERY
-  // redirect hop through the shared SSRF seam: `startsWith('https://')` at registration only ever
-  // vouched for the FIRST url, and a receiver is free to 302 that to the cloud-metadata endpoint.
+  // redirect hop through the shared SSRF seam: the guard at registration only ever vouched for
+  // the FIRST url, and a receiver is free to 302 that to the cloud-metadata endpoint.
   // `safeFetch` also strips the body and credential headers on a cross-origin hop, so a permitted
   // host cannot bounce the delivery to a different one.
   const assertSafe = (u: string) => assertSafeNotificationWebhookUrl(u, deps.urlSafetyPolicy)

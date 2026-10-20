@@ -1,4 +1,6 @@
 import type {
+  AccountRunnerPoolRecord,
+  AccountRunnerPoolRepository,
   GitHubInstallation,
   GitHubInstallationRepository,
   RunnerPoolConnectionRecord,
@@ -6,7 +8,12 @@ import type {
 } from '@cat-factory/kernel'
 import { and, eq, inArray, isNull, or } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
-import { githubInstallations, runnerPoolConnections, workspaces } from '../db/schema.js'
+import {
+  accountRunnerPools,
+  githubInstallations,
+  runnerPoolConnections,
+  workspaces,
+} from '../db/schema.js'
 
 // Drizzle/Postgres adapters for the persistence the container-agent execution path
 // needs on the Node facade: a workspace's self-hosted runner-pool binding, its
@@ -76,6 +83,80 @@ export class DrizzleRunnerPoolConnectionRepository implements RunnerPoolConnecti
           isNull(runnerPoolConnections.deleted_at),
         ),
       )
+  }
+}
+
+function rowToAccountPool(row: typeof accountRunnerPools.$inferSelect): AccountRunnerPoolRecord {
+  return {
+    accountId: row.account_id,
+    kind: row.kind,
+    providerId: row.provider_id,
+    label: row.label,
+    baseUrl: row.base_url,
+    configJson: row.config_json,
+    secretsCipher: row.secrets_cipher,
+    createdAt: row.created_at,
+  }
+}
+
+/** Postgres-backed store of account → runner-pool rows (mirror of D1 migration 0110). */
+export class DrizzleAccountRunnerPoolRepository implements AccountRunnerPoolRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByAccount(accountId: string): Promise<AccountRunnerPoolRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(accountRunnerPools)
+      .where(eq(accountRunnerPools.account_id, accountId))
+      .limit(1)
+    return rows[0] ? rowToAccountPool(rows[0]) : null
+  }
+
+  async listByAccounts(accountIds: string[]): Promise<AccountRunnerPoolRecord[]> {
+    const out: AccountRunnerPoolRecord[] = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < accountIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(accountRunnerPools)
+        .where(inArray(accountRunnerPools.account_id, accountIds.slice(i, i + 500)))
+      for (const row of rows) out.push(rowToAccountPool(row))
+    }
+    return out
+  }
+
+  async insertIfAbsent(record: AccountRunnerPoolRecord): Promise<boolean> {
+    const inserted = await this.db
+      .insert(accountRunnerPools)
+      .values({
+        account_id: record.accountId,
+        kind: record.kind,
+        provider_id: record.providerId,
+        label: record.label,
+        base_url: record.baseUrl,
+        config_json: record.configJson,
+        secrets_cipher: record.secretsCipher,
+        created_at: record.createdAt,
+      })
+      .onConflictDoNothing({ target: accountRunnerPools.account_id })
+      .returning({ accountId: accountRunnerPools.account_id })
+    return inserted.length > 0
+  }
+
+  async replace(record: AccountRunnerPoolRecord): Promise<boolean> {
+    const replaced = await this.db
+      .update(accountRunnerPools)
+      .set({
+        kind: record.kind,
+        provider_id: record.providerId,
+        label: record.label,
+        base_url: record.baseUrl,
+        config_json: record.configJson,
+        secrets_cipher: record.secretsCipher,
+      })
+      .where(eq(accountRunnerPools.account_id, record.accountId))
+      .returning({ accountId: accountRunnerPools.account_id })
+    return replaced.length > 0
   }
 }
 

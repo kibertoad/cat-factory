@@ -36,7 +36,7 @@ lowered it, so an empty result for an older run can mean pruned rather than neve
 
 Run wrangler from `deploy/backend` (its `wrangler.toml` defines the `cat_factory`
 binding). Always pass `--remote` (production) and `--json` (parseable). Do NOT
-pre-check Cloudflare auth — assume the login is correct (see CLAUDE.md).
+pre-check Cloudflare auth — assume the login is correct (see AGENTS.md).
 
 ```bash
 cd deploy/backend

@@ -63,8 +63,10 @@ export function makesOutboundCall(source) {
  * ASSIGNED as an endpoint leaves the ones a vendor page can make wrong.
  */
 const VENDOR_ENDPOINT = new RegExp(
-  String.raw`(?:endpoint|base_?url|api_?host|api_?base|servers?)\s*[:=]\s*[[{(]?\s*\{?\s*` +
-    String.raw`(?:url\s*:\s*)?['"\x60](?:https?:\/\/)?([a-z0-9][a-z0-9.-]*\.[a-z]{2,})`,
+  String.raw`(?:endpoint|base_?url|api_?host|api_?base|servers?|transport)\s*[:=]\s*[[{(]?\s*\{?\s*` +
+    // An MCP tool server declares its host under `transport: { kind: 'http', url: '…' }`, so tolerate
+    // a leading `kind: '…',` before `url:`. Still requires `url:` plus a real host, so the narrowness holds.
+    String.raw`(?:kind\s*:\s*['"\x60][a-z]+['"\x60]\s*,\s*)?(?:url\s*:\s*)?['"\x60](?:https?:\/\/)?([a-z0-9][a-z0-9.-]*\.[a-z]{2,})`,
   'gi',
 )
 

@@ -28,6 +28,13 @@ export type ToolSecretSubject =
    * off the deployment's own environment.
    */
   | { kind: 'foundational-service'; id: string }
+  /**
+   * A DELEGATED EXECUTOR a step dispatches to; see `DelegatedExecutorDefinition`. Its resolved
+   * value is handed straight to the executor call and is never persisted on the step, the
+   * delegation handle or the agent-context snapshot, because a delegated step is polled for hours
+   * and a token frozen at dispatch would be dead long before the poll that needed it.
+   */
+  | { kind: 'delegated-executor'; id: string }
 
 /**
  * Resolves the credentials a declared CAPABILITY needs, per dispatch. The port exists so the

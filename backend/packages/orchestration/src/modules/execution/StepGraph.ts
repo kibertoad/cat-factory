@@ -123,6 +123,13 @@ export class StepGraph {
     // resolution, so the guard in `recordDispatchAttribution` would preserve the container round's),
     // and one whose run is abandoned before it redispatches at all.
     step.toolServers = undefined
+    // The DELEGATED retry budget, which is per run of the step and not per step. Its contract doc
+    // says exactly why it is its own counter rather than a read of `delegated.attempts.length`
+    // (the attempt log is deliberately kept across a human re-run, being the evidence for why the
+    // step is being run again), and leaving it set is the very failure that reasoning describes: a
+    // step re-run after one recovered external failure would spend its first retryable verdict on
+    // a budget the previous run used up, and fail the run as `delegated_failed` instead.
+    step.delegatedRetries = undefined
     step.rework = undefined
     // Clear the live container handle + the deployer fan-out state, so a re-run of a `deployer`
     // step re-provisions from scratch (a stale `deployEnvs` would otherwise let it skip straight to

@@ -407,7 +407,7 @@ export function noFailingCallReason(evidence: RunFailureEvidence): NoFailingCall
 
 /** Tailwind text/bg colour for an output-headroom level (green → amber → red). */
 export function headroomColor(ratio: number | null, truncated: boolean): string {
-  if (truncated || (ratio != null && ratio >= 0.98)) return 'text-rose-400'
-  if (ratio != null && ratio >= 0.8) return 'text-amber-400'
-  return 'text-emerald-400'
+  if (truncated || (ratio != null && ratio >= 0.98)) return 'text-app-error-400'
+  if (ratio != null && ratio >= 0.8) return 'text-app-warning-400'
+  return 'text-app-success-400'
 }

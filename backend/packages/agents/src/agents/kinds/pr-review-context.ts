@@ -7,6 +7,7 @@ import type {
   RepoOpContext,
   RepoOpResult,
 } from '@cat-factory/kernel'
+import { resolvePrNumber } from '@cat-factory/contracts'
 import type { ComposableFragment } from '../runtime/fragments.js'
 import {
   STANDARDS_CONTEXT_FILE_PREFIX,
@@ -100,30 +101,6 @@ const SLICE_MAX_CHANGED_LINES = 2_500
 
 /** Groups smaller than this are merged into a shared "assorted" slice rather than standing alone. */
 const SLICE_MIN_FILES = 2
-
-// ---------------------------------------------------------------------------
-// PR number resolution
-// ---------------------------------------------------------------------------
-
-/** Resolve the reviewed PR's number from the block's task-type fields (prefer `prNumber`). */
-export function resolvePrNumber(
-  fields: { prNumber?: number; prUrl?: string } | undefined,
-): number | null {
-  if (!fields) return null
-  if (
-    typeof fields.prNumber === 'number' &&
-    Number.isInteger(fields.prNumber) &&
-    fields.prNumber > 0
-  )
-    return fields.prNumber
-  const url = fields.prUrl?.trim()
-  if (!url) return null
-  // GitHub `/pull/<n>`, GitLab `/-/merge_requests/<n>`, or a trailing `#<n>` / `/<n>`.
-  const m = url.match(/(?:pull|pulls|merge_requests)\/(\d+)|[#/](\d+)\s*$/)
-  const raw = m?.[1] ?? m?.[2]
-  const n = raw ? Number(raw) : Number.NaN
-  return Number.isInteger(n) && n > 0 ? n : null
-}
 
 /**
  * The pull request a `clone.prHead` step is about, from the source the KIND declared

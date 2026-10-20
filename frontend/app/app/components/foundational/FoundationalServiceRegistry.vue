@@ -20,6 +20,8 @@ import {
   useFoundationalServicesStore,
 } from '~/stores/foundationalServices'
 import FoundationalContractSummary from '~/components/foundational/FoundationalContractSummary.vue'
+import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ kind: FoundationalServiceOwnerKind; ownerId: string }>()
 
@@ -27,7 +29,7 @@ const catalog =
   props.kind === 'workspace'
     ? useFoundationalServicesStore()
     : useFoundationalServices(props.kind, props.ownerId)
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirm } = useConfirm()
@@ -130,7 +132,7 @@ async function save() {
         capabilities: capabilityList.value,
         ...(contracts ? { contracts } : {}),
       })
-      toast.add({ title: t('foundational.toast.created'), icon: 'i-lucide-check' })
+      actionToast.success('foundational.toast.created')
     } else {
       await catalog.update(draft.id, {
         name: draft.name.trim(),
@@ -139,7 +141,7 @@ async function save() {
         capabilities: capabilityList.value,
         ...(contracts ? { contracts } : {}),
       })
-      toast.add({ title: t('foundational.toast.updated'), icon: 'i-lucide-check' })
+      actionToast.success('foundational.toast.updated')
     }
     editing.value = null
   } catch (e) {
@@ -170,7 +172,7 @@ async function remove(service: FoundationalService) {
   if (!ok) return
   try {
     await catalog.remove(service.id)
-    toast.add({ title: t('foundational.toast.deleted'), icon: 'i-lucide-trash-2' })
+    actionToast.success('foundational.toast.deleted')
   } catch (e) {
     present(e, 'foundational.toast.deleteFailed')
   }
@@ -182,49 +184,53 @@ async function remove(service: FoundationalService) {
     <div
       v-for="s in catalog.services"
       :key="s.id"
-      class="rounded-md border border-slate-800 bg-slate-900/60 p-3"
+      class="rounded-md border border-default bg-default/60 p-3"
     >
       <div class="flex items-start gap-2">
-        <UIcon name="i-lucide-boxes" class="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
+        <UIcon name="i-lucide-boxes" class="mt-0.5 h-4 w-4 shrink-0 text-app-info-400" />
         <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-medium text-slate-100">
+          <p class="truncate text-sm font-medium text-app-100">
             {{ s.name }}
-            <code class="ms-1 text-[11px] text-slate-500">{{ s.id }}</code>
+            <code class="ms-1 text-2xs text-dimmed">{{ s.id }}</code>
           </p>
-          <p class="text-xs text-slate-400">{{ s.summary }}</p>
+          <p class="text-xs text-muted">{{ s.summary }}</p>
           <div v-if="s.capabilities.length" class="mt-1 flex flex-wrap gap-1">
             <UBadge v-for="c in s.capabilities" :key="c" size="xs" variant="subtle" color="neutral">
               {{ c }}
             </UBadge>
           </div>
           <FoundationalContractSummary :contracts="s.contracts" :format-label="formatLabel" />
-          <p v-if="s.sourceId" class="mt-1 text-[11px] text-slate-500">
+          <p v-if="s.sourceId" class="mt-1 text-2xs text-dimmed">
             {{ t('foundational.registry.fromSource', { path: s.sourcePath ?? '' }) }}
           </p>
         </div>
         <div class="flex shrink-0 gap-1">
-          <UButton
+          <IconButton
+            color="neutral"
             v-if="!s.sourceId"
             icon="i-lucide-pencil"
             size="xs"
             variant="ghost"
-            :title="t('foundational.registry.edit')"
+            :label="t('foundational.registry.edit')"
             @click="openEdit(s)"
           />
-          <UButton
+          <IconButton
             icon="i-lucide-trash-2"
             size="xs"
             color="error"
             variant="ghost"
-            :title="t('foundational.registry.delete')"
+            :label="t('foundational.registry.delete')"
             @click="remove(s)"
           />
         </div>
       </div>
     </div>
-    <p v-if="!catalog.services.length" class="text-sm text-slate-500">
-      {{ t('foundational.registry.empty') }}
-    </p>
+    <EmptyState
+      v-if="!catalog.services.length"
+      compact
+      icon="i-lucide-package"
+      :title="t('foundational.registry.empty')"
+    />
 
     <UButton
       v-if="editing === null"
@@ -238,7 +244,7 @@ async function remove(service: FoundationalService) {
       {{ t('foundational.registry.add') }}
     </UButton>
 
-    <div v-else class="rounded-md border border-slate-800 p-3">
+    <div v-else class="rounded-md border border-default p-3">
       <p class="mb-2 text-sm font-medium">
         {{
           isCreating ? t('foundational.registry.addTitle') : t('foundational.registry.editTitle')
@@ -251,8 +257,8 @@ async function remove(service: FoundationalService) {
           v-model="draft.id"
           :placeholder="t('foundational.registry.idPlaceholder')"
         />
-        <p v-else class="text-xs text-slate-500">
-          <code class="text-slate-300">{{ draft.id }}</code>
+        <p v-else class="text-xs text-dimmed">
+          <code class="text-toned">{{ draft.id }}</code>
           — {{ t('foundational.registry.idFixed') }}
         </p>
         <UInput v-model="draft.name" :placeholder="t('foundational.registry.namePlaceholder')" />
@@ -270,11 +276,11 @@ async function remove(service: FoundationalService) {
           :placeholder="t('foundational.registry.capabilitiesPlaceholder')"
         />
 
-        <div class="rounded-md border border-slate-800 p-2">
-          <p class="text-xs font-medium text-slate-300">
+        <div class="rounded-md border border-default p-2">
+          <p class="text-xs font-medium text-toned">
             {{ t('foundational.registry.contractsTitle') }}
           </p>
-          <p class="mb-2 text-[11px] text-slate-500">
+          <p class="mb-2 text-2xs text-dimmed">
             {{
               draft.contractsTouched
                 ? t('foundational.registry.contractsReplace')
@@ -289,12 +295,12 @@ async function remove(service: FoundationalService) {
                 class="flex-1"
               />
               <USelect v-model="c.format" :items="formatItems" class="w-56" />
-              <UButton
+              <IconButton
                 icon="i-lucide-x"
                 size="xs"
                 color="error"
                 variant="ghost"
-                :title="t('foundational.registry.removeContract')"
+                :label="t('foundational.registry.removeContract')"
                 @click="removeContract(i)"
               />
             </div>
@@ -309,7 +315,13 @@ async function remove(service: FoundationalService) {
               :placeholder="t('foundational.registry.contractBodyPlaceholder')"
             />
           </div>
-          <UButton icon="i-lucide-plus" size="xs" variant="ghost" @click="addContract">
+          <UButton
+            color="neutral"
+            icon="i-lucide-plus"
+            size="xs"
+            variant="ghost"
+            @click="addContract"
+          >
             {{ t('foundational.registry.addContract') }}
           </UButton>
         </div>
@@ -324,7 +336,7 @@ async function remove(service: FoundationalService) {
           >
             {{ t('foundational.registry.save') }}
           </UButton>
-          <UButton size="sm" variant="ghost" @click="editing = null">
+          <UButton color="neutral" size="sm" variant="ghost" @click="editing = null">
             {{ t('foundational.registry.cancel') }}
           </UButton>
         </div>

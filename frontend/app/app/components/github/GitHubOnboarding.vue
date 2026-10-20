@@ -3,8 +3,11 @@
 // has no connection yet. cat-factory's whole flow runs on a connected repository host (agents
 // open pull/merge requests on the user's repos), so the board is withheld until the workspace
 // connects one. <VcsConnectSurfaces> renders whichever connect methods the deployment serves; a
-// "Sign out" escape hatch avoids trapping a user who needs to switch accounts.
+// "Sign out" escape hatch avoids trapping a user who needs to switch accounts. The board switcher is
+// the other escape: the gate replaces the whole board, sidebar included, so without it a member
+// who landed on a board they cannot connect had no way to reach a board they can.
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
+import BoardSwitcher from '~/components/layout/BoardSwitcher.vue'
 import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 
 const { t } = useI18n()
@@ -24,29 +27,39 @@ const title = computed(() =>
 
 <template>
   <div
-    class="flex h-full w-full items-center justify-center overflow-y-auto bg-slate-950 text-slate-100"
+    class="flex h-full w-full items-center justify-center overflow-y-auto bg-app-950 text-app-100"
   >
     <div
-      class="my-8 w-full max-w-md rounded-xl border border-slate-800 bg-slate-900/80 p-8 backdrop-blur"
+      class="my-8 w-full max-w-md rounded-xl border border-default bg-default/80 p-8 backdrop-blur"
     >
       <div class="mb-5 text-center">
-        <UIcon :name="icon" class="mx-auto mb-3 h-10 w-10 text-indigo-400" />
-        <h1 class="mb-1 text-lg font-semibold text-white">{{ title }}</h1>
-        <p class="text-sm text-slate-400">
+        <UIcon :name="icon" class="mx-auto mb-3 h-10 w-10 text-primary" />
+        <h1 class="mb-1 text-lg font-semibold text-highlighted">{{ title }}</h1>
+        <p class="text-sm text-muted">
           {{ t('vcs.onboarding.intro') }}
         </p>
       </div>
 
       <VcsConnectSurfaces :app-intro="t('github.onboarding.appIntro')" />
 
+      <div class="mt-6 border-t border-default pt-4" data-testid="vcs-onboarding-switch-board">
+        <p class="mb-2 text-xs text-muted">{{ t('vcs.onboarding.switchBoard') }}</p>
+        <BoardSwitcher standalone />
+      </div>
+
       <p
         v-if="auth.required && auth.user"
-        class="mt-6 border-t border-slate-800 pt-4 text-center text-xs text-slate-500"
+        class="mt-6 border-t border-default pt-4 text-center text-xs text-dimmed"
       >
         {{ t('github.onboarding.signedInAs', { login: auth.user.login }) }} ·
-        <button class="text-slate-300 underline-offset-2 hover:underline" @click="auth.logout()">
+        <UButton
+          color="neutral"
+          variant="link"
+          class="p-0 text-xs text-toned underline-offset-2 hover:underline"
+          @click="auth.logout()"
+        >
           {{ t('github.onboarding.signOut') }}
-        </button>
+        </UButton>
       </p>
     </div>
   </div>

@@ -10,6 +10,8 @@ import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 import { BLUEPRINT_AGENT_KIND } from '@cat-factory/contracts'
 import { VCS_PROVIDER_ICONS } from '~/utils/vcs'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -22,10 +24,15 @@ const recurring = useRecurringPipelinesStore()
 const requirements = useRequirementsStore()
 const access = useWorkspaceAccess()
 const { t } = useI18n()
+const { present } = usePipelineErrorToast()
 
 onMounted(() => {
   fragments.ensureLoaded()
-  github.ensureLoaded()
+  // The repo list behind the inspector's repo link and the service config's detect-from-repo
+  // lookup. Both read the store, so this one call serves them.
+  github.ensureLoaded().catch((error: unknown) => {
+    present(error, 'github.connect.errors.loadProjection')
+  })
 })
 
 const block = computed<Block | undefined>(() =>
@@ -277,9 +284,8 @@ const isServiceFrame = computed(
 )
 
 // ---- failed agent run (bootstrap or execution) ------------------------------
-// A block whose current run failed surfaces the shared failure banner + retry,
-// keyed by block id — covering a failed "bootstrap repo" frame and (for tasks) a
-// failed pipeline execution alike.
+// A block whose current run failed shows the failure block, keyed by block id. The header shows
+// it for a failed "bootstrap repo" frame only: a block with runs shows it in TaskExecution.
 const failedRun = computed(() => {
   const run = block.value ? agentRuns.byBlock[block.value.id] : undefined
   return run && run.status === 'failed' ? run : null
@@ -338,11 +344,12 @@ const showOriginalDescription = ref(false)
        NOT `data-block-id`: that attribute is the board's card selector, which the canvas drivers
        measure geometry through (`utils/blockRects.ts`), and a panel answering to it would offer
        the arrows a rect that is not on the canvas at all. -->
+  <!-- safe-area-ok: a bottom sheet below lg; its scroller pads the bottom and side insets -->
   <div
     v-if="block && statusMeta && typeMeta"
     data-testid="inspector-panel"
     :data-inspector-block="block.id"
-    class="fixed inset-x-0 bottom-0 z-20 overflow-hidden rounded-t-2xl border border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:absolute lg:inset-x-auto lg:bottom-auto lg:end-4 lg:top-16 lg:w-80 lg:rounded-2xl"
+    class="fixed inset-x-0 bottom-0 z-20 overflow-hidden rounded-t-2xl border border-muted bg-default/95 shadow-2xl backdrop-blur lg:absolute lg:inset-x-auto lg:bottom-auto lg:end-4 lg:top-16 lg:w-80 lg:rounded-2xl"
   >
     <div class="h-1.5 w-full" :style="{ backgroundColor: statusMeta.color }" />
     <!-- A tall task (execution steps + scenarios + docs) can overflow the
@@ -351,24 +358,27 @@ const showOriginalDescription = ref(false)
          On compact viewports the panel is a bottom sheet capped to the visible
          height (dvh excludes mobile browser chrome). -->
     <div
-      class="max-h-[80dvh] space-y-4 overflow-y-auto overscroll-contain px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:max-h-[calc(100vh-7rem)]"
+      class="max-h-[80dvh] space-y-4 overflow-y-auto overscroll-contain pt-4 pr-[max(1rem,env(safe-area-inset-right))] pb-[calc(1rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] lg:max-h-[calc(100vh-7rem)]"
     >
       <!-- header -->
       <div class="flex items-start justify-between gap-2">
         <div class="flex items-center gap-2">
           <div
             class="flex h-9 w-9 items-center justify-center rounded-lg"
-            :style="{ backgroundColor: typeMeta.accent + '22' }"
+            :style="{ backgroundColor: tint(typeMeta.accent) }"
           >
             <UIcon :name="typeMeta.icon" class="h-5 w-5" :style="{ color: typeMeta.accent }" />
           </div>
           <div>
-            <div class="text-sm font-semibold text-white">{{ block.title }}</div>
+            <div class="text-sm font-semibold text-highlighted">{{ block.title }}</div>
             <div class="mt-0.5 flex items-center gap-1.5">
               <UBadge :color="statusMeta.chip" variant="subtle" size="sm">
                 {{ statusLabel }}
               </UBadge>
-              <span class="text-[10px] uppercase tracking-wide text-slate-500">{{ level }}</span>
+              <!-- The block's LEVEL, beside its status chip: a category this block is in, not a
+                   heading over what follows, so it keeps its own classes rather than adopting the
+                   eyebrow recipe (`common/SectionLabel.vue`). -->
+              <span class="text-3xs uppercase tracking-wide text-dimmed">{{ level }}</span>
             </div>
           </div>
         </div>
@@ -401,18 +411,18 @@ const showOriginalDescription = ref(false)
         <!-- reworked: the standardized requirements document takes focus; the raw
              description is frozen and tucked behind an expander. -->
         <template v-if="frozenByRework">
-          <div class="rounded-lg border border-emerald-900/60 bg-emerald-950/20 p-3">
+          <div class="rounded-lg border border-app-success-900/60 bg-app-success-950/20 p-3">
             <div
-              class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-400"
+              class="mb-1.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-app-success-400"
             >
               <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
               {{ t('panels.inspector.reworkedRequirements') }}
             </div>
-            <p class="line-clamp-5 whitespace-pre-line text-[13px] leading-relaxed text-slate-300">
+            <p class="line-clamp-5 whitespace-pre-line text-sm leading-relaxed text-toned">
               {{ reqReworkedText }}
             </p>
             <div class="mt-2 flex items-center justify-between gap-2">
-              <p class="text-[11px] text-slate-500">
+              <p class="text-2xs text-dimmed">
                 {{ t('panels.inspector.agentStepsUseDocument') }}
               </p>
               <UButton
@@ -464,40 +474,39 @@ const showOriginalDescription = ref(false)
             @change="saveDescription"
             @blur="saveDescription"
           />
-          <p v-if="isTask && !editable" class="flex items-center gap-1 text-[11px] text-slate-500">
+          <p v-if="isTask && !editable" class="flex items-center gap-1 text-2xs text-dimmed">
             <UIcon name="i-lucide-lock" class="h-3 w-3" />
             {{ t('panels.inspector.taskStartedLocked') }}
           </p>
 
           <!-- prior incorporated requirements kept as a base after a review-driven reset -->
-          <div v-if="reqHasPriorDoc" class="rounded-lg border border-slate-700 bg-slate-800/40 p-3">
-            <div
-              class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-            >
+          <div v-if="reqHasPriorDoc" class="rounded-lg border border-muted bg-elevated/40 p-3">
+            <SectionLabel class="mb-1.5 flex items-center gap-1.5">
               <UIcon name="i-lucide-history" class="h-3.5 w-3.5" />
               {{ t('panels.inspector.lastIncorporatedRequirements') }}
-            </div>
-            <p class="line-clamp-5 whitespace-pre-line text-[13px] leading-relaxed text-slate-300">
+            </SectionLabel>
+            <p class="line-clamp-5 whitespace-pre-line text-sm leading-relaxed text-toned">
               {{ reqReworkedText }}
             </p>
-            <p class="mt-2 text-[11px] text-slate-500">
+            <p class="mt-2 text-2xs text-dimmed">
               {{ t('panels.inspector.priorDocHint') }}
             </p>
           </div>
         </template>
       </div>
 
-      <!-- failed run (bootstrap or execution): shared failure banner + retry -->
-      <AgentFailureCard v-if="failedRun" :run="failedRun" />
+      <!-- A failed bootstrap on a service frame: the failure block. A task or an initiative shows
+           its failure block once, in its Execution section (TaskExecution), not here as well. -->
+      <AgentFailureCard v-if="failedRun && !hasRuns" :run="failedRun" />
 
       <!-- running bootstrap: show the steps, let the user inspect it, let them stop it -->
       <div
         v-else-if="runningRun"
-        class="space-y-2 rounded-lg border border-amber-900/60 bg-amber-950/30 px-3 py-2"
+        class="space-y-2 rounded-lg border border-app-warning-900/60 bg-app-warning-950/30 px-3 py-2"
       >
         <div class="flex items-center justify-between gap-2">
-          <span class="flex items-center gap-1.5 text-xs text-amber-300">
-            <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+          <span class="flex items-center gap-1.5 text-xs text-app-warning-300">
+            <Spinner class="h-3.5 w-3.5" />
             {{ t('panels.inspector.bootstrapping') }}
           </span>
           <div class="flex items-center gap-1.5">
@@ -586,7 +595,7 @@ const showOriginalDescription = ref(false)
       >
         {{ t('panels.inspector.mapService') }}
       </UButton>
-      <p v-if="isFrame && !serviceRepo" class="text-[11px] text-slate-500">
+      <p v-if="isFrame && !serviceRepo" class="text-2xs text-dimmed">
         {{ t('panels.inspector.mapServiceNoRepo') }}
       </p>
 
@@ -613,7 +622,7 @@ const showOriginalDescription = ref(false)
            on a disabled button doesn't fire hover events. -->
       <p
         v-if="isTask && runBlockedReason"
-        class="flex items-start gap-1.5 text-[11px] text-amber-300/90"
+        class="flex items-start gap-1.5 text-2xs text-app-warning-300/90"
         data-testid="run-blocked-reason"
       >
         <UIcon name="i-lucide-lock" class="mt-px h-3 w-3 shrink-0" />
@@ -676,7 +685,7 @@ const showOriginalDescription = ref(false)
         </UButton>
         <UButton
           color="error"
-          variant="ghost"
+          variant="soft"
           size="sm"
           icon="i-lucide-trash-2"
           :class="isServiceFrame ? '' : 'ms-auto'"

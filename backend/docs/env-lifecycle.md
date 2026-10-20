@@ -69,7 +69,7 @@ Two entry points, both workspace-scoped (mounted under `/workspaces/:workspaceId
   - `POST /environments/connection/validate-repo`: body `{ owner, repo, gitRef?, provider? }` →
     `{ ok, issues[] }`. Mirrors `testConnection`; nothing persisted.
   - `POST /environments/connection/bootstrap-repo`: body `{ owner, repo, gitRef?, provider?,
-inputs, openPr?, allowAgentFallback? }` → `{ ok, committed, branch?, usedAgent?, issues[] }`.
+    inputs, openPr?, allowAgentFallback? }` → `{ ok, committed, branch?, usedAgent?, issues[] }`.
 - **Pre-flight gate**: `EnvironmentProvisioningService.provision()` runs `validateRepo` against
   the block's repo **before** calling `provider.provision()`. On failure it logs and throws a
   `ValidationError` synchronously (instead of letting the environment fail later). The gate is skipped

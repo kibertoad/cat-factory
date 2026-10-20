@@ -33,6 +33,10 @@ import {
   createLocalMachineTokenStore,
 } from './sqlite/machineTokenStore.js'
 import { SqliteWorkQueue, createWorkQueue } from './sqlite/workQueue.js'
+import {
+  createGuidedReviewQueue,
+  type SqliteGuidedReviewQueue,
+} from './sqlite/guidedReviewQueue.js'
 
 // Mothership mode (docs/initiatives/mothership-mode.md): the local node keeps NO main
 // database. Org/durable state lives on a hosted "mothership" cat-factory (Node or Cloudflare)
@@ -203,6 +207,8 @@ export interface MothershipComposition {
   telemetryClient: HttpMachineTelemetryClient
   /** The durable local-sqlite execution work queue (the no-pg-boss durability substrate). */
   workQueue: SqliteWorkQueue
+  /** The durable local-sqlite guided-review job queue (pg-boss's `guided-review.run` stand-in). */
+  guidedReviewQueue: SqliteGuidedReviewQueue
   /**
    * The local-sqlite cache of the mothership-minted machine token. The `/local/mothership/connect`
    * login flow writes it; the RPC client's token provider reads it per request (below). Kept
@@ -345,6 +351,10 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     localDbPath(env.LOCAL_MOTHERSHIP_SETTINGS_DB, 'local-settings.sqlite'),
   )
   const workQueue = createWorkQueue(localDbPath(env.LOCAL_MOTHERSHIP_WORK_DB, 'work-queue.sqlite'))
+  // A second table in the work-queue file, so the one override (`:memory:` in tests) covers both.
+  const guidedReviewQueue = createGuidedReviewQueue(
+    localDbPath(env.LOCAL_MOTHERSHIP_WORK_DB, 'work-queue.sqlite'),
+  )
   return {
     repos,
     githubTokenSource,
@@ -362,6 +372,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     localSettingsStore,
     telemetryStore,
     workQueue,
+    guidedReviewQueue,
     machineTokenStore,
     close: () => {
       realtimeSubscriber.stop()
@@ -369,6 +380,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
       localSettingsStore.close()
       telemetryStore.close()
       workQueue.close()
+      guidedReviewQueue.close()
       machineTokenStore.close()
     },
   }

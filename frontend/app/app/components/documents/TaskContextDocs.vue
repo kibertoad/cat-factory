@@ -6,6 +6,7 @@ import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.
 import DocumentOriginLink from '~/components/documents/DocumentOriginLink.vue'
 import DocumentSyncState from '~/components/documents/DocumentSyncState.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // Documents (from any source) attached to a task OR an initiative as agent
 // context, shown inside the InspectorPanel. An initiative takes the same
@@ -26,7 +27,7 @@ const props = defineProps<{ block: Block }>()
 const { t } = useI18n()
 const documents = useDocumentsStore()
 const ui = useUiStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { linkPending, presentLinkFailures } = useContextLinking()
 
 onMounted(() => {
@@ -88,7 +89,7 @@ async function attach(item: PendingContext) {
   try {
     const failures = await linkPending(props.block.id, [item])
     if (failures.length) presentLinkFailures(failures, props.block.id)
-    else toast.add({ title: t('documents.taskDocs.attached'), icon: 'i-lucide-link' })
+    else actionToast.success('documents.taskDocs.attached')
   } finally {
     linking.value = false
   }
@@ -149,24 +150,22 @@ async function attach(item: PendingContext) {
       <div
         v-for="doc in linked"
         :key="`${doc.source}:${doc.externalId}`"
-        class="rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5"
+        class="rounded-md border border-default bg-default/60 px-2 py-1.5"
       >
         <DocumentOriginLink
           :url="doc.url"
-          class="flex items-center gap-1.5 text-xs text-slate-300"
-          hover-class="hover:text-white"
+          class="flex items-center gap-1.5 text-xs text-toned"
+          hover-class="hover:text-highlighted"
         >
           <UIcon
             :name="documents.descriptorForOrigin(doc.source)?.icon ?? 'i-lucide-file-text'"
-            class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+            class="h-3.5 w-3.5 shrink-0 text-primary"
           />
           <span class="truncate">{{ doc.title }}</span>
         </DocumentOriginLink>
         <DocumentSyncState :doc="doc" class="mt-1" />
       </div>
     </div>
-    <p v-else class="text-[11px] text-slate-500">
-      {{ emptyHint }}
-    </p>
+    <EmptyState v-else compact icon="i-lucide-file-text" :title="emptyHint" />
   </InspectorSection>
 </template>

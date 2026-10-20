@@ -6,6 +6,13 @@ the single source of truth for wire shapes and the domain vocabulary.
 **Entry:** `src/index.ts`. `src/routes/` holds the per-route request/response contracts; the
 top-level files are the domain contracts.
 
+**No import-time side effects.** `package.json` declares `"sideEffects": false`, so a consumer's
+bundler drops every module whose exports it does not reference. A module may build schemas and
+constants when it loads. It must never register into a shared table, mutate another module's export
+(`withMinScope` assigns onto its argument, so wrap only a contract defined in the same module) or
+set valibot's global config: under Node, Vitest and Vite dev that works, and in a production bundle
+it silently disappears.
+
 **Key files:**
 
 - `primitives.ts`: the block **type** / **status** / **level** enums. There are two "task"
@@ -95,7 +102,8 @@ top-level files are the domain contracts.
   `normalizeRepoSearchQuery`), shared by the SPA's paste-a-directory fragment import and the
   backend's available-repos picker (which resolves a pasted URL by its slug instead of feeding
   it to the provider's name search). Lives here because contracts is the only package both
-  sides import.
+  sides import. `resolvePrNumber` beside them is the one reading of which pull request a
+  `review` task names, shared by the dispatch and the SPA's guided-review button.
 
 - `run-evidence.ts` + `run-outcome.ts`: how a finished run's evidence is REDUCED, and the reason
   those rules are in a leaf package rather than in the engine. Two documents reduce one run: the PR
@@ -110,4 +118,4 @@ top-level files are the domain contracts.
   own absence policy: the report writes prose onto a parsed host surface, the summary emits
   machine-readable `gap` codes the SPA maps to translated copy.
 
-**See also:** `docs/glossary.md`, `CLAUDE.md` → "Board / service / repo-linkage model".
+**See also:** `docs/glossary.md`, `AGENTS.md` → "Board / service / repo-linkage model".

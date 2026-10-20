@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import {
   toolServerOAuthCompletedSchema,
   toolServerOAuthCompletionSchema,
@@ -75,7 +75,7 @@ export const disconnectToolServerOAuthContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: singleStringParam('id'),
   pathResolver: ({ id }) => `/tool-servers/${id}/oauth`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 /**

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import type { WorkspaceAccessMode, WorkspaceRole } from '~/types/domain'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // Workspace-membership management (workspace-rbac initiative, slice 9). The tier BELOW
 // account tenancy: an account admin restricts a board to an explicit member list (with
@@ -16,7 +17,7 @@ const workspace = useWorkspaceStore()
 const members = useWorkspaceMembersStore()
 const accounts = useAccountsStore()
 const auth = useAuthStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -108,7 +109,7 @@ async function addMember() {
     await members.add(props.workspaceId, userId, addRole.value)
     addUserId.value = undefined
     addRole.value = 'member'
-    toast.add({ title: t('layout.workspaceMembers.add.added'), icon: 'i-lucide-user-plus' })
+    actionToast.success('layout.workspaceMembers.add.added')
   } catch (e) {
     present(e, 'layout.workspaceMembers.errors.add')
   } finally {
@@ -139,13 +140,13 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
 <template>
   <div class="space-y-6 text-sm" data-testid="workspace-members-settings">
     <!-- access mode -->
-    <section class="rounded-md border border-slate-800 bg-slate-800/40 p-4">
+    <section class="rounded-md border border-default bg-elevated/40 p-4">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <h3 class="mb-1 font-semibold text-white">
+          <h3 class="mb-1 font-semibold text-highlighted">
             {{ t('layout.workspaceMembers.accessMode.title') }}
           </h3>
-          <p class="text-slate-400">
+          <p class="text-muted">
             {{
               restricted
                 ? t('layout.workspaceMembers.accessMode.restrictedHint')
@@ -161,7 +162,7 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
             data-testid="workspace-restrict-toggle"
             @update:model-value="setAccessMode"
           />
-          <span class="text-xs text-slate-300">
+          <span class="text-xs text-toned">
             {{ t('layout.workspaceMembers.accessMode.restrictToggle') }}
           </span>
         </label>
@@ -170,13 +171,17 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
 
     <!-- roster -->
     <section>
-      <h3 class="mb-2 font-semibold text-white">{{ t('layout.workspaceMembers.roster.title') }}</h3>
-      <p v-if="!rosterReady" class="text-slate-500">{{ t('common.loading') }}</p>
+      <h3 class="mb-2 font-semibold text-highlighted">
+        {{ t('layout.workspaceMembers.roster.title') }}
+      </h3>
+      <div v-if="!rosterReady" class="space-y-1">
+        <USkeleton v-for="i in 3" :key="i" class="h-8 w-full" />
+      </div>
       <ul v-else class="space-y-1" data-testid="workspace-members-roster">
         <li
           v-for="m in members.members"
           :key="m.userId"
-          class="flex items-center justify-between gap-2 rounded-md bg-slate-800/40 px-2 py-1"
+          class="flex items-center justify-between gap-2 rounded-md bg-elevated/40 px-2 py-1"
           data-testid="workspace-member-row"
           :data-user-id="m.userId"
         >
@@ -204,20 +209,26 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
             />
           </span>
         </li>
-        <li v-if="members.members.length === 0" class="text-slate-500">
-          {{ t('layout.workspaceMembers.roster.empty') }}
+        <li v-if="members.members.length === 0">
+          <EmptyState
+            compact
+            icon="i-lucide-users"
+            :title="t('layout.workspaceMembers.roster.empty')"
+          />
         </li>
       </ul>
     </section>
 
     <!-- add member -->
     <section>
-      <h3 class="mb-2 font-semibold text-white">{{ t('layout.workspaceMembers.add.title') }}</h3>
-      <p v-if="!accountId" class="text-slate-500">
+      <h3 class="mb-2 font-semibold text-highlighted">
+        {{ t('layout.workspaceMembers.add.title') }}
+      </h3>
+      <p v-if="!accountId" class="text-dimmed">
         {{ t('layout.workspaceMembers.add.noAccount') }}
       </p>
       <template v-else>
-        <form class="flex gap-2" @submit.prevent="addMember">
+        <UForm class="flex gap-2" @submit="addMember">
           <USelect
             v-model="addUserId"
             :items="candidates"
@@ -230,7 +241,6 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
           <USelect v-model="addRole" :items="ROLE_ITEMS" value-key="value" class="w-32" />
           <UButton
             type="submit"
-            color="primary"
             icon="i-lucide-user-plus"
             :loading="busy"
             :disabled="!addUserId"
@@ -238,8 +248,8 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
           >
             {{ t('layout.workspaceMembers.add.submit') }}
           </UButton>
-        </form>
-        <p v-if="candidates.length === 0" class="mt-2 text-slate-500">
+        </UForm>
+        <p v-if="candidates.length === 0" class="mt-2 text-dimmed">
           {{ t('layout.workspaceMembers.add.allAdded') }}
         </p>
       </template>

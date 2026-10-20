@@ -1,4 +1,4 @@
-import { cloudflareTest } from '@cloudflare/vitest-pool-workers'
+import { cloudflareTest } from '@cloudflare/vitest-plugin'
 import { defineConfig } from 'vitest/config'
 
 // The LIVE suite: the same Worker `vitest.config.ts` boots, with the scripted origin taken away.

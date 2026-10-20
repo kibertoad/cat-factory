@@ -128,7 +128,7 @@ the stored steps' `requiresApproval`.
    (`DescriptorFields.vue`, which a custom task type's per-case form renders through too). `InitiativeService.create` validates + freezes the inputs; for an
    `interview: 'skip'` preset it seeds the interview `qa` digest from the filled form (the form IS
    the interview) and templates the goal. `POST /workspaces/:id/initiative-presets/:presetId/probe
-{ frameId }` runs `detect` over the frame's repo and returns detected defaults: best-effort,
+   { frameId }` runs `detect` over the frame's repo and returns detected defaults: best-effort,
    `{}` when GitHub is unwired, never blocks create.
 3. **Planning**: planning is started through the ordinary execution endpoint against the initiative
    block, with `pipelineId = descriptor.planningPipelineId`. `AgentContextBuilder` folds the preset's

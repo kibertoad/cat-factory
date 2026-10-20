@@ -11,7 +11,6 @@
 // preference. The list view shows each preset; the editor view creates/edits one with a
 // base-model picker plus a filterable per-agent override list.
 import { computed, ref, watch } from 'vue'
-import { onKeyStroke } from '@vueuse/core'
 import type { ModelFlavor } from '@cat-factory/contracts'
 import type { AgentKind } from '~/types/domain'
 import type { ModelPreset } from '~/types/model-presets'
@@ -22,6 +21,10 @@ import { cachingLabel, contextLabel, costLabel, displayFlavor, isSelectable } fr
 import ConsensusGroupsSection from '~/components/settings/ConsensusGroupsSection.vue'
 import ProviderPreferenceEditor from '~/components/settings/ProviderPreferenceEditor.vue'
 import { showOverrideField } from '~/utils/uiMode'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -33,7 +36,7 @@ const agentTier = useAgentTierStore()
 const creds = useVendorCredentialsStore()
 const workspace = useWorkspaceStore()
 const { present } = usePipelineErrorToast()
-const toast = useToast()
+const actionToast = useActionToast()
 const { confirm } = useConfirm()
 
 const open = computed({
@@ -90,25 +93,36 @@ const hiddenByTier = computed(() =>
   filter.value.trim() ? 0 : configurableKinds.value.length - tieredKinds.value.length,
 )
 
+// Set when the catalog read rejects, so the preset list states the failure instead of holding a
+// skeleton that never resolves (`models.loaded` stays false after a failed read).
+const catalogFailed = ref(false)
+
+function loadCatalog() {
+  catalogFailed.value = false
+  models.ensureLoaded(workspace.workspaceId ?? undefined).catch((error) => {
+    catalogFailed.value = true
+    present(error, 'settings.modelConfiguration.toast.catalogFailed')
+  })
+}
+
 watch(
   open,
   (isOpen) => {
     if (isOpen) {
       editor.value = null
       filter.value = ''
-      void models.ensureLoaded(workspace.workspaceId ?? undefined)
+      loadCatalog()
       if (workspace.workspaceId) void creds.load(workspace.workspaceId)
     }
   },
   { immediate: true },
 )
 
-onKeyStroke('Escape', () => {
-  if (!open.value) return
-  // Esc backs out of the editor first, then closes the panel.
+// Esc backs out of the editor first, then closes the panel.
+function backOut() {
   if (editor.value) editor.value = null
   else open.value = false
-})
+}
 
 /** The selectable catalog models, as `{ id, label, suffix }` for a dropdown. */
 const selectableModels = computed(() => {
@@ -255,11 +269,8 @@ async function save() {
     // NOT through `present`: that funnel classifies a BACKEND failure, and a synthesized local
     // `Error` carries no envelope and no status, so it lands on the network-fault description and
     // tells the user the server could not be reached about a check that never left the browser.
-    toast.add({
-      title: t('settings.modelConfiguration.toast.nameRequiredTitle'),
+    actionToast.error('settings.modelConfiguration.toast.nameRequiredTitle', {
       description: t('settings.modelConfiguration.toast.nameRequiredBody'),
-      color: 'warning',
-      icon: 'i-lucide-triangle-alert',
     })
     return
   }
@@ -296,23 +307,23 @@ async function save() {
 <template>
   <Teleport to="body">
     <Transition name="reader-fade">
-      <div
+      <TakeoverShell
         v-if="open"
-        class="fixed inset-0 z-50 flex max-h-[100dvh] flex-col bg-slate-950/96 backdrop-blur-sm"
-        role="dialog"
-        aria-modal="true"
+        :label="t('settings.modelConfiguration.title')"
+        :content-key="editor ? 'editor' : 'list'"
+        class="flex-col bg-app-950/96 backdrop-blur-sm"
+        data-testid="model-configuration-panel"
+        @close="backOut"
       >
-        <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
-          <div
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15"
-          >
-            <UIcon name="i-lucide-cpu" class="h-5 w-5 text-indigo-300" />
+        <header class="flex items-center gap-3 border-b border-default px-6 py-4">
+          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+            <UIcon name="i-lucide-cpu" class="h-5 w-5 text-primary" />
           </div>
           <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">
+            <h1 class="truncate text-base font-semibold text-highlighted">
               {{ t('settings.modelConfiguration.title') }}
             </h1>
-            <p class="truncate text-xs text-slate-500">
+            <p class="truncate text-xs text-dimmed">
               {{ t('settings.modelConfiguration.subtitle') }}
             </p>
           </div>
@@ -332,13 +343,13 @@ async function save() {
           >
             {{ t('settings.modelConfiguration.back') }}
           </UButton>
-          <UButton
+          <IconButton
             icon="i-lucide-x"
             color="neutral"
             variant="ghost"
             size="sm"
             :class="editor ? '' : 'ms-auto'"
-            :title="t('settings.modelConfiguration.closeEsc')"
+            :label="t('settings.modelConfiguration.closeEsc')"
             @click="
               () => {
                 open = false
@@ -352,14 +363,14 @@ async function save() {
             <!-- ===== list view ===== -->
             <template v-if="!editor">
               <div class="flex items-center justify-between">
-                <p class="text-sm leading-relaxed text-slate-400">
+                <p class="text-sm leading-relaxed text-muted">
                   <i18n-t
                     keypath="settings.modelConfiguration.list.intro"
                     scope="global"
                     tag="span"
                   >
                     <template #baseModel>
-                      <span class="text-slate-300">{{
+                      <span class="text-toned">{{
                         t('settings.modelConfiguration.list.introBaseModel')
                       }}</span>
                     </template>
@@ -367,57 +378,74 @@ async function save() {
                 </p>
                 <UButton
                   icon="i-lucide-plus"
-                  color="primary"
                   size="sm"
                   class="shrink-0"
+                  data-testid="model-preset-new"
                   @click="startCreate"
                 >
                   {{ t('settings.modelConfiguration.list.newPreset') }}
                 </UButton>
               </div>
 
-              <p v-if="models.models.length === 0" class="py-4 text-center text-sm text-slate-500">
-                {{ t('settings.modelConfiguration.list.loadingCatalog') }}
-              </p>
+              <UAlert
+                v-if="catalogFailed"
+                color="error"
+                variant="subtle"
+                icon="i-lucide-triangle-alert"
+                :title="t('settings.modelConfiguration.list.catalogFailed')"
+                :actions="[
+                  {
+                    label: t('common.retry'),
+                    color: 'neutral',
+                    variant: 'outline',
+                    onClick: loadCatalog,
+                  },
+                ]"
+              />
+
+              <div v-else-if="!models.loaded" class="space-y-3">
+                <USkeleton v-for="n in 3" :key="n" class="h-20 w-full rounded-lg" />
+              </div>
 
               <div v-else class="space-y-3">
                 <div
                   v-for="p in sortedPresets"
                   :key="p.id"
-                  class="rounded-xl border border-slate-800 bg-slate-900/50 p-4"
+                  class="rounded-xl border border-default bg-default/50 p-4"
                 >
                   <div class="flex items-center gap-2">
-                    <span class="truncate text-sm font-semibold text-slate-100">{{ p.name }}</span>
-                    <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="xs">
+                    <span class="truncate text-sm font-semibold text-app-100">{{ p.name }}</span>
+                    <UBadge v-if="p.isDefault" variant="subtle" size="xs">
                       {{ t('settings.modelConfiguration.list.default') }}
                     </UBadge>
                     <div class="ms-auto flex items-center gap-1">
-                      <UButton
+                      <IconButton
                         v-if="!p.isDefault"
                         size="xs"
                         variant="ghost"
                         color="neutral"
                         icon="i-lucide-star"
                         :loading="busy"
-                        :title="t('settings.modelConfiguration.list.setDefaultTitle')"
+                        :label="t('settings.modelConfiguration.list.setDefaultTitle')"
                         @click="setDefault(p)"
                       />
-                      <UButton
+                      <IconButton
                         size="xs"
                         variant="ghost"
                         color="neutral"
                         icon="i-lucide-pencil"
-                        :title="t('settings.modelConfiguration.list.editTitle')"
+                        :label="t('settings.modelConfiguration.list.editTitle')"
                         @click="startEdit(p)"
                       />
-                      <UButton
+                      <IconButton
                         size="xs"
                         variant="ghost"
                         color="error"
                         icon="i-lucide-trash-2"
+                        data-testid="model-preset-delete"
                         :disabled="p.isDefault"
                         :loading="busy"
-                        :title="
+                        :label="
                           p.isDefault
                             ? t('settings.modelConfiguration.list.deleteDisabledTitle')
                             : t('settings.modelConfiguration.list.deleteTitle')
@@ -426,9 +454,9 @@ async function save() {
                       />
                     </div>
                   </div>
-                  <div class="mt-1.5 text-[11px] text-slate-400">
+                  <div class="mt-1.5 text-2xs text-muted">
                     {{ t('settings.modelConfiguration.list.basePrefix') }}
-                    <span class="text-slate-300">{{ modelLabel(p.baseModelId) }}</span>
+                    <span class="text-toned">{{ modelLabel(p.baseModelId) }}</span>
                     <span v-if="Object.keys(p.overrides).length">
                       ·
                       {{
@@ -442,17 +470,16 @@ async function save() {
                     <!-- A custom route order changes which provider the same model runs on, so the
                          list says so rather than leaving it visible only inside the editor (which
                          basic mode hides). -->
-                    <span v-if="p.providerPreference?.length" class="text-slate-300">
+                    <span v-if="p.providerPreference?.length" class="text-toned">
                       · {{ t('settings.modelConfiguration.list.customRouteOrder') }}
                     </span>
                   </div>
                 </div>
-                <p
+                <EmptyState
                   v-if="sortedPresets.length === 0"
-                  class="py-6 text-center text-sm text-slate-500"
-                >
-                  {{ t('settings.modelConfiguration.list.empty') }}
-                </p>
+                  icon="i-lucide-sliders-horizontal"
+                  :title="t('settings.modelConfiguration.list.empty')"
+                />
               </div>
 
               <!-- The consensus-GROUP library: which model PANELS review the workspace's heavier
@@ -463,15 +490,14 @@ async function save() {
 
             <!-- ===== editor view ===== -->
             <template v-else>
-              <div class="space-y-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+              <div class="space-y-4 rounded-xl border border-default bg-default/50 p-4">
                 <div>
-                  <label
-                    class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-                  >
+                  <SectionLabel as="label" class="mb-1 block">
                     {{ t('settings.modelConfiguration.editor.nameLabel') }}
-                  </label>
+                  </SectionLabel>
                   <UInput
                     v-model="editor.name"
+                    data-testid="model-preset-name"
                     :placeholder="t('settings.modelConfiguration.editor.namePlaceholder')"
                     size="sm"
                     class="w-full"
@@ -479,28 +505,26 @@ async function save() {
                 </div>
 
                 <div>
-                  <label
-                    class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-                  >
+                  <SectionLabel as="label" class="mb-1 block">
                     {{ t('settings.modelConfiguration.editor.baseModelLabel') }}
-                  </label>
+                  </SectionLabel>
                   <UDropdownMenu
                     :items="baseMenu"
                     :ui="{ content: 'max-h-80 overflow-y-auto z-[60]' }"
                   >
                     <UButton
                       size="sm"
-                      color="primary"
                       variant="subtle"
                       trailing-icon="i-lucide-chevron-down"
                       class="w-full justify-between"
+                      data-testid="model-preset-base-model"
                     >
                       <span class="truncate">{{ modelLabel(editor.baseModelId) }}</span>
                     </UButton>
                   </UDropdownMenu>
                 </div>
 
-                <label class="flex items-center gap-2 text-sm text-slate-300">
+                <label class="flex items-center gap-2 text-sm text-toned">
                   <UCheckbox v-model="editor.isDefault" />
                   {{ t('settings.modelConfiguration.editor.makeDefault') }}
                 </label>
@@ -519,9 +543,9 @@ async function save() {
 
               <div>
                 <div class="mb-1 flex items-start justify-between gap-3">
-                  <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  <SectionLabel as="span">
                     {{ t('settings.modelConfiguration.editor.perAgentOverrides') }}
-                  </span>
+                  </SectionLabel>
                   <AgentTierSelect class="w-56 shrink-0" :hidden-count="hiddenByTier" />
                 </div>
                 <UInput
@@ -531,9 +555,7 @@ async function save() {
                   :placeholder="t('settings.modelConfiguration.editor.filterPlaceholder')"
                   class="mb-3 w-full"
                 />
-                <div
-                  class="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-900/50"
-                >
+                <div class="divide-y divide-default rounded-xl border border-default bg-default/50">
                   <div
                     v-for="a in filteredKinds"
                     :key="a.kind"
@@ -546,7 +568,7 @@ async function save() {
                       :title="a.description"
                     />
                     <div class="min-w-0 flex-1" :title="a.description">
-                      <p class="truncate text-sm text-slate-200">{{ a.label }}</p>
+                      <p class="truncate text-sm text-default">{{ a.label }}</p>
                     </div>
                     <UDropdownMenu
                       :items="overrideMenu(a.kind)"
@@ -563,12 +585,12 @@ async function save() {
                       </UButton>
                     </UDropdownMenu>
                   </div>
-                  <p
+                  <EmptyState
                     v-if="filteredKinds.length === 0"
-                    class="px-4 py-6 text-center text-sm text-slate-500"
-                  >
-                    {{ t('settings.modelConfiguration.editor.noAgentsMatch', { filter }) }}
-                  </p>
+                    compact
+                    icon="i-lucide-search-x"
+                    :title="t('settings.modelConfiguration.editor.noAgentsMatch', { filter })"
+                  />
                 </div>
               </div>
 
@@ -585,7 +607,7 @@ async function save() {
                 >
                   {{ t('common.cancel') }}
                 </UButton>
-                <UButton color="primary" size="sm" :loading="busy" @click="save">
+                <UButton size="sm" :loading="busy" @click="save">
                   {{
                     editor.id
                       ? t('settings.modelConfiguration.editor.saveChanges')
@@ -596,7 +618,7 @@ async function save() {
             </template>
           </div>
         </div>
-      </div>
+      </TakeoverShell>
     </Transition>
   </Teleport>
 </template>
