@@ -126,8 +126,19 @@ export function providerConnectionsApi({ send, ws }: ApiContext) {
             } as TestRunnerPoolConnectionInput,
           }),
 
-    deleteProviderConnection: (workspaceId: string, kind: ProviderConnectionKind) =>
-      send(CONTRACTS[kind].unregister, { pathPrefix: ws(workspaceId) }),
+    // `fallBackToAccount` (runner pool only): after the board's own pool is removed, keep
+    // inheriting the account's pool. Omitted, the backend opts the board out of it.
+    deleteProviderConnection: (
+      workspaceId: string,
+      kind: ProviderConnectionKind,
+      options: { fallBackToAccount?: boolean } = {},
+    ) =>
+      kind === 'environment'
+        ? send(CONTRACTS.environment.unregister, { pathPrefix: ws(workspaceId) })
+        : send(CONTRACTS['runner-pool'].unregister, {
+            pathPrefix: ws(workspaceId),
+            queryParams: options.fallBackToAccount ? { fallBackToAccount: 'true' as const } : {},
+          }),
   }
 }
 

@@ -436,8 +436,28 @@ export const runnerPoolConnectionSchema = v.object({
    * on edit instead of forcing a full re-entry. Omitted only for a legacy/unparsable row.
    */
   config: v.optional(runnerBackendConfigSchema),
+  /**
+   * Which tier this pool comes from: the board's own registration (`workspace`), or its account's
+   * pool, which the board inherits while it has none of its own (`account`). An inherited pool is
+   * not the board's to edit, rotate or remove: a write addresses the board's own row only.
+   */
+  source: v.picklist(['workspace', 'account']),
 })
 export type RunnerPoolConnection = v.InferOutput<typeof runnerPoolConnectionSchema>
+export type RunnerPoolSource = RunnerPoolConnection['source']
+
+/**
+ * The board's ACCOUNT's runner pool, as safe metadata, whether or not the board uses it: the board
+ * may have its own pool, or may have opted out through `inheritAccountRunnerPool`. Lets an admin
+ * see what the board would fall back to before they remove its own pool or opt back in.
+ */
+export const accountRunnerPoolSummarySchema = v.object({
+  kind: v.string(),
+  providerId: v.string(),
+  label: v.string(),
+  baseUrl: v.string(),
+})
+export type AccountRunnerPoolSummary = v.InferOutput<typeof accountRunnerPoolSummarySchema>
 
 // ---- Request bodies -------------------------------------------------------
 

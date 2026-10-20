@@ -404,6 +404,17 @@
         "saveFailed": "Die Verbindung konnte nicht gespeichert werden",
         "removed": "Verbindung entfernt",
         "removeFailed": "Die Verbindung konnte nicht entfernt werden"
+      },
+      "accountPool": {
+        "badge": "Konto-Pool",
+        "inherited": "Dieses Board hat keinen eigenen Runner-Pool und verwendet deshalb den Pool seines Kontos, {label}.",
+        "optOut": "Konto-Pool nicht mehr verwenden",
+        "optOutHint": "Das Board kann dann keine Agenten ausführen, bis Sie unten einen eigenen Pool verbinden.",
+        "alsoAvailable": "Dieses Board verwendet seinen eigenen Pool. Sein Konto hat ebenfalls einen Pool: {label}.",
+        "fallBack": "Wenn ich den Pool dieses Boards entferne, den Konto-Pool verwenden",
+        "optedOut": "Dieses Board verwendet den Pool seines Kontos, {label}, nicht und hat keinen eigenen Pool.",
+        "optIn": "Konto-Pool verwenden",
+        "ownPoolForm": "Einen anderen Pool für dieses Board verwenden"
       }
     },
     "serviceFragmentDefaults": {

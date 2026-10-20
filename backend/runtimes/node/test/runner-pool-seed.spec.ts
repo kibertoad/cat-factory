@@ -132,19 +132,29 @@ describeDb('declared account runner pool (seedAccountRunnerPool)', () => {
     const { userId, accountId } = await makeOrg('org-e')
     const id = (await board(accountId, userId)).workspace.id
     const connection = () =>
-      call<{ connection: { label: string } | null }>(
-        'GET',
-        `/workspaces/${id}/runner-pool/connection`,
-      )
+      call<{
+        connection: { label: string; source: string } | null
+        accountPool: { label: string } | null
+      }>('GET', `/workspaces/${id}/runner-pool/connection`)
+    expect((await connection()).body?.connection).toMatchObject({
+      label: 'Seeded pool',
+      source: 'account',
+    })
     await call('POST', `/workspaces/${id}/runner-pool/connection`, {
       config: { ...SEED.config, kubernetes: { ...SEED.config.kubernetes, label: 'Board pool' } },
       secrets: { apiToken: 'board-token' },
     })
-    expect((await connection()).body?.connection?.label).toBe('Board pool')
+    expect((await connection()).body?.connection).toMatchObject({
+      label: 'Board pool',
+      source: 'workspace',
+    })
+    // The account's pool stays visible beside the board's own, so the admin can see the fallback.
+    expect((await connection()).body?.accountPool?.label).toBe('Seeded pool')
 
     // Deleting the board's own row, with no say on the fallback, leaves the board with NOTHING.
     await call('DELETE', `/workspaces/${id}/runner-pool/connection`)
     expect((await connection()).body?.connection).toBeNull()
+    expect((await connection()).body?.accountPool?.label).toBe('Seeded pool')
 
     // The admin choosing the fallback gets the account's pool back.
     await call('PUT', `/workspaces/${id}/settings`, { inheritAccountRunnerPool: true })
@@ -168,6 +178,25 @@ describeDb('declared account runner pool (seedAccountRunnerPool)', () => {
       `/workspaces/${id}/runner-pool/connection`,
     )
     expect(got.body?.connection?.label).toBe('Seeded pool')
+  })
+
+  it('falls back on fallBackToAccount=true even for a board that had opted out', async () => {
+    const { makeOrg, board, call } = await appWith(() => SEED)
+    const { userId, accountId } = await makeOrg('org-f2')
+    const id = (await board(accountId, userId)).workspace.id
+    await call('PUT', `/workspaces/${id}/settings`, { inheritAccountRunnerPool: false })
+    await call('POST', `/workspaces/${id}/runner-pool/connection`, {
+      config: { ...SEED.config, kubernetes: { ...SEED.config.kubernetes, label: 'Board pool' } },
+      secrets: { apiToken: 'board-token' },
+    })
+
+    await call('DELETE', `/workspaces/${id}/runner-pool/connection?fallBackToAccount=true`)
+
+    const got = await call<{ connection: { label: string; source: string } | null }>(
+      'GET',
+      `/workspaces/${id}/runner-pool/connection`,
+    )
+    expect(got.body?.connection).toMatchObject({ label: 'Seeded pool', source: 'account' })
   })
 
   it('leaves exactly one row when many boards seed the same account at once', async () => {

@@ -404,6 +404,17 @@
         "saveFailed": "Impossibile salvare la connessione",
         "removed": "Connessione rimossa",
         "removeFailed": "Impossibile rimuovere la connessione"
+      },
+      "accountPool": {
+        "badge": "Pool dell'account",
+        "inherited": "Questa bacheca non ha un pool di runner proprio, quindi usa il pool del suo account, {label}.",
+        "optOut": "Smetti di usare il pool dell'account",
+        "optOutHint": "La bacheca non potrà eseguire agenti finché non colleghi qui sotto un pool proprio.",
+        "alsoAvailable": "Questa bacheca usa un pool proprio. Anche il suo account ha un pool: {label}.",
+        "fallBack": "Quando rimuovo il pool di questa bacheca, usa il pool dell'account",
+        "optedOut": "Questa bacheca non usa il pool del suo account, {label}, e non ha un pool proprio.",
+        "optIn": "Usa il pool dell'account",
+        "ownPoolForm": "Usa un altro pool per questa bacheca"
       }
     },
     "serviceFragmentDefaults": {

@@ -20,6 +20,7 @@ import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDr
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import KubernetesEnvironmentForm from '~/components/settings/KubernetesEnvironmentForm.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import RunnerPoolAccountTier from '~/components/settings/RunnerPoolAccountTier.vue'
 
 const props = defineProps<{
   kind: ProviderConnectionKind
@@ -42,6 +43,13 @@ const { confirmAction } = useConfirmAction()
 
 const descriptor = computed(() => store.descriptorFor(props.kind))
 const connection = computed(() => store.connectionFor(props.kind))
+// A runner pool the board inherits from its account is not the board's own: the board can neither
+// remove it nor edit it in place, since every write addresses the board's own row. The form then
+// registers a pool of the board's own instead, which takes over from the account's.
+const inherited = computed(() => connection.value?.source === 'account')
+const ownConnection = computed(() => (inherited.value ? null : connection.value))
+// Whether removing the board's own runner pool falls back to its account's (RunnerPoolAccountTier).
+const fallBackToAccount = ref(false)
 
 const BLURB_KEYS: Record<ProviderConnectionKind, string> = {
   environment: 'settings.providerConnection.kind.environment.blurb',
@@ -324,7 +332,11 @@ async function remove() {
   if (!(await confirmAction('remove', descriptor.value?.label ?? props.kind))) return
   busy.value = true
   try {
-    await store.remove(props.kind)
+    await store.remove(
+      props.kind,
+      props.kind === 'runner-pool' ? { fallBackToAccount: fallBackToAccount.value } : {},
+    )
+    fallBackToAccount.value = false
     resetDraft()
     actionToast.success('settings.providerConnection.toast.removed')
   } catch (e) {
@@ -381,11 +393,22 @@ function fieldHelp(key: string): string | undefined {
     >
       <div>
         <span class="font-medium text-default">{{ connection.label }}</span>
+        <UBadge
+          v-if="inherited"
+          color="neutral"
+          variant="subtle"
+          size="sm"
+          class="ms-2"
+          data-testid="runner-pool-source-account"
+        >
+          {{ t('settings.providerConnection.accountPool.badge') }}
+        </UBadge>
         <div class="text-2xs text-app-success-400">
           {{ t('settings.providerConnection.connectedAt', { baseUrl: connection.baseUrl }) }}
         </div>
       </div>
       <UButton
+        v-if="!inherited"
         icon="i-lucide-trash-2"
         color="error"
         variant="ghost"
@@ -394,6 +417,11 @@ function fieldHelp(key: string): string | undefined {
         @click="remove()"
       />
     </div>
+
+    <RunnerPoolAccountTier
+      v-if="kind === 'runner-pool'"
+      v-model:fall-back-to-account="fallBackToAccount"
+    />
 
     <!-- Mandatory-fields warning (mirrors the banner) -->
     <div
@@ -426,12 +454,14 @@ function fieldHelp(key: string): string | undefined {
     <div v-else-if="isNative" class="rounded-lg border border-dashed border-muted p-3 space-y-3">
       <SectionLabel as="p">
         {{
-          connection
-            ? t('settings.providerConnection.form.updateConfiguration')
-            : t('settings.providerConnection.form.connect')
+          inherited
+            ? t('settings.providerConnection.accountPool.ownPoolForm')
+            : ownConnection
+              ? t('settings.providerConnection.form.updateConfiguration')
+              : t('settings.providerConnection.form.connect')
         }}
       </SectionLabel>
-      <p v-if="connection && hasSecretFields" class="text-2xs text-app-warning-300/80">
+      <p v-if="ownConnection && hasSecretFields" class="text-2xs text-app-warning-300/80">
         {{
           t(
             'settings.providerConnection.form.reenterSecrets',
@@ -504,7 +534,7 @@ function fieldHelp(key: string): string | undefined {
 
       <div class="flex justify-end">
         <UButton size="sm" :loading="busy" :disabled="!canSave" @click="saveNative()">
-          {{ connection ? t('common.save') : t('settings.providerConnection.form.connect') }}
+          {{ ownConnection ? t('common.save') : t('settings.providerConnection.form.connect') }}
         </UButton>
       </div>
     </div>
@@ -515,8 +545,8 @@ function fieldHelp(key: string): string | undefined {
       v-else
       :kind="kind"
       :saved-manifest="descriptor.savedManifest"
-      :connected="!!connection"
-      :stored-secret-keys="connection?.secretKeys ?? []"
+      :connected="!!ownConnection"
+      :stored-secret-keys="ownConnection?.secretKeys ?? []"
       :supports-test="descriptor.supportsTest"
       :testing="testing"
       :busy="busy"
