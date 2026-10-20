@@ -212,8 +212,13 @@
     },
     "frontend/storybook": {
       // The story test config has its own name so no ordinary vitest lane picks it up, so it is
-      // named here as an entry.
-      "entry": ["vitest.stories.config.ts"],
+      // named here as an entry, with the setup file it names. `nuxt.config.ts` gives every page
+      // `EmptyPage.vue` by path, not by import.
+      "entry": [
+        "vitest.stories.config.ts",
+        ".storybook/collectGarbage.ts",
+        ".storybook/EmptyPage.vue",
+      ],
       // msw's generated service worker: Storybook serves it from `.storybook/public` and the
       // preview registers it by URL, so no module imports it.
       "ignore": [".storybook/public/mockServiceWorker.js"],

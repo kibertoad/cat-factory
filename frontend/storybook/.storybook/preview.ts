@@ -3,7 +3,8 @@ import { useColorMode } from '#imports'
 import UApp from '@nuxt/ui/components/App.vue'
 import { __resetConsumerModulesForTest } from '../../app/app/modular/registry'
 import { installApiResponses, startApiWorker } from '../../app/app/stories/api'
-import type { Preview } from '@storybook/vue3'
+import { waitOnRequests } from '../../app/app/stories/settle'
+import { composeStory, type Preview } from '@storybook/vue3'
 
 // Every story renders inside `UApp`, exactly as `app.vue` does.
 //
@@ -70,6 +71,22 @@ function clearCookies(): void {
   }
 }
 
+/**
+ * Run one empty story before the first story of the stories file, in the story test lane.
+ *
+ * A frame's first story pays for work the next ones do not: the preset builds the frame's first
+ * Nuxt app and loads the modules its plugins import on demand (the locale messages among them),
+ * `UApp` loads its toaster, the a11y check loads axe-core, and each runs its code for the first
+ * time. A story has 15 s and the hook 30 s, so that work belongs here, in `beforeAll`. The empty
+ * story goes through the same steps as every story (loaders, decorators, render, a11y check), so
+ * nothing is warmed by a copy; the first real story unmounts it, as it would the story before it.
+ */
+async function runEmptyStory(): Promise<void> {
+  // The Storybook page itself has no timeout to protect, and nothing there would unmount it.
+  if (import.meta.env.STORY_TEST_LANE !== 'true') return
+  await composeStory({ render: () => ({ render: () => null }) }, { title: 'Empty' }).run()
+}
+
 const preview: Preview = {
   globalTypes: {
     colorMode: {
@@ -101,9 +118,13 @@ const preview: Preview = {
   },
 
   // One msw worker for the whole preview: registering a service worker per story would be slow
-  // and race the first request.
+  // and race the first request. Then an empty story, so the first story does not pay for the
+  // frame's first boot (`runEmptyStory`).
   beforeAll: async () => {
+    // Before anything renders, so every request a story sends is counted.
+    waitOnRequests()
     await startApiWorker()
+    await runEmptyStory()
   },
 
   // Storybook runs the loaders BEFORE `beforeEach`, so what a story's own loaders need is set up

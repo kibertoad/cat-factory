@@ -17,6 +17,7 @@ export function useSetupActor() {
     fullSurface: uiRole.fullSurface,
     canManageIntegrations: access.canManageIntegrations.value,
     canExecuteRuns: access.canExecuteRuns.value,
+    canWriteBoard: access.canWriteBoard.value,
     isAccountAdmin: accounts.isActiveAccountAdmin,
     accountsEnabled: accounts.enabled,
   }))

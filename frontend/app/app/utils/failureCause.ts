@@ -21,6 +21,7 @@ import type { EnvironmentFailureReason } from '@cat-factory/contracts'
 import type { AgentFailure, AgentFailureKind } from '~/types/execution'
 import type { AgentRunSummary } from '~/stores/agentRuns'
 import { refusalCopy, type ConflictAction } from '~/utils/conflictCopy'
+import { ENVIRONMENTS_FIX, RUNNER_POOL_FIX } from '~/utils/setupFixes'
 
 /** i18n key of the one-line cause, per failure kind, for a task run. */
 export const FAILURE_CAUSE_KEYS: Record<AgentFailureKind, string> = {
@@ -62,12 +63,12 @@ const LOCAL_DEPLOY_RUNTIME_VARIABLE = 'LOCAL_DEPLOY_RUNTIME'
 const ENVIRONMENT_SETUP: ConflictAction = {
   labelKey: 'board.failure.environmentSetup',
   icon: 'i-lucide-settings',
-  run: (ui) => ui.openProviderConnection('environment'),
+  fix: ENVIRONMENTS_FIX,
 }
 const RUNNER_POOL_SETUP: ConflictAction = {
   labelKey: 'board.failure.deployRunnerSetup',
   icon: 'i-lucide-settings',
-  run: (ui) => ui.openProviderConnection('runner-pool'),
+  fix: RUNNER_POOL_FIX,
 }
 
 /** Which run failed: a task run (`execution`) or a single-job run. */

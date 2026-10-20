@@ -1,5 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { startExecutionContract } from '@cat-factory/contracts'
+import { expect, screen, userEvent, within } from 'storybook/test'
 import { computed } from 'vue'
+import { apiRefusal } from '~/stories/api'
 import { loginTask, logoutTask, refreshTask } from '~/stories/board.stories.mocks'
 import {
   auditTask,
@@ -9,7 +12,8 @@ import {
   resetTask,
   totpTask,
 } from '~/stories/lanes.stories.mocks'
-import { seedSnapshot, withSeed } from '~/stories/withStores'
+import { seedMember, seedSnapshot, withSeed } from '~/stories/withStores'
+import { storyWorkspacePrefix } from '~/stories/workspace'
 import { useUiStore } from '~/stores/ui'
 import { useWorkspaceQueueStore } from '~/stores/workspaceQueue'
 import QueueCard from './QueueCard.vue'
@@ -44,11 +48,38 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-function board(select?: string) {
+function board(select?: string, member = false) {
   return withSeed(() => {
     seedSnapshot(queueSnapshot())
+    if (member) seedMember()
     if (select) useUiStore().select(select)
   })
+}
+
+// Start refused because the workspace has no handler for the service's provision type: a setup
+// gap. The board admin who can fix it gets the toast's fix button; a member gets no button and
+// one sentence naming who can fix it. The message is the run admission's own.
+const startRefused = {
+  api: [
+    apiRefusal(startExecutionContract, {
+      status: 409,
+      error: {
+        code: 'conflict',
+        message:
+          "This service provisions a 'kubernetes' environment via the Deployer, but this " +
+          'workspace has no infrastructure handler configured for that type. Configure a ' +
+          'handler (Infrastructure, Test environments), or set the service to infraless, before ' +
+          'starting.',
+        details: { reason: 'provision_type_unhandled', provisionType: 'kubernetes' },
+      },
+      pathPrefix: storyWorkspacePrefix,
+      pathParams: { blockId: auditTask.id },
+    }),
+  ],
+}
+
+async function clickStart(canvasElement: HTMLElement) {
+  await userEvent.click(within(canvasElement).getByRole('button', { name: 'Start' }))
 }
 
 /** The architect asked where the TOTP secrets go: the question, and Answer. */
@@ -101,4 +132,27 @@ export const Merged: Story = {
 /** The inspector shows this task: the border is the strong one. */
 export const Selected: Story = {
   decorators: [board(totpTask.id)],
+}
+
+/** Start refused on a setup gap, for a board admin: the toast offers the fix. */
+export const StartRefused: Story = {
+  args: { taskId: auditTask.id },
+  decorators: [board()],
+  parameters: startRefused,
+  play: async ({ canvasElement }) => {
+    await clickStart(canvasElement)
+    await screen.findByRole('button', { name: 'Configure infrastructure' })
+  },
+}
+
+/** The same refusal for a member: no fix button, and the toast names the board admin. */
+export const StartRefusedMember: Story = {
+  args: { taskId: auditTask.id },
+  decorators: [board(undefined, true)],
+  parameters: startRefused,
+  play: async ({ canvasElement }) => {
+    await clickStart(canvasElement)
+    await screen.findByText(/A board admin can fix this\./)
+    await expect(screen.queryByRole('button', { name: 'Configure infrastructure' })).toBeNull()
+  },
 }
