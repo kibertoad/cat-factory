@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // The fix for each setup gap a refusal can name: who closes the gap, and which screen closes it.
-// The conflict table (`utils/conflictCopy.ts`) and the failure block read these, and both the toasts
-// and the failure block gate them on who is asking (`gateSetupFix`). Plain data, so a util and a
-// unit test can import it without the stores the remedies read.
+// The conflict table (`utils/conflictCopy.ts`) and the failure block read these, and both the
+// toasts and the failure block gate them on who is asking (`gateSetupFix`). Plain data, so a util
+// and a unit test can import it without the stores the remedies read.
 // ---------------------------------------------------------------------------
 
 import type { useSetupRemedies } from '~/composables/useSetupRemedies'
@@ -65,15 +65,19 @@ export const MODEL_CONFIG_FIX: SetupFix = {
 }
 
 /** Who is asking and who owns each gap, read when a fix is offered (never at store setup). */
-export interface ConflictAudience {
+export interface SetupAudience {
   actor: SetupActor
   owners: InfraSetupOwners | null
 }
 
-/** How a setup prompt reads its audience and opens a fix. */
-export interface SetupConflictDeps {
-  audience: () => ConflictAudience
+/** How a gated fix opens its screen. */
+export interface SetupFixDeps {
   remedies: () => SetupRemedies
+}
+
+/** How a conflict toast reads its audience and opens a fix. */
+export interface SetupConflictDeps extends SetupFixDeps {
+  audience: () => SetupAudience
 }
 
 /** A {@link SetupFix} for one caller: the button, or the line that names who can fix it. */
@@ -87,8 +91,8 @@ export type GatedSetupFix = { remedy: null; run: () => void } | { remedy: SetupR
  */
 export function gateSetupFix(
   fix: SetupFix,
-  audience: ConflictAudience,
-  deps: Pick<SetupConflictDeps, 'remedies'>,
+  audience: SetupAudience,
+  deps: SetupFixDeps,
 ): GatedSetupFix {
   const remedy = setupRemedyFor(fix.owner(audience.owners), audience.actor)
   return remedy

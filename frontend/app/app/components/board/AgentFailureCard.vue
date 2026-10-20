@@ -134,7 +134,7 @@ const gated = computed(() => {
 const fix = computed(() => {
   const f = presented.value?.fix
   const g = gated.value
-  return f && g && !g.remedy ? { label: t(f.labelKey), icon: f.icon, run: g.run } : null
+  return f && g?.remedy === null ? { label: t(f.labelKey), icon: f.icon, run: g.run } : null
 })
 // A caller who cannot save the setting gets the line that names who can, in place of the button.
 // Only where the setting IS the action: beside Retry the setting is a guess, and naming an owner
