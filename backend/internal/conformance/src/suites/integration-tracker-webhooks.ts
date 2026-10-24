@@ -72,7 +72,7 @@ async function setupTracker(
  * below fail for the wrong reason, and (worse) a receiver that verified a re-serialised parse
  * would pass, which is the classic signature bypass this whole shape exists to avoid.
  */
-async function deliver(
+async function deliver<T = unknown>(
   app: ConformanceApp,
   ws: string,
   secret: string,
@@ -81,7 +81,7 @@ async function deliver(
 ) {
   const headers =
     opts.sign === false ? {} : await signFakeTrackerDelivery(secret, JSON.stringify(event))
-  return app.call('POST', `/webhooks/tasks/${opts.source ?? 'jira'}/${ws}`, event, headers)
+  return app.call<T>('POST', `/webhooks/tasks/${opts.source ?? 'jira'}/${ws}`, event, headers)
 }
 
 export function defineTrackerWebhookConformance(harness: ConformanceHarness): void {
@@ -146,6 +146,25 @@ export function defineTrackerWebhookConformance(harness: ConformanceHarness): vo
       const { ws, secret } = await setupTracker(app)
       const acked = await deliver(app, ws, secret, { kind: 'project_updated' })
       expect(acked.status).toBe(202)
+    })
+
+    it("answers a verified handshake with the adapter's response, and refuses an unsigned one", async () => {
+      // A vendor that verifies the URL (Slack's `url_verification`) reads the challenge back out of
+      // the response body, so a 202 with no body means the URL can never be registered.
+      const app = harness.makeApp()
+      const { ws, secret } = await setupTracker(app)
+      const handshake = { kind: 'handshake', challenge: 'c-123' }
+
+      const answered = await deliver<{ challenge: string }>(app, ws, secret, handshake)
+      expect(answered.status).toBe(200)
+      expect(answered.body).toEqual({ challenge: 'c-123' })
+
+      // The handshake runs only after verification: an unsigned or wrongly signed challenge gets
+      // the same terse 401 as any other delivery, never the echo.
+      const unsigned = await deliver(app, ws, secret, handshake, { sign: false })
+      expect(unsigned.status).toBe(401)
+      const forged = await deliver(app, ws, `${secret}-tampered`, handshake)
+      expect(forged.status).toBe(401)
     })
 
     it('applies a ticket reply to a parked review, and applies a REDELIVERY exactly once', async () => {
