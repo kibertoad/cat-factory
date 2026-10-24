@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { postSignInUrl } from './postSignIn'
+import { postSignInUrl, signInThenReload } from './postSignIn'
 
 // The regression this exists for: every sign-in path reloaded to `location.pathname`, so a flow
 // whose subject rides the query string lost it the moment a person signed in. The MCP consent
@@ -25,5 +25,32 @@ describe('postSignInUrl', () => {
     // The fragment is absent by construction: it is never read here, so a stale one would only
     // scroll the freshly booted app to an anchor the previous screen owned.
     expect(postSignInUrl({ pathname: '/boards', search: '?a=1' })).toBe('/boards?a=1')
+  })
+})
+
+describe('signInThenReload', () => {
+  function location(search: string) {
+    const assigned: string[] = []
+    const at = { pathname: '/', search, assign: (url: string) => void assigned.push(url) }
+    return { at, assigned }
+  }
+
+  it('reloads to the URL as it was BEFORE the sign-in, query included', async () => {
+    // What the board does as the session lands: it consumes `?addRepo=` and strips it from the URL.
+    const { at, assigned } = location('?addRepo=octo%2Fdemo&provider=github')
+    await signInThenReload(async () => {
+      at.search = ''
+    }, at)
+    expect(assigned).toEqual(['/?addRepo=octo%2Fdemo&provider=github'])
+  })
+
+  it('does not reload when the sign-in is refused', async () => {
+    const { at, assigned } = location('?addRepo=octo%2Fdemo')
+    await expect(
+      signInThenReload(async () => {
+        throw new Error('refused')
+      }, at),
+    ).rejects.toThrow('refused')
+    expect(assigned).toEqual([])
   })
 })

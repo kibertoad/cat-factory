@@ -1,12 +1,12 @@
-import {
-  type CatFactoryClient,
-  type DirectoryAccountMembership,
-  type DirectoryChange,
-  type DirectoryRepo,
-  type DirectoryUser,
-  type DirectoryWebhookDelivery,
-  type DirectoryWorkspace,
-  type DirectoryWorkspaceMembership,
+import type {
+  CatFactoryClient,
+  DirectoryAccountMembership,
+  DirectoryChange,
+  DirectoryRepo,
+  DirectoryUser,
+  DirectoryWebhookDelivery,
+  DirectoryWorkspace,
+  DirectoryWorkspaceMembership,
 } from '@cat-factory/sdk'
 import { verifyDelivery } from '@cat-factory/webhooks'
 import {
@@ -19,7 +19,8 @@ import {
 
 /**
  * The part of a client the syncer calls. A `CatFactoryClient` built with your key satisfies it.
- * `me` is read to learn the key's workspace reach, which filters what a push may write.
+ * `directory.getReach` is read to learn the key's workspace reach, which filters what a push may
+ * write; `me` answers it on a deployment that predates that route.
  */
 export type DirectoryClient = Pick<CatFactoryClient, 'directory' | 'me'>
 
@@ -121,7 +122,7 @@ export class DirectorySyncer {
         // The endpoint is account-level, so its pushes carry the whole account. A key limited to
         // some workspaces keeps only what it can read back, or the store would hold users and
         // boards that no reconciliation under this key ever revisits.
-        const reach = (await this.#client.me.get()).workspaceIds
+        const reach = await this.#reach()
         for (const change of delivery.changes) {
           if (withinReach(change, reach)) applied += await this.#apply(recordOf(change))
         }
@@ -139,6 +140,23 @@ export class DirectorySyncer {
     return result.ok
       ? new Response(null, { status: 204 })
       : new Response(result.reason, { status: 401 })
+  }
+
+  /**
+   * The key's workspace reach, `null` for every workspace. `/api/v1/me` names one workspace and so
+   * refuses a key reaching several that sends no header, which is every key a directory webhook
+   * accepts; it is asked only of a deployment without `/api/v1/directory/reach`.
+   */
+  async #reach(): Promise<readonly string[] | null> {
+    const { directory, me } = this.#client
+    // The SDK is a peer whose floor predates `getReach`, so an integrator's copy may lack it.
+    if (typeof directory.getReach !== 'function') return (await me.get()).workspaceIds
+    try {
+      return (await directory.getReach()).workspaceIds
+    } catch (error) {
+      if (!isNotFound(error)) throw error
+      return (await me.get()).workspaceIds
+    }
   }
 
   async #catchUp(alreadyApplied: number, reconciled: boolean): Promise<SyncResult> {
@@ -307,6 +325,13 @@ function snapshotRecord(
  * memberships, and the memberships and repositories of its own workspaces only, but it is told of
  * every workspace deletion, since the deletion drops the grant that would otherwise name it.
  */
+/** Whether a call was answered 404, as a deployment answers a route it does not serve yet. */
+function isNotFound(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { status?: unknown }).status === 404
+  )
+}
+
 function withinReach(change: DirectoryChange, reach: readonly string[] | null): boolean {
   if (reach === null) return true
   switch (change.entityType) {
@@ -328,9 +353,8 @@ function tombstone(entityType: DirectoryEntityType, key: string, seq: number): D
 
 /**
  * Whether an API refusal carries this `details.reason`. Read structurally rather than through
- * `instanceof CatFactoryApiError`: the client is built by the integrator from THEIR copy of
- * `@cat-factory/sdk`, which is a different class whenever their version differs from the one this
- * package was published against.
+ * `instanceof CatFactoryApiError`: this package takes only types from `@cat-factory/sdk`, so it
+ * never loads the integrator's peer copy at runtime.
  */
 function isReason(error: unknown, reason: string): boolean {
   if (typeof error !== 'object' || error === null || !('details' in error)) return false

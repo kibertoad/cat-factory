@@ -2140,6 +2140,31 @@ func (s *MeService) Get(ctx context.Context) (*PublicIdentity, error) {
 	return &out, nil
 }
 
+// DeploymentService where the deployment serves its web app, for sending a person to one of the app's deep links
+// (the prefilled add-service screen, say). Any key may ask, with no workspace named.
+type DeploymentService struct {
+	client *Client
+}
+
+// Get describe the deployment
+// Report where this deployment serves its web app (`appUrl`): `APP_BASE_URL` when the operator
+// set one, otherwise the origin this API was reached on. An integration uses it to send a person
+// to one of the app’s deep links, such as the prefilled add-service screen
+// (`?addRepo=<owner>/<name>`). Account-level, so a key reaching several workspaces calls it
+// without naming one. `read` scope.
+// GET /api/v1/deployment (operation getPublicDeployment).
+func (s *DeploymentService) Get(ctx context.Context) (*PublicDeployment, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/deployment",
+	}
+	var out PublicDeployment
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // DecisionsService every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge
 // verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview
 // gates.
@@ -3598,6 +3623,25 @@ func (s *DirectoryService) DeleteWebhook(ctx context.Context, webhookID string) 
 	return s.client.requestNoContent(ctx, req)
 }
 
+// GetReach read the key's directory reach
+// The calling key’s account and the workspaces it reaches, `null` for every workspace in the
+// account (later ones included). Account-scoped like the rest of the directory: no
+// `x-cat-factory-workspace` header is read, so a key reaching several workspaces gets an answer
+// where `GET /api/v1/me` asks it to name one. A mirror reads this to filter what a directory push
+// may write, and to tell an account-wide key from one limited to some workspaces.
+// GET /api/v1/directory/reach (operation getDirectoryReach).
+func (s *DirectoryService) GetReach(ctx context.Context) (*DirectoryReach, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/directory/reach",
+	}
+	var out DirectoryReach
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ListAccountMemberships list the account's memberships
 // A keyset-paged snapshot of the account’s memberships, each with the member’s account roles.
 // Account-wide, so a key limited to some workspaces is refused with `403` and `reason:
@@ -4329,6 +4373,47 @@ func (s *GuidedReviewsService) Stream(ctx context.Context, sessionID string) (*E
 		Path:   fmt.Sprintf("/api/v1/guided-reviews/%s/events", pathEscape(sessionID)),
 	}
 	return s.client.stream(ctx, req)
+}
+
+// PrAssessmentsService assess a pull request in a linked repository: the merger's complexity, risk and impact scores
+// with a rationale, the change class its paths fall in, and whether a risk policy would let it
+// land with no person. The verdict is given without publishing the policy's ceilings. Takes a
+// `write` key: each assessment is one model call. Nothing is persisted and no run starts.
+type PrAssessmentsService struct {
+	client *Client
+}
+
+// Assess assess a pull request against a risk policy
+// Score one pull request in a repository linked to the workspace on the merger’s three axes
+// (complexity, risk, impact, each 0..1, with a rationale), classify it by its changed paths, and
+// say whether a risk policy would let it land with no person. The policy is the one named by
+// `riskPolicyId` from `GET /api/v1/risk-policies`, else the workspace’s unattended default (the
+// one a run started through this API resolves); an unknown id is `422` with `details.reason:
+// "risk_policy_not_found"`, and a workspace with no unattended default is `503`
+// `risk_policy_default_missing`. The verdict comes from the same decision the merge step makes,
+// so the policy’s ceilings are never published: `verdict.reason` and `verdict.exceededAxes` say
+// why. A key bound to a person is judged under that person’s workspace role, as a task it creates
+// is admitted, so the role-scoped rules (`classRulesByRole`, `dryRunRoles`,
+// `submissionClassesByRole`) apply to it; a key bound to nobody has no role and they do not.
+// Synchronous: one inline model call, nothing persisted, no run. An unlinked repository is `404`
+// `repo_not_linked`, a PR the host cannot find is `404` `pr_not_found`, a PR that received
+// commits while it was read is `503` `pr_head_moved` (retry), an exhausted budget is `429`
+// `budget_exhausted`, no configured model is `503` `model_unavailable`, a failed model call is
+// `503` `generation_failed`, a call that runs out of time is `503` `generation_timeout`, and a
+// reply that is not an assessment is `503` `unreadable_reply`. A key bound to a person reads the
+// PR and calls the model as that person. Requires a `write` key.
+// POST /api/v1/pr-assessments (operation assessPublicPullRequest).
+func (s *PrAssessmentsService) Assess(ctx context.Context, body AssessPublicPullRequest) (*PublicPrAssessment, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   "/api/v1/pr-assessments",
+		Body:   body,
+	}
+	var out PublicPrAssessment
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // KeysService the workspace's own API keys: provision one headlessly, list them, revoke one (and what it

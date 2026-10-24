@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/directory-sync",
-  "version": "0.2.0",
+  "version": "0.2.3",
   "description": "Keep a copy of a cat-factory account's directory (workspaces, users, memberships, linked repositories) in sync: snapshot bootstrap, change-feed catch-up, signed webhook pushes and periodic reconciliation, over a storage adapter you implement.",
   "keywords": [
     "cat-factory",
@@ -38,13 +38,16 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@cat-factory/sdk": "workspace:*",
-    "@cat-factory/webhooks": "workspace:*"
+    "@cat-factory/webhooks": "workspace:^"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
+    "@cat-factory/sdk": "workspace:*",
+    "@types/node": "^26.6.5",
     "typescript": "7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.5"
+  },
+  "peerDependencies": {
+    "@cat-factory/sdk": "workspace:>=0.57.0 <1.0.0"
   },
   "engines": {
     "node": ">=20"

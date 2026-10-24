@@ -68,6 +68,13 @@ prerequisites are configured.
   stack whose layers are all inline / from other repos needs NO repo of its own and materializes an
   empty working tree instead of cloning. `SharedStackSeeder.ts` is the deployment-declared side:
   `startNode`/`startLocal`'s `seedSharedStacks` flows through it, idempotently by NAME.
+- `runners/RunnerPoolSeeder.ts`: the deployment-declared runner pool (Node's
+  `seedAccountRunnerPool` callback), the third seeder beside the handler and shared-stack ones but
+  keyed by ACCOUNT: it inserts the account's pool when it has none (`seedAccount`, validated by the
+  same `RunnerPoolConnectionService.validate` as an admin registration), and the boot backfill alone
+  replaces one whose seed changed (`reseedAccount`, compared by content). A bad seed is an `error`
+  log, a failed read a `warn`. Dispatch reads go through the service's single
+  `effective` resolver (board row, else account row, unless the board opted out).
 - `serviceCatalog/`: the workspace's DEVELOPER PORTAL connection (Backstage), whose services are
   imported into the foundational-services catalog as `workspace`-tier rows.
   `ServiceCatalogConnectionService.ts` owns the sealed connection plus the probe and is the only

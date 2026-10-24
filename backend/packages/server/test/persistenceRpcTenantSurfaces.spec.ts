@@ -546,6 +546,28 @@ describe('account onboarding read surface (account-scoped)', () => {
   })
 })
 
+describe('account runner pool surface', () => {
+  it('forwards getByAccount for an in-scope account and refuses an out-of-scope one (404)', async () => {
+    const repo = remoteRegistry().accountRunnerPoolRepository!
+    expect(await repo.getByAccount!(ACCOUNT)).toMatchObject({ accountId: ACCOUNT })
+    await expect(repo.getByAccount!(OTHER_ACCOUNT)).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('forwards listByAccounts only when EVERY requested account is in scope', async () => {
+    const repo = remoteRegistry().accountRunnerPoolRepository!
+    expect(await repo.listByAccounts!([ACCOUNT])).toEqual([{ accountId: ACCOUNT }])
+    await expect(repo.listByAccounts!([ACCOUNT, OTHER_ACCOUNT])).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('refuses insertIfAbsent and replace (the seed writes stay mothership-internal)', async () => {
+    const repo = remoteRegistry().accountRunnerPoolRepository!
+    await expect(repo.insertIfAbsent!({ accountId: ACCOUNT })).rejects.toThrow(/not callable/)
+    await expect(repo.replace!({ accountId: ACCOUNT })).rejects.toThrow(/not callable/)
+  })
+})
+
 describe('directory read surface (account-scoped)', () => {
   // `/api/v1/directory/*` served by a mothership-mode node. Every read names its account first,
   // so the `account` rule binds it; each stub echoes the account, proving the call reached it.

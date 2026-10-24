@@ -41,6 +41,7 @@ export function mergeWorkspaceSettings(
     kaizenEnabled: patch.kaizenEnabled ?? current.kaizenEnabled,
     delegateAgentsToRunnerPool:
       patch.delegateAgentsToRunnerPool ?? current.delegateAgentsToRunnerPool,
+    inheritAccountRunnerPool: patch.inheritAccountRunnerPool ?? current.inheritAccountRunnerPool,
     inputGateMode: patch.inputGateMode ?? current.inputGateMode,
     reviewFrictionMode: patch.reviewFrictionMode ?? current.reviewFrictionMode,
     reviewFrictionWarnCount: patch.reviewFrictionWarnCount ?? current.reviewFrictionWarnCount,

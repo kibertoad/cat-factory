@@ -408,10 +408,38 @@
       "stalled": "Uruchomienie utknęło",
       "retryBootstrap": "Ponów inicjalizację",
       "retryRun": "Ponów uruchomienie",
+      "startNewRun": "Rozpocznij nowe uruchomienie",
       "environmentSetup": "Skonfiguruj środowiska",
       "deployRunnerSetup": "Skonfiguruj pulę runnerów",
       "environmentLocalHint": "Lokalne środowiska tymczasowe wymagają środowiska uruchomieniowego wdrożenia do uruchomienia kubectl/kustomize/helm. Ustaw {runtime} w pliku .env: tryb natywny uruchamia te narzędzia na twoim hoście ({native}), tryb kontenerowy uruchamia je w obrazie wdrożeniowym ({container}).",
       "showDetail": "Pokaż szczegóły",
+      "details": "Szczegóły",
+      "detailsMessage": "Komunikat",
+      "detailsHint": "Uwagi dla operatora",
+      "detailsFull": "Pełne wyjście",
+      "cause": {
+        "preflight": "Kontrola przed startem nie powiodła się, więc żadna praca nie została wykonana. Otwórz Szczegóły, aby zobaczyć, co poprawić, a potem ponów.",
+        "dispatch": "Kontener agenta nie uruchomił się, więc żadna praca nie została wykonana. Zwykle jest to problem chwilowy.",
+        "environment": "Nie udało się utworzyć środowiska testowego. Sprawdź ustawienia środowiska, a potem ponów.",
+        "evicted": "Kontener zatrzymał się kilka razy podczas uruchomienia. Zwykle dzieje się tak podczas aktualizacji platformy, więc ponów po jej zakończeniu.",
+        "harness_shutdown": "Coś zatrzymało kontener podczas tego kroku. Znajdź przyczynę w Szczegółach, zanim ponowisz, bo ponowienie może znów się zatrzymać.",
+        "timeout": "Uruchomienie przestało odpowiadać lub przekroczyło swój limit czasu. Sprawdź w Szczegółach, które z nich, a potem ponów.",
+        "agent": "Krok agenta nie powiódł się. Sprawdź przyczynę przy nieudanym kroku, a potem ponów.",
+        "job_failed": "Kontener agenta zgłosił błąd. Ponowienie uruchamia nowy kontener.",
+        "delegated_failed": "Zewnętrzny system, który wykonał ten krok, zgłosił błąd. Link przy kroku otwiera jego uruchomienie z przyczyną.",
+        "rejected": "Krok został odrzucony, więc uruchomienie zostało zatrzymane. Ponowienie zaczyna od tego kroku.",
+        "companion_rejected": "Agent towarzyszący nie zwrócił użytecznego wyniku. Ponowienie uruchamia go jeszcze raz.",
+        "stalled": "Platforma straciła kontakt z tym uruchomieniem. Ponowienie rozpoczyna nowe uruchomienie.",
+        "state_unreadable": "Nie można odczytać zapisanego stanu tego uruchomienia, więc ponowienie odczyta ten sam uszkodzony stan. Rozpocznij nowe uruchomienie.",
+        "cancelled": "To uruchomienie zostało zatrzymane. Ponowienie uruchamia je jeszcze raz.",
+        "unknown": "Uruchomienie nie powiodło się z nieznanej przyczyny. Sprawdź Szczegóły, a potem ponów.",
+        "deployRunnerUnwiredLocal": "Ten komputer nie ma środowiska wdrożeniowego do utworzenia środowiska testowego. Ustaw {variable} w pliku .env, a potem ponów.",
+        "singleJob": {
+          "evicted": "Kontener zatrzymał się przed zakończeniem zadania. Ponowienie uruchamia nowy kontener.",
+          "timeout": "Zadanie zbyt długo nie wykazywało aktywności lub przekroczyło swój limit czasu. Ponowienie uruchamia je jeszcze raz.",
+          "agent": "Agent lub git push nie powiódł się. Sprawdź przyczynę w Szczegółach, a potem ponów."
+        }
+      },
       "retrying": "Ponawianie…",
       "history": {
         "previousErrors": "{count} poprzedni błąd | {count} poprzednie błędy | {count} poprzednich błędów"
@@ -806,6 +834,7 @@
       "providersUnconfigured": {
         "title": "Brak dostawcy AI dla tego modelu",
         "body": "Dla {models} nie skonfigurowano żadnego dostawcy. Dodaj klucz dostawcy, połącz subskrypcję lub włącz Cloudflare AI, aby go uruchomić.",
+        "cause": "Dla modelu w tym potoku nie skonfigurowano dostawcy. Dodaj klucz dostawcy, połącz subskrypcję lub włącz Cloudflare AI, a potem ponów.",
         "action": "Skonfiguruj AI"
       },
       "binaryStorageUnconfigured": {
@@ -2640,8 +2669,12 @@
         "githubConnect": "Połącz GitHub",
         "slackManage": "Zarządzaj powiadomieniami Slack",
         "slackConnect": "Połącz Slack",
-        "sourceManage": "Zarządzaj {source}",
-        "sourceConnect": "Połącz {source}",
+        "documentSourceManage": "Zarządzaj {source} (dokumenty)",
+        "documentSourceConnect": "Połącz {source} (dokumenty)",
+        "designSourceManage": "Zarządzaj {source} (projekty)",
+        "designSourceConnect": "Połącz {source} (projekty)",
+        "taskSourceManage": "Zarządzaj {source} (system zgłoszeń)",
+        "taskSourceConnect": "Połącz {source} (system zgłoszeń)",
         "documentImport": "Importuj i utwórz z dokumentów",
         "taskImport": "Importuj zgłoszenia",
         "fragments": "Biblioteka fragmentów kontekstu",
@@ -2910,19 +2943,23 @@
     "scopeHint": "Każdy poziom obejmuje poprzednie.",
     "scope": {
       "read": {
-        "label": "Tylko odczyt",
+        "label": "Odczyt · read",
         "description": "Podgląd usług, zadań, potoków i uruchomień."
       },
+      "webhooks": {
+        "label": "Webhooki · webhooks",
+        "description": "Dodatkowo rejestrowanie webhooków wysyłających zmiany do innego systemu."
+      },
       "write": {
-        "label": "Odczyt i zapis",
+        "label": "Zapis · write",
         "description": "Dodatkowo tworzenie i uruchamianie zadań."
       },
       "decide": {
-        "label": "Odczyt, zapis i decyzje",
+        "label": "Decyzje · decide",
         "description": "Dodatkowo odpowiadanie na pytania, na które czeka wstrzymane uruchomienie."
       },
       "admin": {
-        "label": "Pełny dostęp",
+        "label": "Pełny dostęp · admin",
         "description": "Dodatkowo usuwanie zadań i reagowanie na powiadomienia, co może scalić pull request."
       }
     },
@@ -3604,6 +3641,7 @@
         "boundToYou": "Twoja subskrypcja",
         "boundToOther": "Subskrypcja użytkownika {user}",
         "reachAll": "Wszystkie obszary robocze",
+        "reachMemberships": "Śledzi obszary robocze swojej osoby",
         "reachCount": "Obszary robocze: {count}"
       },
       "add": {
@@ -3612,7 +3650,7 @@
         "labelHelp": "Nazwa, po której później rozpoznasz ten token.",
         "labelPlaceholder": "np. potok CI",
         "scope": "Zakres",
-        "scopeHelp": "Co może ten token: tylko odczyt, odczyt i zapis lub pełny dostęp (który pozwala także na usuwanie).",
+        "scopeHelp": "Każdy poziom obejmuje wszystko, na co pozwala poprzedni. Odczyt: przeglądanie zadań, przebiegów i ich wyników. Webhooki: dodatkowo rejestrowanie i usuwanie webhooków wysyłających zmiany do innego systemu, takich jak webhooki katalogu i powiadomień. Zapis: dodatkowo tworzenie, edytowanie, uruchamianie, zatrzymywanie i ponawianie zadań oraz uruchamianie przeglądów i ocen. Decyzje: dodatkowo odpowiadanie na decyzje człowieka w przebiegu (zatwierdzenia, uwagi z przeglądu, pytania z wywiadu i pytania doprecyzowujące, testy ręczne); token potrzebuje tego poziomu także do uruchomienia potoku, który może się zatrzymać na takiej decyzji. Pełny dostęp (admin): dodatkowo dodawanie, konfigurowanie i usuwanie usług, usuwanie zadań, łączenie repozytoriów, zarządzanie połączeniami środowisk oraz reagowanie na powiadomienia.",
         "create": "Utwórz token",
         "identity": "Działa jako",
         "identitySystem": "Ten obszar roboczy (token systemowy)",
@@ -3621,16 +3659,20 @@
         "identitySelfHelp": "Uruchomienia rozpoczęte tym tokenem są przypisywane Tobie i mogą korzystać z Twojej osobistej subskrypcji Claude / Codex / GLM. Każde takie wywołanie musi dodatkowo przesłać Twoje hasło osobiste w nagłówku X-Personal-Password; nie jest ono nigdzie zapisywane. Użyj go do własnych uruchomień headless.",
         "reach": "Obszary robocze",
         "reachHelp": "W których obszarach roboczych ten token może działać. Token obejmujący więcej niż jeden wskazuje obszar roboczy przy każdym wywołaniu w nagłówku x-cat-factory-workspace.",
+        "reachAdminOnly": "Tylko administrator konta może utworzyć token obejmujący inne obszary robocze, którego wymagają webhooki katalogu. Poproś o to administratora.",
         "reachThis": "Tylko ten obszar roboczy",
         "reachAll": "Wszystkie obszary robocze konta",
         "reachSelected": "Wybrane obszary robocze",
+        "reachMemberships": "Moje obszary robocze (śledzi moje członkostwa)",
+        "reachMembershipsHelp": "Przy każdym wywołaniu sięga do każdego obszaru roboczego, w którym możesz działać: dołączenie lub odejście to zmienia, bez tworzenia od nowa. W każdym może tyle, ile pozwala tam Twoja rola.",
         "reachPick": "Wybierz obszary robocze"
       },
       "scopes": {
-        "read": "Tylko odczyt",
-        "write": "Odczyt i zapis",
-        "decide": "Odpowiadanie na decyzje",
-        "admin": "Pełny dostęp"
+        "read": "Odczyt · read",
+        "webhooks": "Webhooki · webhooks (obejmuje Odczyt)",
+        "write": "Zapis · write (obejmuje Webhooki)",
+        "decide": "Decyzje · decide (obejmuje Zapis)",
+        "admin": "Pełny dostęp · admin (obejmuje Decyzje)"
       },
       "toast": {
         "loadFailed": "Nie udało się załadować tokenów API",
@@ -4544,6 +4586,7 @@
       },
       "errors": {
         "listInstallations": "Nie udało się wyświetlić instalacji GitHub",
+        "loadProjection": "Nie udało się wczytać repozytoriów, pull requestów i zgłoszeń",
         "startInstall": "Nie udało się rozpocząć instalacji aplikacji GitHub",
         "connect": "Nie udało się połączyć"
       }
@@ -4638,7 +4681,8 @@
         "frontendWiringFailedNote": "Ustawienia frontendu nie zostały zapisane. Otwórz inspektor każdej aplikacji frontendowej, aby ustawić jej podkatalog i usługi backendowe."
       },
       "repoType": "Typ repozytorium",
-      "repoTypeHint": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i)."
+      "repoTypeHint": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i).",
+      "prefillProviderMismatch": "Link wskazywał {repo} u innego dostawcy, a ta tablica jest połączona z {connected}. Wyszukaj repozytorium ręcznie albo otwórz link na tablicy połączonej z jego dostawcą."
     },
     "repoTree": {
       "root": "katalog główny",
@@ -8424,11 +8468,11 @@
           },
           "banner": {
             "title": "Co poszło nie tak",
-            "body": "Karta zamienia pasek postępu na ten komunikat. Nazywa przyczynę, szczegóły zawierają surowe wyjście, a niektóre przyczyny oferują przycisk prosto do ustawienia, które je naprawia."
+            "body": "Karta zastępuje pasek postępu tym banerem. Pokazuje, co się nie powiodło, i daje jedną akcję. Otwórz zadanie, aby przeczytać przyczynę w jednym wierszu, z pełnym wyjściem w Szczegółach."
           },
           "retry": {
-            "title": "Uruchomić ponownie",
-            "body": "Ponów uruchamia pracę od nowa. Wcześniejsze błędy zostają na zadaniu, w sekcji „Poprzednie błędy”, więc możesz porównywać próby, zamiast tracić ślad."
+            "title": "Następny krok",
+            "body": "Ten przycisk to następny krok. Zwykle jest to Ponów, które uruchamia pracę jeszcze raz. Gdy błąd powoduje ustawienie, przycisk otwiera to ustawienie. Wcześniejsze błędy zostają przy zadaniu w sekcji Poprzednie błędy, więc można porównać próby."
           },
           "finish": {
             "title": "Błąd to informacja",

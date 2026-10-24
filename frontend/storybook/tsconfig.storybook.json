@@ -1,0 +1,12 @@
+{
+  // The Storybook config and the story test config, typed against the layer they render: its
+  // `~` alias, its auto-imports and its sources. This package's Nuxt tsconfig does not include
+  // them, and its `~` points at this package, which has no `app/`.
+  "extends": "../app/.nuxt/tsconfig.app.json",
+  "include": [
+    "../app/.nuxt/nuxt.d.ts",
+    "../app/.nuxt/nuxt.node.d.ts",
+    ".storybook/*.ts",
+    "vitest.stories.config.ts"
+  ]
+}

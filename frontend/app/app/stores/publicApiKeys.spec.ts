@@ -10,6 +10,7 @@ function key(over: Partial<PublicApiKey> = {}): PublicApiKey {
     accountId: 'acc1',
     workspaceId: 'ws1',
     workspaceIds: ['ws1'],
+    followsMemberships: false,
     label: 'CI',
     scope: 'write',
     createdByUserId: null,
@@ -105,10 +106,20 @@ describe('publicApiKeys store', () => {
 
     const store = usePublicApiKeysStore()
     await store.create('ci', 'write')
-    expect(body).toHaveBeenCalledWith({ label: 'ci', scope: 'write', actsAsSelf: false })
+    expect(body).toHaveBeenCalledWith({
+      label: 'ci',
+      scope: 'write',
+      actsAsSelf: false,
+      followsMemberships: false,
+    })
 
     await store.create('mine', 'write', true)
-    expect(body).toHaveBeenCalledWith({ label: 'mine', scope: 'write', actsAsSelf: true })
+    expect(body).toHaveBeenCalledWith({
+      label: 'mine',
+      scope: 'write',
+      actsAsSelf: true,
+      followsMemberships: false,
+    })
   })
 
   it('sends a reach only when one was chosen, so the default stays this workspace alone', async () => {
@@ -119,13 +130,19 @@ describe('publicApiKeys store', () => {
 
     const store = usePublicApiKeysStore()
     await store.create('ci', 'read')
-    expect(body).toHaveBeenLastCalledWith({ label: 'ci', scope: 'read', actsAsSelf: false })
+    expect(body).toHaveBeenLastCalledWith({
+      label: 'ci',
+      scope: 'read',
+      actsAsSelf: false,
+      followsMemberships: false,
+    })
 
     await store.create('all', 'read', false, null)
     expect(body).toHaveBeenLastCalledWith({
       label: 'all',
       scope: 'read',
       actsAsSelf: false,
+      followsMemberships: false,
       workspaceIds: null,
     })
 
@@ -134,8 +151,23 @@ describe('publicApiKeys store', () => {
       label: 'two',
       scope: 'read',
       actsAsSelf: false,
+      followsMemberships: false,
       workspaceIds: ['ws1', 'ws2'],
     })
+
+    // A key that follows its person's memberships names no workspaces, and lists here at once.
+    body.mockResolvedValueOnce({
+      key: key({ id: 'pak_follow', workspaceIds: [], followsMemberships: true }),
+      secret: 's',
+    })
+    await store.create('mine', 'decide', true, 'memberships')
+    expect(body).toHaveBeenLastCalledWith({
+      label: 'mine',
+      scope: 'decide',
+      actsAsSelf: true,
+      followsMemberships: true,
+    })
+    expect(store.keys.map((k) => k.id)).toContain('pak_follow')
   })
 
   it('revoke drops the key from the list', async () => {

@@ -493,3 +493,66 @@ generated types in every client.
 Additive. The management operations need an `admin` key that reaches every workspace. Pushes are
 at-least-once; a receiver dedupes on `deliveryId`, and the change feed stays the guarantee of
 completeness.
+
+## 1.83.0
+
+`POST /api/v1/pr-assessments` is new (`client.prAssessments.assess`): a pull request in a linked
+repository scored on the merger's complexity, risk and impact axes, its path-derived change class,
+and whether a risk policy would let it land with no person. The answer is a verdict
+(`within_policy` or `requires_review`, with the merge-decision reason and the exceeded axes), so
+the policy's ceilings stay unpublished, as `PublicRiskPolicy` already keeps them.
+
+Additive: one `write` operation and the shapes it carries (`AssessPublicPullRequest`,
+`PublicPrAssessment`, `PublicPrAssessmentPolicy`, `PublicPrAssessmentVerdict`). The call is
+synchronous and persists nothing.
+
+## 1.84.0
+
+A directory `DirectoryUser` gains `accounts`: the GitHub and GitLab accounts the user signed in
+with, each as `{ provider, id, login }`, where `id` is the host's numeric user id. A mirror matches
+people across systems on `(provider, id)`, which survives a rename on the host. Linking such an
+account to a user, or moving it to another user, records a `user` change for each user involved.
+
+Additive. A client built against an older document reads users as before.
+
+## 1.86.0
+
+The scope ladder gains a `webhooks` rung between `read` and `write`
+(`read ⊂ webhooks ⊂ write ⊂ decide ⊂ admin`). It is `read` plus registering and removing push
+endpoints: the directory webhooks (`/api/v1/directory/webhooks`, still for a key reaching every
+workspace) and a workspace's notification webhooks (`/api/v1/notification-webhook[s]`). Those
+operations move from `admin` to `webhooks`.
+
+Additive: a new enum value on `scope`, and operations that admit more keys than before. Every key
+that could call them still can.
+
+## 1.87.0
+
+`GET /api/v1/deployment` is new (`client.deployment.get`): where the deployment serves its web
+app (`appUrl`), so an integration can send a person to one of its deep links, such as the
+add-service screen prefilled with a repository (`?addRepo=<owner>/<name>`). It is account-level, so
+a key reaching several workspaces calls it without naming one, and any `read` key may.
+
+Additive: one `read` operation and its `PublicDeployment` shape.
+
+## 1.88.0
+
+`GET /api/v1/directory/reach` is new (`client.directory.getReach`): the calling key's
+`accountId` and `workspaceIds` (`null` for every workspace), account-scoped like the rest of the
+directory, so it needs no `x-cat-factory-workspace` header. `GET /api/v1/me` names one workspace and
+refuses a key reaching several that sends none, which is every key a directory webhook accepts, so a
+mirror filtering a push by reach reads this instead.
+
+Additive: one `read` operation and its `DirectoryReach` shape.
+
+## 1.89.0
+
+A key can follow its person's workspaces. `followsMemberships` is new on the key a mint returns or
+`GET /api/v1/keys` lists, on `GET /api/v1/me` and on `GET /api/v1/directory/reach`. Such a key is
+bound to a person (`actsAsUserId`) and reaches every workspace that person can act in, decided on
+each call, with its scope in each lowered to what their role there allows. `/me` and
+`/directory/reach` answer that reach as of the call; a listed key carries `workspaceIds: []`, since
+its reach is not a list.
+
+Additive: a new boolean on three shapes. A listed key's `workspaceIds` may now be an empty list,
+which it never was before, and only ever for a key with `followsMemberships: true`.

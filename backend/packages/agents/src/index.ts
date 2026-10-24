@@ -524,6 +524,12 @@ export {
   type GuidedReviewTurn,
 } from './agents/prompts/guided-review.js'
 export {
+  PR_ASSESSMENT_SYSTEM_PROMPT,
+  PR_ASSESSOR_AGENT_KIND,
+  renderPrAssessmentPrompt,
+  type PrAssessmentPromptInput,
+} from './agents/prompts/pr-assessment.js'
+export {
   FRAGMENT_TITLE_AGENT_KIND,
   FRAGMENT_TITLE_SYSTEM_PROMPT,
   renderFragmentTitlePrompt,

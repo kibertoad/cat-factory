@@ -33,6 +33,7 @@ public abstract class Resources {
     private final WebhookClient webhook;
     private final UsageClient usage;
     private final MeClient me;
+    private final DeploymentClient deployment;
     private final DecisionsClient decisions;
     private final DebugClient debug;
     private final EvidenceClient evidence;
@@ -40,6 +41,7 @@ public abstract class Resources {
     private final DirectoryClient directory;
     private final KaizenClient kaizen;
     private final GuidedReviewsClient guidedReviews;
+    private final PrAssessmentsClient prAssessments;
     private final KeysClient keys;
 
     protected Resources(Transport transport) {
@@ -62,6 +64,7 @@ public abstract class Resources {
         this.webhook = new WebhookClient(transport);
         this.usage = new UsageClient(transport);
         this.me = new MeClient(transport);
+        this.deployment = new DeploymentClient(transport);
         this.decisions = new DecisionsClient(transport);
         this.debug = new DebugClient(transport);
         this.evidence = new EvidenceClient(transport);
@@ -69,6 +72,7 @@ public abstract class Resources {
         this.directory = new DirectoryClient(transport);
         this.kaizen = new KaizenClient(transport);
         this.guidedReviews = new GuidedReviewsClient(transport);
+        this.prAssessments = new PrAssessmentsClient(transport);
         this.keys = new KeysClient(transport);
     }
 
@@ -167,6 +171,11 @@ public abstract class Resources {
         return me;
     }
 
+    /** Where the deployment serves its web app, for sending a person to one of the app's deep links (the prefilled add-service screen, say). Any key may ask, with no workspace named. */
+    public DeploymentClient deployment() {
+        return deployment;
+    }
+
     /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates. */
     public DecisionsClient decisions() {
         return decisions;
@@ -200,6 +209,11 @@ public abstract class Resources {
     /** Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking, drafting and posting drafts take a `write` key. Posting publishes plain comments on the pull request and never approves or requests changes. */
     public GuidedReviewsClient guidedReviews() {
         return guidedReviews;
+    }
+
+    /** Assess a pull request in a linked repository: the merger's complexity, risk and impact scores with a rationale, the change class its paths fall in, and whether a risk policy would let it land with no person. The verdict is given without publishing the policy's ceilings. Takes a `write` key: each assessment is one model call. Nothing is persisted and no run starts. */
+    public PrAssessmentsClient prAssessments() {
+        return prAssessments;
     }
 
     /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */

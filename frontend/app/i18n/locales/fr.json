@@ -408,10 +408,38 @@
       "stalled": "L’exécution est bloquée",
       "retryBootstrap": "Relancer l’initialisation",
       "retryRun": "Relancer l’exécution",
+      "startNewRun": "Démarrer une nouvelle exécution",
       "environmentSetup": "Configurer les environnements",
       "deployRunnerSetup": "Configurer le pool de runners",
       "environmentLocalHint": "Les environnements éphémères locaux nécessitent un runtime de déploiement pour exécuter kubectl/kustomize/helm. Définissez {runtime} dans votre .env : le mode natif exécute ces outils sur votre hôte ({native}), le mode conteneur les exécute dans l'image de déploiement ({container}).",
       "showDetail": "Afficher le détail",
+      "details": "Détails",
+      "detailsMessage": "Message",
+      "detailsHint": "Notes pour l’exploitant",
+      "detailsFull": "Sortie complète",
+      "cause": {
+        "preflight": "Une vérification avant le démarrage a échoué, aucun travail n’a donc été fait. Ouvrez Détails pour voir quoi corriger, puis réessayez.",
+        "dispatch": "Le conteneur de l’agent n’a pas démarré, aucun travail n’a donc été fait. C’est en général temporaire.",
+        "environment": "L’environnement de test n’a pas pu être créé. Vérifiez les paramètres de l’environnement, puis réessayez.",
+        "evicted": "Le conteneur s’est arrêté plusieurs fois pendant l’exécution. Cela arrive en général pendant une mise à jour de la plateforme : réessayez quand la mise à jour est terminée.",
+        "harness_shutdown": "Quelque chose a arrêté le conteneur pendant cette étape. Cherchez la cause dans Détails avant de réessayer, car une nouvelle tentative peut s’arrêter de nouveau.",
+        "timeout": "L’exécution a cessé de répondre ou a dépassé sa limite de temps. Consultez Détails pour savoir lequel, puis réessayez.",
+        "agent": "Une étape d’agent a échoué. Consultez la cause sur l’étape en échec, puis réessayez.",
+        "job_failed": "Le conteneur de l’agent a signalé un échec. Une nouvelle tentative démarre un nouveau conteneur.",
+        "delegated_failed": "Le système externe qui a exécuté cette étape a signalé un échec. Le lien de l’étape ouvre son exécution, qui montre la cause.",
+        "rejected": "Une étape a été rejetée, l’exécution s’est donc arrêtée. Une nouvelle tentative reprend à cette étape.",
+        "companion_rejected": "Un agent compagnon n’a pas donné de résultat utilisable. Une nouvelle tentative le relance.",
+        "stalled": "La plateforme a perdu le contact avec cette exécution. Une nouvelle tentative démarre une nouvelle exécution.",
+        "state_unreadable": "L’état enregistré de cette exécution est illisible, une nouvelle tentative relit donc le même état endommagé. Démarrez une nouvelle exécution.",
+        "cancelled": "Cette exécution a été arrêtée. Une nouvelle tentative la relance.",
+        "unknown": "L’exécution a échoué pour une cause inconnue. Consultez Détails, puis réessayez.",
+        "deployRunnerUnwiredLocal": "Cet ordinateur n’a pas de runtime de déploiement pour créer l’environnement de test. Définissez {variable} dans votre fichier .env, puis réessayez.",
+        "singleJob": {
+          "evicted": "Le conteneur s’est arrêté avant la fin de la tâche. Une nouvelle tentative démarre un nouveau conteneur.",
+          "timeout": "La tâche est restée trop longtemps sans activité, ou elle a dépassé sa limite de temps. Une nouvelle tentative la relance.",
+          "agent": "L’agent ou le git push a échoué. Consultez la cause dans Détails, puis réessayez."
+        }
+      },
       "retrying": "Nouvelle tentative…",
       "history": {
         "previousErrors": "{count} erreur précédente | {count} erreurs précédentes"
@@ -806,6 +834,7 @@
       "providersUnconfigured": {
         "title": "Aucun fournisseur d’IA pour ce modèle",
         "body": "Aucun fournisseur n’est configuré pour {models}. Ajoutez une clé de fournisseur, connectez un abonnement ou activez Cloudflare AI pour l’exécuter.",
+        "cause": "Aucun fournisseur n’est configuré pour un modèle de ce pipeline. Ajoutez une clé de fournisseur, connectez un abonnement ou activez Cloudflare AI, puis réessayez.",
         "action": "Configurer l’IA"
       },
       "binaryStorageUnconfigured": {
@@ -2640,8 +2669,12 @@
         "githubConnect": "Connecter GitHub",
         "slackManage": "Gérer les notifications Slack",
         "slackConnect": "Connecter Slack",
-        "sourceManage": "Gérer {source}",
-        "sourceConnect": "Connecter {source}",
+        "documentSourceManage": "Gérer {source} (documents)",
+        "documentSourceConnect": "Connecter {source} (documents)",
+        "designSourceManage": "Gérer {source} (maquettes)",
+        "designSourceConnect": "Connecter {source} (maquettes)",
+        "taskSourceManage": "Gérer {source} (gestionnaire de tickets)",
+        "taskSourceConnect": "Connecter {source} (gestionnaire de tickets)",
         "documentImport": "Importer et générer depuis des documents",
         "taskImport": "Importer des tickets",
         "fragments": "Bibliothèque de fragments de contexte",
@@ -2910,19 +2943,23 @@
     "scopeHint": "Chaque niveau inclut les précédents.",
     "scope": {
       "read": {
-        "label": "Lecture seule",
+        "label": "Lecture · read",
         "description": "Voir les services, les tâches, les pipelines et les exécutions."
       },
+      "webhooks": {
+        "label": "Webhooks",
+        "description": "Et aussi enregistrer des webhooks qui envoient les changements à un autre système."
+      },
       "write": {
-        "label": "Lecture et écriture",
+        "label": "Écriture · write",
         "description": "Et aussi créer et lancer des tâches."
       },
       "decide": {
-        "label": "Lecture, écriture et décision",
+        "label": "Décision · decide",
         "description": "Et aussi répondre aux questions qu'attend une exécution en pause."
       },
       "admin": {
-        "label": "Accès complet",
+        "label": "Accès complet · admin",
         "description": "Et aussi supprimer des tâches et agir sur les notifications, ce qui peut fusionner une pull request."
       }
     },
@@ -3604,6 +3641,7 @@
         "boundToYou": "Votre abonnement",
         "boundToOther": "Abonnement de {user}",
         "reachAll": "Tous les espaces de travail",
+        "reachMemberships": "Suit les espaces de travail de sa personne",
         "reachCount": "{count} espaces de travail"
       },
       "add": {
@@ -3612,7 +3650,7 @@
         "labelHelp": "Un nom pour reconnaître ce jeton plus tard.",
         "labelPlaceholder": "ex. pipeline CI",
         "scope": "Portée",
-        "scopeHelp": "Ce que ce jeton peut faire : lecture seule, lecture et écriture, ou accès complet (qui autorise aussi la suppression).",
+        "scopeHelp": "Chaque niveau inclut tout ce que permet le précédent. Lecture : consulter les tâches, les exécutions et leurs résultats. Webhooks : en plus, enregistrer et supprimer les webhooks qui envoient les changements à un autre système, comme les webhooks d'annuaire et de notification. Écriture : en plus, créer, modifier, démarrer, arrêter et relancer des tâches, et lancer des revues et des évaluations. Décision : en plus, répondre aux décisions humaines d'une exécution (approbations, constats de revue, questions d'entretien et de clarification, tests manuels) ; un jeton a aussi besoin de ce niveau pour démarrer un pipeline qui peut s'arrêter sur l'une d'elles. Accès complet (admin) : en plus, ajouter, configurer et supprimer des services, supprimer des tâches, lier des dépôts, gérer les connexions d'environnement, et agir sur les notifications.",
         "create": "Créer le jeton",
         "identity": "S'exécute en tant que",
         "identitySystem": "Cet espace de travail (jeton système)",
@@ -3621,16 +3659,20 @@
         "identitySelfHelp": "Les exécutions lancées avec ce jeton vous sont attribuées et peuvent utiliser votre abonnement personnel Claude / Codex / GLM. Chaque appel doit aussi envoyer votre mot de passe personnel dans l'en-tête X-Personal-Password ; il n'est jamais conservé. À utiliser pour vos propres exécutions headless.",
         "reach": "Espaces de travail",
         "reachHelp": "Les espaces de travail sur lesquels ce jeton peut agir. Un jeton qui en couvre plusieurs indique l’espace de travail à chaque appel dans l’en-tête x-cat-factory-workspace.",
+        "reachAdminOnly": "Seul un administrateur du compte peut créer un jeton qui couvre d'autres espaces de travail, ce dont les webhooks d'annuaire ont besoin. Demandez-le à l'un d'eux.",
         "reachThis": "Cet espace de travail uniquement",
         "reachAll": "Tous les espaces de travail du compte",
         "reachSelected": "Espaces de travail sélectionnés",
+        "reachMemberships": "Mes espaces de travail (suit mes adhésions)",
+        "reachMembershipsHelp": "Atteint à chaque appel chaque espace de travail où vous pouvez agir : en rejoindre ou en quitter un le change, sans rien recréer. Dans chacun, il ne peut pas faire plus que votre rôle ne le permet.",
         "reachPick": "Choisir des espaces de travail"
       },
       "scopes": {
-        "read": "Lecture seule",
-        "write": "Lecture et écriture",
-        "decide": "Répondre aux décisions",
-        "admin": "Accès complet"
+        "read": "Lecture · read",
+        "webhooks": "Webhooks (inclut Lecture)",
+        "write": "Écriture · write (inclut Webhooks)",
+        "decide": "Décision · decide (inclut Écriture)",
+        "admin": "Accès complet · admin (inclut Décision)"
       },
       "toast": {
         "loadFailed": "Impossible de charger les jetons d'API",
@@ -4544,6 +4586,7 @@
       },
       "errors": {
         "listInstallations": "Impossible de lister les installations GitHub",
+        "loadProjection": "Impossible de charger les dépôts, les pull requests et les issues",
         "startInstall": "Impossible de démarrer l'installation de la GitHub App",
         "connect": "Connexion impossible"
       }
@@ -4638,7 +4681,8 @@
         "frontendWiringFailedNote": "Les réglages du frontend n'ont pas été enregistrés. Ouvrez l'inspecteur de chaque application frontend pour définir son sous-répertoire et ses services backend."
       },
       "repoType": "Type de dépôt",
-      "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement)."
+      "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement).",
+      "prefillProviderMismatch": "Le lien visait {repo} chez un autre hébergeur, et ce tableau est connecté à {connected}. Cherchez le dépôt à la main, ou ouvrez le lien sur un tableau connecté à son hébergeur."
     },
     "repoTree": {
       "root": "racine",
@@ -8424,11 +8468,11 @@
           },
           "banner": {
             "title": "Ce qui s’est mal passé",
-            "body": "La carte remplace sa barre de progression par ce bandeau. Il nomme la cause, les détails contiennent la sortie brute, et certaines causes proposent un bouton menant droit au réglage qui les corrige."
+            "body": "La carte remplace sa barre de progression par ce bandeau. Il indique ce qui a échoué et propose une action. Ouvrez la tâche pour lire la cause en une ligne, avec la sortie brute dans Détails."
           },
           "retry": {
-            "title": "Relancer",
-            "body": "Réessayer relance le travail. Les erreurs précédentes restent sur la tâche, sous « Erreurs précédentes », pour comparer les tentatives au lieu de perdre la trace."
+            "title": "L’étape suivante",
+            "body": "Ce bouton est l’étape suivante. En général c’est Réessayer, qui relance le travail. Quand un paramètre cause l’échec, il ouvre ce paramètre. Les erreurs précédentes restent sur la tâche, sous Erreurs précédentes, pour comparer les tentatives."
           },
           "finish": {
             "title": "Un échec est une information",

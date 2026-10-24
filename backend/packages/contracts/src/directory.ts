@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { accountRolesSchema } from './accounts.js'
 import { notificationWebhookIdSchema } from './notification-webhooks.js'
+import { publicApiKeyWorkspaceIdsSchema } from './public-api-keys.js'
 import { cursorSchema, pageLimitSchema } from './public-paging.js'
 import { vcsProviderSchema } from './routes/auth.js'
 import { workspaceAccessModeSchema, workspaceRoleSchema } from './workspace-members.js'
@@ -44,11 +45,32 @@ export const directoryWorkspaceSchema = v.object({
 })
 export type DirectoryWorkspace = v.InferOutput<typeof directoryWorkspaceSchema>
 
+/**
+ * A source-control account the user signed in with. A mirror matches people across systems on
+ * `(provider, id)`, because the host's numeric id survives a rename and a login does not.
+ */
+export const directoryUserAccountSchema = v.object({
+  provider: vcsProviderSchema,
+  /**
+   * The host's numeric user id, as a decimal string. A `gitlab` id is the one on the GitLab
+   * instance this deployment signs in through, which may be self-managed rather than gitlab.com.
+   */
+  id: v.string(),
+  /** The handle recorded when the account was linked. Display only: a rename on the host is not followed. */
+  login: v.nullable(v.string()),
+})
+export type DirectoryUserAccount = v.InferOutput<typeof directoryUserAccountSchema>
+
 export const directoryUserSchema = v.object({
   id: v.string(),
   name: v.nullable(v.string()),
   email: v.nullable(v.string()),
   avatarUrl: v.nullable(v.string()),
+  /**
+   * Ordered by provider, then by id compared as a string. Empty for a user who never signed in
+   * through a host.
+   */
+  accounts: v.array(directoryUserAccountSchema),
 })
 export type DirectoryUser = v.InferOutput<typeof directoryUserSchema>
 
@@ -219,6 +241,22 @@ export const directoryWebhookListSchema = v.object({ webhooks: v.array(directory
 export type DirectoryWebhookList = v.InferOutput<typeof directoryWebhookListSchema>
 
 /**
+ * What the calling key may read of the directory: its account, and the workspaces it reaches
+ * (`null` for every workspace, later ones included). The account-scoped twin of `/api/v1/me`,
+ * which names one workspace and so refuses a key reaching several that sends no header.
+ */
+export const directoryReachSchema = v.object({
+  accountId: v.string(),
+  workspaceIds: publicApiKeyWorkspaceIdsSchema,
+  /**
+   * Whether `workspaceIds` is the key's bound person's memberships as of this call, which the
+   * next call may answer differently, rather than a fixed grant.
+   */
+  followsMemberships: v.boolean(),
+})
+export type DirectoryReach = v.InferOutput<typeof directoryReachSchema>
+
+/**
  * Register or edit an endpoint. Every field keeps its stored value when omitted; `url` is required
  * only when registering. A new endpoint starts at the feed's current head: it receives what changes
  * from now on, and a receiver bootstraps the past from the snapshots.
@@ -229,7 +267,7 @@ export const putDirectoryWebhookSchema = v.object({
       v.string(),
       v.trim(),
       v.url(),
-      v.startsWith('https://', 'The webhook endpoint must be an https:// URL'),
+      v.regex(/^https?:\/\//i, 'The webhook endpoint must be an http:// or https:// URL'),
       v.maxLength(2000),
     ),
   ),

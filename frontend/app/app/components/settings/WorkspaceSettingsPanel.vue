@@ -328,6 +328,7 @@ async function save() {
 </script>
 
 <template>
+  <!-- workbench-width-ok: tabbed workspace settings (768px). Its shell waits on #2359. -->
   <UModal
     v-model:open="open"
     :title="t('settings.workspaceSettings.title')"
@@ -410,7 +411,10 @@ async function save() {
                 />
               </label>
 
-              <div v-else-if="draft.taskLimitMode === 'per_type'" class="grid grid-cols-2 gap-3">
+              <div
+                v-else-if="draft.taskLimitMode === 'per_type'"
+                class="grid grid-cols-1 gap-3 sm:grid-cols-2"
+              >
                 <label v-for="taskType in TASK_TYPES" :key="taskType" class="block">
                   <SectionLabel as="span" class="mb-1 block">
                     {{ maxTaskTypeLabel(taskType) }}

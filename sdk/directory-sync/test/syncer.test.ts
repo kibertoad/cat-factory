@@ -1,6 +1,8 @@
 import {
   CatFactoryConflictError,
   CatFactoryForbiddenError,
+  CatFactoryNotFoundError,
+  CatFactoryValidationError,
   type DirectoryChange,
   type DirectoryUser,
   type DirectoryWorkspace,
@@ -25,9 +27,17 @@ const workspace = (id: string, name = id): DirectoryWorkspace => ({
   description: null,
   accessMode: 'account',
 })
-const user = (id: string): DirectoryUser => ({ id, name: id, email: null, avatarUrl: null })
+const user = (id: string): DirectoryUser => ({
+  id,
+  name: id,
+  email: null,
+  avatarUrl: null,
+  accounts: [],
+})
 
-function fakeDirectory(options: { restricted?: boolean; reach?: string[] } = {}) {
+function fakeDirectory(
+  options: { restricted?: boolean; reach?: string[]; servesReach?: boolean } = {},
+) {
   const state = {
     workspaces: new Map<string, DirectoryWorkspace>(),
     users: new Map<string, DirectoryUser>(),
@@ -45,11 +55,39 @@ function fakeDirectory(options: { restricted?: boolean; reach?: string[] } = {})
       requestId: null,
       body: null,
     })
+  const reach = options.restricted ? (options.reach ?? []) : null
   const client = {
+    // Like the real `/api/v1/me`: workspace-scoped, so a key reaching several workspaces that
+    // names none is refused.
     me: {
-      get: async () => ({ workspaceIds: options.restricted ? (options.reach ?? []) : null }),
+      get: async () => {
+        if (reach === null || reach.length !== 1) {
+          throw new CatFactoryValidationError({
+            status: 422,
+            code: 'validation',
+            message: 'This key reaches several workspaces',
+            details: { reason: 'workspace_required' },
+            requestId: null,
+            body: null,
+          })
+        }
+        return { workspaceIds: reach }
+      },
     },
     directory: {
+      getReach: async () => {
+        if (options.servesReach === false) {
+          throw new CatFactoryNotFoundError({
+            status: 404,
+            code: 'not_found',
+            message: 'Not Found',
+            details: null,
+            requestId: null,
+            body: null,
+          })
+        }
+        return { accountId: 'acc', workspaceIds: reach }
+      },
       listChanges: async ({ after = 0, limit = 100 }: { after?: number; limit?: number }) => {
         if (after < state.oldest - 1 || after > head()) {
           throw new CatFactoryConflictError({
@@ -188,7 +226,7 @@ describe('DirectorySyncer', () => {
     expect(store.entities('user').size).toBe(0)
   })
 
-  it('verifies a push before writing it, then catches up', async () => {
+  it('verifies a push to an account-wide key before writing it, then catches up', async () => {
     const dir = fakeDirectory()
     const store = new MemoryDirectoryStore()
     const syncer = new DirectorySyncer({
@@ -217,6 +255,38 @@ describe('DirectorySyncer', () => {
     expect(accepted).toMatchObject({ ok: true, event: 'directory.changed' })
     expect(store.entities('workspace').get('ws_a')?.name).toBe('Alpha')
     expect(await store.getCursor()).toBe(1)
+  })
+
+  it('asks /me for the reach only of a deployment without the directory reach route', async () => {
+    const dir = fakeDirectory({ restricted: true, reach: ['ws_a'], servesReach: false })
+    const store = new MemoryDirectoryStore()
+    const syncer = new DirectorySyncer({
+      client: dir.client,
+      store,
+      webhookSecret: SECRET,
+      now: () => NOW,
+    })
+    await syncer.catchUp()
+    const change = (seq: number, id: string) => ({
+      seq,
+      at: 1,
+      workspaceId: id,
+      entityId: id,
+      entityType: 'workspace',
+      entity: workspace(id),
+    })
+    // The changes ride the push alone, so the catch-up after it has nothing to add.
+    const body = JSON.stringify({
+      deliveryId: 'mirror:0-2',
+      sentAt: NOW,
+      accountId: 'acc',
+      event: 'directory.changed',
+      changes: [change(1, 'ws_a'), change(2, 'ws_b')],
+      nextAfter: 2,
+      headSeq: 2,
+    })
+    expect(await syncer.handleDelivery(await sign(body), body)).toMatchObject({ ok: true })
+    expect([...store.entities('workspace').keys()]).toEqual(['ws_a'])
   })
 
   it('keeps only what a restricted key can reach from an account-wide push', async () => {

@@ -150,6 +150,19 @@ export function findFixedBlackWhite({ raw, code, prev }) {
   return [...new Set(code.match(FIXED_BW) ?? [])]
 }
 
+/**
+ * Whether the literal rule skips a file. It reads production code only: a test or a story holds a
+ * colour as DATA (a task type's stored colour, a value a component formats), and the component
+ * that draws it is what the rule checks. The utility rules still apply to these files.
+ */
+export function isLiteralExempt(rel) {
+  return (
+    rel.endsWith('.spec.ts') ||
+    rel.endsWith('.stories.ts') ||
+    rel.includes('frontend/app/app/stories/')
+  )
+}
+
 function main() {
   const offenders = []
   for (const file of spaSourceFiles()) {
@@ -159,7 +172,7 @@ function main() {
     // editor's own component classes) stored only to rebuild an editor share link and NEVER rendered
     // by the SPA, so no palette rule applies to it.
     if (file.rel.endsWith('frontend/app/app/utils/theme/presets.ts')) continue
-    const literalExempt = file.rel.endsWith('.spec.ts')
+    const literalExempt = isLiteralExempt(file.rel)
     readCodeLines(file).forEach((line, i) => {
       const matches = [
         ...findRawPalette(line.raw),

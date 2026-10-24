@@ -64,7 +64,7 @@ export const SERVED_OPENAPI_PATH = resolve(
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.82.0'
+const API_VERSION = '1.89.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -75,6 +75,7 @@ const COMPONENT_SCHEMAS = {
   ErrorResponse: 'errorResponseSchema',
   DirectoryWorkspace: 'directoryWorkspaceSchema',
   DirectoryUser: 'directoryUserSchema',
+  DirectoryUserAccount: 'directoryUserAccountSchema',
   DirectoryAccountMembership: 'directoryAccountMembershipSchema',
   DirectoryWorkspaceMembership: 'directoryWorkspaceMembershipSchema',
   DirectoryRepo: 'directoryRepoSchema',
@@ -87,6 +88,7 @@ const COMPONENT_SCHEMAS = {
   DirectoryRepoPage: 'directoryRepoPageSchema',
   DirectoryWebhook: 'directoryWebhookSchema',
   DirectoryWebhookList: 'directoryWebhookListSchema',
+  DirectoryReach: 'directoryReachSchema',
   PutDirectoryWebhook: 'putDirectoryWebhookSchema',
   DirectoryWebhookDelivery: 'directoryWebhookDeliverySchema',
   NotificationWebhookDelivery: 'notificationWebhookDeliverySchema',
@@ -140,6 +142,10 @@ const COMPONENT_SCHEMAS = {
   EditGuidedReviewDraft: 'editGuidedReviewDraftSchema',
   PostGuidedReviewDrafts: 'postGuidedReviewDraftsSchema',
   GuidedReviewPostResult: 'guidedReviewPostResultSchema',
+  AssessPublicPullRequest: 'assessPublicPullRequestSchema',
+  PublicPrAssessment: 'publicPrAssessmentSchema',
+  PublicPrAssessmentPolicy: 'publicPrAssessmentPolicySchema',
+  PublicPrAssessmentVerdict: 'publicPrAssessmentVerdictSchema',
   PublicPipeline: 'publicPipelineSchema',
   PublicPipelineList: 'publicPipelineListSchema',
   // The best-practice standard a task pins, hoisted for the reason the spend rows are: it is a
@@ -168,6 +174,7 @@ const COMPONENT_SCHEMAS = {
   PublicSpendTotals: 'publicSpendTotalsSchema',
   PublicSpend: 'publicSpendSchema',
   PublicIdentity: 'publicIdentitySchema',
+  PublicDeployment: 'publicDeploymentSchema',
   // Parked decisions. `PublicDecisionList` is the response of EVERY decision route, and it
   // transitively carries the full finding + fork-option + PR-finding shapes — hoisting it (and the
   // members of its variant) keeps the spec from inlining tens of KB per operation.
@@ -627,6 +634,12 @@ const OPERATION_DOCS = {
     description:
       'Group the board\u2019s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`, `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` / `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage, so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a dropped row, never dropped from the breakdown. `rows` is the heaviest `limit` slices (default 100, max 500) and `truncated` says when there was a tail, while `totals` aggregates the WHOLE window either way, so a capped answer still reports what the board spent. `source` says which store answered: the short windows scan the live ledger, which resolves a repository or a ticket through today\u2019s links, while the long ones read the durable daily rollup, which froze that attribution while the money was spent and is never pruned. Read `rolledUpThrough` before reporting a quiet quarter, since a rollup that has never run and a board that spent nothing look identical. Workspace-scoped: the account-wide view is not reachable through this surface.',
   },
+  getPublicDeployment: {
+    tag: 'Identity',
+    summary: 'Describe the deployment',
+    description:
+      'Report where this deployment serves its web app (`appUrl`): `APP_BASE_URL` when the operator set one, otherwise the origin this API was reached on. An integration uses it to send a person to one of the app’s deep links, such as the prefilled add-service screen (`?addRepo=<owner>/<name>`). Account-level, so a key reaching several workspaces calls it without naming one. `read` scope.',
+  },
   getPublicIdentity: {
     tag: 'Identity',
     summary: 'Describe the calling key',
@@ -1082,6 +1095,12 @@ const OPERATION_DOCS = {
     summary: 'Post comment drafts to the pull request',
     description:
       'Publish the named drafts as review comments on the pull request, as the key\'s identity, with an optional summary comment. Each comment posts on its own, so a partial post is normal: the result counts `posted` and `failed` drafts (a failed one carries `postError` and can be posted again) and lists in `skipped` the named drafts this call did not claim because they were already posted, discarded or being posted, so a retried call never posts a comment twice. The summary posts only alongside a draft this call claimed, so an identical retry after a complete post publishes nothing. Refused `409` with `details.reason: "session_stale"` when the pull request has commits past `reviewedHeadSha`: refresh the review and check the drafts first. Posting never approves or requests changes.',
+  },
+  assessPublicPullRequest: {
+    tag: 'PR assessment',
+    summary: 'Assess a pull request against a risk policy',
+    description:
+      'Score one pull request in a repository linked to the workspace on the merger’s three axes (complexity, risk, impact, each 0..1, with a rationale), classify it by its changed paths, and say whether a risk policy would let it land with no person. The policy is the one named by `riskPolicyId` from `GET /api/v1/risk-policies`, else the workspace’s unattended default (the one a run started through this API resolves); an unknown id is `422` with `details.reason: "risk_policy_not_found"`, and a workspace with no unattended default is `503` `risk_policy_default_missing`. The verdict comes from the same decision the merge step makes, so the policy’s ceilings are never published: `verdict.reason` and `verdict.exceededAxes` say why. A key bound to a person is judged under that person’s workspace role, as a task it creates is admitted, so the role-scoped rules (`classRulesByRole`, `dryRunRoles`, `submissionClassesByRole`) apply to it; a key bound to nobody has no role and they do not. Synchronous: one inline model call, nothing persisted, no run. An unlinked repository is `404` `repo_not_linked`, a PR the host cannot find is `404` `pr_not_found`, a PR that received commits while it was read is `503` `pr_head_moved` (retry), an exhausted budget is `429` `budget_exhausted`, no configured model is `503` `model_unavailable`, a failed model call is `503` `generation_failed`, a call that runs out of time is `503` `generation_timeout`, and a reply that is not an assessment is `503` `unreadable_reply`. A key bound to a person reads the PR and calls the model as that person. Requires a `write` key.',
   },
   getPublicServiceSpec: {
     tag: 'Spec',

@@ -39,7 +39,7 @@ import (
 )
 
 // Version is the SDK version, stamped into User-Agent. Kept in step by `pnpm check:sdk`.
-const Version = "0.57.0"
+const Version = "0.63.1"
 
 // Options configures a Client.
 type Options struct {
@@ -135,6 +135,8 @@ type Client struct {
 	Debug *DebugService
 	// What the calling key is and what it may do.
 	Me *MeService
+	// Where the deployment serves its web app, for linking a person into it.
+	Deployment *DeploymentService
 	// What a run proved: its verification report and captured artifacts.
 	Evidence *EvidenceService
 	// The evidence behind the auto-merge policy: per-run merge decisions, the per-class
@@ -145,6 +147,8 @@ type Client struct {
 	Kaizen *KaizenService
 	// Guided pull request review: a PR explained, question threads about it, and comment drafts.
 	GuidedReviews *GuidedReviewsService
+	// A pull request scored on the merger's axes, and whether a risk policy would land it.
+	PrAssessments *PrAssessmentsService
 	// The account's directory (workspaces, users, memberships, linked repositories) as snapshots
 	// and a change feed, for keeping an external copy in sync.
 	Directory *DirectoryService
@@ -215,10 +219,12 @@ func New(options Options) (*Client, error) {
 	client.Decisions = &DecisionsService{client: client}
 	client.Debug = &DebugService{client: client}
 	client.Me = &MeService{client: client}
+	client.Deployment = &DeploymentService{client: client}
 	client.Evidence = &EvidenceService{client: client}
 	client.MergeRecords = &MergeRecordsService{client: client}
 	client.Kaizen = &KaizenService{client: client}
 	client.GuidedReviews = &GuidedReviewsService{client: client}
+	client.PrAssessments = &PrAssessmentsService{client: client}
 	client.Directory = &DirectoryService{client: client}
 	client.Keys = &KeysService{client: client}
 	if options.PersonalPassword != "" {

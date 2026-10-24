@@ -30,6 +30,11 @@ same transaction (Postgres) or batch (D1) as the write. The append lives in the 
 writer can bypass it; a cascaded delete (a workspace) appends the rows it is about to remove first.
 Rows name an entity and never carry its state.
 
+A user's GitHub and GitLab login identities are part of the `user` entity (`accounts`, keyed on the
+host's numeric id), so a mirror can match people on the host account rather than an email. Linking
+one is a `user` change for its new owner and, when it moves, for the user it is taken from; a
+password, Google or OIDC identity is not published and records nothing.
+
 `seq` is per account and assigned so that commit order equals `seq` order: Postgres writers take
 `pg_advisory_xact_lock(<feed class>, hashtext(account_id))` before their first row write and assign
 `MAX(seq) + ROW_NUMBER()`; on D1 the append rides the writer's batch, which SQLite serializes. Repo
@@ -42,7 +47,10 @@ sync re-upserts every row on every pass, so it appends only when a published fie
 call names its workspace in `x-cat-factory-workspace`, which a key reaching one workspace may omit,
 so every key minted before this keeps working. A key never mints or revokes one reaching further
 than itself (`403 workspace_reach_exceeded`), and widening a key past the board it is minted from
-in the app takes an account admin.
+in the app takes an account admin. A personal key may instead follow its person's memberships
+(`follows_memberships`): it holds no grants, its reach is resolved on each call from what that
+person can see in the app, and its scope in each workspace is lowered to their role there, so it
+needs no account admin (see "Keys that follow your workspaces" in `public-api.md`).
 
 **3. `/api/v1/directory/*` serves keyset-paged snapshots and the feed.** The feed returns changes
 after a cursor, each carrying the entity's CURRENT state, or `null` once it is gone or out of the
@@ -106,7 +114,8 @@ snapshots would build.
 
 - **Any new writer of a directory table must append to the feed**, inside its transaction or batch,
   taking the per-account lock first on Postgres. A new cascade that removes members or repos must
-  append their changes before deleting them.
+  append their changes before deleting them. `user_identities` counts for its host providers: a
+  path that unlinks one must append the owner's `user` change too.
 - **Never prune an account's newest feed row**: `MAX(seq)` continues from it.
 - **A restricted key's grants are trusted without an ownership read.** They are checked at mint, and
   a board is only ever linked to an account once (accountless to account). If boards become

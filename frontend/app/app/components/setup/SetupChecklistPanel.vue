@@ -3,6 +3,7 @@ import type { SetupRow, SetupRowCause, SetupRowId, SetupRowStatus } from '~/util
 import type { SetupRemedy } from '~/utils/setupAudience'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import Spinner from '~/components/common/Spinner.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 /**
  * The setup checklist: every prerequisite for "a task can run and merge", its state, and one
@@ -210,7 +211,7 @@ const also = computed(() =>
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('setup.title')" :ui="{ content: 'sm:max-w-3xl' }">
+  <AppModal size="wide" v-model:open="open" :title="t('setup.title')">
     <template #title>
       <span class="flex items-baseline gap-3">
         {{ t('setup.title') }}
@@ -336,5 +337,5 @@ const also = computed(() =>
         </ul>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

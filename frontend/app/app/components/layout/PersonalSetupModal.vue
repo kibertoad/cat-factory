@@ -6,6 +6,7 @@
 // existing per-panel handlers via `ui.openFromPersonal(...)`, so opening one closes this
 // hub, reveals that panel, and gives it a "Back to My setup" control (IntegrationBackTitle).
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -107,11 +108,7 @@ const groups = computed<PersonalGroup[]>(() => {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('layout.personalSetup.title')"
-    :ui="{ content: 'max-w-xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('layout.personalSetup.title')">
     <template #body>
       <div class="space-y-5">
         <p class="text-xs text-muted">
@@ -153,5 +150,5 @@ const groups = computed<PersonalGroup[]>(() => {
         </section>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

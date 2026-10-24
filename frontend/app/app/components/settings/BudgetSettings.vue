@@ -132,7 +132,7 @@ function saveUser() {
       <h3 class="text-sm font-semibold text-default">
         {{ t('settings.workspaceSettings.budget.workspace') }}
       </h3>
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label class="block">
           <SectionLabel as="span" class="mb-1 block">
             {{ t('settings.workspaceSettings.budget.monthlyLimit') }}

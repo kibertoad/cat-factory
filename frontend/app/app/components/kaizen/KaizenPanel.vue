@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
-import { onKeyStroke } from '@vueuse/core'
 import type { TableColumn } from '@nuxt/ui'
 import type { KaizenGrading } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
 import EmptyState from '~/components/common/EmptyState.vue'
-import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 // The Kaizen screen: a full-panel overlay listing the workspace's grading history and
 // its verified-combo library. Opened via `ui.openKaizen()` from the sidebar. Read-only —
@@ -27,9 +26,6 @@ watch(
 function close() {
   ui.closeKaizen()
 }
-onKeyStroke('Escape', () => {
-  if (open.value) close()
-})
 
 function meta(kind: string) {
   return agentKindMeta(kind)
@@ -66,12 +62,11 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
 <template>
   <Teleport to="body">
     <Transition name="kz-fade">
-      <div
+      <TakeoverShell
         v-if="open"
-        class="z-[60] flex-col bg-app-950/96 backdrop-blur-sm"
-        :class="FULL_BLEED_TAKEOVER_CLASS"
-        role="dialog"
-        aria-modal="true"
+        :label="t('kaizen.title')"
+        class="flex-col bg-app-950/96 backdrop-blur-sm"
+        @close="close"
       >
         <header class="flex items-center gap-3 border-b border-default px-6 py-4">
           <div
@@ -180,7 +175,7 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
               :columns="historyColumns"
               :loading="kaizen.loadingOverview"
               :ui="{
-                root: 'overflow-hidden rounded-lg border border-default',
+                root: 'overflow-x-auto rounded-lg border border-default',
                 base: 'text-xs',
                 th: 'px-3 py-2',
                 td: 'px-3 py-2 text-xs whitespace-normal',
@@ -241,7 +236,7 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
             </UTable>
           </section>
         </div>
-      </div>
+      </TakeoverShell>
     </Transition>
   </Teleport>
 </template>

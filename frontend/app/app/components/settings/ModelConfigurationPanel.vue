@@ -11,7 +11,6 @@
 // preference. The list view shows each preset; the editor view creates/edits one with a
 // base-model picker plus a filterable per-agent override list.
 import { computed, ref, watch } from 'vue'
-import { onKeyStroke } from '@vueuse/core'
 import type { ModelFlavor } from '@cat-factory/contracts'
 import type { AgentKind } from '~/types/domain'
 import type { ModelPreset } from '~/types/model-presets'
@@ -25,7 +24,7 @@ import { showOverrideField } from '~/utils/uiMode'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
-import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -119,12 +118,11 @@ watch(
   { immediate: true },
 )
 
-onKeyStroke('Escape', () => {
-  if (!open.value) return
-  // Esc backs out of the editor first, then closes the panel.
+// Esc backs out of the editor first, then closes the panel.
+function backOut() {
   if (editor.value) editor.value = null
   else open.value = false
-})
+}
 
 /** The selectable catalog models, as `{ id, label, suffix }` for a dropdown. */
 const selectableModels = computed(() => {
@@ -309,12 +307,13 @@ async function save() {
 <template>
   <Teleport to="body">
     <Transition name="reader-fade">
-      <div
+      <TakeoverShell
         v-if="open"
-        class="z-50 flex-col bg-app-950/96 backdrop-blur-sm"
-        :class="FULL_BLEED_TAKEOVER_CLASS"
-        role="dialog"
-        aria-modal="true"
+        :label="t('settings.modelConfiguration.title')"
+        :content-key="editor ? 'editor' : 'list'"
+        class="flex-col bg-app-950/96 backdrop-blur-sm"
+        data-testid="model-configuration-panel"
+        @close="backOut"
       >
         <header class="flex items-center gap-3 border-b border-default px-6 py-4">
           <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
@@ -377,7 +376,13 @@ async function save() {
                     </template>
                   </i18n-t>
                 </p>
-                <UButton icon="i-lucide-plus" size="sm" class="shrink-0" @click="startCreate">
+                <UButton
+                  icon="i-lucide-plus"
+                  size="sm"
+                  class="shrink-0"
+                  data-testid="model-preset-new"
+                  @click="startCreate"
+                >
                   {{ t('settings.modelConfiguration.list.newPreset') }}
                 </UButton>
               </div>
@@ -437,6 +442,7 @@ async function save() {
                         variant="ghost"
                         color="error"
                         icon="i-lucide-trash-2"
+                        data-testid="model-preset-delete"
                         :disabled="p.isDefault"
                         :loading="busy"
                         :label="
@@ -491,6 +497,7 @@ async function save() {
                   </SectionLabel>
                   <UInput
                     v-model="editor.name"
+                    data-testid="model-preset-name"
                     :placeholder="t('settings.modelConfiguration.editor.namePlaceholder')"
                     size="sm"
                     class="w-full"
@@ -510,6 +517,7 @@ async function save() {
                       variant="subtle"
                       trailing-icon="i-lucide-chevron-down"
                       class="w-full justify-between"
+                      data-testid="model-preset-base-model"
                     >
                       <span class="truncate">{{ modelLabel(editor.baseModelId) }}</span>
                     </UButton>
@@ -610,7 +618,7 @@ async function save() {
             </template>
           </div>
         </div>
-      </div>
+      </TakeoverShell>
     </Transition>
   </Teleport>
 </template>

@@ -149,6 +149,7 @@ const SURFACE = {
 
   // ---- Key introspection (`read` scope; the startup self-check) --------------------------
   getPublicIdentity: { group: 'me', method: 'get' },
+  getPublicDeployment: { group: 'deployment', method: 'get' },
 
   // ---- Parked human decisions -----------------------------------------------------------
   listPublicRunDecisions: { group: 'decisions', method: 'list' },
@@ -213,6 +214,7 @@ const SURFACE = {
   // ---- Kaizen entries (`read` to consume the backlog, `write` to acknowledge one) ----------
   listPublicKaizenEntries: { group: 'kaizen', method: 'listEntries', paginates: 'entries' },
   // ---- Directory (`read`; account-scoped, for keeping an external copy in sync) ------------
+  getDirectoryReach: { group: 'directory', method: 'getReach' },
   listDirectoryChanges: { group: 'directory', method: 'listChanges' },
   listDirectoryWorkspaces: { group: 'directory', method: 'listWorkspaces', paginates: 'items' },
   listDirectoryUsers: { group: 'directory', method: 'listUsers', paginates: 'items' },
@@ -245,6 +247,7 @@ const SURFACE = {
   editPublicGuidedReviewDraft: { group: 'guidedReviews', method: 'editDraft' },
   postPublicGuidedReviewDrafts: { group: 'guidedReviews', method: 'postDrafts' },
   streamPublicGuidedReview: { group: 'guidedReviews', method: 'stream' },
+  assessPublicPullRequest: { group: 'prAssessments', method: 'assess' },
 
   // ---- Headless key provisioning (`admin` scope) ------------------------------------------
   listPublicKeys: { group: 'keys', method: 'list' },
@@ -415,6 +418,8 @@ export const GROUP_DOCS = {
   usage:
     "The workspace's money, two ways: the billing period's metered budget position with the per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept against (a repository, a tracker ticket, one run).",
   me: 'What the calling key is and what it may do — the self-check an integration runs at startup.',
+  deployment:
+    "Where the deployment serves its web app, for sending a person to one of the app's deep links (the prefilled add-service screen, say). Any key may ask, with no workspace named.",
   decisions:
     'Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates.',
   debug:
@@ -429,6 +434,8 @@ export const GROUP_DOCS = {
     "The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything.",
   guidedReviews:
     'Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking, drafting and posting drafts take a `write` key. Posting publishes plain comments on the pull request and never approves or requests changes.',
+  prAssessments:
+    "Assess a pull request in a linked repository: the merger's complexity, risk and impact scores with a rationale, the change class its paths fall in, and whether a risk policy would let it land with no person. The verdict is given without publishing the policy's ceilings. Takes a `write` key: each assessment is one model call. Nothing is persisted and no run starts.",
   keys: "The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted).",
 }
 

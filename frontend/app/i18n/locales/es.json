@@ -408,10 +408,38 @@
       "stalled": "La ejecución se estancó",
       "retryBootstrap": "Reintentar arranque",
       "retryRun": "Reintentar ejecución",
+      "startNewRun": "Iniciar una ejecución nueva",
       "environmentSetup": "Configurar entornos",
       "deployRunnerSetup": "Configurar pool de runners",
       "environmentLocalHint": "Los entornos efímeros locales necesitan un runtime de despliegue para ejecutar kubectl/kustomize/helm. Define {runtime} en tu .env: el modo nativo ejecuta esas herramientas en tu host ({native}), el modo contenedor las ejecuta en la imagen de despliegue ({container}).",
       "showDetail": "Mostrar detalle",
+      "details": "Detalles",
+      "detailsMessage": "Mensaje",
+      "detailsHint": "Notas para el operador",
+      "detailsFull": "Salida completa",
+      "cause": {
+        "preflight": "Una comprobación previa al inicio falló, así que no se hizo ningún trabajo. Abre Detalles para ver qué corregir y luego reintenta.",
+        "dispatch": "El contenedor del agente no se inició, así que no se hizo ningún trabajo. Esto suele ser temporal.",
+        "environment": "No se pudo crear el entorno de pruebas. Revisa la configuración del entorno y luego reintenta.",
+        "evicted": "El contenedor se detuvo varias veces durante la ejecución. Esto suele ocurrir mientras se actualiza la plataforma, así que reintenta cuando la actualización termine.",
+        "harness_shutdown": "Algo detuvo el contenedor durante este paso. Busca la causa en Detalles antes de reintentar, porque un reintento puede detenerse otra vez.",
+        "timeout": "La ejecución dejó de responder o superó su límite de tiempo. Consulta en Detalles cuál de las dos y luego reintenta.",
+        "agent": "Falló un paso de un agente. Consulta la causa en el paso fallido y luego reintenta.",
+        "job_failed": "El contenedor del agente informó de un fallo. Un reintento inicia un contenedor nuevo.",
+        "delegated_failed": "El sistema externo que ejecutó este paso informó de un fallo. El enlace del paso abre su ejecución, que muestra la causa.",
+        "rejected": "Se rechazó un paso, así que la ejecución se detuvo. Un reintento empieza de nuevo desde ese paso.",
+        "companion_rejected": "Un agente acompañante no dio un resultado utilizable. Un reintento lo ejecuta de nuevo.",
+        "stalled": "La plataforma perdió el contacto con esta ejecución. Un reintento inicia una ejecución nueva.",
+        "state_unreadable": "No se puede leer el estado guardado de esta ejecución, así que un reintento lee el mismo estado dañado. Inicia una ejecución nueva.",
+        "cancelled": "Esta ejecución se detuvo. Un reintento la inicia de nuevo.",
+        "unknown": "La ejecución falló por una causa desconocida. Consulta Detalles y luego reintenta.",
+        "deployRunnerUnwiredLocal": "Este equipo no tiene un runtime de despliegue para crear el entorno de pruebas. Configura {variable} en tu archivo .env y luego reintenta.",
+        "singleJob": {
+          "evicted": "El contenedor se detuvo antes de que el trabajo terminara. Un reintento inicia un contenedor nuevo.",
+          "timeout": "El trabajo estuvo sin actividad demasiado tiempo o superó su límite de tiempo. Un reintento lo inicia de nuevo.",
+          "agent": "Falló el agente o el git push. Consulta la causa en Detalles y luego reintenta."
+        }
+      },
       "retrying": "Reintentando…",
       "history": {
         "previousErrors": "{count} error anterior | {count} errores anteriores"
@@ -806,6 +834,7 @@
       "providersUnconfigured": {
         "title": "No hay proveedor de IA para este modelo",
         "body": "No hay ningún proveedor configurado para {models}. Añade una clave de proveedor, conecta una suscripción o activa Cloudflare AI para ejecutarlo.",
+        "cause": "No hay ningún proveedor configurado para un modelo de este pipeline. Añade una clave de proveedor, conecta una suscripción o activa Cloudflare AI, y luego reintenta.",
         "action": "Configurar IA"
       },
       "binaryStorageUnconfigured": {
@@ -2640,8 +2669,12 @@
         "githubConnect": "Conectar GitHub",
         "slackManage": "Gestionar las notificaciones de Slack",
         "slackConnect": "Conectar Slack",
-        "sourceManage": "Gestionar {source}",
-        "sourceConnect": "Conectar {source}",
+        "documentSourceManage": "Gestionar {source} (documentos)",
+        "documentSourceConnect": "Conectar {source} (documentos)",
+        "designSourceManage": "Gestionar {source} (diseños)",
+        "designSourceConnect": "Conectar {source} (diseños)",
+        "taskSourceManage": "Gestionar {source} (gestor de incidencias)",
+        "taskSourceConnect": "Conectar {source} (gestor de incidencias)",
         "documentImport": "Importar y generar desde documentos",
         "taskImport": "Importar incidencias",
         "fragments": "Biblioteca de fragmentos de contexto",
@@ -2910,19 +2943,23 @@
     "scopeHint": "Cada nivel incluye los anteriores.",
     "scope": {
       "read": {
-        "label": "Solo lectura",
+        "label": "Lectura · read",
         "description": "Ver servicios, tareas, pipelines y ejecuciones."
       },
+      "webhooks": {
+        "label": "Webhooks",
+        "description": "Además, registrar webhooks que envían cambios a otro sistema."
+      },
       "write": {
-        "label": "Lectura y escritura",
+        "label": "Escritura · write",
         "description": "Además, crear e iniciar tareas."
       },
       "decide": {
-        "label": "Lectura, escritura y decisión",
+        "label": "Decisión · decide",
         "description": "Además, responder a las preguntas que espera una ejecución detenida."
       },
       "admin": {
-        "label": "Acceso completo",
+        "label": "Acceso completo · admin",
         "description": "Además, eliminar tareas y actuar sobre notificaciones, lo que puede fusionar un pull request."
       }
     },
@@ -3604,6 +3641,7 @@
         "boundToYou": "Tu suscripción",
         "boundToOther": "Suscripción de {user}",
         "reachAll": "Todos los espacios de trabajo",
+        "reachMemberships": "Sigue los espacios de trabajo de su persona",
         "reachCount": "{count} espacios de trabajo"
       },
       "add": {
@@ -3612,7 +3650,7 @@
         "labelHelp": "Un nombre para reconocer este token más adelante.",
         "labelPlaceholder": "p. ej. pipeline de CI",
         "scope": "Alcance",
-        "scopeHelp": "Lo que puede hacer este token: solo lectura, lectura y escritura o acceso completo (que también permite eliminar).",
+        "scopeHelp": "Cada nivel incluye todo lo que permite el anterior. Lectura: ver tareas, ejecuciones y sus resultados. Webhooks: además, registrar y eliminar webhooks que envían cambios a otro sistema, como los webhooks de directorio y de notificaciones. Escritura: además, crear, editar, iniciar, detener y reintentar tareas, y lanzar revisiones y evaluaciones. Decisión: además, responder a las decisiones humanas de una ejecución (aprobaciones, hallazgos de revisión, preguntas de entrevista y de aclaración, pruebas manuales); un token también necesita este nivel para iniciar una canalización que pueda detenerse en una de ellas. Acceso completo (admin): además, añadir, configurar y eliminar servicios, eliminar tareas, vincular repositorios, gestionar conexiones de entorno y actuar sobre notificaciones.",
         "create": "Crear token",
         "identity": "Se ejecuta como",
         "identitySystem": "Este espacio de trabajo (token de sistema)",
@@ -3621,16 +3659,20 @@
         "identitySelfHelp": "Las ejecuciones iniciadas con este token se te atribuyen y pueden usar tu suscripción personal de Claude / Codex / GLM. Cada llamada debe enviar además tu contraseña personal en la cabecera X-Personal-Password; nunca se almacena. Úsalo para tus propias ejecuciones headless.",
         "reach": "Espacios de trabajo",
         "reachHelp": "En qué espacios de trabajo puede actuar este token. Un token con acceso a más de uno indica el espacio de trabajo en cada llamada con la cabecera x-cat-factory-workspace.",
+        "reachAdminOnly": "Solo un administrador de la cuenta puede crear un token que llegue a otros espacios de trabajo, como necesitan los webhooks de directorio. Pídeselo a uno.",
         "reachThis": "Solo este espacio de trabajo",
         "reachAll": "Todos los espacios de trabajo de la cuenta",
         "reachSelected": "Espacios de trabajo seleccionados",
+        "reachMemberships": "Mis espacios de trabajo (sigue mis membresías)",
+        "reachMembershipsHelp": "Llega a todos los espacios de trabajo en los que puedes actuar, en cada llamada: unirte o salir de uno lo cambia, sin crear nada de nuevo. En cada uno no puede hacer más de lo que permite tu rol allí.",
         "reachPick": "Elige espacios de trabajo"
       },
       "scopes": {
-        "read": "Solo lectura",
-        "write": "Lectura y escritura",
-        "decide": "Responder decisiones",
-        "admin": "Acceso completo"
+        "read": "Lectura · read",
+        "webhooks": "Webhooks (incluye Lectura)",
+        "write": "Escritura · write (incluye Webhooks)",
+        "decide": "Decisión · decide (incluye Escritura)",
+        "admin": "Acceso completo · admin (incluye Decisión)"
       },
       "toast": {
         "loadFailed": "No se pudieron cargar los tokens de la API",
@@ -4544,6 +4586,7 @@
       },
       "errors": {
         "listInstallations": "No se pudieron listar las instalaciones de GitHub",
+        "loadProjection": "No se pudieron cargar los repositorios, las pull requests y las issues",
         "startInstall": "No se pudo iniciar la instalación de la GitHub App",
         "connect": "No se pudo conectar"
       }
@@ -4638,7 +4681,8 @@
         "frontendWiringFailedNote": "Los ajustes del frontend no se guardaron. Abre el inspector de cada aplicación frontend para definir su subdirectorio y sus servicios backend."
       },
       "repoType": "Tipo de repositorio",
-      "repoTypeHint": "Qué es este repositorio: un servicio backend, una aplicación frontend, una biblioteca compartida o un repositorio de documentación (solo documentos/spikes)."
+      "repoTypeHint": "Qué es este repositorio: un servicio backend, una aplicación frontend, una biblioteca compartida o un repositorio de documentación (solo documentos/spikes).",
+      "prefillProviderMismatch": "El enlace pedía {repo} en otro proveedor, y este tablero está conectado a {connected}. Busca el repositorio a mano o abre el enlace en un tablero conectado a su proveedor."
     },
     "repoTree": {
       "root": "raíz",
@@ -8424,11 +8468,11 @@
           },
           "banner": {
             "title": "Qué ha ido mal",
-            "body": "La tarjeta cambia su barra de progreso por este aviso. Nombra la causa, los detalles guardan la salida en bruto y algunas causas ofrecen un botón directo al ajuste que las corrige."
+            "body": "La tarjeta cambia su barra de progreso por este aviso. Indica qué falló y da una acción. Abre la tarea para leer la causa en una línea, con la salida completa en Detalles."
           },
           "retry": {
-            "title": "Volver a ejecutarla",
-            "body": "Reintentar vuelve a ejecutar el trabajo. Los errores anteriores se quedan en la tarea, bajo «Errores anteriores», para que puedas comparar intentos en vez de perder el rastro."
+            "title": "El siguiente paso",
+            "body": "Este botón es el siguiente paso. Normalmente es Reintentar, que ejecuta el trabajo de nuevo. Cuando una configuración causa el fallo, abre esa configuración. Los errores anteriores quedan en la tarea, en Errores anteriores, para que puedas comparar intentos."
           },
           "finish": {
             "title": "Un fallo es información",

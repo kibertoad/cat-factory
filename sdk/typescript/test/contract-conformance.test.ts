@@ -199,6 +199,22 @@ expectMutuallyAssignable<
   sdk.GuidedReviewPostResult,
   v.InferOutput<typeof contracts.guidedReviewPostResultSchema>
 >()
+expectMutuallyAssignable<
+  sdk.AssessPublicPullRequest,
+  v.InferOutput<typeof contracts.assessPublicPullRequestSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrAssessment,
+  v.InferOutput<typeof contracts.publicPrAssessmentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrAssessmentPolicy,
+  v.InferOutput<typeof contracts.publicPrAssessmentPolicySchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrAssessmentVerdict,
+  v.InferOutput<typeof contracts.publicPrAssessmentVerdictSchema>
+>()
 expectMutuallyAssignable<sdk.PublicPipeline, v.InferOutput<typeof contracts.publicPipelineSchema>>()
 expectMutuallyAssignable<
   sdk.PublicPipelineList,
@@ -246,6 +262,10 @@ expectMutuallyAssignable<
 >()
 expectMutuallyAssignable<sdk.PublicSpend, v.InferOutput<typeof contracts.publicSpendSchema>>()
 expectMutuallyAssignable<sdk.PublicIdentity, v.InferOutput<typeof contracts.publicIdentitySchema>>()
+expectMutuallyAssignable<
+  sdk.PublicDeployment,
+  v.InferOutput<typeof contracts.publicDeploymentSchema>
+>()
 expectMutuallyAssignable<
   sdk.PublicUnanswerableWait,
   v.InferOutput<typeof contracts.publicUnanswerableWaitSchema>
@@ -565,6 +585,10 @@ expectMutuallyAssignable<
 >()
 expectMutuallyAssignable<sdk.DirectoryUser, v.InferOutput<typeof contracts.directoryUserSchema>>()
 expectMutuallyAssignable<
+  sdk.DirectoryUserAccount,
+  v.InferOutput<typeof contracts.directoryUserAccountSchema>
+>()
+expectMutuallyAssignable<
   sdk.DirectoryAccountMembership,
   v.InferOutput<typeof contracts.directoryAccountMembershipSchema>
 >()
@@ -610,6 +634,7 @@ expectMutuallyAssignable<
   sdk.DirectoryWebhookList,
   v.InferOutput<typeof contracts.directoryWebhookListSchema>
 >()
+expectMutuallyAssignable<sdk.DirectoryReach, v.InferOutput<typeof contracts.directoryReachSchema>>()
 expectMutuallyAssignable<
   sdk.PutDirectoryWebhook,
   v.InferOutput<typeof contracts.putDirectoryWebhookSchema>
@@ -658,10 +683,12 @@ const ASSERTED_COMPONENTS = [
   'PlatformAlertWebhookDelivery',
   'DirectoryWebhook',
   'DirectoryWebhookList',
+  'DirectoryReach',
   'PutDirectoryWebhook',
   'DirectoryWebhookDelivery',
   'DirectoryWorkspace',
   'DirectoryUser',
+  'DirectoryUserAccount',
   'DirectoryAccountMembership',
   'DirectoryWorkspaceMembership',
   'DirectoryRepo',
@@ -713,6 +740,10 @@ const ASSERTED_COMPONENTS = [
   'EditGuidedReviewDraft',
   'PostGuidedReviewDrafts',
   'GuidedReviewPostResult',
+  'AssessPublicPullRequest',
+  'PublicPrAssessment',
+  'PublicPrAssessmentPolicy',
+  'PublicPrAssessmentVerdict',
   'PublicPipeline',
   'PublicPipelineList',
   'PublicPromptFragment',
@@ -730,6 +761,7 @@ const ASSERTED_COMPONENTS = [
   'PublicSpendTotals',
   'PublicSpend',
   'PublicIdentity',
+  'PublicDeployment',
   'PublicUnanswerableWait',
   'PublicReviewFinding',
   'PublicRequirementsDecision',

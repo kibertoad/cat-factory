@@ -1287,6 +1287,9 @@ export const publicApiKeys = pgTable(
     // 1 = the key reaches every workspace in its account, including later ones; 0 = exactly the
     // workspaces granted in `public_api_key_workspaces`. Mirror of D1 migration 0108.
     all_workspaces: integer('all_workspaces').notNull().default(0),
+    // 1 = the key reaches whatever its bound person (`acts_as_user_id`) can act in, decided per
+    // call; it then holds no grants and `all_workspaces` is 0. Mirror of D1 migration 0110.
+    follows_memberships: integer('follows_memberships').notNull().default(0),
     label: text('label').notNull(),
     // Permission on `/api/v1`: read ⊂ write ⊂ admin. Existing rows backfill to `write` (D1
     // migration 0053). Kept as text (matches D1) rather than a pg enum, so the two runtimes'

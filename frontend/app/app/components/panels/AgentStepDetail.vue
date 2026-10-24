@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { onKeyStroke } from '@vueuse/core'
 import type { IterationCapChoice } from '~/types/execution'
 import { agentKindMeta } from '~/utils/catalog'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
@@ -32,7 +31,7 @@ import RunDetailLoadState from '~/components/panels/RunDetailLoadState.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
-import { FULL_BLEED_TAKEOVER_CLASS } from '~/utils/safeArea'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
@@ -372,10 +371,6 @@ watch(
   },
 )
 
-onKeyStroke('Escape', () => {
-  if (open.value) close()
-})
-
 const { copy } = useCopyToClipboard()
 async function copyOutput() {
   if (step.value?.output) await copy(step.value.output)
@@ -391,20 +386,24 @@ async function copyOutput() {
   <!-- `data-agent-kind` names WHICH step this window is scoped to, as the kind rather than as
        the heading beside it: the heading is a translated display label, so it is the wrong
        thing to read for anything that needs to know which agent's step is open. -->
-  <div
+  <!-- `content-key` moves focus back to the top when the reader swaps to another step. -->
+  <TakeoverShell
     v-if="open && step && agent"
+    :label="agent.label"
+    :content-key="ctx && `${ctx.instanceId}:${ctx.stepIndex}`"
     data-testid="step-detail"
     :data-agent-kind="step?.agentKind"
-    class="z-50 bg-app-950/96 backdrop-blur-sm"
-    :class="FULL_BLEED_TAKEOVER_CLASS"
-    role="dialog"
-    aria-modal="true"
+    class="bg-app-950/96 backdrop-blur-sm"
+    @close="close"
   >
-    <!-- ToC sidebar (only meaningful when there are prose headings) -->
+    <!-- ToC sidebar (only meaningful when there are prose headings). Hidden below `lg`
+         (the compact cutoff): it is a jump-nav duplicating headings already present in the
+         scrollable prose, so it stays a wide-screen convenience rather than restacking a
+         vertical nav into a top strip. -->
     <aside
       v-if="outline.hasToc"
       data-testid="step-detail-toc"
-      class="hidden w-72 shrink-0 flex-col border-e border-default bg-default/60 md:flex"
+      class="hidden w-72 shrink-0 flex-col border-e border-default bg-default/60 lg:flex"
     >
       <div class="border-b border-default px-4 py-3">
         <SectionLabel>
@@ -1085,7 +1084,7 @@ async function copyOutput() {
         </p>
       </div>
     </aside>
-  </div>
+  </TakeoverShell>
 </template>
 
 <style scoped>

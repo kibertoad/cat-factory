@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import type { InfraSetup, InfraSetupOwners } from '~/types/domain'
-import { blockingSetupNotice, canActOnSetup, type SetupActor } from './setupAudience'
+import {
+  BOARD_MEMBER_SETUP_OWNER,
+  blockingSetupNotice,
+  canActOnSetup,
+  setupRemedyFor,
+  type SetupActor,
+} from './setupAudience'
 
 const admin: SetupActor = {
   fullSurface: true,
   canManageIntegrations: true,
   canExecuteRuns: true,
+  canWriteBoard: true,
   isAccountAdmin: false,
   accountsEnabled: true,
 }
 const member: SetupActor = { ...admin, canManageIntegrations: false }
-const viewer: SetupActor = { ...member, canExecuteRuns: false }
+const viewer: SetupActor = { ...member, canExecuteRuns: false, canWriteBoard: false }
 const designerAdmin: SetupActor = { ...admin, fullSurface: false }
 const designerMember: SetupActor = { ...member, fullSurface: false }
 
@@ -62,6 +69,34 @@ describe('canActOnSetup', () => {
       expect(canActOnSetup(owner, admin)).toBe(true)
       expect(canActOnSetup(owner, member)).toBe(false)
     }
+  })
+})
+
+describe('setupRemedyFor', () => {
+  it('returns null for a caller who can act, so they get the fix', () => {
+    expect(setupRemedyFor('workspace_admin', admin)).toBeNull()
+  })
+
+  it('names the owner for a caller who cannot act', () => {
+    expect(setupRemedyFor('workspace_admin', member)).toBe('workspace_admin')
+    expect(setupRemedyFor('account_admin', admin)).toBe('account_admin')
+    expect(setupRemedyFor('operator', admin)).toBe('operator')
+  })
+
+  it('tells an admin on the designer surface to switch surface, not to find an admin', () => {
+    expect(setupRemedyFor('workspace_admin', designerAdmin)).toBe('full_surface')
+    expect(setupRemedyFor('workspace_admin', designerMember)).toBe('workspace_admin')
+  })
+
+  it('gives a board-member gap to anyone who can write the board, and a viewer the admin', () => {
+    expect(setupRemedyFor(BOARD_MEMBER_SETUP_OWNER, member)).toBeNull()
+    expect(setupRemedyFor(BOARD_MEMBER_SETUP_OWNER, designerMember)).toBe('full_surface')
+    expect(setupRemedyFor(BOARD_MEMBER_SETUP_OWNER, viewer)).toBe('workspace_admin')
+  })
+
+  it('falls back to the workspace admin for an owner this build does not know', () => {
+    expect(setupRemedyFor('board_owner', member)).toBe('workspace_admin')
+    expect(setupRemedyFor(undefined, admin)).toBeNull()
   })
 })
 

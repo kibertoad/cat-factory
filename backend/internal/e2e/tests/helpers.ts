@@ -660,6 +660,18 @@ export async function findParkedApproval(
   return null
 }
 
+/** The id of a block's run as the workspace snapshot lists it, or null before one exists. */
+export async function findRunOf(
+  request: APIRequestContext,
+  workspaceId: string,
+  blockId: string,
+): Promise<string | null> {
+  const snapshot = await json<{ executions: ExecutionInstance[] }>(
+    await request.get(`${BACKEND_URL}/workspaces/${workspaceId}`),
+  )
+  return snapshot.executions.find((instance) => instance.blockId === blockId)?.id ?? null
+}
+
 /** Approve a parked step gate over REST (the endpoint the step-detail "Approve" button calls). */
 export async function approveStep(
   request: APIRequestContext,

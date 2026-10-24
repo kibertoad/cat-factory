@@ -34,7 +34,8 @@ A spatial planning surface. You lay out a system as a **board** of frames
 (services), modules and tasks on a [Vue Flow](https://vueflow.dev) canvas, wire up
 dependencies, attach requirements, and apply **agent pipelines** to blocks.
 Execution streams back in real time (step/subtask progress bars, decision
-prompts, failures with retry) so the canvas doubles as a live dashboard.
+prompts, failures with retry) so the canvas doubles as a live dashboard. The board's second view,
+the [queue](#queue-view), lists the same tasks by what each one needs.
 
 It is a thin client: there is **no business logic here**. Every mutation calls the
 Worker API and the stores hydrate from server snapshots and live updates pushed
@@ -43,8 +44,8 @@ over the WebSocket. How that sync works is written up in
 
 ## Tech stack
 
-- **Nuxt 4 / Vue 3** SPA: the board is `pages/index.vue`, beside three standalone routes
-  (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-password.vue`).
+- **Nuxt 4 / Vue 3** SPA: the board and its queue view are `pages/index.vue`, beside three
+  standalone routes (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-password.vue`).
 - **Pinia** (+ `pinia-plugin-persistedstate`): feature stores.
 - **Vue Flow** (`core`, `background`, `controls`, `node-resizer`): the canvas.
 - **Nuxt UI** + Tailwind: components and styling.
@@ -387,7 +388,21 @@ A phone's notch and home indicator cover whatever sits at the screen edge, and o
 - **`FULL_BLEED_TAKEOVER_CLASS`** for a takeover that fills the screen (`AgentStepDetail`, the model configuration takeover, the observability, reports, operator dashboard and Kaizen panels, the artifact lightbox). It pads by the inset alone, so a screen without one keeps the edge-to-edge layout.
 - **`WINDOWED_OVERLAY_CLASS`** for a window on a backdrop (`ResultWindowShell`). Its gutter is 1rem or the inset, whichever is larger.
 
-`scripts/check-frontend-safe-area.mjs` (CI) refuses any other `fixed` surface that spans a whole side of the viewport, in `.vue`, `.ts` and `.css`. A surface with no edge content (a scrim, a drawing layer) or one that pads its own edges (the sidebar drawer, the inspector's bottom sheet) says why with a `safe-area-ok:` comment, on the line or the one above it, or above the element's opening tag.
+Each class list belongs to ONE shell, and a surface renders inside that shell instead of binding the class itself: a takeover inside [`common/TakeoverShell.vue`](./app/components/common/TakeoverShell.vue), a window inside [`panels/ResultWindowShell.vue`](./app/components/panels/ResultWindowShell.vue). The shell binds the padding AND the modal behaviour (`useModalBehavior`: a focus trap, focus return, a body-scroll lock, and a ticket on the shared overlay stack), so focus stays inside and Escape closes only the top overlay. A takeover gates the shell with its own `v-if` inside its own `Teleport` and `Transition`, passes a `label` (the dialog's accessible name), and handles the shell's `close` event; it never adds an Escape listener of its own. A Nuxt UI menu, select, popover or modal opened inside a shell holds its own ticket on the same stack while it is open ([`utils/foreignLayers.ts`](./app/utils/foreignLayers.ts), wired by a client plugin), so Escape and Tab are its keys until it closes. No site pushes a ticket by hand. Why this is not `UModal fullscreen`, and the rest of the overlay consolidation: [`docs/initiatives/overlay-shells.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/overlay-shells.md).
+
+`scripts/check-frontend-safe-area.mjs` (CI) refuses any other `fixed` surface that spans a whole side of the viewport, in `.vue`, `.ts` and `.css`. A surface with no edge content (a scrim, a drawing layer) or one that pads its own edges (the sidebar drawer, the inspector's bottom sheet) says why with a `safe-area-ok:` comment, on the line or the one above it, or above the element's opening tag. The same guard refuses either class list named outside its owning shell, with no waiver.
+
+### Modals open at a named width
+
+A modal states what KIND of content it holds, and the width follows from that in one place. Before this, each modal picked its own `max-w-*`: five widths for three kinds of content, and no rule for which one a new modal takes.
+
+- **`<AppModal size="prompt">`** (448px): a confirmation, a decision, a short read such as the keyboard help, or a dialog with one or two fields.
+- **`<AppModal size="form">`** (576px): a form, a list or a hub to work through.
+- **`<AppModal size="wide">`** (672px): cards that each carry a paragraph and an action beside it, a row of tabs over a form, or three pickers side by side (the AI provider onboarding, the vendor credentials, the setup checklist, describe new work).
+- [`common/AppModal.vue`](./app/components/common/AppModal.vue) is `UModal` with the width applied through `ui.content`; every other prop, listener and slot passes through, and a call site still passes other `ui` slots and non-width content classes (a stacked dialog's `z-[70]`). The widths live in [`utils/overlaySize.ts`](./app/utils/overlaySize.ts). It is a wrapper rather than an `app.config.ts` variant because `UModal` has no `size` prop and passes only `transition`, `fullscreen`, `overlay` and `scrollable` into its variant function, so a `size` variant would never be selected.
+- **An always-`fullscreen` modal has no width** and stays a plain `UModal`. A modal bound fullscreen only sometimes (`:fullscreen="isPhone"`) is centered everywhere else, so it takes an `AppModal` size, which `AppModal` drops while the modal is fullscreen.
+- **A workbench surface keeps its own width for now**: the libraries, settings panels, bug hunt, adoption review and environment wizard at 768px, the sandbox and the agent prompt editor above that. Their shell is the open decision in [#2359](https://github.com/kibertoad/cat-factory/issues/2359), so a named width for them now would be dead work. Each says why in a `<!-- workbench-width-ok: … -->` comment directly above its tag.
+- `scripts/check-frontend-geometry.mjs` (CI) refuses a raw `UModal` (or `LazyUModal`) outside the wrapper, an `AppModal` that names its own width utility (`max-w-*`, `min-w-*`, `w-*`) in `class` or in the `content` slot of `:ui`, or reads either from a variable or a spread it cannot see through, a waiver with no reason, and a waiver with no raw modal directly below it. A `USlideover` is a side panel with no named width, so the guard does not read it.
 
 ### A control is its Nuxt UI component
 
@@ -1492,7 +1507,8 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
 
 - **Board canvas** (`components/board`): `BoardCanvas` + `nodes/` (`BlockNode`,
   `FrameSwimlanes` / `TaskLane` / `LaneGroup` / `LaneTask`, `TaskCard`), dependency edges,
-  the per-block `AgentFailureCard` /
+  the per-block `AgentFailureCard` (the ONE failure block per task view: a cause line from
+  `utils/failureCause.ts`, one action, and the backend's text behind Details) /
   `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`. Tasks are laid out in status
   lanes rather than at coordinates (see [Task swimlanes](#task-swimlanes)); the board-level
   order/grouping override is `LaneViewControl` in the toolbar. A running task card expands
@@ -1501,7 +1517,10 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
   `taskExpansion` store and driven by `useTaskExpansion`.
 - **Sidebar & chrome** (`components/layout`): board/account switchers, palettes
   entry points, the language + [interface-mode](#interface-modes-basic--advanced)
-  switchers, the `SpendWarningBanner`, and the toolbar (zoom, LOD, decision queue).
+  switchers, the Views switcher (`WorkViewSwitcher`), the `SpendWarningBanner`, and the toolbar
+  (zoom, LOD, and the decision counter, which opens the queue view).
+- **Queue view** (`components/queue`): `QueueView` and `QueueCard`, the board's second view. It
+  regroups the swimlane verdict and reuses the board card's actions; see [Queue view](#queue-view).
 - **Palettes** (`components/palettes`): drag blocks, pipelines and agents onto
   the board.
 - **Describe new work** (`components/queue/DescribeWorkModal.vue`, `utils/describeWork.ts`): the
@@ -1516,6 +1535,11 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
   setup. It adds no probe of its own: each row reads what its banner or startup dialog already
   reads (`useSetupChecklist`) and opens the same surface. "Checking" and "missing" are separate
   states, because an unanswered probe and an absent capability are opposite facts.
+- **Notifications inbox** (`components/layout/NotificationsInbox.vue`, `utils/notificationRoutes.ts`):
+  a card that asks for a person carries its verb ("Answer", "Review", ...) as the primary button,
+  and "Mark read" is secondary. `NOTIFICATION_ROUTES` is exhaustive over the notification types and
+  holds each one's verb and destination, so the title link and the button cannot open different
+  places. A route that can only select the task is named "Open".
 - **Inspector** (`components/panels` + `panels/inspector`): per-block tabs:
   structure, dependencies, model + fragment picker, live execution, and linked
   docs/issues/scenarios. Decisions resolve via `DecisionModal`. A `review` task
@@ -1614,7 +1638,15 @@ pnpm lint                                            # oxlint + oxfmt over the w
 pnpm exec vitest run <file>                          # run the spec your change touched
 pnpm i18n:check                                      # catalog is well-formed
 pnpm i18n:parity                                     # locales are in parity
+
+# Component stories, from the repo root:
+pnpm --filter @cat-factory/storybook run storybook      # http://localhost:6006
+pnpm --filter @cat-factory/storybook run test:stories   # every story in headless Chromium
 ```
+
+A component's stories sit beside it as `Foo.stories.ts`; the fixtures and helpers they share are in
+`app/stories/` (neither ships in the package). Conventions, helpers and the traps the setup already
+paid for: [Component stories](https://github.com/kibertoad/cat-factory/blob/main/docs/internal/storybook.md).
 
 To see the SPA with data while you work on it, run it against the e2e backend: it needs only a
 Postgres, fakes the LLM, the agent runner and GitHub, and can seed boards. See

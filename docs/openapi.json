@@ -69,6 +69,42 @@
         ],
         "type": "object"
       },
+      "AssessPublicPullRequest": {
+        "properties": {
+          "owner": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "prNumber": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "gitlab"
+            ],
+            "type": "string"
+          },
+          "repo": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "riskPolicyId": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "owner",
+          "repo",
+          "prNumber"
+        ],
+        "type": "object"
+      },
       "CreateHeadlessPublicApiKey": {
         "properties": {
           "externalIdentity": {
@@ -85,6 +121,7 @@
           "scope": {
             "enum": [
               "read",
+              "webhooks",
               "write",
               "decide"
             ],
@@ -560,6 +597,38 @@
         ],
         "type": "object"
       },
+      "DirectoryReach": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "followsMemberships": {
+            "type": "boolean"
+          },
+          "workspaceIds": {
+            "anyOf": [
+              {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "accountId",
+          "workspaceIds",
+          "followsMemberships"
+        ],
+        "type": "object"
+      },
       "DirectoryRepo": {
         "properties": {
           "defaultBranch": {
@@ -641,6 +710,12 @@
       },
       "DirectoryUser": {
         "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryUserAccount"
+            },
+            "type": "array"
+          },
           "avatarUrl": {
             "anyOf": [
               {
@@ -679,7 +754,38 @@
           "id",
           "name",
           "email",
-          "avatarUrl"
+          "avatarUrl",
+          "accounts"
+        ],
+        "type": "object"
+      },
+      "DirectoryUserAccount": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "gitlab"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "id",
+          "login"
         ],
         "type": "object"
       },
@@ -4754,6 +4860,9 @@
               }
             ]
           },
+          "followsMemberships": {
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },
@@ -4783,6 +4892,7 @@
           "scope": {
             "enum": [
               "read",
+              "webhooks",
               "write",
               "decide",
               "admin"
@@ -4796,11 +4906,8 @@
             "anyOf": [
               {
                 "items": {
-                  "minLength": 1,
                   "type": "string"
                 },
-                "maxItems": 50,
-                "minItems": 1,
                 "type": "array"
               },
               {
@@ -4814,6 +4921,7 @@
           "accountId",
           "workspaceId",
           "workspaceIds",
+          "followsMemberships",
           "label",
           "scope",
           "createdByUserId",
@@ -5745,6 +5853,17 @@
         ],
         "type": "object"
       },
+      "PublicDeployment": {
+        "properties": {
+          "appUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "appUrl"
+        ],
+        "type": "object"
+      },
       "PublicFollowUpItem": {
         "properties": {
           "answer": {
@@ -6083,6 +6202,9 @@
               }
             ]
           },
+          "followsMemberships": {
+            "type": "boolean"
+          },
           "keyId": {
             "type": "string"
           },
@@ -6092,6 +6214,7 @@
           "scope": {
             "enum": [
               "read",
+              "webhooks",
               "write",
               "decide",
               "admin"
@@ -6123,6 +6246,7 @@
           "accountId",
           "workspaceId",
           "workspaceIds",
+          "followsMemberships",
           "scope",
           "label",
           "externalIdentity",
@@ -6783,6 +6907,164 @@
         "required": [
           "pipelines",
           "unattendedDefaultPipelineId"
+        ],
+        "type": "object"
+      },
+      "PublicPrAssessment": {
+        "properties": {
+          "assessedAt": {
+            "type": "number"
+          },
+          "assessment": {
+            "properties": {
+              "complexity": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "impact": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "rationale": {
+                "type": "string"
+              },
+              "risk": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [
+              "complexity",
+              "risk",
+              "impact",
+              "rationale"
+            ],
+            "type": "object"
+          },
+          "changeClass": {
+            "enum": [
+              "docs",
+              "test",
+              "dependency",
+              "config",
+              "source",
+              "schema",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "changedFileCount": {
+            "type": "number"
+          },
+          "headSha": {
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "owner": {
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/PublicPrAssessmentPolicy"
+          },
+          "prNumber": {
+            "type": "number"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "gitlab"
+            ],
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/PublicPrAssessmentVerdict"
+          }
+        },
+        "required": [
+          "provider",
+          "owner",
+          "repo",
+          "prNumber",
+          "headSha",
+          "changeClass",
+          "changedFileCount",
+          "assessment",
+          "model",
+          "policy",
+          "verdict",
+          "assessedAt"
+        ],
+        "type": "object"
+      },
+      "PublicPrAssessmentPolicy": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "policyId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "policyId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "PublicPrAssessmentVerdict": {
+        "properties": {
+          "exceededAxes": {
+            "items": {
+              "enum": [
+                "complexity",
+                "risk",
+                "impact"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "outcome": {
+            "enum": [
+              "within_policy",
+              "requires_review"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "within_thresholds",
+              "exceeded_thresholds",
+              "auto_merge_disabled",
+              "no_rationale",
+              "class_auto_merge",
+              "class_requires_review",
+              "role_requires_review",
+              "submission_not_allowed",
+              "dry_run"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "reason",
+          "exceededAxes"
         ],
         "type": "object"
       },
@@ -8744,7 +9026,7 @@
           "url": {
             "format": "uri",
             "maxLength": 2000,
-            "pattern": "^https://",
+            "pattern": "^https?:\\/\\/",
             "type": "string"
           }
         },
@@ -8823,7 +9105,7 @@
           "url": {
             "format": "uri",
             "maxLength": 2000,
-            "pattern": "^https://",
+            "pattern": "^https?:\\/\\/",
             "type": "string"
           }
         },
@@ -9260,7 +9542,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.82.0"
+    "version": "1.89.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -13758,6 +14040,49 @@
         "x-min-scope": "read"
       }
     },
+    "/api/v1/deployment": {
+      "get": {
+        "description": "Report where this deployment serves its web app (`appUrl`): `APP_BASE_URL` when the operator set one, otherwise the origin this API was reached on. An integration uses it to send a person to one of the app’s deep links, such as the prefilled add-service screen (`?addRepo=<owner>/<name>`). Account-level, so a key reaching several workspaces calls it without naming one. `read` scope.",
+        "operationId": "getPublicDeployment",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDeployment"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Describe the deployment",
+        "tags": [
+          "Identity"
+        ],
+        "x-min-scope": "read"
+      }
+    },
     "/api/v1/directory/account-memberships": {
       "get": {
         "description": "A keyset-paged snapshot of the account’s memberships, each with the member’s account roles. Account-wide, so a key limited to some workspaces is refused with `403` and `reason: \"account_scope_required\"`.",
@@ -13884,6 +14209,49 @@
           }
         },
         "summary": "List directory changes",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/reach": {
+      "get": {
+        "description": "The calling key’s account and the workspaces it reaches, `null` for every workspace in the account (later ones included). Account-scoped like the rest of the directory: no `x-cat-factory-workspace` header is read, so a key reaching several workspaces gets an answer where `GET /api/v1/me` asks it to name one. A mirror reads this to filter what a directory push may write, and to tell an account-wide key from one limited to some workspaces.",
+        "operationId": "getDirectoryReach",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryReach"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Read the key's directory reach",
         "tags": [
           "Directory"
         ],
@@ -14062,7 +14430,7 @@
         "tags": [
           "Directory"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       }
     },
     "/api/v1/directory/webhooks/{webhookId}": {
@@ -14108,7 +14476,7 @@
         "tags": [
           "Directory"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       },
       "put": {
         "description": "Register an endpoint the directory change feed is pushed to, or edit one; an omitted field keeps its stored value, and `url` is required only when registering. A new endpoint starts at the feed head: it is pushed what changes from now on, and its receiver bootstraps the past from the snapshots. Pushes run every couple of minutes, signed like the notification webhooks, each a `DirectoryWebhookDelivery`. An account holds at most 10 (`409` with `reason: \"webhook_limit_reached\"`).",
@@ -14169,7 +14537,7 @@
         "tags": [
           "Directory"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       }
     },
     "/api/v1/directory/workspace-memberships": {
@@ -17448,7 +17816,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       },
       "get": {
         "description": "The endpoint this workspace delivers notifications, run-lifecycle events and platform-health alerts to, or `{ \"webhook\": null }` when none is registered. The signing secret is never returned; `hasSecret` reports only whether one is set.",
@@ -17489,7 +17857,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       },
       "put": {
         "description": "Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered. Every omitted field keeps its stored value, so subscribing to run events is a one-field call that re-sends neither the URL nor the secret. `url` is required only on the first call, when there is nothing registered to keep; omitting it otherwise leaves the endpoint alone. Supplying `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be `https:` and publicly routable unless the deployment widened its allow-list.",
@@ -17540,7 +17908,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       }
     },
     "/api/v1/notification-webhooks": {
@@ -17583,7 +17951,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       }
     },
     "/api/v1/notification-webhooks/{webhookId}": {
@@ -17629,7 +17997,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       },
       "get": {
         "description": "The endpoint registered under this id, or `{ \"webhook\": null }` when there is none — the same shape the unnamed read answers, so an integration's startup self-check does not branch on a status code. The signing secret is never returned.",
@@ -17680,7 +18048,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       },
       "put": {
         "description": "Register an endpoint under an id YOU choose (1-63 characters of lowercase letters, digits, `-` or `_`), or update the one already there. Idempotent by id, so an integration can enroll its own receiver on every cold start without tracking whether it has enrolled before, and without displacing anything else the workspace registered. Every field follows the same keep-on-omit rule as the unnamed route, `url` being required only when there is nothing under this id to keep, and a supplied `secret` rotating this endpoint's own signing secret. Refused with `reason: \"invalid_webhook_id\"` for an id that is not a slug, and `reason: \"webhook_limit_reached\"` (409) when registering a NEW id would exceed the per-workspace cap; editing an existing one is admitted either way.",
@@ -17741,7 +18109,7 @@
         "tags": [
           "Webhook"
         ],
-        "x-min-scope": "admin"
+        "x-min-scope": "webhooks"
       }
     },
     "/api/v1/notifications": {
@@ -17962,6 +18330,59 @@
           "Pipelines"
         ],
         "x-min-scope": "read"
+      }
+    },
+    "/api/v1/pr-assessments": {
+      "post": {
+        "description": "Score one pull request in a repository linked to the workspace on the merger’s three axes (complexity, risk, impact, each 0..1, with a rationale), classify it by its changed paths, and say whether a risk policy would let it land with no person. The policy is the one named by `riskPolicyId` from `GET /api/v1/risk-policies`, else the workspace’s unattended default (the one a run started through this API resolves); an unknown id is `422` with `details.reason: \"risk_policy_not_found\"`, and a workspace with no unattended default is `503` `risk_policy_default_missing`. The verdict comes from the same decision the merge step makes, so the policy’s ceilings are never published: `verdict.reason` and `verdict.exceededAxes` say why. A key bound to a person is judged under that person’s workspace role, as a task it creates is admitted, so the role-scoped rules (`classRulesByRole`, `dryRunRoles`, `submissionClassesByRole`) apply to it; a key bound to nobody has no role and they do not. Synchronous: one inline model call, nothing persisted, no run. An unlinked repository is `404` `repo_not_linked`, a PR the host cannot find is `404` `pr_not_found`, a PR that received commits while it was read is `503` `pr_head_moved` (retry), an exhausted budget is `429` `budget_exhausted`, no configured model is `503` `model_unavailable`, a failed model call is `503` `generation_failed`, a call that runs out of time is `503` `generation_timeout`, and a reply that is not an assessment is `503` `unreadable_reply`. A key bound to a person reads the PR and calls the model as that person. Requires a `write` key.",
+        "operationId": "assessPublicPullRequest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssessPublicPullRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicPrAssessment"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Assess a pull request against a risk policy",
+        "tags": [
+          "PR assessment"
+        ],
+        "x-min-scope": "write"
       }
     },
     "/api/v1/prompt-fragments": {
@@ -26542,6 +26963,9 @@
       "name": "Notifications"
     },
     {
+      "name": "PR assessment"
+    },
+    {
       "description": "The workspace’s pipelines (discover a pipelineId to start a task with).",
       "name": "Pipelines"
     },
@@ -26671,6 +27095,7 @@
   },
   "x-public-api-scopes": [
     "read",
+    "webhooks",
     "write",
     "decide",
     "admin"

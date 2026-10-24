@@ -23,6 +23,7 @@ import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import { appInstallationManageUrl, newRepoUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 const bootstrap = useBootstrapStore()
@@ -53,7 +54,7 @@ watch(
 async function loadGitHubRepos() {
   try {
     await github.probe()
-    if (github.connected) await github.load()
+    await github.refresh()
   } catch {
     // GitHub integration off / unreachable → the repo picker just isn't offered.
   }
@@ -604,7 +605,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 </script>
 
 <template>
-  <UModal v-model:open="modalOpen" :title="t('bootstrap.title')" :ui="{ content: 'max-w-2xl' }">
+  <AppModal size="form" v-model:open="modalOpen" :title="t('bootstrap.title')">
     <template #body>
       <div class="space-y-6">
         <!-- Three states, because each promises the user something different about the repo.
@@ -1026,7 +1027,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 class="w-full"
               />
             </UFormField>
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <UFormField :label="t('bootstrap.arch.repoOwner')" required>
                 <UInput
                   v-model="archForm.repoOwner"
@@ -1080,5 +1081,5 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
         </section>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

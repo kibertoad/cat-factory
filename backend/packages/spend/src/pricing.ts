@@ -422,9 +422,9 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     inputPerMillion: 0.46,
     outputPerMillion: 4.49,
   },
-  // DeepSeek API. The `deepseek-chat` / `deepseek-reasoner` aliases were retired in July
-  // 2026 in favour of the V4 pair; the old key is kept so historical spend rows recorded
-  // against it keep costing correctly. (USD→EUR ~0.92.)
+  // DeepSeek API (USD→EUR ~0.92). The `deepseek-chat` / `deepseek-reasoner` aliases were retired
+  // in July 2026 in favour of the V4 pair, and their row is gone: a stray ref on them falls through
+  // to the bare `deepseek` fallback below, which is dearer and so errs in the safe direction.
   //
   // PRICED AT THE PEAK RATE, not the flat rate DeepSeek charged until 2026-08-16. From that
   // date the V4 family bills peak/off-peak (peak 01:00-04:00 and 06:00-10:00 UTC, off-peak
@@ -465,7 +465,6 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     outputPerMillion: 3.64,
     cacheReadPerMillion: 0.04,
   },
-  'deepseek:deepseek-chat': { inputPerMillion: 0.26, outputPerMillion: 1.01 },
   deepseek: { inputPerMillion: 1.21, outputPerMillion: 3.64 },
   // Alibaba DashScope (approximate qwen3.7-max list prices, USD→EUR ~0.92).
   'qwen:qwen3.7-max': { inputPerMillion: 2.3, outputPerMillion: 6.9 },
@@ -490,9 +489,8 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     outputPerMillion: 0.44,
     cacheReadPerMillion: 0.015,
   },
-  // Qwen3-Max is the superseded flagship, kept so historical spend rows keep costing; Alibaba
-  // has since cut it to $0.78 in / $3.90 out per 1M, from the $1.20 / $6.00 this held.
-  'qwen:qwen3-max': { inputPerMillion: 0.72, outputPerMillion: 3.59 },
+  // Qwen3-Max, the superseded flagship, has left Model Studio, so its row is gone too: a stray
+  // `qwen:qwen3-max` ref falls through to the bare `qwen` fallback below, which is dearer.
   qwen: { inputPerMillion: 2.3, outputPerMillion: 6.9 },
   // Moonshot AI direct (list prices from platform.kimi.ai, USD→EUR ~0.92). K3 is $3 in /
   // $0.30 cached / $15 out per 1M, so its derived cache tier is already exact.
@@ -613,20 +611,29 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
       outputPerMillion: 16.56,
     },
   },
-  // The three Flash rows are ONE band each, which is what makes them the plain case beside the
-  // entry above: Google prices them per token regardless of prompt length. All three sit at the
-  // $0.75 / $0.075 cached / $3.75 per 1M the gateway serves today, so these are the rate
-  // actually billed and the derived cache tier is exact.
+  // Gemini 4 Argon (2026-10-13), Google's new flagship: one band across its 1,048,576-token
+  // window. Its $2 in / $0.10 cached / $10 out per 1M is a LAUNCH rate that doubles to $4 / $0.20 /
+  // $20 on 2026-12-01, and this row carries the doubled figure already. That is the rule the Z.ai
+  // rows state (a promotion that lapses under a row leaves the gate metering at half the cost),
+  // and the Flash exception below does not reach it: that one rests on a lapse months out, this
+  // one is six weeks away. Its cache read is 0.05x and is left DERIVED, for the reason the Fable
+  // 5.1 note gives: the 0.1x floor over-states it, which is the safe side.
+  'openrouter:google/gemini-4-argon': { inputPerMillion: 3.68, outputPerMillion: 18.4 },
+  // Gemini 3.8 Flash is ONE band, which is what makes it the plain case beside the entries above:
+  // Google prices it per token regardless of prompt length, at a $0.75 / $0.075 cached / $3.75 per
+  // 1M DISCOUNT that runs to 2026-12-31 and doubles on 2027-01-01. The table carries the discount
+  // rather than the announced price because the row is short only AFTER a date Google has already
+  // fixed; the sweep after 2027-01-01 lands it.
   //
-  // That rate is Google's own DISCOUNT, running to 2026-12-31 and doubling on 2027-01-01, and
-  // this table deliberately carries the discounted figure rather than the announced one. It is
-  // the single place the table prices BELOW a published number, and the exception holds only
-  // because the direction is reversed: everywhere else the risk is a promotion lapsing under a
-  // row and leaving the gate short, while here the row is short only AFTER a date Google has
-  // already fixed. A future price is not the current one; the sweep after 2027-01-01 lands it.
-  'openrouter:google/gemini-3.6-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
-  'openrouter:google/gemini-3.7-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
-  'openrouter:google/gemini-3.8-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
+  // The gateway's model-level price now reads the `google-vertex/us` endpoint, 10% over Google's
+  // own ($0.825 / $0.0825 / $4.125), and a row may never sit under its route, so the fresh classes
+  // follow it (0.759 and 3.795 rounded up). The derived cache tier then lands on 0.076, above the
+  // route's 0.0759, so it stays derived.
+  //
+  // The 3.6 and 3.7 Flash rows are gone, as are their catalog entries: Google now routes every
+  // 3.7 Flash request to 3.8 Flash, and 3.6 is two generations back. A stray ref on either falls
+  // through to the bare `openrouter` fallback, which is dearer.
+  'openrouter:google/gemini-3.8-flash': { inputPerMillion: 0.76, outputPerMillion: 3.8 },
   // The same OpenAI list prices and the same two bands as the direct rows above, which
   // `pricing.test.ts` asserts pair for pair rather than leaving to the eye: the gateway confirms
   // the mechanism outright, since every one of these slugs carries an
@@ -732,6 +739,10 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // route. A pinned rate would assert a hit that nothing here knows how to take, which is why
   // `check-openrouter-pins.mjs` does not report these two either.
   'openrouter:meta/muse-spark-1.3': { inputPerMillion: 1.15, outputPerMillion: 3.91 },
+  // Meta Muse Wonder (2026-10-12), Meta's first frontier model: $4 in / $0.20 cached / $20 out per
+  // 1M on the gateway, one band across a 1M window. No cache rate is named, for the reason the
+  // Muse Spark note above gives: `providerCachePolicy` answers `none` for the `meta` prefix.
+  'openrouter:meta/muse-wonder': { inputPerMillion: 3.68, outputPerMillion: 18.4 },
   'openrouter:meta/muse-spark-1.3-contributor': {
     inputPerMillion: 0.092,
     outputPerMillion: 0.184,
@@ -761,11 +772,12 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     outputPerMillion: 1.1,
     cacheReadPerMillion: 0.006,
   },
-  // Read again 2026-10-09: the retired V4-Flash slug's blend now bills $0.0075 in / $0.0075
-  // cached / $1.28 out, so its output class sat at a seventh of the route and is re-pinned at
-  // 1.18. Input and the cache read stay, both still above the route.
+  // Read again 2026-10-17: the retired V4-Flash slug's blend now bills $0.091 in / $0.0182 cached
+  // / $0.182 out, so its input class sat a hair under the route and is re-pinned at 0.084 (0.0837
+  // rounded up). Output and the cache read stay: both still sit above the route, and only an
+  // understated class is re-pinned.
   'openrouter:deepseek/deepseek-v4-flash': {
-    inputPerMillion: 0.082,
+    inputPerMillion: 0.084,
     outputPerMillion: 1.18,
     cacheReadPerMillion: 0.017,
   },
@@ -821,9 +833,13 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // gateway, so this is the class a container agent's re-sent prefix lands in on every turn: the
   // one understatement on this row a budget could spend through. Rounded UP from 0.2392, as the
   // `z-ai/glm-5.2` row beside it is.
+  //
+  // Output is ABOVE Z.ai's list on this route: the 2026-10-17 read has the gateway's cheapest
+  // upstream at $0.079 in but $4.80 out, so the output class moves up to the route (4.416 rounded
+  // up). Input and the cache read stay above the blend and are left alone.
   'openrouter:z-ai/glm-5.3': {
     inputPerMillion: 1.29,
-    outputPerMillion: 4.05,
+    outputPerMillion: 4.42,
     cacheReadPerMillion: 0.24,
   },
   // The gateway's blend has converged on Z.ai's list for the fresh classes ($0.15 in / $0.50 out)
@@ -894,7 +910,12 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // a row must cover what a call through THIS route costs rather than what the same model costs
   // elsewhere. The Z.ai rows depart the other way, carrying a list ABOVE the promotion the gateway
   // serves today, and both are the same rule: never below the route, and above it is the margin.
-  'openrouter:qwen/qwen3.7-max': { inputPerMillion: 1.36, outputPerMillion: 4.07 },
+  //
+  // The 2026-10-17 read has the route at $1.475 in / $0.295 cached / $4.425 out, so output rounds
+  // up to 4.08 (from 4.071) and input still sits above it. The cache read, now 0.2x input, stays
+  // unnamed for the reason the Qwen3.8 gateway rows are listed in `pricing.test.ts`: Alibaba
+  // caches only on explicit breakpoints, which this path never sends, so no hit is ever recorded.
+  'openrouter:qwen/qwen3.7-max': { inputPerMillion: 1.36, outputPerMillion: 4.08 },
   // OpenRouter passes Alibaba's own Qwen3.8 rates through, cached tier included. The key is the
   // DATED slug: the gateway withdrew the undated `qwen/qwen3.8-max` and now serves `-0902` at the
   // same $2 / $6 / $0.25, so the old key is not kept for historical rows the way the retired

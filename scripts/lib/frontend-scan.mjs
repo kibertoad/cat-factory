@@ -182,13 +182,22 @@ export function isWaived(line, prevLine, marker) {
  * leak onto a second tag that starts on the same line or the one after.
  */
 export function isWaivedAbove(lines, tagLine, marker) {
+  return commentAbove(lines, tagLine).some((n) => lines[n - 1].includes(marker))
+}
+
+/**
+ * The 1-based lines of the comment that ends on the line directly above a TAG, by the rule
+ * {@link isWaivedAbove} applies, or an empty list when there is none. A guard that must also know
+ * WHICH lines a waiver used (to report the unused ones as stale) reads them here.
+ */
+export function commentAbove(lines, tagLine) {
   let i = tagLine - 2
   const last = (lines[i] ?? '').trim()
-  if (last.startsWith('//')) return last.includes(marker)
-  if (!last.endsWith('-->')) return false
-  let block = last
-  while (!block.includes('<!--') && i > 0) block = `${lines[--i].trim()} ${block}`
-  return block.includes('<!--') && block.includes(marker)
+  if (last.startsWith('//')) return [i + 1]
+  if (!last.endsWith('-->')) return []
+  const block = [i + 1]
+  while (!lines[i].includes('<!--') && i > 0) block.unshift(--i + 1)
+  return lines[i].includes('<!--') ? block : []
 }
 
 // Elements that never have children, so they open no frame in {@link walkTemplate}.

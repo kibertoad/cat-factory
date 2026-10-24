@@ -9,19 +9,23 @@
     "scopeHint": "Jede Stufe schließt die darüberliegenden ein.",
     "scope": {
       "read": {
-        "label": "Nur lesen",
+        "label": "Lesen · read",
         "description": "Services, Aufgaben, Pipelines und Läufe ansehen."
       },
+      "webhooks": {
+        "label": "Webhooks",
+        "description": "Zusätzlich Webhooks registrieren, die Änderungen an ein anderes System senden."
+      },
       "write": {
-        "label": "Lesen und schreiben",
+        "label": "Schreiben · write",
         "description": "Zusätzlich Aufgaben anlegen und starten."
       },
       "decide": {
-        "label": "Lesen, schreiben und entscheiden",
+        "label": "Entscheiden · decide",
         "description": "Zusätzlich die Fragen beantworten, auf die ein pausierter Lauf wartet."
       },
       "admin": {
-        "label": "Voller Zugriff",
+        "label": "Vollzugriff · admin",
         "description": "Zusätzlich Aufgaben löschen und auf Benachrichtigungen reagieren, was einen Pull Request zusammenführen kann."
       }
     },
@@ -844,6 +848,7 @@
         "boundToYou": "Ihr Abonnement",
         "boundToOther": "Abonnement von {user}",
         "reachAll": "Alle Arbeitsbereiche",
+        "reachMemberships": "Folgt den Arbeitsbereichen seiner Person",
         "reachCount": "{count} Arbeitsbereiche"
       },
       "add": {
@@ -852,7 +857,7 @@
         "labelHelp": "Ein Name, um dieses Token später wiederzuerkennen.",
         "labelPlaceholder": "z. B. CI-Pipeline",
         "scope": "Berechtigung",
-        "scopeHelp": "Was dieses Token darf: nur Lesen, Lesen und Schreiben oder Vollzugriff (der auch das Löschen erlaubt).",
+        "scopeHelp": "Jede Stufe umfasst alles, was die vorherige erlaubt. Lesen: Aufgaben, Läufe und deren Ergebnisse ansehen. Webhooks: zusätzlich Webhooks registrieren und entfernen, die Änderungen an ein anderes System senden, etwa Verzeichnis- und Benachrichtigungs-Webhooks. Schreiben: zusätzlich Aufgaben anlegen, bearbeiten, starten, stoppen und wiederholen sowie Reviews und Bewertungen ausführen. Entscheiden: zusätzlich die menschlichen Entscheidungen eines Laufs beantworten (Freigaben, Review-Befunde, Interview- und Rückfragen, manuelle Tests); diese Stufe braucht ein Token auch, um eine Pipeline zu starten, die an einer solchen Entscheidung anhalten kann. Vollzugriff (admin): zusätzlich Services anlegen, konfigurieren und löschen, Aufgaben löschen, Repositories verknüpfen, Umgebungsverbindungen verwalten und auf Benachrichtigungen reagieren.",
         "create": "Token erstellen",
         "identity": "Läuft als",
         "identitySystem": "Dieser Arbeitsbereich (System-Token)",
@@ -861,16 +866,20 @@
         "identitySelfHelp": "Mit diesem Token gestartete Läufe gelten als Ihre und können Ihr persönliches Claude-/Codex-/GLM-Abonnement nutzen. Jeder solche Aufruf muss zusätzlich Ihr persönliches Passwort im Header X-Personal-Password senden; es wird nie gespeichert. Für Ihre eigenen Headless-Läufe.",
         "reach": "Arbeitsbereiche",
         "reachHelp": "Auf welchen Arbeitsbereichen dieses Token handeln darf. Ein Token für mehr als einen Arbeitsbereich nennt den Arbeitsbereich bei jedem Aufruf im Header x-cat-factory-workspace.",
+        "reachAdminOnly": "Nur ein Konto-Admin kann ein Token anlegen, das weitere Arbeitsbereiche erreicht, wie es Verzeichnis-Webhooks brauchen. Bitte einen Konto-Admin darum.",
         "reachThis": "Nur dieser Arbeitsbereich",
         "reachAll": "Alle Arbeitsbereiche des Kontos",
         "reachSelected": "Ausgewählte Arbeitsbereiche",
+        "reachMemberships": "Meine Arbeitsbereiche (folgt meinen Mitgliedschaften)",
+        "reachMembershipsHelp": "Erreicht bei jedem Aufruf jeden Arbeitsbereich, in dem du handeln kannst: Beitritt oder Austritt ändert das, ohne neues Token. In jedem Arbeitsbereich kann es nicht mehr, als deine Rolle dort erlaubt.",
         "reachPick": "Arbeitsbereiche auswählen"
       },
       "scopes": {
-        "read": "Nur Lesen",
-        "write": "Lesen und Schreiben",
-        "decide": "Antworten auf Entscheidungen",
-        "admin": "Vollzugriff"
+        "read": "Lesen · read",
+        "webhooks": "Webhooks (inkl. Lesen)",
+        "write": "Schreiben · write (inkl. Webhooks)",
+        "decide": "Entscheiden · decide (inkl. Schreiben)",
+        "admin": "Vollzugriff · admin (inkl. Entscheiden)"
       },
       "toast": {
         "loadFailed": "API-Tokens konnten nicht geladen werden",
@@ -2773,8 +2782,12 @@
         "githubConnect": "GitHub verbinden",
         "slackManage": "Slack-Benachrichtigungen verwalten",
         "slackConnect": "Slack verbinden",
-        "sourceManage": "{source} verwalten",
-        "sourceConnect": "{source} verbinden",
+        "documentSourceManage": "{source} verwalten (Dokumente)",
+        "documentSourceConnect": "{source} verbinden (Dokumente)",
+        "designSourceManage": "{source} verwalten (Designs)",
+        "designSourceConnect": "{source} verbinden (Designs)",
+        "taskSourceManage": "{source} verwalten (Tracker)",
+        "taskSourceConnect": "{source} verbinden (Tracker)",
         "documentImport": "Aus Dokumenten importieren und spawnen",
         "taskImport": "Issues importieren",
         "fragments": "Kontextfragment-Bibliothek",
@@ -3288,10 +3301,38 @@
       "stalled": "Lauf ins Stocken geraten",
       "retryBootstrap": "Bootstrap wiederholen",
       "retryRun": "Lauf wiederholen",
+      "startNewRun": "Neuen Lauf starten",
       "environmentSetup": "Umgebungen einrichten",
       "deployRunnerSetup": "Runner-Pool einrichten",
       "environmentLocalHint": "Lokale ephemere Umgebungen benötigen eine Deploy-Runtime, um kubectl/kustomize/helm auszuführen. Setzen Sie {runtime} in Ihrer .env: der Native-Modus führt diese Tools auf Ihrem Host aus ({native}), der Container-Modus führt sie im Deploy-Image aus ({container}).",
       "showDetail": "Details anzeigen",
+      "details": "Details",
+      "detailsMessage": "Meldung",
+      "detailsHint": "Hinweise für den Betrieb",
+      "detailsFull": "Vollständige Ausgabe",
+      "cause": {
+        "preflight": "Eine Prüfung vor dem Start ist fehlgeschlagen, daher wurde keine Arbeit erledigt. Öffnen Sie Details, um zu sehen, was zu beheben ist, und wiederholen Sie dann.",
+        "dispatch": "Der Container des Agenten ist nicht gestartet, daher wurde keine Arbeit erledigt. Das ist meist vorübergehend.",
+        "environment": "Die Testumgebung konnte nicht erstellt werden. Prüfen Sie die Umgebungseinstellungen und wiederholen Sie dann.",
+        "evicted": "Der Container hat während des Laufs mehrmals angehalten. Das geschieht meist während eines Plattform-Updates. Wiederholen Sie, wenn das Update abgeschlossen ist.",
+        "harness_shutdown": "Etwas hat den Container während dieses Schritts angehalten. Suchen Sie die Ursache in Details, bevor Sie wiederholen, denn eine Wiederholung kann erneut anhalten.",
+        "timeout": "Der Lauf hat nicht mehr reagiert oder sein Zeitlimit überschritten. Was davon, steht in Details. Wiederholen Sie dann.",
+        "agent": "Ein Agentenschritt ist fehlgeschlagen. Die Ursache steht beim fehlgeschlagenen Schritt. Wiederholen Sie dann.",
+        "job_failed": "Der Container des Agenten hat einen Fehler gemeldet. Eine Wiederholung startet einen neuen Container.",
+        "delegated_failed": "Das externe System, das diesen Schritt ausgeführt hat, hat einen Fehler gemeldet. Der Link am Schritt öffnet dessen Lauf mit der Ursache.",
+        "rejected": "Ein Schritt wurde abgelehnt, daher wurde der Lauf angehalten. Eine Wiederholung beginnt erneut bei diesem Schritt.",
+        "companion_rejected": "Ein Begleitagent hat kein verwendbares Ergebnis geliefert. Eine Wiederholung führt ihn erneut aus.",
+        "stalled": "Die Plattform hat den Kontakt zu diesem Lauf verloren. Eine Wiederholung startet einen neuen Lauf.",
+        "state_unreadable": "Der gespeicherte Zustand dieses Laufs ist nicht lesbar, daher liest eine Wiederholung denselben defekten Zustand. Starten Sie einen neuen Lauf.",
+        "cancelled": "Dieser Lauf wurde angehalten. Eine Wiederholung startet ihn erneut.",
+        "unknown": "Der Lauf ist aus unbekanntem Grund fehlgeschlagen. Sehen Sie sich Details an und wiederholen Sie dann.",
+        "deployRunnerUnwiredLocal": "Dieser Computer hat keine Deploy-Runtime, um die Testumgebung zu erstellen. Setzen Sie {variable} in Ihrer .env-Datei und wiederholen Sie dann.",
+        "singleJob": {
+          "evicted": "Der Container hat angehalten, bevor der Job abgeschlossen war. Eine Wiederholung startet einen neuen Container.",
+          "timeout": "Der Job war zu lange ohne Aktivität oder hat sein Zeitlimit überschritten. Eine Wiederholung startet ihn erneut.",
+          "agent": "Der Agent oder der Git-Push ist fehlgeschlagen. Die Ursache steht in Details. Wiederholen Sie dann."
+        }
+      },
       "retrying": "Wird wiederholt…",
       "history": {
         "previousErrors": "{count} vorheriger Fehler | {count} vorherige Fehler"
@@ -3712,6 +3753,7 @@
       },
       "errors": {
         "listInstallations": "GitHub-Installationen konnten nicht aufgelistet werden",
+        "loadProjection": "Repositories, Pull Requests und Issues konnten nicht geladen werden",
         "startInstall": "Die Installation der GitHub App konnte nicht gestartet werden",
         "connect": "Verbindung nicht möglich"
       }
@@ -3806,7 +3848,8 @@
         "servicesAddedDescription": "{count} Service zum Board hinzugefügt. | {count} Services zum Board hinzugefügt.",
         "frontendLinkedNote": "{directory} wurde als Frontend hinzugefügt und mit den übrigen verknüpft. Benennen Sie die Umgebungsvariablen für die Backend-URLs im Inspector.",
         "frontendWiringFailedNote": "Die Frontend-Einstellungen wurden nicht gespeichert. Öffnen Sie den Inspector jeder Frontend-App, um ihr Unterverzeichnis und ihre Backend-Services zu setzen."
-      }
+      },
+      "prefillProviderMismatch": "Der Link verweist auf {repo} bei einem anderen Anbieter, dieses Board ist aber mit {connected} verbunden. Suche das Repository von Hand oder öffne den Link auf einem Board, das mit seinem Anbieter verbunden ist."
     },
     "repoTree": {
       "root": "root",
@@ -6516,6 +6559,7 @@
       "providersUnconfigured": {
         "title": "Kein KI-Anbieter für dieses Modell",
         "body": "Für {models} ist kein Anbieter konfiguriert. Füge einen Anbieterschlüssel hinzu, verbinde ein Abonnement oder aktiviere Cloudflare AI, um es auszuführen.",
+        "cause": "Für ein Modell in dieser Pipeline ist kein Anbieter konfiguriert. Fügen Sie einen Anbieterschlüssel hinzu, verbinden Sie ein Abonnement oder aktivieren Sie Cloudflare AI und wiederholen Sie dann.",
         "action": "KI konfigurieren"
       },
       "binaryStorageUnconfigured": {
@@ -8424,11 +8468,11 @@
           },
           "banner": {
             "title": "Was schiefgegangen ist",
-            "body": "Die Karte tauscht ihren Fortschrittsbalken gegen dieses Banner. Es nennt die Ursache, die Details enthalten die Rohausgabe, und manche Ursachen bieten einen Knopf direkt zu der Einstellung, die sie behebt."
+            "body": "Die Karte ersetzt ihren Fortschrittsbalken durch dieses Banner. Es nennt, was fehlgeschlagen ist, und bietet eine Aktion. Öffnen Sie die Aufgabe, um die Ursache in einer Zeile zu lesen, mit der Rohausgabe unter Details."
           },
           "retry": {
-            "title": "Noch einmal ausführen",
-            "body": "Wiederholen führt die Arbeit erneut aus. Frühere Fehler bleiben unter „Frühere Fehler“ an der Aufgabe, du kannst Versuche also vergleichen, statt die Spur zu verlieren."
+            "title": "Der nächste Schritt",
+            "body": "Diese Schaltfläche ist der nächste Schritt. Meist ist es „Erneut versuchen“, das die Arbeit noch einmal ausführt. Wenn eine Einstellung den Fehler verursacht, öffnet sie diese Einstellung. Vorherige Fehler bleiben an der Aufgabe, damit Sie Versuche vergleichen können."
           },
           "finish": {
             "title": "Ein Fehler ist eine Information",
