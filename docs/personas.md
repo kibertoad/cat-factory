@@ -1,7 +1,7 @@
 # Personas
 
-**Status:** draft for discussion. The maintainer agreed on 2026-10-19 that the personas the product
-supports out of the box should be defined and documented, so they can guide what each surface shows.
+**Status:** draft for discussion. It defines the personas the product supports out of the box, so
+they can guide what each surface shows.
 
 This doc defines who uses cat-factory, which jobs each of them comes to do, and which surface each
 one should land on. A new user-facing surface checks it before it decides its narrowing (the role
@@ -87,8 +87,8 @@ infrastructure. A technical PM who does can pick the engineer role.
     `contracts/src/accounts.ts`);
   - the task's responsible product person, notified when requirement review flags findings
     (`TaskRunSettings.vue`);
-  - the Slack member role `product`, @-mentioned on requirement-review findings
-    (`contracts/src/slack.ts`).
+  - the Product / Engineering choice on each person in the Slack member mapping: Product people are
+    @-mentioned on requirement-review findings (`contracts/src/slack.ts`).
 
   The SPA's `product-manager` role ignores all three and maps to `full`, the engineer's surface
   (`ROLE_SURFACES` in `utils/uiRole.ts`).
@@ -106,9 +106,9 @@ infrastructure. A technical PM who does can pick the engineer role.
 
 ### Designer
 
-Hands a design off as work and follows it to the result. Jobs J1 and part of J2. Decided on
-2026-10-19: the designer role is for **handoff**. Cat-factory does not support iterating on a UI
-today (no fast loop on a running app), so the role must not promise design work.
+Hands a design off as work and follows it to the result. Jobs J1 and part of J2. The designer role
+is for **handoff**. Cat-factory does not support iterating on a UI today (no fast loop on a running
+app), so the role must not promise design work.
 
 - **Lands on:** the intake surface.
 - **Needs:** "Start from a design", the work in flight, the outcome window with its screenshots.
@@ -128,7 +128,7 @@ what it cost, what is stuck. The UX assessment behind #2258 already lists this p
   boards they own, and the work that waits on a person.
 - **Gaps today:** the queue shows only a count of merges in the Done-lane retention window
   (UXA-33). Reports needs the advanced tier and account admin (`nav-contributions.ts`, `reports`).
-  Decided on 2026-10-19: this needs **more granular permissions**, so it is an RBAC change first
+  This needs **more granular permissions**, so it is an RBAC change first
   (ADR 0025 has `admin | member | viewer` per workspace and no permission for reading spend), and a
   surface second.
 
@@ -148,11 +148,11 @@ and then rarely. Often a platform team, not a user of the boards.
 
 Three separate definitions, none derived from another:
 
-| Where                         | Vocabulary                                               | Decides                                                    |
-| ----------------------------- | -------------------------------------------------------- | ---------------------------------------------------------- |
-| The SPA role question         | engineer, product-manager, designer → `full` or `intake` | Which sidebar destinations show                            |
-| The interface tier            | basic, advanced                                          | Override fields and power-user destinations                |
-| Account roles and Slack roles | admin, developer, product; product, engineering          | Permissions, notifications, the responsible product person |
+| Where                                      | Vocabulary                                                   | Decides                                                    |
+| ------------------------------------------ | ------------------------------------------------------------ | ---------------------------------------------------------- |
+| The SPA role question                      | engineer, product-manager, designer → `full` or `intake`     | Which sidebar destinations show                            |
+| The interface tier                         | basic, advanced                                              | Override fields and power-user destinations                |
+| Account roles and the Slack member mapping | admin, developer, product; Product or Engineering per person | Permissions, notifications, the responsible product person |
 
 So "engineer" holds two jobs on one surface, the PM gets the engineer's surface, the backend's
 `product` person never reaches the SPA's role, and the lead and the operator have no role at all.
@@ -236,8 +236,8 @@ roles come first because every surface hangs off them. Each question has a sugge
    _Suggested:_ yes, into the setup area that #2429 proposes, opened from the setup checklist and
    gated by the permissions that already exist (`integrations.manage`, `secrets.manage`,
    `settings.manage`). No new role.
-10. **Which permission lets someone below account admin see what shipped and what it cost?** Decided
-    on 2026-10-19 that this needs more granular permissions.
+10. **Which permission lets someone below account admin see what shipped and what it cost?** It
+    needs more granular permissions than exist today.
     _Suggested:_ split it in two. "What shipped" (the Shipped list with the outcome windows) needs
     only `workspace.read`, so every member and viewer sees it. "What it cost" for one board becomes
     a new workspace permission held by workspace admins, so a lead with workspace admin sees spend

@@ -418,7 +418,7 @@ UXA-20, UXA-22. UXA-01 is in review in #2312.
 
 The role findings of this pass (the PM on the engineer's surface, the designer's handoff, and
 what shipped and what it cost below account admin) are in [Personas](../personas.md), with the
-maintainer's answers of 2026-10-19 and the questions still open. They are not tracked here.
+questions still open. They are not tracked here.
 
 ## Hierarchy and delight read
 
