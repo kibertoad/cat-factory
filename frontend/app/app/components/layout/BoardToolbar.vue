@@ -146,6 +146,7 @@ const spendColor = computed(() => (spend.value?.exceeded ? 'error' : 'neutral'))
       :title="t('board.toolbar.resetZoom')"
       :aria-label="t('board.toolbar.resetZoom')"
       data-testid="board-zoom-reset"
+      :data-lod="ui.lod"
       @click="resetZoom()"
     >
       {{ zoomPct }}%

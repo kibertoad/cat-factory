@@ -3420,6 +3420,7 @@
         "title": "Esecuzione avviata",
         "body": "Esecuzione di \"{name}\"."
       },
+      "stepPosition": "{current} di {total}",
       "pr": "PR",
       "prNumber": "PR #{number}",
       "readOutcome": "Esito",

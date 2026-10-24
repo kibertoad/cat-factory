@@ -2,7 +2,8 @@
 '@cat-factory/app': patch
 ---
 
-A task card's action buttons no longer move when the pointer arrives on them. Hovering a card with
-a run expands its pipeline steps, and the steps rendered above the action row, so the expansion
-pushed Resolve, Approve and Outcome down mid-click: the first click selected the task instead of
-acting. The steps now render below the action row.
+Hovering a task card no longer expands its pipeline steps. The expansion moved the card's own
+buttons and pushed the cards below it down, so the first click on Resolve, Approve or Outcome often
+selected the task instead of acting. An in-flight card now shows the step its run is on, the step's
+position and one segment per step in place of the progress bar, at every zoom. The full step list
+is in the inspector, and on the card past the `steps` zoom band.

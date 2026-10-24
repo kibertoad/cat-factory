@@ -4,14 +4,13 @@ import { boardWith, loginTask } from '~/stories/board.stories.mocks'
 import { prReview, step, subtasks } from '~/stories/pipelineStep.stories.mocks'
 import { execution, parkedExecution, snapshot } from '~/stories/snapshot.stories.mocks'
 import { seedSnapshot, withSeed } from '~/stories/withStores'
-import { useTaskExpansionStore } from '~/stores/taskExpansion'
 import { useUiStore } from '~/stores/ui'
 import TaskPipelineMini from './TaskPipelineMini.vue'
 
-// The run's steps inside a task card, shown while the pointer is on the card or once the board is
-// zoomed to the steps band. One band deeper each step lists its todo items. A step opens its
-// detail window on click, and a pending approval offers Review and approve. The story seeds the
-// login task's run and either the hover or the zoom; the todo items are made up.
+// The run's steps inside a task card, shown once the board is zoomed to the steps band. One band
+// deeper each step lists its todo items. A step opens its detail window on click, and a pending
+// approval offers Review and approve. The story seeds the login task's run and the zoom; the todo
+// items are made up.
 const coderTodo = {
   ...subtasks(2, 5, 1),
   items: [
@@ -31,14 +30,13 @@ const coding = execution({
   ],
 })
 
-/** The login task with `run`, and the card hovered or the board zoomed to `zoom`. */
-function expanded(run: ExecutionInstance, { zoom }: { zoom?: number } = {}) {
+/** The login task with `run`, and the board zoomed to `zoom` (the steps band by default). */
+function expanded(run: ExecutionInstance, { zoom = 2 }: { zoom?: number } = {}) {
   return withSeed(() => {
     seedSnapshot(
       snapshot({ blocks: boardWith({ ...loginTask, executionId: run.id }), executions: [run] }),
     )
-    if (zoom) useUiStore().zoom = zoom
-    else useTaskExpansionStore().setHovered(loginTask.id)
+    useUiStore().zoom = zoom
   })
 }
 
@@ -52,7 +50,7 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-/** Hovered: the three steps, the coder's count of 2/5 and its bar. */
+/** At the steps band: the three steps, the coder's count of 2/5 and its bar. */
 export const Default: Story = {
   decorators: [expanded(coding)],
 }

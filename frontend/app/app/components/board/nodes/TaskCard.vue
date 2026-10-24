@@ -3,6 +3,7 @@ import type { Block } from '~/types/domain'
 import { STATUS_META, MODULE_META, taskTypeMeta } from '~/utils/catalog'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import TaskPipelineMini from './TaskPipelineMini.vue'
+import TaskProgressRow from './TaskProgressRow.vue'
 import IconButton from '~/components/common/IconButton.vue'
 
 const props = defineProps<{ taskId: string }>()
@@ -10,6 +11,7 @@ const props = defineProps<{ taskId: string }>()
 const board = useBoardStore()
 const ui = useUiStore()
 const agentRuns = useAgentRunsStore()
+const execution = useExecutionStore()
 const { t } = useI18n()
 
 // What the card offers a human to do, shared with the queue's card (see `useTaskActions`).
@@ -101,6 +103,10 @@ const showModuleChip = computed(
 // like it's still working after the run has terminated.
 const agentRun = computed(() => agentRuns.byBlock[props.taskId])
 const runFailed = computed(() => agentRun.value?.status === 'failed')
+const inFlight = computed(
+  () => task.value?.status === 'in_progress' || task.value?.status === 'blocked',
+)
+const hasSteps = computed(() => (execution.getByBlock(props.taskId)?.steps.length ?? 0) > 0)
 
 // When this task backs a recurring pipeline, surface a small repeat badge so the
 // service shows its scheduled work at a glance (full controls live in the inspector).
@@ -223,9 +229,11 @@ function selectTask() {
       class="mt-1.5"
     />
 
-    <!-- progress while a pipeline runs (suppressed once the run has failed) -->
+    <!-- progress while a pipeline runs (suppressed once the run has failed): the step it is on,
+         or a plain bar until the run's steps have loaded -->
+    <TaskProgressRow v-else-if="inFlight && hasSteps" :task-id="taskId" class="mt-1.5" />
     <UProgress
-      v-else-if="task.status === 'in_progress' || task.status === 'blocked'"
+      v-else-if="inFlight"
       :model-value="Math.round(task.progress * 100)"
       size="xs"
       class="mt-1.5"
@@ -384,12 +392,10 @@ function selectTask() {
       </template>
     </div>
 
-    <!-- Spatial drill-down: build steps (at `steps` zoom, or while the card is hovered) and each
-         step's live subtask todos (one band deeper, at `subtasks` zoom). It sits BELOW the action
-         row on purpose. Hovering expands it, and the hover grant lands on the next frame after the
-         pointer arrives; above the row, that pushed the buttons down between `pointerdown` and
-         `pointerup`, so the click resolved to the card root and selected the task instead of
-         acting (UXA-01). Below the row, expanding never moves a button. -->
+    <!-- Spatial drill-down: build steps (at `steps` zoom) and each step's live subtask todos (one
+         band deeper, at `subtasks` zoom). Zooming is the only thing that expands it: hovering
+         used to, and the expansion moved buttons under a pointer that was about to press them
+         (UXA-01). -->
     <TaskPipelineMini :task-id="taskId" />
 
     <!-- Structural metadata: assigned module. Dropped while the lanes are GROUPED by module,
