@@ -672,7 +672,8 @@ The outermost of the three narrowing axes, and the only one the app **asks about
 launch it puts up one question, "what do you work on?", offering `engineer`, `product-manager` and
 `designer` with a line each on what picking it gives you. Vocabulary, resolution and the
 presentation table are in `app/utils/uiRole.ts`; the choice and its once-per-session prompt live in
-the `uiRole` store.
+the `uiRole` store. Who each role is for, and the surfaces the roles are moving towards, are in
+[`docs/personas.md`](../../docs/personas.md).
 
 Two roles, three names. `engineer` and `product-manager` both map to the **`full`** surface, and
 that is the product decision rather than an oversight: the two do the same job in this app (plan
