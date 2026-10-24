@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
  * @param prUrl Always present; {@code null} when the server has no value for it.
  * @param reportedSlices the {@code reportedSlices} field.
  * @param resumeAttempts the {@code resumeAttempts} field.
+ * @param reviewedHeadSha Always present; {@code null} when the server has no value for it.
  * @param selectedFindingIds the {@code selectedFindingIds} field.
  * @param slices the {@code slices} field.
  * @param status the {@code status} field.
@@ -52,6 +53,9 @@ public record PublicPrReviewDecision(
     @JsonProperty("reportedSlices") Double reportedSlices,
 
     @JsonProperty("resumeAttempts") Double resumeAttempts,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("reviewedHeadSha") @Nullable String reviewedHeadSha,
 
     @JsonProperty("selectedFindingIds") List<String> selectedFindingIds,
 
@@ -86,6 +90,7 @@ public record PublicPrReviewDecision(
         private @Nullable String prUrl;
         private @Nullable Double reportedSlices;
         private @Nullable Double resumeAttempts;
+        private @Nullable String reviewedHeadSha;
         private @Nullable List<String> selectedFindingIds;
         private @Nullable List<PublicPrReviewDecisionSlice> slices;
         private @Nullable PublicPrReviewDecisionStatus status;
@@ -157,6 +162,12 @@ public record PublicPrReviewDecision(
             return this;
         }
 
+        /** Set {@code reviewedHeadSha}. */
+        public Builder reviewedHeadSha(@Nullable String reviewedHeadSha) {
+            this.reviewedHeadSha = reviewedHeadSha;
+            return this;
+        }
+
         /** Set {@code selectedFindingIds}. */
         public Builder selectedFindingIds(@Nullable List<String> selectedFindingIds) {
             this.selectedFindingIds = selectedFindingIds;
@@ -183,7 +194,7 @@ public record PublicPrReviewDecision(
 
         /** Build the {@link PublicPrReviewDecision}. */
         public PublicPrReviewDecision build() {
-            return new PublicPrReviewDecision(findings, kind, lastActivityAt, maxResumeAttempts, postAttempts, postReport, postedBody, postedFindingIds, prUrl, reportedSlices, resumeAttempts, selectedFindingIds, slices, status, summary);
+            return new PublicPrReviewDecision(findings, kind, lastActivityAt, maxResumeAttempts, postAttempts, postReport, postedBody, postedFindingIds, prUrl, reportedSlices, resumeAttempts, reviewedHeadSha, selectedFindingIds, slices, status, summary);
         }
     }
 }

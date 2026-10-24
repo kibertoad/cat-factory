@@ -556,3 +556,13 @@ its reach is not a list.
 
 Additive: a new boolean on three shapes. A listed key's `workspaceIds` may now be an empty list,
 which it never was before, and only ever for a key with `followsMemberships: true`.
+
+## 1.90.0
+
+A `pr-review` decision states the commit it reviewed and shows each finding's code.
+`reviewedHeadSha` is the pull request's head when the review started, the tree every finding's
+`line` refers to. Each finding gains `excerpt` (`startLine`, `endLine`, `side`, `text`): the anchor
+line plus up to three lines either side, read at that commit and kept within 2 KB. It is null when
+the finding has no line, anchors to the base side, or its file is deleted, binary or unreadable.
+
+Additive: a new nullable field on `PublicPrReviewDecision` and one on its findings.

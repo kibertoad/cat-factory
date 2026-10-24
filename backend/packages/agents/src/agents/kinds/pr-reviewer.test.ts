@@ -773,3 +773,11 @@ describe('pr-reviewer kind registration', () => {
     expect(hasTrait(PR_REVIEWER_KIND, CODE_AWARE_TRAIT, defaultAgentKindRegistry())).toBe(true)
   })
 })
+
+describe('finding layout', () => {
+  it('asks for an impact sentence and evidence bullets, with the fix kept in suggestedFix', () => {
+    expect(PR_REVIEWER_SYSTEM_PROMPT).toContain('ONE sentence first')
+    expect(PR_REVIEWER_SYSTEM_PROMPT).toContain('short evidence bullets')
+    expect(PR_REVIEWER_SYSTEM_PROMPT).toContain('it belongs in `suggestedFix`')
+  })
+})

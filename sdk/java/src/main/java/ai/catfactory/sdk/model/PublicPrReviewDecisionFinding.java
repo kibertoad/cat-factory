@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
  * @param category the {@code category} field.
  * @param challenge Always present; {@code null} when the server has no value for it.
  * @param detail the {@code detail} field.
+ * @param excerpt Always present; {@code null} when the server has no value for it.
  * @param findingId the {@code findingId} field.
  * @param line Always present; {@code null} when the server has no value for it.
  * @param path the {@code path} field.
@@ -29,6 +30,9 @@ public record PublicPrReviewDecisionFinding(
     @JsonProperty("challenge") @Nullable PublicPrReviewDecisionFindingChallenge challenge,
 
     @JsonProperty("detail") String detail,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("excerpt") @Nullable PublicPrReviewDecisionFindingExcerpt excerpt,
 
     @JsonProperty("findingId") String findingId,
 
@@ -66,6 +70,7 @@ public record PublicPrReviewDecisionFinding(
         private @Nullable PublicPrReviewDecisionFindingCategory category;
         private @Nullable PublicPrReviewDecisionFindingChallenge challenge;
         private @Nullable String detail;
+        private @Nullable PublicPrReviewDecisionFindingExcerpt excerpt;
         private @Nullable String findingId;
         private @Nullable Double line;
         private @Nullable String path;
@@ -90,6 +95,12 @@ public record PublicPrReviewDecisionFinding(
         /** Set {@code detail}. */
         public Builder detail(@Nullable String detail) {
             this.detail = detail;
+            return this;
+        }
+
+        /** Set {@code excerpt}. */
+        public Builder excerpt(@Nullable PublicPrReviewDecisionFindingExcerpt excerpt) {
+            this.excerpt = excerpt;
             return this;
         }
 
@@ -143,7 +154,7 @@ public record PublicPrReviewDecisionFinding(
 
         /** Build the {@link PublicPrReviewDecisionFinding}. */
         public PublicPrReviewDecisionFinding build() {
-            return new PublicPrReviewDecisionFinding(category, challenge, detail, findingId, line, path, severity, side, sliceId, suggestedFix, title);
+            return new PublicPrReviewDecisionFinding(category, challenge, detail, excerpt, findingId, line, path, severity, side, sliceId, suggestedFix, title);
         }
     }
 }

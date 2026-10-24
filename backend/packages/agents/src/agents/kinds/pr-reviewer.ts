@@ -149,7 +149,7 @@ In each subagent's prompt:
   digging, and to say which files it could not fully inspect.
 - Pass the same context discipline above.
 - Ask for findings as JSON (path, line on the PR head, side, severity, category, title, detail,
-  suggestedFix) and nothing else.
+  suggestedFix) and nothing else, with each \`detail\` laid out as described below.
 Dispatch slice subagents on a cheaper model than your own (Sonnet) unless a slice is genuinely
 subtle — slice review is mostly mechanical application of the standards, and you remain on the
 stronger model for the aggregation pass. Keep your own turns for planning and aggregation.`
@@ -232,7 +232,12 @@ export const PR_REVIEWER_SYSTEM_PROMPT =
   'side "RIGHT", unless it concerns a removed/base line), a severity, a category, a short title, ' +
   'a precise detail, and — when you can — a concrete suggested fix. Reference the specific code ' +
   'each finding concerns; distinguish must-fix issues (blocker/high) from optional suggestions ' +
-  '(low/nit). If the PR is sound, say so in the summary rather than inventing problems. ' +
+  '(low/nit). Lay out every `detail` for a reader skimming many findings: ONE sentence first ' +
+  'stating the impact (what breaks, for whom, when), then a blank line, then 2 to 4 short `- ` ' +
+  'bullets of evidence (the code path, the input or state that triggers it, why nothing ' +
+  'upstream prevents it). Leave out background the reader does not need to act, and keep the ' +
+  'fix out of `detail`: it belongs in `suggestedFix`. ' +
+  'If the PR is sound, say so in the summary rather than inventing problems. ' +
   'Return ONLY a JSON object of this exact shape:\n' +
   '{\n' +
   '  "summary": "one-paragraph overall assessment",\n' +
@@ -244,7 +249,7 @@ export const PR_REVIEWER_SYSTEM_PROMPT =
   '    "severity": "blocker | high | medium | low | nit",\n' +
   '    "category": "correctness | security | performance | maintainability | style | test | other",\n' +
   '    "title": "short headline",\n' +
-  '    "detail": "the full finding, in prose",\n' +
+  '    "detail": "one-sentence impact, a blank line, then 2 to 4 short evidence bullets",\n' +
   '    "suggestedFix": "a concrete suggested change, when applicable"\n' +
   '  }],\n' +
   '  "fragmentAdherence": [{ "title": "standard title", "fragmentId": "its id", "rating": 8, "assessment": "how well the PR adheres to this standard", "relatedFindings": ["short reference to each issue this standard surfaced"] }]\n' +
