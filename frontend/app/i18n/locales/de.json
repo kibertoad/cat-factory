@@ -3420,6 +3420,7 @@
         "title": "Lauf gestartet",
         "body": "\"{name}\" läuft."
       },
+      "stepPosition": "{current} von {total}",
       "pr": "PR",
       "prNumber": "PR #{number}",
       "readOutcome": "Ergebnis",

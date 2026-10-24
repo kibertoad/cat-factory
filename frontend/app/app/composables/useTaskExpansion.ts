@@ -18,27 +18,23 @@ function sameSet(a: Set<string>, b: Set<string>) {
 
 /**
  * Board-level driver deciding which task cards expand their full pipeline list.
- * Recomputed every frame against live DOM rects so it follows pan / zoom / drag / resize,
- * and writes two independent grants into the `taskExpansion` store (which combines them —
- * see the store for how they resolve):
+ * Recomputed against live DOM rects so it follows pan / zoom / drag / resize, and writes the
+ * granted set into the `taskExpansion` store. Only at the deep `steps`/`subtasks` bands, and
+ * only for on-screen cards, minus overlaps:
  *
- *  - hover: the task directly under the pointer, at ANY zoom level. "Under the pointer"
- *    is the TOPMOST card at the cursor (document.elementFromPoint), so hovering a region
- *    already covered by another open pipeline keeps that pipeline, not the card beneath.
- *  - zoom: at the deep `steps`/`subtasks` bands, every on-screen card, minus overlaps —
- *    two sub-gates:
- *      - visibility: a task expands only while its card overlaps the board viewport.
- *      - overlap: walking the visible candidates nearest-header-to-screen-centre first, a
- *        task expands only if its footprint doesn't collide with one already granted, so
- *        the card you're looking at wins an overlap and the rest stay compact. The hovered
- *        card is granted first, so it wins every overlap it's part of.
+ *  - visibility: a task expands only while its card overlaps the board viewport.
+ *  - overlap: walking the visible candidates nearest-header-to-screen-centre first, a task
+ *    expands only if its footprint doesn't collide with one already granted, so the card
+ *    you're looking at wins an overlap and the rest stay compact.
  *
- * Only tasks with a running pipeline (steps to show) are candidates for either grant — a
- * task that wouldn't expand never blocks a neighbour and never lifts an empty card.
+ * Where the pointer is plays no part. A hover grant used to expand the card under it, and
+ * that moved the buttons of the cards below (UXA-01); see the store.
  *
- * Deciding costs a rect per candidate plus an `elementFromPoint`, so it runs only while the
- * board is moving: the canvas activity pulse wakes it and `useSettlingRaf` parks it again once
- * the two grants stop changing.
+ * Only tasks with a running pipeline (steps to show) are candidates: a task that wouldn't
+ * expand never blocks a neighbour and never lifts an empty card.
+ *
+ * Deciding costs a rect per candidate, so it runs only while the board is moving: the canvas
+ * activity pulse wakes it and `useSettlingRaf` parks it again once the grant stops changing.
  */
 export function useTaskExpansion(container: Ref<HTMLElement | null>, activity: BoardActivity) {
   const board = useBoardStore()
@@ -55,47 +51,16 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>, activity: B
   // card is still tested at its expanded extent and stays denied. Stable.
   const expandedHeight = new Map<string, number>()
 
-  // The task whose card is topmost at the pointer, or null. Using elementFromPoint (not a
-  // rect test) means an open pipeline stacked above a neighbour wins the hit, so hovering
-  // a region obscured by another pipeline doesn't switch to the card hidden beneath it.
-  //
-  // Blocks with no pipeline to show are filtered out here rather than left to the card:
-  // a frame, a module, or a task with no run expands to nothing, and granting it would
-  // still lift an empty card over its neighbours (see LaneTask's z-index).
-  function hoveredTaskId(): string | null {
-    // Where the pointer is comes from the pulse, which already listens for the same gestures on
-    // the same element (see `BoardActivity.pointer`).
-    const pointer = activity.pointer()
-    if (!pointer) return null
-    const hit = document.elementFromPoint(pointer.x, pointer.y)
-    const id = hit?.closest('[data-block-id]')?.getAttribute('data-block-id') ?? null
-    if (!id || !execution.getByBlock(id)?.steps.length) return null
-    return id
-  }
-
-  /** Re-decide both grants; reports whether either of them changed. */
+  /** Re-decide the grant; reports whether it changed. */
   function recompute(): boolean {
-    // Hover expands a card at ANY zoom band, so the pointer hit is resolved BEFORE the
-    // zoom gate below — resolving it after would collapse the hovered card the moment the
-    // user zoomed back out past the `steps` band.
-    const hovered = hoveredTaskId()
-    let changed = false
-    if (store.hoveredId !== hovered) {
-      store.setHovered(hovered)
-      changed = true
-    }
-
-    // The zoom-driven expansion (every on-screen card, overlap-resolved) is deep-band
-    // only; clear its grants otherwise. The hover grant above stands on its own.
+    // The expansion is deep-band only; clear the grant otherwise.
     if (!lodAtLeast(ui.lod, 'steps')) {
-      if (store.allowed.size) {
-        store.setAllowed(new Set())
-        changed = true
-      }
-      return changed
+      if (!store.allowed.size) return false
+      store.setAllowed(new Set())
+      return true
     }
     const view = container.value?.getBoundingClientRect()
-    if (!view) return changed
+    if (!view) return false
     // One DOM query for the whole sweep instead of one per candidate task (see `measureBlocks`).
     const blocks: BlockMeasurements = measureBlocks()
     const cx = view.left + view.width / 2
@@ -135,30 +100,19 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>, activity: B
 
     // Greedy by header distance: a candidate is granted only if its projected footprint
     // clears every footprint already granted, so the centre-most card wins any overlap.
-    // The hovered card is granted FIRST, so hovering a card expands it regardless of its
-    // distance from the centre (and a centre-most neighbour it overlaps yields to it).
     const claimed: Rect[] = []
     const next = new Set<string>()
-    const hoveredCard = hovered ? candidates.find((c) => c.id === hovered) : undefined
-    if (hoveredCard) {
-      next.add(hoveredCard.id)
-      claimed.push(hoveredCard.rect)
-    }
     for (const c of candidates) {
-      if (c.id === hoveredCard?.id) continue
       if (claimed.some((r) => intersects(c.rect, r))) continue
       next.add(c.id)
       claimed.push(c.rect)
     }
-    if (!sameSet(next, store.allowed)) {
-      store.setAllowed(next)
-      changed = true
-    }
-    return changed
+    if (sameSet(next, store.allowed)) return false
+    store.setAllowed(next)
+    return true
   }
 
   const { poke } = useSettlingRaf(recompute)
-  // The pulse both records where the pointer is and schedules the frame that acts on it.
   onBoardActivity(activity, poke)
   onMounted(() => {
     store.setDriverActive(true)

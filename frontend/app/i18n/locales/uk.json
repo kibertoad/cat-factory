@@ -543,6 +543,7 @@
         "title": "Запуск розпочато",
         "body": "Виконується \"{name}\"."
       },
+      "stepPosition": "{current} з {total}",
       "openPrLink": "Відкрити {pr}"
     },
     "dryRunToast": {

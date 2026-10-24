@@ -590,6 +590,7 @@
         "title": "Run started",
         "body": "Running \"{name}\"."
       },
+      "stepPosition": "{current} of {total}",
       "pr": "PR",
       "prNumber": "PR #{number}",
       "readOutcome": "Outcome",

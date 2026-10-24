@@ -1499,10 +1499,11 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
   `utils/failureCause.ts`, one action, and the backend's text behind Details) /
   `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`. Tasks are laid out in status
   lanes rather than at coordinates (see [Task swimlanes](#task-swimlanes)); the board-level
-  order/grouping override is `LaneViewControl` in the toolbar. A running task card expands
-  its build pipeline (`TaskPipelineMini`) on hover at any zoom level, and across every
-  on-screen card past the `steps` zoom band: the two grants are combined in the
-  `taskExpansion` store and driven by `useTaskExpansion`.
+  order/grouping override is `LaneViewControl` in the toolbar. A running task card shows the
+  step its run is on (`TaskProgressRow`) at every zoom, and expands its build pipeline
+  (`TaskPipelineMini`) only past the `steps` zoom band, through the `taskExpansion` store and
+  `useTaskExpansion`. Hovering a card expands nothing, because an in-flow card that grows moves
+  the buttons under the pointer (UXA-01).
 - **Sidebar & chrome** (`components/layout`): board/account switchers, palettes
   entry points, the language + [interface-mode](#interface-modes-basic--advanced)
   switchers, the Views switcher (`WorkViewSwitcher`), the `SpendWarningBanner`, and the toolbar
