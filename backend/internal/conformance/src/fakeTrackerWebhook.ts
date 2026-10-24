@@ -2,6 +2,7 @@ import type {
   TaskSourceWebhookAdapter,
   TrackerWebhookDelivery,
   TrackerWebhookEvent,
+  TrackerWebhookHandshake,
 } from '@cat-factory/kernel'
 
 // A deterministic, network-free inbound-webhook adapter for {@link FakeTaskSourceProvider}, so the
@@ -57,18 +58,33 @@ export const fakeTrackerWebhookAdapter: TaskSourceWebhookAdapter = {
     const expected = await signFakeTrackerDelivery(secret, new TextDecoder().decode(delivery.raw))
     return presented === expected[FAKE_TRACKER_SIGNATURE_HEADER]
   },
-  parse(delivery: TrackerWebhookDelivery): TrackerWebhookEvent | null {
-    try {
-      const value: unknown = JSON.parse(new TextDecoder().decode(delivery.raw))
-      if (!value || typeof value !== 'object') return null
-      const event = value as Partial<TrackerWebhookEvent>
-      // An unrecognised shape maps to null, which the receiver ACKS — the same contract the real
-      // adapters have for a delivery kind we don't consume.
-      return event.kind === 'issue' || event.kind === 'comment'
-        ? (event as TrackerWebhookEvent)
-        : null
-    } catch {
-      return null
-    }
+  handshake(delivery: TrackerWebhookDelivery): TrackerWebhookHandshake | null {
+    // A `{ kind: 'handshake', challenge }` body is the fake's endpoint-verification request, echoed
+    // back as JSON (Slack's `url_verification` shape). Every other body is not a handshake, so the
+    // existing cases keep proving that a null leaves the receiver's parse-and-ack path unchanged.
+    const value = readJson(delivery)
+    if (!value || typeof value !== 'object') return null
+    const { kind, challenge } = value as { kind?: unknown; challenge?: unknown }
+    if (kind !== 'handshake' || typeof challenge !== 'string') return null
+    return { contentType: 'application/json', body: JSON.stringify({ challenge }) }
   },
+  parse(delivery: TrackerWebhookDelivery): TrackerWebhookEvent | null {
+    const value = readJson(delivery)
+    if (!value || typeof value !== 'object') return null
+    const event = value as Partial<TrackerWebhookEvent>
+    // An unrecognised shape maps to null, which the receiver ACKS: the same contract the real
+    // adapters have for a delivery kind we don't consume.
+    return event.kind === 'issue' || event.kind === 'comment'
+      ? (event as TrackerWebhookEvent)
+      : null
+  },
+}
+
+/** The delivery body as JSON, or undefined when it is not JSON. */
+function readJson(delivery: TrackerWebhookDelivery): unknown {
+  try {
+    return JSON.parse(new TextDecoder().decode(delivery.raw))
+  } catch {
+    return undefined
+  }
 }

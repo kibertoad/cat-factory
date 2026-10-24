@@ -332,6 +332,29 @@ log. Two things follow:
 Stating facts in the matcher and disposition at the caller is what keeps this from recurring: a
 third mode cannot inherit a fail-open rule written for someone else's cost model.
 
+### D10: A verified handshake is answered, not acked
+
+Some vendors check a webhook URL before they send real deliveries, and read the answer from the
+response body. Slack's Events API is the case that surfaced it: it POSTs a signed
+`{"type":"url_verification","challenge":"…"}` and accepts the URL only if the response echoes the
+`challenge`. The receiver answered every verified delivery with an empty 202, so a source on such a
+vendor could never be registered.
+
+**Decision.** `TaskSourceWebhookAdapter` gains an optional `handshake(delivery)`, returning a
+`TrackerWebhookHandshake` (`contentType` + `body`) or null. The receiver calls it AFTER `verify`
+and before `parse`. When it answers, the receiver sends that body with a 200 and does not parse or
+enqueue the delivery. A null, or an adapter without the member, leaves the path unchanged. The
+built-in adapters do not implement it, because none of their vendors has a handshake.
+
+- **After verify, never instead of it.** A handshake that ran first would echo attacker-chosen text
+  to any unsigned caller. Slack signs its `url_verification` with the same signing secret as every
+  other delivery, so the order costs nothing.
+- **The status is fixed at 200.** An adapter states WHAT to answer, not whether the request failed:
+  a refusal is the receiver's (a thrown `DomainError`), and an adapter-chosen 4xx would be a second
+  way to build an error response.
+- **Nothing is queued for a handshake.** It carries no event, so the answer must go back on the
+  request itself and the queue has nothing to retry.
+
 ## Deliberately out of scope
 
 - **No SPA panel for the webhook secret.** It is managed over
@@ -371,6 +394,10 @@ third mode cannot inherit a fail-open rule written for someone else's cost model
 - **No per-provider comment formatting.** The ack is markdown through the existing per-provider
   comment paths, like the question comment before it. Worth a Jira-ADF variant only if a reader
   complains.
+- **No handshake that delivers the secret.** Some vendors (Asana's `X-Hook-Secret`, for example)
+  send the signing secret IN the first request and expect it echoed back. That request cannot be
+  verified, because the connection has no secret yet, and D10 requires verification first. Such a
+  vendor needs a separate design in which the handshake mints the secret.
 - **A `pending` ingest claim is not swept.** It self-heals on the next delivery once abandoned,
   which is the same guarantee `review_question_posts` gives; a proactive sweeper would be a second
   runtime-symmetric cron for a row that costs nothing while it sits.
@@ -381,6 +408,9 @@ third mode cannot inherit a fail-open rule written for someone else's cost model
   receivers. Parsing first and verifying the re-serialised body is a classic signature bypass.
 - **Fail closed on an unconfigured secret.** An empty HMAC key lets an attacker forge a signature
   over their own body. The connection with no `webhookSecret` 503s rather than accepting.
+- **A handshake answers only a VERIFIED delivery** (D10). The receiver asks `webhook.handshake`
+  after `verify` succeeds, so an unsigned caller gets the same 401 whether or not its body looks
+  like a handshake.
 - **A claim-before-apply MUST answer "what if the claimer dies"**: carried verbatim from
   `review_question_posts`. A `pending` row needs an abandonment window or a killed ingester silences
   that comment forever, trading a double-apply for a never-apply (the harder failure to notice).
