@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ConfigProblem } from '@cat-factory/contracts'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
 
 // Shown when the backend booted into its misconfiguration fallback: it couldn't start normally
 // because one or more mandatory environment variables / bindings are missing or invalid. We list
@@ -36,11 +37,12 @@ function reload() {
           class="rounded-lg border border-default bg-default/60 p-4"
         >
           <code class="text-sm font-semibold text-app-warning-300">{{ problem.key }}</code>
-          <p class="mt-1 text-sm text-toned">{{ problem.summary }}</p>
-          <p class="mt-2 text-sm text-muted">
+          <!-- The summary and remedy are Markdown (they name env vars and commands in code spans). -->
+          <MarkdownProse class="mt-1 text-sm text-toned" :text="problem.summary" />
+          <div class="mt-2 text-sm text-muted">
             <span class="font-medium text-toned">{{ t('app.misconfigured.howToFix') }}</span>
-            {{ problem.remedy }}
-          </p>
+            <MarkdownProse :text="problem.remedy" />
+          </div>
           <ULink
             raw
             v-if="problem.docsUrl"
