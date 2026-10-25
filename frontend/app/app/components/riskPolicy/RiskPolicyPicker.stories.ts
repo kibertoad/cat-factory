@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { fn, screen, userEvent, within } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 import { manualReviewPolicy, riskPolicy } from '~/stories/policies.stories.mocks'
 import { seedMember, withSeed } from '~/stories/withStores'
 import RiskPolicyPicker from './RiskPolicyPicker.vue'
@@ -9,8 +9,8 @@ import RiskPolicyPicker from './RiskPolicyPicker.vue'
 // that would relax what the person's own role is held to is locked, and pointing at it says why.
 // The library is the three built-ins.
 //
-// Opening the list moves focus to the default row, and a focused row drives the preview, so the
-// pane opens on the workspace default rather than on the chosen policy.
+// Opening the list moves focus to the chosen row, and a focused row drives the preview, so the
+// pane opens on the chosen policy.
 const balanced = riskPolicy()
 const unattended = riskPolicy({
   id: 'mp_unattended',
@@ -39,19 +39,29 @@ const meta = {
   }),
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByTestId('risk-policy-picker-trigger'))
-    // The list is teleported to `body`; the pane opens on the workspace default.
-    await screen.findByText('Applied because this task picks no policy of its own.')
+    // The list is teleported to `body`; focus and the pane open on the chosen policy.
+    const chosen = await screen.findByTestId(`risk-policy-option-${manualReviewPolicy.id}`)
+    await waitFor(() => expect(chosen).toHaveFocus())
+    await expect(
+      screen.queryByText('Applied because this task picks no policy of its own.'),
+    ).toBeNull()
   },
 } satisfies Meta<typeof RiskPolicyPicker>
 export default meta
 
 type Story = StoryObj<typeof meta>
 
-/** Manual review only chosen: its check in the list, and the default's preview on the right. */
+/** Manual review only chosen: its check in the list, and its preview on the right. */
 export const Default: Story = {}
 
 /** No policy chosen: the default row is checked, and the preview says it comes from the default. */
-export const WorkspaceDefault: Story = { args: { modelValue: '' } }
+export const WorkspaceDefault: Story = {
+  args: { modelValue: '' },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByTestId('risk-policy-picker-trigger'))
+    await screen.findByText('Applied because this task picks no policy of its own.')
+  },
+}
 
 /**
  * A member on a Balanced task points at Unattended delivery: the row is locked, because it would
