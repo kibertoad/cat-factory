@@ -2106,7 +2106,8 @@
       "helperFailures": "Fallos del reparador",
       "exhausted": "Pasadas a una persona",
       "hint": "Aprobada sin reparador significa que la comprobación previa quedó satisfecha y no se inició ningún reparador. Los fallos del reparador son intentos cuyo propio trabajo se cayó, a diferencia de los que se ejecutaron y dejaron la comprobación en rojo."
-    }
+    },
+    "loadFailed": "No se pudo cargar la observabilidad de la plataforma."
   },
   "reports": {
     "title": "Informes",
@@ -5110,7 +5111,7 @@
     "boardPlaceholder": "Clave de proyecto o id de equipo",
     "boardFromService": "El repositorio vinculado a este servicio",
     "boardNeedsRepo": "Este servicio no tiene ningún repositorio vinculado, así que no hay incidencias que explorar. Vincula uno desde el panel del servicio.",
-    "boardsFailed": "No se pudieron cargar los tableros: {reason}",
+    "boardsFailed": "No se pudieron cargar los tableros.",
     "issueType": "Tipo de incidencia",
     "issueTypeHelp": "Por defecto bug. Se ignora en gestores sin tipos de incidencia.",
     "issueTypeUnsupported": "{tracker} no tiene ningún tipo de incidencia que signifique «bug», por lo que este filtro no se aplica. Acota el análisis con una etiqueta en su lugar.",
@@ -6689,7 +6690,8 @@
     "outcome": {
       "success": "correcto",
       "failure": "fallido"
-    }
+    },
+    "loadFailed": "No se pudieron cargar los registros de aprovisionamiento."
   },
   "kaizen": {
     "title": "Kaizen",
@@ -7746,18 +7748,25 @@
       "run": "Ejecutar comprobaciones",
       "none": "Esta receta no declara comprobaciones previas.",
       "unavailable": "Las comprobaciones previas se ejecutan en la máquina local y no están disponibles en este despliegue.",
-      "optional": "opcional"
+      "optional": "opcional",
+      "failed": "No se pudieron ejecutar las comprobaciones previas."
     },
     "save": {
       "handlerLabel": "Etiqueta del gestor",
       "handlerHint": "El gestor de Docker Compose del espacio de trabajo que el Deployer usa para aprovisionar este stack.",
       "summary": "Guarda una receta de Docker Compose en \"{frame}\" (exponiendo el servicio \"{service}\") y registra el gestor del espacio de trabajo.",
       "saved": "Guardado. El Deployer aprovisionará este stack cuando una canalización lo ejecute.",
-      "save": "Guardar configuración"
+      "save": "Guardar configuración",
+      "failed": "No se pudo guardar el entorno.",
+      "errors": {
+        "missingService": "Elige primero un marco y un servicio de compose expuesto.",
+        "invalidPort": "Introduce un puerto expuesto válido (de 1 a 65535)."
+      }
     },
     "trial": {
       "hint": "Opcionalmente, aprovisiona este entorno ahora para probar la receta.",
-      "run": "Aprovisionamiento de prueba"
+      "run": "Aprovisionamiento de prueba",
+      "failed": "No se pudo iniciar el aprovisionamiento de prueba."
     }
   },
   "forkDecision": {

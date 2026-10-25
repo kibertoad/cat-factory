@@ -14,6 +14,7 @@ import type { FollowUpItem, FollowUpResolution } from '~/types/execution'
 import { FOLLOW_UP_COMPANION_META } from '~/utils/catalog'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -166,12 +167,10 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
       />
 
       <div v-else class="space-y-3">
-        <p
-          v-if="followUps.error"
+        <FailureMessage
+          :failure="followUps.error"
           class="rounded-md bg-app-error-500/10 px-3 py-2 text-xs text-app-error-300"
-        >
-          {{ followUps.error }}
-        </p>
+        />
 
         <article
           v-for="item in items"

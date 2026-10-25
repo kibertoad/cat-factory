@@ -2106,7 +2106,8 @@
       "helperFailures": "Échecs du réparateur",
       "exhausted": "Confiées à une personne",
       "hint": "Réussie sans réparateur veut dire que la vérification préalable a suffi et qu'aucun réparateur n'a été lancé. Les échecs du réparateur sont les tentatives dont le travail lui-même a planté, par opposition à celles qui se sont exécutées en laissant la vérification au rouge."
-    }
+    },
+    "loadFailed": "L'observabilité de la plateforme n'a pas pu être chargée."
   },
   "reports": {
     "title": "Rapports",
@@ -5110,7 +5111,7 @@
     "boardPlaceholder": "Clé de projet ou id d'équipe",
     "boardFromService": "Le dépôt lié à ce service",
     "boardNeedsRepo": "Aucun dépôt n'est lié à ce service : il n'y a donc pas de tickets à explorer. Liez-en un depuis le panneau du service.",
-    "boardsFailed": "Impossible de charger les tableaux : {reason}",
+    "boardsFailed": "Impossible de charger les tableaux.",
     "issueType": "Type de ticket",
     "issueTypeHelp": "Par défaut bug. Ignoré par les gestionnaires sans types de tickets.",
     "issueTypeUnsupported": "{tracker} n’a aucun type de ticket signifiant « bug », ce filtre n’est donc pas appliqué. Restreignez plutôt l’analyse avec une étiquette.",
@@ -6689,7 +6690,8 @@
     "outcome": {
       "success": "réussite",
       "failure": "échec"
-    }
+    },
+    "loadFailed": "Les journaux de provisionnement n'ont pas pu être chargés."
   },
   "kaizen": {
     "title": "Kaizen",
@@ -7746,18 +7748,25 @@
       "run": "Lancer les vérifications",
       "none": "Cette recette ne déclare aucune vérification préalable.",
       "unavailable": "Les vérifications préalables s'exécutent sur la machine locale et ne sont pas disponibles sur ce déploiement.",
-      "optional": "facultatif"
+      "optional": "facultatif",
+      "failed": "Les vérifications préalables n'ont pas pu s'exécuter."
     },
     "save": {
       "handlerLabel": "Libellé du gestionnaire",
       "handlerHint": "Le gestionnaire Docker Compose de l'espace de travail que le Deployer utilise pour provisionner cette stack.",
       "summary": "Enregistre une recette Docker Compose sur « {frame} » (exposant le service « {service} ») et enregistre le gestionnaire de l'espace de travail.",
       "saved": "Enregistré. Le Deployer provisionnera cette stack lors de l'exécution d'un pipeline.",
-      "save": "Enregistrer la configuration"
+      "save": "Enregistrer la configuration",
+      "failed": "L'environnement n'a pas pu être enregistré.",
+      "errors": {
+        "missingService": "Choisissez d'abord un cadre et un service compose exposé.",
+        "invalidPort": "Saisissez un port exposé valide (de 1 à 65535)."
+      }
     },
     "trial": {
       "hint": "Provisionnez éventuellement cet environnement maintenant pour tester la recette.",
-      "run": "Provisionnement d'essai"
+      "run": "Provisionnement d'essai",
+      "failed": "Le provisionnement d'essai n'a pas pu démarrer."
     }
   },
   "forkDecision": {

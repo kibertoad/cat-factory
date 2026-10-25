@@ -6,6 +6,7 @@
 // and Fixtures (the graded inputs each run is scored against). Loaded on demand when the
 // window opens; 503 (the deployment hasn't provisioned the Sandbox DB) shows a notice.
 import { computed, ref, watch } from 'vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 import type { TableColumn } from '@nuxt/ui'
 import type {
   SandboxExperimentStatus,
@@ -305,7 +306,7 @@ async function archive(prompt: SandboxPromptVersion) {
         class="rounded-lg border border-app-error-800 bg-app-error-950/40 p-6 text-sm text-app-error-200"
       >
         <p class="font-medium text-app-error-100">{{ t('sandbox.error.title') }}</p>
-        <p class="mt-1 text-app-error-300">{{ store.error }}</p>
+        <FailureMessage :failure="store.error" class="mt-1 text-app-error-300" />
         <UButton class="mt-3" size="xs" color="neutral" variant="subtle" @click="store.load()">
           {{ t('common.retry') }}
         </UButton>

@@ -90,7 +90,7 @@ describe('provisioningLogs store — loadForExecution', () => {
 
     expect(store.byExecution.exec1!.loading).toBe(false)
     expect(store.byExecution.exec1!.entries).toHaveLength(0)
-    expect(store.byExecution.exec1!.error).toBe('503')
+    expect(store.byExecution.exec1!.error?.message).toBe('503')
   })
 
   it('a slower stale load never clobbers a newer one (monotonic guard)', async () => {

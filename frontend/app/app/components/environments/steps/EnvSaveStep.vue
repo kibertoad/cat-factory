@@ -5,6 +5,7 @@
 // "Done" fires the journey's `advance` exit, which the transition maps to `complete`
 // — the host closes the modal on finish.
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 import JourneyStepNav from '~/components/environments/steps/JourneyStepNav.vue'
 import { useEnvironmentWizardTarget } from '~/modular/journeys/environmentSetup.frame'
 
@@ -42,13 +43,12 @@ useEnvironmentWizardTarget(() => props.input.frameId)
       </p>
     </div>
 
-    <p
-      v-if="store.saveError"
+    <FailureMessage
+      :failure="store.saveError"
+      :title="t('environmentWizard.save.failed')"
       class="text-xs text-app-error-300/80"
       data-testid="env-setup-save-error"
-    >
-      {{ store.saveError }}
-    </p>
+    />
 
     <div v-if="!store.saved" class="flex justify-end">
       <UButton
@@ -87,9 +87,11 @@ useEnvironmentWizardTarget(() => props.input.frameId)
           {{ t('environmentWizard.trial.run') }}
         </UButton>
       </div>
-      <p v-if="store.trialError" class="text-2xs text-app-error-300/80">
-        {{ store.trialError }}
-      </p>
+      <FailureMessage
+        :failure="store.trialError"
+        :title="t('environmentWizard.trial.failed')"
+        class="text-2xs text-app-error-300/80"
+      />
       <ProvisioningLogsDrawer v-if="store.trialStarted" subsystem="environment" />
     </template>
 

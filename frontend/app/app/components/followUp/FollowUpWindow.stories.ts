@@ -140,7 +140,10 @@ export const ReadOnly: Story = {
   decorators: [opened(pending, seedViewer)],
 }
 
-/** File failed, because the workspace has no issue tracker: the backend's reason over the items. */
+/**
+ * File failed, because the workspace has no issue tracker: translated copy over the items, the
+ * backend's reason behind "Show details".
+ */
 export const ActionFailed: Story = {
   decorators: [opened(pending)],
   parameters: {
@@ -155,5 +158,8 @@ export const ActionFailed: Story = {
   },
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'File as issue' }))
+    await screen.findByText('This action conflicts with the current state.')
+    await userEvent.click(screen.getByTestId('failure-message-show-detail'))
+    await screen.findByText(/No issue tracker is configured for this workspace/)
   },
 }

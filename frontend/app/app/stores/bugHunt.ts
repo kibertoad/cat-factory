@@ -2,6 +2,10 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { BugHuntResult, RunBugHuntInput, TaskSourceKind, TrackerBoard } from '~/types/domain'
 import { apiErrorReason } from '~/composables/api/errors'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { usePersonalSubscriptionsStore } from '~/stores/personalSubscriptions'
 
@@ -32,7 +36,7 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
    * can't enumerate boards is a normal, actionable state (type the board in yourself), and an
    * empty picker alone doesn't say that.
    */
-  const boardsError = ref<string | null>(null)
+  const boardsError = ref<DescribedFailure | null>(null)
   /**
    * The backend's machine-readable reason for that failure. Only `boards_unsupported` means
    * "this tracker cannot enumerate boards, so type one in"; every other failure (an unreachable
@@ -43,7 +47,7 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
 
   const result = ref<BugHuntResult | null>(null)
   const hunting = ref(false)
-  const huntError = ref<string | null>(null)
+  const huntError = ref<DescribedFailure | null>(null)
   /**
    * The backend's machine-readable reason for a failed scan, kept for the same reason
    * {@link boardsErrorReason} is: `repo_not_linked` says the service this hunt is scoped to has
@@ -72,7 +76,7 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
     } catch (e) {
       if (boardsSource.value !== source) return
       boards.value = []
-      boardsError.value = e instanceof Error ? e.message : String(e)
+      boardsError.value = describeFailure(e)
       boardsErrorReason.value = apiErrorReason(e)
     } finally {
       // Only the listing the picker is still showing owns the flag. A superseded one clearing it
@@ -128,7 +132,7 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
       })
       return ran ? 'ran' : 'cancelled'
     } catch (e) {
-      huntError.value = e instanceof Error ? e.message : String(e)
+      huntError.value = describeFailure(e)
       huntErrorReason.value = apiErrorReason(e)
       return 'failed'
     } finally {

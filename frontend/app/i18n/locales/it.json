@@ -4160,7 +4160,8 @@
       "helperFailures": "Fallimenti del riparatore",
       "exhausted": "Passati a una persona",
       "hint": "Superato senza riparatore significa che il controllo preliminare è bastato e non è stato avviato alcun riparatore. I fallimenti del riparatore sono tentativi il cui lavoro è andato in crash, a differenza di quelli che sono stati eseguiti lasciando il controllo rosso."
-    }
+    },
+    "loadFailed": "Non è stato possibile caricare l'osservabilità della piattaforma."
   },
   "reports": {
     "title": "Report",
@@ -4575,7 +4576,7 @@
     "boardPlaceholder": "Chiave progetto o id team",
     "boardFromService": "Il repository collegato a questo servizio",
     "boardNeedsRepo": "A questo servizio non è collegato alcun repository, quindi non ci sono issue da cercare. Collegane uno dal pannello del servizio.",
-    "boardsFailed": "Impossibile caricare le board: {reason}",
+    "boardsFailed": "Impossibile caricare le board.",
     "issueType": "Tipo di ticket",
     "issueTypeHelp": "Per impostazione predefinita bug. Ignorato dai tracker senza tipi di ticket.",
     "issueTypeUnsupported": "{tracker} non ha un tipo di issue che significhi «bug», quindi questo filtro non viene applicato. Restringi la scansione con un’etichetta.",
@@ -7419,7 +7420,8 @@
     "outcome": {
       "success": "riuscito",
       "failure": "non riuscito"
-    }
+    },
+    "loadFailed": "Non è stato possibile caricare i log del provisioning."
   },
   "kaizen": {
     "title": "Kaizen",
@@ -7741,18 +7743,25 @@
       "run": "Esegui verifiche",
       "none": "Questa ricetta non dichiara verifiche preliminari.",
       "unavailable": "Le verifiche preliminari vengono eseguite sulla macchina locale e non sono disponibili in questo deployment.",
-      "optional": "facoltativo"
+      "optional": "facoltativo",
+      "failed": "Non è stato possibile eseguire i controlli preliminari."
     },
     "save": {
       "handlerLabel": "Etichetta del handler",
       "handlerHint": "Il handler Docker Compose dello workspace che il Deployer usa per eseguire il provisioning di questo stack.",
       "summary": "Salva una ricetta Docker Compose su \"{frame}\" (esponendo il servizio \"{service}\") e registra il handler dello workspace.",
       "saved": "Salvato. Il Deployer eseguirà il provisioning di questo stack quando una pipeline lo esegue.",
-      "save": "Salva configurazione"
+      "save": "Salva configurazione",
+      "failed": "Non è stato possibile salvare l'ambiente.",
+      "errors": {
+        "missingService": "Scegli prima un frame e un servizio compose esposto.",
+        "invalidPort": "Inserisci una porta esposta valida (da 1 a 65535)."
+      }
     },
     "trial": {
       "hint": "Se vuoi, esegui subito il provisioning di questo ambiente per testare la ricetta.",
-      "run": "Provisioning di prova"
+      "run": "Provisioning di prova",
+      "failed": "Non è stato possibile avviare il provisioning di prova."
     }
   },
   "palette": {

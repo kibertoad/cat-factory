@@ -44,6 +44,11 @@ import {
 } from '~/utils/sourcePicker'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  failureDetail,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 import { appliesIntakePredicate } from '~/utils/intakePredicates'
 import { boardFromService as isBoardFromService, huntRequest } from './BugHuntModal.logic'
 
@@ -184,9 +189,9 @@ const boardIsFreeText = computed(
 /**
  * The refusals this surface words ITSELF, keyed on the backend's reason.
  *
- * The backend does not localize prose, so a reason with no entry here renders the server's
- * untranslated English — the honest last resort for a cause this modal was not built to explain,
- * and the wrong answer for one it was. Both entries are reachable only from a client that
+ * The backend does not localize prose, so a reason with no entry here gets the toast funnel's
+ * copy for its status class, with the server's English behind "Show details": fine for a cause
+ * this modal was not built to explain, and the wrong answer for one it was. Both entries are reachable only from a client that
  * disagrees with the backend about which sources are repo-backed (a stale SPA build, a raced
  * `repoBacked` read), which is exactly when a user is least served by raw backend prose.
  * `repo_not_linked` is deliberately absent: it is not a message but a warning rendered beside the
@@ -200,15 +205,15 @@ const REFUSAL_KEYS: Partial<Record<TaskSourceReadReason, string>> = {
 function refusalKey(reason: string | null): string | undefined {
   return reason ? REFUSAL_KEYS[reason as TaskSourceReadReason] : undefined
 }
-function refusalText(reason: string | null, fallback: string | null): string | null {
+function refusalFailure(reason: string | null, failure: DescribedFailure): DescribedFailure {
   const key = refusalKey(reason)
-  return key ? t(key) : fallback
+  return key ? { ...failure, descriptionKey: key } : failure
 }
 
 /** A board read that failed for a reason the user has to fix — shown, never silently swallowed. */
 const boardsFailure = computed(() =>
   !hunt.boardsLoading && hunt.boardsError !== null && !boardIsFreeText.value
-    ? refusalText(hunt.boardsErrorReason, hunt.boardsError)
+    ? refusalFailure(hunt.boardsErrorReason, hunt.boardsError)
     : null,
 )
 
@@ -283,11 +288,14 @@ async function runHunt() {
   // `repo_not_linked` is worded by the panel itself beside the scope it invalidates.
   const attempt = await hunt.hunt(source.value, input)
   if (attempt === 'failed' && !huntNeedsRepo.value) {
-    // A recognised refusal reads in translated copy; anything else is the backend's prose, which
-    // is detail behind the disclosure rather than the headline.
+    // A recognised refusal reads in its own translated copy; anything else gets the funnel's copy
+    // for its status class, with the backend's prose as detail behind the disclosure.
     const reasonKey = refusalKey(hunt.huntErrorReason)
     if (reasonKey) actionToast.error('bugHunt.huntFailed', { description: t(reasonKey) })
-    else presentReported(hunt.huntError, 'bugHunt.huntFailed')
+    else if (hunt.huntError)
+      presentReported(failureDetail(hunt.huntError, t), 'bugHunt.huntFailed', {
+        descriptionKey: hunt.huntError.descriptionKey,
+      })
   }
 }
 
@@ -426,9 +434,12 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
             </p>
             <!-- A board read that failed for a fixable reason (unreachable site, expired
                  token): named, so the user isn't left with an empty picker and no cause. -->
-            <p v-else-if="boardsFailure" class="mt-1 text-xs text-app-warning-400">
-              {{ t('bugHunt.boardsFailed', { reason: boardsFailure }) }}
-            </p>
+            <FailureMessage
+              v-else-if="boardsFailure"
+              :failure="boardsFailure"
+              :title="t('bugHunt.boardsFailed')"
+              class="mt-1 text-xs text-app-warning-400"
+            />
           </UFormField>
 
           <UFormField

@@ -2106,7 +2106,8 @@
       "helperFailures": "Awarie naprawiacza",
       "exhausted": "Przekazane człowiekowi",
       "hint": "Zaliczenie bez naprawiacza oznacza, że wystarczyło wstępne sprawdzenie i naprawiacz w ogóle nie wystartował. Awarie naprawiacza to próby, w których padło samo zadanie, w odróżnieniu od prób, które się wykonały i zostawiły sprawdzenie na czerwono."
-    }
+    },
+    "loadFailed": "Nie udało się wczytać obserwowalności platformy."
   },
   "reports": {
     "title": "Raporty",
@@ -5110,7 +5111,7 @@
     "boardPlaceholder": "Klucz projektu lub identyfikator zespołu",
     "boardFromService": "Repozytorium powiązane z tą usługą",
     "boardNeedsRepo": "Ta usługa nie ma powiązanego repozytorium, więc nie ma w niej zgłoszeń do przeszukania. Powiąż je w panelu usługi.",
-    "boardsFailed": "Nie udało się wczytać tablic: {reason}",
+    "boardsFailed": "Nie udało się wczytać tablic.",
     "issueType": "Typ zgłoszenia",
     "issueTypeHelp": "Domyślnie bug. Ignorowane przez systemy bez typów zgłoszeń.",
     "issueTypeUnsupported": "{tracker} nie ma typu zgłoszenia oznaczającego „bug”, więc ten filtr nie jest stosowany. Zawęż skanowanie etykietą.",
@@ -6689,7 +6690,8 @@
     "outcome": {
       "success": "sukces",
       "failure": "niepowodzenie"
-    }
+    },
+    "loadFailed": "Nie udało się wczytać dzienników provisioningu."
   },
   "kaizen": {
     "title": "Kaizen",
@@ -7746,18 +7748,25 @@
       "run": "Uruchom kontrole",
       "none": "Ten przepis nie deklaruje kontroli wstępnych.",
       "unavailable": "Kontrole wstępne działają na komputerze lokalnym i nie są dostępne w tym wdrożeniu.",
-      "optional": "opcjonalne"
+      "optional": "opcjonalne",
+      "failed": "Nie udało się uruchomić kontroli wstępnych."
     },
     "save": {
       "handlerLabel": "Etykieta handlera",
       "handlerHint": "Handler Docker Compose obszaru roboczego, którego Deployer używa do udostępnienia tego stosu.",
       "summary": "Zapisuje przepis Docker Compose w „{frame}” (udostępniając usługę „{service}”) i rejestruje handler obszaru roboczego.",
       "saved": "Zapisano. Deployer udostępni ten stos, gdy uruchomi go potok.",
-      "save": "Zapisz konfigurację"
+      "save": "Zapisz konfigurację",
+      "failed": "Nie udało się zapisać środowiska.",
+      "errors": {
+        "missingService": "Najpierw wybierz ramkę i udostępnianą usługę compose.",
+        "invalidPort": "Wpisz prawidłowy udostępniany port (od 1 do 65535)."
+      }
     },
     "trial": {
       "hint": "Opcjonalnie udostępnij to środowisko teraz, aby przetestować przepis.",
-      "run": "Udostępnienie próbne"
+      "run": "Udostępnienie próbne",
+      "failed": "Nie udało się uruchomić udostępnienia próbnego."
     }
   },
   "forkDecision": {

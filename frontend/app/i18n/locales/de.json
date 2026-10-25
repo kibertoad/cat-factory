@@ -4160,7 +4160,8 @@
       "helperFailures": "Fixer-Fehlschläge",
       "exhausted": "An Menschen übergeben",
       "hint": "Ohne Fixer bestanden heißt: die Vorprüfung war zufrieden und es wurde gar kein Fixer gestartet. Fixer-Fehlschläge sind Versuche, deren eigener Job abgestürzt ist, im Unterschied zu Versuchen, die liefen und die Prüfung rot ließen."
-    }
+    },
+    "loadFailed": "Die Plattform-Observability konnte nicht geladen werden."
   },
   "reports": {
     "title": "Berichte",
@@ -4575,7 +4576,7 @@
     "boardPlaceholder": "Projektschlüssel oder Team-ID",
     "boardFromService": "Das mit diesem Service verknüpfte Repository",
     "boardNeedsRepo": "Mit diesem Service ist kein Repository verknüpft, es gibt also keine Tickets zu durchsuchen. Verknüpfe eines im Service-Panel.",
-    "boardsFailed": "Boards konnten nicht geladen werden: {reason}",
+    "boardsFailed": "Boards konnten nicht geladen werden.",
     "issueType": "Vorgangstyp",
     "issueTypeHelp": "Standard ist bug. Wird von Trackern ohne Vorgangstypen ignoriert.",
     "issueTypeUnsupported": "{tracker} kennt keinen Ticket-Typ mit der Bedeutung „Bug“, daher wird dieser Filter nicht angewendet. Grenzen Sie den Scan stattdessen mit einem Label ein.",
@@ -7419,7 +7420,8 @@
     "outcome": {
       "success": "Erfolg",
       "failure": "Fehler"
-    }
+    },
+    "loadFailed": "Die Bereitstellungs-Logs konnten nicht geladen werden."
   },
   "kaizen": {
     "title": "Kaizen",
@@ -7741,18 +7743,25 @@
       "run": "Prüfungen ausführen",
       "none": "Dieses Rezept deklariert keine Preflight-Prüfungen.",
       "unavailable": "Preflight-Prüfungen laufen auf der lokalen Maschine und sind für dieses Deployment nicht verfügbar.",
-      "optional": "optional"
+      "optional": "optional",
+      "failed": "Die Vorabprüfungen konnten nicht ausgeführt werden."
     },
     "save": {
       "handlerLabel": "Handler-Label",
       "handlerHint": "Der Docker-Compose-Handler des Workspaces, den der Deployer zum Bereitstellen dieses Stacks verwendet.",
       "summary": "Speichert ein Docker-Compose-Rezept auf \"{frame}\" (stellt Service \"{service}\" bereit) und registriert den Workspace-Handler.",
       "saved": "Gespeichert. Der Deployer stellt diesen Stack bereit, wenn eine Pipeline ihn ausführt.",
-      "save": "Konfiguration speichern"
+      "save": "Konfiguration speichern",
+      "failed": "Die Umgebung konnte nicht gespeichert werden.",
+      "errors": {
+        "missingService": "Wählen Sie zuerst einen Rahmen und einen freigegebenen Compose-Dienst.",
+        "invalidPort": "Geben Sie einen gültigen freigegebenen Port ein (1 bis 65535)."
+      }
     },
     "trial": {
       "hint": "Optional diese Umgebung jetzt bereitstellen, um das Rezept zu testen.",
-      "run": "Testbereitstellung"
+      "run": "Testbereitstellung",
+      "failed": "Die Testbereitstellung konnte nicht gestartet werden."
     }
   },
   "palette": {
