@@ -49,9 +49,9 @@ watch(
 )
 
 /**
- * One provider row. `connected` drives the green badge; `status` is its line. A per-user row
- * also carries `state` (`connectionRowState`), so a load in flight or a failed one does not read
- * as "Not connected".
+ * One provider row. `connected` drives the green badge; `status` is its line either way. A
+ * per-user row also carries `state` (`connectionRowState`), so a load in flight or a failed one
+ * does not read as "Not connected".
  */
 interface ProviderItem {
   key: string
@@ -78,7 +78,7 @@ function go(fn: () => void) {
 }
 
 const groups = computed<ProviderGroup[]>(() => {
-  const openRouterKeyConnected = apiKeys.configuredProviders.has('openrouter')
+  const openRouterKey = apiKeys.keyState('openrouter')
   const runnerCount = localModels.endpoints.length
   const subCount = personalSubs.subscriptions.length
 
@@ -93,10 +93,15 @@ const groups = computed<ProviderGroup[]>(() => {
           icon: 'i-lucide-waypoints',
           label: 'OpenRouter',
           description: t('layout.modelProvidersHub.items.openrouter.description'),
-          status: openRouterKeyConnected
-            ? t('layout.modelProvidersHub.status.keyConnected')
-            : undefined,
-          connected: openRouterKeyConnected,
+          // A turned-off key reads as such, not as "not connected": the fix is a toggle, not a
+          // new key, and the row opens the panel that offers it.
+          status:
+            openRouterKey === 'connected'
+              ? t('layout.modelProvidersHub.status.keyConnected')
+              : openRouterKey === 'disabled'
+                ? t('layout.modelProvidersHub.status.keyDisabled')
+                : undefined,
+          connected: openRouterKey === 'connected',
           recommended: true,
           onClick: () => go(ui.openOpenRouter),
         },
@@ -244,9 +249,12 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
                   >
                     {{ t('common.loadFailed') }}
                   </UBadge>
-                  <span v-else class="text-2xs text-dimmed">{{
-                    t('layout.modelProvidersHub.status.notConnected')
-                  }}</span>
+                  <span
+                    v-else
+                    class="text-2xs"
+                    :class="item.status ? 'text-warning' : 'text-dimmed'"
+                    >{{ item.status || t('layout.modelProvidersHub.status.notConnected') }}</span
+                  >
                   <UBadge v-if="!anyConnected && item.recommended" variant="subtle" size="sm">
                     {{ t('layout.modelProvidersHub.status.recommended') }}
                   </UBadge>

@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { KaizenGrading } from '@cat-factory/contracts'
 import { getKaizenRunGradingsContract } from '@cat-factory/contracts'
-import { apiResponse } from '~/stories/api'
+import { screen } from 'storybook/test'
+import { apiFailure, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { gradingHistory, kaizenGrading } from '~/stories/kaizen.stories.mocks'
 import { seedWorkspace, withSeed } from '~/stories/withStores'
@@ -90,5 +91,20 @@ export const Failed: Story = {
         }),
       ),
     ],
+  },
+}
+
+/** The run's gradings could not be read: one error toast, and no section. */
+export const LoadFailed: Story = {
+  parameters: {
+    api: [
+      apiFailure(getKaizenRunGradingsContract, {
+        pathPrefix: storyWorkspacePrefix,
+        pathParams: { executionId: 'exec_login' },
+      }),
+    ],
+  },
+  play: async () => {
+    await screen.findByText('Could not load Kaizen gradings')
   },
 }

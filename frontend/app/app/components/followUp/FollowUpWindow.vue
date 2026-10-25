@@ -309,6 +309,8 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
                     color="neutral"
                     variant="ghost"
                     :loading="followUps.isActing(item.id)"
+                    :disabled="!access.canExecuteRuns.value"
+                    :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                     @click="onDismiss(item)"
                   >
                     {{ t('followUp.actions.dismiss') }}

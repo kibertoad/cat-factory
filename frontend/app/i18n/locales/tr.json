@@ -2381,6 +2381,7 @@
       },
       "invite": {
         "title": "Bir takım arkadaşı davet et",
+        "listTitle": "Davetler",
         "submit": "Davet et",
         "revoke": "Daveti iptal et",
         "created": "Davet oluşturuldu",
@@ -2395,6 +2396,7 @@
       "email": {
         "title": "E-posta göndericisi",
         "notEnabled": "Bu dağıtımda e-posta teslimatı etkin değil. Davetler yine de paylaşılabilir bir kabul bağlantısı üretir.",
+        "notConnected": "Bağlı bir e-posta göndericisi yok. Bir hesap yöneticisi bağlayabilir.",
         "connectedAs": "{provider} aracılığıyla {from} olarak bağlandı",
         "disconnect": "Bağlantıyı kes",
         "connect": "E-posta göndericisi bağla",
@@ -2618,7 +2620,9 @@
       "budget": "Bütçe",
       "tokens": "Belirteçler",
       "resume": "Yine de devam ettir",
-      "resumeHint": "Devam etmek harcamayı sürdürür; hâlâ bütçe aşımı varsa tekrar duraklatılır."
+      "resumeHint": "Devam etmek harcamayı sürdürür; hâlâ bütçe aşımı varsa tekrar duraklatılır.",
+      "resumeFailed": "Ajan yürütmesi devam ettirilemedi",
+      "refreshFailed": "Çalıştırmalar devam ettirildi, ancak pano yenilenemedi"
     },
     "personalSetup": {
       "title": "Kurulumum",
@@ -2816,6 +2820,7 @@
       "status": {
         "connected": "Bağlandı",
         "keyConnected": "Anahtar bağlandı",
+        "keyDisabled": "Anahtar devre dışı",
         "notConnected": "Bağlı değil",
         "recommended": "Önerilen",
         "connectedCount": "bağlı yok | {count} bağlı | {count} bağlı"
@@ -2970,6 +2975,7 @@
     "deny": "Vazgeç",
     "back": "Uygulamaya dön",
     "noWorkspaces": "Bunu bağlayabileceğiniz bir pano henüz yok.",
+    "noAdminWorkspaces": "Panolarınızın hiçbirinde yönetici değilsiniz. Bağlamak için bir pano yöneticisinden yardım isteyin.",
     "revokeHint": "Bu işlem, pano ayarlarından istediğiniz zaman iptal edebileceğiniz bir API anahtarı oluşturur.",
     "error": {
       "title": "Bu bağlantı kurulamadı",
@@ -3530,7 +3536,9 @@
           "thresholds": "Puan eşiklerini kullan",
           "always": "Her zaman otomatik birleştir",
           "never": "Her zaman inceleme iste"
-        }
+        },
+        "loadFailed": "Birleştirme geçmişi yüklenemedi",
+        "unavailable": "Geçmiş kullanılamıyor"
       },
       "roleRules": {
         "heading": "Başlatan role göre sınırlar",
@@ -3964,6 +3972,7 @@
       "apiKey": "API anahtarı",
       "connectAndBrowse": "Bağlan ve göz at",
       "keyConnected": "OpenRouter anahtarı bağlandı",
+      "keyDisabled": "OpenRouter anahtarınız devre dışı. Modellere göz atmak için Sağlayıcılar ve anahtarlar bölümünde yeniden etkinleştirin.",
       "manageKeys": "Sağlayıcılar ve anahtarlar bölümünde yönet",
       "refresh": "Kataloğu yenile",
       "enableRecommended": "Önerilenleri etkinleştir",
@@ -4684,7 +4693,8 @@
       },
       "repoType": "Depo türü",
       "repoTypeHint": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike).",
-      "prefillProviderMismatch": "Bağlantı başka bir sağlayıcıdaki {repo} deposunu istiyordu, bu pano ise {connected} ile bağlı. Depoyu elle arayın veya bağlantıyı onun sağlayıcısına bağlı bir panoda açın."
+      "prefillProviderMismatch": "Bağlantı başka bir sağlayıcıdaki {repo} deposunu istiyordu, bu pano ise {connected} ile bağlı. Depoyu elle arayın veya bağlantıyı onun sağlayıcısına bağlı bir panoda açın.",
+      "searchFailed": "Depolar aranamadı"
     },
     "repoTree": {
       "root": "kök",
@@ -5813,7 +5823,8 @@
       "park": "Bir kişiye sordu",
       "bounce": "Düzeltme için geri gönderildi",
       "fail": "Çalışma başarısız oldu"
-    }
+    },
+    "resolveFailed": "Seçiminiz kaydedilemedi"
   },
   "inputGate": {
     "blockedTitle": "Bu görev çalışmadan önce daha fazla ayrıntı gerektiriyor",
@@ -6731,7 +6742,8 @@
         "recommendations": "Öneriler"
       },
       "empty": "Henüz değerlendirme yok."
-    }
+    },
+    "loadFailed": "Kaizen değerlendirmeleri yüklenemedi"
   },
   "recurring": {
     "runEvery": "Çalıştırma sıklığı",

@@ -39,16 +39,6 @@ export function segmentPct(value: number, max: number): number {
 }
 
 /**
- * A trend column's height as a percentage of the tallest column. A non-zero value floors at
- * 2% so a single small call is still a visible mark rather than an apparent gap — the one
- * thing a reader would otherwise misread as "nothing happened here".
- */
-export function columnPct(value: number, max: number): number {
-  if (max <= 0 || value <= 0) return 0
-  return Math.max(2, (value / max) * 100)
-}
-
-/**
  * Whether a breakdown key is the unattributed bucket. It is a REAL slice (a call whose run,
  * service or task type could not be resolved), so it is rendered with an explicit label
  * rather than silently dropped — omitting it would under-report the window while looking
