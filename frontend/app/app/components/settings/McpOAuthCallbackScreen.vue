@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import Spinner from '~/components/common/Spinner.vue'
+import { useCopyToClipboard } from '~/composables/useCopyToClipboard'
 import { describeCallbackFailure, type CallbackFailure } from './McpOAuthCallbackScreen.logic'
 
 // Where a vendor's authorization server sends the operator's browser back to after they approve a
@@ -19,13 +20,13 @@ import { describeCallbackFailure, type CallbackFailure } from './McpOAuthCallbac
 const api = useApi()
 const { t } = useI18n()
 
+const { copy } = useCopyToClipboard()
+
 const state = ref<'working' | 'done' | 'failed'>('working')
-const detail = ref<string | null>(null)
 const serverId = ref<string | null>(null)
-// A refusal from our own API, described from its status class or reason in translated copy, with
-// the backend's prose and request id behind a disclosure. Inline rather than a toast: this page is
-// the whole screen, and a toast over it would leave the card saying nothing about what went wrong.
-const apiFailure = ref<CallbackFailure | null>(null)
+// Inline rather than a toast: this page is the whole screen, and a toast over it would leave the
+// card saying nothing about what went wrong.
+const failure = ref<CallbackFailure | null>(null)
 const showFailureDetail = ref(false)
 
 function query(name: string): string {
@@ -40,14 +41,14 @@ onMounted(async () => {
   const denied = query('error')
   if (denied) {
     state.value = 'failed'
-    detail.value = query('error_description') || denied
+    failure.value = { kind: 'text', text: query('error_description') || denied }
     return
   }
   const code = query('code')
   const sealed = query('state')
   if (!code || !sealed) {
     state.value = 'failed'
-    detail.value = t('settings.toolServers.oauth.callback.missingParams')
+    failure.value = { kind: 'text', text: t('settings.toolServers.oauth.callback.missingParams') }
     return
   }
   try {
@@ -56,9 +57,18 @@ onMounted(async () => {
     state.value = 'done'
   } catch (e) {
     state.value = 'failed'
-    apiFailure.value = describeCallbackFailure(e, (id) => t('errors.generic.requestId', { id }))
+    failure.value = describeCallbackFailure(e, (id) => t('errors.generic.requestId', { id }))
   }
 })
+
+/** The whole failure as one report, so the request id reaches a bug report intact. */
+function copyReport(description: string, detail: string) {
+  void copy(
+    [t('settings.toolServers.oauth.callback.failedTitle'), description, detail]
+      .filter((part) => part.length > 0)
+      .join('\n'),
+  )
+}
 
 function backToApp() {
   if (typeof window !== 'undefined') window.location.assign('/')
@@ -104,26 +114,42 @@ function backToApp() {
         >
           {{ t('settings.toolServers.oauth.callback.failedTitle') }}
         </h1>
-        <div v-if="apiFailure" class="mb-6 space-y-2">
+        <div v-if="failure?.kind === 'api'" class="mb-6 space-y-2">
           <p class="text-sm break-words text-muted" data-testid="mcp-oauth-callback-reason">
-            {{ t(apiFailure.descriptionKey) }}
+            {{ t(failure.descriptionKey) }}
           </p>
-          <UButton
-            v-if="apiFailure.detail && !showFailureDetail"
-            color="neutral"
-            variant="link"
-            size="xs"
-            class="p-0"
-            data-testid="mcp-oauth-callback-detail"
-            @click="showFailureDetail = true"
-          >
-            {{ t('errors.generic.showDetail') }}
-          </UButton>
+          <p v-if="failure.restartHint" class="text-sm text-muted">
+            {{ t('settings.toolServers.oauth.callback.restartHint') }}
+          </p>
+          <div class="flex flex-wrap items-center justify-center gap-x-3">
+            <UButton
+              v-if="failure.detail && !showFailureDetail"
+              color="neutral"
+              variant="link"
+              size="xs"
+              class="p-0"
+              data-testid="mcp-oauth-callback-detail"
+              @click="showFailureDetail = true"
+            >
+              {{ t('errors.generic.showDetail') }}
+            </UButton>
+            <UButton
+              color="neutral"
+              variant="link"
+              size="xs"
+              class="p-0"
+              icon="i-lucide-clipboard"
+              data-testid="mcp-oauth-callback-copy"
+              @click="copyReport(t(failure.descriptionKey), failure.detail)"
+            >
+              {{ t('common.copyDetails') }}
+            </UButton>
+          </div>
           <p v-if="showFailureDetail" class="font-mono text-3xs break-all text-dimmed select-text">
-            {{ apiFailure.detail }}
+            {{ failure.detail }}
           </p>
         </div>
-        <p v-else class="mb-6 text-sm break-words text-muted">{{ detail }}</p>
+        <p v-else class="mb-6 text-sm break-words text-muted">{{ failure?.text }}</p>
         <UButton block color="neutral" variant="subtle" @click="backToApp">
           {{ t('settings.toolServers.oauth.callback.back') }}
         </UButton>

@@ -752,6 +752,7 @@
           "doneHint": "Die Läufe dieses Boards können den Werkzeugserver jetzt mit dem Konto nutzen, mit dem Sie sich angemeldet haben.",
           "back": "Zurück zur App",
           "failedTitle": "Die Verbindung konnte nicht abgeschlossen werden",
+          "restartHint": "Starten Sie die Verbindung im Infrastruktur-Fenster erneut.",
           "missingParams": "In diesem Link fehlen die vom Anbieter zurückgesendeten Werte, daher gibt es nichts abzuschließen. Starten Sie die Verbindung erneut."
         }
       },
@@ -6403,7 +6404,12 @@
     "reason": {
       "description": {
         "reference_repo_not_found": "Das Repository hinter der Referenzarchitektur dieses Laufs ist über die Quellcodeverwaltungs-Verbindung dieses Workspace nicht sichtbar. Entweder nennt der Eintrag das falsche Repository, oder die Verbindung hat keinen Zugriff darauf: Korrigieren Sie die Referenzarchitektur oder erteilen Sie den Zugriff, und versuchen Sie es erneut.",
-        "reference_repo_unreadable": "Das Repository hinter der Referenzarchitektur dieses Laufs konnte gerade nicht gelesen werden, deshalb wurde der Lauf nicht gegen eine Vorlage gestartet, die er möglicherweise nicht klonen kann. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht."
+        "reference_repo_unreadable": "Das Repository hinter der Referenzarchitektur dieses Laufs konnte gerade nicht gelesen werden, deshalb wurde der Lauf nicht gegen eine Vorlage gestartet, die er möglicherweise nicht klonen kann. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
+        "oauth_state_invalid": "Dieser Autorisierungslink ist abgelaufen oder wurde bereits verwendet, daher kann er die Verbindung nicht abschließen.",
+        "oauth_started_by_other_user": "Jemand anderes hat diese Verbindung gestartet, daher kann nur diese Person sie abschließen.",
+        "oauth_exchange_refused": "Der Autorisierungsserver des Werkzeugservers hat die Freigabe abgelehnt. Bitten Sie Ihren Deployment-Betreiber, die OAuth-Client-Einstellungen des Werkzeugservers zu prüfen.",
+        "oauth_client_secret_unavailable": "Das OAuth-Client-Secret des Werkzeugservers ist auf diesem Board nicht verfügbar. Fügen Sie es im Infrastruktur-Fenster hinzu.",
+        "tool_server_without_oauth": "Dieser Werkzeugserver verwendet kein OAuth mehr, daher gibt es keine Verbindung abzuschließen."
       }
     },
     "action": {

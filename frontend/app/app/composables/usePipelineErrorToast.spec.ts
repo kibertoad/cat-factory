@@ -6,7 +6,11 @@ import {
 } from '~/composables/usePipelineErrorToast'
 import { ApiError } from '~/composables/api/errors'
 import type { SetupActor } from '~/utils/setupAudience'
-import { BOOTSTRAP_REFERENCE_REASONS, UNAVAILABLE_REASONS } from '@cat-factory/contracts'
+import {
+  BOOTSTRAP_REFERENCE_REASONS,
+  TOOL_SERVER_OAUTH_REASONS,
+  UNAVAILABLE_REASONS,
+} from '@cat-factory/contracts'
 import en from '../../i18n/locales/en.json'
 
 /**
@@ -377,7 +381,11 @@ describe('describeGenericFailure', () => {
     // catalog, and that a reason wins over the status class it is attached to. Both refusals here
     // reach a person who can act on them, and the generic 503 wording ("this deployment has not
     // configured the capability") would send them to configure something that is already wired.
-    for (const reason of [...UNAVAILABLE_REASONS, ...BOOTSTRAP_REFERENCE_REASONS]) {
+    for (const reason of [
+      ...UNAVAILABLE_REASONS,
+      ...BOOTSTRAP_REFERENCE_REASONS,
+      ...TOOL_SERVER_OAUTH_REASONS,
+    ]) {
       const failure = describeGenericFailure(
         new ApiError(503, { error: { code: 'unavailable', details: { reason } } }),
       )

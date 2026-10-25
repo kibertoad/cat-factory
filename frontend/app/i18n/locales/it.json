@@ -752,6 +752,7 @@
           "doneHint": "Le esecuzioni di questa lavagna possono ora usare il server di strumenti con l’account con cui hai effettuato l’accesso.",
           "back": "Torna all’app",
           "failedTitle": "Non è stato possibile completare la connessione",
+          "restartHint": "Riavvia la connessione dalla finestra Infrastruttura.",
           "missingParams": "A questo link mancano i valori restituiti dal fornitore, quindi non c’è nulla da completare. Riavvia la connessione."
         }
       },
@@ -6403,7 +6404,12 @@
     "reason": {
       "description": {
         "reference_repo_not_found": "Il repository dietro l'architettura di riferimento di questa esecuzione non è visibile attraverso la connessione di controllo del codice di questo workspace. O la voce indica il repository sbagliato, o la connessione non vi ha accesso: correggi l'architettura di riferimento, oppure concedile l'accesso, e riprova.",
-        "reference_repo_unreadable": "Non è stato possibile leggere in questo momento il repository dietro l'architettura di riferimento di questa esecuzione, quindi l'esecuzione non è stata avviata su un modello che potrebbe non riuscire a clonare. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata."
+        "reference_repo_unreadable": "Non è stato possibile leggere in questo momento il repository dietro l'architettura di riferimento di questa esecuzione, quindi l'esecuzione non è stata avviata su un modello che potrebbe non riuscire a clonare. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
+        "oauth_state_invalid": "Questo link di autorizzazione è scaduto o è già stato usato, quindi non può completare la connessione.",
+        "oauth_started_by_other_user": "Questa connessione è stata avviata da un’altra persona, quindi solo lei può completarla.",
+        "oauth_exchange_refused": "Il server di autorizzazione del server degli strumenti ha rifiutato la concessione. Chiedi a chi gestisce il deployment di controllare le impostazioni del client OAuth del server degli strumenti.",
+        "oauth_client_secret_unavailable": "Il segreto del client OAuth del server degli strumenti non è disponibile su questa board. Aggiungilo dalla finestra Infrastruttura.",
+        "tool_server_without_oauth": "Questo server degli strumenti non usa più OAuth, quindi non c’è nessuna connessione da completare."
       }
     },
     "action": {

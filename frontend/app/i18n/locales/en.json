@@ -751,7 +751,12 @@
     "reason": {
       "description": {
         "reference_repo_not_found": "The repository behind this run's reference architecture cannot be seen through this workspace's source-control connection. Either the entry names the wrong repository, or the connection has not been granted access to it: correct the reference architecture, or grant it access, then try again.",
-        "reference_repo_unreadable": "The repository behind this run's reference architecture could not be read just now, so the run was not started against a template it might be unable to clone. Nothing here is misconfigured and no change is needed: try again once the source-control connection recovers."
+        "reference_repo_unreadable": "The repository behind this run's reference architecture could not be read just now, so the run was not started against a template it might be unable to clone. Nothing here is misconfigured and no change is needed: try again once the source-control connection recovers.",
+        "oauth_state_invalid": "This authorization link has expired or was already used, so it cannot finish the connection.",
+        "oauth_started_by_other_user": "Someone else started this connection, so only they can finish it.",
+        "oauth_exchange_refused": "The tool server's authorization server refused the grant. Ask your deployment operator to check the tool server's OAuth client settings.",
+        "oauth_client_secret_unavailable": "The tool server's OAuth client secret is not available on this board. Add it in the Infrastructure window.",
+        "tool_server_without_oauth": "This tool server no longer uses OAuth, so there is no connection to finish."
       }
     },
     "action": {
@@ -3857,6 +3862,7 @@
           "doneHint": "This board's runs can now use the tool server as the account you signed in with.",
           "back": "Back to the app",
           "failedTitle": "The connection could not be finished",
+          "restartHint": "Start the connection again from the Infrastructure window.",
           "missingParams": "This link is missing the values the vendor sends back, so there is nothing to complete. Start the connection again."
         }
       },

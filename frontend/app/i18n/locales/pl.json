@@ -676,7 +676,12 @@
     "reason": {
       "description": {
         "reference_repo_not_found": "Repozytorium stojące za architekturą referencyjną tego uruchomienia nie jest widoczne przez połączenie kontroli źródeł tej przestrzeni roboczej. Albo wpis wskazuje niewłaściwe repozytorium, albo połączenie nie ma do niego dostępu: popraw architekturę referencyjną lub nadaj jej dostęp i spróbuj ponownie.",
-        "reference_repo_unreadable": "Nie udało się teraz odczytać repozytorium stojącego za architekturą referencyjną tego uruchomienia, więc nie zostało ono uruchomione na szablonie, którego może nie umieć sklonować. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci."
+        "reference_repo_unreadable": "Nie udało się teraz odczytać repozytorium stojącego za architekturą referencyjną tego uruchomienia, więc nie zostało ono uruchomione na szablonie, którego może nie umieć sklonować. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
+        "oauth_state_invalid": "Ten link autoryzacyjny wygasł lub został już użyty, więc nie może dokończyć połączenia.",
+        "oauth_started_by_other_user": "To połączenie rozpoczął ktoś inny, więc tylko ta osoba może je dokończyć.",
+        "oauth_exchange_refused": "Serwer autoryzacji serwera narzędzi odrzucił zgodę. Poproś operatora wdrożenia o sprawdzenie ustawień klienta OAuth serwera narzędzi.",
+        "oauth_client_secret_unavailable": "Sekret klienta OAuth serwera narzędzi nie jest dostępny na tej tablicy. Dodaj go w oknie Infrastruktura.",
+        "tool_server_without_oauth": "Ten serwer narzędzi nie używa już OAuth, więc nie ma połączenia do dokończenia."
       }
     },
     "action": {
@@ -3546,6 +3551,7 @@
           "doneHint": "Uruchomienia tej tablicy mogą teraz korzystać z serwera narzędzi na koncie, na które się zalogowano.",
           "back": "Powrót do aplikacji",
           "failedTitle": "Nie udało się zakończyć połączenia",
+          "restartHint": "Rozpocznij połączenie ponownie w oknie Infrastruktura.",
           "missingParams": "W tym odnośniku brakuje wartości zwracanych przez dostawcę, więc nie ma czego kończyć. Rozpocznij połączenie ponownie."
         }
       },

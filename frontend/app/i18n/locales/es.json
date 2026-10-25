@@ -676,7 +676,12 @@
     "reason": {
       "description": {
         "reference_repo_not_found": "El repositorio de la arquitectura de referencia de esta ejecución no es visible a través de la conexión de control de código de este espacio de trabajo. O la entrada indica el repositorio equivocado, o la conexión no tiene acceso a él: corrige la arquitectura de referencia, o concédele acceso, e inténtalo de nuevo.",
-        "reference_repo_unreadable": "No se ha podido leer en este momento el repositorio de la arquitectura de referencia de esta ejecución, así que no se ha iniciado contra una plantilla que quizá no pueda clonar. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión."
+        "reference_repo_unreadable": "No se ha podido leer en este momento el repositorio de la arquitectura de referencia de esta ejecución, así que no se ha iniciado contra una plantilla que quizá no pueda clonar. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión.",
+        "oauth_state_invalid": "Este enlace de autorización ha caducado o ya se usó, así que no puede completar la conexión.",
+        "oauth_started_by_other_user": "Otra persona inició esta conexión, así que solo ella puede completarla.",
+        "oauth_exchange_refused": "El servidor de autorización del servidor de herramientas rechazó la concesión. Pide a quien opera tu despliegue que revise la configuración del cliente OAuth del servidor de herramientas.",
+        "oauth_client_secret_unavailable": "El secreto del cliente OAuth del servidor de herramientas no está disponible en este tablero. Añádelo en la ventana de Infraestructura.",
+        "tool_server_without_oauth": "Este servidor de herramientas ya no usa OAuth, así que no hay ninguna conexión que completar."
       }
     },
     "action": {
@@ -3546,6 +3551,7 @@
           "doneHint": "Las ejecuciones de este tablero ya pueden usar el servidor de herramientas con la cuenta con la que iniciaste sesión.",
           "back": "Volver a la aplicación",
           "failedTitle": "No se pudo finalizar la conexión",
+          "restartHint": "Vuelve a iniciar la conexión desde la ventana de Infraestructura.",
           "missingParams": "A este enlace le faltan los valores que devuelve el proveedor, así que no hay nada que completar. Vuelve a iniciar la conexión."
         }
       },

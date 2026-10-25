@@ -676,7 +676,12 @@
     "reason": {
       "description": {
         "reference_repo_not_found": "Bu çalıştırmanın referans mimarisinin arkasındaki depo, bu çalışma alanının kaynak denetimi bağlantısı üzerinden görülemiyor. Ya kayıt yanlış depoyu gösteriyor ya da bağlantıya erişim verilmemiş: referans mimarisini düzeltin veya erişim verin, sonra yeniden deneyin.",
-        "reference_repo_unreadable": "Bu çalıştırmanın referans mimarisinin arkasındaki depo şu anda okunamadı, bu yüzden klonlayamayabileceği bir şablon üzerinde başlatılmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin."
+        "reference_repo_unreadable": "Bu çalıştırmanın referans mimarisinin arkasındaki depo şu anda okunamadı, bu yüzden klonlayamayabileceği bir şablon üzerinde başlatılmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
+        "oauth_state_invalid": "Bu yetkilendirme bağlantısının süresi dolmuş ya da bağlantı zaten kullanılmış, bu yüzden bağlantıyı tamamlayamaz.",
+        "oauth_started_by_other_user": "Bu bağlantıyı başka biri başlattı, bu yüzden yalnızca o kişi tamamlayabilir.",
+        "oauth_exchange_refused": "Araç sunucusunun yetkilendirme sunucusu izni reddetti. Dağıtım operatörünüzden araç sunucusunun OAuth istemci ayarlarını kontrol etmesini isteyin.",
+        "oauth_client_secret_unavailable": "Araç sunucusunun OAuth istemci gizli anahtarı bu panoda kullanılamıyor. Altyapı penceresinden ekleyin.",
+        "tool_server_without_oauth": "Bu araç sunucusu artık OAuth kullanmıyor, bu yüzden tamamlanacak bir bağlantı yok."
       }
     },
     "action": {
@@ -3687,6 +3692,7 @@
           "doneHint": "Bu panonun çalıştırmaları artık araç sunucusunu oturum açtığınız hesapla kullanabilir.",
           "back": "Uygulamaya dön",
           "failedTitle": "Bağlantı tamamlanamadı",
+          "restartHint": "Bağlantıyı Altyapı penceresinden yeniden başlatın.",
           "missingParams": "Bu bağlantıda sağlayıcının geri gönderdiği değerler eksik, bu yüzden tamamlanacak bir şey yok. Bağlantıyı yeniden başlatın."
         }
       },

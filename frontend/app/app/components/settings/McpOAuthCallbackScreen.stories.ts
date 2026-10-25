@@ -68,6 +68,30 @@ export const Failed: Story = {
   },
 }
 
+/**
+ * The link's `state` expired or was already used. The session is fine, so this is a 422 with a
+ * reason rather than a 401, and the page says to start the connection again.
+ */
+export const StateExpired: Story = {
+  parameters: {
+    api: [
+      apiRefusal(completeToolServerOAuthContract, {
+        status: 422,
+        error: {
+          code: 'validation',
+          message: 'This authorization request is invalid or has expired',
+          details: { reason: 'oauth_state_invalid' },
+        },
+      }),
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await canvas.findByText(/expired or was already used/)
+    await canvas.findByText('Start the connection again from the Infrastructure window.')
+  },
+}
+
 /** The person chose Deny at the vendor: the vendor's own description, as it sent it. */
 export const Denied: Story = {
   decorators: [
