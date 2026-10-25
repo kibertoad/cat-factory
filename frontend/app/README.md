@@ -673,7 +673,7 @@ launch it puts up one question, "what do you work on?", offering `engineer`, `pr
 `designer` with a line each on what picking it gives you. Vocabulary, resolution and the
 presentation table are in `app/utils/uiRole.ts`; the choice and its once-per-session prompt live in
 the `uiRole` store. Who each role is for, and the surfaces the roles are moving towards, are in
-[`docs/personas.md`](../../docs/personas.md).
+[`docs/personas.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/personas.md).
 
 Two roles, three names. `engineer` and `product-manager` both map to the **`full`** surface, and
 that is the product decision rather than an oversight: the two do the same job in this app (plan
