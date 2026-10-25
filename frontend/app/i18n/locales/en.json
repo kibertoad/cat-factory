@@ -1292,7 +1292,7 @@
       "detect": {
         "title": "Auto-detect",
         "button": "Detect from repo",
-        "hint": "Inspect the repository and suggest a provisioning config. You confirm and edit everything below; nothing is saved automatically.",
+        "hint": "Inspect the repository and fill in the provisioning config below with what it finds. The result is saved at once, and you can edit every field afterwards.",
         "error": "Could not read the repository to detect provisioning.",
         "none": "No Kubernetes manifests or Compose file were detected.",
         "applied": "Suggested a {type} config. Review and adjust the fields below.",

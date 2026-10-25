@@ -5,7 +5,7 @@ import {
   detectServiceProvisioningContract,
   listEnvironmentHandlersContract,
 } from '@cat-factory/contracts'
-import { userEvent, within } from 'storybook/test'
+import { expect, userEvent, waitFor, within } from 'storybook/test'
 import { apiRefusal, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { boardApi } from '~/stories/boardApi'
@@ -88,7 +88,13 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 /** Docker Compose with its file: the nudge into the setup wizard, and Detect from repo. */
-export const Default: Story = { play: opensTo((c) => c.findByTestId('env-setup-nudge')) }
+export const Default: Story = {
+  play: opensTo(async (c) => {
+    await c.findByTestId('env-setup-nudge')
+    // Detect saves what it finds (see Detect Proposal), so the hint must not promise otherwise.
+    await c.findByText(/The result is saved at once/)
+  }),
+}
 
 /** Nothing declared: the service reads as needing no infrastructure. */
 export const Infraless: Story = {
@@ -199,6 +205,10 @@ export const DetectProposal: Story = {
     await detect(canvasElement)
     await within(canvasElement).findByText(
       'Manifests pin namespace "auth-preview"; recommend honoring it on the workspace handler.',
+    )
+    // The hint says the result is saved at once: the block carries the detected type.
+    await waitFor(() =>
+      expect(useBoardStore().getBlock(authService.id)?.provisioning?.type).toBe('kubernetes'),
     )
   },
 }

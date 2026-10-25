@@ -1174,7 +1174,7 @@
       "detect": {
         "title": "Otomatik algılama",
         "button": "Depodan algıla",
-        "hint": "Depoyu inceleyip bir provizyon yapılandırması önerir. Aşağıdaki her şeyi onaylayıp düzenlersiniz; hiçbir şey otomatik kaydedilmez.",
+        "hint": "Depoyu inceler ve aşağıdaki provizyon yapılandırmasını bulduklarıyla doldurur. Sonuç hemen kaydedilir; ardından her alanı düzenleyebilirsiniz.",
         "error": "Provizyonu algılamak için depo okunamadı.",
         "none": "Kubernetes manifesti veya Compose dosyası algılanmadı.",
         "applied": "{type} yapılandırması önerildi. Aşağıdaki alanları gözden geçirip ayarlayın.",

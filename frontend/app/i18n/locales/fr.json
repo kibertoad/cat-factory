@@ -1174,7 +1174,7 @@
       "detect": {
         "title": "Détection automatique",
         "button": "Détecter depuis le dépôt",
-        "hint": "Inspecte le dépôt et propose une configuration de provisionnement. Vous confirmez et modifiez tout ci-dessous ; rien n'est enregistré automatiquement.",
+        "hint": "Inspecte le dépôt et remplit la configuration de provisionnement ci-dessous avec ce qu'il trouve. Le résultat est enregistré immédiatement ; vous pouvez ensuite modifier chaque champ.",
         "error": "Impossible de lire le dépôt pour détecter le provisionnement.",
         "none": "Aucun manifeste Kubernetes ni fichier Compose détecté.",
         "applied": "Configuration {type} suggérée. Vérifiez et ajustez les champs ci-dessous.",

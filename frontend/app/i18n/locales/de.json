@@ -1692,7 +1692,7 @@
       "detect": {
         "title": "Automatisch erkennen",
         "button": "Aus Repo erkennen",
-        "hint": "Untersucht das Repository und schlägt eine Bereitstellungskonfiguration vor. Du bestätigst und bearbeitest alles unten; es wird nichts automatisch gespeichert.",
+        "hint": "Untersucht das Repository und füllt die Bereitstellungskonfiguration unten mit dem Ergebnis aus. Das Ergebnis wird sofort gespeichert; danach kannst du jedes Feld bearbeiten.",
         "error": "Das Repository konnte nicht gelesen werden, um die Bereitstellung zu erkennen.",
         "none": "Es wurden keine Kubernetes-Manifeste oder Compose-Dateien erkannt.",
         "applied": "Eine {type}-Konfiguration wurde vorgeschlagen. Prüfe und passe die Felder unten an.",

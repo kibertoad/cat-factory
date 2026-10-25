@@ -1174,7 +1174,7 @@
       "detect": {
         "title": "Autowykrywanie",
         "button": "Wykryj z repozytorium",
-        "hint": "Sprawdza repozytorium i proponuje konfigurację provisioningu. Potwierdzasz i edytujesz wszystko poniżej; nic nie jest zapisywane automatycznie.",
+        "hint": "Sprawdza repozytorium i wypełnia poniższą konfigurację provisioningu tym, co znajdzie. Wynik jest zapisywany od razu; potem możesz edytować każde pole.",
         "error": "Nie udało się odczytać repozytorium, aby wykryć provisioning.",
         "none": "Nie wykryto manifestów Kubernetes ani pliku Compose.",
         "applied": "Zaproponowano konfigurację {type}. Przejrzyj i dostosuj pola poniżej.",

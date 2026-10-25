@@ -286,10 +286,10 @@ function applyPicked() {
   browseOpen.value = false
 }
 
-// Auto-detect (slice 11): read the repo checkout-free and propose a NON-BINDING provisioning
-// config. The user always confirms — the result prefills the form (and the kube edit refs) but
-// every field stays editable, and the engine-level URL/namespace suggestions are surfaced
-// read-only (the workspace handler owns them). Nothing is persisted server-side by detection.
+// Auto-detect (slice 11): read the repo checkout-free and prefill the provisioning config. The
+// detect call itself persists nothing, but the prefill goes through `updateBlock`, which saves at
+// once (the hint says so). Every field stays editable afterwards, and the engine-level
+// URL/namespace suggestions are surfaced read-only (the workspace handler owns them).
 const detecting = ref(false)
 // The detect failure message to show, or null when there's no error. Holds the SERVER's real
 // message (the backend now raises an actionable one for an unreadable repo) so the user sees why
@@ -476,8 +476,8 @@ function setSize(value: InstanceSize) {
       </UButton>
     </div>
 
-    <!-- Auto-detect a recommended provisioning config from the repo (slice 11). Non-binding:
-         it prefills the form below + the kube edit refs; the user confirms/edits everything. -->
+    <!-- Auto-detect a recommended provisioning config from the repo (slice 11). It prefills and
+         saves the form below + the kube edit refs; the user can edit everything afterwards. -->
     <div v-if="repoContext" class="space-y-2 rounded-sm border border-default bg-default/40 p-2">
       <div class="flex items-center justify-between gap-2">
         <span class="text-2xs text-muted">{{ t('inspector.testConfig.detect.title') }}</span>

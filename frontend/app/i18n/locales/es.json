@@ -1174,7 +1174,7 @@
       "detect": {
         "title": "Detección automática",
         "button": "Detectar desde el repo",
-        "hint": "Inspecciona el repositorio y sugiere una configuración de aprovisionamiento. Confirmas y editas todo lo de abajo; nada se guarda automáticamente.",
+        "hint": "Inspecciona el repositorio y rellena la configuración de aprovisionamiento de abajo con lo que encuentra. El resultado se guarda al momento y después puedes editar cada campo.",
         "error": "No se pudo leer el repositorio para detectar el aprovisionamiento.",
         "none": "No se detectaron manifiestos de Kubernetes ni archivo Compose.",
         "applied": "Se sugirió una configuración {type}. Revisa y ajusta los campos de abajo.",
