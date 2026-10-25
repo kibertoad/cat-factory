@@ -3,6 +3,7 @@ import type { DropdownMenuItem } from '@nuxt/ui'
 import type { CloudProvider } from '~/types/domain'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import AppModal from '~/components/common/AppModal.vue'
+import { currentMenuItem } from '~/utils/currentMenuItem'
 
 // Account + board switching. Picks the active account (personal / org) and the
 // active board within it, and manages boards (new / rename / delete). The account
@@ -64,7 +65,7 @@ const accountItems = computed<DropdownMenuItem[][]>(() => [
   accounts.accounts.map((a) => ({
     label: a.name,
     icon: a.type === 'org' ? 'i-lucide-users' : 'i-lucide-user',
-    trailingIcon: a.id === accounts.activeAccountId ? 'i-lucide-check' : undefined,
+    ...currentMenuItem(a.id === accounts.activeAccountId),
     onSelect: () => void selectAccount(a.id),
   })),
   [
@@ -94,10 +95,9 @@ const accountItems = computed<DropdownMenuItem[][]>(() => [
             icon: 'i-lucide-cloud',
             children: PROVIDERS.value.map((p) => ({
               label: p.label,
-              trailingIcon:
-                (accounts.activeAccount?.defaultCloudProvider ?? 'cloudflare') === p.value
-                  ? 'i-lucide-check'
-                  : undefined,
+              ...currentMenuItem(
+                (accounts.activeAccount?.defaultCloudProvider ?? 'cloudflare') === p.value,
+              ),
               onSelect: () => void setDefaultProvider(p.value),
             })),
           },
@@ -114,7 +114,7 @@ const boardItems = computed<DropdownMenuItem[][]>(() => [
     // A restricted board (limited to an explicit roster) gets a lock glyph so an admin who
     // manages membership can see at a glance which boards are scoped vs open to the account.
     icon: w.accessMode === 'restricted' ? 'i-lucide-lock' : 'i-lucide-layout-dashboard',
-    trailingIcon: w.id === workspace.workspaceId ? 'i-lucide-check' : undefined,
+    ...currentMenuItem(w.id === workspace.workspaceId),
     // Addressable per board id: which board a row opens is the one thing about this menu a test
     // (or a screen reader's user testing a switch) cannot get from the label, which is a name a
     // person chose and two boards may share.
@@ -277,6 +277,9 @@ async function submitPrompt() {
       :content="{ align: 'start' }"
       class="w-full"
     >
+      <template #current-trailing>
+        <UIcon name="i-lucide-check" class="h-4 w-4 shrink-0 text-primary" />
+      </template>
       <UButton
         color="neutral"
         variant="ghost"
@@ -296,6 +299,9 @@ async function submitPrompt() {
 
     <!-- board selector -->
     <UDropdownMenu :items="boardItems" :content="{ align: 'start' }" class="w-full">
+      <template #current-trailing>
+        <UIcon name="i-lucide-check" class="h-4 w-4 shrink-0 text-primary" />
+      </template>
       <UButton
         color="neutral"
         variant="ghost"
