@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { apiErrorEnvelope, isAbsentFeatureRefusal } from '~/composables/api/errors'
+import { apiErrorEnvelope } from '~/composables/api/errors'
+import { createUserScopedLoad } from '~/stores/userScopedLoad'
 import type {
   PersonalSubscriptionStatus,
   StorePersonalSubscriptionInput,
@@ -120,27 +121,13 @@ export const usePersonalSubscriptionsStore = defineStore('personalSubscriptions'
     return personalPasswordCacheKey(apiBase, auth.user?.id)
   }
   const subscriptions = ref<PersonalSubscriptionStatus[]>([])
-  const loading = ref(false)
-  /** True when the last `load()` failed for a reason other than auth or the feature being off. */
-  const loadFailed = ref(false)
+  const { loading, loadFailed, load } = createUserScopedLoad({
+    fetch: () => api.listPersonalSubscriptions(),
+    apply: ({ subscriptions: list }) => (subscriptions.value = list),
+    reset: () => (subscriptions.value = []),
+  })
   /** When set, a credential modal should open to satisfy the pending prompt. */
   const pending = ref<PendingCredential | null>(null)
-
-  async function load() {
-    loading.value = true
-    try {
-      const { subscriptions: list } = await api.listPersonalSubscriptions()
-      subscriptions.value = list
-      loadFailed.value = false
-    } catch (err) {
-      // Auth disabled / not signed in (401) or feature off (503) → no personal subscriptions
-      // surface. Any other failure is recorded, so a reader can tell it from an empty list.
-      loadFailed.value = !isAbsentFeatureRefusal(err)
-      subscriptions.value = []
-    } finally {
-      loading.value = false
-    }
-  }
 
   async function store(input: StorePersonalSubscriptionInput) {
     const status = await api.storePersonalSubscription(input)

@@ -5,7 +5,7 @@ import {
   listUserSecretsContract,
 } from '@cat-factory/contracts'
 import { expect, screen } from 'storybook/test'
-import { apiFailure, apiResponse } from '~/stories/api'
+import { apiFailure, apiPending, apiResponse } from '~/stories/api'
 import { localModelEndpoint, personalSubscription } from '~/stories/providers.stories.mocks'
 import { withSeed } from '~/stories/withStores'
 import { useUiStore } from '~/stores/ui'
@@ -75,6 +75,20 @@ export const NothingConnected: Story = {
       apiResponse(listLocalModelEndpointsContract, { body: { endpoints: [] } }),
       apiResponse(listPersonalSubscriptionsContract, { body: { subscriptions: [] } }),
     ],
+  },
+}
+
+/** The three reads are still in flight: each row says it is checking, not "Not connected". */
+export const Checking: Story = {
+  parameters: {
+    api: [
+      apiPending(listUserSecretsContract),
+      apiPending(listLocalModelEndpointsContract),
+      apiPending(listPersonalSubscriptionsContract),
+    ],
+  },
+  play: async () => {
+    await expect(await screen.findAllByText('Checking…')).toHaveLength(ROW_KEYS.length)
   },
 }
 

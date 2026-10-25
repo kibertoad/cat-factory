@@ -102,7 +102,9 @@
       "keep": "Seguir editando"
     },
     "edit": "Editar",
-    "pathInvalid": "Introduce una ruta dentro del repositorio (sin \"..\", rutas absolutas ni barras invertidas)."
+    "pathInvalid": "Introduce una ruta dentro del repositorio (sin \"..\", rutas absolutas ni barras invertidas).",
+    "checking": "Comprobando…",
+    "loadFailed": "No se pudo cargar"
   },
   "access": {
     "noBoardWrite": "Acceso de solo lectura: puedes ver este tablero pero no editarlo.",
@@ -2623,7 +2625,6 @@
       "intro": "Tus conexiones personales, usadas para las ejecuciones que inicias y visibles solo para ti.",
       "connected": "Conectado",
       "notConnected": "No conectado",
-      "loadFailed": "No se pudo cargar",
       "connectedCount": "ninguno conectado | {count} conectado | {count} conectados",
       "sourceControl": {
         "title": "Control de versiones"

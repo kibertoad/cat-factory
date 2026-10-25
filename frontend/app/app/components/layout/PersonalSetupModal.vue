@@ -7,6 +7,7 @@
 // hub, reveals that panel, and gives it a "Back to My setup" control (IntegrationBackTitle).
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import AppModal from '~/components/common/AppModal.vue'
+import { connectionRowState, type ConnectionRowState } from '~/utils/connectionRowState'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -14,37 +15,29 @@ const userSecrets = useUserSecretsStore()
 const localModels = useLocalModelsStore()
 const personalSubs = usePersonalSubscriptionsStore()
 
-// Load the cheap user-scoped status whenever the hub opens, so each row's badge is accurate.
-// Each `load()` settles on its own and records a failure in its store's `loadFailed`, which
-// the row reads, so nothing is caught here.
-watch(
-  () => ui.personalSetupOpen,
-  (isOpen) => {
-    if (!isOpen) return
-    void userSecrets.load()
-    void localModels.load()
-    void personalSubs.load()
-  },
-  // Lazy v-if mount: the hub mounts with `personalSetupOpen` already true → load immediately.
-  { immediate: true },
-)
+// Load the cheap user-scoped status as the hub opens, so each row's badge is accurate. The
+// board mounts this modal only while `personalSetupOpen` is true and unmounts it on close, so
+// setup runs once per open. Each `load()` settles on its own and records a failure in its
+// store's `loadFailed`, which the row reads.
+void userSecrets.load()
+void localModels.load()
+void personalSubs.load()
 
 const open = computed({
   get: () => ui.personalSetupOpen,
   set: (v: boolean) => (v ? ui.openPersonalSetup() : ui.closePersonalSetup()),
 })
 
-// One row. `connected` drives the badge; `status` is the connected-state line (a count or
-// "Connected"). `failed` means the row's status did not load, so it says that instead of
-// "Not connected". Mirrors the Integrations hub's row shape so the two hubs look identical.
+// One row. `state` drives the badge (`connectionRowState`); `status` is the connected-state
+// line (a count or "Connected"). Mirrors the Integrations hub's row shape so the two hubs look
+// identical.
 interface PersonalItem {
   key: string
   icon: string
   label: string
   description: string
   status?: string
-  connected: boolean
-  failed: boolean
+  state: ConnectionRowState
   onClick: () => void
 }
 
@@ -72,8 +65,7 @@ const groups = computed<PersonalGroup[]>(() => {
         label: t('layout.personalSetup.githubToken.label'),
         description: t('layout.personalSetup.githubToken.description'),
         status: pat ? t('layout.personalSetup.connected') : undefined,
-        connected: pat,
-        failed: userSecrets.loadFailed,
+        state: connectionRowState(pat, userSecrets),
         onClick: () => go(ui.openUserSecrets),
       },
     ],
@@ -93,8 +85,7 @@ const groups = computed<PersonalGroup[]>(() => {
         status: runnerCount
           ? t('layout.personalSetup.connectedCount', { count: runnerCount }, runnerCount)
           : undefined,
-        connected: runnerCount > 0,
-        failed: localModels.loadFailed,
+        state: connectionRowState(runnerCount > 0, localModels),
         onClick: () => go(ui.openLocalModels),
       },
       {
@@ -105,8 +96,7 @@ const groups = computed<PersonalGroup[]>(() => {
         status: subCount
           ? t('layout.personalSetup.connectedCount', { count: subCount }, subCount)
           : undefined,
-        connected: subCount > 0,
-        failed: personalSubs.loadFailed,
+        state: connectionRowState(subCount > 0, personalSubs),
         onClick: () => go(() => ui.openVendorCredentials('personal')),
       },
     ],
@@ -142,22 +132,25 @@ const groups = computed<PersonalGroup[]>(() => {
                 <div class="flex items-center gap-2">
                   <span class="truncate text-sm font-medium text-app-100">{{ item.label }}</span>
                   <UBadge
-                    v-if="item.failed"
-                    color="error"
-                    variant="subtle"
-                    size="sm"
-                    :data-testid="`personal-setup-failed-${item.key}`"
-                  >
-                    {{ t('layout.personalSetup.loadFailed') }}
-                  </UBadge>
-                  <UBadge
-                    v-else-if="item.connected"
+                    v-if="item.state === 'connected'"
                     color="success"
                     variant="subtle"
                     size="sm"
                     :data-testid="`personal-setup-connected-${item.key}`"
                   >
                     {{ item.status || t('layout.personalSetup.connected') }}
+                  </UBadge>
+                  <span v-else-if="item.state === 'checking'" class="text-2xs text-dimmed">
+                    {{ t('common.checking') }}
+                  </span>
+                  <UBadge
+                    v-else-if="item.state === 'failed'"
+                    color="error"
+                    variant="subtle"
+                    size="sm"
+                    :data-testid="`personal-setup-failed-${item.key}`"
+                  >
+                    {{ t('common.loadFailed') }}
                   </UBadge>
                   <span v-else class="text-2xs text-dimmed">
                     {{ t('layout.personalSetup.notConnected') }}

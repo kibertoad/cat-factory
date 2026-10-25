@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { isAbsentFeatureRefusal } from '~/composables/api/errors'
+import { createUserScopedLoad } from '~/stores/userScopedLoad'
 import type {
   LocalModelEndpoint,
   LocalModelEndpointTestResult,
@@ -18,25 +18,11 @@ import type {
 export const useLocalModelsStore = defineStore('localModels', () => {
   const api = useApi()
   const endpoints = ref<LocalModelEndpoint[]>([])
-  const loading = ref(false)
-  /** True when the last `load()` failed for a reason other than auth or the feature being off. */
-  const loadFailed = ref(false)
-
-  async function load() {
-    loading.value = true
-    try {
-      const { endpoints: list } = await api.listLocalModelEndpoints()
-      endpoints.value = list
-      loadFailed.value = false
-    } catch (err) {
-      // Auth disabled / not signed in (401) or feature off (503) → no local runners surface.
-      // Any other failure is recorded, so a reader can tell it from an empty list.
-      loadFailed.value = !isAbsentFeatureRefusal(err)
-      endpoints.value = []
-    } finally {
-      loading.value = false
-    }
-  }
+  const { loading, loadFailed, load } = createUserScopedLoad({
+    fetch: () => api.listLocalModelEndpoints(),
+    apply: ({ endpoints: list }) => (endpoints.value = list),
+    reset: () => (endpoints.value = []),
+  })
 
   async function upsert(input: UpsertLocalModelEndpointInput) {
     const endpoint = await api.upsertLocalModelEndpoint(input.provider, input)

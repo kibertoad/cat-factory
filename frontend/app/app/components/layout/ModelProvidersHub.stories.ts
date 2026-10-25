@@ -1,5 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import {
+  listLocalModelEndpointsContract,
+  listPersonalSubscriptionsContract,
+} from '@cat-factory/contracts'
 import { userEvent, screen } from 'storybook/test'
+import { apiFailure } from '~/stories/api'
 import { apiKey, localModelEndpoint } from '~/stories/providers.stories.mocks'
 import { providersApi } from '~/stories/providersApi'
 import { seedWorkspace, withSeed } from '~/stories/withStores'
@@ -50,6 +55,24 @@ export const NothingConnected: Story = { parameters: { api: providersApi() } }
  */
 export const DisabledKeyOnly: Story = {
   parameters: { api: providersApi({ workspaceKeys: [apiKey({ enabled: false })] }) },
+}
+
+/**
+ * The two per-user reads fail: those rows say they could not load, not that nothing is connected.
+ * The failures come first because the first matching answer wins.
+ */
+export const PersonalLoadFailed: Story = {
+  parameters: {
+    api: [
+      apiFailure(listLocalModelEndpointsContract),
+      apiFailure(listPersonalSubscriptionsContract),
+      ...providersApi({ workspaceKeys: [apiKey()] }),
+    ],
+  },
+  play: async () => {
+    await screen.findByTestId('model-providers-failed-personal-subs')
+    await screen.findByTestId('model-providers-failed-local-runners')
+  },
 }
 
 /** A search that matches no provider. */

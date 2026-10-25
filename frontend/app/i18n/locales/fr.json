@@ -102,7 +102,9 @@
       "keep": "Continuer l'édition"
     },
     "edit": "Modifier",
-    "pathInvalid": "Saisissez un chemin a l'interieur du depot (pas de \"..\", de chemins absolus ni d'antislashs)."
+    "pathInvalid": "Saisissez un chemin a l'interieur du depot (pas de \"..\", de chemins absolus ni d'antislashs).",
+    "checking": "Vérification…",
+    "loadFailed": "Échec du chargement"
   },
   "access": {
     "noBoardWrite": "Accès en lecture seule : vous pouvez consulter ce tableau mais pas le modifier.",
@@ -2623,7 +2625,6 @@
       "intro": "Vos connexions personnelles, utilisées pour les exécutions que vous lancez et visibles uniquement par vous.",
       "connected": "Connecté",
       "notConnected": "Non connecté",
-      "loadFailed": "Échec du chargement",
       "connectedCount": "aucun connecté | {count} connecté | {count} connectés",
       "sourceControl": {
         "title": "Gestion de versions"

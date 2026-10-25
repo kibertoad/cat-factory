@@ -123,7 +123,9 @@
       "keep": "Keep editing"
     },
     "edit": "Edit",
-    "pathInvalid": "Enter a path inside the repository (no \"..\", absolute paths, or backslashes)."
+    "pathInvalid": "Enter a path inside the repository (no \"..\", absolute paths, or backslashes).",
+    "checking": "Checking…",
+    "loadFailed": "Couldn't load"
   },
   "access": {
     "noBoardWrite": "Read-only access: you can view this board but can't edit it.",
@@ -2781,7 +2783,6 @@
       "intro": "Your personal connections, used for runs you start and visible only to you.",
       "connected": "Connected",
       "notConnected": "Not connected",
-      "loadFailed": "Couldn't load",
       "connectedCount": "no connected | {count} connected | {count} connected",
       "sourceControl": {
         "title": "Source control"

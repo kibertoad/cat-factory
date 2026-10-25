@@ -2736,7 +2736,6 @@
       "intro": "Le tue connessioni personali, usate per le esecuzioni che avvii tu e visibili solo a te.",
       "connected": "Connesso",
       "notConnected": "Non connesso",
-      "loadFailed": "Caricamento non riuscito",
       "connectedCount": "nessuno connesso | {count} connesso | {count} connessi",
       "sourceControl": {
         "title": "Controllo del codice sorgente"
@@ -6314,7 +6313,9 @@
       "keep": "Continua a modificare"
     },
     "edit": "Modifica",
-    "pathInvalid": "Inserisci un percorso all'interno del repository (senza \"..\", percorsi assoluti o barre rovesciate)."
+    "pathInvalid": "Inserisci un percorso all'interno del repository (senza \"..\", percorsi assoluti o barre rovesciate).",
+    "checking": "Verifica in corso…",
+    "loadFailed": "Caricamento non riuscito"
   },
   "access": {
     "noBoardWrite": "Accesso in sola lettura: puoi visualizzare questa board ma non modificarla.",

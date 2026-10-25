@@ -2736,7 +2736,6 @@
       "intro": "Ihre persönlichen Verbindungen, die für von Ihnen gestartete Läufe verwendet werden und nur für Sie sichtbar sind.",
       "connected": "Verbunden",
       "notConnected": "Nicht verbunden",
-      "loadFailed": "Laden fehlgeschlagen",
       "connectedCount": "keine verbunden | {count} verbunden | {count} verbunden",
       "sourceControl": {
         "title": "Versionsverwaltung"
@@ -6314,7 +6313,9 @@
       "keep": "Weiter bearbeiten"
     },
     "edit": "Bearbeiten",
-    "pathInvalid": "Geben Sie einen Pfad innerhalb des Repositorys an (kein \"..\", keine absoluten Pfade und keine Backslashes)."
+    "pathInvalid": "Geben Sie einen Pfad innerhalb des Repositorys an (kein \"..\", keine absoluten Pfade und keine Backslashes).",
+    "checking": "Wird geprüft…",
+    "loadFailed": "Laden fehlgeschlagen"
   },
   "access": {
     "noBoardWrite": "Nur-Lese-Zugriff: Sie können dieses Board ansehen, aber nicht bearbeiten.",
