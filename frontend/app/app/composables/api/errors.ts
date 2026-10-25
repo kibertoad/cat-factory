@@ -84,3 +84,27 @@ export function apiErrorStatus(error: unknown): number | undefined {
   if (typeof e?.status === 'number') return e.status
   return undefined
 }
+
+/**
+ * Whether a 503 is the deployment saying it has not configured the module: the unreasoned
+ * `{ code: 'unavailable' }` envelope `requireCapability` sends. A reasoned 503 means "wired, not
+ * answering right now" (`UNAVAILABLE_REASONS`), and a platform or proxy 503 arrives with no
+ * envelope at all; both are outages, so neither counts.
+ */
+export function isModuleOffRefusal(error: unknown): boolean {
+  return (
+    apiErrorStatus(error) === 503 &&
+    apiErrorEnvelope(error)?.code === 'unavailable' &&
+    apiErrorReason(error) === null
+  )
+}
+
+/**
+ * Whether a refused USER-SCOPED read means "nothing to show here" rather than a fault: 401 when
+ * auth is disabled or the caller is signed out (there is no user whose connections could exist),
+ * or the module-off 503 above. A loader treats these as an empty list; any other failure (a 5xx,
+ * an outage 503, a network error) is a load that did not happen and must read as one.
+ */
+export function isAbsentFeatureRefusal(error: unknown): boolean {
+  return apiErrorStatus(error) === 401 || isModuleOffRefusal(error)
+}

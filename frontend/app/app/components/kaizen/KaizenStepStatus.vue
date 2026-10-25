@@ -16,6 +16,7 @@ const props = defineProps<{
 
 const kaizen = useKaizenStore()
 const { t } = useI18n()
+const { present } = usePipelineErrorToast()
 
 const grading = computed(() => {
   if (!props.instanceId || props.stepIndex == null) return null
@@ -23,12 +24,16 @@ const grading = computed(() => {
 })
 
 // Load the run's gradings once when we have an id and nothing cached yet. The stream
-// keeps them live afterwards.
+// keeps them live afterwards. The store rethrows every failure except the reason-less 503 that
+// means this deployment does not wire Kaizen. While the read keeps failing, every reader of the run
+// reloads it, so the toast is deduped: one on screen, not one per step opened.
 watch(
   () => props.instanceId,
   (id) => {
     if (id && kaizen.gradingsFor(id).length === 0 && kaizen.available !== false) {
-      void kaizen.loadForExecution(id)
+      kaizen
+        .loadForExecution(id)
+        .catch((e: unknown) => present(e, 'kaizen.loadFailed', undefined, { dedupe: true }))
     }
   },
   { immediate: true },

@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { UsageReport } from '@cat-factory/contracts'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 /**
  * The workspace's token-usage report for the current billing period (the "Usage" settings
@@ -12,7 +16,7 @@ export const useUsageStore = defineStore('usage', () => {
   const api = useApi()
   const report = ref<UsageReport | null>(null)
   const loading = ref(false)
-  const error = ref<string | null>(null)
+  const error = ref<DescribedFailure | null>(null)
 
   async function load(ws: string) {
     loading.value = true
@@ -20,7 +24,7 @@ export const useUsageStore = defineStore('usage', () => {
     try {
       report.value = await api.getUsage(ws)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e)
+      error.value = describeFailure(e)
     } finally {
       loading.value = false
     }

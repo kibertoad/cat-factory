@@ -8,8 +8,8 @@ import { useExecutionStore } from '~/stores/execution'
 /**
  * The JUDGE action surface (the fourth step-taxonomy bucket). The live verdict lives on the
  * run's judge step (`step.judge`) and is kept fresh by the execution stream, so the window reads
- * it straight off the execution store — this store only wraps the `resolve` action (and a
- * warm-up `load`), tracks the in-flight state so the window can disable its controls, and
+ * it straight off the execution store. This store only wraps the `resolve` action, tracks the
+ * in-flight state so the window can disable its controls, and
  * reflects the returned state back onto the execution store so the UI updates immediately even
  * before the stream echoes the change. Keyed by executionId, mirroring the fork-decision store.
  */
@@ -20,8 +20,6 @@ export const useJudgeStore = defineStore('judge', () => {
 
   /** True while a resolve call is in flight (drives the buttons' spinner / disabled state). */
   const resolving = ref(false)
-  /** The last error message from an action, surfaced inline; cleared on the next action. */
-  const error = ref<string | null>(null)
 
   /**
    * Reflect an authoritative judge state onto the run's judge step. A pipeline may place more
@@ -45,22 +43,6 @@ export const useJudgeStore = defineStore('judge', () => {
     if (step) step.judge = state
   }
 
-  /** Warm the live state from the GET (the stream also keeps it fresh). Best-effort. */
-  async function load(executionId: string): Promise<void> {
-    error.value = null
-    try {
-      await execution.echoAfter(
-        executionId,
-        () => api.getJudgeState(workspace.requireId(), executionId),
-        (state, instance) => {
-          if (state) assign(instance, state as JudgeStepState)
-        },
-      )
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to load'
-    }
-  }
-
   /**
    * Resolve the parked verdict: `proceed` advances the run despite the score, `bounce` sends the
    * work back to the producing step with the findings (plus any extra guidance) as rework, and
@@ -71,7 +53,6 @@ export const useJudgeStore = defineStore('judge', () => {
     choice: 'proceed' | 'bounce' | 'stop',
     feedback?: string,
   ): Promise<void> {
-    error.value = null
     resolving.value = true
     try {
       await execution.echoAfter(
@@ -83,13 +64,10 @@ export const useJudgeStore = defineStore('judge', () => {
           }),
         (state, instance) => assign(instance, state as JudgeStepState),
       )
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to resolve'
-      throw e
     } finally {
       resolving.value = false
     }
   }
 
-  return { resolving, error, load, resolve }
+  return { resolving, resolve }
 })

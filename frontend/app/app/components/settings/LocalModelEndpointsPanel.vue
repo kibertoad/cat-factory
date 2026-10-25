@@ -20,6 +20,11 @@ import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import AppModal from '~/components/common/AppModal.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -129,6 +134,8 @@ const testError = ref<string | null>(null)
 // The backend's own wording, kept as DETAIL beside a translated refusal rather than being
 // shown as the description (it names env vars an operator, not this user, acts on).
 const testErrorDetail = ref<string | null>(null)
+// The test CALL itself failed (no probe answer at all), classified like a failure toast.
+const testFailure = ref<DescribedFailure | null>(null)
 const tested = ref(false)
 const testing = ref(false)
 const busy = ref(false)
@@ -155,6 +162,7 @@ function seedDraft(p: LocalRunner) {
   apiKey.value = ''
   testError.value = null
   testErrorDetail.value = null
+  testFailure.value = null
   tested.value = false
 }
 
@@ -183,6 +191,7 @@ async function test() {
   testing.value = true
   testError.value = null
   testErrorDetail.value = null
+  testFailure.value = null
   try {
     const result = await store.test({
       provider: provider.value,
@@ -205,7 +214,7 @@ async function test() {
       testErrorDetail.value = result.errorReason ? (result.error ?? null) : null
     }
   } catch (e) {
-    testError.value = e instanceof Error ? e.message : String(e)
+    testFailure.value = describeFailure(e)
   } finally {
     testing.value = false
   }
@@ -410,7 +419,12 @@ async function remove(p: LocalRunner) {
             >
               {{ t('settings.localModelEndpoints.testConnection') }}
             </UButton>
-            <span v-if="testError" class="text-xs text-app-error-400">
+            <FailureMessage
+              v-if="testFailure"
+              :failure="testFailure"
+              class="text-xs text-app-error-400"
+            />
+            <span v-else-if="testError" class="text-xs text-app-error-400">
               {{ testError }}
               <span v-if="testErrorDetail" class="block text-2xs text-app-error-300/70">{{
                 testErrorDetail

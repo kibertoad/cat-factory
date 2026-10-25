@@ -77,13 +77,17 @@ pnpm --filter @cat-factory/deploy-harness run test:integration
 The **runner** sub-suite additionally needs its mock-harness image built and imported into the
 cluster, mirroring CI's "Build + import test images" step, and exported as `K8S_IT_RUNNER_IMAGE`. A
 k3d cluster has its own image store: an image that exists on the Docker host is not visible to the
-nodes until `k3d image import` puts it there.
+nodes until `k3d image import` puts it there. Import a single-platform tarball, not the image
+names: k3d imports with `ctr --all-platforms`, which fails on an index whose other platforms were
+never pulled (Docker's containerd image store) and still exits 0.
 
 ```powershell
 docker build -t cat-factory-mock-harness:it `
   backend/packages/integrations/src/modules/kubernetes/test-support/mock-harness
 docker pull nginx:1.27-alpine
-k3d image import cat-factory-mock-harness:it nginx:1.27-alpine -c cf-local
+docker save --platform "linux/$(docker version --format '{{.Server.Arch}}')" `
+  -o "$env:TEMP\k3d-images.tar" cat-factory-mock-harness:it nginx:1.27-alpine
+k3d image import "$env:TEMP\k3d-images.tar" -c cf-local
 $env:K8S_IT_RUNNER_IMAGE = 'cat-factory-mock-harness:it'
 ```
 

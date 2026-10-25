@@ -1,4 +1,5 @@
 import {
+  MCP_AUTHORIZATION_APPROVE_PERMISSION,
   MCP_AUTHORIZATION_REQUEST_INVALID,
   decideMcpAuthorizationContract,
   describeMcpAuthorizationContract,
@@ -132,10 +133,11 @@ async function assertMayApprove<E extends AppEnv>(
     if (!access?.allowed) {
       throw new NotFoundError('Workspace', workspaceId)
     }
-    if (!access.permissions.has('secrets.manage')) {
-      throw new ForbiddenError('This action requires the secrets.manage permission', {
-        permission: 'secrets.manage',
-      })
+    if (!access.permissions.has(MCP_AUTHORIZATION_APPROVE_PERMISSION)) {
+      throw new ForbiddenError(
+        `This action requires the ${MCP_AUTHORIZATION_APPROVE_PERMISSION} permission`,
+        { permission: MCP_AUTHORIZATION_APPROVE_PERMISSION },
+      )
     }
   }
   // The account the minted key belongs to. Absent means the board is gone or predates accounts, and

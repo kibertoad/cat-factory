@@ -15,7 +15,7 @@ import {
   noopLogger,
   ValidationError,
 } from '@cat-factory/kernel'
-import type { ToolServerOAuthStatus } from '@cat-factory/contracts'
+import type { ToolServerOAuthReason, ToolServerOAuthStatus } from '@cat-factory/contracts'
 import {
   type McpOAuthEndpoints,
   McpOAuthError,
@@ -205,8 +205,8 @@ export class McpOAuthService {
    * an authorization request at all.
    *
    * Null rather than a thrown cause on purpose: the four are indistinguishable to the caller and
-   * every one of them is a 401, so telling them apart would only tell an attacker which of their
-   * guesses was closer.
+   * every one of them is the same `oauth_state_invalid` refusal, so telling them apart would only
+   * tell an attacker which of their guesses was closer.
    */
   async readAuthorizationRequest(state: string | null): Promise<McpAuthorizationRequest | null> {
     if (!state) return null
@@ -214,8 +214,8 @@ export class McpOAuthService {
     try {
       parsed = JSON.parse(await this.deps.secretCipher.decrypt(state))
     } catch {
-      // silent-catch-ok: a state that will not open is a 401 whatever the reason, and the reason is
-      // attacker-supplied. The caller logs the refusal with the request's own correlation id.
+      // silent-catch-ok: a state that will not open is the same refusal whatever the reason, and the
+      // reason is attacker-supplied. The caller logs the refusal with the request's own correlation id.
       return null
     }
     const request = parsed as McpAuthorizationRequest
@@ -643,7 +643,9 @@ function describeOAuthError(error: unknown): string {
  */
 function asRefusal(error: unknown): unknown {
   if (error instanceof McpOAuthError && error.permanent) {
-    return new ValidationError(describeOAuthError(error), { reason: 'oauth_exchange_refused' })
+    return new ValidationError(describeOAuthError(error), {
+      reason: 'oauth_exchange_refused' satisfies ToolServerOAuthReason,
+    })
   }
   return error
 }

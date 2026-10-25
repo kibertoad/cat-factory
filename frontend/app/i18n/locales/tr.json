@@ -102,7 +102,9 @@
       "keep": "Düzenlemeye devam et"
     },
     "edit": "Düzenle",
-    "pathInvalid": "Depo icinde bir yol girin (\"..\", mutlak yollar veya ters egik cizgi olmadan)."
+    "pathInvalid": "Depo icinde bir yol girin (\"..\", mutlak yollar veya ters egik cizgi olmadan).",
+    "checking": "Kontrol ediliyor…",
+    "loadFailed": "Yüklenemedi"
   },
   "access": {
     "noBoardWrite": "Salt okunur erişim: bu panoyu görüntüleyebilirsiniz ancak düzenleyemezsiniz.",
@@ -632,7 +634,7 @@
     "attachIssueDisabledConnect": "Önce bir sorun izleyici bağlayın (Entegrasyonlar)",
     "attachIssueDisabledEnable": "Önce sorun izleyici entegrasyonunu etkinleştirin",
     "importsOnAdd": "eklendiğinde içe aktarılır",
-    "unreadable": "Getirilemedi: {error}",
+    "unreadable": "Getirilemedi.",
     "pastedLink": {
       "offer": "Bu açıklama bir {source} sayfasına bağlantı veriyor. Bağlam olarak eklensin mi?",
       "attach": "Ekle"
@@ -676,7 +678,12 @@
     "reason": {
       "description": {
         "reference_repo_not_found": "Bu çalıştırmanın referans mimarisinin arkasındaki depo, bu çalışma alanının kaynak denetimi bağlantısı üzerinden görülemiyor. Ya kayıt yanlış depoyu gösteriyor ya da bağlantıya erişim verilmemiş: referans mimarisini düzeltin veya erişim verin, sonra yeniden deneyin.",
-        "reference_repo_unreadable": "Bu çalıştırmanın referans mimarisinin arkasındaki depo şu anda okunamadı, bu yüzden klonlayamayabileceği bir şablon üzerinde başlatılmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin."
+        "reference_repo_unreadable": "Bu çalıştırmanın referans mimarisinin arkasındaki depo şu anda okunamadı, bu yüzden klonlayamayabileceği bir şablon üzerinde başlatılmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
+        "oauth_state_invalid": "Bu yetkilendirme bağlantısının süresi dolmuş ya da bağlantı zaten kullanılmış, bu yüzden bağlantıyı tamamlayamaz.",
+        "oauth_started_by_other_user": "Bu bağlantıyı başka biri başlattı, bu yüzden yalnızca o kişi tamamlayabilir.",
+        "oauth_exchange_refused": "Araç sunucusunun yetkilendirme sunucusu izni reddetti. Dağıtım operatörünüzden araç sunucusunun OAuth istemci ayarlarını kontrol etmesini isteyin.",
+        "oauth_client_secret_unavailable": "Araç sunucusunun OAuth istemci gizli anahtarı bu panoda kullanılamıyor. Altyapı penceresinden ekleyin.",
+        "tool_server_without_oauth": "Bu araç sunucusu artık OAuth kullanmıyor, bu yüzden tamamlanacak bir bağlantı yok."
       }
     },
     "action": {
@@ -1370,7 +1377,6 @@
       "title": "Yapı",
       "hint": "Bu görevin servisi içinde nerede bulunduğu ve ajanlarının hangi kod standartlarını izlediği.",
       "module": "Modül",
-      "modulePlaceholder": "Bir modül seç veya yaz",
       "moduleHint": "Bu görevin ait olduğu servis modülü; pano kolonları buna göre gruplar. Henüz var olmayan bir modül, görev uygulandığında oluşturulur.",
       "bestPractices": "En iyi uygulamalar",
       "bestPracticesEmpty": "Yok. Ajanlar varsayılan yönergelerini izler.",
@@ -2106,7 +2112,8 @@
       "helperFailures": "Onarıcı hataları",
       "exhausted": "İnsana devredilen",
       "hint": "Onarıcısız geçmek, ön kontrolün yettiği ve hiç onarıcı başlatılmadığı anlamına gelir. Onarıcı hataları, kendi işi çöken denemelerdir; çalışıp kontrolü kırmızı bırakan denemelerden farklıdır."
-    }
+    },
+    "loadFailed": "Platform gözlemlenebilirliği yüklenemedi."
   },
   "reports": {
     "title": "Raporlar",
@@ -2379,6 +2386,7 @@
       },
       "invite": {
         "title": "Bir takım arkadaşı davet et",
+        "listTitle": "Davetler",
         "submit": "Davet et",
         "revoke": "Daveti iptal et",
         "created": "Davet oluşturuldu",
@@ -2393,6 +2401,7 @@
       "email": {
         "title": "E-posta göndericisi",
         "notEnabled": "Bu dağıtımda e-posta teslimatı etkin değil. Davetler yine de paylaşılabilir bir kabul bağlantısı üretir.",
+        "notConnected": "Bağlı bir e-posta göndericisi yok. Bir hesap yöneticisi bağlayabilir.",
         "connectedAs": "{provider} aracılığıyla {from} olarak bağlandı",
         "disconnect": "Bağlantıyı kes",
         "connect": "E-posta göndericisi bağla",
@@ -2616,7 +2625,9 @@
       "budget": "Bütçe",
       "tokens": "Belirteçler",
       "resume": "Yine de devam ettir",
-      "resumeHint": "Devam etmek harcamayı sürdürür; hâlâ bütçe aşımı varsa tekrar duraklatılır."
+      "resumeHint": "Devam etmek harcamayı sürdürür; hâlâ bütçe aşımı varsa tekrar duraklatılır.",
+      "resumeFailed": "Ajan yürütmesi devam ettirilemedi",
+      "refreshFailed": "Çalıştırmalar devam ettirildi, ancak pano yenilenemedi"
     },
     "personalSetup": {
       "title": "Kurulumum",
@@ -2814,6 +2825,7 @@
       "status": {
         "connected": "Bağlandı",
         "keyConnected": "Anahtar bağlandı",
+        "keyDisabled": "Anahtar devre dışı",
         "notConnected": "Bağlı değil",
         "recommended": "Önerilen",
         "connectedCount": "bağlı yok | {count} bağlı | {count} bağlı"
@@ -2968,12 +2980,13 @@
     "deny": "Vazgeç",
     "back": "Uygulamaya dön",
     "noWorkspaces": "Bunu bağlayabileceğiniz bir pano henüz yok.",
+    "noAdminWorkspaces": "Panolarınızın hiçbirinde yönetici değilsiniz. Bağlamak için bir pano yöneticisinden yardım isteyin.",
     "revokeHint": "Bu işlem, pano ayarlarından istediğiniz zaman iptal edebileceğiniz bir API anahtarı oluşturur.",
     "error": {
       "title": "Bu bağlantı kurulamadı",
       "noRequest": "Bu sayfa bir yetkilendirme isteği olmadan açıldı. Bağlantıyı MCP istemcinizden başlatın.",
       "expired": "Bu yetkilendirme isteği geçersiz veya süresi dolmuş. Bağlantıyı MCP istemcinizden yeniden başlatın.",
-      "failed": "Karar kaydedilemedi. Bağlantıyı MCP istemcinizden yeniden başlatın."
+      "decisionFailed": "Karar kaydedilemedi."
     }
   },
   "settings": {
@@ -3528,7 +3541,9 @@
           "thresholds": "Puan eşiklerini kullan",
           "always": "Her zaman otomatik birleştir",
           "never": "Her zaman inceleme iste"
-        }
+        },
+        "loadFailed": "Birleştirme geçmişi yüklenemedi",
+        "unavailable": "Geçmiş kullanılamıyor"
       },
       "roleRules": {
         "heading": "Başlatan role göre sınırlar",
@@ -3686,7 +3701,7 @@
           "doneHint": "Bu panonun çalıştırmaları artık araç sunucusunu oturum açtığınız hesapla kullanabilir.",
           "back": "Uygulamaya dön",
           "failedTitle": "Bağlantı tamamlanamadı",
-          "failed": "Yetkilendirme tamamlanamadı. Bağlantıyı Altyapı penceresinden yeniden başlatın.",
+          "restartHint": "Bağlantıyı Altyapı penceresinden yeniden başlatın.",
           "missingParams": "Bu bağlantıda sağlayıcının geri gönderdiği değerler eksik, bu yüzden tamamlanacak bir şey yok. Bağlantıyı yeniden başlatın."
         }
       },
@@ -3962,6 +3977,7 @@
       "apiKey": "API anahtarı",
       "connectAndBrowse": "Bağlan ve göz at",
       "keyConnected": "OpenRouter anahtarı bağlandı",
+      "keyDisabled": "OpenRouter anahtarınız devre dışı. Modellere göz atmak için Sağlayıcılar ve anahtarlar bölümünde yeniden etkinleştirin.",
       "manageKeys": "Sağlayıcılar ve anahtarlar bölümünde yönet",
       "refresh": "Kataloğu yenile",
       "enableRecommended": "Önerilenleri etkinleştir",
@@ -3988,7 +4004,8 @@
       "metered": "Ölçümlü API",
       "illustrative": "Abonelikler için gösterilen maliyetler bilgi amaçlıdır; bu planlar sabit ücretlidir ve jeton başına faturalandırılmaz.",
       "tokens": "{input} giriş / {output} çıkış",
-      "calls": "{count} çağrı"
+      "calls": "{count} çağrı",
+      "loadFailed": "Kullanım yüklenemedi."
     },
     "workspaceSettings": {
       "title": "Çalışma alanı ayarları",
@@ -4682,7 +4699,8 @@
       },
       "repoType": "Depo türü",
       "repoTypeHint": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike).",
-      "prefillProviderMismatch": "Bağlantı başka bir sağlayıcıdaki {repo} deposunu istiyordu, bu pano ise {connected} ile bağlı. Depoyu elle arayın veya bağlantıyı onun sağlayıcısına bağlı bir panoda açın."
+      "prefillProviderMismatch": "Bağlantı başka bir sağlayıcıdaki {repo} deposunu istiyordu, bu pano ise {connected} ile bağlı. Depoyu elle arayın veya bağlantıyı onun sağlayıcısına bağlı bir panoda açın.",
+      "searchFailed": "Depolar aranamadı"
     },
     "repoTree": {
       "root": "kök",
@@ -4859,7 +4877,7 @@
     "picker": {
       "searchPlaceholder": "Sayfalarda ara veya bir URL/ID yapıştır…",
       "refPlaceholder": "Bir sayfa URL'si veya ID'si yapıştır…",
-      "searchFailed": "Arama başarısız: {error}",
+      "searchFailed": "Arama başarısız.",
       "importedBadge": "içe aktarıldı",
       "attachByReference": "{ref} öğesini referansla ekle",
       "noMatches": "Eşleşen sayfa yok.",
@@ -4887,7 +4905,7 @@
       "searchFilesPlaceholder": "Dosyaları yola göre ara…",
       "searchFilesHint": "Bu depodaki dosyaları aramak için yazın.",
       "noFileMatches": "Eşleşen dosya yok.",
-      "filesFailed": "Dosyalar yüklenemedi: {error}",
+      "filesFailed": "Dosyalar yüklenemedi.",
       "moreFiles": "İlk {count} eşleşme gösteriliyor — daraltmak için aramanızı iyileştirin."
     },
     "import": {
@@ -5019,7 +5037,7 @@
     "picker": {
       "searchPlaceholder": "Sorunlarda ara veya bir URL/anahtar yapıştır…",
       "refPlaceholder": "Bir sorun URL'si veya anahtarı yapıştır…",
-      "searchFailed": "Arama başarısız: {error}",
+      "searchFailed": "Arama başarısız.",
       "searchNeedsRepo": "Bu hizmet henüz bir depoya bağlı değil, bu yüzden aranacak bir şey yok. Onu bir depoya bağlayın veya doğrudan eklemek için bir sorun URL'si yapıştırın.",
       "imported": "içe aktarıldı",
       "attachByReference": "{ref} öğesini referansla ekle",
@@ -5109,7 +5127,7 @@
     "boardPlaceholder": "Proje anahtarı veya takım kimliği",
     "boardFromService": "Bu servise bağlı depo",
     "boardNeedsRepo": "Bu servise bağlı bir depo yok, dolayısıyla taranacak kayıt da yok. Servis panelinden bir depo bağlayın.",
-    "boardsFailed": "Panolar yüklenemedi: {reason}",
+    "boardsFailed": "Panolar yüklenemedi.",
     "issueType": "Kayıt türü",
     "issueTypeHelp": "Varsayılan olarak bug. Kayıt türü olmayan araçlarda yok sayılır.",
     "issueTypeUnsupported": "{tracker} “bug” anlamına gelen bir konu türüne sahip değil, bu nedenle bu filtre uygulanmaz. Taramayı bunun yerine bir etiketle daraltın.",
@@ -5811,7 +5829,8 @@
       "park": "Bir kişiye sordu",
       "bounce": "Düzeltme için geri gönderildi",
       "fail": "Çalışma başarısız oldu"
-    }
+    },
+    "resolveFailed": "Seçiminiz kaydedilemedi"
   },
   "inputGate": {
     "blockedTitle": "Bu görev çalışmadan önce daha fazla ayrıntı gerektiriyor",
@@ -6688,7 +6707,8 @@
     "outcome": {
       "success": "başarılı",
       "failure": "başarısız"
-    }
+    },
+    "loadFailed": "Sağlama günlükleri yüklenemedi."
   },
   "kaizen": {
     "title": "Kaizen",
@@ -6729,7 +6749,8 @@
         "recommendations": "Öneriler"
       },
       "empty": "Henüz değerlendirme yok."
-    }
+    },
+    "loadFailed": "Kaizen değerlendirmeleri yüklenemedi"
   },
   "recurring": {
     "runEvery": "Çalıştırma sıklığı",
@@ -6852,7 +6873,8 @@
         "placeholder": "GitHub dosya veya klasör URL'si yapıştırın (örn. https://github.com/owner/repo/tree/main/docs)",
         "action": "Bul",
         "invalid": "Bu, bir depo dosyası veya klasör URL'sine benzemiyor.",
-        "notFound": "{slug} ile eşleşen erişilebilir bir depo yok. URL'yi kontrol edin veya önce depoyu bağlayın."
+        "notFound": "{slug} ile eşleşen erişilebilir bir depo yok. URL'yi kontrol edin veya önce depoyu bağlayın.",
+        "failed": "Bu URL aranamadı."
       }
     },
     "sources": {
@@ -7744,18 +7766,25 @@
       "run": "Kontrolleri çalıştır",
       "none": "Bu tarif hiçbir ön kontrol tanımlamıyor.",
       "unavailable": "Ön kontroller yerel makinede çalışır ve bu dağıtımda kullanılamaz.",
-      "optional": "isteğe bağlı"
+      "optional": "isteğe bağlı",
+      "failed": "Ön kontroller çalıştırılamadı."
     },
     "save": {
       "handlerLabel": "İşleyici etiketi",
       "handlerHint": "Deployer'ın bu yığını sağlamak için kullandığı çalışma alanının Docker Compose işleyicisi.",
       "summary": "\"{frame}\" üzerine bir Docker Compose tarifi kaydeder (\"{service}\" servisini açığa çıkararak) ve çalışma alanı işleyicisini kaydeder.",
       "saved": "Kaydedildi. Bir hat çalıştırdığında Deployer bu yığını sağlayacak.",
-      "save": "Yapılandırmayı kaydet"
+      "save": "Yapılandırmayı kaydet",
+      "failed": "Ortam kaydedilemedi.",
+      "errors": {
+        "missingService": "Önce bir çerçeve ve dışa açık bir compose hizmeti seçin.",
+        "invalidPort": "Geçerli bir dışa açık port girin (1 ile 65535 arası)."
+      }
     },
     "trial": {
       "hint": "Tarifi test etmek için bu ortamı isteğe bağlı olarak şimdi sağlayabilirsin.",
-      "run": "Deneme sağlaması"
+      "run": "Deneme sağlaması",
+      "failed": "Deneme sağlaması başlatılamadı."
     }
   },
   "forkDecision": {

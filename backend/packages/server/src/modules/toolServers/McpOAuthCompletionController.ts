@@ -1,6 +1,6 @@
-import { completeToolServerOAuthContract } from '@cat-factory/contracts'
+import { completeToolServerOAuthContract, type ToolServerOAuthReason } from '@cat-factory/contracts'
 import type { McpOAuthConfig } from '@cat-factory/kernel'
-import { ForbiddenError, UnauthorizedError, ValidationError } from '@cat-factory/kernel'
+import { ForbiddenError, ValidationError } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
@@ -55,7 +55,10 @@ export function mcpOAuthCompletionController(): Hono<AppEnv> {
     const request = await oauthService.readAuthorizationRequest(state)
     if (!request) {
       logger.warn('mcp oauth completion carried no usable state')
-      throw new UnauthorizedError('This authorization request is invalid or has expired')
+      // A 422, never a 401: the caller's session is valid, and the SPA signs out on every 401.
+      throw new ValidationError('This authorization request is invalid or has expired', {
+        reason: 'oauth_state_invalid' satisfies ToolServerOAuthReason,
+      })
     }
 
     await assertMayCompleteGrant(c, request)
@@ -70,7 +73,7 @@ export function mcpOAuthCompletionController(): Hono<AppEnv> {
       throw new ValidationError(
         `Tool server '${request.serverId}' no longer declares OAuth, so this grant cannot be ` +
           `completed.`,
-        { reason: 'tool_server_without_oauth' },
+        { reason: 'tool_server_without_oauth' satisfies ToolServerOAuthReason },
       )
     }
     const clientSecret = await resolveClientSecret(c, request.workspaceId, request.serverId, oauth)
@@ -111,7 +114,9 @@ async function assertMayCompleteGrant<E extends AppEnv>(
       'mcp oauth completion attempted by a different user than the one who started it',
       { workspaceId: request.workspaceId, toolServerId: request.serverId },
     )
-    throw new UnauthorizedError('This authorization request was started by someone else')
+    throw new ForbiddenError('This authorization request was started by someone else', {
+      reason: 'oauth_started_by_other_user' satisfies ToolServerOAuthReason,
+    })
   }
 
   // Resolved through the ONE shared resolution the workspace gate uses. It cannot be the gate
@@ -149,7 +154,9 @@ async function resolveClientSecret<E extends AppEnv>(
     logger: requestLogger(c),
   })
   if (!resolved.ok) {
-    throw new ValidationError(resolved.error, { reason: 'oauth_client_secret_unavailable' })
+    throw new ValidationError(resolved.error, {
+      reason: 'oauth_client_secret_unavailable' satisfies ToolServerOAuthReason,
+    })
   }
   return resolved.value
 }
