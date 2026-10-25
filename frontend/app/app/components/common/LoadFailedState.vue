@@ -4,13 +4,13 @@
 // here") or as the feature's "not enabled" notice (that is a 503 only), because each of the three
 // needs a different action from the reader (AGENTS.md, "Degrade loudly").
 //
-// The default title is generic; a caller with a more exact one passes it. A `retry` listener adds
-// the retry button, so a surface with no way to re-read renders the state without a dead control.
+// The title names what failed to load. A `retry` listener adds the retry button, so a surface with
+// no way to re-read renders the state without a dead control.
 import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = withDefaults(
   defineProps<{
-    title?: string
+    title: string
     description?: string
     compact?: boolean
     /** True while the retry is in flight, so the button shows it. */
@@ -19,7 +19,6 @@ const props = withDefaults(
     onRetry?: () => void
   }>(),
   {
-    title: undefined,
     description: undefined,
     compact: false,
     retrying: false,
@@ -33,7 +32,7 @@ const { t } = useI18n()
 <template>
   <EmptyState
     icon="i-lucide-triangle-alert"
-    :title="props.title ?? t('common.loadFailed')"
+    :title="props.title"
     :description="props.description"
     :compact="props.compact"
     data-testid="load-failed-state"

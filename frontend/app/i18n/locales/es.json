@@ -102,8 +102,7 @@
       "keep": "Seguir editando"
     },
     "edit": "Editar",
-    "pathInvalid": "Introduce una ruta dentro del repositorio (sin \"..\", rutas absolutas ni barras invertidas).",
-    "loadFailed": "No se pudo cargar"
+    "pathInvalid": "Introduce una ruta dentro del repositorio (sin \"..\", rutas absolutas ni barras invertidas)."
   },
   "access": {
     "noBoardWrite": "Acceso de solo lectura: puedes ver este tablero pero no editarlo.",

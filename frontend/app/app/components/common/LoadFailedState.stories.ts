@@ -12,8 +12,10 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-/** The generic title, with a retry. */
-export const Default: Story = { args: { onRetry: fn() } }
+/** A title naming what failed, with a retry. */
+export const Default: Story = {
+  args: { title: 'Could not load the consensus session', onRetry: fn() },
+}
 
 export const WithDescription: Story = {
   args: {
@@ -29,7 +31,9 @@ export const WithoutRetry: Story = {
 }
 
 /** The retry in flight. */
-export const Retrying: Story = { args: { onRetry: fn(), retrying: true } }
+export const Retrying: Story = {
+  args: { title: 'Could not load the consensus session', onRetry: fn(), retrying: true },
+}
 
 /** Compact: the inline size for an inspector section or a picker. */
 export const Compact: Story = {

@@ -102,8 +102,7 @@
       "keep": "Kontynuuj edycję"
     },
     "edit": "Edytuj",
-    "pathInvalid": "Podaj sciezke wewnatrz repozytorium (bez \"..\", sciezek bezwzglednych ani ukosnikow wstecznych).",
-    "loadFailed": "Nie udało się wczytać"
+    "pathInvalid": "Podaj sciezke wewnatrz repozytorium (bez \"..\", sciezek bezwzglednych ani ukosnikow wstecznych)."
   },
   "access": {
     "noBoardWrite": "Dostęp tylko do odczytu: możesz przeglądać tę tablicę, ale nie możesz jej edytować.",

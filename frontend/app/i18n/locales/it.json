@@ -6326,8 +6326,7 @@
       "keep": "Continua a modificare"
     },
     "edit": "Modifica",
-    "pathInvalid": "Inserisci un percorso all'interno del repository (senza \"..\", percorsi assoluti o barre rovesciate).",
-    "loadFailed": "Impossibile caricare"
+    "pathInvalid": "Inserisci un percorso all'interno del repository (senza \"..\", percorsi assoluti o barre rovesciate)."
   },
   "access": {
     "noBoardWrite": "Accesso in sola lettura: puoi visualizzare questa board ma non modificarla.",

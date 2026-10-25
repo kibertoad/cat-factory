@@ -6326,8 +6326,7 @@
       "keep": "Weiter bearbeiten"
     },
     "edit": "Bearbeiten",
-    "pathInvalid": "Geben Sie einen Pfad innerhalb des Repositorys an (kein \"..\", keine absoluten Pfade und keine Backslashes).",
-    "loadFailed": "Konnte nicht geladen werden"
+    "pathInvalid": "Geben Sie einen Pfad innerhalb des Repositorys an (kein \"..\", keine absoluten Pfade und keine Backslashes)."
   },
   "access": {
     "noBoardWrite": "Nur-Lese-Zugriff: Sie können dieses Board ansehen, aber nicht bearbeiten.",
