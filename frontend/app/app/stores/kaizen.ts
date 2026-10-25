@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import type { KaizenGrading, KaizenVerifiedCombo } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useSingleFlight } from '~/composables/useSingleFlight'
-import { apiErrorReason, apiErrorStatus } from '~/composables/api/errors'
+import { isModuleOffRefusal } from '~/composables/api/errors'
 
 /**
  * Kaizen state: per-run gradings (for the run-window status surface) and the
@@ -11,16 +11,6 @@ import { apiErrorReason, apiErrorStatus } from '~/composables/api/errors'
  * arrive both via lazy loads and live over the workspace stream (`upsert`). Never
  * surfaced on the board — only inside run details + the dedicated screen.
  */
-/**
- * The 503 that means this deployment does not wire Kaizen: the controller's capability guard sends
- * it with no `details.reason`. A 503 WITH a reason is an outage (a mothership node that cannot
- * reach its mothership), so it is rethrown for the caller to report rather than hiding Kaizen for
- * the rest of the session.
- */
-function isNotConfigured(error: unknown): boolean {
-  return apiErrorStatus(error) === 503 && apiErrorReason(error) === null
-}
-
 export const useKaizenStore = defineStore('kaizen', () => {
   const api = useApi()
 
@@ -44,11 +34,14 @@ export const useKaizenStore = defineStore('kaizen', () => {
   const verified = ref<KaizenVerifiedCombo[]>([])
   const loadingOverview = ref(false)
   const loadingExecution = ref<Set<string>>(new Set())
-  /** 503 ⇒ the Kaizen feature isn't configured on this deployment. */
+  /**
+   * False once a read was refused with the module-off 503 (`isModuleOffRefusal`): this deployment
+   * does not wire Kaizen. A reasoned 503 is an outage and is rethrown for the caller to report.
+   */
   const available = ref<boolean | null>(null)
   /**
    * The newest overview load failed, so the screen's empty history and combo lists are ABSENT
-   * rather than zero. Set only for a failure that is not {@link isNotConfigured}.
+   * rather than zero. Set only for a failure that is not the module-off 503.
    */
   const overviewFailed = ref(false)
 
@@ -130,7 +123,7 @@ export const useKaizenStore = defineStore('kaizen', () => {
       const { reconciled, liveOnly } = reconcileWithLive(overview.gradings, history.value)
       history.value = [...liveOnly, ...reconciled]
     } catch (e) {
-      if (isNotConfigured(e)) {
+      if (isModuleOffRefusal(e)) {
         available.value = false
         return
       }
@@ -164,7 +157,7 @@ export const useKaizenStore = defineStore('kaizen', () => {
       )
       byExecution.value = { ...byExecution.value, [executionId]: [...reconciled, ...liveOnly] }
     } catch (e) {
-      if (isNotConfigured(e)) available.value = false
+      if (isModuleOffRefusal(e)) available.value = false
       else throw e
     } finally {
       const next = new Set(loadingExecution.value)
