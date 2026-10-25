@@ -35,6 +35,7 @@ import { useCopyToClipboard } from '~/composables/useCopyToClipboard'
 import type {
   ApiErrorCode,
   BootstrapReferenceReason,
+  ToolServerOAuthReason,
   UnavailableReason,
 } from '@cat-factory/contracts'
 import { apiErrorEnvelope, apiErrorReason, apiErrorStatus } from './api/errors'
@@ -114,10 +115,22 @@ const GENERIC_DESCRIPTION_KEYS: Record<Exclude<ApiErrorCode, 'conflict'>, string
  * entry a specific person can go and fix. The launch dialog handles that one itself, since it can
  * open the entry. This is what every OTHER caller of the funnel is told instead of the status
  * class's generic wording, above all a retry driven from the run card.
+ *
+ * `ToolServerOAuthReason` joins it for the same argument: an OAuth grant refused for its state, its
+ * client secret or the vendor's answer is not "check the values you entered", and the person on
+ * the callback page entered nothing.
  */
-const REASON_DESCRIPTION_KEYS: Record<UnavailableReason | BootstrapReferenceReason, string> = {
+const REASON_DESCRIPTION_KEYS: Record<
+  UnavailableReason | BootstrapReferenceReason | ToolServerOAuthReason,
+  string
+> = {
   reference_repo_not_found: 'errors.reason.description.reference_repo_not_found',
   reference_repo_unreadable: 'errors.reason.description.reference_repo_unreadable',
+  oauth_state_invalid: 'errors.reason.description.oauth_state_invalid',
+  oauth_started_by_other_user: 'errors.reason.description.oauth_started_by_other_user',
+  oauth_exchange_refused: 'errors.reason.description.oauth_exchange_refused',
+  oauth_client_secret_unavailable: 'errors.reason.description.oauth_client_secret_unavailable',
+  tool_server_without_oauth: 'errors.reason.description.tool_server_without_oauth',
   binary_generators_unreachable: 'errors.unavailable.description.binary_generators_unreachable',
   foundational_builtins_unreachable:
     'errors.unavailable.description.foundational_builtins_unreachable',

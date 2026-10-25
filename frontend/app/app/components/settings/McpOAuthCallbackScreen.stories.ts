@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { completeToolServerOAuthContract } from '@cat-factory/contracts'
+import { userEvent, within } from 'storybook/test'
 import { apiPending, apiRefusal, apiResponse } from '~/stories/api'
 import { STORY_WORKSPACE_ID } from '~/stories/workspace'
 import { withQuery } from '~/stories/withQuery'
@@ -44,8 +45,7 @@ export const Loading: Story = {
 
 /**
  * The backend refused the grant: the signed-in user lacks `secrets.manage` on the board. The page
- * reads the message from a field the API error does not have, so it shows its generic line
- * instead of the reason (#2396).
+ * says so in translated copy for the refusal, with the backend's message behind "Show details".
  */
 export const Failed: Story = {
   parameters: {
@@ -59,6 +59,36 @@ export const Failed: Story = {
         },
       }),
     ],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await canvas.findByText(/does not allow this action/)
+    await userEvent.click(canvas.getByRole('button', { name: 'Show details' }))
+    await canvas.findByText('This action requires the secrets.manage permission')
+  },
+}
+
+/**
+ * The link's `state` expired or was already used. The session is fine, so this is a 422 with a
+ * reason rather than a 401, and the page says to start the connection again.
+ */
+export const StateExpired: Story = {
+  parameters: {
+    api: [
+      apiRefusal(completeToolServerOAuthContract, {
+        status: 422,
+        error: {
+          code: 'validation',
+          message: 'This authorization request is invalid or has expired',
+          details: { reason: 'oauth_state_invalid' },
+        },
+      }),
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await canvas.findByText(/expired or was already used/)
+    await canvas.findByText('Start the connection again from the Infrastructure window.')
   },
 }
 
