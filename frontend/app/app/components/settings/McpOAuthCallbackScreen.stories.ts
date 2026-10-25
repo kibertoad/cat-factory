@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { completeToolServerOAuthContract } from '@cat-factory/contracts'
+import { userEvent, within } from 'storybook/test'
 import { apiPending, apiRefusal, apiResponse } from '~/stories/api'
 import { STORY_WORKSPACE_ID } from '~/stories/workspace'
 import { withQuery } from '~/stories/withQuery'
@@ -44,8 +45,7 @@ export const Loading: Story = {
 
 /**
  * The backend refused the grant: the signed-in user lacks `secrets.manage` on the board. The page
- * reads the message from a field the API error does not have, so it shows its generic line
- * instead of the reason (#2396).
+ * says so in translated copy for the refusal, with the backend's message behind "Show details".
  */
 export const Failed: Story = {
   parameters: {
@@ -59,6 +59,12 @@ export const Failed: Story = {
         },
       }),
     ],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await canvas.findByText(/does not allow this action/)
+    await userEvent.click(canvas.getByRole('button', { name: 'Show details' }))
+    await canvas.findByText('This action requires the secrets.manage permission')
   },
 }
 

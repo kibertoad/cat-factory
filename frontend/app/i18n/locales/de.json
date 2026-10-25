@@ -752,7 +752,6 @@
           "doneHint": "Die Läufe dieses Boards können den Werkzeugserver jetzt mit dem Konto nutzen, mit dem Sie sich angemeldet haben.",
           "back": "Zurück zur App",
           "failedTitle": "Die Verbindung konnte nicht abgeschlossen werden",
-          "failed": "Die Autorisierung konnte nicht abgeschlossen werden. Starten Sie die Verbindung im Infrastruktur-Fenster erneut.",
           "missingParams": "In diesem Link fehlen die vom Anbieter zurückgesendeten Werte, daher gibt es nichts abzuschließen. Starten Sie die Verbindung erneut."
         }
       },

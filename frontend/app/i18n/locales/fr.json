@@ -3546,7 +3546,6 @@
           "doneHint": "Les exécutions de ce tableau peuvent désormais utiliser le serveur d’outils avec le compte auquel vous vous êtes connecté.",
           "back": "Retour à l’application",
           "failedTitle": "La connexion n’a pas pu être finalisée",
-          "failed": "L’autorisation n’a pas pu être menée à bien. Relancez la connexion depuis la fenêtre Infrastructure.",
           "missingParams": "Il manque à ce lien les valeurs renvoyées par le fournisseur, il n’y a donc rien à finaliser. Relancez la connexion."
         }
       },

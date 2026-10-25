@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import Spinner from '~/components/common/Spinner.vue'
+import { describeCallbackFailure, type CallbackFailure } from './McpOAuthCallbackScreen.logic'
 
 // Where a vendor's authorization server sends the operator's browser back to after they approve a
 // remote MCP tool server (`/mcp-oauth-callback?code=…&state=…`).
@@ -21,6 +22,11 @@ const { t } = useI18n()
 const state = ref<'working' | 'done' | 'failed'>('working')
 const detail = ref<string | null>(null)
 const serverId = ref<string | null>(null)
+// A refusal from our own API, described from its status class or reason in translated copy, with
+// the backend's prose and request id behind a disclosure. Inline rather than a toast: this page is
+// the whole screen, and a toast over it would leave the card saying nothing about what went wrong.
+const apiFailure = ref<CallbackFailure | null>(null)
+const showFailureDetail = ref(false)
 
 function query(name: string): string {
   if (typeof window === 'undefined') return ''
@@ -50,9 +56,7 @@ onMounted(async () => {
     state.value = 'done'
   } catch (e) {
     state.value = 'failed'
-    detail.value =
-      (e as { data?: { error?: { message?: string } } })?.data?.error?.message ??
-      t('settings.toolServers.oauth.callback.failed')
+    apiFailure.value = describeCallbackFailure(e, (id) => t('errors.generic.requestId', { id }))
   }
 })
 
@@ -100,7 +104,26 @@ function backToApp() {
         >
           {{ t('settings.toolServers.oauth.callback.failedTitle') }}
         </h1>
-        <p class="mb-6 text-sm break-words text-muted">{{ detail }}</p>
+        <div v-if="apiFailure" class="mb-6 space-y-2">
+          <p class="text-sm break-words text-muted" data-testid="mcp-oauth-callback-reason">
+            {{ t(apiFailure.descriptionKey) }}
+          </p>
+          <UButton
+            v-if="apiFailure.detail && !showFailureDetail"
+            color="neutral"
+            variant="link"
+            size="xs"
+            class="p-0"
+            data-testid="mcp-oauth-callback-detail"
+            @click="showFailureDetail = true"
+          >
+            {{ t('errors.generic.showDetail') }}
+          </UButton>
+          <p v-if="showFailureDetail" class="font-mono text-3xs break-all text-dimmed select-text">
+            {{ apiFailure.detail }}
+          </p>
+        </div>
+        <p v-else class="mb-6 text-sm break-words text-muted">{{ detail }}</p>
         <UButton block color="neutral" variant="subtle" @click="backToApp">
           {{ t('settings.toolServers.oauth.callback.back') }}
         </UButton>
