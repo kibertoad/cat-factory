@@ -1314,11 +1314,18 @@ jobs:
       # are really in the node's containerd and retry the import if not — the import is provisioning
       # for the suite, not the thing under test, and a bounded retry here is what keeps the
       # "no pod pulls from a registry" property this step exists to provide.
+      # Import from a single-platform tarball, not by image name. Docker's containerd image store
+      # (the default from ubuntu-26.04) keeps a pulled image's full multi-platform index but only
+      # the runner platform's blobs. `docker save` writes that whole index, and k3d imports with
+      # `ctr import --all-platforms`, so every import fails with `ctr: content digest ... not
+      # found` for a platform that was never pulled. `--platform` writes only the runner's.
       - name: Build + import test images
         run: |
           docker build -t cat-factory-mock-harness:it \
             backend/packages/integrations/src/modules/kubernetes/test-support/mock-harness
           docker pull nginx:1.27-alpine
+          docker save --platform "linux/$(docker version --format '{{.Server.Arch}}')" \
+            -o "$RUNNER_TEMP/k3d-images.tar" cat-factory-mock-harness:it nginx:1.27-alpine
           imported() {
             docker exec k3d-cf-it-server-0 ctr -n k8s.io images ls -q \
               | grep -q "docker.io/library/cat-factory-mock-harness:it" \
@@ -1326,7 +1333,7 @@ jobs:
               | grep -q "docker.io/library/nginx:1.27-alpine"
           }
           for attempt in 1 2 3; do
-            k3d image import cat-factory-mock-harness:it nginx:1.27-alpine -c cf-it || true
+            k3d image import "$RUNNER_TEMP/k3d-images.tar" -c cf-it || true
             if imported; then
               echo "test images present in the cluster node (attempt ${attempt})"
               exit 0
