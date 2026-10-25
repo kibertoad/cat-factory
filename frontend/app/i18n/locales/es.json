@@ -3017,6 +3017,10 @@
       "back": "Atrás",
       "closeEsc": "Cerrar (Esc)",
       "quota": "cuota",
+      "cost": "{input}/{output} {currency} por millón de tokens",
+      "quotaCost": "consumo de cuota ~{input}/{output} {currency} por millón de tokens",
+      "promptCaching": "Caché de prompts",
+      "noPromptCaching": "Sin caché de prompts",
       "list": {
         "intro": "Cada ajuste establece un {baseModel} para cada agente, con anulaciones opcionales por agente. Un modelo fijado en una tarea individual sigue prevaleciendo sobre el ajuste.",
         "introBaseModel": "modelo base",
@@ -5665,6 +5669,7 @@
     "health": {
       "title": "Estado de los pipelines",
       "allValid": "Todos los pipelines son válidos y están actualizados.",
+      "noEnabledSteps": "No hay pasos habilitados: el pipeline no tiene nada que ejecutar.",
       "invalidHeading": "Pipelines no válidos",
       "invalidDescription": "Estos hacen referencia a un agente inexistente o están mal configurados, por lo que fallarían (o se ejecutarían mal) al iniciar. Elimina un pipeline personalizado o vuelve a generar uno integrado para restaurar su definición del catálogo.",
       "builtinBadge": "integrado",
@@ -5759,6 +5764,14 @@
   "palette": {
     "hint": "Haz clic en un agente para añadirlo al pipeline.",
     "customAgents": "Agentes personalizados",
+    "categories": {
+      "review": "Revisión y triaje",
+      "design": "Diseño e investigación",
+      "build": "Implementación",
+      "test": "Pruebas",
+      "docs": "Documentación",
+      "gates": "Puertas y observabilidad"
+    },
     "purposeHidden": "{count} agente oculto para este propósito. | {count} agentes ocultos para este propósito."
   },
   "gates": {

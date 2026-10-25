@@ -70,12 +70,17 @@ export function contextLabel(tokens: number | undefined): string | undefined {
   return tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : `${tokens}`
 }
 
+/** Translate a key with interpolation params. The caller owns the i18n instance. */
+type Translate = (key: string, params?: Record<string, unknown>) => string
+
 /** One-line cost/quota suffix for the picker. */
-export function costLabel(flavor: DisplayFlavor): string | undefined {
+export function costLabel(flavor: DisplayFlavor, t: Translate): string | undefined {
   if (!flavor.cost) return undefined
   const { inputPerMillion, outputPerMillion, currency } = flavor.cost
-  const body = `${inputPerMillion}/${outputPerMillion} ${currency} per Mtok`
-  return flavor.quotaBased ? `quota burn ~${body}` : body
+  const params = { input: inputPerMillion, output: outputPerMillion, currency }
+  return flavor.quotaBased
+    ? t('settings.modelConfiguration.quotaCost', params)
+    : t('settings.modelConfiguration.cost', params)
 }
 
 /**
@@ -87,9 +92,11 @@ export function costLabel(flavor: DisplayFlavor): string | undefined {
  * picker is a text-only dropdown-menu item list, so this is a label token in the option
  * suffix rather than a styled badge.
  */
-export function cachingLabel(flavor: DisplayFlavor): string | null {
+export function cachingLabel(flavor: DisplayFlavor, t: Translate): string | null {
   if (flavor.cachesPrompts === undefined) return null
-  return flavor.cachesPrompts ? 'Prompt caching' : 'No prompt caching'
+  return flavor.cachesPrompts
+    ? t('settings.modelConfiguration.promptCaching')
+    : t('settings.modelConfiguration.noPromptCaching')
 }
 
 /**

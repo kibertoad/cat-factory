@@ -21,15 +21,16 @@ export function uid(prefix: string): string {
 
 /**
  * Ordered palette categories — the collapsible sections the pipeline builder groups the
- * agent archetypes under. The order here is the order they render.
+ * agent archetypes under. The order here is the order they render; `labelKey` is the i18n key
+ * of the section heading.
  */
-export const AGENT_CATEGORIES: { id: AgentCategory; label: string }[] = [
-  { id: 'review', label: 'Review & triage' },
-  { id: 'design', label: 'Design & research' },
-  { id: 'build', label: 'Implementation' },
-  { id: 'test', label: 'Testing' },
-  { id: 'docs', label: 'Documentation' },
-  { id: 'gates', label: 'Gates & observability' },
+export const AGENT_CATEGORIES: { id: AgentCategory; labelKey: string }[] = [
+  { id: 'review', labelKey: 'palette.categories.review' },
+  { id: 'design', labelKey: 'palette.categories.design' },
+  { id: 'build', labelKey: 'palette.categories.build' },
+  { id: 'test', labelKey: 'palette.categories.test' },
+  { id: 'docs', labelKey: 'palette.categories.docs' },
+  { id: 'gates', labelKey: 'palette.categories.gates' },
 ]
 
 /** The agent palette — the building blocks of a development pipeline, grouped by category. */

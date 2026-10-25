@@ -3179,6 +3179,10 @@
         "body": "\"{name}\" will be removed. Tasks using it fall back to the workspace default."
       },
       "quota": "quota",
+      "cost": "{input}/{output} {currency} per Mtok",
+      "quotaCost": "quota burn ~{input}/{output} {currency} per Mtok",
+      "promptCaching": "Prompt caching",
+      "noPromptCaching": "No prompt caching",
       "list": {
         "intro": "Each preset sets a {baseModel} for every agent, with optional per-agent overrides. A model pinned on an individual task still overrides the preset.",
         "introBaseModel": "base model",
@@ -5871,6 +5875,7 @@
     "health": {
       "title": "Pipeline health",
       "allValid": "All pipelines are valid and up to date.",
+      "noEnabledSteps": "No enabled steps: the pipeline has nothing to run.",
       "invalidHeading": "Invalid pipelines",
       "invalidDescription": "These reference a missing agent or are misconfigured, so they would fail (or misrun) at start. Delete a custom pipeline, or reseed a built-in to restore its catalog definition.",
       "builtinBadge": "built-in",
@@ -6047,6 +6052,14 @@
   "palette": {
     "hint": "Click an agent to append it to the pipeline.",
     "customAgents": "Custom agents",
+    "categories": {
+      "review": "Review & triage",
+      "design": "Design & research",
+      "build": "Implementation",
+      "test": "Testing",
+      "docs": "Documentation",
+      "gates": "Gates & observability"
+    },
     "purposeHidden": "{count} agent hidden for this purpose. | {count} agents hidden for this purpose.",
     "@purposeHidden": {
       "description": "Shown under the pipeline-purpose control in the agent palette: how many agents are not offered because they are irrelevant to the pipeline's purpose (e.g. a coder in a documentation pipeline)."

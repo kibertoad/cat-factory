@@ -3017,6 +3017,10 @@
       "back": "Retour",
       "closeEsc": "Fermer (Échap)",
       "quota": "quota",
+      "cost": "{input}/{output} {currency} par million de jetons",
+      "quotaCost": "consommation de quota ~{input}/{output} {currency} par million de jetons",
+      "promptCaching": "Mise en cache des prompts",
+      "noPromptCaching": "Pas de mise en cache des prompts",
       "list": {
         "intro": "Chaque préréglage définit un {baseModel} pour chaque agent, avec des remplacements facultatifs par agent. Un modèle épinglé sur une tâche individuelle prévaut tout de même sur le préréglage.",
         "introBaseModel": "modèle de base",
@@ -5665,6 +5669,7 @@
     "health": {
       "title": "État des pipelines",
       "allValid": "Tous les pipelines sont valides et à jour.",
+      "noEnabledSteps": "Aucune étape activée : le pipeline n'a rien à exécuter.",
       "invalidHeading": "Pipelines non valides",
       "invalidDescription": "Ceux-ci référencent un agent manquant ou sont mal configurés et échoueraient (ou s'exécuteraient mal) au démarrage. Supprimez un pipeline personnalisé, ou régénérez un pipeline intégré pour restaurer sa définition du catalogue.",
       "builtinBadge": "intégré",
@@ -5759,6 +5764,14 @@
   "palette": {
     "hint": "Cliquez sur un agent pour l'ajouter au pipeline.",
     "customAgents": "Agents personnalisés",
+    "categories": {
+      "review": "Revue et tri",
+      "design": "Conception et recherche",
+      "build": "Implémentation",
+      "test": "Tests",
+      "docs": "Documentation",
+      "gates": "Portes et observabilité"
+    },
     "purposeHidden": "{count} agent masqué pour cet objectif. | {count} agents masqués pour cet objectif."
   },
   "gates": {

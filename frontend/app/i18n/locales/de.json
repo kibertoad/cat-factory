@@ -54,6 +54,10 @@
         "body": "\"{name}\" wird entfernt. Aufgaben, die es verwenden, greifen auf den Workspace-Standard zurück."
       },
       "quota": "Kontingent",
+      "cost": "{input}/{output} {currency} pro Mio. Token",
+      "quotaCost": "Kontingentverbrauch ~{input}/{output} {currency} pro Mio. Token",
+      "promptCaching": "Prompt-Caching",
+      "noPromptCaching": "Kein Prompt-Caching",
       "list": {
         "intro": "Jedes Preset legt für jeden Agenten ein {baseModel} fest, mit optionalen Overrides je Agent. Ein an einer einzelnen Aufgabe angeheftetes Modell überschreibt weiterhin das Preset.",
         "introBaseModel": "Basismodell",
@@ -5121,6 +5125,7 @@
     "health": {
       "title": "Pipeline-Zustand",
       "allValid": "Alle Pipelines sind gültig und aktuell.",
+      "noEnabledSteps": "Keine aktivierten Schritte: Die Pipeline hat nichts auszuführen.",
       "invalidHeading": "Ungültige Pipelines",
       "invalidDescription": "Diese verweisen auf einen fehlenden Agenten oder sind falsch konfiguriert, sodass sie beim Start fehlschlagen (oder falsch laufen) würden. Löschen Sie eine benutzerdefinierte Pipeline oder setzen Sie eine integrierte neu auf, um ihre Katalogdefinition wiederherzustellen.",
       "builtinBadge": "integriert",
@@ -7824,6 +7829,14 @@
   "palette": {
     "hint": "Klicke auf einen Agenten, um ihn an die Pipeline anzuhängen.",
     "customAgents": "Benutzerdefinierte Agenten",
+    "categories": {
+      "review": "Review & Triage",
+      "design": "Design & Recherche",
+      "build": "Implementierung",
+      "test": "Tests",
+      "docs": "Dokumentation",
+      "gates": "Gates & Beobachtbarkeit"
+    },
     "purposeHidden": "{count} Agent ist für diesen Zweck ausgeblendet. | {count} Agenten sind für diesen Zweck ausgeblendet."
   },
   "forkDecision": {

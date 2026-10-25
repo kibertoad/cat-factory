@@ -3017,6 +3017,10 @@
       "back": "Wstecz",
       "closeEsc": "Zamknij (Esc)",
       "quota": "limit",
+      "cost": "{input}/{output} {currency} za mln tokenów",
+      "quotaCost": "zużycie limitu ~{input}/{output} {currency} za mln tokenów",
+      "promptCaching": "Buforowanie promptów",
+      "noPromptCaching": "Bez buforowania promptów",
       "list": {
         "intro": "Każde ustawienie wybiera {baseModel} dla każdego agenta, z opcjonalnymi nadpisaniami dla poszczególnych agentów. Model przypięty do pojedynczego zadania nadal ma pierwszeństwo przed ustawieniem.",
         "introBaseModel": "model bazowy",
@@ -5665,6 +5669,7 @@
     "health": {
       "title": "Stan pipeline'ów",
       "allValid": "Wszystkie pipeline'y są prawidłowe i aktualne.",
+      "noEnabledSteps": "Brak włączonych kroków: potok nie ma nic do uruchomienia.",
       "invalidHeading": "Nieprawidłowe pipeline'y",
       "invalidDescription": "Odwołują się do brakującego agenta lub są źle skonfigurowane, więc zawiodłyby (lub wykonałyby się błędnie) przy starcie. Usuń pipeline niestandardowy albo zregeneruj wbudowany, aby przywrócić jego definicję z katalogu.",
       "builtinBadge": "wbudowany",
@@ -5759,6 +5764,14 @@
   "palette": {
     "hint": "Kliknij agenta, aby dodać go do pipeline'u.",
     "customAgents": "Agenci niestandardowi",
+    "categories": {
+      "review": "Przegląd i selekcja",
+      "design": "Projektowanie i badania",
+      "build": "Implementacja",
+      "test": "Testy",
+      "docs": "Dokumentacja",
+      "gates": "Bramki i obserwowalność"
+    },
     "purposeHidden": "{count} agent ukryty dla tego celu. | {count} agenci ukryci dla tego celu. | {count} agentów ukrytych dla tego celu."
   },
   "gates": {

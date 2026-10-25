@@ -203,10 +203,10 @@ function conditionProblem(p: Pipeline): string | null {
  * copy costs. Adding a rule to `validatePipelineShape` without adding it here is the milder half of
  * the same drift: a pipeline the engine refuses at save that this advisory calls healthy.
  */
-function shapeProblem(p: Pipeline): string | null {
+function shapeProblem(p: Pipeline, tr: (key: string) => string): string | null {
   // No enabled steps ⇒ nothing would run.
   if (p.agentKinds.length === 0 || !p.agentKinds.some((_, i) => isEnabledAt(p, i))) {
-    return 'No enabled steps — the pipeline has nothing to run.'
+    return tr('pipeline.health.noEnabledSteps')
   }
   return companionProblem(p) ?? gatingProblem(p) ?? conditionProblem(p)
 }
@@ -224,6 +224,10 @@ function shapeProblem(p: Pipeline): string | null {
  */
 export function usePipelineHealth() {
   const store = usePipelinesStore()
+  // Resolve copy through the Nuxt app's i18n rather than `useI18n()`, so the scan does not need
+  // an active component instance (frontend/app/README.md, the store setup rule).
+  const nuxtApp = useNuxtApp()
+  const tr = (key: string): string => (nuxtApp.$i18n as { t: (k: string) => string }).t(key)
 
   /** Catalog ids the backend reports as withdrawn, indexed to their (optional) replacement id. */
   const retiredIds = computed(
@@ -247,7 +251,7 @@ export function usePipelineHealth() {
         })
       }
 
-      const shape = shapeProblem(pipeline)
+      const shape = shapeProblem(pipeline, tr)
       if (shape) problems.push({ type: 'shape', message: shape })
 
       const catalogVersion = pipeline.builtin ? store.catalogVersions[pipeline.id] : undefined

@@ -3017,6 +3017,10 @@
       "back": "戻る",
       "closeEsc": "閉じる (Esc)",
       "quota": "クォータ",
+      "cost": "100万トークンあたり {input}/{output} {currency}",
+      "quotaCost": "クォータ消費 100万トークンあたり約 {input}/{output} {currency}",
+      "promptCaching": "プロンプトキャッシュあり",
+      "noPromptCaching": "プロンプトキャッシュなし",
       "list": {
         "intro": "各プリセットは全エージェントに {baseModel} を設定し、エージェントごとの個別上書きも可能です。個々のタスクにピン留めしたモデルはプリセットを上書きします。",
         "introBaseModel": "ベースモデル",
@@ -5665,6 +5669,7 @@
     "health": {
       "title": "パイプラインの状態",
       "allValid": "すべてのパイプラインは有効で最新です。",
+      "noEnabledSteps": "有効なステップがありません。パイプラインで実行するものがありません。",
       "invalidHeading": "無効なパイプライン",
       "invalidDescription": "存在しないエージェントを参照しているか設定が誤っているため、開始時に失敗(または誤動作)します。カスタムパイプラインを削除するか、ビルトインを再シードしてカタログ定義を復元してください。",
       "builtinBadge": "ビルトイン",
@@ -5759,6 +5764,14 @@
   "palette": {
     "hint": "エージェントをクリックするとパイプラインに追加されます。",
     "customAgents": "カスタムエージェント",
+    "categories": {
+      "review": "レビューとトリアージ",
+      "design": "設計と調査",
+      "build": "実装",
+      "test": "テスト",
+      "docs": "ドキュメント",
+      "gates": "ゲートと可観測性"
+    },
     "purposeHidden": "この目的では {count} 件のエージェントが非表示です。"
   },
   "gates": {

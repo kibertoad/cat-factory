@@ -54,6 +54,10 @@
         "body": "\"{name}\" verra rimosso. Le attivita che lo usano ricadono sul preset predefinito del workspace."
       },
       "quota": "quota",
+      "cost": "{input}/{output} {currency} per milione di token",
+      "quotaCost": "consumo della quota ~{input}/{output} {currency} per milione di token",
+      "promptCaching": "Cache dei prompt",
+      "noPromptCaching": "Nessuna cache dei prompt",
       "list": {
         "intro": "Ogni preset imposta un {baseModel} per ogni agente, con override facoltativi per singolo agente. Un modello fissato su una singola attivita ha comunque la precedenza sul preset.",
         "introBaseModel": "modello di base",
@@ -5121,6 +5125,7 @@
     "health": {
       "title": "Stato delle pipeline",
       "allValid": "Tutte le pipeline sono valide e aggiornate.",
+      "noEnabledSteps": "Nessun passaggio abilitato: la pipeline non ha nulla da eseguire.",
       "invalidHeading": "Pipeline non valide",
       "invalidDescription": "Queste fanno riferimento a un agente mancante o sono configurate male, quindi fallirebbero (o funzionerebbero male) all'avvio. Elimina una pipeline personalizzata, oppure ripristina una integrata per recuperare la sua definizione dal catalogo.",
       "builtinBadge": "integrata",
@@ -7824,6 +7829,14 @@
   "palette": {
     "hint": "Clicca su un agente per aggiungerlo alla pipeline.",
     "customAgents": "Agenti personalizzati",
+    "categories": {
+      "review": "Revisione e smistamento",
+      "design": "Progettazione e ricerca",
+      "build": "Implementazione",
+      "test": "Test",
+      "docs": "Documentazione",
+      "gates": "Gate e osservabilità"
+    },
     "purposeHidden": "{count} agente nascosto per questo scopo. | {count} agenti nascosti per questo scopo."
   },
   "forkDecision": {

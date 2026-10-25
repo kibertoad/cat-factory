@@ -3017,6 +3017,10 @@
       "back": "Geri",
       "closeEsc": "Kapat (Esc)",
       "quota": "kota",
+      "cost": "milyon token başına {input}/{output} {currency}",
+      "quotaCost": "kota tüketimi milyon token başına ~{input}/{output} {currency}",
+      "promptCaching": "İstem önbelleğe alma",
+      "noPromptCaching": "İstem önbelleğe alma yok",
       "list": {
         "intro": "Her hazır ayar, isteğe bağlı ajan başına geçersiz kılmalarla birlikte her ajan için bir {baseModel} belirler. Bir görevde sabitlenmiş bir model yine de hazır ayarı geçersiz kılar.",
         "introBaseModel": "temel model",
@@ -5665,6 +5669,7 @@
     "health": {
       "title": "Pipeline sağlığı",
       "allValid": "Tüm pipeline'lar geçerli ve güncel.",
+      "noEnabledSteps": "Etkin adım yok: işlem hattının çalıştıracağı bir şey yok.",
       "invalidHeading": "Geçersiz pipeline'lar",
       "invalidDescription": "Bunlar eksik bir agent'a referans veriyor veya yanlış yapılandırılmış, bu yüzden başlangıçta başarısız olur (veya hatalı çalışır). Özel bir pipeline'ı silin ya da katalog tanımını geri yüklemek için bir yerleşik pipeline'ı yeniden tohumlayın.",
       "builtinBadge": "yerleşik",
@@ -5759,6 +5764,14 @@
   "palette": {
     "hint": "Bir agent'ı pipeline'a eklemek için tıklayın.",
     "customAgents": "Özel agent'lar",
+    "categories": {
+      "review": "İnceleme ve önceliklendirme",
+      "design": "Tasarım ve araştırma",
+      "build": "Uygulama",
+      "test": "Test",
+      "docs": "Dokümantasyon",
+      "gates": "Kapılar ve gözlemlenebilirlik"
+    },
     "purposeHidden": "Bu amaç için {count} ajan gizli."
   },
   "gates": {
