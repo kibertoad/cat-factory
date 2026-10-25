@@ -6737,7 +6737,8 @@
     "continueTitle": "Deine Antworten senden; der Interviewer stellt möglicherweise Nachfragen",
     "status": {
       "awaiting": "Warten auf Antworten",
-      "done": "Fertig"
+      "done": "Fertig",
+      "failed": "Fehlgeschlagen"
     },
     "saveFailedCount": "{count} Ihrer Antworten konnten nicht gespeichert werden",
     "continueFailed": "Antworten konnten nicht gesendet werden",

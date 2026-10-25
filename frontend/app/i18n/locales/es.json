@@ -4847,7 +4847,8 @@
     "continueTitle": "Envía tus respuestas; el entrevistador puede hacer preguntas de seguimiento",
     "status": {
       "awaiting": "Esperando respuestas",
-      "done": "Hecho"
+      "done": "Hecho",
+      "failed": "Fallido"
     },
     "saveFailedCount": "No se pudieron guardar {count} de tus respuestas",
     "continueFailed": "No se pudieron enviar tus respuestas",

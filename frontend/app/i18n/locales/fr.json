@@ -4847,7 +4847,8 @@
     "continueTitle": "Envoyez vos réponses ; l'intervieweur peut poser des questions complémentaires",
     "status": {
       "awaiting": "En attente de réponses",
-      "done": "Terminé"
+      "done": "Terminé",
+      "failed": "Échec"
     },
     "saveFailedCount": "Impossible d’enregistrer {count} de vos réponses",
     "continueFailed": "Impossible d’envoyer vos réponses",

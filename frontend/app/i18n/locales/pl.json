@@ -4847,7 +4847,8 @@
     "continueTitle": "Wyślij swoje odpowiedzi; ankieter może zadać dodatkowe pytania",
     "status": {
       "awaiting": "Oczekiwanie na odpowiedzi",
-      "done": "Gotowe"
+      "done": "Gotowe",
+      "failed": "Niepowodzenie"
     },
     "saveFailedCount": "Nie udało się zapisać {count} Twoich odpowiedzi",
     "continueFailed": "Nie udało się przesłać Twoich odpowiedzi",

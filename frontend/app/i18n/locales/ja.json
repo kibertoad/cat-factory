@@ -4847,7 +4847,8 @@
     "continueTitle": "回答を送信します。インタビュアーが追加の質問をする場合があります",
     "status": {
       "awaiting": "回答待ち",
-      "done": "完了"
+      "done": "完了",
+      "failed": "失敗"
     },
     "saveFailedCount": "回答のうち {count} 件を保存できませんでした",
     "continueFailed": "回答を送信できませんでした",

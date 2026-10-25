@@ -6737,7 +6737,8 @@
     "continueTitle": "Invia le tue risposte; l'intervistatore potrebbe porre altre domande",
     "status": {
       "awaiting": "In attesa di risposte",
-      "done": "Fatto"
+      "done": "Fatto",
+      "failed": "Non riuscito"
     },
     "saveFailedCount": "Impossibile salvare {count} delle tue risposte",
     "continueFailed": "Impossibile inviare le tue risposte",

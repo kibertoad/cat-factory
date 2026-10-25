@@ -4847,7 +4847,8 @@
     "continueTitle": "Yanıtlarınızı gönderin; görüşmeci ek sorular sorabilir",
     "status": {
       "awaiting": "Yanıt bekleniyor",
-      "done": "Tamamlandı"
+      "done": "Tamamlandı",
+      "failed": "Başarısız"
     },
     "saveFailedCount": "Yanıtlarınızdan {count} tanesi kaydedilemedi",
     "continueFailed": "Yanıtlarınız gönderilemedi",

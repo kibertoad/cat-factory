@@ -5035,7 +5035,8 @@
     "continueTitle": "Send your answers; the interviewer may ask follow-up questions",
     "status": {
       "awaiting": "Awaiting answers",
-      "done": "Done"
+      "done": "Done",
+      "failed": "Failed"
     },
     "saveFailedCount": "Could not save {count} of your answers",
     "continueFailed": "Could not submit your answers",
