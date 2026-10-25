@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { ProvisioningLogEntry } from '@cat-factory/contracts'
 import { listProvisioningLogsContract } from '@cat-factory/contracts'
+import { expect, within } from 'storybook/test'
 import { apiFailure, apiPending, apiResponse } from '~/stories/api'
 import { STORY_WORKSPACE_ID, storyWorkspacePrefix } from '~/stories/workspace'
 import { seedWorkspace, withSeed } from '~/stories/withStores'
@@ -104,7 +105,11 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 /** A finished run's five attempts, newest first, one refused for capacity with its error. */
-export const Default: Story = {}
+export const Default: Story = {
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findAllByRole('listitem')).toHaveLength(5)
+  },
+}
 
 /** The first load in flight: placeholder rows. */
 export const Loading: Story = {
@@ -118,10 +123,18 @@ export const Failed: Story = {
   parameters: {
     api: [apiFailure(listProvisioningLogsContract, { pathPrefix: storyWorkspacePrefix })],
   },
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findByText(/500 Internal Server Error/)
+  },
 }
 
 /** Nothing started yet: the drawer shows its empty state. */
-export const Empty: Story = { parameters: { api: [entriesAre([])] } }
+export const Empty: Story = {
+  parameters: { api: [entriesAre([])] },
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findByText('No provisioning attempts recorded yet.')
+  },
+}
 
 /**
  * The environment provider panel's drawer: its attempts across runs, each with its
