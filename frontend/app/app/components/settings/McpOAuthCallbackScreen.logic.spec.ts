@@ -18,6 +18,7 @@ describe('describeCallbackFailure', () => {
         descriptionKey: 'errors.generic.description.forbidden',
         message: 'This action requires the secrets.manage permission',
         issues: [],
+        reason: null,
         requestId: 'req-42',
       },
       restartHint: true,

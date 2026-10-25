@@ -1,5 +1,4 @@
 import type { ToolServerOAuthReason } from '@cat-factory/contracts'
-import { apiErrorReason } from '~/composables/api/errors'
 import {
   describeFailure,
   type DescribedFailure,
@@ -27,10 +26,10 @@ const NO_RESTART: ReadonlySet<string> = new Set<ToolServerOAuthReason>([
 
 /** Describe a failed `completeToolServerOAuth` call. */
 export function describeCallbackFailure(error: unknown): CallbackFailure {
-  const reason = apiErrorReason(error)
+  const failure = describeFailure(error)
   return {
     kind: 'api',
-    failure: describeFailure(error),
-    restartHint: !reason || !NO_RESTART.has(reason),
+    failure,
+    restartHint: !failure.reason || !NO_RESTART.has(failure.reason),
   }
 }
