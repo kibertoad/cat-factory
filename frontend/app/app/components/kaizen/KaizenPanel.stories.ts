@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { getKaizenOverviewContract } from '@cat-factory/contracts'
-import { apiPending, apiRefusal, apiResponse } from '~/stories/api'
+import { screen } from 'storybook/test'
+import { apiFailure, apiPending, apiRefusal, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { gradingHistory, verifiedCombos } from '~/stories/kaizen.stories.mocks'
 import { seedWorkspace, withSeed } from '~/stories/withStores'
@@ -68,5 +69,15 @@ export const NotConfigured: Story = {
         error: { code: 'unavailable', message: 'Kaizen is not configured' },
       }),
     ],
+  },
+}
+
+/** The overview read failed: one error toast, and the empty screen under it. */
+export const LoadFailed: Story = {
+  parameters: {
+    api: [apiFailure(getKaizenOverviewContract, { pathPrefix: storyWorkspacePrefix })],
+  },
+  play: async () => {
+    await screen.findByText('Could not load Kaizen gradings')
   },
 }

@@ -594,7 +594,8 @@
           "thresholds": "Schwellenwerte verwenden",
           "always": "Immer automatisch zusammenführen",
           "never": "Immer Review verlangen"
-        }
+        },
+        "loadFailed": "Die Merge-Historie konnte nicht geladen werden"
       },
       "roleRules": {
         "heading": "Grenzen je startender Rolle",
@@ -2729,7 +2730,8 @@
       "budget": "Budget",
       "tokens": "Tokens",
       "resume": "Trotzdem fortsetzen",
-      "resumeHint": "Ein Fortsetzen führt zu weiteren Ausgaben; es pausiert erneut, wenn das Budget weiterhin überschritten wird."
+      "resumeHint": "Ein Fortsetzen führt zu weiteren Ausgaben; es pausiert erneut, wenn das Budget weiterhin überschritten wird.",
+      "resumeFailed": "Die Agentenausführung konnte nicht fortgesetzt werden"
     },
     "personalSetup": {
       "title": "Meine Einrichtung",
@@ -3849,7 +3851,8 @@
         "frontendLinkedNote": "{directory} wurde als Frontend hinzugefügt und mit den übrigen verknüpft. Benennen Sie die Umgebungsvariablen für die Backend-URLs im Inspector.",
         "frontendWiringFailedNote": "Die Frontend-Einstellungen wurden nicht gespeichert. Öffnen Sie den Inspector jeder Frontend-App, um ihr Unterverzeichnis und ihre Backend-Services zu setzen."
       },
-      "prefillProviderMismatch": "Der Link verweist auf {repo} bei einem anderen Anbieter, dieses Board ist aber mit {connected} verbunden. Suche das Repository von Hand oder öffne den Link auf einem Board, das mit seinem Anbieter verbunden ist."
+      "prefillProviderMismatch": "Der Link verweist auf {repo} bei einem anderen Anbieter, dieses Board ist aber mit {connected} verbunden. Suche das Repository von Hand oder öffne den Link auf einem Board, das mit seinem Anbieter verbunden ist.",
+      "searchFailed": "Repositorys konnten nicht durchsucht werden"
     },
     "repoTree": {
       "root": "root",
@@ -7458,7 +7461,8 @@
         "recommendations": "Empfehlungen"
       },
       "empty": "Noch keine Bewertungen."
-    }
+    },
+    "loadFailed": "Kaizen-Bewertungen konnten nicht geladen werden"
   },
   "recurring": {
     "runEvery": "Ausführen alle",

@@ -4,6 +4,7 @@ import { computed } from 'vue'
 const { t, n } = useI18n()
 const workspace = useWorkspaceStore()
 const access = useWorkspaceAccess()
+const { present } = usePipelineErrorToast()
 
 const spend = computed(() => workspace.spend)
 /** Show the large warning only once the budget has been reached. */
@@ -24,6 +25,8 @@ async function resume() {
   resuming.value = true
   try {
     await workspace.resumeSpend()
+  } catch (e) {
+    present(e, 'layout.spendWarningBanner.resumeFailed')
   } finally {
     resuming.value = false
   }

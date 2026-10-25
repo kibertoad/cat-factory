@@ -24,11 +24,13 @@ const emit = defineEmits<{ 'update:modelValue': [MergeClassRules] }>()
 
 const { t, n } = useI18n()
 const trackRecords = useMergeTrackRecordsStore()
+const { present } = usePipelineErrorToast()
 
 // Load the rollups once when the editor mounts. ONE request returns every class (a single SQL
 // aggregate server-side), so this never fans out per class.
 onMounted(() => {
-  if (!trackRecords.loaded && !trackRecords.loading) void trackRecords.load()
+  if (trackRecords.loaded || trackRecords.loading) return
+  trackRecords.load().catch((e: unknown) => present(e, 'settings.riskPolicy.classRules.loadFailed'))
 })
 
 // Per-class + per-rule labels. Exhaustive Records keyed off the unions (a missing member fails the

@@ -594,7 +594,8 @@
           "thresholds": "Usa le soglie",
           "always": "Unisci sempre automaticamente",
           "never": "Richiedi sempre una revisione"
-        }
+        },
+        "loadFailed": "Impossibile caricare lo storico dei merge"
       },
       "roleRules": {
         "heading": "Limiti per ruolo di chi avvia",
@@ -2729,7 +2730,8 @@
       "budget": "Budget",
       "tokens": "Token",
       "resume": "Riprendi comunque",
-      "resumeHint": "Riprendere continua a generare spesa; verrà sospeso di nuovo se ancora oltre il budget."
+      "resumeHint": "Riprendere continua a generare spesa; verrà sospeso di nuovo se ancora oltre il budget.",
+      "resumeFailed": "Impossibile riprendere l’esecuzione degli agenti"
     },
     "personalSetup": {
       "title": "La mia configurazione",
@@ -3849,7 +3851,8 @@
         "frontendLinkedNote": "{directory} è stata aggiunta come frontend e collegata alle altre. Assegna il nome alle sue variabili d'ambiente con gli URL dei backend nel suo inspector.",
         "frontendWiringFailedNote": "Le impostazioni del frontend non sono state salvate. Apri l'inspector di ogni app frontend per impostarne la sottodirectory e i servizi backend."
       },
-      "prefillProviderMismatch": "Il link chiedeva {repo} su un altro provider, e questa board è collegata a {connected}. Cerca il repository a mano, oppure apri il link su una board collegata al suo provider."
+      "prefillProviderMismatch": "Il link chiedeva {repo} su un altro provider, e questa board è collegata a {connected}. Cerca il repository a mano, oppure apri il link su una board collegata al suo provider.",
+      "searchFailed": "Impossibile cercare i repository"
     },
     "repoTree": {
       "root": "root",
@@ -7458,7 +7461,8 @@
         "recommendations": "Raccomandazioni"
       },
       "empty": "Ancora nessuna valutazione."
-    }
+    },
+    "loadFailed": "Impossibile caricare le valutazioni Kaizen"
   },
   "recurring": {
     "runEvery": "Esegui ogni",

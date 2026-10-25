@@ -12,16 +12,22 @@ import TakeoverShell from '~/components/common/TakeoverShell.vue'
 const ui = useUiStore()
 const kaizen = useKaizenStore()
 const { t, d } = useI18n()
+const { present } = usePipelineErrorToast()
 
 const open = computed(() => ui.kaizenScreenOpen)
 
 watch(
   open,
   (isOpen) => {
-    if (isOpen) void kaizen.loadOverview()
+    if (isOpen) loadOverview()
   },
   { immediate: true },
 )
+
+// The store rethrows every failure except the 503 that means "Kaizen is not wired here".
+function loadOverview() {
+  kaizen.loadOverview().catch((e: unknown) => present(e, 'kaizen.loadFailed'))
+}
 
 function close() {
   ui.closeKaizen()
@@ -89,7 +95,7 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
               color="neutral"
               variant="ghost"
               :loading="kaizen.loadingOverview"
-              @click="kaizen.loadOverview()"
+              @click="loadOverview"
             >
               {{ t('kaizen.refresh') }}
             </UButton>

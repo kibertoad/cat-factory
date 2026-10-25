@@ -121,8 +121,13 @@ const canAct = computed(() => awaiting.value && access.canExecuteRuns.value && !
 async function act(choice: 'proceed' | 'bounce' | 'stop') {
   const id = instanceId.value
   if (!id) return
-  await judgeStore.resolve(id, choice, feedback.value.trim() || undefined)
-  feedback.value = ''
+  try {
+    await judgeStore.resolve(id, choice, feedback.value.trim() || undefined)
+    feedback.value = ''
+  } catch {
+    // The store records the refusal in `judgeStore.error`, which this window shows under the
+    // feedback box, so a toast would say it twice. The typed feedback stays for the next try.
+  }
 }
 </script>
 

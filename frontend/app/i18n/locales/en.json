@@ -2774,7 +2774,8 @@
       "budget": "Budget",
       "tokens": "Tokens",
       "resume": "Resume anyway",
-      "resumeHint": "Resuming continues spending; it will pause again if still over budget."
+      "resumeHint": "Resuming continues spending; it will pause again if still over budget.",
+      "resumeFailed": "Could not resume agent execution"
     },
     "personalSetup": {
       "title": "My setup",
@@ -3695,7 +3696,8 @@
           "thresholds": "Use score ceilings",
           "always": "Always auto-merge",
           "never": "Always require review"
-        }
+        },
+        "loadFailed": "Could not load the merge track record"
       },
       "roleRules": {
         "heading": "Limits per initiator role",
@@ -4870,7 +4872,8 @@
         "frontendLinkedNote": "{directory} was added as the frontend and linked to the others. Name its backend URL environment variables in its inspector.",
         "frontendWiringFailedNote": "The frontend settings did not save. Open each frontend app's inspector to set its subdirectory and its backend services."
       },
-      "prefillProviderMismatch": "The link asked for {repo} on a different host, and this board is connected to {connected}. Search for the repository by hand, or open the link on a board connected to its host."
+      "prefillProviderMismatch": "The link asked for {repo} on a different host, and this board is connected to {connected}. Search for the repository by hand, or open the link on a board connected to its host.",
+      "searchFailed": "Could not search repositories"
     },
     "repoTree": {
       "root": "root",
@@ -7066,7 +7069,8 @@
         "recommendations": "Recommendations"
       },
       "empty": "No gradings yet."
-    }
+    },
+    "loadFailed": "Could not load Kaizen gradings"
   },
   "recurring": {
     "runEvery": "Run every",

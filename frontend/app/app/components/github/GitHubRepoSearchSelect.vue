@@ -19,6 +19,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const github = useGitHubStore()
+const { present } = usePipelineErrorToast()
 
 // A wide App install (or a PAT) can expose hundreds of repos — too many to prefetch and
 // filter client-side — so the picker searches SERVER-SIDE once the user types at least
@@ -57,7 +58,9 @@ const repoMenuItems = computed(() => {
 
 // Fetch matches server-side as the debounced query changes; below the gate clear the list.
 watch(repoQueryRaw, (q) => {
-  void github.loadAvailableRepos(q.length >= MIN_SEARCH_LEN ? q : '')
+  github
+    .loadAvailableRepos(q.length >= MIN_SEARCH_LEN ? q : '')
+    .catch((e: unknown) => present(e, 'github.addService.searchFailed'))
 })
 
 const selectedId = computed({

@@ -1,5 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { resumeSpendContract } from '@cat-factory/contracts'
+import { screen, userEvent, within } from 'storybook/test'
+import { apiFailure } from '~/stories/api'
 import { spendStatus } from '~/stories/providers.stories.mocks'
+import { storyWorkspacePrefix } from '~/stories/workspace'
 import { seedViewer, withSeed } from '~/stories/withStores'
 import { useWorkspaceStore } from '~/stores/workspace'
 import SpendWarningBanner from './SpendWarningBanner.vue'
@@ -35,4 +39,15 @@ export const Default: Story = {}
 /** A board viewer sees the same card with Resume anyway disabled. */
 export const Viewer: Story = {
   decorators: [withSeed(seedViewer)],
+}
+
+/** Resume anyway was refused: one error toast, and the card stays. */
+export const ResumeFailed: Story = {
+  parameters: {
+    api: [apiFailure(resumeSpendContract, { pathPrefix: storyWorkspacePrefix })],
+  },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Resume anyway' }))
+    await screen.findByText('Could not resume agent execution')
+  },
 }
