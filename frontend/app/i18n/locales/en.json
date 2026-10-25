@@ -8001,6 +8001,7 @@
       "service": "Exposed compose service",
       "servicePlaceholder": "e.g. app",
       "port": "Exposed port",
+      "portHelp": "Detection does not read ports, so this starts at 80. Enter the port the service listens on.",
       "composeFiles": "Compose files",
       "profiles": "Profiles",
       "seedDumps": "Seed dumps",

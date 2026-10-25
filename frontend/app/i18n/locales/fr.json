@@ -7706,6 +7706,7 @@
       "service": "Service Compose exposé",
       "servicePlaceholder": "p. ex. app",
       "port": "Port exposé",
+      "portHelp": "La détection ne lit pas les ports, la valeur part donc de 80. Saisissez le port d'écoute du service.",
       "composeFiles": "Fichiers Compose",
       "profiles": "Profils",
       "seedDumps": "Jeux de données",

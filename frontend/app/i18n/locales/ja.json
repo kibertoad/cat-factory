@@ -7706,6 +7706,7 @@
       "service": "公開する Compose サービス",
       "servicePlaceholder": "例: app",
       "port": "公開ポート",
+      "portHelp": "検出ではポートを読み取らないため、初期値は 80 です。サービスが待ち受けるポートを入力してください。",
       "composeFiles": "Compose ファイル",
       "profiles": "プロファイル",
       "seedDumps": "シードダンプ",

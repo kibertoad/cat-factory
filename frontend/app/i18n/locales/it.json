@@ -7701,6 +7701,7 @@
       "service": "Servizio compose esposto",
       "servicePlaceholder": "es. app",
       "port": "Porta esposta",
+      "portHelp": "Il rilevamento non legge le porte, quindi il valore parte da 80. Inserisci la porta su cui il servizio è in ascolto.",
       "composeFiles": "File compose",
       "profiles": "Profili",
       "seedDumps": "Dump di seed",

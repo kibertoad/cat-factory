@@ -7706,6 +7706,7 @@
       "service": "Servicio Compose expuesto",
       "servicePlaceholder": "p. ej. app",
       "port": "Puerto expuesto",
+      "portHelp": "La detección no lee puertos, así que el valor empieza en 80. Escribe el puerto en el que escucha el servicio.",
       "composeFiles": "Archivos Compose",
       "profiles": "Perfiles",
       "seedDumps": "Volcados de datos",

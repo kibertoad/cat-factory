@@ -7706,6 +7706,7 @@
       "service": "שירות Compose חשוף",
       "servicePlaceholder": "למשל app",
       "port": "פורט חשוף",
+      "portHelp": "הזיהוי לא קורא פורטים, ולכן הערך מתחיל ב-80. הזינו את הפורט שהשירות מאזין בו.",
       "composeFiles": "קובצי Compose",
       "profiles": "פרופילים",
       "seedDumps": "קובצי זריעה",

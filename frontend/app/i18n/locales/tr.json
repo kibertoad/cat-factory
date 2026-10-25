@@ -7706,6 +7706,7 @@
       "service": "Açığa çıkarılan Compose servisi",
       "servicePlaceholder": "örn. app",
       "port": "Açığa çıkarılan port",
+      "portHelp": "Algılama portları okumaz, bu yüzden değer 80 ile başlar. Hizmetin dinlediği portu girin.",
       "composeFiles": "Compose dosyaları",
       "profiles": "Profiller",
       "seedDumps": "Tohum dökümleri",

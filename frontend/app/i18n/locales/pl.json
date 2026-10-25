@@ -7706,6 +7706,7 @@
       "service": "Udostępniona usługa Compose",
       "servicePlaceholder": "np. app",
       "port": "Udostępniony port",
+      "portHelp": "Wykrywanie nie odczytuje portów, więc wartość startuje od 80. Wpisz port, na którym nasłuchuje usługa.",
       "composeFiles": "Pliki Compose",
       "profiles": "Profile",
       "seedDumps": "Zrzuty danych",

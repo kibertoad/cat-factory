@@ -7701,6 +7701,7 @@
       "service": "Bereitgestellter Compose-Service",
       "servicePlaceholder": "z. B. app",
       "port": "Bereitgestellter Port",
+      "portHelp": "Die Erkennung liest keine Ports aus, daher steht hier zuerst 80. Gib den Port ein, auf dem der Dienst lauscht.",
       "composeFiles": "Compose-Dateien",
       "profiles": "Profile",
       "seedDumps": "Seed-Dumps",
