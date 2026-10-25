@@ -245,8 +245,8 @@
       "loadingIssue": "Bağlantılı sorunun açıklaması yükleniyor…",
       "additionalNotes": "Ek notlar",
       "description": "Açıklama",
-      "notesPlaceholder": "Ajanın bilmesi gereken başka bir şey ekleyin, yukarıdaki sorun açıklamasına eklenir…",
-      "descriptionPlaceholder": "İşi tanımlayın: bağlam, kabul kriterleri, ajanın bilmesi gereken her şey…",
+      "notesPlaceholder": "Ajanın bilmesi gereken başka bir şey ekleyin. Yukarıdaki sorun açıklamasına eklenir…",
+      "descriptionPlaceholder": "İşi tanımlayın: bağlam, kabul kriterleri ve ajanın bilmesi gereken her şey…",
       "technical": "Teknik görev",
       "technicalHint": "Bir yeniden düzenleme / işlevsel olmayan / dahili değişiklik. Uygulayıcı, görev tanımını birincil, spesifikasyonu ise bir gerileme referansı olarak ele alır; spesifikasyon aşamasının karar vermesi için boş bırakın.",
       "severity": "Önem derecesi",
@@ -340,7 +340,7 @@
       "agentConfiguration": "Ajan yapılandırması",
       "noDocsHint": "Ajanların bu görevi uygularken görebilmesi için bir gereksinim, RFC veya PRD ekleyin.",
       "noIssuesHint": "Ajanların bu görevi uygularken açıklamasını ve yorumlarını görebilmesi için bir izleyici sorunu ekleyin.",
-      "plannedHint": "Görev planlanmış bir durumda eklenir. Üzerinde bir işlem hattı başlatana kadar çalışmaz, o zamana kadar düzenlemeye devam edebilirsiniz.",
+      "plannedHint": "Görev planlanmış bir durumda eklenir. Üzerinde bir işlem hattı başlatana kadar çalışmaz, bu yüzden o zamana kadar düzenlemeye devam edebilirsiniz.",
       "continue": "Devam",
       "submit": "Görev ekle",
       "addFailedTitle": "Görev eklenemedi",
@@ -6161,6 +6161,7 @@
     "confidence": "güven {pct}",
     "panel": "Panel",
     "topScore": "en yüksek {label} {pct}",
+    "notScored": "puanlanmadı",
     "expert": "Uzman {letter}",
     "participant": "Katılımcı",
     "strategy": {
@@ -6208,8 +6209,8 @@
       "detail": "Bir beyin fırtınası turu daha yapın, son yönle yine de bir sonraki aşamaya geçin ya da görevi durdurup sıfırlayın; böylece düzenleyip yeniden gönderebilirsiniz."
     },
     "working": {
-      "incorporating": "Seçimleriniz bir {doc} içine katlanıyor… Bunu kapatabilirsiniz; yalnızca daha fazla girdi gerekirse sizi bilgilendiririz.",
-      "reReviewing": "Güncellenmiş yön üzerinde beyin fırtınası yeniden çalıştırılıyor… Bunu kapatabilirsiniz; yalnızca daha fazla girdi gerekirse sizi bilgilendiririz."
+      "incorporating": "Seçimleriniz bir {doc} içine katlanıyor… Bunu kapatabilirsiniz. Yalnızca daha fazla girdi gerekirse sizi bilgilendiririz.",
+      "reReviewing": "Güncellenmiş yön üzerinde beyin fırtınası yeniden çalıştırılıyor… Bunu kapatabilirsiniz. Yalnızca daha fazla girdi gerekirse sizi bilgilendiririz."
     },
     "severity": {
       "low": "düşük",
@@ -6248,30 +6249,30 @@
     "proceedNothing": "Devam et (dahil edilecek bir şey yok)",
     "incorporateChoices": "Seçimleri dahil et",
     "hint": {
-      "allDismissed": "Tüm seçenekler yok sayıldı; yönsüz olarak bir sonraki aşamaya geçin.",
+      "allDismissed": "Tüm seçenekler yok sayıldı. Yönsüz olarak bir sonraki aşamaya geçin.",
       "incorporate": "Seçimlerinizi tek bir {doc} içine katlar, ardından beyin fırtınasını otomatik olarak yeniden çalıştırır.",
       "chooseAll": "Devam etmek için her seçeneği seçin ya da yok sayın."
     },
     "reRunning": "Yeniden çalıştırılıyor…",
-    "reRun": "İyi görünüyor — yeniden çalıştır",
+    "reRun": "İyi görünüyor, yeniden çalıştır",
     "redoIncorporation": "Dahil etmeyi yeniden yap",
     "redoPlaceholder": "Yön ne farklı yapmalı?",
     "redoWithDirection": "Bu yönle yeniden yap",
     "mergedHint": "Yeniden çalıştırma, ajanı bu yöne karşı çalıştırır. Birleştirilme şeklinden memnun değilseniz, bunun yerine bir yorumla yeniden yapın.",
-    "incorporatedFooter": "Yön kesinleşti — hat soldaki belgeyle devam ediyor.",
+    "incorporatedFooter": "Yön kesinleşti. Hat soldaki belgeyle devam ediyor.",
     "toast": {
       "saveChoiceError": "Seçim kaydedilemedi",
       "updateOptionError": "Seçenek güncellenemedi",
       "incorporateError": "Seçimler dahil edilemedi",
       "draftingTitle": "{doc} arka planda hazırlanıyor",
-      "draftingDescription": "Panoya geri döndünüz; yalnızca daha fazla girdi gerekirse sizi bilgilendiririz.",
-      "reReviewSettled": "Yön kesinleşti — hat devam ediyor",
-      "reReviewExceeded": "Yineleme sınırına ulaşıldı — nasıl devam edileceğini seçin",
+      "draftingDescription": "Panoya geri döndünüz. Yalnızca daha fazla girdi gerekirse sizi bilgilendiririz.",
+      "reReviewSettled": "Yön kesinleşti, hat devam ediyor",
+      "reReviewExceeded": "Yineleme sınırına ulaşıldı: nasıl devam edileceğini seçin",
       "reReviewNewOptions": "tepki verilecek yeni seçenek yok | tepki verilecek bir yeni seçenek | tepki verilecek {count} yeni seçenek",
       "reReviewError": "Beyin fırtınası yeniden çalıştırılamadı",
       "proceeding": "Bir sonraki aşamaya geçiliyor",
       "proceedError": "Devam edilemedi",
-      "taskReset": "Görev sıfırlandı — düzenleyip yeniden gönderin",
+      "taskReset": "Görev sıfırlandı: düzenleyip yeniden gönderin",
       "extraRoundGranted": "Bir beyin fırtınası turu daha verildi",
       "resolveError": "Beyin fırtınası çözülemedi"
     }
@@ -6368,10 +6369,10 @@
   },
   "humanTest": {
     "title": "İnsan testi",
-    "titleWithBlock": "İnsan testi — {title}",
+    "titleWithBlock": "İnsan testi · {title}",
     "subtitle": "Değişikliği canlı bir ortamda doğrulayın",
     "notStarted": "Bu adım henüz başlamadı.",
-    "confirm": "İyi görünüyor — devam et",
+    "confirm": "İyi görünüyor, devam et",
     "phase": {
       "provisioning": "Ortam hazırlanıyor…",
       "awaitingHuman": "Doğrulamanız bekleniyor",
@@ -6402,7 +6403,7 @@
       "heading": "Bir sorun mu buldunuz?",
       "cancel": "İptal",
       "requestFix": "Düzeltme iste",
-      "placeholder": "Neyin yanlış gittiğini açıklayın — Fixer ajanı bunu bağlam olarak alır, ardından ortam yeniden test için yeniden oluşturulur.",
+      "placeholder": "Neyin yanlış gittiğini açıklayın. Fixer ajanı bunu bağlam olarak alır, ardından ortam yeniden test için yeniden oluşturulur.",
       "send": "Fixer'a gönder"
     },
     "history": {

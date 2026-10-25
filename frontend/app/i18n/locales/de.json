@@ -3154,8 +3154,8 @@
       "loadingIssue": "Beschreibung des verknüpften Issues wird geladen…",
       "additionalNotes": "Zusätzliche Notizen",
       "description": "Beschreibung",
-      "notesPlaceholder": "Fügen Sie alles hinzu, was der Agent sonst noch wissen sollte — wird an die obige Issue-Beschreibung angehängt…",
-      "descriptionPlaceholder": "Beschreiben Sie die Arbeit — Kontext, Akzeptanzkriterien, alles, was der Agent wissen sollte…",
+      "notesPlaceholder": "Fügen Sie alles hinzu, was der Agent sonst noch wissen sollte. Es wird an die obige Issue-Beschreibung angehängt…",
+      "descriptionPlaceholder": "Beschreiben Sie die Arbeit: Kontext, Akzeptanzkriterien, alles, was der Agent wissen sollte…",
       "technical": "Technische Aufgabe",
       "technicalHint": "Ein Refactor / eine nicht-funktionale / interne Änderung. Der Implementierer behandelt die Aufgabendefinition als primär und die Spezifikation als Regressionsreferenz; lassen Sie es aus, damit die Spec-Phase entscheidet.",
       "severity": "Schweregrad",
@@ -3249,7 +3249,7 @@
       "agentConfiguration": "Agent-Konfiguration",
       "noDocsHint": "Hängen Sie eine Anforderung, ein RFC oder ein PRD an, damit Agenten es beim Implementieren dieser Aufgabe sehen.",
       "noIssuesHint": "Hängen Sie ein Tracker-Issue an, damit Agenten dessen Beschreibung und Kommentare beim Implementieren dieser Aufgabe sehen.",
-      "plannedHint": "Die Aufgabe wird in einem geplanten Zustand hinzugefügt. Sie läuft erst, wenn Sie eine Pipeline darauf starten — Sie können sie bis dahin weiter bearbeiten.",
+      "plannedHint": "Die Aufgabe wird in einem geplanten Zustand hinzugefügt. Sie läuft erst, wenn Sie eine Pipeline darauf starten, und Sie können sie bis dahin weiter bearbeiten.",
       "continue": "Weiter",
       "submit": "Aufgabe hinzufügen",
       "addFailedTitle": "Aufgabe konnte nicht hinzugefügt werden",
@@ -5974,8 +5974,8 @@
       "detail": "Führen Sie eine weitere Brainstorm-Runde durch, fahren Sie trotzdem mit der letzten Richtung zur nächsten Phase fort, oder stoppen und setzen Sie die Aufgabe zurück, um sie zu bearbeiten und erneut einzureichen."
     },
     "working": {
-      "incorporating": "Ihre Auswahl wird in einen {doc} eingearbeitet… Sie können dies schließen — wir benachrichtigen Sie nur, wenn weitere Eingaben benötigt werden.",
-      "reReviewing": "Der Brainstorm wird auf der aktualisierten Richtung erneut ausgeführt… Sie können dies schließen — wir benachrichtigen Sie nur, wenn weitere Eingaben benötigt werden."
+      "incorporating": "Ihre Auswahl wird in einen {doc} eingearbeitet… Sie können dies schließen. Wir benachrichtigen Sie nur, wenn weitere Eingaben benötigt werden.",
+      "reReviewing": "Der Brainstorm wird auf der aktualisierten Richtung erneut ausgeführt… Sie können dies schließen. Wir benachrichtigen Sie nur, wenn weitere Eingaben benötigt werden."
     },
     "severity": {
       "low": "niedrig",
@@ -6014,30 +6014,30 @@
     "proceedNothing": "Fortfahren (nichts einzuarbeiten)",
     "incorporateChoices": "Auswahl einarbeiten",
     "hint": {
-      "allDismissed": "Jede Option ist verworfen — fahren Sie ohne Richtung zur nächsten Phase fort.",
+      "allDismissed": "Jede Option ist verworfen. Fahren Sie ohne Richtung zur nächsten Phase fort.",
       "incorporate": "Fügt Ihre Auswahl in einen {doc} zusammen und führt dann den Brainstorm automatisch erneut aus.",
       "chooseAll": "Wählen oder verwerfen Sie jede Option, um fortzufahren."
     },
     "reRunning": "Wird erneut ausgeführt…",
-    "reRun": "Sieht gut aus — erneut ausführen",
+    "reRun": "Sieht gut aus, erneut ausführen",
     "redoIncorporation": "Einarbeitung wiederholen",
     "redoPlaceholder": "Was soll die Richtung anders machen?",
     "redoWithDirection": "Mit dieser Vorgabe wiederholen",
     "mergedHint": "Die erneute Ausführung führt den Agenten gegen diese Richtung aus. Wenn Sie mit der Zusammenführung unzufrieden sind, wiederholen Sie sie stattdessen mit einem Kommentar.",
-    "incorporatedFooter": "Richtung festgelegt — die Pipeline wird mit dem Dokument links fortgesetzt.",
+    "incorporatedFooter": "Richtung festgelegt. Die Pipeline wird mit dem Dokument links fortgesetzt.",
     "toast": {
       "saveChoiceError": "Die Wahl konnte nicht gespeichert werden",
       "updateOptionError": "Die Option konnte nicht aktualisiert werden",
       "incorporateError": "Die Auswahl konnte nicht eingearbeitet werden",
       "draftingTitle": "Der {doc} wird im Hintergrund erstellt",
-      "draftingDescription": "Sie sind zurück auf dem Board — wir benachrichtigen Sie nur, wenn weitere Eingaben benötigt werden.",
-      "reReviewSettled": "Richtung festgelegt — Pipeline wird fortgesetzt",
-      "reReviewExceeded": "Iterationslimit erreicht — wählen Sie, wie Sie fortfahren",
+      "draftingDescription": "Sie sind zurück auf dem Board. Wir benachrichtigen Sie nur, wenn weitere Eingaben benötigt werden.",
+      "reReviewSettled": "Richtung festgelegt, Pipeline wird fortgesetzt",
+      "reReviewExceeded": "Iterationslimit erreicht: Wählen Sie, wie Sie fortfahren",
       "reReviewNewOptions": "keine neuen Optionen, auf die zu reagieren ist | eine neue Option, auf die zu reagieren ist | {count} neue Optionen, auf die zu reagieren ist",
       "reReviewError": "Der Brainstorm konnte nicht erneut ausgeführt werden",
       "proceeding": "Es wird zur nächsten Phase fortgefahren",
       "proceedError": "Es konnte nicht fortgefahren werden",
-      "taskReset": "Aufgabe zurückgesetzt — bearbeiten Sie sie und reichen Sie sie erneut ein",
+      "taskReset": "Aufgabe zurückgesetzt: Bearbeiten Sie sie und reichen Sie sie erneut ein",
       "extraRoundGranted": "Eine weitere Brainstorm-Runde gewährt",
       "resolveError": "Der Brainstorm konnte nicht abgeschlossen werden"
     }
@@ -6976,6 +6976,7 @@
     "confidence": "Konfidenz {pct}",
     "panel": "Panel",
     "topScore": "Höchste {label} {pct}",
+    "notScored": "nicht bewertet",
     "expert": "Experte {letter}",
     "participant": "Teilnehmer",
     "strategy": {
@@ -7090,10 +7091,10 @@
   },
   "humanTest": {
     "title": "Manuelles Testen",
-    "titleWithBlock": "Manuelles Testen — {title}",
+    "titleWithBlock": "Manuelles Testen · {title}",
     "subtitle": "Die Änderung in einer Live-Umgebung validieren",
     "notStarted": "Dieser Schritt hat noch nicht begonnen.",
-    "confirm": "Sieht gut aus – fortfahren",
+    "confirm": "Sieht gut aus, fortfahren",
     "phase": {
       "provisioning": "Umgebung wird bereitgestellt…",
       "awaitingHuman": "Warten auf deine Validierung",
@@ -7124,7 +7125,7 @@
       "heading": "Ein Problem gefunden?",
       "cancel": "Abbrechen",
       "requestFix": "Eine Korrektur anfordern",
-      "placeholder": "Beschreibe, was schiefgelaufen ist – der Fixer-Agent erhält dies als Kontext, dann wird die Umgebung für erneute Tests neu aufgebaut.",
+      "placeholder": "Beschreibe, was schiefgelaufen ist. Der Fixer-Agent erhält dies als Kontext, dann wird die Umgebung für erneute Tests neu aufgebaut.",
       "send": "An Fixer senden"
     },
     "history": {

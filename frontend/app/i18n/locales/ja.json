@@ -245,8 +245,8 @@
       "loadingIssue": "リンクされた issue の説明を読み込み中…",
       "additionalNotes": "追加メモ",
       "description": "説明",
-      "notesPlaceholder": "エージェントに伝えるべきその他の情報を追加してください。上記の issue の説明に追記されます…",
-      "descriptionPlaceholder": "作業内容を記述してください。コンテキスト、受け入れ基準、エージェントが知っておくべきことなど…",
+      "notesPlaceholder": "エージェントに伝えるべきその他の情報を追加してください。内容は上記の issue の説明に追記されます…",
+      "descriptionPlaceholder": "作業内容を記述してください：コンテキスト、受け入れ基準、エージェントが知っておくべきことなど…",
       "technical": "技術タスク",
       "technicalHint": "リファクタリングや非機能的・内部的な変更です。実装担当はタスク定義を主とし、仕様はリグレッションの参照として扱います。オフにすると仕様フェーズに判断を委ねます。",
       "severity": "重大度",
@@ -340,7 +340,7 @@
       "agentConfiguration": "エージェント設定",
       "noDocsHint": "要件、RFC、PRD を添付すると、このタスクの実装中にエージェントが参照できます。",
       "noIssuesHint": "トラッカーの issue を添付すると、このタスクの実装中にエージェントがその説明やコメントを参照できます。",
-      "plannedHint": "タスクは計画済みの状態で追加されます。パイプラインを開始するまで実行されず、それまでは編集を続けられます。",
+      "plannedHint": "タスクは計画済みの状態で追加されます。パイプラインを開始するまで実行されないため、それまでは編集を続けられます。",
       "continue": "続行",
       "submit": "タスクを追加",
       "addFailedTitle": "タスクを追加できませんでした",
@@ -6161,6 +6161,7 @@
     "confidence": "確信度 {pct}",
     "panel": "パネル",
     "topScore": "最高 {label} {pct}",
+    "notScored": "未評価",
     "expert": "エキスパート {letter}",
     "participant": "参加者",
     "strategy": {
@@ -6208,8 +6209,8 @@
       "detail": "もう1ラウンドのブレインストームを行うか、最後の方向性のまま次のフェーズに進むか、タスクを停止してリセットし編集して再送信できます。"
     },
     "working": {
-      "incorporating": "選択内容を{doc}にまとめています… このまま閉じても構いません。追加の入力が必要な場合のみ通知します。",
-      "reReviewing": "更新された方向性でブレインストームを再実行しています… このまま閉じても構いません。追加の入力が必要な場合のみ通知します。"
+      "incorporating": "選択内容を{doc}にまとめています… この画面は閉じても構いません。追加の入力が必要な場合のみ通知します。",
+      "reReviewing": "更新された方向性でブレインストームを再実行しています… この画面は閉じても構いません。追加の入力が必要な場合のみ通知します。"
     },
     "severity": {
       "low": "低",
@@ -6248,30 +6249,30 @@
     "proceedNothing": "進む（統合する内容なし）",
     "incorporateChoices": "選択を統合",
     "hint": {
-      "allDismissed": "すべての選択肢が却下されました。方向性なしで次のフェーズに進みます。",
+      "allDismissed": "すべての選択肢が却下されました。方向性なしで次のフェーズに進んでください。",
       "incorporate": "選択内容を1つの{doc}にまとめ、ブレインストームを自動的に再実行します。",
       "chooseAll": "続行するには、すべての選択肢を採用または却下してください。"
     },
     "reRunning": "再実行中…",
-    "reRun": "問題なし、再実行",
+    "reRun": "問題ありません、再実行",
     "redoIncorporation": "統合をやり直す",
     "redoPlaceholder": "方向性をどう変えるべきですか？",
     "redoWithDirection": "この方向性でやり直す",
     "mergedHint": "再実行はこの方向性でエージェントを実行します。統合のされ方に不満があれば、代わりにコメント付きでやり直してください。",
-    "incorporatedFooter": "方向性が確定しました。左側のドキュメントでパイプラインが継続中です。",
+    "incorporatedFooter": "方向性が確定しました。パイプラインは左側のドキュメントで継続中です。",
     "toast": {
       "saveChoiceError": "選択を保存できませんでした",
       "updateOptionError": "選択肢を更新できませんでした",
       "incorporateError": "選択内容を統合できませんでした",
       "draftingTitle": "バックグラウンドで{doc}を作成中",
-      "draftingDescription": "ボードに戻りました。追加の入力が必要な場合のみ通知します。",
-      "reReviewSettled": "方向性が確定しました。パイプラインを継続します",
-      "reReviewExceeded": "イテレーション上限に達しました。進め方を選択してください",
+      "draftingDescription": "ボードに戻りました。追加の入力が必要な場合にのみ通知します。",
+      "reReviewSettled": "方向性が確定しました。パイプラインを継続中です",
+      "reReviewExceeded": "イテレーション上限に達しました。進め方を選んでください",
       "reReviewNewOptions": "対応すべき新しい選択肢はありません | 対応すべき新しい選択肢が1件あります | 対応すべき新しい選択肢が{count}件あります",
       "reReviewError": "ブレインストームを再実行できませんでした",
       "proceeding": "次のフェーズに進みます",
       "proceedError": "進めませんでした",
-      "taskReset": "タスクをリセットしました。編集して再送信してください",
+      "taskReset": "タスクをリセットしました。編集してから再送信してください",
       "extraRoundGranted": "ブレインストームをもう1ラウンド許可しました",
       "resolveError": "ブレインストームを解決できませんでした"
     }
@@ -6368,10 +6369,10 @@
   },
   "humanTest": {
     "title": "人手によるテスト",
-    "titleWithBlock": "人手によるテスト — {title}",
+    "titleWithBlock": "人手によるテスト · {title}",
     "subtitle": "ライブ環境で変更を検証",
     "notStarted": "このステップはまだ開始されていません。",
-    "confirm": "問題なし — 続行",
+    "confirm": "問題なし、続行",
     "phase": {
       "provisioning": "環境をプロビジョニング中…",
       "awaitingHuman": "あなたの検証待ち",
@@ -6402,7 +6403,7 @@
       "heading": "問題が見つかりましたか?",
       "cancel": "キャンセル",
       "requestFix": "修正を依頼",
-      "placeholder": "何が問題だったか説明してください。Fixerエージェントがこれをコンテキストとして受け取り、再テストのために環境が再構築されます。",
+      "placeholder": "何が問題だったかを説明してください。Fixer エージェントがこれをコンテキストとして受け取り、その後、再テストのために環境が再構築されます。",
       "send": "Fixerに送信"
     },
     "history": {

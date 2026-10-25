@@ -3154,8 +3154,8 @@
       "loadingIssue": "Caricamento della descrizione dell'issue collegata…",
       "additionalNotes": "Note aggiuntive",
       "description": "Descrizione",
-      "notesPlaceholder": "Aggiungi qualsiasi altra cosa che l'agente dovrebbe sapere — accodata alla descrizione dell'issue qui sopra…",
-      "descriptionPlaceholder": "Descrivi il lavoro — contesto, criteri di accettazione, qualsiasi cosa l'agente dovrebbe sapere…",
+      "notesPlaceholder": "Aggiungi qualsiasi altra cosa che l'agente dovrebbe sapere. Verrà accodata alla descrizione dell'issue qui sopra…",
+      "descriptionPlaceholder": "Descrivi il lavoro: contesto, criteri di accettazione, qualsiasi cosa l'agente dovrebbe sapere…",
       "technical": "Attività tecnica",
       "technicalHint": "Un refactoring / una modifica non funzionale / interna. L'implementatore tratta la definizione dell'attività come primaria e la spec come riferimento di regressione; lascia disattivato per far decidere alla fase di spec.",
       "severity": "Gravità",
@@ -3249,7 +3249,7 @@
       "agentConfiguration": "Configurazione dell'agente",
       "noDocsHint": "Allega un requisito, un RFC o un PRD così gli agenti lo vedono mentre implementano questa attività.",
       "noIssuesHint": "Allega un'issue del tracker così gli agenti vedono la sua descrizione e i commenti mentre implementano questa attività.",
-      "plannedHint": "L'attività viene aggiunta in stato pianificato. Non verrà eseguita finché non avvii una pipeline su di essa — puoi continuare a modificarla fino ad allora.",
+      "plannedHint": "L'attività viene aggiunta in stato pianificato. Non verrà eseguita finché non avvii una pipeline su di essa, quindi puoi continuare a modificarla fino ad allora.",
       "continue": "Continua",
       "submit": "Aggiungi attività",
       "addFailedTitle": "Impossibile aggiungere l'attività",
@@ -5974,8 +5974,8 @@
       "detail": "Esegui un altro giro di brainstorm, procedi alla fase successiva con l'ultima indicazione comunque, oppure interrompi e reimposta l'attivita per poterla modificare e inviarla di nuovo."
     },
     "working": {
-      "incorporating": "Unione delle tue scelte in un {doc}… Puoi chiudere questa finestra: ti avviseremo solo se occorrono altre indicazioni.",
-      "reReviewing": "Riesecuzione del brainstorm sull'indicazione aggiornata… Puoi chiudere questa finestra: ti avviseremo solo se occorrono altre indicazioni."
+      "incorporating": "Unione delle tue scelte in un {doc}… Puoi chiudere questa finestra. Ti avviseremo solo se occorrono altre indicazioni.",
+      "reReviewing": "Riesecuzione del brainstorm sull'indicazione aggiornata… Puoi chiudere questa finestra. Ti avviseremo solo se occorrono altre indicazioni."
     },
     "severity": {
       "low": "bassa",
@@ -6014,30 +6014,30 @@
     "proceedNothing": "Procedi (nulla da incorporare)",
     "incorporateChoices": "Incorpora le scelte",
     "hint": {
-      "allDismissed": "Ogni opzione e ignorata — procedi alla fase successiva senza un'indicazione.",
+      "allDismissed": "Ogni opzione è ignorata. Procedi alla fase successiva senza un'indicazione.",
       "incorporate": "Unisce le tue scelte in un unico {doc}, poi riesegue il brainstorm automaticamente.",
       "chooseAll": "Scegli o ignora ogni opzione per continuare."
     },
     "reRunning": "Riesecuzione in corso…",
-    "reRun": "Va bene — riesegui",
+    "reRun": "Va bene, riesegui",
     "redoIncorporation": "Rifai l'incorporazione",
     "redoPlaceholder": "Cosa dovrebbe fare diversamente l'indicazione?",
     "redoWithDirection": "Rifai con questa indicazione",
     "mergedHint": "La riesecuzione esegue l'agente su questa indicazione. Se non sei soddisfatto di come e stata unita, rifalla con un commento.",
-    "incorporatedFooter": "Indicazione definita — la pipeline prosegue con il documento a sinistra.",
+    "incorporatedFooter": "Indicazione definita. La pipeline prosegue con il documento a sinistra.",
     "toast": {
       "saveChoiceError": "Impossibile salvare la scelta",
       "updateOptionError": "Impossibile aggiornare l'opzione",
       "incorporateError": "Impossibile incorporare le scelte",
       "draftingTitle": "Stesura del {doc} in background",
-      "draftingDescription": "Sei di nuovo sulla lavagna — ti avviseremo solo se occorrono altre indicazioni.",
-      "reReviewSettled": "Indicazione definita — la pipeline prosegue",
-      "reReviewExceeded": "Limite di iterazioni raggiunto — scegli come procedere",
+      "draftingDescription": "Sei di nuovo sulla lavagna. Ti avviseremo solo se occorrono altre indicazioni.",
+      "reReviewSettled": "Indicazione definita, la pipeline prosegue",
+      "reReviewExceeded": "Limite di iterazioni raggiunto: scegli come procedere",
       "reReviewNewOptions": "nessuna nuova opzione a cui reagire | una nuova opzione a cui reagire | {count} nuove opzioni a cui reagire",
       "reReviewError": "Impossibile rieseguire il brainstorm",
       "proceeding": "Passaggio alla fase successiva",
       "proceedError": "Impossibile procedere",
-      "taskReset": "Attivita reimpostata — modificala e inviala di nuovo",
+      "taskReset": "Attività reimpostata: modificala e inviala di nuovo",
       "extraRoundGranted": "Concesso un altro giro di brainstorm",
       "resolveError": "Impossibile risolvere il brainstorm"
     }
@@ -6976,6 +6976,7 @@
     "confidence": "affidabilità {pct}",
     "panel": "Panel",
     "topScore": "migliore {label} {pct}",
+    "notScored": "non valutato",
     "expert": "Esperto {letter}",
     "participant": "Partecipante",
     "strategy": {
@@ -7090,10 +7091,10 @@
   },
   "humanTest": {
     "title": "Test umano",
-    "titleWithBlock": "Test umano — {title}",
+    "titleWithBlock": "Test umano · {title}",
     "subtitle": "Convalida la modifica in un ambiente attivo",
     "notStarted": "Questo passaggio non è ancora iniziato.",
-    "confirm": "Tutto a posto — continua",
+    "confirm": "Tutto a posto, continua",
     "phase": {
       "provisioning": "Provisioning dell'ambiente…",
       "awaitingHuman": "In attesa della tua convalida",
@@ -7124,7 +7125,7 @@
       "heading": "Hai trovato un problema?",
       "cancel": "Annulla",
       "requestFix": "Richiedi una correzione",
-      "placeholder": "Descrivi cosa è andato storto — l'agente Fixer riceve questo come contesto, poi l'ambiente viene ricostruito per un nuovo test.",
+      "placeholder": "Descrivi cosa è andato storto. L'agente Fixer riceve questo come contesto, poi l'ambiente viene ricostruito per un nuovo test.",
       "send": "Invia al Fixer"
     },
     "history": {

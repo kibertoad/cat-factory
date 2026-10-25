@@ -40,7 +40,7 @@ const meta = computed(() => agentKindMeta(step.value?.agentKind ?? 'judge'))
 
 const rubricName = computed(() => judge.value?.rubricName ?? meta.value.label)
 const headerTitle = computed(
-  () => `${rubricName.value}${block.value ? ` — ${block.value.title}` : ''}`,
+  () => `${rubricName.value}${block.value ? ` · ${block.value.title}` : ''}`,
 )
 
 const verdict = computed(() => judge.value?.verdict ?? null)

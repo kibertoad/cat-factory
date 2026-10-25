@@ -245,8 +245,8 @@
       "loadingIssue": "Chargement de la description du ticket lié…",
       "additionalNotes": "Notes supplémentaires",
       "description": "Description",
-      "notesPlaceholder": "Ajoutez tout ce que l’agent devrait savoir ; ce sera ajouté à la description du ticket ci-dessus…",
-      "descriptionPlaceholder": "Décrivez le travail : contexte, critères d’acceptation, tout ce que l’agent devrait savoir…",
+      "notesPlaceholder": "Ajoutez tout ce que l’agent devrait savoir. Ce sera ajouté à la description du ticket ci-dessus…",
+      "descriptionPlaceholder": "Décrivez le travail : contexte, critères d’acceptation, tout ce que l’agent doit savoir…",
       "technical": "Tâche technique",
       "technicalHint": "Un refactor / changement non fonctionnel / interne. L’implémenteur traite la définition de la tâche comme principale et la spec comme référence de régression ; laissez désactivé pour laisser la phase de spec décider.",
       "severity": "Gravité",
@@ -340,7 +340,7 @@
       "agentConfiguration": "Configuration de l’agent",
       "noDocsHint": "Joignez une exigence, un RFC ou un PRD pour que les agents le voient en implémentant cette tâche.",
       "noIssuesHint": "Joignez un ticket du suivi pour que les agents voient sa description et ses commentaires en implémentant cette tâche.",
-      "plannedHint": "La tâche est ajoutée à l’état planifié. Elle ne s’exécutera pas tant que vous n’aurez pas lancé une pipeline dessus ; vous pouvez la modifier jusque-là.",
+      "plannedHint": "La tâche est ajoutée à l’état planifié. Elle ne s’exécutera pas tant que vous n’aurez pas lancé une pipeline dessus, et vous pouvez la modifier jusque-là.",
       "continue": "Continuer",
       "submit": "Ajouter la tâche",
       "addFailedTitle": "Impossible d’ajouter la tâche",
@@ -6161,6 +6161,7 @@
     "confidence": "confiance {pct}",
     "panel": "Panel",
     "topScore": "meilleur {label} {pct}",
+    "notScored": "non noté",
     "expert": "Expert {letter}",
     "participant": "Participant",
     "strategy": {
@@ -6208,8 +6209,8 @@
       "detail": "Faites une ronde de brainstorming supplémentaire, passez à l'étape suivante avec la dernière orientation malgré tout, ou arrêtez et réinitialisez la tâche pour pouvoir la modifier et la resoumettre."
     },
     "working": {
-      "incorporating": "Intégration de vos choix dans une {doc}… Vous pouvez fermer cette fenêtre ; nous vous préviendrons uniquement si davantage d'informations sont nécessaires.",
-      "reReviewing": "Relance du brainstorming sur l'orientation mise à jour… Vous pouvez fermer cette fenêtre ; nous vous préviendrons uniquement si davantage d'informations sont nécessaires."
+      "incorporating": "Intégration de vos choix dans une {doc}… Vous pouvez fermer cette fenêtre. Nous vous préviendrons uniquement si davantage d'informations sont nécessaires.",
+      "reReviewing": "Relance du brainstorming sur l'orientation mise à jour… Vous pouvez fermer cette fenêtre. Nous vous préviendrons uniquement si davantage d'informations sont nécessaires."
     },
     "severity": {
       "low": "faible",
@@ -6248,30 +6249,30 @@
     "proceedNothing": "Continuer (rien à intégrer)",
     "incorporateChoices": "Intégrer les choix",
     "hint": {
-      "allDismissed": "Toutes les options sont écartées — passez à l'étape suivante sans orientation.",
+      "allDismissed": "Toutes les options sont écartées. Passez à l'étape suivante sans orientation.",
       "incorporate": "Intègre vos choix dans une seule {doc}, puis relance le brainstorming automatiquement.",
       "chooseAll": "Choisissez ou écartez chaque option pour continuer."
     },
     "reRunning": "Relance en cours…",
-    "reRun": "C'est bon — relancer",
+    "reRun": "C'est bon, relancer",
     "redoIncorporation": "Refaire l'intégration",
     "redoPlaceholder": "Que devrait faire l'orientation différemment ?",
     "redoWithDirection": "Refaire avec cette orientation",
     "mergedHint": "Relancer exécute l'agent sur cette orientation. Si l'intégration ne vous convient pas, refaites-la plutôt avec un commentaire.",
-    "incorporatedFooter": "Orientation arrêtée — le pipeline continue avec le document à gauche.",
+    "incorporatedFooter": "Orientation arrêtée. Le pipeline continue avec le document à gauche.",
     "toast": {
       "saveChoiceError": "Impossible d'enregistrer le choix",
       "updateOptionError": "Impossible de mettre à jour l'option",
       "incorporateError": "Impossible d'intégrer les choix",
       "draftingTitle": "Rédaction de l'{doc} en arrière-plan",
-      "draftingDescription": "Vous êtes de retour sur le tableau — nous vous préviendrons uniquement si davantage d'informations sont nécessaires.",
-      "reReviewSettled": "Orientation arrêtée — poursuite du pipeline",
-      "reReviewExceeded": "Limite d'itérations atteinte — choisissez comment procéder",
+      "draftingDescription": "Vous êtes de retour sur le tableau. Nous vous préviendrons uniquement si davantage d'informations sont nécessaires.",
+      "reReviewSettled": "Orientation arrêtée, poursuite du pipeline",
+      "reReviewExceeded": "Limite d'itérations atteinte : choisissez comment procéder",
       "reReviewNewOptions": "aucune nouvelle option à traiter | une nouvelle option à traiter | {count} nouvelles options à traiter",
       "reReviewError": "Impossible de relancer le brainstorming",
       "proceeding": "Passage à l'étape suivante",
       "proceedError": "Impossible de continuer",
-      "taskReset": "Tâche réinitialisée — modifiez-la et resoumettez-la",
+      "taskReset": "Tâche réinitialisée : modifiez-la et resoumettez-la",
       "extraRoundGranted": "Une ronde de brainstorming supplémentaire accordée",
       "resolveError": "Impossible de résoudre le brainstorming"
     }
@@ -6368,10 +6369,10 @@
   },
   "humanTest": {
     "title": "Test humain",
-    "titleWithBlock": "Test humain — {title}",
+    "titleWithBlock": "Test humain · {title}",
     "subtitle": "Validez la modification dans un environnement en ligne",
     "notStarted": "Cette étape n'a pas encore commencé.",
-    "confirm": "C'est bon, continuer",
+    "confirm": "Tout est bon, continuer",
     "phase": {
       "provisioning": "Provisionnement de l'environnement…",
       "awaitingHuman": "En attente de votre validation",
@@ -6402,7 +6403,7 @@
       "heading": "Un problème ?",
       "cancel": "Annuler",
       "requestFix": "Demander une correction",
-      "placeholder": "Décrivez ce qui n'a pas fonctionné : l'agent réparateur reçoit ceci comme contexte, puis l'environnement est reconstruit pour un nouveau test.",
+      "placeholder": "Décrivez ce qui n'a pas fonctionné. L'agent réparateur reçoit ceci comme contexte, puis l'environnement est reconstruit pour un nouveau test.",
       "send": "Envoyer au réparateur"
     },
     "history": {

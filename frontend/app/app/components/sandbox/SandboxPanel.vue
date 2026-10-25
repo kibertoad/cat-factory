@@ -575,7 +575,7 @@ async function archive(prompt: SandboxPromptVersion) {
                   >
                     <span :class="scoreColor(d.score)" class="font-semibold">{{ d.score }}</span>
                     <span class="ms-1 text-toned">{{ d.key }}</span>
-                    <span v-if="d.rationale" class="ms-1 text-dimmed">— {{ d.rationale }}</span>
+                    <span v-if="d.rationale" class="text-dimmed">: {{ d.rationale }}</span>
                   </p>
                 </div>
               </div>

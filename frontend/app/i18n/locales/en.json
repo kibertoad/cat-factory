@@ -281,8 +281,8 @@
       "loadingIssue": "Loading the linked issue's description…",
       "additionalNotes": "Additional notes",
       "description": "Description",
-      "notesPlaceholder": "Add anything else the agent should know — appended to the issue description above…",
-      "descriptionPlaceholder": "Describe the work — context, acceptance criteria, anything the agent should know…",
+      "notesPlaceholder": "Add anything else the agent should know. It is appended to the issue description above…",
+      "descriptionPlaceholder": "Describe the work: context, acceptance criteria, anything the agent should know…",
       "technical": "Technical task",
       "technicalHint": "A refactor / non-functional / internal change. The implementer treats the task definition as primary and the spec as a regression reference; leave off to let the spec phase decide.",
       "severity": "Severity",
@@ -376,7 +376,7 @@
       "agentConfiguration": "Agent configuration",
       "noDocsHint": "Attach a requirement, RFC or PRD so agents see it while implementing this task.",
       "noIssuesHint": "Attach a tracker issue so agents see its description and comments while implementing this task.",
-      "plannedHint": "The task is added in a planned state. It won't run until you start a pipeline on it — you can keep editing it until then.",
+      "plannedHint": "The task is added in a planned state. It won't run until you start a pipeline on it, so you can keep editing it until then.",
       "continue": "Continue",
       "submit": "Add task",
       "addFailedTitle": "Could not add task",
@@ -6471,6 +6471,7 @@
     "confidence": "confidence {pct}",
     "panel": "Panel",
     "topScore": "top {label} {pct}",
+    "notScored": "not scored",
     "expert": "Expert {letter}",
     "participant": "Participant",
     "strategy": {
@@ -6518,8 +6519,8 @@
       "detail": "Do one more brainstorm round, proceed to the next phase with the last direction anyway, or stop and reset the task so you can edit it and resubmit."
     },
     "working": {
-      "incorporating": "Folding your choices into a {doc}… You can close this — we'll notify you only if more input is needed.",
-      "reReviewing": "Re-running the brainstorm on the updated direction… You can close this — we'll notify you only if more input is needed."
+      "incorporating": "Folding your choices into a {doc}… You can close this. We'll notify you only if more input is needed.",
+      "reReviewing": "Re-running the brainstorm on the updated direction… You can close this. We'll notify you only if more input is needed."
     },
     "severity": {
       "low": "low",
@@ -6558,25 +6559,25 @@
     "proceedNothing": "Proceed (nothing to incorporate)",
     "incorporateChoices": "Incorporate choices",
     "hint": {
-      "allDismissed": "Every option is dismissed — proceed to the next phase without a direction.",
+      "allDismissed": "Every option is dismissed. Proceed to the next phase without a direction.",
       "incorporate": "Folds your choices into one {doc}, then re-runs the brainstorm automatically.",
       "chooseAll": "Choose or dismiss every option to continue."
     },
     "reRunning": "Re-running…",
-    "reRun": "Looks good — re-run",
+    "reRun": "Looks good, re-run",
     "redoIncorporation": "Redo incorporation",
     "redoPlaceholder": "What should the direction do differently?",
     "redoWithDirection": "Redo with this direction",
     "mergedHint": "Re-run runs the agent against this direction. If you're unhappy with how it was merged, redo it with a comment instead.",
-    "incorporatedFooter": "Direction settled — the pipeline is continuing with the document on the left.",
+    "incorporatedFooter": "Direction settled. The pipeline is continuing with the document on the left.",
     "toast": {
       "saveChoiceError": "Could not save the choice",
       "updateOptionError": "Could not update the option",
       "incorporateError": "Could not incorporate the choices",
       "draftingTitle": "Drafting the {doc} in the background",
-      "draftingDescription": "You're back on the board — we'll notify you only if more input is needed.",
-      "reReviewSettled": "Direction settled — continuing the pipeline",
-      "reReviewExceeded": "Iteration limit reached — choose how to proceed",
+      "draftingDescription": "You're back on the board. We'll notify you only if more input is needed.",
+      "reReviewSettled": "Direction settled, continuing the pipeline",
+      "reReviewExceeded": "Iteration limit reached: choose how to proceed",
       "reReviewNewOptions": "no new options to react to | one new option to react to | {count} new options to react to",
       "@reReviewNewOptions": {
         "description": "Count of newly raised brainstorm options the user must react to; uses plural forms."
@@ -6584,7 +6585,7 @@
       "reReviewError": "Could not re-run the brainstorm",
       "proceeding": "Proceeding to the next phase",
       "proceedError": "Could not proceed",
-      "taskReset": "Task reset — edit it and resubmit",
+      "taskReset": "Task reset: edit it and resubmit",
       "extraRoundGranted": "One more brainstorm round granted",
       "resolveError": "Could not resolve the brainstorm"
     }
@@ -6699,10 +6700,10 @@
   },
   "humanTest": {
     "title": "Human testing",
-    "titleWithBlock": "Human testing — {title}",
+    "titleWithBlock": "Human testing · {title}",
     "subtitle": "Validate the change in a live environment",
     "notStarted": "This step hasn't started yet.",
-    "confirm": "Looks good — continue",
+    "confirm": "Looks good, continue",
     "phase": {
       "provisioning": "Provisioning environment…",
       "awaitingHuman": "Awaiting your validation",
@@ -6733,7 +6734,7 @@
       "heading": "Found a problem?",
       "cancel": "Cancel",
       "requestFix": "Request a fix",
-      "placeholder": "Describe what went wrong — the Fixer agent gets this as context, then the environment is rebuilt for re-testing.",
+      "placeholder": "Describe what went wrong. The Fixer agent gets this as context, then the environment is rebuilt for re-testing.",
       "send": "Send to Fixer"
     },
     "history": {

@@ -245,8 +245,8 @@
       "loadingIssue": "Cargando la descripción de la incidencia vinculada…",
       "additionalNotes": "Notas adicionales",
       "description": "Descripción",
-      "notesPlaceholder": "Añade cualquier otra cosa que el agente deba saber; se añadirá a la descripción de la incidencia de arriba…",
-      "descriptionPlaceholder": "Describe el trabajo: contexto, criterios de aceptación y todo lo que el agente deba saber…",
+      "notesPlaceholder": "Añade cualquier otra cosa que el agente deba saber. Se añadirá a la descripción de la incidencia de arriba…",
+      "descriptionPlaceholder": "Describe el trabajo: contexto, criterios de aceptación, todo lo que el agente deba saber…",
       "technical": "Tarea técnica",
       "technicalHint": "Un refactor / cambio no funcional / interno. El implementador trata la definición de la tarea como principal y la especificación como referencia de regresión; déjalo desactivado para que decida la fase de especificación.",
       "severity": "Gravedad",
@@ -340,7 +340,7 @@
       "agentConfiguration": "Configuración del agente",
       "noDocsHint": "Adjunta un requisito, RFC o PRD para que los agentes lo vean al implementar esta tarea.",
       "noIssuesHint": "Adjunta una incidencia del gestor para que los agentes vean su descripción y comentarios al implementar esta tarea.",
-      "plannedHint": "La tarea se añade en estado planificado. No se ejecutará hasta que inicies una pipeline sobre ella; puedes seguir editándola hasta entonces.",
+      "plannedHint": "La tarea se añade en estado planificado. No se ejecutará hasta que inicies una pipeline sobre ella, así que puedes seguir editándola hasta entonces.",
       "continue": "Continuar",
       "submit": "Añadir tarea",
       "addFailedTitle": "No se pudo añadir la tarea",
@@ -6161,6 +6161,7 @@
     "confidence": "confianza {pct}",
     "panel": "Panel",
     "topScore": "máximo {label} {pct}",
+    "notScored": "sin puntuación",
     "expert": "Experto {letter}",
     "participant": "Participante",
     "strategy": {
@@ -6208,8 +6209,8 @@
       "detail": "Realiza una ronda más de lluvia de ideas, continúa a la siguiente fase con la última dirección de todos modos, o detén y reinicia la tarea para poder editarla y reenviarla."
     },
     "working": {
-      "incorporating": "Integrando tus elecciones en una {doc}… Puedes cerrar esto; te avisaremos solo si se necesita más información.",
-      "reReviewing": "Volviendo a ejecutar la lluvia de ideas sobre la dirección actualizada… Puedes cerrar esto; te avisaremos solo si se necesita más información."
+      "incorporating": "Integrando tus elecciones en una {doc}… Puedes cerrar esto. Te avisaremos solo si se necesita más información.",
+      "reReviewing": "Volviendo a ejecutar la lluvia de ideas sobre la dirección actualizada… Puedes cerrar esto. Te avisaremos solo si se necesita más información."
     },
     "severity": {
       "low": "baja",
@@ -6248,30 +6249,30 @@
     "proceedNothing": "Continuar (nada que incorporar)",
     "incorporateChoices": "Incorporar elecciones",
     "hint": {
-      "allDismissed": "Todas las opciones están descartadas; continúa a la siguiente fase sin una dirección.",
+      "allDismissed": "Todas las opciones están descartadas. Continúa a la siguiente fase sin una dirección.",
       "incorporate": "Integra tus elecciones en una sola {doc} y luego vuelve a ejecutar la lluvia de ideas automáticamente.",
       "chooseAll": "Elige o descarta cada opción para continuar."
     },
     "reRunning": "Volviendo a ejecutar…",
-    "reRun": "Se ve bien — volver a ejecutar",
+    "reRun": "Se ve bien, volver a ejecutar",
     "redoIncorporation": "Rehacer incorporación",
     "redoPlaceholder": "¿Qué debería hacer la dirección de manera diferente?",
     "redoWithDirection": "Rehacer con esta dirección",
     "mergedHint": "Volver a ejecutar lanza el agente sobre esta dirección. Si no te gusta cómo se integró, rehazla con un comentario en su lugar.",
-    "incorporatedFooter": "Dirección definida; el pipeline continúa con el documento de la izquierda.",
+    "incorporatedFooter": "Dirección definida. El pipeline continúa con el documento de la izquierda.",
     "toast": {
       "saveChoiceError": "No se pudo guardar la elección",
       "updateOptionError": "No se pudo actualizar la opción",
       "incorporateError": "No se pudieron incorporar las elecciones",
       "draftingTitle": "Redactando la {doc} en segundo plano",
-      "draftingDescription": "Estás de vuelta en el tablero; te avisaremos solo si se necesita más información.",
-      "reReviewSettled": "Dirección definida — continuando el pipeline",
-      "reReviewExceeded": "Se alcanzó el límite de iteraciones — elige cómo proceder",
+      "draftingDescription": "Estás de vuelta en el tablero. Te avisaremos solo si se necesita más información.",
+      "reReviewSettled": "Dirección definida, continuando el pipeline",
+      "reReviewExceeded": "Se alcanzó el límite de iteraciones: elige cómo proceder",
       "reReviewNewOptions": "no hay opciones nuevas a las que reaccionar | una opción nueva a la que reaccionar | {count} opciones nuevas a las que reaccionar",
       "reReviewError": "No se pudo volver a ejecutar la lluvia de ideas",
       "proceeding": "Continuando a la siguiente fase",
       "proceedError": "No se pudo continuar",
-      "taskReset": "Tarea reiniciada — edítala y reenvíala",
+      "taskReset": "Tarea reiniciada: edítala y reenvíala",
       "extraRoundGranted": "Se concedió una ronda más de lluvia de ideas",
       "resolveError": "No se pudo resolver la lluvia de ideas"
     }
@@ -6368,10 +6369,10 @@
   },
   "humanTest": {
     "title": "Pruebas humanas",
-    "titleWithBlock": "Pruebas humanas — {title}",
+    "titleWithBlock": "Pruebas humanas · {title}",
     "subtitle": "Valida el cambio en un entorno en vivo",
     "notStarted": "Este paso aún no ha comenzado.",
-    "confirm": "Todo bien, continuar",
+    "confirm": "Se ve bien, continuar",
     "phase": {
       "provisioning": "Aprovisionando entorno…",
       "awaitingHuman": "Esperando tu validación",
@@ -6402,7 +6403,7 @@
       "heading": "¿Encontraste un problema?",
       "cancel": "Cancelar",
       "requestFix": "Solicitar una corrección",
-      "placeholder": "Describe qué salió mal: el agente reparador recibe esto como contexto y luego el entorno se reconstruye para volver a probar.",
+      "placeholder": "Describe qué salió mal. El agente reparador recibe esto como contexto y luego el entorno se reconstruye para volver a probar.",
       "send": "Enviar al reparador"
     },
     "history": {

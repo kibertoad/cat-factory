@@ -39,7 +39,7 @@ onUnmounted(() => blobs.revokeAll())
 const { open, blockId, instanceId, stepIndex, close } = useResultView('tester')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const headerTitle = computed(
-  () => `${t('testing.title')}${block.value ? ` — ${block.value.title}` : ''}`,
+  () => `${t('testing.title')}${block.value ? ` · ${block.value.title}` : ''}`,
 )
 
 const instance = computed(() =>

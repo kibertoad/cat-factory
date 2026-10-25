@@ -42,7 +42,7 @@ const isHumanReview = computed(() => step.value?.agentKind === 'human-review')
 const isDocQuality = computed(() => step.value?.agentKind === 'doc-quality')
 const meta = computed(() => agentKindMeta(step.value?.agentKind ?? 'ci'))
 const headerTitle = computed(
-  () => `${meta.value.label}${block.value ? ` — ${block.value.title}` : ''}`,
+  () => `${meta.value.label}${block.value ? ` · ${block.value.title}` : ''}`,
 )
 const helperKind = computed(() =>
   isHumanReview.value

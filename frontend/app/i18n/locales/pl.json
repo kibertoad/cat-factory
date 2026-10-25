@@ -245,8 +245,8 @@
       "loadingIssue": "Wczytywanie opisu powiązanego zgłoszenia…",
       "additionalNotes": "Dodatkowe uwagi",
       "description": "Opis",
-      "notesPlaceholder": "Dodaj wszystko, co agent powinien wiedzieć; zostanie dołączone do opisu zgłoszenia powyżej…",
-      "descriptionPlaceholder": "Opisz pracę: kontekst, kryteria akceptacji i wszystko, co agent powinien wiedzieć…",
+      "notesPlaceholder": "Dodaj wszystko, co agent powinien wiedzieć. Zostanie to dołączone do opisu zgłoszenia powyżej…",
+      "descriptionPlaceholder": "Opisz pracę: kontekst, kryteria akceptacji, wszystko, co agent powinien wiedzieć…",
       "technical": "Zadanie techniczne",
       "technicalHint": "Refaktor / zmiana niefunkcjonalna / wewnętrzna. Implementujący traktuje definicję zadania jako nadrzędną, a specyfikację jako odniesienie regresyjne; pozostaw wyłączone, aby zdecydowała faza specyfikacji.",
       "severity": "Ważność",
@@ -340,7 +340,7 @@
       "agentConfiguration": "Konfiguracja agenta",
       "noDocsHint": "Dołącz wymaganie, RFC lub PRD, aby agenci widzieli je podczas realizacji tego zadania.",
       "noIssuesHint": "Dołącz zgłoszenie z systemu, aby agenci widzieli jego opis i komentarze podczas realizacji tego zadania.",
-      "plannedHint": "Zadanie zostaje dodane w stanie zaplanowanym. Nie uruchomi się, dopóki nie uruchomisz na nim pipeline’u; do tego czasu możesz je edytować.",
+      "plannedHint": "Zadanie zostaje dodane w stanie zaplanowanym. Nie uruchomi się, dopóki nie uruchomisz na nim pipeline’u, więc do tego czasu możesz je edytować.",
       "continue": "Dalej",
       "submit": "Dodaj zadanie",
       "addFailedTitle": "Nie udało się dodać zadania",
@@ -6161,6 +6161,7 @@
     "confidence": "pewność {pct}",
     "panel": "Panel",
     "topScore": "najwyższy {label} {pct}",
+    "notScored": "brak oceny",
     "expert": "Ekspert {letter}",
     "participant": "Uczestnik",
     "strategy": {
@@ -6208,8 +6209,8 @@
       "detail": "Wykonaj jeszcze jedną rundę burzy mózgów, przejdź do następnego etapu z ostatnim kierunkiem mimo to, albo zatrzymaj i zresetuj zadanie, aby móc je edytować i przesłać ponownie."
     },
     "working": {
-      "incorporating": "Scalanie Twoich wyborów w {doc}… Możesz to zamknąć — powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
-      "reReviewing": "Ponowne uruchamianie burzy mózgów na zaktualizowanym kierunku… Możesz to zamknąć — powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje."
+      "incorporating": "Scalanie Twoich wyborów w {doc}… Możesz to zamknąć. Powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
+      "reReviewing": "Ponowne uruchamianie burzy mózgów na zaktualizowanym kierunku… Możesz to zamknąć. Powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje."
     },
     "severity": {
       "low": "niski",
@@ -6248,30 +6249,30 @@
     "proceedNothing": "Kontynuuj (nic do scalenia)",
     "incorporateChoices": "Scal wybory",
     "hint": {
-      "allDismissed": "Wszystkie opcje są odrzucone — przejdź do następnego etapu bez kierunku.",
+      "allDismissed": "Wszystkie opcje są odrzucone. Przejdź do następnego etapu bez kierunku.",
       "incorporate": "Scala Twoje wybory w jeden {doc}, a następnie automatycznie uruchamia burzę mózgów ponownie.",
       "chooseAll": "Wybierz lub odrzuć każdą opcję, aby kontynuować."
     },
     "reRunning": "Ponowne uruchamianie…",
-    "reRun": "Wygląda dobrze — uruchom ponownie",
+    "reRun": "Wygląda dobrze, uruchom ponownie",
     "redoIncorporation": "Ponów scalanie",
     "redoPlaceholder": "Co kierunek powinien zrobić inaczej?",
     "redoWithDirection": "Ponów z tym kierunkiem",
     "mergedHint": "Ponowne uruchomienie uruchamia agenta na tym kierunku. Jeśli nie jesteś zadowolony ze sposobu scalenia, zamiast tego ponów je z komentarzem.",
-    "incorporatedFooter": "Kierunek ustalony — pipeline kontynuuje pracę z dokumentem po lewej.",
+    "incorporatedFooter": "Kierunek ustalony. Pipeline kontynuuje pracę z dokumentem po lewej.",
     "toast": {
       "saveChoiceError": "Nie udało się zapisać wyboru",
       "updateOptionError": "Nie udało się zaktualizować opcji",
       "incorporateError": "Nie udało się scalić wyborów",
       "draftingTitle": "Tworzenie {doc} w tle",
-      "draftingDescription": "Wróciłeś do tablicy — powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
-      "reReviewSettled": "Kierunek ustalony — kontynuowanie pipeline'u",
-      "reReviewExceeded": "Osiągnięto limit iteracji — wybierz, jak kontynuować",
+      "draftingDescription": "Wróciłeś do tablicy. Powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
+      "reReviewSettled": "Kierunek ustalony, kontynuowanie pipeline'u",
+      "reReviewExceeded": "Osiągnięto limit iteracji: wybierz, jak kontynuować",
       "reReviewNewOptions": "jedna nowa opcja do rozpatrzenia | {count} nowe opcje do rozpatrzenia | {count} nowych opcji do rozpatrzenia",
       "reReviewError": "Nie udało się ponownie uruchomić burzy mózgów",
       "proceeding": "Przechodzenie do następnego etapu",
       "proceedError": "Nie udało się kontynuować",
-      "taskReset": "Zadanie zresetowane — edytuj je i prześlij ponownie",
+      "taskReset": "Zadanie zresetowane: edytuj je i prześlij ponownie",
       "extraRoundGranted": "Przyznano jeszcze jedną rundę burzy mózgów",
       "resolveError": "Nie udało się rozwiązać burzy mózgów"
     }
@@ -6368,10 +6369,10 @@
   },
   "humanTest": {
     "title": "Testy ręczne",
-    "titleWithBlock": "Testy ręczne — {title}",
+    "titleWithBlock": "Testy ręczne · {title}",
     "subtitle": "Zweryfikuj zmianę w działającym środowisku",
     "notStarted": "Ten krok jeszcze się nie rozpoczął.",
-    "confirm": "Wygląda dobrze — kontynuuj",
+    "confirm": "Wygląda dobrze, kontynuuj",
     "phase": {
       "provisioning": "Tworzenie środowiska…",
       "awaitingHuman": "Oczekiwanie na Twoją weryfikację",
@@ -6402,7 +6403,7 @@
       "heading": "Znalazłeś problem?",
       "cancel": "Anuluj",
       "requestFix": "Poproś o poprawkę",
-      "placeholder": "Opisz, co poszło nie tak — agent naprawiający otrzyma to jako kontekst, a następnie środowisko zostanie odbudowane do ponownych testów.",
+      "placeholder": "Opisz, co poszło nie tak. Agent naprawiający otrzyma to jako kontekst, a następnie środowisko zostanie odbudowane do ponownych testów.",
       "send": "Wyślij do naprawiacza"
     },
     "history": {
