@@ -262,14 +262,12 @@ async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
               >
                 {{ t(KIND_LABEL_KEYS[k]) }}
               </UButton>
-              <!-- More kinds and Attach context open the full add-task form, whose create a
-                   viewer is refused: hidden for a viewer. -->
               <UButton
-                v-if="access.canWriteBoard.value"
                 size="sm"
                 color="neutral"
                 variant="link"
-                :disabled="!service"
+                :disabled="!service || !access.canWriteBoard.value"
+                :title="access.canWriteBoard.value ? undefined : t('access.noBoardWrite')"
                 data-testid="describe-work-more-kinds"
                 @click="openFullForm"
               >
@@ -329,13 +327,13 @@ async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
         </UCollapsible>
 
         <UButton
-          v-if="access.canWriteBoard.value"
           color="neutral"
           variant="link"
           class="p-0"
           icon="i-lucide-paperclip"
           data-testid="describe-work-attach-context"
-          :disabled="!service"
+          :disabled="!service || !access.canWriteBoard.value"
+          :title="access.canWriteBoard.value ? undefined : t('access.noBoardWrite')"
           @click="openFullForm"
         >
           {{ t('describeWork.attachContext') }}

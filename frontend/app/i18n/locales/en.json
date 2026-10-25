@@ -2519,6 +2519,7 @@
       },
       "invite": {
         "title": "Invite a teammate",
+        "listTitle": "Invitations",
         "submit": "Invite",
         "revoke": "Revoke invitation",
         "created": "Invitation created",

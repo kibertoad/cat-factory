@@ -270,10 +270,13 @@ async function disconnectEmail() {
       </ul>
     </section>
 
-    <!-- invitations -->
-    <section v-if="isOrg">
+    <!-- invitations: a non-admin cannot invite, so they get the list alone, and no section when
+         there is nothing to list -->
+    <section v-if="isOrg && (isAdmin || accounts.invitations.length)">
       <h3 class="mb-2 font-semibold text-highlighted">
-        {{ t('layout.accountTeam.invite.title') }}
+        {{
+          isAdmin ? t('layout.accountTeam.invite.title') : t('layout.accountTeam.invite.listTitle')
+        }}
       </h3>
       <!-- Inviting, revoking and the email sender below are account-admin writes
            (`InvitationService`, `AccountController`): hidden for anyone else. -->

@@ -49,9 +49,6 @@ function execId(): string | null {
   return instanceId.value
 }
 
-// Each action's `.catch(() => {})` below is not a swallow: the store records the failure before it
-// rethrows, and the inline error strip renders it.
-
 async function onFile(item: FollowUpItem) {
   const id = execId()
   if (id) await followUps.fileItem(id, item.id).catch(() => {})

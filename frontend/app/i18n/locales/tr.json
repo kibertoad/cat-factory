@@ -2379,6 +2379,7 @@
       },
       "invite": {
         "title": "Bir takım arkadaşı davet et",
+        "listTitle": "Davetler",
         "submit": "Davet et",
         "revoke": "Daveti iptal et",
         "created": "Davet oluşturuldu",

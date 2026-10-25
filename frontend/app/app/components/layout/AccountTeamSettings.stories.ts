@@ -57,13 +57,14 @@ type Story = StoryObj<typeof meta>
 
 /**
  * Tomás, a developer of Acme: the roles as text, no way to end a session, and no admin section.
- * He sees the invitations and the sender, but cannot invite, revoke or disconnect: each is an
- * account-admin write the backend refuses him.
+ * He sees the invitations, under a heading that does not offer to invite, and the sender, but
+ * cannot invite, revoke or disconnect: each is an account-admin write the backend refuses him.
  */
 export const Default: Story = {
   decorators: [active({ ...orgAccount, roles: ['developer'] }, developerUser)],
   play: async () => {
     await screen.findByText('lena@acme.dev')
+    await screen.findByRole('heading', { name: 'Invitations' })
     await screen.findByText('cat-factory@acme.dev', { exact: false })
     await expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull()
     await expect(screen.queryByRole('button', { name: 'Revoke invitation' })).toBeNull()

@@ -2493,6 +2493,7 @@
       },
       "invite": {
         "title": "Invita un collega",
+        "listTitle": "Inviti",
         "submit": "Invita",
         "revoke": "Revoca invito",
         "created": "Invito creato",

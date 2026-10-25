@@ -2493,6 +2493,7 @@
       },
       "invite": {
         "title": "Ein Teammitglied einladen",
+        "listTitle": "Einladungen",
         "submit": "Einladen",
         "revoke": "Einladung widerrufen",
         "created": "Einladung erstellt",

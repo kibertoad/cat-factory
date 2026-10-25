@@ -5,12 +5,15 @@ import {
   listWorkspacesContract,
   MCP_AUTHORIZATION_REQUEST_INVALID,
   type McpAuthorizationRequestView,
+  type WorkspaceListItem,
 } from '@cat-factory/contracts'
 import type { HttpHandler } from 'msw'
 import { expect, screen, userEvent, waitFor } from 'storybook/test'
-import { accountBoards } from '~/stories/accounts.stories.mocks'
+import { accountBoards, signedInUser } from '~/stories/accounts.stories.mocks'
 import { apiPending, apiRefusal, apiResponse } from '~/stories/api'
 import { withQuery } from '~/stories/withQuery'
+import { withSeed } from '~/stories/withStores'
+import { useAuthStore } from '~/stores/auth'
 import McpAuthorizeScreen from './McpAuthorizeScreen.vue'
 
 // The consent screen an MCP host's authorization request lands on: who says it is asking, where
@@ -35,10 +38,20 @@ function requestIs(view: Partial<McpAuthorizationRequestView> = {}): HttpHandler
 
 const boards = apiResponse(listWorkspacesContract, { body: accountBoards })
 
+/** A listed board as the backend sends it when the person resolves no access to it: no role. */
+const leftBehind: WorkspaceListItem = { ...accountBoards[0]!, id: 'ws_left', name: 'Left behind' }
+delete leftBehind.viewerRole
+
 const meta = {
   title: 'Settings/Pages/McpAuthorizeScreen',
   component: McpAuthorizeScreen,
-  decorators: [withQuery(['request'], sealed)],
+  decorators: [
+    withQuery(['request'], sealed),
+    // Signed in: which boards are offered depends on the person's role on each.
+    withSeed(() => {
+      useAuthStore().user = signedInUser
+    }),
+  ],
   parameters: { layout: 'fullscreen', api: [requestIs(), boards] },
 } satisfies Meta<typeof McpAuthorizeScreen>
 export default meta
@@ -103,14 +116,15 @@ export const NoBoards: Story = {
 
 /**
  * The person has boards, but is an admin of none: no choices, a line saying a board admin can
- * connect it, and Connect is off.
+ * connect it, and Connect is off. One board is listed with no role at all (a member row left
+ * behind after the person left its account), which is no access, so it is not offered either.
  */
 export const NoAdminBoards: Story = {
   parameters: {
     api: [
       requestIs(),
       apiResponse(listWorkspacesContract, {
-        body: accountBoards.filter((board) => board.viewerRole !== 'admin'),
+        body: [...accountBoards.filter((board) => board.viewerRole !== 'admin'), leftBehind],
       }),
     ],
   },

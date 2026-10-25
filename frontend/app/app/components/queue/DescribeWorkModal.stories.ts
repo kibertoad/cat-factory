@@ -84,14 +84,14 @@ export const NoServiceChosen: Story = {
 }
 
 /**
- * A board viewer can type, but cannot add, and is not offered More kinds or Attach context: both
- * open the full add-task form, whose create would be refused.
+ * A board viewer can type, but cannot add, and More kinds and Attach context are off: both open
+ * the full add-task form, whose create would be refused.
  */
 export const ReadOnly: Story = {
   decorators: [opened({ viewer: true })],
   play: async () => {
     await describeThenAdd(false)()
-    await expect(screen.queryByTestId('describe-work-more-kinds')).toBeNull()
-    await expect(screen.queryByTestId('describe-work-attach-context')).toBeNull()
+    await expect(screen.getByTestId('describe-work-more-kinds')).toBeDisabled()
+    await expect(screen.getByTestId('describe-work-attach-context')).toBeDisabled()
   },
 }

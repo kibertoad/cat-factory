@@ -2379,6 +2379,7 @@
       },
       "invite": {
         "title": "メンバーを招待",
+        "listTitle": "招待",
         "submit": "招待",
         "revoke": "招待を取り消す",
         "created": "招待を作成しました",
