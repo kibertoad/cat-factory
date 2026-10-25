@@ -7203,7 +7203,7 @@
     },
     "intro": {
       "workspace": "Curate the best-practice guidelines agents follow on this board. Fragments are merged from the built-in catalog, your account, and this board (later tiers override earlier ones), then the relevant ones are selected for each agent run.",
-      "account": "Curate best-practice guidelines shared by every board in this account. Account fragments are merged below the built-in catalog and above nothing, and a board can override or add its own on top. The relevant ones are selected for each agent run."
+      "account": "Curate best-practice guidelines shared by every board in this account. Account fragments override the built-in catalog, and a board can override them or add its own on top. The relevant ones are selected for each agent run."
     },
     "owner": {
       "workspace": "This board",
@@ -8047,7 +8047,7 @@
       "awaiting": "Awaiting review",
       "cleared": "Reviewed",
       "pausedTitle": "Paused for review",
-      "pausedBody": "Phase \"{phase}\" is complete. Review its committed artifacts and PRs above, then resume to continue or cancel to stop the initiative."
+      "pausedBody": "Phase \"{phase}\" is complete. Review its committed artifacts and PRs below, then resume to continue or cancel to stop the initiative."
     }
   },
   "environmentWizard": {
@@ -8567,6 +8567,7 @@
       "progress": "Step {current} of {total}",
       "ariaLabel": "Tutorial step",
       "announcement": "Step {current} of {total}. {title}. {body}",
+      "announcementPunctuated": "Step {current} of {total}. {title} {body}",
       "@announcement": {
         "description": "Screen-reader-only announcement read out on every step change; it is never shown on screen. {title} and {body} are the step's own heading and full sentence, so the separators around them have to be real sentence punctuation in the target language."
       },

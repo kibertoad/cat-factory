@@ -6863,7 +6863,7 @@
     },
     "intro": {
       "workspace": "Aracıların bu panoda izlediği en iyi uygulama yönergelerini düzenleyin. Parçalar yerleşik katalog, hesabınız ve bu panodan birleştirilir (sonraki katmanlar öncekileri geçersiz kılar), ardından her aracı çalıştırması için ilgili olanlar seçilir.",
-      "account": "Bu hesaptaki her panonun paylaştığı en iyi uygulama yönergelerini düzenleyin. Hesap parçaları yerleşik kataloğun altında birleştirilir ve bir pano bunların üzerine kendi parçalarını ekleyebilir veya geçersiz kılabilir. Her aracı çalıştırması için ilgili olanlar seçilir."
+      "account": "Bu hesaptaki her panonun paylaştığı en iyi uygulama yönergelerini düzenleyin. Hesap parçaları yerleşik kataloğu geçersiz kılar ve bir pano bunları geçersiz kılabilir veya üzerine kendi parçalarını ekleyebilir. Her aracı çalıştırması için ilgili olanlar seçilir."
     },
     "owner": {
       "workspace": "Bu pano",
@@ -7752,7 +7752,7 @@
       "awaiting": "İnceleme bekliyor",
       "cleared": "İncelendi",
       "pausedTitle": "İnceleme için duraklatıldı",
-      "pausedBody": "\"{phase}\" aşaması tamamlandı. Yukarıdaki işlenmiş yapıtları ve PR'leri inceleyin, ardından devam etmek için sürdürün ya da girişimi durdurmak için iptal edin."
+      "pausedBody": "\"{phase}\" aşaması tamamlandı. Aşağıdaki işlenmiş yapıtları ve PR'leri inceleyin, ardından devam etmek için sürdürün ya da girişimi durdurmak için iptal edin."
     }
   },
   "environmentWizard": {
@@ -8251,6 +8251,7 @@
       "progress": "Adım {current} / {total}",
       "ariaLabel": "Eğitim adımı",
       "announcement": "Adım {current} / {total}. {title}. {body}",
+      "announcementPunctuated": "Adım {current} / {total}. {title} {body}",
       "abridged": "1 adım atlandı: bu denetim bu panonun parçası değil. | {count} adım atlandı: bu denetimler bu panonun parçası değil.",
       "searching": "Vurgulanan denetim aranıyor...",
       "clickHint": "Devam etmek için vurgulanan denetime tıklayın",

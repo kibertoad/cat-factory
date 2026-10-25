@@ -6863,7 +6863,7 @@
     },
     "intro": {
       "workspace": "Organisez les bonnes pratiques que les agents suivent sur ce tableau. Les fragments sont fusionnés depuis le catalogue intégré, votre compte et ce tableau (les niveaux ultérieurs priment sur les précédents), puis les plus pertinents sont sélectionnés pour chaque exécution d'agent.",
-      "account": "Organisez les bonnes pratiques partagées par tous les tableaux de ce compte. Les fragments du compte sont fusionnés au-dessus du catalogue intégré, et un tableau peut les remplacer ou ajouter les siens par-dessus. Les plus pertinents sont sélectionnés pour chaque exécution d'agent."
+      "account": "Organisez les bonnes pratiques partagées par tous les tableaux de ce compte. Les fragments du compte remplacent ceux du catalogue intégré, et un tableau peut les remplacer ou ajouter les siens par-dessus. Les plus pertinents sont sélectionnés pour chaque exécution d'agent."
     },
     "owner": {
       "workspace": "Ce tableau",
@@ -7752,7 +7752,7 @@
       "awaiting": "En attente de revue",
       "cleared": "Revu",
       "pausedTitle": "En pause pour revue",
-      "pausedBody": "La phase « {phase} » est terminée. Examinez ci-dessus les artefacts et les PR validés, puis reprenez pour continuer ou annulez pour arrêter l'initiative."
+      "pausedBody": "La phase « {phase} » est terminée. Examinez ci-dessous les artefacts et les PR validés, puis reprenez pour continuer ou annulez pour arrêter l'initiative."
     }
   },
   "environmentWizard": {
@@ -8251,6 +8251,7 @@
       "progress": "Étape {current} sur {total}",
       "ariaLabel": "Étape du tutoriel",
       "announcement": "Étape {current} sur {total}. {title}. {body}",
+      "announcementPunctuated": "Étape {current} sur {total}. {title} {body}",
       "abridged": "1 étape a été ignorée : ce contrôle ne fait pas partie de ce tableau. | {count} étapes ont été ignorées : ces contrôles ne font pas partie de ce tableau.",
       "searching": "Recherche du contrôle mis en évidence...",
       "clickHint": "Cliquez sur le contrôle mis en évidence pour continuer",

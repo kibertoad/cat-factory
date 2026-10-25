@@ -6863,7 +6863,7 @@
     },
     "intro": {
       "workspace": "Organiza las pautas de buenas prácticas que los agentes siguen en este tablero. Los fragmentos se combinan desde el catálogo integrado, tu cuenta y este tablero (las capas posteriores prevalecen sobre las anteriores), y luego se seleccionan los relevantes para cada ejecución de agente.",
-      "account": "Organiza las pautas de buenas prácticas compartidas por todos los tableros de esta cuenta. Los fragmentos de la cuenta se combinan por encima del catálogo integrado, y un tablero puede sobrescribirlos o añadir los suyos propios encima. Los relevantes se seleccionan para cada ejecución de agente."
+      "account": "Organiza las pautas de buenas prácticas compartidas por todos los tableros de esta cuenta. Los fragmentos de la cuenta prevalecen sobre el catálogo integrado, y un tablero puede sobrescribirlos o añadir los suyos propios encima. Los relevantes se seleccionan para cada ejecución de agente."
     },
     "owner": {
       "workspace": "Este tablero",
@@ -7752,7 +7752,7 @@
       "awaiting": "Pendiente de revisión",
       "cleared": "Revisado",
       "pausedTitle": "En pausa para revisión",
-      "pausedBody": "La fase «{phase}» está completa. Revisa arriba los artefactos y las PR confirmados y luego reanuda para continuar o cancela para detener la iniciativa."
+      "pausedBody": "La fase «{phase}» está completa. Revisa abajo los artefactos y las PR confirmados y luego reanuda para continuar o cancela para detener la iniciativa."
     }
   },
   "environmentWizard": {
@@ -8251,6 +8251,7 @@
       "progress": "Paso {current} de {total}",
       "ariaLabel": "Paso del tutorial",
       "announcement": "Paso {current} de {total}. {title}. {body}",
+      "announcementPunctuated": "Paso {current} de {total}. {title} {body}",
       "abridged": "Se omitió 1 paso: ese control no forma parte de este tablero. | Se omitieron {count} pasos: esos controles no forman parte de este tablero.",
       "searching": "Buscando el control resaltado...",
       "clickHint": "Haz clic en el control resaltado para continuar",

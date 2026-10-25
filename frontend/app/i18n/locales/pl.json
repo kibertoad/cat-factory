@@ -6863,7 +6863,7 @@
     },
     "intro": {
       "workspace": "Zarządzaj wytycznymi najlepszych praktyk, które agenci stosują na tej tablicy. Fragmenty są scalane z katalogu wbudowanego, Twojego konta i tej tablicy (późniejsze poziomy mają pierwszeństwo przed wcześniejszymi), a następnie odpowiednie z nich są wybierane dla każdego uruchomienia agenta.",
-      "account": "Zarządzaj wytycznymi najlepszych praktyk współdzielonymi przez wszystkie tablice na tym koncie. Fragmenty konta są scalane ponad katalogiem wbudowanym, a tablica może je nadpisać lub dodać własne na górze. Odpowiednie z nich są wybierane dla każdego uruchomienia agenta."
+      "account": "Zarządzaj wytycznymi najlepszych praktyk współdzielonymi przez wszystkie tablice na tym koncie. Fragmenty konta mają pierwszeństwo przed katalogiem wbudowanym, a tablica może je nadpisać lub dodać własne na górze. Odpowiednie z nich są wybierane dla każdego uruchomienia agenta."
     },
     "owner": {
       "workspace": "Ta tablica",
@@ -7752,7 +7752,7 @@
       "awaiting": "Oczekuje na przegląd",
       "cleared": "Sprawdzono",
       "pausedTitle": "Wstrzymano do przeglądu",
-      "pausedBody": "Faza „{phase}\" została ukończona. Przejrzyj powyżej zatwierdzone artefakty i PR-y, a następnie wznów, aby kontynuować, albo anuluj, aby zatrzymać inicjatywę."
+      "pausedBody": "Faza „{phase}\" została ukończona. Przejrzyj poniżej zatwierdzone artefakty i PR-y, a następnie wznów, aby kontynuować, albo anuluj, aby zatrzymać inicjatywę."
     }
   },
   "environmentWizard": {
@@ -8251,6 +8251,7 @@
       "progress": "Krok {current} z {total}",
       "ariaLabel": "Krok samouczka",
       "announcement": "Krok {current} z {total}. {title}. {body}",
+      "announcementPunctuated": "Krok {current} z {total}. {title} {body}",
       "abridged": "Pominięto 1 krok: tego elementu nie ma na tej tablicy. | Pominięto {count} kroki: tych elementów nie ma na tej tablicy. | Pominięto {count} kroków: tych elementów nie ma na tej tablicy.",
       "searching": "Szukanie podświetlonego elementu...",
       "clickHint": "Kliknij podświetlony element, aby kontynuować",

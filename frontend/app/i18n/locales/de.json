@@ -5622,7 +5622,7 @@
     },
     "intro": {
       "workspace": "Kuratieren Sie die Best-Practice-Richtlinien, denen Agenten auf diesem Board folgen. Fragmente werden aus dem integrierten Katalog, Ihrem Konto und diesem Board zusammengeführt (spätere Ebenen überschreiben frühere), dann werden die relevanten für jeden Agentenlauf ausgewählt.",
-      "account": "Kuratieren Sie Best-Practice-Richtlinien, die von jedem Board in diesem Konto geteilt werden. Konto-Fragmente werden unterhalb des integrierten Katalogs und über nichts zusammengeführt, und ein Board kann eigene darüber überschreiben oder hinzufügen. Die relevanten werden für jeden Agentenlauf ausgewählt."
+      "account": "Kuratieren Sie Best-Practice-Richtlinien, die von jedem Board in diesem Konto geteilt werden. Konto-Fragmente überschreiben den integrierten Katalog, und ein Board kann sie überschreiben oder eigene darüber hinzufügen. Die relevanten werden für jeden Agentenlauf ausgewählt."
     },
     "owner": {
       "workspace": "Dieses Board",
@@ -6260,7 +6260,7 @@
       "awaiting": "Warten auf Prüfung",
       "cleared": "Geprüft",
       "pausedTitle": "Pausiert zur Prüfung",
-      "pausedBody": "Phase „{phase}\" ist abgeschlossen. Prüfe oben die committeten Artefakte und PRs, setze dann fort, um weiterzumachen, oder brich die Initiative ab."
+      "pausedBody": "Phase „{phase}\" ist abgeschlossen. Prüfe unten die committeten Artefakte und PRs, setze dann fort, um weiterzumachen, oder brich die Initiative ab."
     }
   },
   "app": {
@@ -8251,6 +8251,7 @@
       "progress": "Schritt {current} von {total}",
       "ariaLabel": "Tutorial-Schritt",
       "announcement": "Schritt {current} von {total}. {title}. {body}",
+      "announcementPunctuated": "Schritt {current} von {total}. {title} {body}",
       "abridged": "1 Schritt wurde übersprungen: dieses Element gehört nicht zu diesem Board. | {count} Schritte wurden übersprungen: diese Elemente gehören nicht zu diesem Board.",
       "searching": "Suche das hervorgehobene Element...",
       "clickHint": "Klicke auf das hervorgehobene Element, um fortzufahren",

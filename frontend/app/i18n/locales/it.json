@@ -5622,7 +5622,7 @@
     },
     "intro": {
       "workspace": "Cura le linee guida di best practice che gli agenti seguono su questa lavagna. I frammenti vengono uniti dal catalogo integrato, dal tuo account e da questa lavagna (i livelli successivi hanno la precedenza su quelli precedenti), poi vengono selezionati quelli pertinenti per ogni esecuzione dell'agente.",
-      "account": "Cura le linee guida di best practice condivise da ogni lavagna di questo account. I frammenti dell'account vengono uniti sotto il catalogo integrato e sopra il nulla, e una lavagna puo sovrascriverli o aggiungerne di propri al di sopra. Quelli pertinenti vengono selezionati per ogni esecuzione dell'agente."
+      "account": "Cura le linee guida di best practice condivise da ogni lavagna di questo account. I frammenti dell'account prevalgono sul catalogo integrato, e una lavagna può sovrascriverli o aggiungerne di propri al di sopra. Quelli pertinenti vengono selezionati per ogni esecuzione dell'agente."
     },
     "owner": {
       "workspace": "Questa lavagna",
@@ -6260,7 +6260,7 @@
       "awaiting": "In attesa di revisione",
       "cleared": "Revisionato",
       "pausedTitle": "In pausa per la revisione",
-      "pausedBody": "La fase «{phase}» è completa. Rivedi sopra gli artefatti e le PR salvati, poi riprendi per continuare o annulla per interrompere l'iniziativa."
+      "pausedBody": "La fase «{phase}» è completa. Rivedi sotto gli artefatti e le PR salvati, poi riprendi per continuare o annulla per interrompere l'iniziativa."
     }
   },
   "app": {
@@ -8251,6 +8251,7 @@
       "progress": "Passaggio {current} di {total}",
       "ariaLabel": "Passaggio del tutorial",
       "announcement": "Passaggio {current} di {total}. {title}. {body}",
+      "announcementPunctuated": "Passaggio {current} di {total}. {title} {body}",
       "abridged": "1 passaggio è stato saltato: quel controllo non fa parte di questa board. | {count} passaggi sono stati saltati: quei controlli non fanno parte di questa board.",
       "searching": "Ricerca del controllo evidenziato...",
       "clickHint": "Clicca sul controllo evidenziato per continuare",
