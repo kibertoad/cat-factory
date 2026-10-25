@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { expect, within } from 'storybook/test'
 import type { WorkspaceSnapshot } from '@cat-factory/contracts'
 import { authInitiative, boardWith, loginTask, logoutTask } from '~/stories/board.stories.mocks'
 import { initiative, initiativeSnapshot } from '~/stories/initiative.stories.mocks'
@@ -66,19 +67,17 @@ export const Empty: Story = {
   decorators: [focused(logoutTask.id, taskFormSnapshot())],
 }
 
-/**
- * The initiative: Run planning, and beside it the Run pipeline menu, which the template's comment
- * says an initiative does not get (the menu is the last branch of the dry-run chain, and an
- * initiative takes neither of the branches before it).
- */
+/** The initiative: Run planning, and no Run pipeline menu, because only a task picks its pipeline. */
 export const Initiative: Story = {
   decorators: [focused(authInitiative.id, initiativeSnapshot(initiative()))],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(await canvas.findByTestId('focus-run-planning')).toBeVisible()
+    await expect(canvas.queryByTestId('focus-run-pipeline')).toBeNull()
+  },
 }
 
-/**
- * The merge policy sandboxes runs started by a member: the Dry run badge, and no Re-run pipeline
- * menu, because the badge and the menu are branches of one chain.
- */
+/** The merge policy sandboxes runs started by a member: the Dry run badge beside Re-run pipeline. */
 export const DryRunForced: Story = {
   decorators: [
     focused(
@@ -91,14 +90,24 @@ export const DryRunForced: Story = {
       { member: true },
     ),
   ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(await canvas.findByTestId('focus-dry-run-forced')).toBeVisible()
+    await expect(canvas.getByTestId('focus-run-pipeline')).toBeVisible()
+  },
 }
 
 /**
- * The advanced tier: the Dry run switch, which asks for a sandbox on the next run, and for the
- * same reason no Re-run pipeline menu.
+ * The advanced tier: the Dry run switch, which asks for a sandbox on the next run, beside Re-run
+ * pipeline.
  */
 export const Advanced: Story = {
   decorators: [focused(loginTask.id, running, { mode: 'advanced' })],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(await canvas.findByTestId('focus-dry-run')).toBeVisible()
+    await expect(canvas.getByTestId('focus-run-pipeline')).toBeVisible()
+  },
 }
 
 /**

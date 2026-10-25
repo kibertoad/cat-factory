@@ -77,6 +77,7 @@ function runPipeline(id: string) {
  * composable as those two surfaces, so which pipeline it starts can't drift across the three.
  */
 const isInitiative = computed(() => block.value?.level === 'initiative')
+const isTask = computed(() => block.value?.level === 'task')
 const {
   planningPipeline,
   running: planningRunning,
@@ -173,47 +174,47 @@ function openApprovalFor(approvalId: string) {
         >
           {{ t('initiative.inspector.runPlanning') }}
         </UButton>
-        <!-- A sandboxed role cannot ask its way out, so the badge REPLACES the toggle rather
-             than sitting beside it as a switch that does nothing. -->
-        <UBadge
-          v-if="!isInitiative && runStart.forced.value"
-          color="warning"
-          variant="subtle"
-          size="sm"
-          icon="i-lucide-shield"
-          :title="t('focus.dryRunForcedHint')"
-          data-testid="focus-dry-run-forced"
-        >
-          {{ t('focus.dryRun') }}
-        </UBadge>
-        <USwitch
-          v-else-if="!isInitiative && runStart.canRequest.value"
-          :model-value="runStart.requested.value"
-          size="sm"
-          :label="t('focus.dryRun')"
-          :title="t('focus.dryRunHint')"
-          data-testid="focus-dry-run"
-          @update:model-value="runStart.setRequested($event)"
-        />
-        <!-- The rich picker rather than a list of names: the run starts the moment a row is
-             clicked, so the preview is the only chance to see which agents it will run. -->
-        <PipelinePicker
-          v-else
-          model-value=""
-          :options="runOptions"
-          @update:model-value="runPipeline"
-        >
-          <template #trigger>
-            <UButton
-              variant="soft"
-              size="sm"
-              icon="i-lucide-play"
-              trailing-icon="i-lucide-chevron-down"
-            >
-              {{ instance ? t('focus.rerunPipeline') : t('focus.runPipeline') }}
-            </UButton>
-          </template>
-        </PipelinePicker>
+        <!-- Only a task picks its pipeline, the same rule as the inspector's Run menu. The run
+             mode sits beside the picker and never replaces it. -->
+        <template v-if="isTask">
+          <!-- A sandboxed role cannot ask its way out, so the badge REPLACES the toggle rather
+               than sitting beside it as a switch that does nothing. -->
+          <UBadge
+            v-if="runStart.forced.value"
+            color="warning"
+            variant="subtle"
+            size="sm"
+            icon="i-lucide-shield"
+            :title="t('focus.dryRunForcedHint')"
+            data-testid="focus-dry-run-forced"
+          >
+            {{ t('focus.dryRun') }}
+          </UBadge>
+          <USwitch
+            v-else-if="runStart.canRequest.value"
+            :model-value="runStart.requested.value"
+            size="sm"
+            :label="t('focus.dryRun')"
+            :title="t('focus.dryRunHint')"
+            data-testid="focus-dry-run"
+            @update:model-value="runStart.setRequested($event)"
+          />
+          <!-- The rich picker rather than a list of names: the run starts the moment a row is
+               clicked, so the preview is the only chance to see which agents it will run. -->
+          <PipelinePicker model-value="" :options="runOptions" @update:model-value="runPipeline">
+            <template #trigger>
+              <UButton
+                variant="soft"
+                size="sm"
+                icon="i-lucide-play"
+                trailing-icon="i-lucide-chevron-down"
+                data-testid="focus-run-pipeline"
+              >
+                {{ instance ? t('focus.rerunPipeline') : t('focus.runPipeline') }}
+              </UButton>
+            </template>
+          </PipelinePicker>
+        </template>
         <IconButton
           icon="i-lucide-x"
           color="neutral"
