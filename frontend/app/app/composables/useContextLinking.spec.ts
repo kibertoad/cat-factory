@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describeFailure } from '~/composables/pipelineErrorToast/describeFailure'
 import {
   buildLinkFailureReport,
   contextKey,
@@ -143,7 +144,7 @@ describe('resolvePending', () => {
     expect(resolved.map((c) => c.needsImport)).toEqual([true, true])
     // And MARKED, so the form the user is still looking at names which chip refused. The toast
     // names them too, but the toast is gone by the time they go looking for the one to remove.
-    expect(resolved.map((c) => c.unreadable)).toEqual([
+    expect(resolved.map((c) => c.unreadable?.message)).toEqual([
       'no access to acme/repo:a.md',
       'no access to acme/repo:b.md',
     ])
@@ -153,7 +154,9 @@ describe('resolvePending', () => {
     // A prior failure is not a standing verdict: leaving the mark on a page that has just been
     // fetched accuses a good attachment (and the retry is the whole point of keeping it staged).
     stub(async (_source, ref) => ({ externalId: `resolved:${ref}` }))
-    const previouslyFailed = item({ unreadable: 'GitHub denied access (HTTP 403).' })
+    const previouslyFailed = item({
+      unreadable: describeFailure(new Error('GitHub denied access (HTTP 403).')),
+    })
 
     const { resolved } = await useContextLinking().resolvePending([previouslyFailed])
 

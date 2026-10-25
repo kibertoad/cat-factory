@@ -632,7 +632,7 @@
     "attachIssueDisabledConnect": "まず issue トラッカーを接続してください（連携）",
     "attachIssueDisabledEnable": "まず issue トラッカー連携を有効にしてください",
     "importsOnAdd": "追加時にインポート",
-    "unreadable": "取得できませんでした: {error}",
+    "unreadable": "取得できませんでした。",
     "pastedLink": {
       "offer": "この説明は {source} のページにリンクしています。コンテキストとして添付しますか？",
       "attach": "添付"
@@ -4860,7 +4860,7 @@
     "picker": {
       "searchPlaceholder": "ページを検索、または URL/ID を貼り付け…",
       "refPlaceholder": "ページの URL または ID を貼り付け…",
-      "searchFailed": "検索に失敗しました: {error}",
+      "searchFailed": "検索に失敗しました。",
       "importedBadge": "インポート済み",
       "attachByReference": "{ref} を参照で添付",
       "noMatches": "一致するページがありません。",
@@ -4888,7 +4888,7 @@
       "searchFilesPlaceholder": "パスでファイルを検索…",
       "searchFilesHint": "このリポジトリ内のファイルを検索するには入力してください。",
       "noFileMatches": "一致するファイルがありません。",
-      "filesFailed": "ファイルを読み込めませんでした: {error}",
+      "filesFailed": "ファイルを読み込めませんでした。",
       "moreFiles": "最初の{count}件の一致を表示しています。検索条件を絞り込んでください。"
     },
     "import": {
@@ -5020,7 +5020,7 @@
     "picker": {
       "searchPlaceholder": "課題を検索、または URL/キーを貼り付け…",
       "refPlaceholder": "課題の URL またはキーを貼り付け…",
-      "searchFailed": "検索に失敗しました: {error}",
+      "searchFailed": "検索に失敗しました。",
       "searchNeedsRepo": "このサービスはまだリポジトリに紐付けられていないため、検索する対象がありません。リポジトリに紐付けるか、課題の URL を貼り付けて直接添付してください。",
       "imported": "インポート済み",
       "attachByReference": "{ref} を参照で添付",
@@ -6853,7 +6853,8 @@
         "placeholder": "GitHub のファイルまたはフォルダーの URL を貼り付け (例: https://github.com/owner/repo/tree/main/docs)",
         "action": "検索",
         "invalid": "リポジトリのファイルまたはフォルダーの URL ではないようです。",
-        "notFound": "{slug} に一致するアクセス可能なリポジトリがありません。URL を確認するか、まずリポジトリを接続してください。"
+        "notFound": "{slug} に一致するアクセス可能なリポジトリがありません。URL を確認するか、まずリポジトリを接続してください。",
+        "failed": "この URL を調べられませんでした。"
       }
     },
     "sources": {

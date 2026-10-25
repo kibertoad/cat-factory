@@ -632,7 +632,7 @@
     "attachIssueDisabledConnect": "Najpierw połącz system zgłoszeń (Integracje)",
     "attachIssueDisabledEnable": "Najpierw włącz integrację systemu zgłoszeń",
     "importsOnAdd": "importowane przy dodaniu",
-    "unreadable": "Nie udało się pobrać: {error}",
+    "unreadable": "Nie udało się pobrać.",
     "pastedLink": {
       "offer": "Ten opis zawiera odnośnik do strony {source}. Dołączyć ją jako kontekst?",
       "attach": "Dołącz"
@@ -4860,7 +4860,7 @@
     "picker": {
       "searchPlaceholder": "Wyszukaj strony lub wklej adres URL albo identyfikator…",
       "refPlaceholder": "Wklej adres URL lub identyfikator strony…",
-      "searchFailed": "Wyszukiwanie nie powiodło się: {error}",
+      "searchFailed": "Wyszukiwanie nie powiodło się.",
       "importedBadge": "zaimportowano",
       "attachByReference": "Dołącz {ref} przez odwołanie",
       "noMatches": "Brak pasujących stron.",
@@ -4888,7 +4888,7 @@
       "searchFilesPlaceholder": "Szukaj plików według ścieżki…",
       "searchFilesHint": "Wpisz, aby wyszukać pliki w tym repozytorium.",
       "noFileMatches": "Brak pasujących plików.",
-      "filesFailed": "Nie udało się wczytać plików: {error}",
+      "filesFailed": "Nie udało się wczytać plików.",
       "moreFiles": "Wyświetlono pierwsze {count} wyników — zawęź wyszukiwanie."
     },
     "import": {
@@ -5020,7 +5020,7 @@
     "picker": {
       "searchPlaceholder": "Szukaj zgłoszeń lub wklej adres URL/klucz…",
       "refPlaceholder": "Wklej adres URL lub klucz zgłoszenia…",
-      "searchFailed": "Wyszukiwanie nie powiodło się: {error}",
+      "searchFailed": "Wyszukiwanie nie powiodło się.",
       "searchNeedsRepo": "Ta usługa nie jest jeszcze powiązana z repozytorium, więc nie ma czego przeszukiwać. Powiąż ją z repozytorium lub wklej adres URL zgłoszenia, aby dołączyć je bezpośrednio.",
       "imported": "zaimportowane",
       "attachByReference": "Dołącz {ref} przez odniesienie",
@@ -6853,7 +6853,8 @@
         "placeholder": "Wklej URL pliku lub folderu GitHub (np. https://github.com/owner/repo/tree/main/docs)",
         "action": "Znajdź",
         "invalid": "To nie wygląda na URL pliku ani folderu repozytorium.",
-        "notFound": "Żadne dostępne repozytorium nie pasuje do {slug}. Sprawdź URL lub najpierw połącz repozytorium."
+        "notFound": "Żadne dostępne repozytorium nie pasuje do {slug}. Sprawdź URL lub najpierw połącz repozytorium.",
+        "failed": "Nie udało się wyszukać tego adresu URL."
       }
     },
     "sources": {

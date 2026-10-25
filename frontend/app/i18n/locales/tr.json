@@ -632,7 +632,7 @@
     "attachIssueDisabledConnect": "Önce bir sorun izleyici bağlayın (Entegrasyonlar)",
     "attachIssueDisabledEnable": "Önce sorun izleyici entegrasyonunu etkinleştirin",
     "importsOnAdd": "eklendiğinde içe aktarılır",
-    "unreadable": "Getirilemedi: {error}",
+    "unreadable": "Getirilemedi.",
     "pastedLink": {
       "offer": "Bu açıklama bir {source} sayfasına bağlantı veriyor. Bağlam olarak eklensin mi?",
       "attach": "Ekle"
@@ -4860,7 +4860,7 @@
     "picker": {
       "searchPlaceholder": "Sayfalarda ara veya bir URL/ID yapıştır…",
       "refPlaceholder": "Bir sayfa URL'si veya ID'si yapıştır…",
-      "searchFailed": "Arama başarısız: {error}",
+      "searchFailed": "Arama başarısız.",
       "importedBadge": "içe aktarıldı",
       "attachByReference": "{ref} öğesini referansla ekle",
       "noMatches": "Eşleşen sayfa yok.",
@@ -4888,7 +4888,7 @@
       "searchFilesPlaceholder": "Dosyaları yola göre ara…",
       "searchFilesHint": "Bu depodaki dosyaları aramak için yazın.",
       "noFileMatches": "Eşleşen dosya yok.",
-      "filesFailed": "Dosyalar yüklenemedi: {error}",
+      "filesFailed": "Dosyalar yüklenemedi.",
       "moreFiles": "İlk {count} eşleşme gösteriliyor — daraltmak için aramanızı iyileştirin."
     },
     "import": {
@@ -5020,7 +5020,7 @@
     "picker": {
       "searchPlaceholder": "Sorunlarda ara veya bir URL/anahtar yapıştır…",
       "refPlaceholder": "Bir sorun URL'si veya anahtarı yapıştır…",
-      "searchFailed": "Arama başarısız: {error}",
+      "searchFailed": "Arama başarısız.",
       "searchNeedsRepo": "Bu hizmet henüz bir depoya bağlı değil, bu yüzden aranacak bir şey yok. Onu bir depoya bağlayın veya doğrudan eklemek için bir sorun URL'si yapıştırın.",
       "imported": "içe aktarıldı",
       "attachByReference": "{ref} öğesini referansla ekle",
@@ -6853,7 +6853,8 @@
         "placeholder": "GitHub dosya veya klasör URL'si yapıştırın (örn. https://github.com/owner/repo/tree/main/docs)",
         "action": "Bul",
         "invalid": "Bu, bir depo dosyası veya klasör URL'sine benzemiyor.",
-        "notFound": "{slug} ile eşleşen erişilebilir bir depo yok. URL'yi kontrol edin veya önce depoyu bağlayın."
+        "notFound": "{slug} ile eşleşen erişilebilir bir depo yok. URL'yi kontrol edin veya önce depoyu bağlayın.",
+        "failed": "Bu URL aranamadı."
       }
     },
     "sources": {

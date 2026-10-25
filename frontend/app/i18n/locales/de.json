@@ -3526,7 +3526,7 @@
     "attachIssueDisabledConnect": "Verbinden Sie zuerst einen Issue-Tracker (Integrationen)",
     "attachIssueDisabledEnable": "Aktivieren Sie zuerst die Issue-Tracker-Integration",
     "importsOnAdd": "importiert beim Hinzufügen",
-    "unreadable": "Konnte nicht abgerufen werden: {error}",
+    "unreadable": "Konnte nicht abgerufen werden.",
     "pastedLink": {
       "offer": "Diese Beschreibung verlinkt eine {source}-Seite. Als Kontext anhängen?",
       "attach": "Anhängen"
@@ -4325,7 +4325,7 @@
     "picker": {
       "searchPlaceholder": "Seiten durchsuchen oder eine URL/ID einfügen…",
       "refPlaceholder": "Eine Seiten-URL oder -ID einfügen…",
-      "searchFailed": "Suche fehlgeschlagen: {error}",
+      "searchFailed": "Suche fehlgeschlagen.",
       "importedBadge": "importiert",
       "attachByReference": "{ref} per Referenz anhängen",
       "noMatches": "Keine passenden Seiten.",
@@ -4353,7 +4353,7 @@
       "searchFilesPlaceholder": "Dateien nach Pfad suchen…",
       "searchFilesHint": "Tippen, um Dateien in diesem Repository zu suchen.",
       "noFileMatches": "Keine passenden Dateien.",
-      "filesFailed": "Dateien konnten nicht geladen werden: {error}",
+      "filesFailed": "Dateien konnten nicht geladen werden.",
       "moreFiles": "Es werden die ersten {count} Treffer angezeigt – grenzen Sie Ihre Suche ein."
     },
     "import": {
@@ -4485,7 +4485,7 @@
     "picker": {
       "searchPlaceholder": "Issues durchsuchen oder eine URL/einen Schlüssel einfügen…",
       "refPlaceholder": "Eine Issue-URL oder einen -Schlüssel einfügen…",
-      "searchFailed": "Suche fehlgeschlagen: {error}",
+      "searchFailed": "Suche fehlgeschlagen.",
       "searchNeedsRepo": "Dieser Service ist noch mit keinem Repository verknüpft, es gibt also nichts zu durchsuchen. Verknüpfen Sie ihn mit einem Repository oder fügen Sie eine Issue-URL ein, um ein Issue direkt anzuhängen.",
       "imported": "importiert",
       "attachByReference": "{ref} per Referenz anhängen",
@@ -5633,7 +5633,8 @@
         "placeholder": "GitHub-Datei- oder Ordner-URL einfügen (z. B. https://github.com/owner/repo/tree/main/docs)",
         "action": "Suchen",
         "invalid": "Das sieht nicht nach der URL einer Repository-Datei oder eines Ordners aus.",
-        "notFound": "Kein zugängliches Repository passt zu {slug}. Prüfen Sie die URL oder verbinden Sie das Repository zuerst."
+        "notFound": "Kein zugängliches Repository passt zu {slug}. Prüfen Sie die URL oder verbinden Sie das Repository zuerst.",
+        "failed": "Die URL konnte nicht nachgeschlagen werden."
       }
     },
     "sources": {

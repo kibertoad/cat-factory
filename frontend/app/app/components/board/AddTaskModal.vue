@@ -49,6 +49,10 @@ import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import { buildTaskTypePickerRows } from '~/utils/taskTypePicker'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import AppModal from '~/components/common/AppModal.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 const ui = useUiStore()
 // Interface tier. In BASIC mode this form asks for the task itself (type, title,
@@ -594,7 +598,7 @@ async function resolvePendingIssueBodies() {
   resolvingIssueBodies.value = true
   try {
     const resolved: Record<string, string> = {}
-    const failed: Record<string, string> = {}
+    const failed: Record<string, DescribedFailure> = {}
     for (const item of unresolved) {
       const source = item.source as TaskSourceKind
       const cached = tasks.tasks.find(
@@ -609,7 +613,7 @@ async function resolvePendingIssueBodies() {
         const imported = await tasks.importTask(source, item.externalId)
         if ((imported.description ?? '').trim()) resolved[contextKey(item)] = imported.description
       } catch (e) {
-        failed[contextKey(item)] = e instanceof Error ? e.message : String(e)
+        failed[contextKey(item)] = describeFailure(e)
       }
     }
     if (Object.keys(resolved).length || Object.keys(failed).length) {

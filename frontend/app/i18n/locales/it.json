@@ -3526,7 +3526,7 @@
     "attachIssueDisabledConnect": "Connetti prima un issue tracker (Integrazioni)",
     "attachIssueDisabledEnable": "Abilita prima l'integrazione dell'issue tracker",
     "importsOnAdd": "importa all'aggiunta",
-    "unreadable": "Impossibile recuperarlo: {error}",
+    "unreadable": "Impossibile recuperarlo.",
     "pastedLink": {
       "offer": "Questa descrizione rimanda a una pagina {source}. Allegarla come contesto?",
       "attach": "Allega"
@@ -4325,7 +4325,7 @@
     "picker": {
       "searchPlaceholder": "Cerca pagine o incolla un URL/ID…",
       "refPlaceholder": "Incolla l'URL o l'ID di una pagina…",
-      "searchFailed": "Ricerca non riuscita: {error}",
+      "searchFailed": "Ricerca non riuscita.",
       "importedBadge": "importato",
       "attachByReference": "Allega {ref} per riferimento",
       "noMatches": "Nessuna pagina corrispondente.",
@@ -4353,7 +4353,7 @@
       "searchFilesPlaceholder": "Cerca file per percorso…",
       "searchFilesHint": "Digita per cercare file in questo repository.",
       "noFileMatches": "Nessun file corrispondente.",
-      "filesFailed": "Impossibile caricare i file: {error}",
+      "filesFailed": "Impossibile caricare i file.",
       "moreFiles": "Vengono mostrati i primi {count} risultati: affina la ricerca per restringerla."
     },
     "import": {
@@ -4485,7 +4485,7 @@
     "picker": {
       "searchPlaceholder": "Cerca issue o incolla un URL/chiave…",
       "refPlaceholder": "Incolla l'URL o la chiave di una issue…",
-      "searchFailed": "Ricerca non riuscita: {error}",
+      "searchFailed": "Ricerca non riuscita.",
       "searchNeedsRepo": "Questo servizio non è ancora collegato a un repository, quindi non c'è nulla in cui cercare. Collegalo a un repository oppure incolla l'URL di una issue per allegarla direttamente.",
       "imported": "importata",
       "attachByReference": "Allega {ref} per riferimento",
@@ -5633,7 +5633,8 @@
         "placeholder": "Incolla l'URL di un file o di una cartella GitHub (ad es. https://github.com/owner/repo/tree/main/docs)",
         "action": "Cerca",
         "invalid": "Questo non sembra l'URL di un file o di una cartella di un repository.",
-        "notFound": "Nessun repository accessibile corrisponde a {slug}. Controlla l'URL o collega prima il repository."
+        "notFound": "Nessun repository accessibile corrisponde a {slug}. Controlla l'URL o collega prima il repository.",
+        "failed": "Non è stato possibile cercare questo URL."
       }
     },
     "sources": {

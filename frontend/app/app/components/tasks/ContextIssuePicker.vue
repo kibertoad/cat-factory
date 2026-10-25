@@ -29,6 +29,11 @@ import {
   sourceMenuItems,
 } from '~/utils/sourcePicker'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 const props = defineProps<{
   /** contextKeys already staged by the caller, so they're filtered out / not re-offered. */
@@ -121,7 +126,7 @@ const searchable = computed(() => descriptor.value?.searchable ?? false)
 const query = ref('')
 const results = ref<TaskSearchResult[]>([])
 const searching = ref(false)
-const searchError = ref<string | null>(null)
+const searchError = ref<DescribedFailure | null>(null)
 
 // Already-imported issues, scoped to the target container's repo on the backend
 // (GitHub narrows to the service's linked repo, exactly as search does; repo-less
@@ -167,13 +172,14 @@ async function runSearch() {
   } catch (e) {
     results.value = []
     // "This service has no repo" is the one failure with an action attached, so it gets its
-    // own localized copy off the backend's machine-readable reason rather than the raw
-    // message (AGENTS.md "Backend strings"). Anything else keeps the generic wording.
+    // own localized copy off the backend's machine-readable reason (AGENTS.md "Backend
+    // strings"). Anything else gets the toast funnel's copy; the raw message stays as detail.
     const notLinked: TaskSourceReadReason = 'repo_not_linked'
+    const failure = describeFailure(e)
     searchError.value =
       apiErrorReason(e) === notLinked
-        ? t('tasks.picker.searchNeedsRepo')
-        : t('tasks.picker.searchFailed', { error: e instanceof Error ? e.message : String(e) })
+        ? { ...failure, descriptionKey: 'tasks.picker.searchNeedsRepo' }
+        : failure
   } finally {
     searching.value = false
   }
@@ -333,9 +339,11 @@ onMounted(() => {
       @keydown.enter="refRow && pickRef(refRow)"
     />
 
-    <p v-if="searchError" class="px-1 text-2xs text-app-warning-400">
-      {{ searchError }}
-    </p>
+    <FailureMessage
+      :failure="searchError"
+      :title="t('tasks.picker.searchFailed')"
+      class="px-1 text-2xs text-app-warning-400"
+    />
 
     <div class="max-h-56 space-y-0.5 overflow-y-auto">
       <!-- Already-imported issues (linked directly, no re-fetch). -->

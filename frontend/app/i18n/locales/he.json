@@ -632,7 +632,7 @@
     "attachIssueDisabledConnect": "חבר תחילה מערכת לניהול אישיו (אינטגרציות)",
     "attachIssueDisabledEnable": "הפעל תחילה את אינטגרציית מערכת האישיו",
     "importsOnAdd": "מיובא בעת ההוספה",
-    "unreadable": "לא ניתן לאחזר: {error}",
+    "unreadable": "לא ניתן לאחזר.",
     "pastedLink": {
       "offer": "התיאור הזה מקשר לדף {source}. לצרף אותו כהקשר?",
       "attach": "צרף"
@@ -4860,7 +4860,7 @@
     "picker": {
       "searchPlaceholder": "חפש דפים או הדבק כתובת URL/מזהה…",
       "refPlaceholder": "הדבק כתובת URL או מזהה של דף…",
-      "searchFailed": "החיפוש נכשל: {error}",
+      "searchFailed": "החיפוש נכשל.",
       "importedBadge": "יובא",
       "attachByReference": "צרף את {ref} לפי הפניה",
       "noMatches": "אין דפים תואמים.",
@@ -4888,7 +4888,7 @@
       "searchFilesPlaceholder": "חיפוש קבצים לפי נתיב…",
       "searchFilesHint": "הקלד כדי לחפש קבצים במאגר זה.",
       "noFileMatches": "אין קבצים תואמים.",
-      "filesFailed": "לא ניתן היה לטעון את הקבצים: {error}",
+      "filesFailed": "לא ניתן היה לטעון את הקבצים.",
       "moreFiles": "מוצגות {count} התוצאות הראשונות — צמצם את החיפוש כדי למקד אותו."
     },
     "import": {
@@ -5020,7 +5020,7 @@
     "picker": {
       "searchPlaceholder": "חפש ניושנים או הדבק URL/מפתח…",
       "refPlaceholder": "הדבק URL או מפתח של ניושן…",
-      "searchFailed": "החיפוש נכשל: {error}",
+      "searchFailed": "החיפוש נכשל.",
       "searchNeedsRepo": "השירות הזה עדיין אינו מקושר למאגר, ולכן אין במה לחפש. קשרו אותו למאגר, או הדביקו כתובת URL של ניושן כדי לצרף אחד ישירות.",
       "imported": "מיובא",
       "attachByReference": "צרף {ref} לפי הפניה",
@@ -6853,7 +6853,8 @@
         "placeholder": "הדבק כתובת URL של קובץ או תיקייה ב-GitHub (למשל https://github.com/owner/repo/tree/main/docs)",
         "action": "חפש",
         "invalid": "זה לא נראה כמו כתובת URL של קובץ או תיקייה במאגר.",
-        "notFound": "אין מאגר נגיש התואם ל-{slug}. בדוק את הכתובת או חבר תחילה את המאגר."
+        "notFound": "אין מאגר נגיש התואם ל-{slug}. בדוק את הכתובת או חבר תחילה את המאגר.",
+        "failed": "לא ניתן היה לחפש את כתובת ה־URL הזו."
       }
     },
     "sources": {

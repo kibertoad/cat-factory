@@ -632,7 +632,7 @@
     "attachIssueDisabledConnect": "Conecta primero un gestor de incidencias (Integraciones)",
     "attachIssueDisabledEnable": "Activa primero la integración del gestor de incidencias",
     "importsOnAdd": "se importa al añadir",
-    "unreadable": "No se pudo obtener: {error}",
+    "unreadable": "No se pudo obtener.",
     "pastedLink": {
       "offer": "Esta descripción enlaza una página de {source}. ¿Adjuntarla como contexto?",
       "attach": "Adjuntar"
@@ -4860,7 +4860,7 @@
     "picker": {
       "searchPlaceholder": "Busca páginas o pega una URL o ID…",
       "refPlaceholder": "Pega la URL o el ID de una página…",
-      "searchFailed": "Error en la búsqueda: {error}",
+      "searchFailed": "Error en la búsqueda.",
       "importedBadge": "importado",
       "attachByReference": "Adjuntar {ref} por referencia",
       "noMatches": "No hay páginas que coincidan.",
@@ -4888,7 +4888,7 @@
       "searchFilesPlaceholder": "Buscar archivos por ruta…",
       "searchFilesHint": "Escribe para buscar archivos en este repositorio.",
       "noFileMatches": "No hay archivos coincidentes.",
-      "filesFailed": "No se pudieron cargar los archivos: {error}",
+      "filesFailed": "No se pudieron cargar los archivos.",
       "moreFiles": "Mostrando las primeras {count} coincidencias; refina tu búsqueda para acotarla."
     },
     "import": {
@@ -5020,7 +5020,7 @@
     "picker": {
       "searchPlaceholder": "Busca incidencias o pega una URL/clave…",
       "refPlaceholder": "Pega la URL o clave de una incidencia…",
-      "searchFailed": "La búsqueda falló: {error}",
+      "searchFailed": "La búsqueda falló.",
       "searchNeedsRepo": "Este servicio aún no está vinculado a un repositorio, así que no hay nada donde buscar. Vincúlalo a un repositorio o pega la URL de una incidencia para adjuntarla directamente.",
       "imported": "importada",
       "attachByReference": "Adjuntar {ref} por referencia",
@@ -6853,7 +6853,8 @@
         "placeholder": "Pega la URL de un archivo o carpeta de GitHub (p. ej. https://github.com/owner/repo/tree/main/docs)",
         "action": "Buscar",
         "invalid": "Esto no parece la URL de un archivo o carpeta de un repositorio.",
-        "notFound": "Ningún repositorio accesible coincide con {slug}. Revisa la URL o conecta primero el repositorio."
+        "notFound": "Ningún repositorio accesible coincide con {slug}. Revisa la URL o conecta primero el repositorio.",
+        "failed": "No se pudo buscar esta URL."
       }
     },
     "sources": {

@@ -632,7 +632,7 @@
     "attachIssueDisabledConnect": "Connectez d’abord un suivi de tickets (Intégrations)",
     "attachIssueDisabledEnable": "Activez d’abord l’intégration du suivi de tickets",
     "importsOnAdd": "importé à l’ajout",
-    "unreadable": "Récupération impossible : {error}",
+    "unreadable": "Récupération impossible.",
     "pastedLink": {
       "offer": "Cette description renvoie à une page {source}. L’attacher comme contexte ?",
       "attach": "Attacher"
@@ -4860,7 +4860,7 @@
     "picker": {
       "searchPlaceholder": "Recherchez des pages ou collez une URL ou un ID…",
       "refPlaceholder": "Collez l'URL ou l'ID d'une page…",
-      "searchFailed": "Échec de la recherche : {error}",
+      "searchFailed": "Échec de la recherche.",
       "importedBadge": "importé",
       "attachByReference": "Joindre {ref} par référence",
       "noMatches": "Aucune page correspondante.",
@@ -4888,7 +4888,7 @@
       "searchFilesPlaceholder": "Rechercher des fichiers par chemin…",
       "searchFilesHint": "Saisissez du texte pour rechercher des fichiers dans ce dépôt.",
       "noFileMatches": "Aucun fichier correspondant.",
-      "filesFailed": "Impossible de charger les fichiers : {error}",
+      "filesFailed": "Impossible de charger les fichiers.",
       "moreFiles": "Affichage des {count} premiers résultats ; affinez votre recherche pour la restreindre."
     },
     "import": {
@@ -5020,7 +5020,7 @@
     "picker": {
       "searchPlaceholder": "Rechercher des tickets ou coller une URL/clé…",
       "refPlaceholder": "Coller l'URL ou la clé d'un ticket…",
-      "searchFailed": "Échec de la recherche : {error}",
+      "searchFailed": "Échec de la recherche.",
       "searchNeedsRepo": "Ce service n'est encore lié à aucun dépôt, il n'y a donc rien à rechercher. Liez-le à un dépôt ou collez l'URL d'un ticket pour en joindre un directement.",
       "imported": "importé",
       "attachByReference": "Joindre {ref} par référence",
@@ -6853,7 +6853,8 @@
         "placeholder": "Collez l'URL d'un fichier ou d'un dossier GitHub (par ex. https://github.com/owner/repo/tree/main/docs)",
         "action": "Rechercher",
         "invalid": "Ceci ne ressemble pas à l'URL d'un fichier ou d'un dossier de dépôt.",
-        "notFound": "Aucun dépôt accessible ne correspond à {slug}. Vérifiez l'URL ou connectez d'abord le dépôt."
+        "notFound": "Aucun dépôt accessible ne correspond à {slug}. Vérifiez l'URL ou connectez d'abord le dépôt.",
+        "failed": "Impossible de rechercher cette URL."
       }
     },
     "sources": {

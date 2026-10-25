@@ -1,6 +1,10 @@
 import type { DocumentSourceKind, TaskSourceKind } from '~/types/domain'
 import { apiErrorEnvelope, apiErrorStatus } from './api/errors'
 import { useActionToast } from '~/composables/useActionToast'
+import {
+  describeFailure as describeFetchFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 // Shared model + orchestration for attaching external context (imported docs and
 // tracker issues) to a board block. A "pending" item is something the user has
@@ -31,8 +35,8 @@ export interface PendingContext {
   /** True when the item must be imported before it can be linked. */
   needsImport: boolean
   /**
-   * Why this item could not be FETCHED, when an attempt has already failed (the server's own
-   * message). Set by {@link useContextLinking.resolvePending} and by the add-task form's body
+   * Why this item could not be FETCHED, when an attempt has already failed, classified like a
+   * failure toast (the server's own message is its detail). Set by {@link useContextLinking.resolvePending} and by the add-task form's body
    * pre-fetch; cleared the moment a later attempt succeeds.
    *
    * It exists because the fetch moved ahead of the create: a failure now costs the user the
@@ -40,7 +44,7 @@ export interface PendingContext {
    * at, not only in the toast that named it. A tracker issue has no pre-flight of its own, so this
    * is the whole of its warning.
    */
-  unreadable?: string
+  unreadable?: DescribedFailure
 }
 
 /**
@@ -163,7 +167,7 @@ export function useContextLinking() {
         // Kept in the list, still unresolved: the host aborts on any failure, and dropping the
         // item here would silently discard an attachment the user asked for while they fix it.
         // Marked, so the form the user is still looking at names WHICH attachment refused.
-        resolved.push({ ...item, unreadable: failure.message })
+        resolved.push({ ...item, unreadable: describeFetchFailure(e) })
       }
     }
     return { resolved, failures }
