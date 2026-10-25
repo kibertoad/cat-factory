@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { AuditEventWire } from '@cat-factory/contracts'
 import { listAuditEventsContract } from '@cat-factory/contracts'
+import { expect, screen, userEvent } from 'storybook/test'
 import { apiFailure, apiHandler, apiPending, apiResponse } from '~/stories/api'
 import { orgAccount } from '~/stories/accounts.stories.mocks'
 import { auditEvents, olderAuditEvents } from '~/stories/audit.stories.mocks'
@@ -57,9 +58,18 @@ export const Loading: Story = {
   },
 }
 
-/** The read failed: a message with the reason in place of the list, and no Load older entries. */
+/** The read failed: a translated message in place of the list, and no Load older entries. */
 export const Failed: Story = {
   parameters: {
     api: [apiFailure(listAuditEventsContract, { pathParams: { accountId: orgAccount.id } })],
+  },
+  // The translated copy where the list would be; the server's own text only behind "Show details".
+  play: async () => {
+    await screen.findByText('The audit log could not be loaded.')
+    await expect(screen.queryByText('Internal server error')).toBeNull()
+    await userEvent.click(screen.getByTestId('failure-message-show-detail'))
+    await expect(screen.getByTestId('failure-message-detail')).toHaveTextContent(
+      'Internal server error',
+    )
   },
 }

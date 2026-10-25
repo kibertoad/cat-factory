@@ -267,7 +267,8 @@ async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
                 size="sm"
                 color="neutral"
                 variant="link"
-                :disabled="!service"
+                :disabled="!service || !access.canWriteBoard.value"
+                :title="access.canWriteBoard.value ? undefined : t('access.noBoardWrite')"
                 data-testid="describe-work-more-kinds"
                 @click="openFullForm"
               >
@@ -335,7 +336,9 @@ async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
           variant="link"
           class="p-0"
           icon="i-lucide-paperclip"
-          :disabled="!service"
+          data-testid="describe-work-attach-context"
+          :disabled="!service || !access.canWriteBoard.value"
+          :title="access.canWriteBoard.value ? undefined : t('access.noBoardWrite')"
           @click="openFullForm"
         >
           {{ t('describeWork.attachContext') }}

@@ -1,11 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import {
+  MCP_AUTHORIZATION_APPROVE_PERMISSION,
   MCP_AUTHORIZATION_REQUEST_INVALID,
   PUBLIC_API_SCOPES,
+  permissionsForRole,
   type PublicApiScope,
+  type WorkspaceListItem,
 } from '@cat-factory/contracts'
-import { apiErrorEnvelope, apiErrorReason } from '~/composables/api/errors'
+import { apiErrorReason } from '~/composables/api/errors'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  reportedFailure,
+  type DescribedFailure,
+  type ReasonCopy,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 // The consent screen an MCP host's authorization request lands on
 // (`/mcp-authorize?request=…`), reached by a redirect from `GET /oauth/authorize`.
@@ -23,21 +33,25 @@ import { apiErrorEnvelope, apiErrorReason } from '~/composables/api/errors'
 // is.
 
 const api = useApi()
+const auth = useAuthStore()
 const { t } = useI18n()
 
 type Screen = 'loading' | 'deciding' | 'submitting' | 'failed'
 
 const screen = ref<Screen>('loading')
-const detail = ref<string | null>(null)
+const detail = ref<DescribedFailure | null>(null)
 /**
  * A refusal that did NOT consume the request, shown beside the choices rather than instead of
  * them. See `decide`: the two failures are answered differently because only one of them ends the
  * flow.
  */
-const decisionError = ref<string | null>(null)
+const decisionError = ref<DescribedFailure | null>(null)
 const clientName = ref('')
 const redirectOrigin = ref('')
-const workspaces = ref<{ label: string; value: string }[]>([])
+/** Every board the person can see, as listed. */
+const boards = ref<WorkspaceListItem[]>([])
+/** Whether the person has boards at all, so an empty choice can say why it is empty. */
+const hasBoards = computed(() => boards.value.length > 0)
 const workspaceId = ref<string | undefined>(undefined)
 /**
  * Starts at the FLOOR of the ladder and is replaced by the server's `defaultScope` once the request
@@ -56,6 +70,25 @@ const sealedRequest = computed(() =>
 )
 
 /**
+ * Whether approving on `board` can succeed: the approval mints a key on it, which needs
+ * {@link MCP_AUTHORIZATION_APPROVE_PERMISSION} there (`McpAuthorizationConsentController`). With
+ * nobody signed in the deployment is dev-open and allows everything, as the backend does. A
+ * signed-in person with no `viewerRole` on a listed board holds no access to it at all.
+ */
+function mayApproveOn(board: WorkspaceListItem): boolean {
+  if (auth.user === null) return true
+  return (
+    !!board.viewerRole &&
+    permissionsForRole(board.viewerRole).has(MCP_AUTHORIZATION_APPROVE_PERMISSION)
+  )
+}
+
+/** The boards an approval can succeed on, as choices. */
+const workspaces = computed(() =>
+  boards.value.filter(mayApproveOn).map((board) => ({ label: board.name, value: board.id })),
+)
+
+/**
  * The ladder, as choices. Every rung is offered rather than a curated subset: the rungs are what
  * the surface itself enforces, and hiding one would leave a host that genuinely needs it unable to
  * be granted it from the screen built for granting.
@@ -68,14 +101,23 @@ const scopeItems = computed(() =>
   })),
 )
 
+/**
+ * Why the request cannot go on. A request the server calls invalid or expired gets the "start
+ * again from your MCP host" copy; any other failure gets the toast funnel's copy for its status
+ * class. The server's own text stays behind "Show details" in both.
+ */
+const REQUEST_FAILURE_COPY: ReasonCopy = {
+  [MCP_AUTHORIZATION_REQUEST_INVALID]: 'mcpAuthorize.error.expired',
+}
+
 onMounted(async () => {
   if (!sealedRequest.value) {
     screen.value = 'failed'
-    detail.value = t('mcpAuthorize.error.noRequest')
+    detail.value = reportedFailure(null, 'mcpAuthorize.error.noRequest')
     return
   }
   try {
-    const [request, boards] = await Promise.all([
+    const [request, listed] = await Promise.all([
       api.describeMcpAuthorization(sealedRequest.value),
       api.listWorkspaces(),
     ])
@@ -88,14 +130,14 @@ onMounted(async () => {
       request.requestedScope && request.requestedScope !== request.defaultScope
         ? request.requestedScope
         : null
-    workspaces.value = boards.map((board) => ({ label: board.name, value: board.id }))
+    boards.value = listed
     workspaceId.value = workspaces.value[0]?.value
     screen.value = 'deciding'
   } catch (e) {
     // Terminal whatever the cause: with no request to describe there is nothing to decide, and the
     // person is told to start again from the host, which is the only place a new one comes from.
     screen.value = 'failed'
-    detail.value = apiErrorEnvelope(e)?.message ?? t('mcpAuthorize.error.expired')
+    detail.value = describeFailure(e, REQUEST_FAILURE_COPY)
   }
 })
 
@@ -126,11 +168,11 @@ async function decide(decision: 'approve' | 'deny') {
     // COULD have picked one dropdown away.
     if (apiErrorReason(e) === MCP_AUTHORIZATION_REQUEST_INVALID) {
       screen.value = 'failed'
-      detail.value = apiErrorEnvelope(e)?.message ?? t('mcpAuthorize.error.expired')
+      detail.value = describeFailure(e, REQUEST_FAILURE_COPY)
       return
     }
     screen.value = 'deciding'
-    decisionError.value = apiErrorEnvelope(e)?.message ?? t('mcpAuthorize.error.failed')
+    decisionError.value = describeFailure(e)
   }
 }
 
@@ -162,7 +204,7 @@ function backToApp() {
         >
           {{ t('mcpAuthorize.error.title') }}
         </h1>
-        <p class="mb-6 text-center text-sm break-words text-muted">{{ detail }}</p>
+        <FailureMessage :failure="detail" class="mb-6 text-center text-sm text-muted" />
         <UButton block color="neutral" variant="subtle" @click="backToApp">
           {{ t('mcpAuthorize.back') }}
         </UButton>
@@ -183,8 +225,12 @@ function backToApp() {
           {{ t('mcpAuthorize.subtitle', { client: clientName, origin: redirectOrigin }) }}
         </p>
 
-        <div v-if="!workspaces.length" class="mb-6 text-center text-sm text-app-warning-300">
-          {{ t('mcpAuthorize.noWorkspaces') }}
+        <div
+          v-if="!workspaces.length"
+          class="mb-6 text-center text-sm text-app-warning-300"
+          data-testid="mcp-authorize-no-workspaces"
+        >
+          {{ hasBoards ? t('mcpAuthorize.noAdminWorkspaces') : t('mcpAuthorize.noWorkspaces') }}
         </div>
 
         <template v-else>
@@ -228,13 +274,12 @@ function backToApp() {
           </p>
         </template>
 
-        <p
-          v-if="decisionError"
-          class="mb-4 text-center text-sm break-words text-app-error-400"
+        <FailureMessage
+          :failure="decisionError"
+          :title="t('mcpAuthorize.error.decisionFailed')"
+          class="mb-4 text-center text-sm text-app-error-400"
           data-testid="mcp-authorize-decision-error"
-        >
-          {{ decisionError }}
-        </p>
+        />
 
         <div class="flex gap-2">
           <UButton

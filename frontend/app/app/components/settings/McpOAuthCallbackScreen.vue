@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 import Spinner from '~/components/common/Spinner.vue'
+import { describeCallbackFailure, type CallbackFailure } from './McpOAuthCallbackScreen.logic'
 
 // Where a vendor's authorization server sends the operator's browser back to after they approve a
 // remote MCP tool server (`/mcp-oauth-callback?code=…&state=…`).
@@ -19,8 +21,10 @@ const api = useApi()
 const { t } = useI18n()
 
 const state = ref<'working' | 'done' | 'failed'>('working')
-const detail = ref<string | null>(null)
 const serverId = ref<string | null>(null)
+// Inline rather than a toast: this page is the whole screen, and a toast over it would leave the
+// card saying nothing about what went wrong.
+const failure = ref<CallbackFailure | null>(null)
 
 function query(name: string): string {
   if (typeof window === 'undefined') return ''
@@ -34,14 +38,14 @@ onMounted(async () => {
   const denied = query('error')
   if (denied) {
     state.value = 'failed'
-    detail.value = query('error_description') || denied
+    failure.value = { kind: 'text', text: query('error_description') || denied }
     return
   }
   const code = query('code')
   const sealed = query('state')
   if (!code || !sealed) {
     state.value = 'failed'
-    detail.value = t('settings.toolServers.oauth.callback.missingParams')
+    failure.value = { kind: 'text', text: t('settings.toolServers.oauth.callback.missingParams') }
     return
   }
   try {
@@ -50,9 +54,7 @@ onMounted(async () => {
     state.value = 'done'
   } catch (e) {
     state.value = 'failed'
-    detail.value =
-      (e as { data?: { error?: { message?: string } } })?.data?.error?.message ??
-      t('settings.toolServers.oauth.callback.failed')
+    failure.value = describeCallbackFailure(e)
   }
 })
 
@@ -100,7 +102,17 @@ function backToApp() {
         >
           {{ t('settings.toolServers.oauth.callback.failedTitle') }}
         </h1>
-        <p class="mb-6 text-sm break-words text-muted">{{ detail }}</p>
+        <div
+          v-if="failure?.kind === 'api'"
+          class="mb-6 space-y-2 text-sm text-muted"
+          data-testid="mcp-oauth-callback-reason"
+        >
+          <FailureMessage :failure="failure.failure" />
+          <p v-if="failure.restartHint">
+            {{ t('settings.toolServers.oauth.callback.restartHint') }}
+          </p>
+        </div>
+        <p v-else class="mb-6 text-sm break-words text-muted">{{ failure?.text }}</p>
         <UButton block color="neutral" variant="subtle" @click="backToApp">
           {{ t('settings.toolServers.oauth.callback.back') }}
         </UButton>

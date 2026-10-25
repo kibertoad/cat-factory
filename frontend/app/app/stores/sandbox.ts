@@ -10,6 +10,10 @@ import type {
   SandboxPromptVersion,
 } from '~/types/sandbox'
 import { useWorkspaceStore } from '~/stores/workspace'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 /**
  * The Sandbox (parallel prompt/model testing surface). Loaded on demand when the panel
@@ -23,7 +27,7 @@ export const useSandboxStore = defineStore('sandbox', () => {
 
   const available = ref(true)
   const loading = ref(false)
-  const error = ref<string | null>(null)
+  const error = ref<DescribedFailure | null>(null)
 
   const agentKinds = ref<SandboxAgentKindMeta[]>([])
   const prompts = ref<SandboxPromptVersion[]>([])
@@ -73,7 +77,7 @@ export const useSandboxStore = defineStore('sandbox', () => {
       if (status === 503) {
         available.value = false
       } else {
-        error.value = e instanceof Error ? e.message : String(e)
+        error.value = describeFailure(e)
       }
     } finally {
       loading.value = false

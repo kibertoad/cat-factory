@@ -16,6 +16,7 @@
 // later. The pipeline override applies to the marks made after it is changed, and the window
 // says which pipeline it will use before anything is created.
 import { computed, ref } from 'vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 import { useResultView } from '~/composables/useResultView'
 import { useExecutionStore } from '~/stores/execution'
 import { useBoardStore } from '~/stores/board'
@@ -465,9 +466,7 @@ const PHASE_ICON: Record<string, string> = {
           <UCheckbox v-model="showTriaged" size="xs" :label="t('bugFishing.showTriaged')" />
         </div>
 
-        <p v-if="bugFishing.error" class="mb-3 text-xs text-app-error-300">
-          {{ bugFishing.error }}
-        </p>
+        <FailureMessage :failure="bugFishing.error" class="mb-3 text-xs text-app-error-300" />
 
         <!-- An expedition that caught nothing is a real answer. The copy says which of the two it
              is, because "nothing found" and "nothing left to triage" are different things to be

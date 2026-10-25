@@ -1,5 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import {
+  listLocalModelEndpointsContract,
+  listPersonalSubscriptionsContract,
+} from '@cat-factory/contracts'
 import { userEvent, screen } from 'storybook/test'
+import { apiFailure } from '~/stories/api'
 import { apiKey, localModelEndpoint } from '~/stories/providers.stories.mocks'
 import { providersApi } from '~/stories/providersApi'
 import { seedWorkspace, withSeed } from '~/stories/withStores'
@@ -45,11 +50,41 @@ export const Default: Story = {}
 export const NothingConnected: Story = { parameters: { api: providersApi() } }
 
 /**
- * The only OpenRouter key is disabled. The key contract says a disabled key does not make its
- * provider configured, but the row reads Key connected and there is no callout.
+ * The only OpenRouter key is disabled, so nothing is configured: the callout shows, and the row
+ * reads Key disabled rather than Not connected, since the fix is to turn the key back on.
  */
 export const DisabledKeyOnly: Story = {
   parameters: { api: providersApi({ workspaceKeys: [apiKey({ enabled: false })] }) },
+  play: async () => {
+    await screen.findByText('Key disabled')
+    await screen.findByText('No provider connected yet')
+  },
+}
+
+/** The only OpenRouter key belongs to the account, which the key lists here never show. */
+export const AccountKeyOnly: Story = {
+  parameters: { api: providersApi({ configured: ['openrouter'] }) },
+  play: async () => {
+    await screen.findByText('Key connected')
+  },
+}
+
+/**
+ * The two per-user reads fail: those rows say they could not load, not that nothing is connected.
+ * The failures come first because the first matching answer wins.
+ */
+export const PersonalLoadFailed: Story = {
+  parameters: {
+    api: [
+      apiFailure(listLocalModelEndpointsContract),
+      apiFailure(listPersonalSubscriptionsContract),
+      ...providersApi({ workspaceKeys: [apiKey()] }),
+    ],
+  },
+  play: async () => {
+    await screen.findByTestId('model-providers-failed-personal-subs')
+    await screen.findByTestId('model-providers-failed-local-runners')
+  },
 }
 
 /** A search that matches no provider. */

@@ -8,9 +8,13 @@
 // The token never persists in the browser: it lives in the field for the length of the request
 // and is cleared on success. A rejected token comes back as a typed API error whose message
 // says why (invalid, revoked, or missing the `api` scope), so it is shown inline rather than
-// flattened into a generic toast.
+// flattened into a generic toast, with that message behind "Show details".
 import SecretInput from '~/components/common/SecretInput.vue'
-import { apiErrorEnvelope } from '~/composables/api/errors'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 import { vcsTokenCreateUrl } from '~/utils/vcs'
 
 const { t } = useI18n()
@@ -19,7 +23,7 @@ const actionToast = useActionToast()
 
 const pat = ref('')
 const connecting = ref(false)
-const error = ref<string | null>(null)
+const error = ref<DescribedFailure | null>(null)
 
 // The token page on the instance this deployment would connect, not on gitlab.com: a
 // self-managed GitLab's tokens are minted on its own host. The advertised host is null when the
@@ -39,9 +43,7 @@ async function connect() {
     pat.value = ''
     actionToast.success('vcs.connect.gitlab.toast.connected')
   } catch (e) {
-    error.value =
-      apiErrorEnvelope(e)?.message ??
-      (e instanceof Error ? e.message : t('vcs.connect.gitlab.errors.connect'))
+    error.value = describeFailure(e)
   } finally {
     connecting.value = false
   }
@@ -69,9 +71,12 @@ async function connect() {
       </ULink>
     </p>
 
-    <p v-if="error" class="text-sm text-app-error-400" data-testid="gitlab-connect-error">
-      {{ error }}
-    </p>
+    <FailureMessage
+      :failure="error"
+      :title="t('vcs.connect.gitlab.errors.connect')"
+      class="text-sm text-app-error-400"
+      data-testid="gitlab-connect-error"
+    />
 
     <UButton
       icon="i-lucide-gitlab"
