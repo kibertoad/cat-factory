@@ -2044,6 +2044,7 @@
       "thirtyDays": "Ostatnie 30 dni",
       "ninetyDays": "Ostatnie 90 dni"
     },
+    "noAccount": "Brak aktywnego konta, więc nie ma danych do pokazania.",
     "outcomes": {
       "title": "Wyniki uruchomień",
       "total": "Łącznie uruchomień",
@@ -2111,8 +2112,7 @@
       "helperFailures": "Awarie naprawiacza",
       "exhausted": "Przekazane człowiekowi",
       "hint": "Zaliczenie bez naprawiacza oznacza, że wystarczyło wstępne sprawdzenie i naprawiacz w ogóle nie wystartował. Awarie naprawiacza to próby, w których padło samo zadanie, w odróżnieniu od prób, które się wykonały i zostawiły sprawdzenie na czerwono."
-    },
-    "noAccount": "Brak aktywnego konta, więc nie ma danych do pokazania."
+    }
   },
   "reports": {
     "title": "Raporty",

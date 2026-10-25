@@ -2044,6 +2044,7 @@
       "thirtyDays": "Últimos 30 días",
       "ninetyDays": "Últimos 90 días"
     },
+    "noAccount": "No hay ninguna cuenta activa, así que no hay datos que mostrar.",
     "outcomes": {
       "title": "Resultados de las ejecuciones",
       "total": "Ejecuciones totales",
@@ -2111,8 +2112,7 @@
       "helperFailures": "Fallos del reparador",
       "exhausted": "Pasadas a una persona",
       "hint": "Aprobada sin reparador significa que la comprobación previa quedó satisfecha y no se inició ningún reparador. Los fallos del reparador son intentos cuyo propio trabajo se cayó, a diferencia de los que se ejecutaron y dejaron la comprobación en rojo."
-    },
-    "noAccount": "No hay ninguna cuenta activa, así que no hay datos que mostrar."
+    }
   },
   "reports": {
     "title": "Informes",

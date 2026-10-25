@@ -4101,6 +4101,7 @@
       "thirtyDays": "Letzte 30 Tage",
       "ninetyDays": "Letzte 90 Tage"
     },
+    "noAccount": "Es ist kein Konto aktiv, daher gibt es keine Daten anzuzeigen.",
     "outcomes": {
       "title": "Lauf-Ergebnisse",
       "total": "Läufe gesamt",
@@ -4168,8 +4169,7 @@
       "helperFailures": "Fixer-Fehlschläge",
       "exhausted": "An Menschen übergeben",
       "hint": "Ohne Fixer bestanden heißt: die Vorprüfung war zufrieden und es wurde gar kein Fixer gestartet. Fixer-Fehlschläge sind Versuche, deren eigener Job abgestürzt ist, im Unterschied zu Versuchen, die liefen und die Prüfung rot ließen."
-    },
-    "noAccount": "Es ist kein Konto aktiv, daher gibt es keine Daten anzuzeigen."
+    }
   },
   "reports": {
     "title": "Berichte",

@@ -2044,6 +2044,7 @@
       "thirtyDays": "30 derniers jours",
       "ninetyDays": "90 derniers jours"
     },
+    "noAccount": "Aucun compte n'est actif, il n'y a donc aucune donnée à afficher.",
     "outcomes": {
       "title": "Résultats des exécutions",
       "total": "Exécutions totales",
@@ -2111,8 +2112,7 @@
       "helperFailures": "Échecs du réparateur",
       "exhausted": "Confiées à une personne",
       "hint": "Réussie sans réparateur veut dire que la vérification préalable a suffi et qu'aucun réparateur n'a été lancé. Les échecs du réparateur sont les tentatives dont le travail lui-même a planté, par opposition à celles qui se sont exécutées en laissant la vérification au rouge."
-    },
-    "noAccount": "Aucun compte n'est actif, il n'y a donc aucune donnée à afficher."
+    }
   },
   "reports": {
     "title": "Rapports",

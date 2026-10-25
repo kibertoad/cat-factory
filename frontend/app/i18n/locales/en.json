@@ -2175,6 +2175,7 @@
       "thirtyDays": "Last 30 days",
       "ninetyDays": "Last 90 days"
     },
+    "noAccount": "There is no active account, so there is no data to show.",
     "outcomes": {
       "title": "Run outcomes",
       "total": "Total runs",
@@ -2242,8 +2243,7 @@
       "helperFailures": "Fixer failures",
       "exhausted": "Handed to a human",
       "hint": "A clean pass is a gate the precheck satisfied without starting a fixer at all. Fixer failures are attempts whose own job crashed, as opposed to attempts that ran and left the check red."
-    },
-    "noAccount": "There is no active account, so there is no data to show."
+    }
   },
   "reports": {
     "title": "Reports",

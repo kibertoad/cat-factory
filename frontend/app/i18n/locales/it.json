@@ -4101,6 +4101,7 @@
       "thirtyDays": "Ultimi 30 giorni",
       "ninetyDays": "Ultimi 90 giorni"
     },
+    "noAccount": "Nessun account è attivo, quindi non ci sono dati da mostrare.",
     "outcomes": {
       "title": "Esiti delle esecuzioni",
       "total": "Esecuzioni totali",
@@ -4168,8 +4169,7 @@
       "helperFailures": "Fallimenti del riparatore",
       "exhausted": "Passati a una persona",
       "hint": "Superato senza riparatore significa che il controllo preliminare è bastato e non è stato avviato alcun riparatore. I fallimenti del riparatore sono tentativi il cui lavoro è andato in crash, a differenza di quelli che sono stati eseguiti lasciando il controllo rosso."
-    },
-    "noAccount": "Nessun account è attivo, quindi non ci sono dati da mostrare."
+    }
   },
   "reports": {
     "title": "Report",

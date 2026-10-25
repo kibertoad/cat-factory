@@ -2044,6 +2044,7 @@
       "thirtyDays": "Son 30 gün",
       "ninetyDays": "Son 90 gün"
     },
+    "noAccount": "Etkin hesap yok, bu nedenle gösterilecek veri yok.",
     "outcomes": {
       "title": "Çalıştırma sonuçları",
       "total": "Toplam çalıştırma",
@@ -2111,8 +2112,7 @@
       "helperFailures": "Onarıcı hataları",
       "exhausted": "İnsana devredilen",
       "hint": "Onarıcısız geçmek, ön kontrolün yettiği ve hiç onarıcı başlatılmadığı anlamına gelir. Onarıcı hataları, kendi işi çöken denemelerdir; çalışıp kontrolü kırmızı bırakan denemelerden farklıdır."
-    },
-    "noAccount": "Etkin hesap yok, bu nedenle gösterilecek veri yok."
+    }
   },
   "reports": {
     "title": "Raporlar",
