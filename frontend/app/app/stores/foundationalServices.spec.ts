@@ -106,6 +106,27 @@ describe('foundational-services store', () => {
     expect(store.sources).toEqual([])
   })
 
+  it('a reasoned 503 is an outage, so it reads as a failed load too', async () => {
+    // `requireCapability` sends the unreasoned envelope; a 503 that names a reason is a wired
+    // module that is not answering right now.
+    const client = api()
+    vi.stubGlobal('useApi', () => client)
+    const store = useFoundationalServicesStore()
+    client.listFoundationalServices.mockRejectedValueOnce(
+      new ApiError(503, {
+        error: {
+          code: 'unavailable',
+          message: 'unreachable',
+          details: { reason: 'foundational_builtins_unreachable' },
+        },
+      }),
+    )
+    await store.probe()
+
+    expect(store.available).toBeNull()
+    expect(store.loadFailed).toBe(true)
+  })
+
   it('a non-503 failure is a failed load, not a catalog that is switched off', async () => {
     const client = api()
     vi.stubGlobal('useApi', () => client)
