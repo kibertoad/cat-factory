@@ -119,6 +119,46 @@ describe('guided review store', () => {
     expect(store.refetchFailures.s1).toBeUndefined()
   })
 
+  it('keeps a failed session refetch recorded while one of its threads lands', async () => {
+    const failure = new ApiError(503, { error: { code: 'unavailable' } })
+    const getGuidedReview = vi
+      .fn()
+      .mockResolvedValueOnce(view('s1', 'x'))
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce(view('s1', 'y'))
+    const getGuidedReviewThread = vi.fn(async () => threadView('t1', 2))
+    vi.stubGlobal('useApi', () => ({ getGuidedReview, getGuidedReviewThread }))
+    useWorkspaceStore().workspaceId = 'ws_1'
+    const store = useGuidedReviewStore()
+    await store.loadSession('s1')
+    await store.applyChange({ sessionId: 's1', scope: 'session' })
+    expect(store.refetchFailures.s1).toBe(failure)
+    // The session view is still the stale one, so the warning must stay.
+    await store.loadThread('s1', 't1')
+    expect(store.refetchFailures.s1).toBe(failure)
+    await store.loadSession('s1')
+    expect(store.refetchFailures.s1).toBeUndefined()
+  })
+
+  it('clears a failed thread refetch when that thread lands again', async () => {
+    const failure = new ApiError(503, { error: { code: 'unavailable' } })
+    const getGuidedReview = vi.fn(async (_ws: string, id: string) => view(id, 'x'))
+    const getGuidedReviewThread = vi
+      .fn()
+      .mockResolvedValueOnce(threadView('t1', 1))
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce(threadView('t1', 2))
+    vi.stubGlobal('useApi', () => ({ getGuidedReview, getGuidedReviewThread }))
+    useWorkspaceStore().workspaceId = 'ws_1'
+    const store = useGuidedReviewStore()
+    await store.loadSession('s1')
+    await store.loadThread('s1', 't1')
+    await store.applyChange({ sessionId: 's1', scope: 'thread', threadId: 't1' })
+    expect(store.refetchFailures.s1).toBe(failure)
+    await store.loadThread('s1', 't1')
+    expect(store.refetchFailures.s1).toBeUndefined()
+  })
+
   it('forgets a session whose refetch answers 404', async () => {
     const getGuidedReview = vi
       .fn()
