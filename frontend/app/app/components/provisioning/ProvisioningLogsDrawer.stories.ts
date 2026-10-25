@@ -12,12 +12,6 @@ import ProvisioningLogsDrawer from './ProvisioningLogsDrawer.vue'
 // drawer loads the attempts itself. The row shapes follow the backend's writers
 // (`EnvironmentProvisioningService.ts` and `LoggingRunnerTransport.ts` in integrations); the
 // Kubernetes error and the container capacity error are made up.
-//
-// By run id, the first load never shows: `loadForExecution` writes its result through the plain
-// object that `byExecution[id] ??= emptyState()` returns, not through the store's reactive proxy,
-// so the drawer keeps its placeholder rows and a disabled Refresh while the store holds the
-// answer. A live run recovers on its next poll; a finished one does not. The Default, Failed and
-// Empty stories show that (#2394). The subsystem drawer is not affected.
 
 function entry(
   id: string,
@@ -109,10 +103,7 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-/**
- * A finished run's five attempts are answered, and the drawer still shows placeholder rows: the
- * first load by run id is never rendered (see above).
- */
+/** A finished run's five attempts, newest first, one refused for capacity with its error. */
 export const Default: Story = {}
 
 /** The first load in flight: placeholder rows. */
@@ -122,21 +113,18 @@ export const Loading: Story = {
   },
 }
 
-/**
- * The read failed. By run id the error is never rendered either, so this also shows placeholder
- * rows.
- */
+/** The read failed: the drawer shows the error. */
 export const Failed: Story = {
   parameters: {
     api: [apiFailure(listProvisioningLogsContract, { pathPrefix: storyWorkspacePrefix })],
   },
 }
 
-/** Nothing started yet. By run id this also shows placeholder rows, not the empty state. */
+/** Nothing started yet: the drawer shows its empty state. */
 export const Empty: Story = { parameters: { api: [entriesAre([])] } }
 
 /**
- * The environment provider panel's drawer, which renders: its attempts across runs, each with its
+ * The environment provider panel's drawer: its attempts across runs, each with its
  * outcome and target, one refused by the namespace's memory quota with the provider's error.
  */
 export const Subsystem: Story = {

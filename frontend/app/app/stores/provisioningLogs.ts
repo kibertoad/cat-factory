@@ -66,7 +66,10 @@ export const useProvisioningLogsStore = defineStore('provisioningLogs', () => {
    */
   async function loadForExecution(executionId: string, opts?: { silent?: boolean }) {
     const ws = useWorkspaceStore()
-    const s = (byExecution[executionId] ??= emptyState())
+    // Read the state back through the map: an assignment expression yields the raw object, and
+    // writes to it would not reach the drawer (#2394).
+    byExecution[executionId] ??= emptyState()
+    const s = byExecution[executionId]
     if (!opts?.silent) {
       s.loading = true
       s.error = null

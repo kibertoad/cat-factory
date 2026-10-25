@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { computed } from 'vue'
 import { useProvisioningLogsStore } from '~/stores/provisioningLogs'
 import { useWorkspaceStore } from '~/stores/workspace'
 import type { ProvisioningLogEntry } from '~/types/provisioningLogs'
@@ -44,6 +45,64 @@ describe('provisioningLogs store — loadForExecution', () => {
 
     expect(store.byExecution.exec1!.loading).toBe(false)
     expect(store.byExecution.exec1!.entries).toHaveLength(1)
+  })
+
+  describe('the first load for a run reaches a reader that tracks the store (#2394)', () => {
+    // The drawer reads `byExecution[id]` through a computed. A plain read after the load would see
+    // the values even if the store wrote them to the raw object, so these specs read through a
+    // computed, which only re-evaluates when the writes go through the reactive proxy.
+    function trackRun(store: ReturnType<typeof useProvisioningLogsStore>) {
+      return computed(() => {
+        const s = store.byExecution.exec1
+        return s ? { loading: s.loading, ids: s.entries.map((e) => e.id), error: s.error } : null
+      })
+    }
+
+    it('shows loading, then the entries', async () => {
+      let resolveFetch!: (r: { entries: ProvisioningLogEntry[] }) => void
+      vi.stubGlobal('useApi', () => ({
+        listProvisioningLogs: () =>
+          new Promise<{ entries: ProvisioningLogEntry[] }>((res) => {
+            resolveFetch = res
+          }),
+      }))
+      const store = useProvisioningLogsStore()
+      const run = trackRun(store)
+      expect(run.value).toBeNull()
+
+      const load = store.loadForExecution('exec1')
+      expect(run.value).toEqual({ loading: true, ids: [], error: null })
+
+      resolveFetch({ entries: [entry({ id: 'a' }), entry({ id: 'b' })] })
+      await load
+      expect(run.value).toEqual({ loading: false, ids: ['a', 'b'], error: null })
+    })
+
+    it('shows the error when the read fails', async () => {
+      vi.stubGlobal('useApi', () => ({
+        listProvisioningLogs: () => Promise.reject(new Error('503')),
+      }))
+      const store = useProvisioningLogsStore()
+      const run = trackRun(store)
+
+      const load = store.loadForExecution('exec1')
+      expect(run.value?.loading).toBe(true)
+      await load
+      expect(run.value).toEqual({ loading: false, ids: [], error: '503' })
+    })
+
+    it('shows an empty run as loaded with no entries', async () => {
+      vi.stubGlobal('useApi', () => ({
+        listProvisioningLogs: () => Promise.resolve({ entries: [] }),
+      }))
+      const store = useProvisioningLogsStore()
+      const run = trackRun(store)
+
+      const load = store.loadForExecution('exec1')
+      expect(run.value?.loading).toBe(true)
+      await load
+      expect(run.value).toEqual({ loading: false, ids: [], error: null })
+    })
   })
 
   it('a silent poll never flips the loading spinner', async () => {
