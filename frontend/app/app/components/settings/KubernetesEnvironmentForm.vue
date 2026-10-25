@@ -177,15 +177,25 @@ const urlValid = computed(() => {
   return true // ingressStatus has no required field
 })
 
+// Whether a token is already SAVED for this connection. The value is write-only (never returned),
+// so on edit the token field starts blank and may stay blank: a save overlays the stored secrets,
+// and a blank value keeps the saved token. The connection test probes the candidate config with
+// the supplied secrets only, so it still needs the token typed in.
+const tokenStored = computed(
+  () =>
+    props.connection?.kind === 'kubernetes' &&
+    props.connection.secretKeys.includes(KUBERNETES_ENV_TOKEN_SECRET_KEY),
+)
 const canSave = computed(
   () =>
     !!form.label.trim() &&
     !!form.apiServerUrl.trim() &&
-    !!apiToken.value.trim() &&
+    (tokenStored.value || !!apiToken.value.trim()) &&
     !tokenBlocking.value &&
     manifestSourceValid.value &&
     urlValid.value,
 )
+const canTest = computed(() => canSave.value && !!apiToken.value.trim())
 
 // Why the Connect button is disabled, surfaced as a red hint next to it so a mandatory-field gap
 // is visible rather than a dead button. Lists the empty required fields by their on-screen label;
@@ -196,7 +206,8 @@ const connectBlockedReason = computed(() => {
   if (!form.label.trim()) missing.push(t('settings.providerConnection.kubernetesEnv.label'))
   if (!form.apiServerUrl.trim())
     missing.push(t('settings.providerConnection.kubernetesEnv.apiServerUrl'))
-  if (!apiToken.value.trim()) missing.push(t('settings.providerConnection.kubernetesEnv.apiToken'))
+  if (!tokenStored.value && !apiToken.value.trim())
+    missing.push(t('settings.providerConnection.kubernetesEnv.apiToken'))
   if (form.manifestSourceType === 'separate' && !form.manifestRepo.trim())
     missing.push(t('settings.providerConnection.kubernetesEnv.repo'))
   if (!form.manifestPath.trim()) missing.push(t('settings.providerConnection.kubernetesEnv.path'))
@@ -289,9 +300,28 @@ function optional(label: string): string {
 
     <UFormField
       :label="t('settings.providerConnection.kubernetesEnv.apiToken')"
-      :help="t('settings.providerConnection.kubernetesEnv.apiTokenHelp')"
+      :help="
+        tokenStored
+          ? t('settings.providerConnection.kubernetesEnv.apiTokenHelpStored')
+          : t('settings.providerConnection.kubernetesEnv.apiTokenHelp')
+      "
     >
-      <SecretInput v-model="apiToken" class="w-full font-mono" />
+      <template v-if="tokenStored" #hint>
+        <span class="inline-flex items-center gap-1 text-2xs text-app-success-400">
+          <UIcon name="i-lucide-check-circle-2" class="h-3.5 w-3.5" />
+          {{ t('settings.providerConnection.kubernetesEnv.tokenSaved') }}
+        </span>
+      </template>
+      <SecretInput
+        v-model="apiToken"
+        class="w-full font-mono"
+        autocomplete="off"
+        :placeholder="
+          tokenStored
+            ? t('settings.providerConnection.kubernetesEnv.apiTokenPlaceholderStored')
+            : undefined
+        "
+      />
       <!-- Rose when the paste is impossible (blocks Test/Save), amber when it is only suspicious
            and the operator may legitimately overrule it. -->
       <p
@@ -444,7 +474,7 @@ function optional(label: string): string {
         size="sm"
         icon="i-lucide-plug-zap"
         :loading="testing"
-        :disabled="!canSave"
+        :disabled="!canTest"
         @click="emit('test', buildPayload())"
       >
         {{ t('settings.providerConnection.test.button') }}
