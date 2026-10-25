@@ -7,7 +7,7 @@ import type {
   ResolveBrainstormExceededChoice,
 } from '~/types/brainstorm'
 import { useWorkspaceStore } from '~/stores/workspace'
-import { apiErrorStatus } from '~/composables/api/errors'
+import { isFeatureOffRefusal } from '~/composables/api/errors'
 
 /**
  * Brainstorm (structured-dialogue) state. On the pipeline path a brainstorm runs as an opt-in
@@ -142,7 +142,7 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
       } catch (error) {
         // Only a 503 means the feature is off. Any other failure is a read that did not answer,
         // which the window states instead of showing "no session yet".
-        if (apiErrorStatus(error) === 503) available.value = false
+        if (isFeatureOffRefusal(error)) available.value = false
         else withFlag(failedByKey, k, true)
       } finally {
         withFlag(loadingByKey, k, false)

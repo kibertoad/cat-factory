@@ -6,7 +6,7 @@ import type {
   ReviewItemStatus,
 } from '~/types/requirements'
 import { useWorkspaceStore } from '~/stores/workspace'
-import { apiErrorStatus } from '~/composables/api/errors'
+import { isFeatureOffRefusal } from '~/composables/api/errors'
 // The settlement derivations over one review's findings (`stores/requirements/settlement.ts`):
 // pure, memoised per review object, and re-exported below so every caller keeps reading them off
 // the store.
@@ -157,7 +157,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
       } catch (error) {
         // Only a 503 means the feature is off. Any other failure is a read that did not answer,
         // which the window states instead of showing "no review yet".
-        if (apiErrorStatus(error) === 503) available.value = false
+        if (isFeatureOffRefusal(error)) available.value = false
         else withFlag(failedByBlock, blockId, true)
       } finally {
         withFlag(loadingByBlock, blockId, false)

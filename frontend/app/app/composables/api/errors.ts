@@ -77,10 +77,30 @@ export function apiErrorReason(error: unknown): string | null {
   return typeof reason === 'string' ? reason : null
 }
 
+/**
+ * Whether a refused read means the deployment has not configured the module (503, from
+ * `requireCapability`). Pick this over {@link isAbsentFeatureRefusal} for a read behind the auth
+ * gate, where a 401 means the session expired and is a failure like any other.
+ */
+export function isFeatureOffRefusal(error: unknown): boolean {
+  return apiErrorStatus(error) === 503
+}
+
 /** The HTTP status of a thrown API error, when present (contract client or `$fetch`). */
 export function apiErrorStatus(error: unknown): number | undefined {
   const e = error as { statusCode?: unknown; status?: unknown }
   if (typeof e?.statusCode === 'number') return e.statusCode
   if (typeof e?.status === 'number') return e.status
   return undefined
+}
+
+/**
+ * Whether a refused read means "nothing to show here" rather than a fault: 401 when auth is
+ * disabled or the caller is signed out, 503 when the deployment has not configured the module
+ * (`requireCapability`). A user-scoped loader treats these as an empty list; any other failure
+ * (a 5xx, a network error) is a load that did not happen and must read as one.
+ */
+export function isAbsentFeatureRefusal(error: unknown): boolean {
+  const status = apiErrorStatus(error)
+  return status === 401 || status === 503
 }

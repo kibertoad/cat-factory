@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import type { ConsensusSession } from '~/types/consensus'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useSingleFlight } from '~/composables/useSingleFlight'
-import { apiErrorStatus } from '~/composables/api/errors'
+import { isFeatureOffRefusal } from '~/composables/api/errors'
 
 /**
  * Consensus session state. A consensus-enabled step runs a multi-model process (panel /
@@ -95,7 +95,7 @@ export const useConsensusStore = defineStore('consensus', () => {
       // "No session" is a `session: null` answer, so only a failure reaches here. A 503 is a
       // deployment with consensus off, which has no session to show. Anything else is a read that
       // did not answer, and the window must say so rather than show its empty state.
-      if (apiErrorStatus(error) === 503) {
+      if (isFeatureOffRefusal(error)) {
         setFailed(blockId, false)
         if (sessions.value[blockId] === undefined) sessions.value[blockId] = null
       } else {

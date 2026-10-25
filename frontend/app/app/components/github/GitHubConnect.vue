@@ -9,7 +9,7 @@
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import LoadFailedState from '~/components/common/LoadFailedState.vue'
-import { apiErrorStatus } from '~/composables/api/errors'
+import { isFeatureOffRefusal } from '~/composables/api/errors'
 
 const { t } = useI18n()
 const github = useGitHubStore()
@@ -35,7 +35,7 @@ async function refreshInstallations() {
     listFailed.value = false
   } catch (e) {
     // A 503 (integration off) is handled by the host; surface anything else.
-    listFailed.value = apiErrorStatus(e) !== 503
+    listFailed.value = !isFeatureOffRefusal(e)
     present(e, 'github.connect.errors.listInstallations')
   }
 }

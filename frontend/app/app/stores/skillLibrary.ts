@@ -6,7 +6,7 @@ import type {
   SkillSource,
   SkillSyncResult,
 } from '~/types/domain'
-import { apiErrorStatus } from '~/composables/api/errors'
+import { isFeatureOffRefusal } from '~/composables/api/errors'
 import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { useSkillsStore } from '~/stores/skills'
 
@@ -73,7 +73,7 @@ function skillLibrarySetup(resolveAccountId: () => string | null) {
     } catch (error) {
       // Only a 503 means the library is off. A read that did not answer says nothing about the
       // gate, so `available` goes back to unknown and the failure is stated on its own.
-      const off = apiErrorStatus(error) === 503
+      const off = isFeatureOffRefusal(error)
       available.value = off ? false : null
       loadFailed.value = !off
       catalog.value = []

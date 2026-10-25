@@ -13,7 +13,7 @@ import type {
   UpsertEnvironmentUserHandlerBody,
 } from '@cat-factory/contracts'
 import { useWorkspaceStore } from '~/stores/workspace'
-import { apiErrorStatus } from '~/composables/api/errors'
+import { isFeatureOffRefusal } from '~/composables/api/errors'
 
 // One predicate for "this handler is the (type, manifestId) one" — custom handlers are keyed by
 // manifestId, the rest by type alone (manifestId null). Defined once and reused across both the
@@ -69,7 +69,7 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
     } catch (error) {
       // Only a 503 means the environments integration is off and hides the configurator. Any
       // other failure is a read that did not answer, which the configurator states.
-      const off = apiErrorStatus(error) === 503
+      const off = isFeatureOffRefusal(error)
       available.value = off ? false : null
       loadFailed.value = !off
       handlers.value = []

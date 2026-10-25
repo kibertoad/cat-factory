@@ -12,7 +12,7 @@ import type {
 } from '~/types/incidentEnrichment'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
-import { apiErrorStatus } from '~/composables/api/errors'
+import { isFeatureOffRefusal } from '~/composables/api/errors'
 
 /**
  * The workspace's post-release-health settings: the (single) observability connection —
@@ -71,7 +71,7 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
       connection.value = { connected: false, provider: null, summary: null }
       configs.value = []
       // Only a 503 means observability is disabled and hides the entry points.
-      if (apiErrorStatus(error) === 503) {
+      if (isFeatureOffRefusal(error)) {
         available.value = false
         loadFailed.value = false
       } else {

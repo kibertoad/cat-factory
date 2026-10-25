@@ -12,7 +12,7 @@ import type {
   ResolvedFoundationalService,
   UpdateFoundationalServiceInput,
 } from '~/types/domain'
-import { apiErrorStatus } from '~/composables/api/errors'
+import { isFeatureOffRefusal } from '~/composables/api/errors'
 import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { createServiceCatalogState } from '~/stores/serviceCatalogConnection'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -140,7 +140,7 @@ function foundationalServicesSetup(
       loadFailed.value = false
     } catch (error) {
       // Only a 503 means the catalog is not wired; anything else is a failed read.
-      const off = apiErrorStatus(error) === 503
+      const off = isFeatureOffRefusal(error)
       available.value = off ? false : null
       loadFailed.value = !off
       // Reset EVERY view, `sourcesAvailable` included. Leaving it at its previous value would

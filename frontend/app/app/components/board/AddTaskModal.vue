@@ -37,7 +37,7 @@ import ReviewSkillQueue from '~/components/skills/ReviewSkillQueue.vue'
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
 import { isReviewDebtConflict, reviewFrictionContext } from '~/utils/reviewFriction'
-import { apiErrorEnvelope, apiErrorStatus } from '~/composables/api/errors'
+import { apiErrorEnvelope, isFeatureOffRefusal } from '~/composables/api/errors'
 import type { ReviewTargetReason } from '@cat-factory/contracts'
 import {
   defaultBuildPipelineId,
@@ -707,7 +707,7 @@ onModalOpen(open, () => {
  */
 function reportPickerLoadFailure(titleKey: string) {
   return (error: unknown) => {
-    if (apiErrorStatus(error) !== 503) present(error, titleKey)
+    if (!isFeatureOffRefusal(error)) present(error, titleKey)
   }
 }
 

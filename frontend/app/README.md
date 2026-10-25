@@ -322,10 +322,13 @@ because `UEmpty` renders it as an `<h2>`, which would put a heading into every p
 value placeholder ("None", a dash in a table cell) is not an empty state.
 
 **A read that failed renders `common/LoadFailedState.vue`, never `EmptyState` and never the
-feature's "not enabled" notice.** Only a 503 means the deployment did not wire a feature
-(`apiErrorStatus(error) === 503`); a store records any other failure apart from its data (a
-`loadFailed` flag), so the surface can tell "nothing here", "switched off" and "could not ask"
-apart. A `@retry` listener adds the retry button.
+feature's "not enabled" notice.** Classify the refusal with one of the two helpers in
+`composables/api/errors.ts`. `isFeatureOffRefusal` (503 only: the deployment did not wire the
+module) is for a read behind the auth gate, where a 401 means the session expired and is a
+failure. `isAbsentFeatureRefusal` (401 or 503) is for a user-scoped read that a signed-out caller
+or an auth-disabled deployment answers with 401 by design. A store records any other failure apart
+from its data (a `loadFailed` flag), so the surface can tell "nothing here", "switched off" and
+"could not ask" apart. A `@retry` listener adds the retry button.
 
 `scripts/check-frontend-feedback.mjs` (CI's `repo-guards` job) bans `useToast(` and `toast.add(`
 outside the two funnels and `animate-spin` outside `Spinner.vue`. Its `PENDING` list names files another open
