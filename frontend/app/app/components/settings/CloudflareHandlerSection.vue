@@ -12,6 +12,11 @@
 // preview is built by CI and lives in the cloud, so "this machine only" has no meaning for it.
 import { computed, ref, watch } from 'vue'
 import type { InfraHandlerConfig } from '@cat-factory/contracts'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 type CloudflareHandlerConfig = Extract<InfraHandlerConfig, { engine: 'cloudflare' }>
 type CloudflareConfig = CloudflareHandlerConfig['cloudflare']
@@ -24,7 +29,7 @@ const { confirmAction } = useConfirmAction()
 
 const busy = ref(false)
 const testing = ref(false)
-const testResult = ref<{ ok: boolean; message?: string } | null>(null)
+const testResult = ref<{ ok: boolean; message?: string; failure?: DescribedFailure } | null>(null)
 const editing = ref(false)
 
 const handler = computed(() => infra.handlerFor('cloudflare') ?? null)
@@ -118,7 +123,7 @@ async function test() {
       secrets: secretsForSave(),
     })
   } catch (e) {
-    testResult.value = { ok: false, message: e instanceof Error ? e.message : String(e) }
+    testResult.value = { ok: false, failure: describeFailure(e) }
   } finally {
     testing.value = false
   }
@@ -297,8 +302,13 @@ async function remove() {
         </UButton>
       </div>
 
+      <FailureMessage
+        v-if="testResult?.failure"
+        :failure="testResult.failure"
+        class="text-2xs text-app-error-300"
+      />
       <p
-        v-if="testResult"
+        v-else-if="testResult"
         class="text-2xs"
         :class="testResult.ok ? 'text-app-success-300' : 'text-app-error-300'"
       >

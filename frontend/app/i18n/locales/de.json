@@ -39,7 +39,7 @@
       "title": "Diese Verbindung konnte nicht eingerichtet werden",
       "noRequest": "Diese Seite wurde ohne Autorisierungsanfrage geöffnet. Starten Sie die Verbindung in Ihrem MCP-Host.",
       "expired": "Diese Autorisierungsanfrage ist ungültig oder abgelaufen. Starten Sie die Verbindung in Ihrem MCP-Host erneut.",
-      "failed": "Die Entscheidung konnte nicht gespeichert werden. Starten Sie die Verbindung in Ihrem MCP-Host erneut."
+      "decisionFailed": "Die Entscheidung konnte nicht gespeichert werden."
     }
   },
   "settings": {
@@ -1054,7 +1054,8 @@
       "metered": "Gemessene API",
       "illustrative": "Die für Abonnements angezeigten Kosten sind Richtwerte – diese Tarife sind Pauschalpreise und werden nicht pro Token abgerechnet.",
       "tokens": "{input} ein / {output} aus",
-      "calls": "{count} Aufrufe"
+      "calls": "{count} Aufrufe",
+      "loadFailed": "Die Nutzung konnte nicht geladen werden."
     },
     "workspaceSettings": {
       "title": "Workspace-Einstellungen",

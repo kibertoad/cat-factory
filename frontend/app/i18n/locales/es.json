@@ -2973,7 +2973,7 @@
       "title": "No se pudo establecer esta conexión",
       "noRequest": "Esta página se abrió sin una solicitud de autorización. Inicia la conexión desde tu host MCP.",
       "expired": "Esta solicitud de autorización no es válida o ha caducado. Vuelve a iniciar la conexión desde tu host MCP.",
-      "failed": "No se pudo registrar la decisión. Vuelve a iniciar la conexión desde tu host MCP."
+      "decisionFailed": "No se pudo registrar la decisión."
     }
   },
   "settings": {
@@ -3847,7 +3847,8 @@
       "metered": "API medida",
       "illustrative": "Los costes mostrados para las suscripciones son orientativos: estos planes son de tarifa plana y no se facturan por token.",
       "tokens": "{input} entrada / {output} salida",
-      "calls": "{count} llamadas"
+      "calls": "{count} llamadas",
+      "loadFailed": "No se pudo cargar el uso."
     },
     "workspaceSettings": {
       "title": "Configuración del espacio de trabajo",

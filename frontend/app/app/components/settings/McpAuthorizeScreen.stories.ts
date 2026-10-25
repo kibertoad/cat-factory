@@ -71,6 +71,17 @@ export const Failed: Story = {
       boards,
     ],
   },
+  // The translated copy first; the backend's English only behind "Show details".
+  play: async () => {
+    await screen.findByText(
+      'This authorization request is invalid or has expired. Start the connection again from your MCP host.',
+    )
+    await expect(screen.queryByText(/request is invalid or has expired$/)).toBeNull()
+    await userEvent.click(screen.getByTestId('failure-message-show-detail'))
+    await expect(screen.getByTestId('failure-message-detail')).toHaveTextContent(
+      'This authorization request is invalid or has expired',
+    )
+  },
 }
 
 /** Opened with no request on the URL: nothing is read, and the screen says where to start. */
@@ -116,6 +127,10 @@ export const DecisionRefused: Story = {
     // The open menu blocks pointer events on the page until it has closed.
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
     await userEvent.click(screen.getByTestId('mcp-authorize-approve'))
-    await screen.findByTestId('mcp-authorize-decision-error')
+    const refusal = await screen.findByTestId('mcp-authorize-decision-error')
+    await expect(refusal).toHaveTextContent(
+      'Your role in this workspace does not allow this action.',
+    )
+    await expect(refusal).not.toHaveTextContent('secrets.manage')
   },
 }

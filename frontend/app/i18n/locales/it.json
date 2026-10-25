@@ -39,7 +39,7 @@
       "title": "Non è stato possibile creare questo collegamento",
       "noRequest": "Questa pagina è stata aperta senza una richiesta di autorizzazione. Avvia il collegamento dal tuo host MCP.",
       "expired": "Questa richiesta di autorizzazione non è valida o è scaduta. Riavvia il collegamento dal tuo host MCP.",
-      "failed": "Non è stato possibile registrare la decisione. Riavvia il collegamento dal tuo host MCP."
+      "decisionFailed": "Non è stato possibile registrare la decisione."
     }
   },
   "settings": {
@@ -1054,7 +1054,8 @@
       "metered": "API misurata",
       "illustrative": "I costi mostrati per gli abbonamenti sono indicativi: questi piani sono a tariffa fissa e non fatturati per token.",
       "tokens": "{input} in ingresso / {output} in uscita",
-      "calls": "{count} chiamate"
+      "calls": "{count} chiamate",
+      "loadFailed": "Non è stato possibile caricare l'utilizzo."
     },
     "workspaceSettings": {
       "title": "Impostazioni del workspace",

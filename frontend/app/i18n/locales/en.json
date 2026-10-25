@@ -3131,7 +3131,7 @@
       "title": "This connection could not be set up",
       "noRequest": "This page was opened without an authorization request. Start the connection from your MCP host.",
       "expired": "This authorization request is invalid or has expired. Start the connection again from your MCP host.",
-      "failed": "The decision could not be recorded. Start the connection again from your MCP host."
+      "decisionFailed": "The decision could not be recorded."
     }
   },
   "settings": {
@@ -4158,7 +4158,8 @@
       "metered": "Metered API",
       "illustrative": "Costs shown for subscriptions are illustrative — these plans are flat-rate, not billed per token.",
       "tokens": "{input} in / {output} out",
-      "calls": "{count} calls"
+      "calls": "{count} calls",
+      "loadFailed": "Usage could not be loaded."
     },
     "workspaceSettings": {
       "title": "Workspace settings",

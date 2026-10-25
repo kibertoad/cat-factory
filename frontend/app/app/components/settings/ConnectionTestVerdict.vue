@@ -17,10 +17,20 @@
 import { computed } from 'vue'
 import type { ConnectionFailureCause } from '@cat-factory/contracts'
 import { CONNECTION_FAILURE_CAUSE_KEYS } from '~/utils/connectionFailures'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import type { DescribedFailure } from '~/composables/pipelineErrorToast/describeFailure'
 
 const props = defineProps<{
-  /** The probe verdict; null before the first test (renders nothing). */
-  result: { ok: boolean; message?: string; failureCause?: ConnectionFailureCause } | null
+  /**
+   * The probe verdict; null before the first test (renders nothing). `failure` is set instead of
+   * a verdict when the test CALL itself failed, so there is no probe answer to show.
+   */
+  result: {
+    ok: boolean
+    message?: string
+    failureCause?: ConnectionFailureCause
+    failure?: DescribedFailure
+  } | null
 }>()
 
 const { t, te } = useI18n()
@@ -55,6 +65,12 @@ const detail = computed(() => (causeKey.value ? (props.result?.message ?? '') : 
   >
     {{ result.message ?? t('settings.providerConnection.test.ok') }}
   </p>
+  <FailureMessage
+    v-else-if="result?.failure"
+    :failure="result.failure"
+    class="text-xs text-app-error-400"
+    data-testid="connection-test-result"
+  />
   <div v-else-if="result" class="space-y-0.5" data-testid="connection-test-result">
     <p class="text-xs text-app-error-400 break-words">{{ headline }}</p>
     <p v-if="detail" class="text-2xs text-muted break-words">{{ detail }}</p>

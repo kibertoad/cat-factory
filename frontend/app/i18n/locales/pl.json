@@ -2973,7 +2973,7 @@
       "title": "Nie udało się skonfigurować tego połączenia",
       "noRequest": "Ta strona została otwarta bez żądania autoryzacji. Rozpocznij łączenie w swoim hoście MCP.",
       "expired": "To żądanie autoryzacji jest nieprawidłowe lub wygasło. Rozpocznij łączenie ponownie w swoim hoście MCP.",
-      "failed": "Nie udało się zapisać decyzji. Rozpocznij łączenie ponownie w swoim hoście MCP."
+      "decisionFailed": "Nie udało się zapisać decyzji."
     }
   },
   "settings": {
@@ -3847,7 +3847,8 @@
       "metered": "Mierzone API",
       "illustrative": "Koszty pokazane dla abonamentów mają charakter poglądowy – te plany są ryczałtowe i nie są rozliczane za token.",
       "tokens": "{input} wej. / {output} wyj.",
-      "calls": "Wywołania: {count}"
+      "calls": "Wywołania: {count}",
+      "loadFailed": "Nie udało się wczytać użycia."
     },
     "workspaceSettings": {
       "title": "Ustawienia obszaru roboczego",

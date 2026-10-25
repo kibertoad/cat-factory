@@ -2973,7 +2973,7 @@
       "title": "Cette connexion n'a pas pu être établie",
       "noRequest": "Cette page a été ouverte sans demande d'autorisation. Lancez la connexion depuis votre hôte MCP.",
       "expired": "Cette demande d'autorisation est invalide ou a expiré. Relancez la connexion depuis votre hôte MCP.",
-      "failed": "La décision n'a pas pu être enregistrée. Relancez la connexion depuis votre hôte MCP."
+      "decisionFailed": "La décision n'a pas pu être enregistrée."
     }
   },
   "settings": {
@@ -3847,7 +3847,8 @@
       "metered": "API facturée",
       "illustrative": "Les coûts affichés pour les abonnements sont indicatifs : ces forfaits sont à tarif fixe et non facturés au jeton.",
       "tokens": "{input} entrée / {output} sortie",
-      "calls": "{count} appels"
+      "calls": "{count} appels",
+      "loadFailed": "L'utilisation n'a pas pu être chargée."
     },
     "workspaceSettings": {
       "title": "Paramètres de l'espace de travail",

@@ -12,6 +12,11 @@ import SecretInput from '~/components/common/SecretInput.vue'
 import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import AppModal from '~/components/common/AppModal.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -36,6 +41,8 @@ const status = computed(() => store.statusFor(kind.value))
 const values = ref<Record<string, string>>({})
 const labelDraft = ref('')
 const testResult = ref<ConnectionTestResult | null>(null)
+// The test CALL itself failed (no verdict at all), classified like a failure toast.
+const testFailure = ref<DescribedFailure | null>(null)
 const testing = ref(false)
 const busy = ref(false)
 
@@ -43,6 +50,7 @@ function resetDraft() {
   values.value = {}
   labelDraft.value = ''
   testResult.value = null
+  testFailure.value = null
   // Prefill non-secret metadata from the stored status (secret stays blank — write-only).
   const meta = status.value?.metadata
   if (meta) for (const [k, v] of Object.entries(meta)) values.value[k] = v
@@ -83,10 +91,11 @@ async function test() {
   if (!payload) return
   testing.value = true
   testResult.value = null
+  testFailure.value = null
   try {
     testResult.value = await store.test(kind.value, payload)
   } catch (e) {
-    testResult.value = { ok: false, message: e instanceof Error ? e.message : String(e) }
+    testFailure.value = describeFailure(e)
   } finally {
     testing.value = false
   }
@@ -221,7 +230,12 @@ async function remove() {
             >
               {{ t('settings.userSecrets.testConnection') }}
             </UButton>
-            <span v-if="testResult && testResult.ok" class="text-xs text-app-success-400">
+            <FailureMessage
+              v-if="testFailure"
+              :failure="testFailure"
+              class="text-xs text-app-error-400"
+            />
+            <span v-else-if="testResult && testResult.ok" class="text-xs text-app-success-400">
               {{ testResult.message ?? t('settings.userSecrets.tokenValid') }}
             </span>
             <span v-else-if="testResult" class="text-xs text-app-error-400">

@@ -2973,7 +2973,7 @@
       "title": "Bu bağlantı kurulamadı",
       "noRequest": "Bu sayfa bir yetkilendirme isteği olmadan açıldı. Bağlantıyı MCP istemcinizden başlatın.",
       "expired": "Bu yetkilendirme isteği geçersiz veya süresi dolmuş. Bağlantıyı MCP istemcinizden yeniden başlatın.",
-      "failed": "Karar kaydedilemedi. Bağlantıyı MCP istemcinizden yeniden başlatın."
+      "decisionFailed": "Karar kaydedilemedi."
     }
   },
   "settings": {
@@ -3988,7 +3988,8 @@
       "metered": "Ölçümlü API",
       "illustrative": "Abonelikler için gösterilen maliyetler bilgi amaçlıdır; bu planlar sabit ücretlidir ve jeton başına faturalandırılmaz.",
       "tokens": "{input} giriş / {output} çıkış",
-      "calls": "{count} çağrı"
+      "calls": "{count} çağrı",
+      "loadFailed": "Kullanım yüklenemedi."
     },
     "workspaceSettings": {
       "title": "Çalışma alanı ayarları",
