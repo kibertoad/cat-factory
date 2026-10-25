@@ -2623,6 +2623,7 @@
       "intro": "Tus conexiones personales, usadas para las ejecuciones que inicias y visibles solo para ti.",
       "connected": "Conectado",
       "notConnected": "No conectado",
+      "loadFailed": "No se pudo cargar",
       "connectedCount": "ninguno conectado | {count} conectado | {count} conectados",
       "sourceControl": {
         "title": "Control de versiones"

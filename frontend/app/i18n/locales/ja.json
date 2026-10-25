@@ -2623,6 +2623,7 @@
       "intro": "あなたが開始する実行に使われる個人的な接続です。あなたにのみ表示されます。",
       "connected": "接続済み",
       "notConnected": "未接続",
+      "loadFailed": "読み込めませんでした",
       "connectedCount": "接続なし | {count}件接続済み | {count}件接続済み",
       "sourceControl": {
         "title": "ソース管理"

@@ -2623,6 +2623,7 @@
       "intro": "Başlattığınız çalıştırmalar için kullanılan ve yalnızca size görünür kişisel bağlantılarınız.",
       "connected": "Bağlandı",
       "notConnected": "Bağlı değil",
+      "loadFailed": "Yüklenemedi",
       "connectedCount": "bağlı yok | {count} bağlı | {count} bağlı",
       "sourceControl": {
         "title": "Kaynak kontrolü"

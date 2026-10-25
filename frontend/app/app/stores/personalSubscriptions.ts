@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { apiErrorEnvelope } from '~/composables/api/errors'
+import { apiErrorEnvelope, isAbsentFeatureRefusal } from '~/composables/api/errors'
 import type {
   PersonalSubscriptionStatus,
   StorePersonalSubscriptionInput,
@@ -121,6 +121,8 @@ export const usePersonalSubscriptionsStore = defineStore('personalSubscriptions'
   }
   const subscriptions = ref<PersonalSubscriptionStatus[]>([])
   const loading = ref(false)
+  /** True when the last `load()` failed for a reason other than auth or the feature being off. */
+  const loadFailed = ref(false)
   /** When set, a credential modal should open to satisfy the pending prompt. */
   const pending = ref<PendingCredential | null>(null)
 
@@ -129,8 +131,11 @@ export const usePersonalSubscriptionsStore = defineStore('personalSubscriptions'
     try {
       const { subscriptions: list } = await api.listPersonalSubscriptions()
       subscriptions.value = list
-    } catch {
-      // Auth disabled / not signed in / feature off → no personal subscriptions surface.
+      loadFailed.value = false
+    } catch (err) {
+      // Auth disabled / not signed in (401) or feature off (503) → no personal subscriptions
+      // surface. Any other failure is recorded, so a reader can tell it from an empty list.
+      loadFailed.value = !isAbsentFeatureRefusal(err)
       subscriptions.value = []
     } finally {
       loading.value = false
@@ -288,6 +293,7 @@ export const usePersonalSubscriptionsStore = defineStore('personalSubscriptions'
   return {
     subscriptions,
     loading,
+    loadFailed,
     pending,
     renewals,
     load,

@@ -2736,6 +2736,7 @@
       "intro": "Le tue connessioni personali, usate per le esecuzioni che avvii tu e visibili solo a te.",
       "connected": "Connesso",
       "notConnected": "Non connesso",
+      "loadFailed": "Caricamento non riuscito",
       "connectedCount": "nessuno connesso | {count} connesso | {count} connessi",
       "sourceControl": {
         "title": "Controllo del codice sorgente"

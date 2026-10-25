@@ -84,3 +84,14 @@ export function apiErrorStatus(error: unknown): number | undefined {
   if (typeof e?.status === 'number') return e.status
   return undefined
 }
+
+/**
+ * Whether a refused read means "nothing to show here" rather than a fault: 401 when auth is
+ * disabled or the caller is signed out, 503 when the deployment has not configured the module
+ * (`requireCapability`). A user-scoped loader treats these as an empty list; any other failure
+ * (a 5xx, a network error) is a load that did not happen and must read as one.
+ */
+export function isAbsentFeatureRefusal(error: unknown): boolean {
+  const status = apiErrorStatus(error)
+  return status === 401 || status === 503
+}

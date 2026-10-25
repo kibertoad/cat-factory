@@ -1,32 +1,42 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import {
+  listLocalModelEndpointsContract,
+  listPersonalSubscriptionsContract,
+  listUserSecretsContract,
+} from '@cat-factory/contracts'
+import { expect, screen } from 'storybook/test'
+import { apiFailure, apiResponse } from '~/stories/api'
 import { localModelEndpoint, personalSubscription } from '~/stories/providers.stories.mocks'
 import { withSeed } from '~/stories/withStores'
-import { useLocalModelsStore } from '~/stores/localModels'
-import { usePersonalSubscriptionsStore } from '~/stores/personalSubscriptions'
 import { useUiStore } from '~/stores/ui'
-import { useUserSecretsStore } from '~/stores/userSecrets'
 import PersonalSetupModal from './PersonalSetupModal.vue'
 
 // "My setup": the connections that belong to the signed-in user rather than the board, a
 // personal GitHub token, the user's own subscriptions and local model runners, each opening its
-// own window. The board mounts the modal only once it is open, and its reload watch is not
-// immediate, so opening it loads nothing: the rows show what other surfaces loaded into the
-// stores. The stories seed those stores and answer no request.
-function seeded(connected: boolean) {
-  return withSeed(() => {
-    useUserSecretsStore().secrets = connected
-      ? [
+// own window. The board mounts the modal only once it is open, and the modal loads its three
+// stores as it mounts. The stores start empty here, so every badge comes from the answers the
+// story gives those three requests.
+const ROW_KEYS = ['github-pat', 'local-runners', 'personal-subs'] as const
+
+function connectedAnswers() {
+  return [
+    apiResponse(listUserSecretsContract, {
+      body: {
+        secrets: [
           {
             kind: 'github_pat',
             label: 'Personal GitHub token',
             hasSecret: true,
             connectedAt: Date.UTC(2026, 8, 14),
           },
-        ]
-      : []
-    useLocalModelsStore().endpoints = connected ? [localModelEndpoint()] : []
-    usePersonalSubscriptionsStore().subscriptions = connected
-      ? [
+        ],
+        descriptors: [],
+      },
+    }),
+    apiResponse(listLocalModelEndpointsContract, { body: { endpoints: [localModelEndpoint()] } }),
+    apiResponse(listPersonalSubscriptionsContract, {
+      body: {
+        subscriptions: [
           personalSubscription(),
           personalSubscription({
             vendor: 'codex',
@@ -34,23 +44,51 @@ function seeded(connected: boolean) {
             expiresAt: null,
             expiresInDays: null,
           }),
-        ]
-      : []
-    useUiStore().openPersonalSetup()
-  })
+        ],
+      },
+    }),
+  ]
 }
 
 const meta = {
   title: 'Settings/Components/PersonalSetupModal',
   component: PersonalSetupModal,
-  decorators: [seeded(true)],
+  decorators: [withSeed(() => useUiStore().openPersonalSetup())],
+  parameters: { api: connectedAnswers() },
 } satisfies Meta<typeof PersonalSetupModal>
 export default meta
 
 type Story = StoryObj<typeof meta>
 
-/** A GitHub token, two subscriptions and one local runner, each marked connected. */
-export const Default: Story = {}
+/** A GitHub token, two subscriptions and one local runner, each marked connected once loaded. */
+export const Default: Story = {
+  play: async () => {
+    for (const key of ROW_KEYS) await screen.findByTestId(`personal-setup-connected-${key}`)
+  },
+}
 
 /** Nothing connected: every row says so. */
-export const NothingConnected: Story = { decorators: [seeded(false)] }
+export const NothingConnected: Story = {
+  parameters: {
+    api: [
+      apiResponse(listUserSecretsContract, { body: { secrets: [], descriptors: [] } }),
+      apiResponse(listLocalModelEndpointsContract, { body: { endpoints: [] } }),
+      apiResponse(listPersonalSubscriptionsContract, { body: { subscriptions: [] } }),
+    ],
+  },
+}
+
+/** All three loads fail: each row says it could not load, not that nothing is connected. */
+export const LoadFailed: Story = {
+  parameters: {
+    api: [
+      apiFailure(listUserSecretsContract),
+      apiFailure(listLocalModelEndpointsContract),
+      apiFailure(listPersonalSubscriptionsContract),
+    ],
+  },
+  play: async () => {
+    for (const key of ROW_KEYS) await screen.findByTestId(`personal-setup-failed-${key}`)
+    await expect(screen.queryByTestId('personal-setup-connected-github-pat')).toBeNull()
+  },
+}

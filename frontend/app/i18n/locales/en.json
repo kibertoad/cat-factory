@@ -2781,6 +2781,7 @@
       "intro": "Your personal connections, used for runs you start and visible only to you.",
       "connected": "Connected",
       "notConnected": "Not connected",
+      "loadFailed": "Couldn't load",
       "connectedCount": "no connected | {count} connected | {count} connected",
       "sourceControl": {
         "title": "Source control"

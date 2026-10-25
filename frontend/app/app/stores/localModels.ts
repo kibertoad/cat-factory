@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { isAbsentFeatureRefusal } from '~/composables/api/errors'
 import type {
   LocalModelEndpoint,
   LocalModelEndpointTestResult,
@@ -18,14 +19,19 @@ export const useLocalModelsStore = defineStore('localModels', () => {
   const api = useApi()
   const endpoints = ref<LocalModelEndpoint[]>([])
   const loading = ref(false)
+  /** True when the last `load()` failed for a reason other than auth or the feature being off. */
+  const loadFailed = ref(false)
 
   async function load() {
     loading.value = true
     try {
       const { endpoints: list } = await api.listLocalModelEndpoints()
       endpoints.value = list
-    } catch {
-      // Auth disabled / not signed in / feature off → no local runners surface.
+      loadFailed.value = false
+    } catch (err) {
+      // Auth disabled / not signed in (401) or feature off (503) → no local runners surface.
+      // Any other failure is recorded, so a reader can tell it from an empty list.
+      loadFailed.value = !isAbsentFeatureRefusal(err)
       endpoints.value = []
     } finally {
       loading.value = false
@@ -47,5 +53,5 @@ export const useLocalModelsStore = defineStore('localModels', () => {
     return await api.testLocalModelEndpoint(input)
   }
 
-  return { endpoints, loading, load, upsert, remove, test }
+  return { endpoints, loading, loadFailed, load, upsert, remove, test }
 })

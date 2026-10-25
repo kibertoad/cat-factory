@@ -2623,6 +2623,7 @@
       "intro": "החיבורים האישיים שלך, המשמשים להרצות שאתה מתחיל וגלויים רק לך.",
       "connected": "מחובר",
       "notConnected": "לא מחובר",
+      "loadFailed": "הטעינה נכשלה",
       "connectedCount": "לא מחוברים | {count} מחובר | {count} מחוברים | {count} מחוברים",
       "sourceControl": {
         "title": "בקרת מקור"

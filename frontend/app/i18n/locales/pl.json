@@ -2623,6 +2623,7 @@
       "intro": "Twoje osobiste połączenia, używane do uruchomień, które rozpoczynasz, i widoczne tylko dla Ciebie.",
       "connected": "Połączono",
       "notConnected": "Niepołączono",
+      "loadFailed": "Nie udało się wczytać",
       "connectedCount": "{count} połączony | {count} połączone | {count} połączonych",
       "sourceControl": {
         "title": "Kontrola wersji"

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { isAbsentFeatureRefusal } from '~/composables/api/errors'
 import type {
   ConnectionTestResult,
   StoreUserSecretInput,
@@ -18,6 +19,8 @@ export const useUserSecretsStore = defineStore('userSecrets', () => {
   const secrets = ref<UserSecretStatus[]>([])
   const descriptors = ref<UserSecretDescriptor[]>([])
   const loading = ref(false)
+  /** True when the last `load()` failed for a reason other than auth or the feature being off. */
+  const loadFailed = ref(false)
 
   async function load() {
     loading.value = true
@@ -25,8 +28,11 @@ export const useUserSecretsStore = defineStore('userSecrets', () => {
       const { secrets: list, descriptors: descs } = await api.listUserSecrets()
       secrets.value = list
       descriptors.value = descs
-    } catch {
-      // Auth disabled / not signed in / feature off → nothing to surface.
+      loadFailed.value = false
+    } catch (err) {
+      // Auth disabled / not signed in (401) or feature off (503) → nothing to surface. Any
+      // other failure is recorded, so a reader can tell it from an empty list.
+      loadFailed.value = !isAbsentFeatureRefusal(err)
       secrets.value = []
       descriptors.value = []
     } finally {
@@ -60,5 +66,16 @@ export const useUserSecretsStore = defineStore('userSecrets', () => {
     return await api.testUserSecret(kind, input)
   }
 
-  return { secrets, descriptors, loading, load, statusFor, descriptorFor, store, remove, test }
+  return {
+    secrets,
+    descriptors,
+    loading,
+    loadFailed,
+    load,
+    statusFor,
+    descriptorFor,
+    store,
+    remove,
+    test,
+  }
 })

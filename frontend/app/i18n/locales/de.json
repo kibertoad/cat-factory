@@ -2736,6 +2736,7 @@
       "intro": "Ihre persönlichen Verbindungen, die für von Ihnen gestartete Läufe verwendet werden und nur für Sie sichtbar sind.",
       "connected": "Verbunden",
       "notConnected": "Nicht verbunden",
+      "loadFailed": "Laden fehlgeschlagen",
       "connectedCount": "keine verbunden | {count} verbunden | {count} verbunden",
       "sourceControl": {
         "title": "Versionsverwaltung"

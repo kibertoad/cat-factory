@@ -15,14 +15,18 @@ const localModels = useLocalModelsStore()
 const personalSubs = usePersonalSubscriptionsStore()
 
 // Load the cheap user-scoped status whenever the hub opens, so each row's badge is accurate.
+// Each `load()` settles on its own and records a failure in its store's `loadFailed`, which
+// the row reads, so nothing is caught here.
 watch(
   () => ui.personalSetupOpen,
   (isOpen) => {
     if (!isOpen) return
-    void userSecrets.load().catch(() => {})
-    void localModels.load().catch(() => {})
-    void personalSubs.load().catch(() => {})
+    void userSecrets.load()
+    void localModels.load()
+    void personalSubs.load()
   },
+  // Lazy v-if mount: the hub mounts with `personalSetupOpen` already true → load immediately.
+  { immediate: true },
 )
 
 const open = computed({
@@ -31,7 +35,8 @@ const open = computed({
 })
 
 // One row. `connected` drives the badge; `status` is the connected-state line (a count or
-// "Connected"). Mirrors the Integrations hub's row shape so the two hubs look identical.
+// "Connected"). `failed` means the row's status did not load, so it says that instead of
+// "Not connected". Mirrors the Integrations hub's row shape so the two hubs look identical.
 interface PersonalItem {
   key: string
   icon: string
@@ -39,6 +44,7 @@ interface PersonalItem {
   description: string
   status?: string
   connected: boolean
+  failed: boolean
   onClick: () => void
 }
 
@@ -67,6 +73,7 @@ const groups = computed<PersonalGroup[]>(() => {
         description: t('layout.personalSetup.githubToken.description'),
         status: pat ? t('layout.personalSetup.connected') : undefined,
         connected: pat,
+        failed: userSecrets.loadFailed,
         onClick: () => go(ui.openUserSecrets),
       },
     ],
@@ -87,6 +94,7 @@ const groups = computed<PersonalGroup[]>(() => {
           ? t('layout.personalSetup.connectedCount', { count: runnerCount }, runnerCount)
           : undefined,
         connected: runnerCount > 0,
+        failed: localModels.loadFailed,
         onClick: () => go(ui.openLocalModels),
       },
       {
@@ -98,6 +106,7 @@ const groups = computed<PersonalGroup[]>(() => {
           ? t('layout.personalSetup.connectedCount', { count: subCount }, subCount)
           : undefined,
         connected: subCount > 0,
+        failed: personalSubs.loadFailed,
         onClick: () => go(() => ui.openVendorCredentials('personal')),
       },
     ],
@@ -132,7 +141,22 @@ const groups = computed<PersonalGroup[]>(() => {
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">
                   <span class="truncate text-sm font-medium text-app-100">{{ item.label }}</span>
-                  <UBadge v-if="item.connected" color="success" variant="subtle" size="sm">
+                  <UBadge
+                    v-if="item.failed"
+                    color="error"
+                    variant="subtle"
+                    size="sm"
+                    :data-testid="`personal-setup-failed-${item.key}`"
+                  >
+                    {{ t('layout.personalSetup.loadFailed') }}
+                  </UBadge>
+                  <UBadge
+                    v-else-if="item.connected"
+                    color="success"
+                    variant="subtle"
+                    size="sm"
+                    :data-testid="`personal-setup-connected-${item.key}`"
+                  >
                     {{ item.status || t('layout.personalSetup.connected') }}
                   </UBadge>
                   <span v-else class="text-2xs text-dimmed">
