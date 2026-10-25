@@ -2816,6 +2816,7 @@
       "status": {
         "connected": "Conectado",
         "keyConnected": "Clave conectada",
+        "keyDisabled": "Clave desactivada",
         "notConnected": "Sin conectar",
         "recommended": "Recomendado",
         "connectedCount": "ninguno conectado | {count} conectado | {count} conectados"
@@ -3824,6 +3825,7 @@
       "apiKey": "Clave de API",
       "connectAndBrowse": "Conectar y explorar",
       "keyConnected": "Clave de OpenRouter conectada",
+      "keyDisabled": "Tu clave de OpenRouter está desactivada. Vuelve a activarla en Proveedores y claves para explorar modelos.",
       "manageKeys": "Gestionar en Proveedores y claves",
       "refresh": "Actualizar catálogo",
       "enableRecommended": "Habilitar recomendados",

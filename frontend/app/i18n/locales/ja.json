@@ -2816,6 +2816,7 @@
       "status": {
         "connected": "接続済み",
         "keyConnected": "キー接続済み",
+        "keyDisabled": "キーは無効です",
         "notConnected": "未接続",
         "recommended": "おすすめ",
         "connectedCount": "接続なし | {count}件接続済み | {count}件接続済み"
@@ -3965,6 +3966,7 @@
       "apiKey": "API キー",
       "connectAndBrowse": "接続して閲覧",
       "keyConnected": "OpenRouter キーを接続しました",
+      "keyDisabled": "OpenRouter キーは無効になっています。モデルを参照するには、ベンダーとキーで再度有効にしてください。",
       "manageKeys": "ベンダーとキーで管理",
       "refresh": "カタログを更新",
       "enableRecommended": "おすすめを有効化",

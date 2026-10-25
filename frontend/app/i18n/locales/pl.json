@@ -2816,6 +2816,7 @@
       "status": {
         "connected": "Połączono",
         "keyConnected": "Klucz połączony",
+        "keyDisabled": "Klucz wyłączony",
         "notConnected": "Niepołączono",
         "recommended": "Zalecane",
         "connectedCount": "{count} połączony | {count} połączone | {count} połączonych"
@@ -3824,6 +3825,7 @@
       "apiKey": "Klucz API",
       "connectAndBrowse": "Połącz i przeglądaj",
       "keyConnected": "Klucz OpenRouter połączony",
+      "keyDisabled": "Twój klucz OpenRouter jest wyłączony. Włącz go ponownie w Dostawcy i klucze, aby przeglądać modele.",
       "manageKeys": "Zarządzaj w Dostawcy i klucze",
       "refresh": "Odśwież katalog",
       "enableRecommended": "Włącz rekomendowane",

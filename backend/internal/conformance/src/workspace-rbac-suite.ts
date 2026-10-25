@@ -148,6 +148,47 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
       expect(write2.status).toBe(201)
     })
 
+    it('configured providers: a viewer reads them, including a provider only an account-scoped key configures', async () => {
+      const app = harness.makeApp()
+      const { accountId, adminA, b, wsId } = await scenario(app)
+      await app.workspaceRepository().setAccessMode(wsId, 'restricted')
+      await app.workspaceMemberRepository().upsert({
+        workspaceId: wsId,
+        userId: b,
+        role: 'viewer',
+        createdAt: 1,
+        addedByUserId: adminA,
+      })
+      const ha = bearer(await app.session({ id: adminA }))
+      const added = await app.call(
+        'POST',
+        `/accounts/${accountId}/api-keys`,
+        { provider: 'openrouter', label: 'org', key: 'sk-or-org-secret' },
+        ha,
+      )
+      expect(added.status).toBe(201)
+
+      const hb = bearer(await app.session({ id: b }))
+      // The workspace key list carries no account key, so a client cannot derive this from rows.
+      const keys = await app.call<{ keys: unknown[] }>(
+        'GET',
+        `/workspaces/${wsId}/api-keys`,
+        undefined,
+        hb,
+      )
+      expect(keys.status).toBe(200)
+      expect(keys.body.keys).toEqual([])
+      // The resolved answer names the provider the account key configures, to a viewer too.
+      const configured = await app.call<{ providers: string[] }>(
+        'GET',
+        `/workspaces/${wsId}/configured-providers`,
+        undefined,
+        hb,
+      )
+      expect(configured.status).toBe(200)
+      expect(configured.body.providers).toEqual(['openrouter'])
+    })
+
     it('cache coherence: granting account membership is visible on the immediately following request', async () => {
       const app = harness.makeApp()
       const tag = uniq()

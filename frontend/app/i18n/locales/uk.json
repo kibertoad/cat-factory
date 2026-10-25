@@ -2816,6 +2816,7 @@
       "status": {
         "connected": "Підключено",
         "keyConnected": "Ключ підключено",
+        "keyDisabled": "Ключ вимкнено",
         "notConnected": "Не підключено",
         "recommended": "Рекомендовано",
         "connectedCount": "{count} підключено | {count} підключено | {count} підключено"
@@ -3824,6 +3825,7 @@
       "apiKey": "Ключ API",
       "connectAndBrowse": "Підключити й переглянути",
       "keyConnected": "Ключ OpenRouter підключено",
+      "keyDisabled": "Ваш ключ OpenRouter вимкнено. Увімкніть його знову в Постачальники та ключі, щоб переглядати моделі.",
       "manageKeys": "Керувати в Постачальники та ключі",
       "refresh": "Оновити каталог",
       "enableRecommended": "Увімкнути рекомендовані",

@@ -2981,6 +2981,7 @@
       "status": {
         "connected": "Connected",
         "keyConnected": "Key connected",
+        "keyDisabled": "Key disabled",
         "notConnected": "Not connected",
         "recommended": "Recommended",
         "connectedCount": "none connected | {count} connected | {count} connected"
@@ -4135,6 +4136,7 @@
       "apiKey": "API key",
       "connectAndBrowse": "Connect & browse",
       "keyConnected": "OpenRouter key connected",
+      "keyDisabled": "Your OpenRouter key is turned off. Turn it back on in Vendors & keys to browse models.",
       "manageKeys": "Manage in Vendors & keys",
       "refresh": "Refresh catalog",
       "enableRecommended": "Enable recommended",

@@ -1029,6 +1029,7 @@
       "apiKey": "Chiave API",
       "connectAndBrowse": "Connetti ed esplora",
       "keyConnected": "Chiave OpenRouter connessa",
+      "keyDisabled": "La tua chiave OpenRouter è disattivata. Riattivala in Vendor e chiavi per sfogliare i modelli.",
       "manageKeys": "Gestisci in Vendor e chiavi",
       "refresh": "Aggiorna il catalogo",
       "enableRecommended": "Abilita i consigliati",
@@ -2937,6 +2938,7 @@
       "status": {
         "connected": "Connesso",
         "keyConnected": "Chiave connessa",
+        "keyDisabled": "Chiave disattivata",
         "notConnected": "Non connesso",
         "recommended": "Consigliato",
         "connectedCount": "nessuno connesso | {count} connesso | {count} connessi"

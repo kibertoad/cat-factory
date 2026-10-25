@@ -1029,6 +1029,7 @@
       "apiKey": "API-Schlüssel",
       "connectAndBrowse": "Verbinden & durchsuchen",
       "keyConnected": "OpenRouter-Schlüssel verbunden",
+      "keyDisabled": "Dein OpenRouter-Schlüssel ist deaktiviert. Aktiviere ihn unter Vendors & Schlüssel wieder, um Modelle zu durchsuchen.",
       "manageKeys": "In Vendors & Schlüssel verwalten",
       "refresh": "Katalog aktualisieren",
       "enableRecommended": "Empfohlene aktivieren",
@@ -2937,6 +2938,7 @@
       "status": {
         "connected": "Verbunden",
         "keyConnected": "Schlüssel verbunden",
+        "keyDisabled": "Schlüssel deaktiviert",
         "notConnected": "Nicht verbunden",
         "recommended": "Empfohlen",
         "connectedCount": "keine verbunden | {count} verbunden | {count} verbunden"
