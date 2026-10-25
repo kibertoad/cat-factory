@@ -4,7 +4,7 @@ import {
   failureDetail,
   reportedFailure,
 } from '~/composables/pipelineErrorToast/describeFailure'
-import { describeGenericFailure } from '~/composables/usePipelineErrorToast'
+import { describeGenericFailure, failureReport } from '~/composables/usePipelineErrorToast'
 import { ApiError } from '~/composables/api/errors'
 import { conflictInfo } from '~/utils/conflictCopy'
 
@@ -92,5 +92,22 @@ describe('failureDetail', () => {
 
   it('is empty when there is nothing to disclose', () => {
     expect(failureDetail(reportedFailure(null), t)).toBe('')
+  })
+})
+
+describe('failureReport', () => {
+  it('puts the title, the description and the detail with its request id on separate lines', () => {
+    const failure = describeFailure(
+      new ApiError(500, {
+        error: { code: 'internal', message: 'Internal server error', requestId: 'req-3' },
+      }),
+    )
+    expect(failureReport('Usage could not be loaded.', 'desc', failureDetail(failure, t))).toBe(
+      'Usage could not be loaded.\ndesc\nInternal server error · errors.generic.requestId({"id":"req-3"})',
+    )
+  })
+
+  it('drops empty lines, so a failure with no title or detail copies only its description', () => {
+    expect(failureReport('', 'desc', '')).toBe('desc')
   })
 })

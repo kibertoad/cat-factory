@@ -203,6 +203,15 @@ export function describeGenericFailure(error: unknown): GenericFailure {
   }
 }
 
+/**
+ * What "Copy details" puts on the clipboard for a failure: its lines (title, description, raw
+ * detail), empty ones dropped. Shared by the failure toast and the inline `FailureMessage`, so a
+ * failure copies the same text wherever it surfaced.
+ */
+export function failureReport(...lines: string[]): string {
+  return lines.filter((line) => line.length > 0).join('\n')
+}
+
 export function usePipelineErrorToast() {
   const toast = useToast()
   // Resolved through the Nuxt app's global i18n instance rather than `useI18n()`, which
@@ -373,7 +382,7 @@ export function usePipelineErrorToast() {
   /** The failure toast both generic paths render: translated title and description, the raw
    * detail behind "Show details", and the whole report copyable. */
   function showFailure(title: string, description: string, detail: string): void {
-    const report = [title, description, detail].filter((part) => part.length > 0).join('\n')
+    const report = failureReport(title, description, detail)
     const added = toast.add({
       title,
       description,
