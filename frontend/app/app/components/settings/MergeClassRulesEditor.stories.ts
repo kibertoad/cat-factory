@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { fn } from 'storybook/test'
+import { listMergeClassRollupsContract, RULEABLE_CHANGE_CLASSES } from '@cat-factory/contracts'
+import { expect, fn, screen, within } from 'storybook/test'
+import { apiFailure } from '~/stories/api'
 import { mergeClassRollups } from '~/stories/mergeTrackRecord.stories.mocks'
+import { storyWorkspacePrefix } from '~/stories/workspace'
 import { seedWorkspace, withSeed } from '~/stories/withStores'
 import { useMergeTrackRecordsStore } from '~/stores/mergeTrackRecords'
 import MergeClassRulesEditor from './MergeClassRulesEditor.vue'
@@ -47,3 +50,29 @@ export const AutoMergeOff: Story = { args: { autoMergeEnabled: false } }
 
 /** While the policy saves: every select is off. */
 export const Disabled: Story = { args: { disabled: true } }
+
+/**
+ * The track record could not be read: the error toast, and every class says its record is
+ * unavailable rather than that it has none.
+ */
+export const LoadFailed: Story = {
+  decorators: [
+    withSeed(() => {
+      seedWorkspace()
+      const store = useMergeTrackRecordsStore()
+      store.rollups = []
+      store.loaded = false
+    }),
+  ],
+  parameters: {
+    api: [apiFailure(listMergeClassRollupsContract, { pathPrefix: storyWorkspacePrefix })],
+  },
+  play: async ({ canvasElement }) => {
+    await screen.findByText('Could not load the merge track record')
+    const canvas = within(canvasElement)
+    await expect(canvas.getAllByText('Track record unavailable')).toHaveLength(
+      RULEABLE_CHANGE_CLASSES.length,
+    )
+    await expect(canvas.queryByText('No history yet')).toBeNull()
+  },
+}

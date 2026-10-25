@@ -2520,6 +2520,7 @@
       },
       "invite": {
         "title": "Invite a teammate",
+        "listTitle": "Invitations",
         "submit": "Invite",
         "revoke": "Revoke invitation",
         "created": "Invitation created",
@@ -2534,6 +2535,7 @@
       "email": {
         "title": "Email sender",
         "notEnabled": "Email delivery is not enabled on this deployment. Invitations still produce a shareable accept link.",
+        "notConnected": "No email sender is connected. An account admin can connect one.",
         "connectedAs": "Connected via {provider} as {from}",
         "disconnect": "Disconnect",
         "connect": "Connect email sender",
@@ -2775,7 +2777,9 @@
       "budget": "Budget",
       "tokens": "Tokens",
       "resume": "Resume anyway",
-      "resumeHint": "Resuming continues spending; it will pause again if still over budget."
+      "resumeHint": "Resuming continues spending; it will pause again if still over budget.",
+      "resumeFailed": "Could not resume agent execution",
+      "refreshFailed": "Runs resumed, but the board did not refresh"
     },
     "personalSetup": {
       "title": "My setup",
@@ -2980,6 +2984,7 @@
       "status": {
         "connected": "Connected",
         "keyConnected": "Key connected",
+        "keyDisabled": "Key disabled",
         "notConnected": "Not connected",
         "recommended": "Recommended",
         "connectedCount": "none connected | {count} connected | {count} connected"
@@ -3127,6 +3132,7 @@
     "deny": "Cancel",
     "back": "Back to the app",
     "noWorkspaces": "You have no boards to connect this to yet.",
+    "noAdminWorkspaces": "You are not an admin of any of your boards. Ask a board admin to connect it.",
     "revokeHint": "This issues an API key you can revoke at any time from the board's settings.",
     "error": {
       "title": "This connection could not be set up",
@@ -3696,7 +3702,9 @@
           "thresholds": "Use score ceilings",
           "always": "Always auto-merge",
           "never": "Always require review"
-        }
+        },
+        "loadFailed": "Could not load the merge track record",
+        "unavailable": "Track record unavailable"
       },
       "roleRules": {
         "heading": "Limits per initiator role",
@@ -4133,6 +4141,7 @@
       "apiKey": "API key",
       "connectAndBrowse": "Connect & browse",
       "keyConnected": "OpenRouter key connected",
+      "keyDisabled": "Your OpenRouter key is turned off. Turn it back on in Vendors & keys to browse models.",
       "manageKeys": "Manage in Vendors & keys",
       "refresh": "Refresh catalog",
       "enableRecommended": "Enable recommended",
@@ -4872,7 +4881,8 @@
         "frontendLinkedNote": "{directory} was added as the frontend and linked to the others. Name its backend URL environment variables in its inspector.",
         "frontendWiringFailedNote": "The frontend settings did not save. Open each frontend app's inspector to set its subdirectory and its backend services."
       },
-      "prefillProviderMismatch": "The link asked for {repo} on a different host, and this board is connected to {connected}. Search for the repository by hand, or open the link on a board connected to its host."
+      "prefillProviderMismatch": "The link asked for {repo} on a different host, and this board is connected to {connected}. Search for the repository by hand, or open the link on a board connected to its host.",
+      "searchFailed": "Could not search repositories"
     },
     "repoTree": {
       "root": "root",
@@ -6104,7 +6114,8 @@
       "park": "Asked a human",
       "bounce": "Sent back for rework",
       "fail": "Failed the run"
-    }
+    },
+    "resolveFailed": "Could not record your choice"
   },
   "inputGate": {
     "blockedTitle": "This task needs more detail before it can run",
@@ -7069,7 +7080,8 @@
         "recommendations": "Recommendations"
       },
       "empty": "No gradings yet."
-    }
+    },
+    "loadFailed": "Could not load Kaizen gradings"
   },
   "recurring": {
     "runEvery": "Run every",

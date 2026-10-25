@@ -21,13 +21,20 @@
 // each a panel here, in place of the box, because that is where the person is looking and where
 // the retry belongs.
 import type { AssistantActionId, AssistantOutcome } from '~/types/domain'
-import { answerFor, assistantSurface, revealTarget, submitGate } from './AssistantModal.logic'
+import {
+  answerFor,
+  assistantSurface,
+  revealsInFocus,
+  revealTarget,
+  submitGate,
+} from './AssistantModal.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import Spinner from '~/components/common/Spinner.vue'
 import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
+const board = useBoardStore()
 const assistant = useAssistantStore()
 const { present } = usePipelineErrorToast()
 
@@ -148,7 +155,7 @@ async function useCandidate(
 /** Select what a performed turn produced, and close, so the board shows it straight away. */
 function reveal(blockId: string): void {
   ui.select(blockId)
-  ui.focus(blockId)
+  if (revealsInFocus(board.getBlock(blockId)?.level)) ui.focus(blockId)
   ui.closeAssistant()
 }
 </script>

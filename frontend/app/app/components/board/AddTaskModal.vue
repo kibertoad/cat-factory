@@ -63,6 +63,7 @@ const ui = useUiStore()
 // would have shown, so a basic-mode task behaves identically, it just asks less. The
 // inspector's `TaskRunSettings` applies the same split after creation.
 const uiMode = useUiModeStore()
+const access = useWorkspaceAccess()
 const board = useBoardStore()
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
@@ -755,6 +756,8 @@ const modalOpen = computed({
 const RALPH_VALIDATION_COMMAND_ID = 'ralph.validationCommand'
 
 const canAdd = computed(() => {
+  // Every opener of this form is refused for a viewer here, so none of them has to remember to.
+  if (!access.canWriteBoard.value) return false
   if (isRecurring.value) return recurringFrameId.value !== null
   // A review task doesn't require a title (the PR reference is the subject — we derive one),
   // so it only needs a valid target PR. Every other type still requires a title.
@@ -1461,6 +1464,7 @@ function createRefusalMessage(error: unknown): string | null {
           :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
           :loading="saving"
           :disabled="!canAdd"
+          :title="access.canWriteBoard.value ? undefined : t('access.noBoardWrite')"
           @click="add"
         >
           {{ isRecurring ? t('board.addTask.continue') : t('board.addTask.submit') }}

@@ -309,7 +309,8 @@ export function usePipelineErrorToast() {
   function presentMappedConflict(
     conflict: ParsedConflict,
     fallbackTitleKey: string,
-    titleParams?: Record<string, unknown>,
+    titleParams: Record<string, unknown> | undefined,
+    id: string | undefined,
   ): void {
     const info = conflictInfo(conflict.reason)
     const title =
@@ -327,6 +328,7 @@ export function usePipelineErrorToast() {
     const detail = conflict.message && conflict.message !== translated ? conflict.message : ''
     const report = conflictReport(conflict, title, description)
     const added = toast.add({
+      id,
       title,
       description,
       color: 'warning',
@@ -383,7 +385,8 @@ export function usePipelineErrorToast() {
   function presentGenericFailure(
     error: unknown,
     fallbackTitleKey: string,
-    titleParams?: Record<string, unknown>,
+    titleParams: Record<string, unknown> | undefined,
+    id: string | undefined,
   ): void {
     const failure = describeGenericFailure(error)
     const detail = failureDetail(failure, t)
@@ -391,14 +394,15 @@ export function usePipelineErrorToast() {
     // ships in the base `en` catalog, so a locale missing it renders English via `fallbackLocale`
     // (better than the raw prose this replaced) and a bare key can never leak.
     const title = t(fallbackTitleKey, titleParams ?? {})
-    showFailure(title, t(failure.descriptionKey), detail)
+    showFailure(title, t(failure.descriptionKey), detail, id)
   }
 
   /** The failure toast both generic paths render: translated title and description, the raw
    * detail behind "Show details", and the whole report copyable. */
-  function showFailure(title: string, description: string, detail: string): void {
+  function showFailure(title: string, description: string, detail: string, id?: string): void {
     const report = failureReport(title, description, detail)
     const added = toast.add({
+      id,
       title,
       description,
       color: 'error',
@@ -449,19 +453,26 @@ export function usePipelineErrorToast() {
    * Present `error` as a toast. `fallbackTitleKey` is an i18n message key used for
    * non-conflict failures and any conflict reason without a dedicated title; `titleParams` carries
    * that key's interpolation when it takes any (a title naming the thing that failed).
+   *
+   * `dedupe` is for a call site that can fail again and again with nothing new to say: a search
+   * that refires on every debounced query, or a section every reader of a run reloads. The toast
+   * gets an id derived from `fallbackTitleKey`, so Nuxt UI replaces the toast already on screen
+   * instead of stacking an identical one. The bespoke conflict toasts keep their own handling.
    */
   function present(
     error: unknown,
     fallbackTitleKey = 'common.actionFailed',
     titleParams?: Record<string, unknown>,
+    options: { dedupe?: boolean } = {},
   ): void {
+    const id = options.dedupe ? `pipeline-error:${fallbackTitleKey}` : undefined
     const conflict = parseConflict(error)
     if (conflict) {
       if (presentBespokeConflict(conflict)) return
-      presentMappedConflict(conflict, fallbackTitleKey, titleParams)
+      presentMappedConflict(conflict, fallbackTitleKey, titleParams, id)
       return
     }
-    presentGenericFailure(error, fallbackTitleKey, titleParams)
+    presentGenericFailure(error, fallbackTitleKey, titleParams, id)
   }
 
   return { present, presentReported }

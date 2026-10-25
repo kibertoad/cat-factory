@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import {
+  MCP_AUTHORIZATION_APPROVE_PERMISSION,
   MCP_AUTHORIZATION_REQUEST_INVALID,
   PUBLIC_API_SCOPES,
+  permissionsForRole,
   type PublicApiScope,
+  type WorkspaceListItem,
 } from '@cat-factory/contracts'
 import { apiErrorReason } from '~/composables/api/errors'
 import FailureMessage from '~/components/common/FailureMessage.vue'
@@ -30,6 +33,7 @@ import {
 // is.
 
 const api = useApi()
+const auth = useAuthStore()
 const { t } = useI18n()
 
 type Screen = 'loading' | 'deciding' | 'submitting' | 'failed'
@@ -44,7 +48,10 @@ const detail = ref<DescribedFailure | null>(null)
 const decisionError = ref<DescribedFailure | null>(null)
 const clientName = ref('')
 const redirectOrigin = ref('')
-const workspaces = ref<{ label: string; value: string }[]>([])
+/** Every board the person can see, as listed. */
+const boards = ref<WorkspaceListItem[]>([])
+/** Whether the person has boards at all, so an empty choice can say why it is empty. */
+const hasBoards = computed(() => boards.value.length > 0)
 const workspaceId = ref<string | undefined>(undefined)
 /**
  * Starts at the FLOOR of the ladder and is replaced by the server's `defaultScope` once the request
@@ -60,6 +67,25 @@ const sealedRequest = computed(() =>
   typeof window === 'undefined'
     ? ''
     : (new URLSearchParams(window.location.search).get('request') ?? ''),
+)
+
+/**
+ * Whether approving on `board` can succeed: the approval mints a key on it, which needs
+ * {@link MCP_AUTHORIZATION_APPROVE_PERMISSION} there (`McpAuthorizationConsentController`). With
+ * nobody signed in the deployment is dev-open and allows everything, as the backend does. A
+ * signed-in person with no `viewerRole` on a listed board holds no access to it at all.
+ */
+function mayApproveOn(board: WorkspaceListItem): boolean {
+  if (auth.user === null) return true
+  return (
+    !!board.viewerRole &&
+    permissionsForRole(board.viewerRole).has(MCP_AUTHORIZATION_APPROVE_PERMISSION)
+  )
+}
+
+/** The boards an approval can succeed on, as choices. */
+const workspaces = computed(() =>
+  boards.value.filter(mayApproveOn).map((board) => ({ label: board.name, value: board.id })),
 )
 
 /**
@@ -91,7 +117,7 @@ onMounted(async () => {
     return
   }
   try {
-    const [request, boards] = await Promise.all([
+    const [request, listed] = await Promise.all([
       api.describeMcpAuthorization(sealedRequest.value),
       api.listWorkspaces(),
     ])
@@ -104,7 +130,7 @@ onMounted(async () => {
       request.requestedScope && request.requestedScope !== request.defaultScope
         ? request.requestedScope
         : null
-    workspaces.value = boards.map((board) => ({ label: board.name, value: board.id }))
+    boards.value = listed
     workspaceId.value = workspaces.value[0]?.value
     screen.value = 'deciding'
   } catch (e) {
@@ -199,8 +225,12 @@ function backToApp() {
           {{ t('mcpAuthorize.subtitle', { client: clientName, origin: redirectOrigin }) }}
         </p>
 
-        <div v-if="!workspaces.length" class="mb-6 text-center text-sm text-app-warning-300">
-          {{ t('mcpAuthorize.noWorkspaces') }}
+        <div
+          v-if="!workspaces.length"
+          class="mb-6 text-center text-sm text-app-warning-300"
+          data-testid="mcp-authorize-no-workspaces"
+        >
+          {{ hasBoards ? t('mcpAuthorize.noAdminWorkspaces') : t('mcpAuthorize.noWorkspaces') }}
         </div>
 
         <template v-else>
