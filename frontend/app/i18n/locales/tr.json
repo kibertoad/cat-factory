@@ -102,7 +102,9 @@
       "keep": "Düzenlemeye devam et"
     },
     "edit": "Düzenle",
-    "pathInvalid": "Depo icinde bir yol girin (\"..\", mutlak yollar veya ters egik cizgi olmadan)."
+    "pathInvalid": "Depo icinde bir yol girin (\"..\", mutlak yollar veya ters egik cizgi olmadan).",
+    "checking": "Kontrol ediliyor…",
+    "loadFailed": "Yüklenemedi"
   },
   "access": {
     "noBoardWrite": "Salt okunur erişim: bu panoyu görüntüleyebilirsiniz ancak düzenleyemezsiniz.",

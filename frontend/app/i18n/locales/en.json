@@ -123,7 +123,9 @@
       "keep": "Keep editing"
     },
     "edit": "Edit",
-    "pathInvalid": "Enter a path inside the repository (no \"..\", absolute paths, or backslashes)."
+    "pathInvalid": "Enter a path inside the repository (no \"..\", absolute paths, or backslashes).",
+    "checking": "Checking…",
+    "loadFailed": "Couldn't load"
   },
   "access": {
     "noBoardWrite": "Read-only access: you can view this board but can't edit it.",

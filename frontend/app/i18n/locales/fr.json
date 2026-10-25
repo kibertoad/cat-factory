@@ -102,7 +102,9 @@
       "keep": "Continuer l'édition"
     },
     "edit": "Modifier",
-    "pathInvalid": "Saisissez un chemin a l'interieur du depot (pas de \"..\", de chemins absolus ni d'antislashs)."
+    "pathInvalid": "Saisissez un chemin a l'interieur du depot (pas de \"..\", de chemins absolus ni d'antislashs).",
+    "checking": "Vérification…",
+    "loadFailed": "Échec du chargement"
   },
   "access": {
     "noBoardWrite": "Accès en lecture seule : vous pouvez consulter ce tableau mais pas le modifier.",
