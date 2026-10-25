@@ -2379,6 +2379,7 @@
       },
       "invite": {
         "title": "Zaproś członka zespołu",
+        "listTitle": "Zaproszenia",
         "submit": "Zaproś",
         "revoke": "Odwołaj zaproszenie",
         "created": "Utworzono zaproszenie",
@@ -2393,6 +2394,7 @@
       "email": {
         "title": "Nadawca e-maili",
         "notEnabled": "Wysyłka e-maili nie jest włączona w tym wdrożeniu. Zaproszenia nadal generują link akceptacji do udostępnienia.",
+        "notConnected": "Nie połączono nadawcy e-maili. Administrator konta może go połączyć.",
         "connectedAs": "Połączono przez {provider} jako {from}",
         "disconnect": "Rozłącz",
         "connect": "Połącz nadawcę e-maili",
@@ -2968,6 +2970,7 @@
     "deny": "Anuluj",
     "back": "Powrót do aplikacji",
     "noWorkspaces": "Nie masz jeszcze tablicy, z którą można to połączyć.",
+    "noAdminWorkspaces": "Nie jesteś administratorem żadnej ze swoich tablic. Poproś administratora tablicy o połączenie.",
     "revokeHint": "Zostanie wydany klucz API, który w każdej chwili możesz unieważnić w ustawieniach tablicy.",
     "error": {
       "title": "Nie udało się skonfigurować tego połączenia",

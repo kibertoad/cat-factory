@@ -2379,6 +2379,7 @@
       },
       "invite": {
         "title": "Bir takım arkadaşı davet et",
+        "listTitle": "Davetler",
         "submit": "Davet et",
         "revoke": "Daveti iptal et",
         "created": "Davet oluşturuldu",
@@ -2393,6 +2394,7 @@
       "email": {
         "title": "E-posta göndericisi",
         "notEnabled": "Bu dağıtımda e-posta teslimatı etkin değil. Davetler yine de paylaşılabilir bir kabul bağlantısı üretir.",
+        "notConnected": "Bağlı bir e-posta göndericisi yok. Bir hesap yöneticisi bağlayabilir.",
         "connectedAs": "{provider} aracılığıyla {from} olarak bağlandı",
         "disconnect": "Bağlantıyı kes",
         "connect": "E-posta göndericisi bağla",
@@ -2968,6 +2970,7 @@
     "deny": "Vazgeç",
     "back": "Uygulamaya dön",
     "noWorkspaces": "Bunu bağlayabileceğiniz bir pano henüz yok.",
+    "noAdminWorkspaces": "Panolarınızın hiçbirinde yönetici değilsiniz. Bağlamak için bir pano yöneticisinden yardım isteyin.",
     "revokeHint": "Bu işlem, pano ayarlarından istediğiniz zaman iptal edebileceğiniz bir API anahtarı oluşturur.",
     "error": {
       "title": "Bu bağlantı kurulamadı",

@@ -2519,6 +2519,7 @@
       },
       "invite": {
         "title": "Invite a teammate",
+        "listTitle": "Invitations",
         "submit": "Invite",
         "revoke": "Revoke invitation",
         "created": "Invitation created",
@@ -2533,6 +2534,7 @@
       "email": {
         "title": "Email sender",
         "notEnabled": "Email delivery is not enabled on this deployment. Invitations still produce a shareable accept link.",
+        "notConnected": "No email sender is connected. An account admin can connect one.",
         "connectedAs": "Connected via {provider} as {from}",
         "disconnect": "Disconnect",
         "connect": "Connect email sender",
@@ -3126,6 +3128,7 @@
     "deny": "Cancel",
     "back": "Back to the app",
     "noWorkspaces": "You have no boards to connect this to yet.",
+    "noAdminWorkspaces": "You are not an admin of any of your boards. Ask a board admin to connect it.",
     "revokeHint": "This issues an API key you can revoke at any time from the board's settings.",
     "error": {
       "title": "This connection could not be set up",
