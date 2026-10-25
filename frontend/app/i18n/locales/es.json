@@ -2618,7 +2618,9 @@
       "budget": "Presupuesto",
       "tokens": "Tokens",
       "resume": "Reanudar de todos modos",
-      "resumeHint": "Reanudar sigue generando gasto; se pausará de nuevo si sigue por encima del presupuesto."
+      "resumeHint": "Reanudar sigue generando gasto; se pausará de nuevo si sigue por encima del presupuesto.",
+      "resumeFailed": "No se pudo reanudar la ejecución de agentes",
+      "refreshFailed": "Ejecuciones reanudadas, pero el tablero no se actualizó"
     },
     "personalSetup": {
       "title": "Mi configuración",
@@ -3391,7 +3393,9 @@
           "thresholds": "Usar los umbrales",
           "always": "Fusionar siempre automáticamente",
           "never": "Exigir siempre revisión"
-        }
+        },
+        "loadFailed": "No se pudo cargar el historial de fusiones",
+        "unavailable": "Historial no disponible"
       },
       "roleRules": {
         "heading": "Límites según el rol que inicia",
@@ -4687,7 +4691,8 @@
       },
       "repoType": "Tipo de repositorio",
       "repoTypeHint": "Qué es este repositorio: un servicio backend, una aplicación frontend, una biblioteca compartida o un repositorio de documentación (solo documentos/spikes).",
-      "prefillProviderMismatch": "El enlace pedía {repo} en otro proveedor, y este tablero está conectado a {connected}. Busca el repositorio a mano o abre el enlace en un tablero conectado a su proveedor."
+      "prefillProviderMismatch": "El enlace pedía {repo} en otro proveedor, y este tablero está conectado a {connected}. Busca el repositorio a mano o abre el enlace en un tablero conectado a su proveedor.",
+      "searchFailed": "No se pudieron buscar repositorios"
     },
     "repoTree": {
       "root": "raíz",
@@ -5816,7 +5821,8 @@
       "park": "Consultó a una persona",
       "bounce": "Devuelto para revisión",
       "fail": "Ejecución fallida"
-    }
+    },
+    "resolveFailed": "No se pudo registrar tu elección"
   },
   "inputGate": {
     "blockedTitle": "Esta tarea necesita más detalle antes de ejecutarse",
@@ -6734,7 +6740,8 @@
         "recommendations": "Recomendaciones"
       },
       "empty": "Aún no hay calificaciones."
-    }
+    },
+    "loadFailed": "No se pudieron cargar las calificaciones Kaizen"
   },
   "recurring": {
     "runEvery": "Ejecutar cada",

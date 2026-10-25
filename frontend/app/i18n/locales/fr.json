@@ -2618,7 +2618,9 @@
       "budget": "Budget",
       "tokens": "Jetons",
       "resume": "Reprendre quand même",
-      "resumeHint": "Reprendre continue à générer des dépenses ; cela se mettra de nouveau en pause si vous dépassez encore le budget."
+      "resumeHint": "Reprendre continue à générer des dépenses ; cela se mettra de nouveau en pause si vous dépassez encore le budget.",
+      "resumeFailed": "Impossible de reprendre l’exécution des agents",
+      "refreshFailed": "Exécutions reprises, mais le tableau ne s’est pas actualisé"
     },
     "personalSetup": {
       "title": "Ma configuration",
@@ -3391,7 +3393,9 @@
           "thresholds": "Utiliser les seuils",
           "always": "Toujours fusionner automatiquement",
           "never": "Toujours exiger une revue"
-        }
+        },
+        "loadFailed": "Impossible de charger l’historique des fusions",
+        "unavailable": "Historique indisponible"
       },
       "roleRules": {
         "heading": "Limites selon le rôle qui lance l'exécution",
@@ -4687,7 +4691,8 @@
       },
       "repoType": "Type de dépôt",
       "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement).",
-      "prefillProviderMismatch": "Le lien visait {repo} chez un autre hébergeur, et ce tableau est connecté à {connected}. Cherchez le dépôt à la main, ou ouvrez le lien sur un tableau connecté à son hébergeur."
+      "prefillProviderMismatch": "Le lien visait {repo} chez un autre hébergeur, et ce tableau est connecté à {connected}. Cherchez le dépôt à la main, ou ouvrez le lien sur un tableau connecté à son hébergeur.",
+      "searchFailed": "Impossible de rechercher des dépôts"
     },
     "repoTree": {
       "root": "racine",
@@ -5816,7 +5821,8 @@
       "park": "A demandé à une personne",
       "bounce": "Renvoyé pour reprise",
       "fail": "Exécution échouée"
-    }
+    },
+    "resolveFailed": "Impossible d’enregistrer votre choix"
   },
   "inputGate": {
     "blockedTitle": "Cette tâche a besoin de plus de détails avant de s'exécuter",
@@ -6734,7 +6740,8 @@
         "recommendations": "Recommandations"
       },
       "empty": "Aucune évaluation pour l'instant."
-    }
+    },
+    "loadFailed": "Impossible de charger les évaluations Kaizen"
   },
   "recurring": {
     "runEvery": "Exécuter toutes les",

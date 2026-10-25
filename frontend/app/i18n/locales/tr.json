@@ -2618,7 +2618,9 @@
       "budget": "Bütçe",
       "tokens": "Belirteçler",
       "resume": "Yine de devam ettir",
-      "resumeHint": "Devam etmek harcamayı sürdürür; hâlâ bütçe aşımı varsa tekrar duraklatılır."
+      "resumeHint": "Devam etmek harcamayı sürdürür; hâlâ bütçe aşımı varsa tekrar duraklatılır.",
+      "resumeFailed": "Ajan yürütmesi devam ettirilemedi",
+      "refreshFailed": "Çalıştırmalar devam ettirildi, ancak pano yenilenemedi"
     },
     "personalSetup": {
       "title": "Kurulumum",
@@ -3532,7 +3534,9 @@
           "thresholds": "Puan eşiklerini kullan",
           "always": "Her zaman otomatik birleştir",
           "never": "Her zaman inceleme iste"
-        }
+        },
+        "loadFailed": "Birleştirme geçmişi yüklenemedi",
+        "unavailable": "Geçmiş kullanılamıyor"
       },
       "roleRules": {
         "heading": "Başlatan role göre sınırlar",
@@ -4687,7 +4691,8 @@
       },
       "repoType": "Depo türü",
       "repoTypeHint": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike).",
-      "prefillProviderMismatch": "Bağlantı başka bir sağlayıcıdaki {repo} deposunu istiyordu, bu pano ise {connected} ile bağlı. Depoyu elle arayın veya bağlantıyı onun sağlayıcısına bağlı bir panoda açın."
+      "prefillProviderMismatch": "Bağlantı başka bir sağlayıcıdaki {repo} deposunu istiyordu, bu pano ise {connected} ile bağlı. Depoyu elle arayın veya bağlantıyı onun sağlayıcısına bağlı bir panoda açın.",
+      "searchFailed": "Depolar aranamadı"
     },
     "repoTree": {
       "root": "kök",
@@ -5816,7 +5821,8 @@
       "park": "Bir kişiye sordu",
       "bounce": "Düzeltme için geri gönderildi",
       "fail": "Çalışma başarısız oldu"
-    }
+    },
+    "resolveFailed": "Seçiminiz kaydedilemedi"
   },
   "inputGate": {
     "blockedTitle": "Bu görev çalışmadan önce daha fazla ayrıntı gerektiriyor",
@@ -6734,7 +6740,8 @@
         "recommendations": "Öneriler"
       },
       "empty": "Henüz değerlendirme yok."
-    }
+    },
+    "loadFailed": "Kaizen değerlendirmeleri yüklenemedi"
   },
   "recurring": {
     "runEvery": "Çalıştırma sıklığı",
