@@ -347,7 +347,8 @@ outcome window, Reports, the empty queue and Start from a design with no source.
 performance and dark mode were out of scope.
 
 Still visible on `3c0b4e428` and not re-graded: UXA-04, UXA-05, UXA-13, UXA-15, UXA-16, UXA-19,
-UXA-20, UXA-22. UXA-01 is in review in #2312.
+UXA-20, UXA-22. UXA-01 is in review in #2312. #2432 merged after that commit and fixed UXA-13 and
+UXA-27, so both are marked done below.
 
 ### Major
 
@@ -375,8 +376,9 @@ UXA-20, UXA-22. UXA-01 is in review in #2312.
   [delivery-surface](./delivery-surface.md)): a translated cause line per failure kind
   (`utils/failureCause.ts`), one action, and the backend hint behind Details. Extends UXA-13.
   [Copy]
-- **UXA-28. The basic tier hides 4 of 23 destinations.** An engineer in basic sees 19 sidebar
-  entries, including Model providers, Model configuration, Integrations, Infrastructure, Context
+- **UXA-28. The basic tier hides 4 of 23 destinations.** Measured as a workspace admin (the e2e
+  user); an ordinary member holds neither `integrations.manage` nor `settings.manage`, so most setup
+  entries are already hidden from them. A workspace admin in basic sees 19 sidebar entries, including Model providers, Model configuration, Integrations, Infrastructure, Context
   fragments, Setup checklist and Workspace settings, under the hint "Everyday tools only."
   Advanced adds only Bootstrap repo, Sandbox, Kaizen and Foundational services. In basic,
   Infrastructure opens on "Where agents run" with a Kubernetes form (API server URL, namespace,
@@ -417,7 +419,7 @@ UXA-20, UXA-22. UXA-01 is in review in #2312.
 ### Roles
 
 The role findings of this pass (the PM on the engineer's surface, the designer's handoff, and
-what shipped and what it cost below account admin) are in [Personas](../personas.md), with the
+what shipped and what it cost below account admin) are in [Personas](./personas.md), with the
 questions still open. They are not tracked here.
 
 ## Hierarchy and delight read
@@ -490,7 +492,7 @@ Confidence: **high** means the screenshot shows it and the mechanism was traced 
 | UXA-10 initial fit at 42%                                | Minor    | medium: seen once         | todo                           |                                                             |
 | UXA-11 edge through an unrelated card                    | Minor    | medium: seen once         | todo                           |                                                             |
 | UXA-12 Stop/Reset on finished runs, lock note tense      | Minor    | medium: seen once         | todo                           |                                                             |
-| UXA-13 failure block length and repetition               | Minor    | medium: seen once         | todo                           |                                                             |
+| UXA-13 failure block length and repetition               | Minor    | medium: seen once         | done (slice 8)                 | [#2432](https://github.com/kibertoad/cat-factory/pull/2432) |
 | UXA-14 review effort without hint, preselected           | Minor    | medium: seen once         | todo                           |                                                             |
 | UXA-15 tour offer exits and Start names                  | Minor    | high: seen, code-traced   | todo                           |                                                             |
 | UXA-16 five signals for one parked run                   | Minor    | low: structural judgement | todo                           |                                                             |
@@ -506,7 +508,7 @@ Confidence: **high** means the screenshot shows it and the mechanism was traced 
 | UXA-26 no build pipeline before a service is chosen      | Major    | high: seen, code-traced   | todo                           |                                                             |
 | UXA-27 failure prose is backend English for operators    | Major    | high: seen, code-traced   | done (slice 8)                 | [#2432](https://github.com/kibertoad/cat-factory/pull/2432) |
 | UXA-28 basic tier hides 4 of 23 destinations             | Major    | high: seen, code-traced   | todo (slices 5, 10)            |                                                             |
-| UXA-29 queue and board name one state differently        | Minor    | high: seen                | todo (slice 9)                 |                                                             |
+| UXA-29 queue and board name one state differently        | Minor    | medium: seen once         | todo (slice 9)                 |                                                             |
 | UXA-30 negative wait time on a queue card                | Minor    | medium: seen once         | todo                           |                                                             |
 | UXA-31 outcome subtitle over a body of absences          | Minor    | medium: seen once         | todo (slice 9)                 |                                                             |
 | UXA-32 "Approve with corrections" not explained          | Minor    | medium: seen once         | todo (slice 9)                 |                                                             |

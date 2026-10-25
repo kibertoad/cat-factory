@@ -5,9 +5,9 @@ they can guide what each surface shows.
 
 This doc defines who uses cat-factory, which jobs each of them comes to do, and which surface each
 one should land on. A new user-facing surface checks it before it decides its narrowing (the role
-and the interface tier, see [`frontend/app/README.md`](../frontend/app/README.md#roles-engineer--product-manager--designer)).
+and the interface tier, see [`frontend/app/README.md`](../../frontend/app/README.md#roles-engineer--product-manager--designer)).
 It is not authorization: what a person may do stays with account roles and workspace RBAC
-([ADR 0025](../backend/docs/adr/0025-workspace-rbac.md)).
+([ADR 0025](../../backend/docs/adr/0025-workspace-rbac.md)).
 
 ## Summary
 
@@ -53,7 +53,8 @@ merges. Jobs J1, J2 and J3, many times a day.
 - **Needs:** one-sentence intake, the decisions and approvals waiting on them, the outcome window
   and the merge.
 - **Does not need on this surface:** pipeline authoring, agent options with raw values, model and
-  infrastructure setup. Today the basic tier still shows most of them (UXA-04, UXA-28).
+  infrastructure setup. Today the basic tier still shows most of them to an engineer who is a
+  workspace admin (UXA-04, UXA-28).
 
 ### Factory engineer
 
@@ -94,12 +95,14 @@ infrastructure. A technical PM who does can pick the engineer role.
   (`ROLE_SURFACES` in `utils/uiRole.ts`).
 
 - **Gaps today:**
-  - On `full`, a PM meets pipeline names (UXA-26), operator failure text (UXA-27), the approval
-    rail's run metadata (UXA-20) and the setup destinations (UXA-28).
+  - On `full`, a PM meets pipeline names (UXA-26) and the approval rail's run metadata (UXA-20),
+    and a PM who is a workspace admin also meets the setup destinations (UXA-28). The operator
+    failure text (UXA-27) was fixed by #2432.
   - On `intake`, a PM can answer a requirement review or a brainstorm when a run parks on one (both
-    open as result views of the run step, with no role gate). But requirement review runs only in
-    Complex build, and the two brainstorm steps are opt-in steps that need the pipeline builder,
-    which `intake` hides. Initiatives, which run the planning pipelines, are advanced-only, and
+    open as result views of the run step, with no role gate). But requirement review is a default
+    step only in Complex build; the two spike pipelines carry it switched off, and turning it on
+    means editing the task's pipeline. The two brainstorm steps are opt-in steps that need the
+    pipeline builder, which `intake` hides. Initiatives, which run the planning pipelines, are advanced-only, and
     `intake` caps the tier at basic.
   - The frame header's bug hunt is described in its own code comment as "the engineer/PM judgement
     call", but it is hidden from `intake` (`BlockNode.vue`).
@@ -126,11 +129,14 @@ what it cost, what is stuck. The UX assessment behind #2258 already lists this p
 - **Lands on:** a read view of results and spend.
 - **Needs:** a list of what shipped (task, service, merge date, the outcome window), spend for the
   boards they own, and the work that waits on a person.
-- **Gaps today:** the queue shows only a count of merges in the Done-lane retention window
-  (UXA-33). Reports needs the advanced tier and account admin (`nav-contributions.ts`, `reports`).
-  This needs **more granular permissions**, so it is an RBAC change first
-  (ADR 0025 has `admin | member | viewer` per workspace and no permission for reading spend), and a
-  surface second.
+- **Gaps today:**
+  - The queue shows only a count of merges in the Done-lane retention window (UXA-33).
+  - One board's spend is already readable at `workspace.read`: `GET /workspaces/:ws/usage` and
+    `/spend` mount no permission gate, and `GET /api/v1/usage/spend` serves it to a `read`-scoped
+    key. But the SPA shows it only in Workspace settings, which needs `settings.manage`. For one
+    board, the gap is a surface, not a permission.
+  - Spend across boards (Reports) needs the advanced tier and account admin
+    (`nav-contributions.ts`, `reports`). That is where **more granular permissions** are needed.
 
 ### Operator
 
@@ -140,8 +146,10 @@ and then rarely. Often a platform team, not a user of the boards.
 - **Lands on:** the setup area: the setup checklist, then the screens each row opens.
 - **Needs:** the setup checklist, Infrastructure, Model providers, Integrations, the operator
   dashboard, local models.
-- **Gaps today:** the operator's screens sit in the everyday sidebar for every engineer, in the
-  basic tier too (UXA-28), and the startup advisories reach every role (UXA-03, #2328). #2429
+- **Gaps today:** the operator's screens are already gated on workspace-admin permissions
+  (`integrations.manage`, `settings.manage`), so an ordinary member never sees them. But a workspace
+  admin sees them in the everyday sidebar beside the delivery loop, in the basic tier too (UXA-28),
+  and the startup advisories reach every role (UXA-03, #2328). #2429
   proposes one setup checklist instead of banners.
 
 ## How personas are encoded today
@@ -164,9 +172,10 @@ A proposal, for the maintainer to accept or change:
 1. **The role question picks the person.** Engineer, product manager, designer, each with its own
    surface. Once the PM's surface differs, the question has a reason to exist at launch, which
    affects #2429's option A (questions A1 and A2).
-2. **The account role answers it when it can.** `product` without `developer` means "Product
-   manager", `developer` means "Engineer", and the question opens only when the account roles do
-   not decide. The person can switch from the sidebar either way.
+2. **The account role answers it when it can.** Every member holds `developer` by default
+   (`normalizeRoles`, invitations), so `product` is the signal: `product` means "Product manager",
+   whether or not `developer` is also held. The question opens when the account roles do not
+   decide. The person can switch from the sidebar either way.
 3. **`RoleSurface` grows from `full | intake` to `intake | product | delivery | factory`:**
    - `intake`: the designer (handoff).
    - `product`: the PM. Intake, plus the requirements phases: the requirement review and
@@ -174,8 +183,9 @@ A proposal, for the maintainer to accept or change:
      "Shipped" list.
    - `delivery` and `factory`: the two jobs of the engineer. The interface tier becomes the switch
      between them, so basic means "ship product" and advanced means "improve the factory".
-4. **The lead is a permission plus a view, not a role surface.** A read permission for results and
-   spend below account admin (RBAC), and a read view that uses it.
+4. **The lead is a view, not a role surface.** What shipped and one board's spend are already
+   readable at `workspace.read`; they need a view every member can open. Only spend across boards
+   needs a new permission below account admin.
 5. **The operator is the setup area, not a role surface.** Operator screens leave the everyday
    sidebar and are reached from the setup checklist, gated by the permissions that already exist
    (`canManageIntegrations` and the like).
@@ -190,14 +200,17 @@ roles come first because every surface hangs off them. Each question has a sugge
 1. **Does the role question still open at launch?** #2429 proposes it does not (option A), because
    today two of its three answers give the same surface. Once the PM has a surface of its own, an
    unasked PM lands on the engineer's.
-   _Suggested:_ ask at launch only when the account roles do not decide it (see 2), after the setup
+   _Suggested:_ ask at launch with the account role's answer preselected (see 2), after the setup
    checklist and before the tour offer. This changes #2429's option A; decide both together.
 2. **Does the account role preselect the answer?** The backend already knows a `product` person.
-   _Suggested:_ yes. Account roles `product` without `developer` preselect "Product manager",
-   `developer` preselects "Engineer", and the question is skipped when exactly one applies. The
-   person can still switch from the sidebar. A deployment without accounts (local mode) always asks.
+   _Suggested:_ yes, with `product` winning. `developer` is the default every member holds
+   (`normalizeRoles` and invitations fall back to it), so a PM is normally
+   `['product', 'developer']`. Any `product` role preselects "Product manager"; `developer` alone
+   preselects "Engineer"; the preselection is shown in the question rather than skipping it while
+   the account roles are this coarse. The person can still switch from the sidebar. A deployment
+   without accounts (local mode) asks with nothing preselected.
 3. **Does the lead get an answer in the role question?**
-   _Suggested:_ not yet. The lead's need is a permission and a read view (D). A role surface for
+   _Suggested:_ not yet. The lead's need is a read view (D). A role surface for
    the lead is worth adding once that view exists and something else differs.
 
 ### B. The PM's surface
@@ -210,8 +223,9 @@ roles come first because every surface hangs off them. Each question has a sugge
    that flag to become a list of surfaces, and the tour requirements that derive from it follow.
 5. **Which requirements phases does a PM start, and which only answer?**
    _Suggested:_ a PM starts them at intake: "Settle the requirements first" and "Brainstorm a
-   direction first" as choices in Describe new work, so neither needs the pipeline builder or
-   Complex build. A PM answers them through the queue, as today, and stays the task's responsible
+   direction first" as choices in Describe new work. The first generalises what the spike pipelines
+   already do (a `requirements-review` step carried switched off, turned on per task) to the build
+   pipelines, so neither needs the pipeline builder or Complex build. A PM answers them through the queue, as today, and stays the task's responsible
    product person, so the existing notifications reach them.
 
 ### C. What the interface tier means
@@ -236,21 +250,22 @@ roles come first because every surface hangs off them. Each question has a sugge
    _Suggested:_ yes, into the setup area that #2429 proposes, opened from the setup checklist and
    gated by the permissions that already exist (`integrations.manage`, `secrets.manage`,
    `settings.manage`). No new role.
-10. **Which permission lets someone below account admin see what shipped and what it cost?** It
-    needs more granular permissions than exist today.
-    _Suggested:_ split it in two. "What shipped" (the Shipped list with the outcome windows) needs
-    only `workspace.read`, so every member and viewer sees it. "What it cost" for one board becomes
-    a new workspace permission held by workspace admins, so a lead with workspace admin sees spend
-    without being account admin. Account-wide Reports stays with account admins. The new permission
-    is an additive member of the `WorkspacePermission` catalog in ADR 0025.
+10. **What does someone below account admin need to see what shipped and what it cost?**
+    _Suggested:_ start from what is already readable. "What shipped" (a Shipped list with the
+    outcome windows) and one board's spend both need only `workspace.read`, which the API already
+    grants (`/workspaces/:ws/usage`, `/spend`, and `GET /api/v1/usage/spend` for a `read` key). So
+    for one board this is a surface, not a permission: show both to every member and viewer, outside
+    Workspace settings. Narrowing either would remove access members and integrations have today,
+    which is a break, not an addition. The granular permission question is only about spend across
+    boards (Reports), which needs account admin today.
 
 ## Related
 
 - [#2429](https://github.com/kibertoad/cat-factory/issues/2429): the first minute, which proposes no
   role question at launch.
-- [UX assessment](./initiatives/ux-assessment-2026-09.md): UXA-03, UXA-04, UXA-05, UXA-20 and
+- [UX assessment](./ux-assessment-2026-09.md): UXA-03, UXA-04, UXA-05, UXA-20 and
   UXA-26 to UXA-28, the findings these personas explain.
-- [Delivery surface](./initiatives/delivery-surface.md): slice 6 (the role prompt) is where these
+- [Delivery surface](./delivery-surface.md): slice 6 (the role prompt) is where these
   decisions land.
-- [`frontend/app/README.md`](../frontend/app/README.md#roles-engineer--product-manager--designer):
+- [`frontend/app/README.md`](../../frontend/app/README.md#roles-engineer--product-manager--designer):
   how the role and the tier are implemented today.
