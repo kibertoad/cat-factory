@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { showOverrideField } from '~/utils/uiMode'
+import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import AppModal from '~/components/common/AppModal.vue'
@@ -132,8 +133,14 @@ const groups = computed<IntegrationGroup[]>(() => {
   if (github.available) {
     code.push({
       key: 'github',
-      icon: 'i-lucide-github',
-      label: 'GitHub',
+      // Named for the provider the workspace connected (or the only one it could), never a
+      // hard-coded GitHub: a GitLab deployment serves this same row (`~/utils/vcs`).
+      icon: github.surfaceProvider
+        ? VCS_PROVIDER_ICONS[github.surfaceProvider]
+        : 'i-lucide-git-branch',
+      label: github.surfaceProvider
+        ? VCS_PROVIDER_LABELS[github.surfaceProvider]
+        : t('vcs.panel.title'),
       description: t('layout.integrationsHub.items.github.description'),
       status: github.connected ? github.connection?.accountLogin : undefined,
       connected: github.connected,

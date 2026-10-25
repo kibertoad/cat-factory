@@ -208,7 +208,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
               }}</span>
               <span class="text-muted"> · {{ p.role }}</span>
               <span v-if="p.modelId" class="ms-1 text-dimmed"
-                >({{ models.labelForRef(p.modelId) ?? p.modelId }})</span
+                >({{ models.labelForId(p.modelId) }})</span
               >
             </div>
           </div>

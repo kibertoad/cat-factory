@@ -184,6 +184,18 @@
       "library": "Biblioteca",
       "document": "Repositorio de documentación"
     },
+    "blockTypes": {
+      "frontend": "Frontend",
+      "service": "Servicio",
+      "library": "Biblioteca",
+      "document": "Repositorio de documentación",
+      "api": "API",
+      "database": "Base de datos",
+      "queue": "Cola",
+      "integration": "Integración",
+      "external": "Externo",
+      "environment": "Entorno"
+    },
     "toolbar": {
       "addService": "Añadir servicio",
       "decisionWord": "decisión | decisiones",
@@ -238,6 +250,12 @@
       "technical": "Tarea técnica",
       "technicalHint": "Un refactor / cambio no funcional / interno. El implementador trata la definición de la tarea como principal y la especificación como referencia de regresión; déjalo desactivado para que decida la fase de especificación.",
       "severity": "Gravedad",
+      "severities": {
+        "low": "Baja",
+        "medium": "Media",
+        "high": "Alta",
+        "critical": "Crítica"
+      },
       "stepsToReproduce": "Pasos para reproducir",
       "stepsToReproducePlaceholder": "Observado vs esperado, y cómo reproducirlo…",
       "timebox": "Tiempo límite (horas)",
@@ -5024,6 +5042,18 @@
       "remove": "Quitar",
       "linkFailed": "No se pudo actualizar el vínculo del documento",
       "loadFailed": "No se pudieron cargar las plantillas de documentos"
+    },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "Diseño",
+      "technical": "Técnico",
+      "api": "API",
+      "runbook": "Manual de operaciones",
+      "research": "Investigación",
+      "reference": "Referencia",
+      "other": "Otro"
     },
     "startFromDesign": {
       "title": "Empezar desde un diseño",

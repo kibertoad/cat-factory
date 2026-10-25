@@ -41,6 +41,14 @@ const EMAIL_PROVIDER_ITEMS = computed(() => [
   { label: t('layout.accountTeam.email.providers.sendgrid'), value: 'sendgrid' as const },
 ])
 
+/** A role or email provider as its label: the ids are codes, not names a reader should see. */
+function roleLabel(role: AccountRole): string {
+  return ROLE_ITEMS.value.find((item) => item.value === role)?.label ?? role
+}
+function emailProviderLabel(provider: string): string {
+  return EMAIL_PROVIDER_ITEMS.value.find((item) => item.value === provider)?.label ?? provider
+}
+
 // Invitation status is a closed contract union; map each member to a literal key so the
 // typed-message-key check stays live, with a te()-guarded fallback if a locale omits one.
 const INVITATION_STATUS_KEYS: Record<InvitationStatus, string> = {
@@ -244,7 +252,7 @@ async function disconnectEmail() {
                a heading over it, so it keeps its own classes rather than adopting the eyebrow
                recipe (`common/SectionLabel.vue`). -->
           <span v-else class="text-xs uppercase tracking-wide text-muted">
-            {{ m.roles.join(', ') }}
+            {{ m.roles.map(roleLabel).join(', ') }}
           </span>
           <!-- Offboarding: end every session this member holds, leaving their membership and
                roles alone. Confirmed, because it is not undoable from here (the person simply
@@ -332,7 +340,7 @@ async function disconnectEmail() {
         >
           <i18n-t keypath="layout.accountTeam.email.connectedAs" tag="span" scope="global">
             <template #provider>
-              <strong>{{ accounts.emailConnection.provider }}</strong>
+              <strong>{{ emailProviderLabel(accounts.emailConnection.provider) }}</strong>
             </template>
             <template #from>{{ accounts.emailConnection.fromAddress }}</template>
           </i18n-t>

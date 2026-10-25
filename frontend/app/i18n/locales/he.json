@@ -184,6 +184,18 @@
       "library": "ספרייה",
       "document": "מאגר תיעוד"
     },
+    "blockTypes": {
+      "frontend": "פרונט-אנד",
+      "service": "שירות",
+      "library": "ספרייה",
+      "document": "מאגר תיעוד",
+      "api": "API",
+      "database": "מסד נתונים",
+      "queue": "תור",
+      "integration": "אינטגרציה",
+      "external": "חיצוני",
+      "environment": "סביבה"
+    },
     "toolbar": {
       "addService": "הוסף שירות",
       "decisionWord": "החלטה | החלטות | החלטות",
@@ -238,6 +250,12 @@
       "technical": "משימה טכנית",
       "technicalHint": "שינוי רפקטור / לא פונקציונלי / פנימי. המיישם מתייחס להגדרת המשימה כעיקרית ולמפרט כהפניה לרגרסיה; השאר כבוי כדי לתת לשלב המפרט להחליט.",
       "severity": "חומרה",
+      "severities": {
+        "low": "נמוכה",
+        "medium": "בינונית",
+        "high": "גבוהה",
+        "critical": "קריטית"
+      },
       "stepsToReproduce": "שלבים לשחזור",
       "stepsToReproducePlaceholder": "מה נצפה לעומת מה שצופה, וכיצד לשחזר…",
       "timebox": "תיחום זמן (שעות)",
@@ -5024,6 +5042,18 @@
       "remove": "הסר",
       "linkFailed": "לא ניתן לעדכן את קישור המסמך",
       "loadFailed": "לא ניתן היה לטעון את תבניות המסמכים"
+    },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "עיצוב",
+      "technical": "טכני",
+      "api": "API",
+      "runbook": "מדריך תפעול",
+      "research": "מחקר",
+      "reference": "עיון",
+      "other": "אחר"
     },
     "startFromDesign": {
       "title": "להתחיל מעיצוב",

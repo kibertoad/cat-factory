@@ -214,6 +214,18 @@
       "library": "Library",
       "document": "Document repository"
     },
+    "blockTypes": {
+      "frontend": "Frontend",
+      "service": "Service",
+      "library": "Library",
+      "document": "Document repository",
+      "api": "API",
+      "database": "Database",
+      "queue": "Queue",
+      "integration": "Integration",
+      "external": "External",
+      "environment": "Environment"
+    },
     "toolbar": {
       "addService": "Add service",
       "decisionWord": "decision | decisions",
@@ -274,6 +286,12 @@
       "technical": "Technical task",
       "technicalHint": "A refactor / non-functional / internal change. The implementer treats the task definition as primary and the spec as a regression reference; leave off to let the spec phase decide.",
       "severity": "Severity",
+      "severities": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "critical": "Critical"
+      },
       "stepsToReproduce": "Steps to reproduce",
       "stepsToReproducePlaceholder": "Observed vs expected, and how to reproduce…",
       "timebox": "Time-box (hours)",
@@ -5212,6 +5230,18 @@
       "remove": "Remove",
       "linkFailed": "Couldn't update the document link",
       "loadFailed": "Couldn't load document templates"
+    },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "Design",
+      "technical": "Technical",
+      "api": "API",
+      "runbook": "Runbook",
+      "research": "Research",
+      "reference": "Reference",
+      "other": "Other"
     },
     "startFromDesign": {
       "title": "Start from a design",

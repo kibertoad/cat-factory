@@ -42,8 +42,42 @@ describe('audit sentence composition', () => {
   })
 
   it('interpolates the row’s own values', () => {
-    expect(describeEvent(event(), fakeT)).toBe(
-      'layout.auditLog.actions.accountMemberRolesChanged(previousRoles=developer,roles=admin,target=Grace)',
+    expect(
+      describeEvent(event({ action: 'account.budget_changed', details: { limit: 50 } }), fakeT),
+    ).toBe('layout.auditLog.actions.accountBudgetChanged(limit=50,target=Grace)')
+  })
+
+  it('names roles by their label, never their id', () => {
+    expect(
+      describeEvent(
+        event({ details: { previousRoles: 'developer', roles: 'admin, product' } }),
+        fakeT,
+      ),
+    ).toBe(
+      'layout.auditLog.actions.accountMemberRolesChanged(' +
+        'previousRoles=layout.accountTeam.roles.developer,' +
+        'roles=layout.accountTeam.roles.admin, layout.accountTeam.roles.product,target=Grace)',
+    )
+    expect(
+      describeEvent(
+        event({
+          action: 'workspace.member_role_changed',
+          details: { previousRole: 'viewer', role: 'admin' },
+        }),
+        fakeT,
+      ),
+    ).toBe(
+      'layout.auditLog.actions.workspaceMemberRoleChanged(' +
+        'previousRole=layout.workspaceMembers.roles.viewer,role=layout.workspaceMembers.roles.admin,target=Grace)',
+    )
+  })
+
+  it('keeps a role id this build does not know as itself', () => {
+    expect(
+      describeEvent(event({ details: { previousRoles: 'auditor', roles: 'admin' } }), fakeT),
+    ).toBe(
+      'layout.auditLog.actions.accountMemberRolesChanged(' +
+        'previousRoles=auditor,roles=layout.accountTeam.roles.admin,target=Grace)',
     )
   })
 

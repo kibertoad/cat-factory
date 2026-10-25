@@ -3089,6 +3089,18 @@
       "library": "Bibliothek",
       "document": "Dokument-Repository"
     },
+    "blockTypes": {
+      "frontend": "Frontend",
+      "service": "Service",
+      "library": "Bibliothek",
+      "document": "Dokument-Repository",
+      "api": "API",
+      "database": "Datenbank",
+      "queue": "Warteschlange",
+      "integration": "Integration",
+      "external": "Extern",
+      "environment": "Umgebung"
+    },
     "toolbar": {
       "addService": "Service hinzufügen",
       "decisionWord": "Entscheidung | Entscheidungen",
@@ -3143,6 +3155,12 @@
       "technical": "Technische Aufgabe",
       "technicalHint": "Ein Refactor / eine nicht-funktionale / interne Änderung. Der Implementierer behandelt die Aufgabendefinition als primär und die Spezifikation als Regressionsreferenz; lassen Sie es aus, damit die Spec-Phase entscheidet.",
       "severity": "Schweregrad",
+      "severities": {
+        "low": "Niedrig",
+        "medium": "Mittel",
+        "high": "Hoch",
+        "critical": "Kritisch"
+      },
       "stepsToReproduce": "Schritte zur Reproduktion",
       "stepsToReproducePlaceholder": "Beobachtet vs. erwartet und wie zu reproduzieren…",
       "timebox": "Zeitbudget (Stunden)",
@@ -4480,6 +4498,18 @@
       "remove": "Entfernen",
       "linkFailed": "Die Dokumentverknüpfung konnte nicht aktualisiert werden",
       "loadFailed": "Dokumentvorlagen konnten nicht geladen werden"
+    },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "Design",
+      "technical": "Technisch",
+      "api": "API",
+      "runbook": "Betriebshandbuch",
+      "research": "Recherche",
+      "reference": "Referenz",
+      "other": "Sonstiges"
     },
     "startFromDesign": {
       "title": "Mit einem Design starten",

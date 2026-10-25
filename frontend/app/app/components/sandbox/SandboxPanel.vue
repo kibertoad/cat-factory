@@ -222,6 +222,13 @@ const detailRows = computed(() =>
 )
 const selectedRun = ref<SandboxRun | null>(null)
 
+// A run records the catalog id it ran on; the reader sees the catalog label. A model since
+// removed from the catalog keeps its id, the only name left for it.
+const modelLabels = computed(() => new Map(store.models.map((m) => [m.id, m.label])))
+function modelLabel(id: string): string {
+  return modelLabels.value.get(id) ?? id
+}
+
 // Column definitions rather than hand-written `<th>`s: the header typography then comes from the
 // table theme instead of a per-file recipe.
 const detailColumns = computed<TableColumn<(typeof detailRows.value)[number]>[]>(() => [
@@ -506,7 +513,9 @@ async function archive(prompt: SandboxPromptVersion) {
                     <span class="text-toned">{{ row.original.run.promptLabel }}</span>
                   </template>
                   <template #model-cell="{ row }">
-                    <span class="font-mono text-2xs text-muted">{{ row.original.run.model }}</span>
+                    <span class="text-2xs text-muted">{{
+                      modelLabel(row.original.run.model)
+                    }}</span>
                   </template>
                   <template #fixture-cell="{ row }">
                     <span class="text-muted">{{ row.original.fixtureName }}</span>
@@ -549,7 +558,7 @@ async function archive(prompt: SandboxPromptVersion) {
               <!-- selected cell output -->
               <div v-if="selectedRun" class="mt-3 border-t border-default pt-2">
                 <SectionLabel as="p" class="mb-1">
-                  {{ selectedRun.promptLabel }} · {{ selectedRun.model }}
+                  {{ selectedRun.promptLabel }} · {{ modelLabel(selectedRun.model) }}
                 </SectionLabel>
                 <p v-if="selectedRun.error" class="text-xs text-app-error-400">
                   {{ selectedRun.error }}

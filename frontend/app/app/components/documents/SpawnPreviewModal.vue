@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { isDesignSource } from '@cat-factory/contracts'
-import type { DocumentBoardPlan } from '~/types/domain'
+import type { BlockType, DocumentBoardPlan } from '~/types/domain'
 import Spinner from '~/components/common/Spinner.vue'
 import AppModal from '~/components/common/AppModal.vue'
 
@@ -15,6 +15,21 @@ import AppModal from '~/components/common/AppModal.vue'
 // even requested. The frame is then sent to the spawn as well, so the write re-plans against the
 // same target and nothing the preview showed is discarded.
 const { t } = useI18n()
+
+// A frame's block type as its label, never its id. Exhaustive over the contract union, so a new
+// block type fails the typecheck here until it has copy.
+const BLOCK_TYPE_LABEL = computed<Record<BlockType, string>>(() => ({
+  frontend: t('board.blockTypes.frontend'),
+  service: t('board.blockTypes.service'),
+  library: t('board.blockTypes.library'),
+  document: t('board.blockTypes.document'),
+  api: t('board.blockTypes.api'),
+  database: t('board.blockTypes.database'),
+  queue: t('board.blockTypes.queue'),
+  integration: t('board.blockTypes.integration'),
+  external: t('board.blockTypes.external'),
+  environment: t('board.blockTypes.environment'),
+}))
 const ui = useUiStore()
 const board = useBoardStore()
 const documents = useDocumentsStore()
@@ -180,7 +195,9 @@ async function spawn() {
             <div class="flex items-center gap-2">
               <UIcon name="i-lucide-box" class="h-4 w-4 text-primary" />
               <span class="text-sm font-semibold text-highlighted">{{ frame.title }}</span>
-              <UBadge variant="subtle" size="sm" color="neutral">{{ frame.type }}</UBadge>
+              <UBadge variant="subtle" size="sm" color="neutral">{{
+                BLOCK_TYPE_LABEL[frame.type]
+              }}</UBadge>
             </div>
 
             <ul v-if="frame.tasks.length" class="mt-2 space-y-1 ps-6">

@@ -3089,6 +3089,18 @@
       "library": "Libreria",
       "document": "Repository di documenti"
     },
+    "blockTypes": {
+      "frontend": "Frontend",
+      "service": "Servizio",
+      "library": "Libreria",
+      "document": "Repository di documenti",
+      "api": "API",
+      "database": "Database",
+      "queue": "Coda",
+      "integration": "Integrazione",
+      "external": "Esterno",
+      "environment": "Ambiente"
+    },
     "toolbar": {
       "addService": "Aggiungi servizio",
       "decisionWord": "decisione | decisioni",
@@ -3143,6 +3155,12 @@
       "technical": "Attività tecnica",
       "technicalHint": "Un refactoring / una modifica non funzionale / interna. L'implementatore tratta la definizione dell'attività come primaria e la spec come riferimento di regressione; lascia disattivato per far decidere alla fase di spec.",
       "severity": "Gravità",
+      "severities": {
+        "low": "Bassa",
+        "medium": "Media",
+        "high": "Alta",
+        "critical": "Critica"
+      },
       "stepsToReproduce": "Passaggi per riprodurre",
       "stepsToReproducePlaceholder": "Osservato vs atteso, e come riprodurre…",
       "timebox": "Time-box (ore)",
@@ -4480,6 +4498,18 @@
       "remove": "Rimuovi",
       "linkFailed": "Impossibile aggiornare il collegamento del documento",
       "loadFailed": "Impossibile caricare i modelli di documento"
+    },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "Progettazione",
+      "technical": "Tecnico",
+      "api": "API",
+      "runbook": "Manuale operativo",
+      "research": "Ricerca",
+      "reference": "Riferimento",
+      "other": "Altro"
     },
     "startFromDesign": {
       "title": "Parti da un design",

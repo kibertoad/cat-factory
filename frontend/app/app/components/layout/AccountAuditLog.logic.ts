@@ -1,5 +1,10 @@
 import { AUDIT_ACTION_DETAIL_KEYS, isRetiredAuditValue } from '@cat-factory/contracts'
-import type { AuditAction, AuditEventWire } from '@cat-factory/contracts'
+import type {
+  AccountRole,
+  AuditAction,
+  AuditEventWire,
+  WorkspaceRole,
+} from '@cat-factory/contracts'
 
 // How one audit row becomes one sentence. Kept out of the SFC on the same seam as
 // `StepToolServers.logic.ts`, because the two rules worth asserting here are both about rows a
@@ -30,6 +35,27 @@ export const ACTION_KEYS: Record<AuditAction, string> = {
   'workspace.access_mode_changed': 'layout.auditLog.actions.workspaceAccessModeChanged',
 }
 
+/**
+ * Role id → label key, for the detail slots that carry roles. The writer stores the ids (a list
+ * joined as `'admin, developer'`), and an id on screen reads as a code, not a role.
+ */
+const ACCOUNT_ROLE_KEYS: Record<AccountRole, string> = {
+  admin: 'layout.accountTeam.roles.admin',
+  developer: 'layout.accountTeam.roles.developer',
+  product: 'layout.accountTeam.roles.product',
+}
+const WORKSPACE_ROLE_KEYS: Record<WorkspaceRole, string> = {
+  admin: 'layout.workspaceMembers.roles.admin',
+  member: 'layout.workspaceMembers.roles.member',
+  viewer: 'layout.workspaceMembers.roles.viewer',
+}
+const ROLE_SLOT_KEYS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  roles: ACCOUNT_ROLE_KEYS,
+  previousRoles: ACCOUNT_ROLE_KEYS,
+  role: WORKSPACE_ROLE_KEYS,
+  previousRole: WORKSPACE_ROLE_KEYS,
+}
+
 /** Translate a key with interpolation params. The component owns the i18n instance; this is pure. */
 export type Translate = (key: string, params?: Record<string, string>) => string
 
@@ -50,14 +76,33 @@ export type Translate = (key: string, params?: Record<string, string>) => string
 function detailParams(
   action: AuditAction,
   details: AuditEventWire['details'],
-  none: string,
+  t: Translate,
 ): Record<string, string> {
+  const none = t('layout.auditLog.values.none')
   const params: Record<string, string> = {}
   for (const key of AUDIT_ACTION_DETAIL_KEYS[action]) params[key] = none
   for (const [key, value] of Object.entries(details)) {
-    params[key] = value === null || value === '' ? none : String(value)
+    if (value === null || value === '') params[key] = none
+    else params[key] = roleLabels(ROLE_SLOT_KEYS[key], String(value), t)
   }
   return params
+}
+
+/**
+ * A role slot's ids as labels. An id this build does not know (a role retired after the row was
+ * written) stays as itself rather than being guessed onto a current role.
+ */
+function roleLabels(
+  keys: Readonly<Record<string, string>> | undefined,
+  value: string,
+  t: Translate,
+): string {
+  if (!keys) return value
+  return value
+    .split(',')
+    .map((id) => id.trim())
+    .map((id) => (Object.hasOwn(keys, id) ? t(keys[id]!) : id))
+    .join(', ')
 }
 
 /** Who the action was performed ON: the resolved name, else the raw id. */
@@ -96,6 +141,6 @@ export function describeEvent(event: AuditEventWire, t: Translate): string {
   }
   return t(ACTION_KEYS[event.action], {
     target: targetLabel(event),
-    ...detailParams(event.action, event.details, t('layout.auditLog.values.none')),
+    ...detailParams(event.action, event.details, t),
   })
 }

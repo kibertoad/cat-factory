@@ -184,6 +184,18 @@
       "library": "Biblioteka",
       "document": "Repozytorium dokumentacji"
     },
+    "blockTypes": {
+      "frontend": "Frontend",
+      "service": "Usługa",
+      "library": "Biblioteka",
+      "document": "Repozytorium dokumentacji",
+      "api": "API",
+      "database": "Baza danych",
+      "queue": "Kolejka",
+      "integration": "Integracja",
+      "external": "Zewnętrzny",
+      "environment": "Środowisko"
+    },
     "toolbar": {
       "addService": "Dodaj usługę",
       "decisionWord": "decyzja | decyzje | decyzji",
@@ -238,6 +250,12 @@
       "technical": "Zadanie techniczne",
       "technicalHint": "Refaktor / zmiana niefunkcjonalna / wewnętrzna. Implementujący traktuje definicję zadania jako nadrzędną, a specyfikację jako odniesienie regresyjne; pozostaw wyłączone, aby zdecydowała faza specyfikacji.",
       "severity": "Ważność",
+      "severities": {
+        "low": "Niska",
+        "medium": "Średnia",
+        "high": "Wysoka",
+        "critical": "Krytyczna"
+      },
       "stepsToReproduce": "Kroki do odtworzenia",
       "stepsToReproducePlaceholder": "Zaobserwowane vs oczekiwane oraz jak odtworzyć…",
       "timebox": "Limit czasu (godziny)",
@@ -5024,6 +5042,18 @@
       "remove": "Usuń",
       "linkFailed": "Nie udało się zaktualizować powiązania dokumentu",
       "loadFailed": "Nie udało się wczytać szablonów dokumentów"
+    },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "Projekt",
+      "technical": "Techniczny",
+      "api": "API",
+      "runbook": "Instrukcja operacyjna",
+      "research": "Badanie",
+      "reference": "Dokumentacja referencyjna",
+      "other": "Inny"
     },
     "startFromDesign": {
       "title": "Zacznij od projektu",

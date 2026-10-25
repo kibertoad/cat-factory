@@ -184,6 +184,18 @@
       "library": "ライブラリ",
       "document": "ドキュメントリポジトリ"
     },
+    "blockTypes": {
+      "frontend": "フロントエンド",
+      "service": "サービス",
+      "library": "ライブラリ",
+      "document": "ドキュメントリポジトリ",
+      "api": "API",
+      "database": "データベース",
+      "queue": "キュー",
+      "integration": "連携",
+      "external": "外部",
+      "environment": "環境"
+    },
     "toolbar": {
       "addService": "サービスを追加",
       "decisionWord": "決定 | 決定",
@@ -238,6 +250,12 @@
       "technical": "技術タスク",
       "technicalHint": "リファクタリングや非機能的・内部的な変更です。実装担当はタスク定義を主とし、仕様はリグレッションの参照として扱います。オフにすると仕様フェーズに判断を委ねます。",
       "severity": "重大度",
+      "severities": {
+        "low": "低",
+        "medium": "中",
+        "high": "高",
+        "critical": "致命的"
+      },
       "stepsToReproduce": "再現手順",
       "stepsToReproducePlaceholder": "観測された挙動と期待される挙動、および再現方法…",
       "timebox": "タイムボックス（時間）",
@@ -5024,6 +5042,18 @@
       "remove": "削除",
       "linkFailed": "ドキュメントのリンクを更新できませんでした",
       "loadFailed": "ドキュメントテンプレートを読み込めませんでした"
+    },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "設計",
+      "technical": "技術",
+      "api": "API",
+      "runbook": "運用手順書",
+      "research": "調査",
+      "reference": "リファレンス",
+      "other": "その他"
     },
     "startFromDesign": {
       "title": "デザインから始める",

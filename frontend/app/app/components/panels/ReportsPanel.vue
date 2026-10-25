@@ -9,6 +9,7 @@ import type {
   ReportWindow,
 } from '~/types/execution'
 import { formatMs, formatTokens } from '~/utils/observability'
+import { agentKindMeta, isKnownAgentKind, taskTypeMeta } from '~/utils/catalog'
 import {
   activitySegments,
   isUnattributed,
@@ -75,11 +76,31 @@ const dimension = ref<ReportActivityDimension>('workspace')
 const currency = computed(() => view.value?.currency ?? 'EUR')
 const money = (value: number) => n(value, { key: 'currency', currency: currency.value })
 
-/** A slice's display name: the resolved label, the raw key, or the unattributed notice. */
-function sliceLabel(row: { key: string; label: string | null }): string {
-  if (isUnattributed(row.key)) return t('reports.unattributed')
-  return row.label ?? row.key
+const models = useModelsStore()
+
+/**
+ * A slice's display name: the resolved label, else `name(key)`, or the unattributed notice. The
+ * backend labels no model, agent kind or task type row, so those name their key from the SPA's
+ * own catalogs rather than showing an id.
+ */
+function sliceLabelWith(name: (key: string) => string) {
+  return (row: { key: string; label: string | null }): string => {
+    if (isUnattributed(row.key)) return t('reports.unattributed')
+    return row.label ?? name(row.key)
+  }
 }
+const sliceLabel = sliceLabelWith((key) => key)
+const modelSliceLabel = sliceLabelWith((key) => models.labelForRef(key) ?? key)
+const agentKindSliceLabel = sliceLabelWith((key) =>
+  isKnownAgentKind(key) ? agentKindMeta(key).label : key,
+)
+const taskTypeSliceLabel = sliceLabelWith((key) => {
+  const meta = taskTypeMeta(key)
+  return meta.labelKey ? t(meta.labelKey) : (meta.label ?? key)
+})
+const dimensionSliceLabel = computed(() =>
+  dimension.value === 'taskType' ? taskTypeSliceLabel : sliceLabel,
+)
 
 const spendByDimension = computed<ReportSpendRow[]>(() => {
   const spend = view.value?.spend
@@ -420,7 +441,7 @@ watch(
                   :rows="view.spend.byModel"
                   :currency="currency"
                   test-id="reports-spend-model"
-                  :label-of="sliceLabel"
+                  :label-of="modelSliceLabel"
                 />
               </section>
               <section>
@@ -431,7 +452,7 @@ watch(
                   :rows="view.spend.byAgentKind"
                   :currency="currency"
                   test-id="reports-spend-agent-kind"
-                  :label-of="sliceLabel"
+                  :label-of="agentKindSliceLabel"
                 />
               </section>
             </div>
@@ -495,7 +516,7 @@ watch(
                     :rows="spendByDimension"
                     :currency="currency"
                     test-id="reports-spend-dimension"
-                    :label-of="sliceLabel"
+                    :label-of="dimensionSliceLabel"
                   />
                 </div>
                 <div>
@@ -518,7 +539,9 @@ watch(
                           data-testid="reports-activity-row"
                         >
                           <div class="mb-1 flex items-baseline justify-between gap-2">
-                            <span class="min-w-0 truncate text-toned">{{ sliceLabel(row) }}</span>
+                            <span class="min-w-0 truncate text-toned">{{
+                              dimensionSliceLabel(row)
+                            }}</span>
                             <span class="shrink-0 tabular-nums text-muted">
                               {{ t('reports.activity.runs', { count: row.runs }, row.runs) }}
                             </span>

@@ -184,6 +184,18 @@
       "library": "Kütüphane",
       "document": "Doküman deposu"
     },
+    "blockTypes": {
+      "frontend": "Frontend",
+      "service": "Servis",
+      "library": "Kütüphane",
+      "document": "Doküman deposu",
+      "api": "API",
+      "database": "Veritabanı",
+      "queue": "Kuyruk",
+      "integration": "Entegrasyon",
+      "external": "Harici",
+      "environment": "Ortam"
+    },
     "toolbar": {
       "addService": "Servis ekle",
       "decisionWord": "karar | karar",
@@ -238,6 +250,12 @@
       "technical": "Teknik görev",
       "technicalHint": "Bir yeniden düzenleme / işlevsel olmayan / dahili değişiklik. Uygulayıcı, görev tanımını birincil, spesifikasyonu ise bir gerileme referansı olarak ele alır; spesifikasyon aşamasının karar vermesi için boş bırakın.",
       "severity": "Önem derecesi",
+      "severities": {
+        "low": "Düşük",
+        "medium": "Orta",
+        "high": "Yüksek",
+        "critical": "Kritik"
+      },
       "stepsToReproduce": "Yeniden oluşturma adımları",
       "stepsToReproducePlaceholder": "Gözlemlenen ile beklenen, ve nasıl yeniden oluşturulacağı…",
       "timebox": "Zaman kutusu (saat)",
@@ -5024,6 +5042,18 @@
       "remove": "Kaldır",
       "linkFailed": "Belge bağlantısı güncellenemedi",
       "loadFailed": "Belge şablonları yüklenemedi"
+    },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "Tasarım",
+      "technical": "Teknik",
+      "api": "API",
+      "runbook": "İşletim kılavuzu",
+      "research": "Araştırma",
+      "reference": "Başvuru",
+      "other": "Diğer"
     },
     "startFromDesign": {
       "title": "Tasarımdan başla",

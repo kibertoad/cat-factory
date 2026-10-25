@@ -294,6 +294,13 @@ const DOC_FIELD_PLACEHOLDER_KEYS: Record<DocKindFieldKey, string> = {
   apiSurface: 'board.addTask.docFields.apiSurface.placeholder',
 }
 const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
+const SEVERITY_LABEL = computed<Record<(typeof SEVERITIES)[number], string>>(() => ({
+  low: t('board.addTask.severities.low'),
+  medium: t('board.addTask.severities.medium'),
+  high: t('board.addTask.severities.high'),
+  critical: t('board.addTask.severities.critical'),
+}))
+const docKindLabel = useDocKindLabel()
 
 // A CUSTOM (deployment-registered) task type: fold the collected values into the sparse
 // `taskTypeFields.custom` bag. A bespoke form panel owns the whole bag (taken verbatim, minus blank
@@ -1078,14 +1085,13 @@ function createRefusalMessage(error: unknown): string | null {
                   :color="severity === s ? 'primary' : 'neutral'"
                   :variant="severity === s ? 'soft' : 'ghost'"
                   size="xs"
-                  class="capitalize"
                   @click="
                     () => {
                       severity = severity === s ? '' : s
                     }
                   "
                 >
-                  {{ s }}
+                  {{ SEVERITY_LABEL[s] }}
                 </UButton>
               </div>
             </UFormField>
@@ -1229,14 +1235,13 @@ function createRefusalMessage(error: unknown): string | null {
                   :color="docKind === k ? 'primary' : 'neutral'"
                   :variant="docKind === k ? 'soft' : 'ghost'"
                   size="xs"
-                  class="uppercase"
                   @click="
                     () => {
                       docKind = docKind === k ? '' : k
                     }
                   "
                 >
-                  {{ k }}
+                  {{ docKindLabel(k) }}
                 </UButton>
               </div>
             </UFormField>

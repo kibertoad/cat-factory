@@ -184,6 +184,18 @@
       "library": "Bibliothèque",
       "document": "Dépôt de documentation"
     },
+    "blockTypes": {
+      "frontend": "Frontend",
+      "service": "Service",
+      "library": "Bibliothèque",
+      "document": "Dépôt de documentation",
+      "api": "API",
+      "database": "Base de données",
+      "queue": "File d'attente",
+      "integration": "Intégration",
+      "external": "Externe",
+      "environment": "Environnement"
+    },
     "toolbar": {
       "addService": "Ajouter un service",
       "decisionWord": "décision | décisions",
@@ -238,6 +250,12 @@
       "technical": "Tâche technique",
       "technicalHint": "Un refactor / changement non fonctionnel / interne. L’implémenteur traite la définition de la tâche comme principale et la spec comme référence de régression ; laissez désactivé pour laisser la phase de spec décider.",
       "severity": "Gravité",
+      "severities": {
+        "low": "Faible",
+        "medium": "Moyenne",
+        "high": "Élevée",
+        "critical": "Critique"
+      },
       "stepsToReproduce": "Étapes de reproduction",
       "stepsToReproducePlaceholder": "Observé vs attendu, et comment reproduire…",
       "timebox": "Limite de temps (heures)",
@@ -5024,6 +5042,18 @@
       "remove": "Retirer",
       "linkFailed": "Impossible de mettre à jour le lien du document",
       "loadFailed": "Impossible de charger les modèles de documents"
+    },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "Conception",
+      "technical": "Technique",
+      "api": "API",
+      "runbook": "Procédure d'exploitation",
+      "research": "Recherche",
+      "reference": "Référence",
+      "other": "Autre"
     },
     "startFromDesign": {
       "title": "Partir d'une maquette",
