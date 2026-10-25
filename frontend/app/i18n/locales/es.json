@@ -2393,6 +2393,7 @@
       "email": {
         "title": "Remitente de correo",
         "notEnabled": "El envío de correo no está habilitado en este despliegue. Las invitaciones aún generan un enlace de aceptación que se puede compartir.",
+        "notConnected": "No hay ningún remitente de correo conectado. Un administrador de la cuenta puede conectar uno.",
         "connectedAs": "Conectado mediante {provider} como {from}",
         "disconnect": "Desconectar",
         "connect": "Conectar remitente de correo",
@@ -2968,6 +2969,7 @@
     "deny": "Cancelar",
     "back": "Volver a la aplicación",
     "noWorkspaces": "Todavía no tienes ningún tablero al que conectarlo.",
+    "noAdminWorkspaces": "No eres administrador de ninguno de tus tableros. Pide a un administrador del tablero que lo conecte.",
     "revokeHint": "Esto emite una clave de API que puedes revocar cuando quieras desde los ajustes del tablero.",
     "error": {
       "title": "No se pudo establecer esta conexión",

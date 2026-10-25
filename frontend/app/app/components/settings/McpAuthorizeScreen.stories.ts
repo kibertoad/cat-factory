@@ -46,10 +46,20 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 /**
- * The host asks for nothing above the default: the person's four boards, the first picked, and
- * the four access levels with Read only picked.
+ * The host asks for nothing above the default: the two of the person's four boards they are an
+ * admin of, the first picked, and the four access levels with Read only picked. Payments platform
+ * (member) and Mobile app (viewer) are not offered: issuing a key needs `secrets.manage` there.
  */
-export const Default: Story = {}
+export const Default: Story = {
+  play: async () => {
+    await userEvent.click(await screen.findByTestId('mcp-authorize-workspace'))
+    const options = await screen.findAllByRole('option')
+    await expect(options.map((option) => option.textContent?.trim())).toEqual([
+      'Core services',
+      'Sandbox',
+    ])
+  },
+}
 
 /** The request still being described: placeholder rows. */
 export const Loading: Story = {
@@ -92,8 +102,29 @@ export const NoBoards: Story = {
 }
 
 /**
- * The person picks Payments platform, where they are only a member, and the backend refuses to
- * issue a key there. The choices stay, with the refusal above the buttons.
+ * The person has boards, but is an admin of none: no choices, a line saying a board admin can
+ * connect it, and Connect is off.
+ */
+export const NoAdminBoards: Story = {
+  parameters: {
+    api: [
+      requestIs(),
+      apiResponse(listWorkspacesContract, {
+        body: accountBoards.filter((board) => board.viewerRole !== 'admin'),
+      }),
+    ],
+  },
+  play: async () => {
+    await expect(await screen.findByTestId('mcp-authorize-no-workspaces')).toHaveTextContent(
+      'You are not an admin of any of your boards. Ask a board admin to connect it.',
+    )
+    await expect(screen.getByTestId('mcp-authorize-approve')).toBeDisabled()
+  },
+}
+
+/**
+ * The person picks Sandbox, and the backend refuses to issue a key there: their admin role on it
+ * was taken away after the screen listed it. The choices stay, with the refusal above the buttons.
  */
 export const DecisionRefused: Story = {
   parameters: {
@@ -112,7 +143,7 @@ export const DecisionRefused: Story = {
   },
   play: async () => {
     await userEvent.click(await screen.findByTestId('mcp-authorize-workspace'))
-    await userEvent.click(await screen.findByRole('option', { name: 'Payments platform' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Sandbox' }))
     // The open menu blocks pointer events on the page until it has closed.
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
     await userEvent.click(screen.getByTestId('mcp-authorize-approve'))

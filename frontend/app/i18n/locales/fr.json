@@ -2393,6 +2393,7 @@
       "email": {
         "title": "Expéditeur des e-mails",
         "notEnabled": "L'envoi d'e-mails n'est pas activé sur ce déploiement. Les invitations produisent quand même un lien d'acceptation partageable.",
+        "notConnected": "Aucun expéditeur d'e-mails n'est connecté. Un administrateur du compte peut en connecter un.",
         "connectedAs": "Connecté via {provider} en tant que {from}",
         "disconnect": "Déconnecter",
         "connect": "Connecter l'expéditeur des e-mails",
@@ -2968,6 +2969,7 @@
     "deny": "Annuler",
     "back": "Retour à l'application",
     "noWorkspaces": "Vous n'avez encore aucun tableau auquel le connecter.",
+    "noAdminWorkspaces": "Vous n'êtes administrateur d'aucun de vos tableaux. Demandez à un administrateur du tableau de le connecter.",
     "revokeHint": "Cela émet une clé d'API que vous pouvez révoquer à tout moment depuis les réglages du tableau.",
     "error": {
       "title": "Cette connexion n'a pas pu être établie",

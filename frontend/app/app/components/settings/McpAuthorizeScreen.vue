@@ -3,7 +3,9 @@ import { computed, onMounted, ref } from 'vue'
 import {
   MCP_AUTHORIZATION_REQUEST_INVALID,
   PUBLIC_API_SCOPES,
+  permissionsForRole,
   type PublicApiScope,
+  type WorkspaceListItem,
 } from '@cat-factory/contracts'
 import { apiErrorEnvelope, apiErrorReason } from '~/composables/api/errors'
 
@@ -38,6 +40,8 @@ const decisionError = ref<string | null>(null)
 const clientName = ref('')
 const redirectOrigin = ref('')
 const workspaces = ref<{ label: string; value: string }[]>([])
+/** Whether the person has boards at all, so an empty list can say why it is empty. */
+const hasBoards = ref(false)
 const workspaceId = ref<string | undefined>(undefined)
 /**
  * Starts at the FLOOR of the ladder and is replaced by the server's `defaultScope` once the request
@@ -54,6 +58,15 @@ const sealedRequest = computed(() =>
     ? ''
     : (new URLSearchParams(window.location.search).get('request') ?? ''),
 )
+
+/**
+ * Whether approving on `board` can succeed: the approval mints a key on it, which needs
+ * `secrets.manage` there (`McpAuthorizationConsentController`). No `viewerRole` is dev-open, which
+ * allows everything, as `useWorkspaceAccess` reads an absent access.
+ */
+function mayApproveOn(board: WorkspaceListItem): boolean {
+  return !board.viewerRole || permissionsForRole(board.viewerRole).has('secrets.manage')
+}
 
 /**
  * The ladder, as choices. Every rung is offered rather than a curated subset: the rungs are what
@@ -88,7 +101,10 @@ onMounted(async () => {
       request.requestedScope && request.requestedScope !== request.defaultScope
         ? request.requestedScope
         : null
-    workspaces.value = boards.map((board) => ({ label: board.name, value: board.id }))
+    hasBoards.value = boards.length > 0
+    workspaces.value = boards
+      .filter(mayApproveOn)
+      .map((board) => ({ label: board.name, value: board.id }))
     workspaceId.value = workspaces.value[0]?.value
     screen.value = 'deciding'
   } catch (e) {
@@ -183,8 +199,12 @@ function backToApp() {
           {{ t('mcpAuthorize.subtitle', { client: clientName, origin: redirectOrigin }) }}
         </p>
 
-        <div v-if="!workspaces.length" class="mb-6 text-center text-sm text-app-warning-300">
-          {{ t('mcpAuthorize.noWorkspaces') }}
+        <div
+          v-if="!workspaces.length"
+          class="mb-6 text-center text-sm text-app-warning-300"
+          data-testid="mcp-authorize-no-workspaces"
+        >
+          {{ hasBoards ? t('mcpAuthorize.noAdminWorkspaces') : t('mcpAuthorize.noWorkspaces') }}
         </div>
 
         <template v-else>

@@ -34,6 +34,7 @@
     "deny": "Annulla",
     "back": "Torna all'app",
     "noWorkspaces": "Non hai ancora una bacheca a cui collegarlo.",
+    "noAdminWorkspaces": "Non sei amministratore di nessuna delle tue bacheche. Chiedi a un amministratore della bacheca di collegarlo.",
     "revokeHint": "Questo emette una chiave API che puoi revocare in qualsiasi momento dalle impostazioni della bacheca.",
     "error": {
       "title": "Non è stato possibile creare questo collegamento",
@@ -2506,6 +2507,7 @@
       "email": {
         "title": "Mittente email",
         "notEnabled": "L'invio di email non è abilitato su questo deployment. Gli inviti generano comunque un link di accettazione condivisibile.",
+        "notConnected": "Nessun mittente email è collegato. Un amministratore dell'account può collegarne uno.",
         "connectedAs": "Connesso tramite {provider} come {from}",
         "disconnect": "Disconnetti",
         "connect": "Connetti mittente email",
