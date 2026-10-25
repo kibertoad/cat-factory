@@ -149,11 +149,13 @@ async function detectFromRepo() {
   if (!repo) {
     // The frame points at a repo that isn't in the connected-repo projection, so we can't resolve
     // its owner/name to ask the backend. A "sync/connect GitHub" problem, not a read failure.
+    detectFailure.value = null
     detectError.value = t('inspector.detectRepoUnresolved')
     return
   }
   detecting.value = true
   detectError.value = null
+  detectFailure.value = null
   detectResult.value = null
   try {
     const result = await infra.detectFrontendConfig({

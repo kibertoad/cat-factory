@@ -19,7 +19,6 @@
 import { useId } from 'vue'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import type { SourceTask, TaskSearchResult, TaskSourceKind } from '~/types/domain'
-import { apiErrorReason } from '~/composables/api/errors'
 import EmptyState from '~/components/common/EmptyState.vue'
 import {
   type AddSourceLabels,
@@ -33,6 +32,7 @@ import FailureMessage from '~/components/common/FailureMessage.vue'
 import {
   describeFailure,
   type DescribedFailure,
+  type ReasonCopy,
 } from '~/composables/pipelineErrorToast/describeFailure'
 
 const props = defineProps<{
@@ -127,6 +127,10 @@ const query = ref('')
 const results = ref<TaskSearchResult[]>([])
 const searching = ref(false)
 const searchError = ref<DescribedFailure | null>(null)
+/** The one search refusal this picker words itself: the service has no repo to search. */
+const SEARCH_FAILURE_COPY = {
+  repo_not_linked: 'tasks.picker.searchNeedsRepo',
+} satisfies Partial<Record<TaskSourceReadReason, string>> & ReasonCopy
 
 // Already-imported issues, scoped to the target container's repo on the backend
 // (GitHub narrows to the service's linked repo, exactly as search does; repo-less
@@ -174,12 +178,7 @@ async function runSearch() {
     // "This service has no repo" is the one failure with an action attached, so it gets its
     // own localized copy off the backend's machine-readable reason (AGENTS.md "Backend
     // strings"). Anything else gets the toast funnel's copy; the raw message stays as detail.
-    const notLinked: TaskSourceReadReason = 'repo_not_linked'
-    const failure = describeFailure(e)
-    searchError.value =
-      apiErrorReason(e) === notLinked
-        ? { ...failure, descriptionKey: 'tasks.picker.searchNeedsRepo' }
-        : failure
+    searchError.value = describeFailure(e, SEARCH_FAILURE_COPY)
   } finally {
     searching.value = false
   }

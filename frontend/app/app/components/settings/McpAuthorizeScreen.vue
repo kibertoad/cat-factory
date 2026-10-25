@@ -14,6 +14,7 @@ import {
   describeFailure,
   reportedFailure,
   type DescribedFailure,
+  type ReasonCopy,
 } from '~/composables/pipelineErrorToast/describeFailure'
 
 // The consent screen an MCP host's authorization request lands on
@@ -100,6 +101,15 @@ const scopeItems = computed(() =>
   })),
 )
 
+/**
+ * Why the request cannot go on. A request the server calls invalid or expired gets the "start
+ * again from your MCP host" copy; any other failure gets the toast funnel's copy for its status
+ * class. The server's own text stays behind "Show details" in both.
+ */
+const REQUEST_FAILURE_COPY: ReasonCopy = {
+  [MCP_AUTHORIZATION_REQUEST_INVALID]: 'mcpAuthorize.error.expired',
+}
+
 onMounted(async () => {
   if (!sealedRequest.value) {
     screen.value = 'failed'
@@ -127,21 +137,9 @@ onMounted(async () => {
     // Terminal whatever the cause: with no request to describe there is nothing to decide, and the
     // person is told to start again from the host, which is the only place a new one comes from.
     screen.value = 'failed'
-    detail.value = requestFailure(e)
+    detail.value = describeFailure(e, REQUEST_FAILURE_COPY)
   }
 })
-
-/**
- * Why the request cannot go on. A request the server calls invalid or expired gets the "start
- * again from your MCP host" copy; any other failure gets the toast funnel's copy for its status
- * class. The server's own text stays behind "Show details" in both.
- */
-function requestFailure(error: unknown): DescribedFailure {
-  const failure = describeFailure(error)
-  return apiErrorReason(error) === MCP_AUTHORIZATION_REQUEST_INVALID
-    ? { ...failure, descriptionKey: 'mcpAuthorize.error.expired' }
-    : failure
-}
 
 async function decide(decision: 'approve' | 'deny') {
   if (decision === 'approve' && !workspaceId.value) return
@@ -170,7 +168,7 @@ async function decide(decision: 'approve' | 'deny') {
     // COULD have picked one dropdown away.
     if (apiErrorReason(e) === MCP_AUTHORIZATION_REQUEST_INVALID) {
       screen.value = 'failed'
-      detail.value = requestFailure(e)
+      detail.value = describeFailure(e, REQUEST_FAILURE_COPY)
       return
     }
     screen.value = 'deciding'

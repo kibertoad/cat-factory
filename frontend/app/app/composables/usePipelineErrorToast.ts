@@ -179,6 +179,8 @@ export interface GenericFailure {
   issues: string[]
   /** The envelope's correlation id, so the user can quote it at whoever reads the logs. */
   requestId: string | null
+  /** The backend's machine-readable `details.reason`, for a surface that words a reason itself. */
+  reason: string | null
 }
 
 /**
@@ -213,7 +215,26 @@ export function describeGenericFailure(error: unknown): GenericFailure {
       issue.path ? `${issue.path}: ${issue.message}` : issue.message,
     ),
     requestId: typeof envelope?.requestId === 'string' ? envelope.requestId : null,
+    reason,
   }
+}
+
+/**
+ * The raw detail of a failure as one line: the prose, the validation issues and the request id,
+ * empty parts dropped. The toast's "Show details" and the inline `FailureMessage` both show this,
+ * so an empty result means there is nothing to disclose and no button is shown.
+ */
+export function failureDetail(
+  failure: GenericFailure,
+  t: (key: string, params: Record<string, unknown>) => string,
+): string {
+  return [
+    failure.message,
+    failure.issues.join(', '),
+    failure.requestId ? t('errors.generic.requestId', { id: failure.requestId }) : '',
+  ]
+    .filter((part): part is string => !!part && part.trim().length > 0)
+    .join(' · ')
 }
 
 /**
@@ -381,13 +402,7 @@ export function usePipelineErrorToast() {
     id: string | undefined,
   ): void {
     const failure = describeGenericFailure(error)
-    const detail = [
-      failure.message,
-      failure.issues.join(', '),
-      failure.requestId ? t('errors.generic.requestId', { id: failure.requestId }) : '',
-    ]
-      .filter((part) => part && part.trim().length > 0)
-      .join(' · ')
+    const detail = failureDetail(failure, t)
     // No `te` guard: the key comes from a Record exhaustive over the wire union and every entry
     // ships in the base `en` catalog, so a locale missing it renders English via `fallbackLocale`
     // (better than the raw prose this replaced) and a bare key can never leak.

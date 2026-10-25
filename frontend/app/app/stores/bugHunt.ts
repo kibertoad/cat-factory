@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { BugHuntResult, RunBugHuntInput, TaskSourceKind, TrackerBoard } from '~/types/domain'
-import { apiErrorReason } from '~/composables/api/errors'
 import {
   describeFailure,
   type DescribedFailure,
@@ -34,27 +33,21 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
   /**
    * Why board listing failed, if it did. Kept rather than swallowed: a source whose provider
    * can't enumerate boards is a normal, actionable state (type the board in yourself), and an
-   * empty picker alone doesn't say that.
+   * empty picker alone doesn't say that. Only the reason `boards_unsupported` means "this tracker
+   * cannot enumerate boards, so type one in"; every other failure (an unreachable site, an expired
+   * token) is a real error and must be shown as one, since offering a free-text field there would
+   * just move the same failure to the next click.
    */
   const boardsError = ref<DescribedFailure | null>(null)
-  /**
-   * The backend's machine-readable reason for that failure. Only `boards_unsupported` means
-   * "this tracker cannot enumerate boards, so type one in"; every other failure (an unreachable
-   * site, an expired token) is a real error and must be shown as one — offering a free-text
-   * field there would just move the same failure to the next click.
-   */
-  const boardsErrorReason = ref<string | null>(null)
 
   const result = ref<BugHuntResult | null>(null)
   const hunting = ref(false)
-  const huntError = ref<DescribedFailure | null>(null)
   /**
-   * The backend's machine-readable reason for a failed scan, kept for the same reason
-   * {@link boardsErrorReason} is: `repo_not_linked` says the service this hunt is scoped to has
-   * no repository to read issues from, which is a state the person can fix on the board and the
-   * only one the surface words itself. Every other failure stays a toast.
+   * Why the last scan failed, if it did. Its reason `repo_not_linked` says the service this hunt is
+   * scoped to has no repository to read issues from, which is a state the person can fix on the
+   * board and the only one the surface words itself. Every other failure stays a toast.
    */
-  const huntErrorReason = ref<string | null>(null)
+  const huntError = ref<DescribedFailure | null>(null)
   /** The candidate currently being adopted, so only its own row shows a spinner. */
   const adopting = ref<string | null>(null)
 
@@ -65,7 +58,6 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
   async function loadBoards(source: TaskSourceKind): Promise<void> {
     boardsLoading.value = true
     boardsError.value = null
-    boardsErrorReason.value = null
     boardsSource.value = source
     try {
       const view = await api.listTrackerBoards(workspace.requireId(), source)
@@ -77,7 +69,6 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
       if (boardsSource.value !== source) return
       boards.value = []
       boardsError.value = describeFailure(e)
-      boardsErrorReason.value = apiErrorReason(e)
     } finally {
       // Only the listing the picker is still showing owns the flag. A superseded one clearing it
       // unconditionally would report the tracker now being loaded as done, which is the same
@@ -97,7 +88,6 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
     boardsSource.value = source
     boards.value = []
     boardsError.value = null
-    boardsErrorReason.value = null
     // The listing in flight belongs to the tracker being left, and its `finally` will not run
     // until it settles — indefinitely, if that tracker hangs. Clearing the flag with the rest of
     // the state is what makes "land on nothing" true of the WHOLE listing rather than of four of
@@ -117,7 +107,6 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
   async function hunt(source: TaskSourceKind, input: RunBugHuntInput): Promise<BugHuntAttempt> {
     hunting.value = true
     huntError.value = null
-    huntErrorReason.value = null
     // A new scan supersedes whatever is on screen the moment it starts. Clearing HERE rather than
     // on each way out is what keeps a cancelled prompt from leaving the previous board's ranking
     // under the current selection, where adopting one would file a task against the wrong board.
@@ -133,7 +122,6 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
       return ran ? 'ran' : 'cancelled'
     } catch (e) {
       huntError.value = describeFailure(e)
-      huntErrorReason.value = apiErrorReason(e)
       return 'failed'
     } finally {
       hunting.value = false
@@ -175,7 +163,6 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
   function reset(): void {
     result.value = null
     huntError.value = null
-    huntErrorReason.value = null
     adopting.value = null
   }
 
@@ -184,13 +171,11 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
     boardsSource,
     boardsLoading,
     boardsError,
-    boardsErrorReason,
     result,
     candidates,
     hasResult,
     hunting,
     huntError,
-    huntErrorReason,
     adopting,
     loadBoards,
     dropBoards,

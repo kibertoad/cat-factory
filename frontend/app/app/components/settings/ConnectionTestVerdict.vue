@@ -68,6 +68,7 @@ const detail = computed(() => (causeKey.value ? (props.result?.message ?? '') : 
   <FailureMessage
     v-else-if="result?.failure"
     :failure="result.failure"
+    :title="t('settings.providerConnection.test.failed')"
     class="text-xs text-app-error-400"
     data-testid="connection-test-result"
   />
