@@ -68,7 +68,7 @@ function setValue(id: string, value: string) {
           />
         </div>
       </div>
-      <div class="flex flex-wrap gap-1">
+      <div v-if="d.type === 'select'" class="flex flex-wrap gap-1">
         <UButton
           v-for="opt in d.options"
           :key="opt.value"
@@ -81,6 +81,19 @@ function setValue(id: string, value: string) {
           {{ opt.label }}
         </UButton>
       </div>
+      <!-- A text or number value saves on change (blur or Enter), not on every keystroke: each
+           save is a block update. -->
+      <UInput
+        v-else
+        :model-value="valueOf(d.id, d.default)"
+        :type="d.type === 'number' ? 'number' : 'text'"
+        :placeholder="d.placeholder"
+        :disabled="isFrozen(d.agentKind)"
+        size="xs"
+        class="w-full"
+        :data-testid="`agent-config-${d.id}`"
+        @change="(e: Event) => setValue(d.id, (e.target as HTMLInputElement).value)"
+      />
       <p class="text-2xs leading-snug text-dimmed">{{ d.description }}</p>
     </div>
   </InspectorSection>
