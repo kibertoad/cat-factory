@@ -719,16 +719,16 @@
       "blockedTitle": "Çok fazla görev incelemeyi bekliyor",
       "warnToast": "Bazı görevler insan incelemesini bekliyor. Daha fazla iş oluşturmadan önce onları incelemeyi düşünün.",
       "blockedToast": "İnceleme kuyruğu azaltılana kadar görev oluşturma engellendi.",
-      "warnBody": "{count} görev insan incelemesini bekliyor. Daha fazla iş oluşturmadan önce onları incelemeyi düşünün.",
-      "blockedCountBody": "Oluşturma engellendi: {count} görev insan incelemesini bekliyor (sınır {threshold}). Önce inceleme kuyruğunu azaltın.",
-      "blockedStuckBody": "Oluşturma engellendi: bir görev {minutes} dakikadan uzun süredir insan incelemesini bekliyor. Önce inceleme kuyruğunu azaltın.",
+      "warnBody": "{count} görev insan incelemesini bekliyor. Daha fazla iş oluşturmadan önce onu incelemeyi düşünün. | {count} görev insan incelemesini bekliyor. Daha fazla iş oluşturmadan önce onları incelemeyi düşünün.",
+      "blockedCountBody": "Oluşturma engellendi: {count} görev insan incelemesini bekliyor (sınır {threshold}). Önce inceleme kuyruğunu azaltın. | Oluşturma engellendi: {count} görev insan incelemesini bekliyor (sınır {threshold}). Önce inceleme kuyruğunu azaltın.",
+      "blockedStuckBody": "Oluşturma engellendi: bir görev {minutes} dakikadan uzun süredir insan incelemesini bekliyor. Önce inceleme kuyruğunu azaltın. | Oluşturma engellendi: bir görev {minutes} dakikadan uzun süredir insan incelemesini bekliyor. Önce inceleme kuyruğunu azaltın.",
       "waitingHeading": "İncelemeyi bekliyor",
       "waiting": "{minutes} dk bekliyor",
       "untitled": "Başlıksız görev",
       "close": "Kapat",
       "createAnyway": "Yine de oluştur",
       "goReview": "İncelemeye git",
-      "badge": "{count} görev incelemeyi bekliyor"
+      "badge": "{count} görev incelemeyi bekliyor | {count} görev incelemeyi bekliyor"
     },
     "conflict": {
       "title": {
@@ -7047,7 +7047,7 @@
       "link": "Bağla ve eşitle",
       "metaSynced": "eşitlendi {date} · ref {ref}",
       "metaNever": "hiç eşitlenmedi · ref {ref}",
-      "metaFiles": "{service} · {count} sözleşme dosyası",
+      "metaFiles": "{service} · {count} sözleşme dosyası | {service} · {count} sözleşme dosyası",
       "metaFolder": "{service} · bu klasördeki sözleşmeler",
       "metaFolderRecursive": "{service} · bu klasördeki ve alt klasörlerindeki sözleşmeler",
       "metaDirectory": "her alt dizin için bir hizmet",
@@ -8170,7 +8170,9 @@
       },
       "unprotectedHint": "bir çalıştırmanın kimlik bilgisi buraya doğrudan gönderim yapıp kendi çekme isteğini birleştirebilir",
       "detailUnavailable": "korumalı, ancak kural okunamadı — doğrudan gönderimlere hâlâ izin veriyor olabilir",
-      "requiresPr": "çekme isteği zorunlu, {reviews} onaylayan inceleme, {checks} zorunlu denetim",
+      "requiresPr": "çekme isteği zorunlu, {reviews}, {checks}",
+      "approvingReviews": "{count} onaylayan inceleme | {count} onaylayan inceleme",
+      "requiredChecks": "{count} zorunlu denetim | {count} zorunlu denetim",
       "noPrRequired": "korumalı, ancak çekme isteği zorunlu değil",
       "unknownReason": {
         "branch_not_found": "varsayılan dal bulunamadı — depo izdüşümü eskimiş olabilir",
@@ -8679,7 +8681,7 @@
     "keepAction": "{count} tanesini tut",
     "warning": {
       "omitted": "Üst sınırın ötesinde {count} aday elendi, bu liste yalnızca baştan bir bölüm. ",
-      "invalid": "Bildirilen {count} kayıt okunamadı ve burada yok. ",
+      "invalid": "Bildirilen {count} kayıt okunamadı ve burada yok. | Bildirilen {count} kayıt okunamadı ve burada yok.",
       "previews": "{count} önizleme bağlantısı reddedildi, o adaylar görselsiz gösteriliyor."
     },
     "noChoice": {

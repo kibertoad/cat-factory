@@ -229,7 +229,13 @@ const { requestClose } = useUnsavedGuard({
           t('binaryCandidates.warning.omitted', { count: view.state.omitted })
         }}</span>
         <span v-if="view.state.invalidEntries">
-          {{ t('binaryCandidates.warning.invalid', { count: view.state.invalidEntries }) }}</span
+          {{
+            t(
+              'binaryCandidates.warning.invalid',
+              { count: view.state.invalidEntries },
+              view.state.invalidEntries,
+            )
+          }}</span
         >
         <span v-if="view.state.unusablePreviews">
           {{ t('binaryCandidates.warning.previews', { count: view.state.unusablePreviews }) }}</span

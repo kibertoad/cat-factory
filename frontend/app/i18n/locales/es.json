@@ -719,16 +719,16 @@
       "blockedTitle": "Demasiadas tareas esperando revisión",
       "warnToast": "Algunas tareas esperan revisión humana. Considera revisarlas antes de crear más trabajo.",
       "blockedToast": "La creación de tareas está bloqueada hasta reducir la cola de revisión.",
-      "warnBody": "{count} tarea(s) esperan revisión humana. Considera revisarlas antes de crear más trabajo.",
-      "blockedCountBody": "Creación bloqueada: {count} tarea(s) esperan revisión humana (límite {threshold}). Reduce primero la cola de revisión.",
-      "blockedStuckBody": "Creación bloqueada: una tarea lleva más de {minutes} minuto(s) esperando revisión humana. Reduce primero la cola de revisión.",
+      "warnBody": "{count} tarea espera revisión humana. Considera revisarla antes de crear más trabajo. | {count} tareas esperan revisión humana. Considera revisarlas antes de crear más trabajo.",
+      "blockedCountBody": "Creación bloqueada: {count} tarea espera revisión humana (límite {threshold}). Reduce primero la cola de revisión. | Creación bloqueada: {count} tareas esperan revisión humana (límite {threshold}). Reduce primero la cola de revisión.",
+      "blockedStuckBody": "Creación bloqueada: una tarea lleva más de {minutes} minuto esperando revisión humana. Reduce primero la cola de revisión. | Creación bloqueada: una tarea lleva más de {minutes} minutos esperando revisión humana. Reduce primero la cola de revisión.",
       "waitingHeading": "Esperando revisión",
       "waiting": "{minutes} min esperando",
       "untitled": "Tarea sin título",
       "close": "Cerrar",
       "createAnyway": "Crear de todos modos",
       "goReview": "Ir a revisar",
-      "badge": "{count} tarea(s) esperando revisión"
+      "badge": "{count} tarea esperando revisión | {count} tareas esperando revisión"
     },
     "conflict": {
       "title": {
@@ -7047,7 +7047,7 @@
       "link": "Vincular y sincronizar",
       "metaSynced": "sincronizado {date} · ref {ref}",
       "metaNever": "nunca sincronizado · ref {ref}",
-      "metaFiles": "{service} · {count} archivos de contrato",
+      "metaFiles": "{service} · {count} archivo de contrato | {service} · {count} archivos de contrato",
       "metaFolder": "{service} · contratos de esta carpeta",
       "metaFolderRecursive": "{service} · contratos de esta carpeta y sus subcarpetas",
       "metaDirectory": "un servicio por subdirectorio",
@@ -8170,7 +8170,9 @@
       },
       "unprotectedHint": "la credencial de una ejecución puede hacer push aquí directamente y fusionar su propia solicitud de incorporación",
       "detailUnavailable": "protegida, pero no se pudo leer la regla: puede seguir permitiendo pushes directos",
-      "requiresPr": "solicitud de incorporación obligatoria, {reviews} revisión(es) de aprobación, {checks} comprobación(es) obligatoria(s)",
+      "requiresPr": "solicitud de incorporación obligatoria, {reviews}, {checks}",
+      "approvingReviews": "{count} revisión de aprobación | {count} revisiones de aprobación",
+      "requiredChecks": "{count} comprobación obligatoria | {count} comprobaciones obligatorias",
       "noPrRequired": "protegida, pero no exige solicitud de incorporación",
       "unknownReason": {
         "branch_not_found": "no se encontró la rama predeterminada: la proyección del repositorio puede estar obsoleta",
@@ -8679,7 +8681,7 @@
     "keepAction": "Conservar {count}",
     "warning": {
       "omitted": "Se descartaron {count} candidatos por encima del límite, así que esta lista es un prefijo. ",
-      "invalid": "{count} entradas declaradas eran ilegibles y faltan aquí. ",
+      "invalid": "{count} entrada declarada era ilegible y falta aquí. | {count} entradas declaradas eran ilegibles y faltan aquí.",
       "previews": "Se rechazaron {count} enlaces de vista previa, así que esos candidatos se muestran sin imagen."
     },
     "noChoice": {

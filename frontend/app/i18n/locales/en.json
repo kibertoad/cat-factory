@@ -794,16 +794,16 @@
       "blockedTitle": "Too many tasks waiting on review",
       "warnToast": "Some tasks are waiting on human review. Consider reviewing them before creating more work.",
       "blockedToast": "Task creation is blocked until the review queue is worked down.",
-      "warnBody": "{count} task(s) are waiting on human review. Consider reviewing them before creating more work.",
-      "blockedCountBody": "Task creation is blocked: {count} task(s) are waiting on human review (limit {threshold}). Work down the review queue first.",
-      "blockedStuckBody": "Task creation is blocked: a task has been waiting on human review for over {minutes} minute(s). Work down the review queue first.",
+      "warnBody": "{count} task is waiting on human review. Consider reviewing it before creating more work. | {count} tasks are waiting on human review. Consider reviewing them before creating more work.",
+      "blockedCountBody": "Task creation is blocked: {count} task is waiting on human review (limit {threshold}). Work down the review queue first. | Task creation is blocked: {count} tasks are waiting on human review (limit {threshold}). Work down the review queue first.",
+      "blockedStuckBody": "Task creation is blocked: a task has been waiting on human review for over {minutes} minute. Work down the review queue first. | Task creation is blocked: a task has been waiting on human review for over {minutes} minutes. Work down the review queue first.",
       "waitingHeading": "Waiting on review",
       "waiting": "{minutes} min waiting",
       "untitled": "Untitled task",
       "close": "Close",
       "createAnyway": "Create anyway",
       "goReview": "Go review",
-      "badge": "{count} task(s) waiting on review"
+      "badge": "{count} task waiting on review | {count} tasks waiting on review"
     },
     "conflict": {
       "title": {
@@ -7388,7 +7388,7 @@
       "link": "Link & sync",
       "metaSynced": "synced {date} · ref {ref}",
       "metaNever": "never synced · ref {ref}",
-      "metaFiles": "{service} · {count} contract files",
+      "metaFiles": "{service} · {count} contract file | {service} · {count} contract files",
       "metaFolder": "{service} · contracts from this folder",
       "metaFolderRecursive": "{service} · contracts from this folder and its subfolders",
       "metaDirectory": "one service per subdirectory",
@@ -8477,7 +8477,9 @@
       },
       "unprotectedHint": "a run's credential can push here directly and merge its own pull request",
       "detailUnavailable": "protected, but the rule could not be read — it may still allow direct pushes",
-      "requiresPr": "pull request required, {reviews} approving review(s), {checks} required check(s)",
+      "requiresPr": "pull request required, {reviews}, {checks}",
+      "approvingReviews": "{count} approving review | {count} approving reviews",
+      "requiredChecks": "{count} required check | {count} required checks",
       "noPrRequired": "protected, but no pull request is required",
       "unknownReason": {
         "branch_not_found": "the default branch was not found — the repository projection may be stale",
@@ -9004,7 +9006,7 @@
     "keepAction": "Keep {count}",
     "warning": {
       "omitted": "{count} candidates were dropped past the cap, so this list is a prefix. ",
-      "invalid": "{count} declared entries were unreadable and are missing here. ",
+      "invalid": "{count} declared entry was unreadable and is missing here. | {count} declared entries were unreadable and are missing here.",
       "previews": "{count} preview links were refused, so those candidates render without an image."
     },
     "noChoice": {

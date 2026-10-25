@@ -42,13 +42,12 @@ const title = computed(() =>
 const body = computed(() => {
   const c = ctx.value
   if (!c) return ''
-  if (c.kind === 'warn') return t('errors.reviewFriction.warnBody', { count: c.debt.length })
+  const count = c.debt.length
+  if (c.kind === 'warn') return t('errors.reviewFriction.warnBody', { count }, count)
+  const threshold = c.threshold ?? 0
   if (c.reason === 'stuck')
-    return t('errors.reviewFriction.blockedStuckBody', { minutes: c.threshold ?? 0 })
-  return t('errors.reviewFriction.blockedCountBody', {
-    count: c.debt.length,
-    threshold: c.threshold ?? 0,
-  })
+    return t('errors.reviewFriction.blockedStuckBody', { minutes: threshold }, threshold)
+  return t('errors.reviewFriction.blockedCountBody', { count, threshold }, count)
 })
 
 /** Deep-link to a waiting task's block and dismiss the whole friction flow. */

@@ -5815,7 +5815,7 @@
       "link": "Verknüpfen & synchronisieren",
       "metaSynced": "synchronisiert {date} · Ref {ref}",
       "metaNever": "nie synchronisiert · Ref {ref}",
-      "metaFiles": "{service} · {count} Vertragsdateien",
+      "metaFiles": "{service} · {count} Vertragsdatei | {service} · {count} Vertragsdateien",
       "metaFolder": "{service} · Verträge aus diesem Ordner",
       "metaFolderRecursive": "{service} · Verträge aus diesem Ordner und seinen Unterordnern",
       "metaDirectory": "ein Dienst je Unterverzeichnis",
@@ -6474,16 +6474,16 @@
       "blockedTitle": "Zu viele Aufgaben warten auf Prüfung",
       "warnToast": "Einige Aufgaben warten auf die menschliche Prüfung. Prüfe sie, bevor du mehr Arbeit anlegst.",
       "blockedToast": "Das Anlegen von Aufgaben ist gesperrt, bis der Prüf-Rückstau abgebaut ist.",
-      "warnBody": "{count} Aufgabe(n) warten auf die menschliche Prüfung. Prüfe sie, bevor du mehr Arbeit anlegst.",
-      "blockedCountBody": "Anlegen gesperrt: {count} Aufgabe(n) warten auf die menschliche Prüfung (Limit {threshold}). Baue zuerst den Prüf-Rückstau ab.",
-      "blockedStuckBody": "Anlegen gesperrt: Eine Aufgabe wartet seit über {minutes} Minute(n) auf die menschliche Prüfung. Baue zuerst den Prüf-Rückstau ab.",
+      "warnBody": "{count} Aufgabe wartet auf die menschliche Prüfung. Prüfe sie, bevor du mehr Arbeit anlegst. | {count} Aufgaben warten auf die menschliche Prüfung. Prüfe sie, bevor du mehr Arbeit anlegst.",
+      "blockedCountBody": "Anlegen gesperrt: {count} Aufgabe wartet auf die menschliche Prüfung (Limit {threshold}). Baue zuerst den Prüf-Rückstau ab. | Anlegen gesperrt: {count} Aufgaben warten auf die menschliche Prüfung (Limit {threshold}). Baue zuerst den Prüf-Rückstau ab.",
+      "blockedStuckBody": "Anlegen gesperrt: Eine Aufgabe wartet seit über {minutes} Minute auf die menschliche Prüfung. Baue zuerst den Prüf-Rückstau ab. | Anlegen gesperrt: Eine Aufgabe wartet seit über {minutes} Minuten auf die menschliche Prüfung. Baue zuerst den Prüf-Rückstau ab.",
       "waitingHeading": "Warten auf Prüfung",
       "waiting": "{minutes} Min. Wartezeit",
       "untitled": "Aufgabe ohne Titel",
       "close": "Schließen",
       "createAnyway": "Trotzdem anlegen",
       "goReview": "Zur Prüfung",
-      "badge": "{count} Aufgabe(n) warten auf Prüfung"
+      "badge": "{count} Aufgabe wartet auf Prüfung | {count} Aufgaben warten auf Prüfung"
     },
     "conflict": {
       "title": {
@@ -8170,7 +8170,9 @@
       },
       "unprotectedHint": "der Zugang einer Ausführung kann hier direkt pushen und den eigenen Pull Request mergen",
       "detailUnavailable": "geschützt, aber die Regel konnte nicht gelesen werden — direkte Pushes sind möglicherweise weiterhin erlaubt",
-      "requiresPr": "Pull Request erforderlich, {reviews} zustimmende Review(s), {checks} erforderliche Prüfung(en)",
+      "requiresPr": "Pull Request erforderlich, {reviews}, {checks}",
+      "approvingReviews": "{count} zustimmendes Review | {count} zustimmende Reviews",
+      "requiredChecks": "{count} erforderliche Prüfung | {count} erforderliche Prüfungen",
       "noPrRequired": "geschützt, aber kein Pull Request erforderlich",
       "unknownReason": {
         "branch_not_found": "der Standard-Branch wurde nicht gefunden — die Repository-Projektion ist möglicherweise veraltet",
@@ -8679,7 +8681,7 @@
     "keepAction": "{count} behalten",
     "warning": {
       "omitted": "{count} Kandidaten wurden über der Obergrenze verworfen, diese Liste ist also ein Anfang. ",
-      "invalid": "{count} deklarierte Einträge waren unlesbar und fehlen hier. ",
+      "invalid": "{count} deklarierter Eintrag war unlesbar und fehlt hier. | {count} deklarierte Einträge waren unlesbar und fehlen hier.",
       "previews": "{count} Vorschaulinks wurden abgelehnt, diese Kandidaten werden ohne Bild dargestellt."
     },
     "noChoice": {

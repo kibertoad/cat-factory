@@ -5815,7 +5815,7 @@
       "link": "Collega e sincronizza",
       "metaSynced": "sincronizzato {date} · ref {ref}",
       "metaNever": "mai sincronizzato · ref {ref}",
-      "metaFiles": "{service} · {count} file di contratto",
+      "metaFiles": "{service} · {count} file di contratto | {service} · {count} file di contratto",
       "metaFolder": "{service} · contratti da questa cartella",
       "metaFolderRecursive": "{service} · contratti da questa cartella e dalle sue sottocartelle",
       "metaDirectory": "un servizio per sottocartella",
@@ -6474,16 +6474,16 @@
       "blockedTitle": "Troppe attività in attesa di revisione",
       "warnToast": "Alcune attività attendono la revisione umana. Valuta di revisionarle prima di creare altro lavoro.",
       "blockedToast": "La creazione di attività è bloccata finché non si riduce la coda di revisione.",
-      "warnBody": "{count} attività attendono la revisione umana. Valuta di revisionarle prima di creare altro lavoro.",
-      "blockedCountBody": "Creazione bloccata: {count} attività attendono la revisione umana (limite {threshold}). Riduci prima la coda di revisione.",
-      "blockedStuckBody": "Creazione bloccata: un’attività attende la revisione umana da oltre {minutes} minuto/i. Riduci prima la coda di revisione.",
+      "warnBody": "{count} attività attende la revisione umana. Valuta di revisionarla prima di creare altro lavoro. | {count} attività attendono la revisione umana. Valuta di revisionarle prima di creare altro lavoro.",
+      "blockedCountBody": "Creazione bloccata: {count} attività attende la revisione umana (limite {threshold}). Riduci prima la coda di revisione. | Creazione bloccata: {count} attività attendono la revisione umana (limite {threshold}). Riduci prima la coda di revisione.",
+      "blockedStuckBody": "Creazione bloccata: un’attività attende la revisione umana da oltre {minutes} minuto. Riduci prima la coda di revisione. | Creazione bloccata: un’attività attende la revisione umana da oltre {minutes} minuti. Riduci prima la coda di revisione.",
       "waitingHeading": "In attesa di revisione",
       "waiting": "{minutes} min di attesa",
       "untitled": "Attività senza titolo",
       "close": "Chiudi",
       "createAnyway": "Crea comunque",
       "goReview": "Vai a revisionare",
-      "badge": "{count} attività in attesa di revisione"
+      "badge": "{count} attività in attesa di revisione | {count} attività in attesa di revisione"
     },
     "conflict": {
       "title": {
@@ -8170,7 +8170,9 @@
       },
       "unprotectedHint": "la credenziale di un'esecuzione può fare push qui direttamente e unire la propria richiesta di pull",
       "detailUnavailable": "protetto, ma la regola non è stata leggibile: potrebbe consentire ancora push diretti",
-      "requiresPr": "richiesta di pull obbligatoria, {reviews} revisione/i di approvazione, {checks} controllo/i obbligatorio/i",
+      "requiresPr": "richiesta di pull obbligatoria, {reviews}, {checks}",
+      "approvingReviews": "{count} revisione di approvazione | {count} revisioni di approvazione",
+      "requiredChecks": "{count} controllo obbligatorio | {count} controlli obbligatori",
       "noPrRequired": "protetto, ma non richiede una richiesta di pull",
       "unknownReason": {
         "branch_not_found": "ramo predefinito non trovato: la proiezione del repository potrebbe essere obsoleta",
@@ -8679,7 +8681,7 @@
     "keepAction": "Tieni {count}",
     "warning": {
       "omitted": "{count} candidati sono stati scartati oltre il limite, quindi questo elenco è un prefisso. ",
-      "invalid": "{count} voci dichiarate erano illeggibili e mancano qui. ",
+      "invalid": "{count} voce dichiarata era illeggibile e manca qui. | {count} voci dichiarate erano illeggibili e mancano qui.",
       "previews": "{count} link di anteprima sono stati rifiutati, quindi quei candidati appaiono senza immagine."
     },
     "noChoice": {

@@ -719,16 +719,16 @@
       "blockedTitle": "Zbyt wiele zadań czeka na przegląd",
       "warnToast": "Niektóre zadania czekają na przegląd przez człowieka. Rozważ ich przejrzenie przed tworzeniem kolejnej pracy.",
       "blockedToast": "Tworzenie zadań jest zablokowane do czasu zmniejszenia kolejki przeglądów.",
-      "warnBody": "{count} zadań czeka na przegląd przez człowieka. Rozważ ich przejrzenie przed tworzeniem kolejnej pracy.",
-      "blockedCountBody": "Tworzenie zablokowane: {count} zadań czeka na przegląd przez człowieka (limit {threshold}). Najpierw zmniejsz kolejkę przeglądów.",
-      "blockedStuckBody": "Tworzenie zablokowane: zadanie czeka na przegląd przez człowieka od ponad {minutes} minut(y). Najpierw zmniejsz kolejkę przeglądów.",
+      "warnBody": "{count} zadanie czeka na przegląd przez człowieka. Rozważ jego przejrzenie przed tworzeniem kolejnej pracy. | {count} zadania czekają na przegląd przez człowieka. Rozważ ich przejrzenie przed tworzeniem kolejnej pracy. | {count} zadań czeka na przegląd przez człowieka. Rozważ ich przejrzenie przed tworzeniem kolejnej pracy.",
+      "blockedCountBody": "Tworzenie zablokowane: {count} zadanie czeka na przegląd przez człowieka (limit {threshold}). Najpierw zmniejsz kolejkę przeglądów. | Tworzenie zablokowane: {count} zadania czekają na przegląd przez człowieka (limit {threshold}). Najpierw zmniejsz kolejkę przeglądów. | Tworzenie zablokowane: {count} zadań czeka na przegląd przez człowieka (limit {threshold}). Najpierw zmniejsz kolejkę przeglądów.",
+      "blockedStuckBody": "Tworzenie zablokowane: zadanie czeka na przegląd przez człowieka od ponad {minutes} minuty. Najpierw zmniejsz kolejkę przeglądów. | Tworzenie zablokowane: zadanie czeka na przegląd przez człowieka od ponad {minutes} minut. Najpierw zmniejsz kolejkę przeglądów. | Tworzenie zablokowane: zadanie czeka na przegląd przez człowieka od ponad {minutes} minut. Najpierw zmniejsz kolejkę przeglądów.",
       "waitingHeading": "Oczekujące na przegląd",
       "waiting": "{minutes} min oczekiwania",
       "untitled": "Zadanie bez tytułu",
       "close": "Zamknij",
       "createAnyway": "Utwórz mimo to",
       "goReview": "Przejdź do przeglądu",
-      "badge": "{count} zadań czeka na przegląd"
+      "badge": "{count} zadanie czeka na przegląd | {count} zadania czekają na przegląd | {count} zadań czeka na przegląd"
     },
     "conflict": {
       "title": {
@@ -7047,7 +7047,7 @@
       "link": "Powiąż i zsynchronizuj",
       "metaSynced": "zsynchronizowano {date} · ref {ref}",
       "metaNever": "nigdy nie synchronizowano · ref {ref}",
-      "metaFiles": "{service} · {count} plików kontraktów",
+      "metaFiles": "{service} · {count} plik kontraktu | {service} · {count} pliki kontraktów | {service} · {count} plików kontraktów",
       "metaFolder": "{service} · kontrakty z tego folderu",
       "metaFolderRecursive": "{service} · kontrakty z tego folderu i jego podfolderów",
       "metaDirectory": "jedna usługa na podkatalog",
@@ -8170,7 +8170,9 @@
       },
       "unprotectedHint": "poświadczenie uruchomienia może wypchnąć zmiany bezpośrednio i scalić własnego pull requesta",
       "detailUnavailable": "chroniona, ale nie udało się odczytać reguły — bezpośrednie wypchnięcia mogą nadal być dozwolone",
-      "requiresPr": "wymagany pull request, {reviews} zatwierdzających recenzji, {checks} wymaganych sprawdzeń",
+      "requiresPr": "wymagany pull request, {reviews}, {checks}",
+      "approvingReviews": "{count} zatwierdzająca recenzja | {count} zatwierdzające recenzje | {count} zatwierdzających recenzji",
+      "requiredChecks": "{count} wymagane sprawdzenie | {count} wymagane sprawdzenia | {count} wymaganych sprawdzeń",
       "noPrRequired": "chroniona, ale nie wymaga pull requesta",
       "unknownReason": {
         "branch_not_found": "nie znaleziono gałęzi domyślnej — projekcja repozytorium może być nieaktualna",
@@ -8679,7 +8681,7 @@
     "keepAction": "Zachowaj {count}",
     "warning": {
       "omitted": "{count} kandydatów odrzucono powyżej limitu, więc ta lista to tylko początek. ",
-      "invalid": "{count} zadeklarowanych wpisów było nieczytelnych i ich tu brakuje. ",
+      "invalid": "{count} zadeklarowany wpis był nieczytelny i go tu brakuje. | {count} zadeklarowane wpisy były nieczytelne i ich tu brakuje. | {count} zadeklarowanych wpisów było nieczytelnych i ich tu brakuje.",
       "previews": "{count} linków podglądu odrzucono, więc ci kandydaci są pokazani bez obrazu."
     },
     "noChoice": {

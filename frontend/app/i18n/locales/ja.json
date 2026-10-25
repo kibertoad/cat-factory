@@ -719,16 +719,16 @@
       "blockedTitle": "レビュー待ちのタスクが多すぎます",
       "warnToast": "一部のタスクが人によるレビューを待っています。新しい作業を作成する前にレビューを検討してください。",
       "blockedToast": "レビュー待ち行列が解消されるまで、タスクの作成はブロックされます。",
-      "warnBody": "{count} 件のタスクが人によるレビューを待っています。新しい作業を作成する前にレビューを検討してください。",
-      "blockedCountBody": "作成がブロックされました：{count} 件のタスクが人によるレビューを待っています（上限 {threshold}）。先にレビュー待ち行列を解消してください。",
-      "blockedStuckBody": "作成がブロックされました：あるタスクが {minutes} 分以上、人によるレビューを待っています。先にレビュー待ち行列を解消してください。",
+      "warnBody": "{count} 件のタスクが人によるレビューを待っています。新しい作業を作成する前にレビューを検討してください。 | {count} 件のタスクが人によるレビューを待っています。新しい作業を作成する前にレビューを検討してください。",
+      "blockedCountBody": "作成がブロックされました：{count} 件のタスクが人によるレビューを待っています（上限 {threshold}）。先にレビュー待ち行列を解消してください。 | 作成がブロックされました：{count} 件のタスクが人によるレビューを待っています（上限 {threshold}）。先にレビュー待ち行列を解消してください。",
+      "blockedStuckBody": "作成がブロックされました：あるタスクが {minutes} 分以上、人によるレビューを待っています。先にレビュー待ち行列を解消してください。 | 作成がブロックされました：あるタスクが {minutes} 分以上、人によるレビューを待っています。先にレビュー待ち行列を解消してください。",
       "waitingHeading": "レビュー待ち",
       "waiting": "待機 {minutes} 分",
       "untitled": "無題のタスク",
       "close": "閉じる",
       "createAnyway": "それでも作成",
       "goReview": "レビューへ移動",
-      "badge": "{count} 件のタスクがレビュー待ち"
+      "badge": "{count} 件のタスクがレビュー待ち | {count} 件のタスクがレビュー待ち"
     },
     "conflict": {
       "title": {
@@ -7047,7 +7047,7 @@
       "link": "連携して同期",
       "metaSynced": "同期日時 {date} · ref {ref}",
       "metaNever": "未同期 · ref {ref}",
-      "metaFiles": "{service} · コントラクトファイル {count} 件",
+      "metaFiles": "{service} · コントラクトファイル {count} 件 | {service} · コントラクトファイル {count} 件",
       "metaFolder": "{service} · このフォルダのコントラクト",
       "metaFolderRecursive": "{service} · このフォルダとサブフォルダのコントラクト",
       "metaDirectory": "サブディレクトリごとに 1 サービス",
@@ -8170,7 +8170,9 @@
       },
       "unprotectedHint": "実行の認証情報はここへ直接プッシュでき、自分のプルリクエストをマージできます",
       "detailUnavailable": "保護されていますが、ルールを読み取れませんでした。直接プッシュが許可されている可能性があります",
-      "requiresPr": "プルリクエスト必須、承認レビュー {reviews} 件、必須チェック {checks} 件",
+      "requiresPr": "プルリクエスト必須、{reviews}、{checks}",
+      "approvingReviews": "承認レビュー {count} 件",
+      "requiredChecks": "必須チェック {count} 件",
       "noPrRequired": "保護されていますが、プルリクエストは必須ではありません",
       "unknownReason": {
         "branch_not_found": "デフォルトブランチが見つかりませんでした。リポジトリの投影が古い可能性があります",
@@ -8679,7 +8681,7 @@
     "keepAction": "{count} 件を採用",
     "warning": {
       "omitted": "上限を超えた候補が {count} 件破棄されたため、この一覧は先頭部分だけです。",
-      "invalid": "申告された {count} 件の項目が読み取れず、ここには含まれていません。",
+      "invalid": "申告された {count} 件の項目が読み取れず、ここには含まれていません。 | 申告された {count} 件の項目が読み取れず、ここには含まれていません。",
       "previews": "{count} 件のプレビューリンクが拒否されたため、それらの候補は画像なしで表示されます。"
     },
     "noChoice": {
