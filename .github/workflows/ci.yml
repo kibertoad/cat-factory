@@ -560,6 +560,13 @@ jobs:
       - name: Guard SPA safe-area overlays
         run: node scripts/check-frontend-safe-area.mjs
 
+      # Bans a select item with `value: ''` in the SPA: Reka's SelectItem and ComboboxItem throw on
+      # it, so the USelect or USelectMenu breaks when the item renders (#2393). The "no value" row
+      # is `selectNoneItem` from `utils/selectNone.ts`. Its fixtures run in the `node --test` step
+      # below. Pure node; no install.
+      - name: Guard SPA select values
+        run: node scripts/check-frontend-select-values.mjs
+
       # The mechanical half of the story conventions (docs/internal/storybook.md): a title is
       # `<Domain>/<Kind>/<Component>` from closed vocabularies, its last segment is the file's stem,
       # no two files claim one title, a stories file sits beside its component, and `Default` comes

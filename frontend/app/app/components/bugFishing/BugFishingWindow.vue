@@ -23,6 +23,7 @@ import { useBoardStore } from '~/stores/board'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useUiStore } from '~/stores/ui'
 import { pipelineAllowedForTaskType } from '~/utils/pipeline'
+import { selectNoneItem, selectNoneModel } from '~/utils/selectNone'
 import { useBugFishingStore } from '~/stores/bugFishing'
 import { bugFishingSpawnIsClaimable } from '@cat-factory/contracts'
 import type { BugFishingFinding, BugFishingSeverity, BugFishingStepState } from '~/types/execution'
@@ -186,6 +187,12 @@ function phaseFindingCount(pass: { id: string; territoryId?: string | null }): n
  */
 /** '' means "use the board's default", the same spelling the workspace settings field uses. */
 const pipelineOverride = ref('')
+const pipelineOverrideModel = selectNoneModel(
+  () => pipelineOverride.value,
+  (value) => {
+    pipelineOverride.value = value
+  },
+)
 const defaultPipelineId = computed(() => state.value?.defaultFixPipelineId ?? null)
 /** What a mark made right now would run on — the override if one is set, else the board default. */
 const effectivePipelineName = computed(() => {
@@ -196,11 +203,11 @@ const effectivePipelineName = computed(() => {
 /**
  * The pipelines a spawned fix task may run: the ones this board offers a `bug` task, since that is
  * exactly what a spawned fix IS. Narrowed by the same predicate the create form uses, so the two
- * screens cannot disagree about what a bug task may run. The leading row carries '' so "the
+ * screens cannot disagree about what a bug task may run. The leading row is a real item so "the
  * board's default" is a value someone can pick back to rather than only a starting state.
  */
 const pipelineOptions = computed(() => [
-  { value: '', label: t('bugFishing.fixPipeline.boardDefault') },
+  selectNoneItem(t('bugFishing.fixPipeline.boardDefault')),
   ...pipelines.pipelines
     .filter((p) => pipelineAllowedForTaskType(p, 'bug'))
     .map((p) => ({ label: p.name, value: p.id })),
@@ -441,7 +448,7 @@ const PHASE_ICON: Record<string, string> = {
         >
           <span class="text-2xs text-muted">{{ t('bugFishing.fixPipeline.label') }}</span>
           <USelectMenu
-            v-model="pipelineOverride"
+            v-model="pipelineOverrideModel.value"
             :items="pipelineOptions"
             value-key="value"
             size="xs"

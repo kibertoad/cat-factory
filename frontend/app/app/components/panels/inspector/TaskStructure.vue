@@ -3,6 +3,7 @@ import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import { selectNoneItem, selectNoneModel } from '~/utils/selectNone'
 
 const props = defineProps<{ block: Block }>()
 
@@ -35,12 +36,18 @@ const moduleOptions = computed(() => {
   const own = props.block.moduleName?.trim()
   const names = own && !existing.includes(own) ? [...existing, own] : existing
   return [
-    { label: t('inspector.structure.moduleNone'), value: '' },
+    selectNoneItem(t('inspector.structure.moduleNone')),
     ...names.map((n) => ({ label: n, value: n })),
   ]
 })
 
 const selectedModule = computed(() => props.block.moduleName?.trim() ?? '')
+// A created module goes through the same model as a pick, so a typed `__none__` means "no
+// module" and the sentinel can never be stored as a module name.
+const moduleModel = selectNoneModel(
+  () => selectedModule.value,
+  (name) => setModule(name),
+)
 
 async function setModule(name: string) {
   const previous = selectedModule.value
@@ -87,17 +94,15 @@ function setFragments(ids: string[]) {
         {{ t('inspector.structure.module') }}
       </SectionLabel>
       <USelectMenu
-        :model-value="selectedModule"
+        v-model="moduleModel.value"
         :items="moduleOptions"
         value-key="value"
         size="sm"
         class="w-full"
         icon="i-lucide-package"
         :create-item="true"
-        :placeholder="t('inspector.structure.modulePlaceholder')"
         data-testid="task-module-select"
-        @update:model-value="setModule"
-        @create="setModule"
+        @create="(name: string) => (moduleModel.value = name)"
       />
       <p class="mt-1 text-2xs leading-snug text-dimmed">
         {{ t('inspector.structure.moduleHint') }}

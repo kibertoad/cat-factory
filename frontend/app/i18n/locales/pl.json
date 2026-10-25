@@ -1377,7 +1377,6 @@
       "title": "Struktura",
       "hint": "Gdzie w usłudze znajduje się to zadanie i jakich standardów kodu przestrzegają jego agenci.",
       "module": "Moduł",
-      "modulePlaceholder": "Wybierz lub wpisz moduł",
       "moduleHint": "Moduł usługi, do którego należy to zadanie; tablica grupuje po nim kolumny. Moduł, który jeszcze nie istnieje, powstaje w chwili wdrożenia zadania.",
       "bestPractices": "Dobre praktyki",
       "bestPracticesEmpty": "Brak. Agenci stosują swoje domyślne wytyczne.",

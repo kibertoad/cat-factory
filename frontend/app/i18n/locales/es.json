@@ -1377,7 +1377,6 @@
       "title": "Estructura",
       "hint": "Dónde vive esta tarea dentro de su servicio y qué estándares de código siguen sus agentes.",
       "module": "Módulo",
-      "modulePlaceholder": "Elige o escribe un módulo",
       "moduleHint": "El módulo del servicio al que pertenece esta tarea; el tablero agrupa las columnas por él. Un módulo que aún no existe se crea cuando se implementa la tarea.",
       "bestPractices": "Buenas prácticas",
       "bestPracticesEmpty": "Ninguna. Los agentes siguen su guía predeterminada.",

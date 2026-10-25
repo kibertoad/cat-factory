@@ -1497,7 +1497,6 @@
       "title": "Structure",
       "hint": "Where this task lives in its service and which coding standards its agents follow.",
       "module": "Module",
-      "modulePlaceholder": "Pick or type a module",
       "moduleHint": "The service module this task belongs to; the board groups lanes by it. A module that doesn't exist yet is created when the task is implemented.",
       "bestPractices": "Best practices",
       "bestPracticesEmpty": "None. Agents follow their default guidance.",
