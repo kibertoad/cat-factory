@@ -24,6 +24,7 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import type { AppSlots } from '~/modular/slots'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { pipelineAllowedForTaskType } from '~/utils/pipeline'
+import { fromSelectValue, selectNoneItem, toSelectValue } from '~/utils/selectNone'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t, te } = useI18n()
@@ -192,11 +193,11 @@ const REVIEW_FRICTION_MODES = computed<{ value: ReviewFrictionMode; label: strin
  *
  * Narrowed by the same predicate the create form uses for a `bug` task, because a spawned fix IS
  * one — a board that could pin a document-authoring preset here would spawn tasks that author a
- * document instead of fixing the defect they were spawned for. The clearing row carries the empty
- * string rather than being absent, so "no board default" is a value someone can choose back to.
+ * document instead of fixing the defect they were spawned for. The clearing row is present rather
+ * than absent, so "no board default" is a value someone can choose back to.
  */
 const fixPipelineOptions = computed<{ value: string; label: string }[]>(() => [
-  { value: '', label: t('settings.workspaceSettings.bugFishing.builtInDefault') },
+  selectNoneItem(t('settings.workspaceSettings.bugFishing.builtInDefault')),
   ...pipelines.pipelines
     .filter((p) => pipelineAllowedForTaskType(p, 'bug'))
     .map((p) => ({ value: p.id, label: p.name })),
@@ -676,12 +677,13 @@ async function save() {
                 {{ t('settings.workspaceSettings.bugFishing.body') }}
               </p>
               <USelectMenu
-                v-model="draft.bugFishingFixPipelineId"
+                :model-value="toSelectValue(draft.bugFishingFixPipelineId)"
                 :items="fixPipelineOptions"
                 value-key="value"
                 size="sm"
                 class="max-w-md"
                 data-testid="workspace-settings-bug-fishing-pipeline"
+                @update:model-value="draft.bugFishingFixPipelineId = fromSelectValue($event)"
               />
             </section>
 

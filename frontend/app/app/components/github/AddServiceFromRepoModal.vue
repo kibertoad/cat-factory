@@ -27,6 +27,7 @@ import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import { appInstallationManageUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
+import { fromSelectValue, selectNoneItem, toSelectValue } from '~/utils/selectNone'
 import { prefilledRepoMatch, prefillProviderMismatch } from '~/composables/useAddRepoDeepLink'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
@@ -214,15 +215,15 @@ watch(pendingDirectories, (dirs) => {
 })
 
 const frontendItems = computed(() => [
-  { label: t('github.addService.frontendNone'), value: '' },
+  selectNoneItem(t('github.addService.frontendNone')),
   ...pendingDirectories.value.map((d) => ({ label: d, value: d })),
 ])
 
 // USelect needs a present value for its "none" row; the mark itself stays absent-or-a-path.
 const frontendSelection = computed({
-  get: () => frontendDirectory.value ?? '',
+  get: () => toSelectValue(frontendDirectory.value),
   set: (value: string) => {
-    frontendDirectory.value = value || undefined
+    frontendDirectory.value = fromSelectValue(value) || undefined
   },
 })
 

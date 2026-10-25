@@ -18,6 +18,7 @@ import {
 import type { WorkspaceMetadataFieldDefinition } from '~/modular/workspace-metadata'
 import type { AppSlots } from '~/modular/slots'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import { fromSelectValue, selectNoneItem, toSelectValue } from '~/utils/selectNone'
 import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
@@ -79,7 +80,7 @@ async function save() {
 /** A `select` field's items, with an explicit "not set" choice so a value can be cleared. */
 function selectItems(field: WorkspaceMetadataFieldDefinition) {
   return [
-    { label: t('settings.workspaceSettings.metadata.unset'), value: '' },
+    selectNoneItem(t('settings.workspaceSettings.metadata.unset')),
     ...(field.options ?? []).map((o) => ({ label: o.label, value: o.value })),
   ]
 }
@@ -112,10 +113,11 @@ function selectItems(field: WorkspaceMetadataFieldDefinition) {
           </SectionLabel>
           <USelect
             v-if="field.type === 'select'"
-            v-model="draft[field.key]"
+            :model-value="toSelectValue(draft[field.key])"
             :items="selectItems(field)"
             size="sm"
             :data-testid="`workspace-metadata-${field.key}`"
+            @update:model-value="draft[field.key] = fromSelectValue($event)"
           />
           <UInput
             v-else

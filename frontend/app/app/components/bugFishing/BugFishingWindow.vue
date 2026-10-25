@@ -22,6 +22,7 @@ import { useBoardStore } from '~/stores/board'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useUiStore } from '~/stores/ui'
 import { pipelineAllowedForTaskType } from '~/utils/pipeline'
+import { fromSelectValue, selectNoneItem, toSelectValue } from '~/utils/selectNone'
 import { useBugFishingStore } from '~/stores/bugFishing'
 import { bugFishingSpawnIsClaimable } from '@cat-factory/contracts'
 import type { BugFishingFinding, BugFishingSeverity, BugFishingStepState } from '~/types/execution'
@@ -195,11 +196,11 @@ const effectivePipelineName = computed(() => {
 /**
  * The pipelines a spawned fix task may run: the ones this board offers a `bug` task, since that is
  * exactly what a spawned fix IS. Narrowed by the same predicate the create form uses, so the two
- * screens cannot disagree about what a bug task may run. The leading row carries '' so "the
+ * screens cannot disagree about what a bug task may run. The leading row is a real item so "the
  * board's default" is a value someone can pick back to rather than only a starting state.
  */
 const pipelineOptions = computed(() => [
-  { value: '', label: t('bugFishing.fixPipeline.boardDefault') },
+  selectNoneItem(t('bugFishing.fixPipeline.boardDefault')),
   ...pipelines.pipelines
     .filter((p) => pipelineAllowedForTaskType(p, 'bug'))
     .map((p) => ({ label: p.name, value: p.id })),
@@ -440,11 +441,12 @@ const PHASE_ICON: Record<string, string> = {
         >
           <span class="text-2xs text-muted">{{ t('bugFishing.fixPipeline.label') }}</span>
           <USelectMenu
-            v-model="pipelineOverride"
+            :model-value="toSelectValue(pipelineOverride)"
             :items="pipelineOptions"
             value-key="value"
             size="xs"
             class="min-w-52"
+            @update:model-value="pipelineOverride = fromSelectValue($event)"
           />
           <span class="text-2xs text-dimmed">
             {{ t('bugFishing.fixPipeline.hint', { pipeline: effectivePipelineName ?? '—' }) }}

@@ -3,6 +3,7 @@ import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import { fromSelectValue, selectNoneItem, toSelectValue } from '~/utils/selectNone'
 
 const props = defineProps<{ block: Block }>()
 
@@ -35,7 +36,7 @@ const moduleOptions = computed(() => {
   const own = props.block.moduleName?.trim()
   const names = own && !existing.includes(own) ? [...existing, own] : existing
   return [
-    { label: t('inspector.structure.moduleNone'), value: '' },
+    selectNoneItem(t('inspector.structure.moduleNone')),
     ...names.map((n) => ({ label: n, value: n })),
   ]
 })
@@ -87,7 +88,7 @@ function setFragments(ids: string[]) {
         {{ t('inspector.structure.module') }}
       </SectionLabel>
       <USelectMenu
-        :model-value="selectedModule"
+        :model-value="toSelectValue(selectedModule)"
         :items="moduleOptions"
         value-key="value"
         size="sm"
@@ -96,7 +97,7 @@ function setFragments(ids: string[]) {
         :create-item="true"
         :placeholder="t('inspector.structure.modulePlaceholder')"
         data-testid="task-module-select"
-        @update:model-value="setModule"
+        @update:model-value="setModule(fromSelectValue($event))"
         @create="setModule"
       />
       <p class="mt-1 text-2xs leading-snug text-dimmed">

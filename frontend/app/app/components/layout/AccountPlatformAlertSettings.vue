@@ -12,6 +12,7 @@ import {
   hasFailureKindRuleFaults,
   MAX_FAILURE_KIND_RULES,
 } from '~/utils/failureKinds'
+import { fromSelectValue, selectNoneItem, toSelectValue } from '~/utils/selectNone'
 
 // Per-account tuning for the platform-health alert sweep (admin only): the ceilings the
 // deployment's aggregate run health is checked against, and the window they are evaluated over.
@@ -40,7 +41,7 @@ const windowLabels = computed<Record<PlatformAlertWindow, string>>(() => ({
 }))
 const windowItems = computed(() =>
   [
-    { label: t('settings.platformAlerts.window.inherit'), value: '' },
+    selectNoneItem(t('settings.platformAlerts.window.inherit')),
     ...WINDOWS.map((w) => ({ label: windowLabels.value[w], value: w })),
   ].map((i) => i),
 )
@@ -283,11 +284,12 @@ const hasOverrides = computed(
       </label>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <USelect
-          v-model="alertWindow"
+          :model-value="toSelectValue(alertWindow)"
           :items="windowItems"
           value-key="value"
           size="sm"
           data-testid="platform-alerts-window"
+          @update:model-value="alertWindow = fromSelectValue($event)"
         />
       </div>
       <p class="text-2xs text-muted">{{ t('settings.platformAlerts.windowHint') }}</p>

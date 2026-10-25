@@ -11,6 +11,7 @@ import OutputBudgetInput from '~/components/pipeline/OutputBudgetInput.vue'
 import BinaryOutputStepPicker from '~/components/pipeline/BinaryOutputStepPicker.vue'
 import { ESTIMATE_AXES, ESTIMATE_AXIS_FIELD, type EstimateAxis } from '~/utils/estimateGating'
 import { showOverrideField } from '~/utils/uiMode'
+import { fromSelectValue, selectNoneItem, toSelectValue } from '~/utils/selectNone'
 import { narrowPipelineLibrary } from '~/utils/pipelineLibrary'
 import { CONDITION_MARKERS, stepConditionsAt } from '~/utils/pipeline'
 
@@ -190,7 +191,7 @@ function showGateConfig(index: number, kind: AgentKind): boolean {
  */
 function variantSelectItems(kind: AgentKind) {
   return [
-    { label: t('pipeline.builder.variantShipped'), value: '' },
+    selectNoneItem(t('pipeline.builder.variantShipped')),
     ...agents.variantsForKind(kind).map((variant) => ({ label: variant.label, value: variant.id })),
   ]
 }
@@ -807,12 +808,15 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                 </span>
                 <USelect
                   class="w-56"
-                  :model-value="pipelines.draftAgentVariantId(unit.index) ?? ''"
+                  :model-value="toSelectValue(pipelines.draftAgentVariantId(unit.index))"
                   :items="variantSelectItems(unit.kind)"
                   value-key="value"
                   size="xs"
                   @update:model-value="
-                    pipelines.setDraftAgentVariantId(unit.index, $event || undefined)
+                    pipelines.setDraftAgentVariantId(
+                      unit.index,
+                      fromSelectValue($event) || undefined,
+                    )
                   "
                 />
               </div>
