@@ -3,10 +3,11 @@ import {
   describeFailure,
   failureDetail,
   reportedFailure,
+  withReasonCopy,
 } from '~/composables/pipelineErrorToast/describeFailure'
 import { describeGenericFailure, failureReport } from '~/composables/usePipelineErrorToast'
 import { ApiError } from '~/composables/api/errors'
-import { conflictInfo } from '~/utils/conflictCopy'
+import { BESPOKE_CONFLICT_FIXES, conflictInfo } from '~/utils/conflictCopy'
 
 /** A `t` that shows which key and params it was asked for, so the join is assertable. */
 const t = (key: string, params: Record<string, unknown>) => `${key}(${JSON.stringify(params)})`
@@ -26,7 +27,36 @@ describe('describeFailure', () => {
       message: 'Blocked by an unmet dependency.',
       issues: [],
       requestId: 'req-1',
+      reason: 'dependencies_unmet',
     })
+  })
+
+  it("names a bespoke conflict's cause, as the toast for the same error does", () => {
+    // Derived from the table the code reads, so a new bespoke reason is covered with no edit here.
+    for (const [reason, info] of Object.entries(BESPOKE_CONFLICT_FIXES)) {
+      const error = new ApiError(409, { error: { code: 'conflict', details: { reason } } })
+      expect(describeFailure(error).descriptionKey).toBe(info.descriptionKey)
+    }
+  })
+
+  it("applies a surface's own copy for the reasons it names, and only those", () => {
+    const overrides = { repo_not_linked: 'tasks.picker.searchNeedsRepo' }
+    const named = new ApiError(422, {
+      error: { code: 'validation', message: 'No repo.', details: { reason: 'repo_not_linked' } },
+    })
+    expect(describeFailure(named, overrides)).toMatchObject({
+      descriptionKey: 'tasks.picker.searchNeedsRepo',
+      message: 'No repo.',
+      reason: 'repo_not_linked',
+    })
+    const other = new ApiError(422, { error: { code: 'validation', details: { reason: 'x' } } })
+    expect(describeFailure(other, overrides).descriptionKey).toBe(
+      'errors.generic.description.validation',
+    )
+    // The same re-wording for a failure a store already classified.
+    expect(withReasonCopy(describeFailure(named), overrides).descriptionKey).toBe(
+      'tasks.picker.searchNeedsRepo',
+    )
   })
 
   it('falls back to the generic conflict line for a reason this build does not know', () => {
@@ -61,6 +91,7 @@ describe('reportedFailure', () => {
       message: 'pod crashed',
       issues: [],
       requestId: null,
+      reason: null,
     })
   })
 

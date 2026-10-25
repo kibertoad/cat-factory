@@ -114,6 +114,7 @@ async function save() {
     // so this is the one point at which an over-broad token is visible at all
     // (backend/docs/security-model.md). Best-effort: the save already succeeded, so a probe
     // failure must not read as one.
+    testFailure.value = null
     testResult.value = await store.test(kind.value, payload).catch(() => null)
     actionToast.success('settings.userSecrets.toast.saved', {
       params: {

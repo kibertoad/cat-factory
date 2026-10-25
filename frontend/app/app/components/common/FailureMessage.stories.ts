@@ -15,6 +15,7 @@ const meta = {
       message: 'Internal server error',
       issues: [],
       requestId: '7f3c2a10-5b9e-4c1d-9a64-2e8f0b6d4c31',
+      reason: null,
     },
   },
 } satisfies Meta<typeof FailureMessage>
@@ -74,6 +75,7 @@ export const NoDetail: Story = {
       message: null,
       issues: [],
       requestId: null,
+      reason: null,
     },
   },
 }

@@ -70,6 +70,11 @@ export interface LinkFailure {
    * so the diagnostic report shows the real GitHub status, not just the mapped one.
    */
   details?: Record<string, unknown>
+  /**
+   * The same failure classified like a failure toast. The toast line and the item's `unreadable`
+   * mark both show its translated copy, so the two never disagree about one fetch.
+   */
+  failure: DescribedFailure
 }
 
 /** Stable key for a pending item, used for dedupe + selection toggles. */
@@ -167,7 +172,7 @@ export function useContextLinking() {
         // Kept in the list, still unresolved: the host aborts on any failure, and dropping the
         // item here would silently discard an attachment the user asked for while they fix it.
         // Marked, so the form the user is still looking at names WHICH attachment refused.
-        resolved.push({ ...item, unreadable: describeFetchFailure(e) })
+        resolved.push({ ...item, unreadable: failure.failure })
       }
     }
     return { resolved, failures }
@@ -239,6 +244,7 @@ export function useContextLinking() {
         envelope?.details && typeof envelope.details === 'object'
           ? (envelope.details as Record<string, unknown>)
           : undefined,
+      failure: describeFetchFailure(e),
     }
   }
 
@@ -252,30 +258,18 @@ export function useContextLinking() {
    * "Initiative created, but …"). It is a plural key, resolved against the failure count;
    * `toastTitleKeys.spec.ts` checks the literal each caller passes, which typed keys cannot see.
    */
-  /**
-   * A failure's line in the toast: TRANSLATED copy where the backend named a reason we have a
-   * key for, else the server's own prose.
-   *
-   * The backend does not localize (it emits `details.reason`), so a refusal a user routinely
-   * hits — attaching a document another task already holds — would otherwise reach them as
-   * English prose in every locale. The full diagnostic dump keeps the raw message regardless,
-   * so nothing is lost for support.
-   */
-  function describeFailure(failure: LinkFailure): string {
-    const reason = failure.details?.reason
-    if (reason === 'document_already_linked') {
-      return t('errors.conflict.description.document_already_linked')
-    }
-    return failure.message
-  }
-
   function presentLinkFailures(
     failures: LinkFailure[],
     blockId?: string,
     opts: { titleKey?: string } = {},
   ): void {
     if (failures.length === 0) return
-    const description = failures.map((f) => `${f.item.title}: ${describeFailure(f)}`).join('\n')
+    // TRANSLATED copy per item, from the same classification the item's mark shows. The backend
+    // does not localize (it emits `details.reason`), so its prose would reach every locale in
+    // English; the copied diagnostic report keeps the raw message, so nothing is lost for support.
+    const description = failures
+      .map((f) => `${f.item.title}: ${t(f.failure.descriptionKey)}`)
+      .join('\n')
     const report = buildLinkFailureReport(failures, {
       workspaceId: workspace.workspaceId,
       blockId,
