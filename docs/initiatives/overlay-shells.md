@@ -82,9 +82,12 @@ guard), not a visible change.
       with icons (for example `panels/ObservabilityPanel.vue`, `settings/WorkspaceSettingsPanel.vue`).
       The GitHub panel, guided review, the fragment library and the view switcher build tabs from
       `UButton` rows. About 15 more `UButton` rows are option pickers, not navigation. They are a
-      separate question (`URadioGroup` or a segmented control) and are out of scope here. - [x] Stage 1: the GitHub panel, guided review and the fragment library become `UTabs`, and
-      `scripts/check-frontend-tabs.mjs` refuses a hand-written tab role:
-      [#2460](https://github.com/kibertoad/cat-factory/pull/2460). - [ ] Stage 2: one variant, size and icon rule per surface for every `UTabs`.
+      separate question (`URadioGroup` or a segmented control) and are out of scope here.
+
+  - [x] Stage 1: the GitHub panel, guided review and the fragment library become `UTabs`, and
+        `scripts/check-frontend-tabs.mjs` refuses a hand-written tab role:
+        [#2460](https://github.com/kibertoad/cat-factory/pull/2460).
+  - [ ] Stage 2: one variant, size and icon rule per surface for every `UTabs`.
 
 ### 4. Settings and detail panels as slideovers, and the workbench surfaces
 
