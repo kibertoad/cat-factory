@@ -25,9 +25,6 @@ import ReportsPanel from './ReportsPanel.vue'
 // account's report when it opens, so each story opens it and answers that read. The keys and
 // labels follow the backend's (`D1ReportsRepository.ts`): model, agent kind and task type rows
 // carry no label, so they show their raw key. The amounts are made up.
-//
-// The spend trend draws no bars, for the same reason as the operator dashboard's: its row aligns
-// the columns to the end (`items-end`), so the bars' percentage heights resolve to nothing (#2395).
 
 const DAY = 24 * 3_600_000
 const NOW = Date.UTC(2026, 9, 11, 12, 0)
@@ -199,7 +196,7 @@ function report(overrides: Partial<ReportsView> = {}): ReportsView {
 }
 
 /**
- * Seven days: the four totals, an empty trend box (see above), spend by model, agent kind, ticket
+ * Seven days: the four totals, the daily spend trend, spend by model, agent kind, ticket
  * and run, and the boards with their runs. Model, agent kind and task type rows show their raw
  * keys; the bootstrap run has no task, so it shows its run id.
  */

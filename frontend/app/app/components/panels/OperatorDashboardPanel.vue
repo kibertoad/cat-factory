@@ -307,7 +307,7 @@ watch(
                   <div
                     v-for="p in view.trend.points"
                     :key="p.start"
-                    class="flex flex-1 flex-col justify-end"
+                    class="flex h-full flex-1 flex-col justify-end"
                     :title="trendTooltip(p)"
                   >
                     <div

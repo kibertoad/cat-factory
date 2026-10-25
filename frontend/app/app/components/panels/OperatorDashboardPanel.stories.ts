@@ -15,10 +15,6 @@ import OperatorDashboardPanel from './OperatorDashboardPanel.vue'
 // 30 and 90 days come from a daily rollup, and the dashboard says how far that rollup reaches.
 // It loads the account's figures when it opens, so each story opens it and answers that read.
 // The figures are made up; the failure kinds and gate kinds are the backend's.
-//
-// The trend draws no bars: its row aligns the columns to the end (`items-end`), so each column
-// is only as tall as its content, and the bars' percentage heights resolve to nothing. Every
-// story that sends trend points shows an empty box with its legend (#2395).
 
 const HOUR = 3_600_000
 const DAY = 24 * HOUR
@@ -140,9 +136,8 @@ function dailyTrend(days: number, through: number) {
 }
 
 /**
- * The last 24 hours, counted live: the four tiles, an empty trend box (see above, #2395), both gates
- * with their clean pass rates, four failure kinds, the runs live now, and the duration
- * percentiles.
+ * The last 24 hours, counted live: the four tiles, the hourly trend, both gates with their clean
+ * pass rates, four failure kinds, the runs live now, and the duration percentiles.
  */
 export const Default: Story = {}
 
