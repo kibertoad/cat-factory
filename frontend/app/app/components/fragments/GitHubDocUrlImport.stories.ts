@@ -88,7 +88,7 @@ export const Resolving: Story = {
   },
 }
 
-/** The lookup failed: the line shows the backend's message as it came. */
+/** The lookup failed: a translated line, with the backend's message behind "Show details". */
 export const RequestFailed: Story = {
   parameters: {
     api: [apiFailure(listGitHubAvailableReposContract, { pathPrefix: storyWorkspacePrefix })],

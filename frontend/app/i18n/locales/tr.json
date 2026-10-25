@@ -632,7 +632,7 @@
     "attachIssueDisabledConnect": "Önce bir sorun izleyici bağlayın (Entegrasyonlar)",
     "attachIssueDisabledEnable": "Önce sorun izleyici entegrasyonunu etkinleştirin",
     "importsOnAdd": "eklendiğinde içe aktarılır",
-    "unreadable": "Getirilemedi: {error}",
+    "unreadable": "Getirilemedi.",
     "pastedLink": {
       "offer": "Bu açıklama bir {source} sayfasına bağlantı veriyor. Bağlam olarak eklensin mi?",
       "attach": "Ekle"
@@ -2106,7 +2106,8 @@
       "helperFailures": "Onarıcı hataları",
       "exhausted": "İnsana devredilen",
       "hint": "Onarıcısız geçmek, ön kontrolün yettiği ve hiç onarıcı başlatılmadığı anlamına gelir. Onarıcı hataları, kendi işi çöken denemelerdir; çalışıp kontrolü kırmızı bırakan denemelerden farklıdır."
-    }
+    },
+    "loadFailed": "Platform gözlemlenebilirliği yüklenemedi."
   },
   "reports": {
     "title": "Raporlar",
@@ -2979,7 +2980,7 @@
       "title": "Bu bağlantı kurulamadı",
       "noRequest": "Bu sayfa bir yetkilendirme isteği olmadan açıldı. Bağlantıyı MCP istemcinizden başlatın.",
       "expired": "Bu yetkilendirme isteği geçersiz veya süresi dolmuş. Bağlantıyı MCP istemcinizden yeniden başlatın.",
-      "failed": "Karar kaydedilemedi. Bağlantıyı MCP istemcinizden yeniden başlatın."
+      "decisionFailed": "Karar kaydedilemedi."
     }
   },
   "settings": {
@@ -3997,7 +3998,8 @@
       "metered": "Ölçümlü API",
       "illustrative": "Abonelikler için gösterilen maliyetler bilgi amaçlıdır; bu planlar sabit ücretlidir ve jeton başına faturalandırılmaz.",
       "tokens": "{input} giriş / {output} çıkış",
-      "calls": "{count} çağrı"
+      "calls": "{count} çağrı",
+      "loadFailed": "Kullanım yüklenemedi."
     },
     "workspaceSettings": {
       "title": "Çalışma alanı ayarları",
@@ -4869,7 +4871,7 @@
     "picker": {
       "searchPlaceholder": "Sayfalarda ara veya bir URL/ID yapıştır…",
       "refPlaceholder": "Bir sayfa URL'si veya ID'si yapıştır…",
-      "searchFailed": "Arama başarısız: {error}",
+      "searchFailed": "Arama başarısız.",
       "importedBadge": "içe aktarıldı",
       "attachByReference": "{ref} öğesini referansla ekle",
       "noMatches": "Eşleşen sayfa yok.",
@@ -4897,7 +4899,7 @@
       "searchFilesPlaceholder": "Dosyaları yola göre ara…",
       "searchFilesHint": "Bu depodaki dosyaları aramak için yazın.",
       "noFileMatches": "Eşleşen dosya yok.",
-      "filesFailed": "Dosyalar yüklenemedi: {error}",
+      "filesFailed": "Dosyalar yüklenemedi.",
       "moreFiles": "İlk {count} eşleşme gösteriliyor — daraltmak için aramanızı iyileştirin."
     },
     "import": {
@@ -5029,7 +5031,7 @@
     "picker": {
       "searchPlaceholder": "Sorunlarda ara veya bir URL/anahtar yapıştır…",
       "refPlaceholder": "Bir sorun URL'si veya anahtarı yapıştır…",
-      "searchFailed": "Arama başarısız: {error}",
+      "searchFailed": "Arama başarısız.",
       "searchNeedsRepo": "Bu hizmet henüz bir depoya bağlı değil, bu yüzden aranacak bir şey yok. Onu bir depoya bağlayın veya doğrudan eklemek için bir sorun URL'si yapıştırın.",
       "imported": "içe aktarıldı",
       "attachByReference": "{ref} öğesini referansla ekle",
@@ -5119,7 +5121,7 @@
     "boardPlaceholder": "Proje anahtarı veya takım kimliği",
     "boardFromService": "Bu servise bağlı depo",
     "boardNeedsRepo": "Bu servise bağlı bir depo yok, dolayısıyla taranacak kayıt da yok. Servis panelinden bir depo bağlayın.",
-    "boardsFailed": "Panolar yüklenemedi: {reason}",
+    "boardsFailed": "Panolar yüklenemedi.",
     "issueType": "Kayıt türü",
     "issueTypeHelp": "Varsayılan olarak bug. Kayıt türü olmayan araçlarda yok sayılır.",
     "issueTypeUnsupported": "{tracker} “bug” anlamına gelen bir konu türüne sahip değil, bu nedenle bu filtre uygulanmaz. Taramayı bunun yerine bir etiketle daraltın.",
@@ -6699,7 +6701,8 @@
     "outcome": {
       "success": "başarılı",
       "failure": "başarısız"
-    }
+    },
+    "loadFailed": "Sağlama günlükleri yüklenemedi."
   },
   "kaizen": {
     "title": "Kaizen",
@@ -6864,7 +6867,8 @@
         "placeholder": "GitHub dosya veya klasör URL'si yapıştırın (örn. https://github.com/owner/repo/tree/main/docs)",
         "action": "Bul",
         "invalid": "Bu, bir depo dosyası veya klasör URL'sine benzemiyor.",
-        "notFound": "{slug} ile eşleşen erişilebilir bir depo yok. URL'yi kontrol edin veya önce depoyu bağlayın."
+        "notFound": "{slug} ile eşleşen erişilebilir bir depo yok. URL'yi kontrol edin veya önce depoyu bağlayın.",
+        "failed": "Bu URL aranamadı."
       }
     },
     "sources": {
@@ -7756,18 +7760,25 @@
       "run": "Kontrolleri çalıştır",
       "none": "Bu tarif hiçbir ön kontrol tanımlamıyor.",
       "unavailable": "Ön kontroller yerel makinede çalışır ve bu dağıtımda kullanılamaz.",
-      "optional": "isteğe bağlı"
+      "optional": "isteğe bağlı",
+      "failed": "Ön kontroller çalıştırılamadı."
     },
     "save": {
       "handlerLabel": "İşleyici etiketi",
       "handlerHint": "Deployer'ın bu yığını sağlamak için kullandığı çalışma alanının Docker Compose işleyicisi.",
       "summary": "\"{frame}\" üzerine bir Docker Compose tarifi kaydeder (\"{service}\" servisini açığa çıkararak) ve çalışma alanı işleyicisini kaydeder.",
       "saved": "Kaydedildi. Bir hat çalıştırdığında Deployer bu yığını sağlayacak.",
-      "save": "Yapılandırmayı kaydet"
+      "save": "Yapılandırmayı kaydet",
+      "failed": "Ortam kaydedilemedi.",
+      "errors": {
+        "missingService": "Önce bir çerçeve ve dışa açık bir compose hizmeti seçin.",
+        "invalidPort": "Geçerli bir dışa açık port girin (1 ile 65535 arası)."
+      }
     },
     "trial": {
       "hint": "Tarifi test etmek için bu ortamı isteğe bağlı olarak şimdi sağlayabilirsin.",
-      "run": "Deneme sağlaması"
+      "run": "Deneme sağlaması",
+      "failed": "Deneme sağlaması başlatılamadı."
     }
   },
   "forkDecision": {

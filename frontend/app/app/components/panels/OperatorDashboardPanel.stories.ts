@@ -9,6 +9,7 @@ import { useAccountsStore } from '~/stores/accounts'
 import { usePlatformObservabilityStore } from '~/stores/platformObservability'
 import { useUiStore } from '~/stores/ui'
 import OperatorDashboardPanel from './OperatorDashboardPanel.vue'
+import { screen, userEvent } from 'storybook/test'
 
 // The operator's dashboard for the active account, a full-screen overlay: run outcomes and the
 // success rate, an outcome trend, the gates' fixer statistics, the failure kinds, the runs live
@@ -157,8 +158,14 @@ export const Loading: Story = {
   },
 }
 
-/** The read failed: the client's message as it arrives, and Retry. */
+/** The read failed: translated copy with the server's text behind "Show details", and Retry. */
 export const Failed: Story = {
+  // The translated copy above Retry; the server's own text only behind "Show details".
+  play: async () => {
+    await screen.findByText('Platform observability could not be loaded.')
+    await userEvent.click(await screen.findByTestId('failure-message-show-detail'))
+    await screen.findByText(/Internal server error/)
+  },
   parameters: {
     api: [
       apiFailure(getPlatformObservabilityContract, { pathParams: { accountId: orgAccount.id } }),

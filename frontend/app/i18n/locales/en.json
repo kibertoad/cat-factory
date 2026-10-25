@@ -698,7 +698,7 @@
     "attachIssueDisabledConnect": "Connect an issue tracker first (Integrations)",
     "attachIssueDisabledEnable": "Enable the issue-tracker integration first",
     "importsOnAdd": "imports on add",
-    "unreadable": "Could not be fetched: {error}",
+    "unreadable": "Could not be fetched.",
     "pastedLink": {
       "offer": "This description links a {source} page. Attach it as context?",
       "attach": "Attach"
@@ -2237,7 +2237,8 @@
       "helperFailures": "Fixer failures",
       "exhausted": "Handed to a human",
       "hint": "A clean pass is a gate the precheck satisfied without starting a fixer at all. Fixer failures are attempts whose own job crashed, as opposed to attempts that ran and left the check red."
-    }
+    },
+    "loadFailed": "Platform observability could not be loaded."
   },
   "reports": {
     "title": "Reports",
@@ -3137,7 +3138,7 @@
       "title": "This connection could not be set up",
       "noRequest": "This page was opened without an authorization request. Start the connection from your MCP host.",
       "expired": "This authorization request is invalid or has expired. Start the connection again from your MCP host.",
-      "failed": "The decision could not be recorded. Start the connection again from your MCP host."
+      "decisionFailed": "The decision could not be recorded."
     }
   },
   "settings": {
@@ -4167,7 +4168,8 @@
       "metered": "Metered API",
       "illustrative": "Costs shown for subscriptions are illustrative — these plans are flat-rate, not billed per token.",
       "tokens": "{input} in / {output} out",
-      "calls": "{count} calls"
+      "calls": "{count} calls",
+      "loadFailed": "Usage could not be loaded."
     },
     "workspaceSettings": {
       "title": "Workspace settings",
@@ -5057,7 +5059,7 @@
     "picker": {
       "searchPlaceholder": "Search pages or paste a URL/ID…",
       "refPlaceholder": "Paste a page URL or ID…",
-      "searchFailed": "Search failed: {error}",
+      "searchFailed": "Search failed.",
       "importedBadge": "imported",
       "attachByReference": "Attach {ref} by reference",
       "noMatches": "No matching pages.",
@@ -5085,7 +5087,7 @@
       "searchFilesPlaceholder": "Search files by path…",
       "searchFilesHint": "Type to search files in this repository.",
       "noFileMatches": "No matching files.",
-      "filesFailed": "Couldn't load files: {error}",
+      "filesFailed": "Couldn't load files.",
       "moreFiles": "Showing the first {count} matches — refine your search to narrow it down."
     },
     "import": {
@@ -5217,7 +5219,7 @@
     "picker": {
       "searchPlaceholder": "Search issues or paste a URL/key…",
       "refPlaceholder": "Paste an issue URL or key…",
-      "searchFailed": "Search failed: {error}",
+      "searchFailed": "Search failed.",
       "searchNeedsRepo": "This service isn't linked to a repository yet, so there's nothing to search. Link it to a repo, or paste an issue URL to attach one directly.",
       "imported": "imported",
       "attachByReference": "Attach {ref} by reference",
@@ -5310,7 +5312,7 @@
     "boardPlaceholder": "Project key or team id",
     "boardFromService": "The repository this service is linked to",
     "boardNeedsRepo": "This service has no repository linked, so it has no issues to hunt. Link one from the service panel.",
-    "boardsFailed": "Boards could not be loaded: {reason}",
+    "boardsFailed": "Boards could not be loaded.",
     "issueType": "Issue type",
     "issueTypeHelp": "Defaults to bug. Ignored by trackers with no issue types.",
     "issueTypeUnsupported": "{tracker} has no issue type that means \"bug\", so this filter is not applied. Narrow the scan with a label instead.",
@@ -7033,7 +7035,8 @@
     "outcome": {
       "success": "success",
       "failure": "failure"
-    }
+    },
+    "loadFailed": "The provisioning logs could not be loaded."
   },
   "kaizen": {
     "title": "Kaizen",
@@ -7205,7 +7208,8 @@
         "placeholder": "Paste a GitHub file or folder URL (e.g. https://github.com/owner/repo/tree/main/docs)",
         "action": "Find",
         "invalid": "This doesn't look like a repository file or folder URL.",
-        "notFound": "No accessible repository matches {slug}. Check the URL or connect the repository first."
+        "notFound": "No accessible repository matches {slug}. Check the URL or connect the repository first.",
+        "failed": "This URL could not be looked up."
       }
     },
     "sources": {
@@ -8051,18 +8055,25 @@
       "run": "Run checks",
       "none": "This recipe declares no preflight checks.",
       "unavailable": "Preflight checks run on the local machine and aren't available on this deployment.",
-      "optional": "optional"
+      "optional": "optional",
+      "failed": "The preflight checks could not run."
     },
     "save": {
       "handlerLabel": "Handler label",
       "handlerHint": "The workspace's Docker Compose handler the Deployer uses to provision this stack.",
       "summary": "Saves a Docker Compose recipe onto \"{frame}\" (exposing service \"{service}\") and registers the workspace handler.",
       "saved": "Saved. The Deployer will provision this stack when a pipeline runs it.",
-      "save": "Save configuration"
+      "save": "Save configuration",
+      "failed": "The environment could not be saved.",
+      "errors": {
+        "missingService": "Pick a frame and an exposed compose service first.",
+        "invalidPort": "Enter a valid exposed port (1 to 65535)."
+      }
     },
     "trial": {
       "hint": "Optionally provision this environment now to test the recipe.",
-      "run": "Trial provision"
+      "run": "Trial provision",
+      "failed": "The trial provision could not start."
     }
   },
   "forkDecision": {

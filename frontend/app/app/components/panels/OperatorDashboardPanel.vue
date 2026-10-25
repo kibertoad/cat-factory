@@ -8,6 +8,7 @@ import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import TakeoverShell from '~/components/common/TakeoverShell.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 import TrendColumn from '~/components/panels/TrendColumn.vue'
 
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
@@ -188,7 +189,7 @@ watch(
             v-if="error"
             class="mx-auto max-w-2xl rounded-lg border border-app-error-800/60 bg-app-error-950/40 p-4 text-sm text-app-error-200"
           >
-            <p>{{ error }}</p>
+            <FailureMessage :failure="error" :title="t('platformObservability.loadFailed')" />
             <UButton
               color="neutral"
               variant="ghost"

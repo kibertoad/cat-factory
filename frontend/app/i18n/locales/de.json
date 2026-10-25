@@ -40,7 +40,7 @@
       "title": "Diese Verbindung konnte nicht eingerichtet werden",
       "noRequest": "Diese Seite wurde ohne Autorisierungsanfrage geöffnet. Starten Sie die Verbindung in Ihrem MCP-Host.",
       "expired": "Diese Autorisierungsanfrage ist ungültig oder abgelaufen. Starten Sie die Verbindung in Ihrem MCP-Host erneut.",
-      "failed": "Die Entscheidung konnte nicht gespeichert werden. Starten Sie die Verbindung in Ihrem MCP-Host erneut."
+      "decisionFailed": "Die Entscheidung konnte nicht gespeichert werden."
     }
   },
   "settings": {
@@ -1058,7 +1058,8 @@
       "metered": "Gemessene API",
       "illustrative": "Die für Abonnements angezeigten Kosten sind Richtwerte – diese Tarife sind Pauschalpreise und werden nicht pro Token abgerechnet.",
       "tokens": "{input} ein / {output} aus",
-      "calls": "{count} Aufrufe"
+      "calls": "{count} Aufrufe",
+      "loadFailed": "Die Nutzung konnte nicht geladen werden."
     },
     "workspaceSettings": {
       "title": "Workspace-Einstellungen",
@@ -3534,7 +3535,7 @@
     "attachIssueDisabledConnect": "Verbinden Sie zuerst einen Issue-Tracker (Integrationen)",
     "attachIssueDisabledEnable": "Aktivieren Sie zuerst die Issue-Tracker-Integration",
     "importsOnAdd": "importiert beim Hinzufügen",
-    "unreadable": "Konnte nicht abgerufen werden: {error}",
+    "unreadable": "Konnte nicht abgerufen werden.",
     "pastedLink": {
       "offer": "Diese Beschreibung verlinkt eine {source}-Seite. Als Kontext anhängen?",
       "attach": "Anhängen"
@@ -4169,7 +4170,8 @@
       "helperFailures": "Fixer-Fehlschläge",
       "exhausted": "An Menschen übergeben",
       "hint": "Ohne Fixer bestanden heißt: die Vorprüfung war zufrieden und es wurde gar kein Fixer gestartet. Fixer-Fehlschläge sind Versuche, deren eigener Job abgestürzt ist, im Unterschied zu Versuchen, die liefen und die Prüfung rot ließen."
-    }
+    },
+    "loadFailed": "Die Plattform-Observability konnte nicht geladen werden."
   },
   "reports": {
     "title": "Berichte",
@@ -4334,7 +4336,7 @@
     "picker": {
       "searchPlaceholder": "Seiten durchsuchen oder eine URL/ID einfügen…",
       "refPlaceholder": "Eine Seiten-URL oder -ID einfügen…",
-      "searchFailed": "Suche fehlgeschlagen: {error}",
+      "searchFailed": "Suche fehlgeschlagen.",
       "importedBadge": "importiert",
       "attachByReference": "{ref} per Referenz anhängen",
       "noMatches": "Keine passenden Seiten.",
@@ -4362,7 +4364,7 @@
       "searchFilesPlaceholder": "Dateien nach Pfad suchen…",
       "searchFilesHint": "Tippen, um Dateien in diesem Repository zu suchen.",
       "noFileMatches": "Keine passenden Dateien.",
-      "filesFailed": "Dateien konnten nicht geladen werden: {error}",
+      "filesFailed": "Dateien konnten nicht geladen werden.",
       "moreFiles": "Es werden die ersten {count} Treffer angezeigt – grenzen Sie Ihre Suche ein."
     },
     "import": {
@@ -4494,7 +4496,7 @@
     "picker": {
       "searchPlaceholder": "Issues durchsuchen oder eine URL/einen Schlüssel einfügen…",
       "refPlaceholder": "Eine Issue-URL oder einen -Schlüssel einfügen…",
-      "searchFailed": "Suche fehlgeschlagen: {error}",
+      "searchFailed": "Suche fehlgeschlagen.",
       "searchNeedsRepo": "Dieser Service ist noch mit keinem Repository verknüpft, es gibt also nichts zu durchsuchen. Verknüpfen Sie ihn mit einem Repository oder fügen Sie eine Issue-URL ein, um ein Issue direkt anzuhängen.",
       "imported": "importiert",
       "attachByReference": "{ref} per Referenz anhängen",
@@ -4584,7 +4586,7 @@
     "boardPlaceholder": "Projektschlüssel oder Team-ID",
     "boardFromService": "Das mit diesem Service verknüpfte Repository",
     "boardNeedsRepo": "Mit diesem Service ist kein Repository verknüpft, es gibt also keine Tickets zu durchsuchen. Verknüpfe eines im Service-Panel.",
-    "boardsFailed": "Boards konnten nicht geladen werden: {reason}",
+    "boardsFailed": "Boards konnten nicht geladen werden.",
     "issueType": "Vorgangstyp",
     "issueTypeHelp": "Standard ist bug. Wird von Trackern ohne Vorgangstypen ignoriert.",
     "issueTypeUnsupported": "{tracker} kennt keinen Ticket-Typ mit der Bedeutung „Bug“, daher wird dieser Filter nicht angewendet. Grenzen Sie den Scan stattdessen mit einem Label ein.",
@@ -5642,7 +5644,8 @@
         "placeholder": "GitHub-Datei- oder Ordner-URL einfügen (z. B. https://github.com/owner/repo/tree/main/docs)",
         "action": "Suchen",
         "invalid": "Das sieht nicht nach der URL einer Repository-Datei oder eines Ordners aus.",
-        "notFound": "Kein zugängliches Repository passt zu {slug}. Prüfen Sie die URL oder verbinden Sie das Repository zuerst."
+        "notFound": "Kein zugängliches Repository passt zu {slug}. Prüfen Sie die URL oder verbinden Sie das Repository zuerst.",
+        "failed": "Die URL konnte nicht nachgeschlagen werden."
       }
     },
     "sources": {
@@ -7428,7 +7431,8 @@
     "outcome": {
       "success": "Erfolg",
       "failure": "Fehler"
-    }
+    },
+    "loadFailed": "Die Bereitstellungs-Logs konnten nicht geladen werden."
   },
   "kaizen": {
     "title": "Kaizen",
@@ -7751,18 +7755,25 @@
       "run": "Prüfungen ausführen",
       "none": "Dieses Rezept deklariert keine Preflight-Prüfungen.",
       "unavailable": "Preflight-Prüfungen laufen auf der lokalen Maschine und sind für dieses Deployment nicht verfügbar.",
-      "optional": "optional"
+      "optional": "optional",
+      "failed": "Die Vorabprüfungen konnten nicht ausgeführt werden."
     },
     "save": {
       "handlerLabel": "Handler-Label",
       "handlerHint": "Der Docker-Compose-Handler des Workspaces, den der Deployer zum Bereitstellen dieses Stacks verwendet.",
       "summary": "Speichert ein Docker-Compose-Rezept auf \"{frame}\" (stellt Service \"{service}\" bereit) und registriert den Workspace-Handler.",
       "saved": "Gespeichert. Der Deployer stellt diesen Stack bereit, wenn eine Pipeline ihn ausführt.",
-      "save": "Konfiguration speichern"
+      "save": "Konfiguration speichern",
+      "failed": "Die Umgebung konnte nicht gespeichert werden.",
+      "errors": {
+        "missingService": "Wählen Sie zuerst einen Rahmen und einen freigegebenen Compose-Dienst.",
+        "invalidPort": "Geben Sie einen gültigen freigegebenen Port ein (1 bis 65535)."
+      }
     },
     "trial": {
       "hint": "Optional diese Umgebung jetzt bereitstellen, um das Rezept zu testen.",
-      "run": "Testbereitstellung"
+      "run": "Testbereitstellung",
+      "failed": "Die Testbereitstellung konnte nicht gestartet werden."
     }
   },
   "palette": {

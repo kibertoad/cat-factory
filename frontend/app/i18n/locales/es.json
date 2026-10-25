@@ -632,7 +632,7 @@
     "attachIssueDisabledConnect": "Conecta primero un gestor de incidencias (Integraciones)",
     "attachIssueDisabledEnable": "Activa primero la integración del gestor de incidencias",
     "importsOnAdd": "se importa al añadir",
-    "unreadable": "No se pudo obtener: {error}",
+    "unreadable": "No se pudo obtener.",
     "pastedLink": {
       "offer": "Esta descripción enlaza una página de {source}. ¿Adjuntarla como contexto?",
       "attach": "Adjuntar"
@@ -2106,7 +2106,8 @@
       "helperFailures": "Fallos del reparador",
       "exhausted": "Pasadas a una persona",
       "hint": "Aprobada sin reparador significa que la comprobación previa quedó satisfecha y no se inició ningún reparador. Los fallos del reparador son intentos cuyo propio trabajo se cayó, a diferencia de los que se ejecutaron y dejaron la comprobación en rojo."
-    }
+    },
+    "loadFailed": "No se pudo cargar la observabilidad de la plataforma."
   },
   "reports": {
     "title": "Informes",
@@ -2979,7 +2980,7 @@
       "title": "No se pudo establecer esta conexión",
       "noRequest": "Esta página se abrió sin una solicitud de autorización. Inicia la conexión desde tu host MCP.",
       "expired": "Esta solicitud de autorización no es válida o ha caducado. Vuelve a iniciar la conexión desde tu host MCP.",
-      "failed": "No se pudo registrar la decisión. Vuelve a iniciar la conexión desde tu host MCP."
+      "decisionFailed": "No se pudo registrar la decisión."
     }
   },
   "settings": {
@@ -3856,7 +3857,8 @@
       "metered": "API medida",
       "illustrative": "Los costes mostrados para las suscripciones son orientativos: estos planes son de tarifa plana y no se facturan por token.",
       "tokens": "{input} entrada / {output} salida",
-      "calls": "{count} llamadas"
+      "calls": "{count} llamadas",
+      "loadFailed": "No se pudo cargar el uso."
     },
     "workspaceSettings": {
       "title": "Configuración del espacio de trabajo",
@@ -4869,7 +4871,7 @@
     "picker": {
       "searchPlaceholder": "Busca páginas o pega una URL o ID…",
       "refPlaceholder": "Pega la URL o el ID de una página…",
-      "searchFailed": "Error en la búsqueda: {error}",
+      "searchFailed": "Error en la búsqueda.",
       "importedBadge": "importado",
       "attachByReference": "Adjuntar {ref} por referencia",
       "noMatches": "No hay páginas que coincidan.",
@@ -4897,7 +4899,7 @@
       "searchFilesPlaceholder": "Buscar archivos por ruta…",
       "searchFilesHint": "Escribe para buscar archivos en este repositorio.",
       "noFileMatches": "No hay archivos coincidentes.",
-      "filesFailed": "No se pudieron cargar los archivos: {error}",
+      "filesFailed": "No se pudieron cargar los archivos.",
       "moreFiles": "Mostrando las primeras {count} coincidencias; refina tu búsqueda para acotarla."
     },
     "import": {
@@ -5029,7 +5031,7 @@
     "picker": {
       "searchPlaceholder": "Busca incidencias o pega una URL/clave…",
       "refPlaceholder": "Pega la URL o clave de una incidencia…",
-      "searchFailed": "La búsqueda falló: {error}",
+      "searchFailed": "La búsqueda falló.",
       "searchNeedsRepo": "Este servicio aún no está vinculado a un repositorio, así que no hay nada donde buscar. Vincúlalo a un repositorio o pega la URL de una incidencia para adjuntarla directamente.",
       "imported": "importada",
       "attachByReference": "Adjuntar {ref} por referencia",
@@ -5119,7 +5121,7 @@
     "boardPlaceholder": "Clave de proyecto o id de equipo",
     "boardFromService": "El repositorio vinculado a este servicio",
     "boardNeedsRepo": "Este servicio no tiene ningún repositorio vinculado, así que no hay incidencias que explorar. Vincula uno desde el panel del servicio.",
-    "boardsFailed": "No se pudieron cargar los tableros: {reason}",
+    "boardsFailed": "No se pudieron cargar los tableros.",
     "issueType": "Tipo de incidencia",
     "issueTypeHelp": "Por defecto bug. Se ignora en gestores sin tipos de incidencia.",
     "issueTypeUnsupported": "{tracker} no tiene ningún tipo de incidencia que signifique «bug», por lo que este filtro no se aplica. Acota el análisis con una etiqueta en su lugar.",
@@ -6699,7 +6701,8 @@
     "outcome": {
       "success": "correcto",
       "failure": "fallido"
-    }
+    },
+    "loadFailed": "No se pudieron cargar los registros de aprovisionamiento."
   },
   "kaizen": {
     "title": "Kaizen",
@@ -6864,7 +6867,8 @@
         "placeholder": "Pega la URL de un archivo o carpeta de GitHub (p. ej. https://github.com/owner/repo/tree/main/docs)",
         "action": "Buscar",
         "invalid": "Esto no parece la URL de un archivo o carpeta de un repositorio.",
-        "notFound": "Ningún repositorio accesible coincide con {slug}. Revisa la URL o conecta primero el repositorio."
+        "notFound": "Ningún repositorio accesible coincide con {slug}. Revisa la URL o conecta primero el repositorio.",
+        "failed": "No se pudo buscar esta URL."
       }
     },
     "sources": {
@@ -7756,18 +7760,25 @@
       "run": "Ejecutar comprobaciones",
       "none": "Esta receta no declara comprobaciones previas.",
       "unavailable": "Las comprobaciones previas se ejecutan en la máquina local y no están disponibles en este despliegue.",
-      "optional": "opcional"
+      "optional": "opcional",
+      "failed": "No se pudieron ejecutar las comprobaciones previas."
     },
     "save": {
       "handlerLabel": "Etiqueta del gestor",
       "handlerHint": "El gestor de Docker Compose del espacio de trabajo que el Deployer usa para aprovisionar este stack.",
       "summary": "Guarda una receta de Docker Compose en \"{frame}\" (exponiendo el servicio \"{service}\") y registra el gestor del espacio de trabajo.",
       "saved": "Guardado. El Deployer aprovisionará este stack cuando una canalización lo ejecute.",
-      "save": "Guardar configuración"
+      "save": "Guardar configuración",
+      "failed": "No se pudo guardar el entorno.",
+      "errors": {
+        "missingService": "Elige primero un marco y un servicio de compose expuesto.",
+        "invalidPort": "Introduce un puerto expuesto válido (de 1 a 65535)."
+      }
     },
     "trial": {
       "hint": "Opcionalmente, aprovisiona este entorno ahora para probar la receta.",
-      "run": "Aprovisionamiento de prueba"
+      "run": "Aprovisionamiento de prueba",
+      "failed": "No se pudo iniciar el aprovisionamiento de prueba."
     }
   },
   "forkDecision": {

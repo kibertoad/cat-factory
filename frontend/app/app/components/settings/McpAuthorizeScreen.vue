@@ -8,7 +8,14 @@ import {
   type PublicApiScope,
   type WorkspaceListItem,
 } from '@cat-factory/contracts'
-import { apiErrorEnvelope, apiErrorReason } from '~/composables/api/errors'
+import { apiErrorReason } from '~/composables/api/errors'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  reportedFailure,
+  type DescribedFailure,
+  type ReasonCopy,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 // The consent screen an MCP host's authorization request lands on
 // (`/mcp-authorize?request=…`), reached by a redirect from `GET /oauth/authorize`.
@@ -32,13 +39,13 @@ const { t } = useI18n()
 type Screen = 'loading' | 'deciding' | 'submitting' | 'failed'
 
 const screen = ref<Screen>('loading')
-const detail = ref<string | null>(null)
+const detail = ref<DescribedFailure | null>(null)
 /**
  * A refusal that did NOT consume the request, shown beside the choices rather than instead of
  * them. See `decide`: the two failures are answered differently because only one of them ends the
  * flow.
  */
-const decisionError = ref<string | null>(null)
+const decisionError = ref<DescribedFailure | null>(null)
 const clientName = ref('')
 const redirectOrigin = ref('')
 /** Every board the person can see, as listed. */
@@ -94,10 +101,19 @@ const scopeItems = computed(() =>
   })),
 )
 
+/**
+ * Why the request cannot go on. A request the server calls invalid or expired gets the "start
+ * again from your MCP host" copy; any other failure gets the toast funnel's copy for its status
+ * class. The server's own text stays behind "Show details" in both.
+ */
+const REQUEST_FAILURE_COPY: ReasonCopy = {
+  [MCP_AUTHORIZATION_REQUEST_INVALID]: 'mcpAuthorize.error.expired',
+}
+
 onMounted(async () => {
   if (!sealedRequest.value) {
     screen.value = 'failed'
-    detail.value = t('mcpAuthorize.error.noRequest')
+    detail.value = reportedFailure(null, 'mcpAuthorize.error.noRequest')
     return
   }
   try {
@@ -121,7 +137,7 @@ onMounted(async () => {
     // Terminal whatever the cause: with no request to describe there is nothing to decide, and the
     // person is told to start again from the host, which is the only place a new one comes from.
     screen.value = 'failed'
-    detail.value = apiErrorEnvelope(e)?.message ?? t('mcpAuthorize.error.expired')
+    detail.value = describeFailure(e, REQUEST_FAILURE_COPY)
   }
 })
 
@@ -152,11 +168,11 @@ async function decide(decision: 'approve' | 'deny') {
     // COULD have picked one dropdown away.
     if (apiErrorReason(e) === MCP_AUTHORIZATION_REQUEST_INVALID) {
       screen.value = 'failed'
-      detail.value = apiErrorEnvelope(e)?.message ?? t('mcpAuthorize.error.expired')
+      detail.value = describeFailure(e, REQUEST_FAILURE_COPY)
       return
     }
     screen.value = 'deciding'
-    decisionError.value = apiErrorEnvelope(e)?.message ?? t('mcpAuthorize.error.failed')
+    decisionError.value = describeFailure(e)
   }
 }
 
@@ -188,7 +204,7 @@ function backToApp() {
         >
           {{ t('mcpAuthorize.error.title') }}
         </h1>
-        <p class="mb-6 text-center text-sm break-words text-muted">{{ detail }}</p>
+        <FailureMessage :failure="detail" class="mb-6 text-center text-sm text-muted" />
         <UButton block color="neutral" variant="subtle" @click="backToApp">
           {{ t('mcpAuthorize.back') }}
         </UButton>
@@ -258,13 +274,12 @@ function backToApp() {
           </p>
         </template>
 
-        <p
-          v-if="decisionError"
-          class="mb-4 text-center text-sm break-words text-app-error-400"
+        <FailureMessage
+          :failure="decisionError"
+          :title="t('mcpAuthorize.error.decisionFailed')"
+          class="mb-4 text-center text-sm text-app-error-400"
           data-testid="mcp-authorize-decision-error"
-        >
-          {{ decisionError }}
-        </p>
+        />
 
         <div class="flex gap-2">
           <UButton

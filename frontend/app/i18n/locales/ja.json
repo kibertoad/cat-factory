@@ -632,7 +632,7 @@
     "attachIssueDisabledConnect": "まず issue トラッカーを接続してください（連携）",
     "attachIssueDisabledEnable": "まず issue トラッカー連携を有効にしてください",
     "importsOnAdd": "追加時にインポート",
-    "unreadable": "取得できませんでした: {error}",
+    "unreadable": "取得できませんでした。",
     "pastedLink": {
       "offer": "この説明は {source} のページにリンクしています。コンテキストとして添付しますか？",
       "attach": "添付"
@@ -2106,7 +2106,8 @@
       "helperFailures": "修正エージェントの失敗",
       "exhausted": "人に引き継ぎ",
       "hint": "修正なしで通過とは、事前チェックだけで満たされ修正エージェントを一度も起動しなかったゲートのことです。修正エージェントの失敗とは、ジョブ自体が落ちた試行を指し、実行はされたがチェックが赤のままだった試行とは区別されます。"
-    }
+    },
+    "loadFailed": "プラットフォームの可観測性を読み込めませんでした。"
   },
   "reports": {
     "title": "レポート",
@@ -2979,7 +2980,7 @@
       "title": "この接続を設定できませんでした",
       "noRequest": "認可リクエストなしでこのページが開かれました。MCP ホストから接続を開始してください。",
       "expired": "この認可リクエストは無効か、有効期限が切れています。MCP ホストから接続をやり直してください。",
-      "failed": "判断を記録できませんでした。MCP ホストから接続をやり直してください。"
+      "decisionFailed": "判断を記録できませんでした。"
     }
   },
   "settings": {
@@ -3997,7 +3998,8 @@
       "metered": "従量制 API",
       "illustrative": "サブスクリプションに表示される料金は参考値です。これらのプランは定額制であり、トークン単位では課金されません。",
       "tokens": "入力 {input} / 出力 {output}",
-      "calls": "{count} 回の呼び出し"
+      "calls": "{count} 回の呼び出し",
+      "loadFailed": "使用状況を読み込めませんでした。"
     },
     "workspaceSettings": {
       "title": "ワークスペース設定",
@@ -4869,7 +4871,7 @@
     "picker": {
       "searchPlaceholder": "ページを検索、または URL/ID を貼り付け…",
       "refPlaceholder": "ページの URL または ID を貼り付け…",
-      "searchFailed": "検索に失敗しました: {error}",
+      "searchFailed": "検索に失敗しました。",
       "importedBadge": "インポート済み",
       "attachByReference": "{ref} を参照で添付",
       "noMatches": "一致するページがありません。",
@@ -4897,7 +4899,7 @@
       "searchFilesPlaceholder": "パスでファイルを検索…",
       "searchFilesHint": "このリポジトリ内のファイルを検索するには入力してください。",
       "noFileMatches": "一致するファイルがありません。",
-      "filesFailed": "ファイルを読み込めませんでした: {error}",
+      "filesFailed": "ファイルを読み込めませんでした。",
       "moreFiles": "最初の{count}件の一致を表示しています。検索条件を絞り込んでください。"
     },
     "import": {
@@ -5029,7 +5031,7 @@
     "picker": {
       "searchPlaceholder": "課題を検索、または URL/キーを貼り付け…",
       "refPlaceholder": "課題の URL またはキーを貼り付け…",
-      "searchFailed": "検索に失敗しました: {error}",
+      "searchFailed": "検索に失敗しました。",
       "searchNeedsRepo": "このサービスはまだリポジトリに紐付けられていないため、検索する対象がありません。リポジトリに紐付けるか、課題の URL を貼り付けて直接添付してください。",
       "imported": "インポート済み",
       "attachByReference": "{ref} を参照で添付",
@@ -5119,7 +5121,7 @@
     "boardPlaceholder": "プロジェクトキーまたはチーム ID",
     "boardFromService": "このサービスにリンクされたリポジトリ",
     "boardNeedsRepo": "このサービスにはリポジトリがリンクされていないため、探索できる課題がありません。サービスパネルからリンクしてください。",
-    "boardsFailed": "ボードを読み込めませんでした: {reason}",
+    "boardsFailed": "ボードを読み込めませんでした。",
     "issueType": "課題タイプ",
     "issueTypeHelp": "既定は bug です。課題タイプを持たないトラッカーでは無視されます。",
     "issueTypeUnsupported": "{tracker} には「bug」を意味する課題タイプがないため、このフィルターは適用されません。代わりにラベルでスキャンを絞り込んでください。",
@@ -6699,7 +6701,8 @@
     "outcome": {
       "success": "成功",
       "failure": "失敗"
-    }
+    },
+    "loadFailed": "プロビジョニングログを読み込めませんでした。"
   },
   "kaizen": {
     "title": "Kaizen",
@@ -6864,7 +6867,8 @@
         "placeholder": "GitHub のファイルまたはフォルダーの URL を貼り付け (例: https://github.com/owner/repo/tree/main/docs)",
         "action": "検索",
         "invalid": "リポジトリのファイルまたはフォルダーの URL ではないようです。",
-        "notFound": "{slug} に一致するアクセス可能なリポジトリがありません。URL を確認するか、まずリポジトリを接続してください。"
+        "notFound": "{slug} に一致するアクセス可能なリポジトリがありません。URL を確認するか、まずリポジトリを接続してください。",
+        "failed": "この URL を調べられませんでした。"
       }
     },
     "sources": {
@@ -7756,18 +7760,25 @@
       "run": "チェックを実行",
       "none": "このレシピにはプリフライトチェックが宣言されていません。",
       "unavailable": "プリフライトチェックはローカルマシンで実行され、このデプロイでは利用できません。",
-      "optional": "任意"
+      "optional": "任意",
+      "failed": "事前チェックを実行できませんでした。"
     },
     "save": {
       "handlerLabel": "ハンドラーのラベル",
       "handlerHint": "Deployer がこのスタックのプロビジョニングに使う、ワークスペースの Docker Compose ハンドラー。",
       "summary": "「{frame}」に Docker Compose レシピを保存し（サービス「{service}」を公開）、ワークスペースハンドラーを登録します。",
       "saved": "保存しました。パイプラインが実行されると Deployer がこのスタックをプロビジョニングします。",
-      "save": "設定を保存"
+      "save": "設定を保存",
+      "failed": "環境を保存できませんでした。",
+      "errors": {
+        "missingService": "先にフレームと公開する compose サービスを選んでください。",
+        "invalidPort": "有効な公開ポートを入力してください（1〜65535）。"
+      }
     },
     "trial": {
       "hint": "レシピをテストするため、この環境を今すぐプロビジョニングすることもできます。",
-      "run": "お試しプロビジョニング"
+      "run": "お試しプロビジョニング",
+      "failed": "お試しプロビジョニングを開始できませんでした。"
     }
   },
   "forkDecision": {

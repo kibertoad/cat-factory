@@ -13,7 +13,11 @@ import type {
 import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBindingsResolved.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import IconButton from '~/components/common/IconButton.vue'
-import { apiErrorEnvelope } from '~/composables/api/errors'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 import EmptyState from '~/components/common/EmptyState.vue'
 
 // Frontend-frame (`type: 'frontend'`) configuration: how to build, serve, and mock this
@@ -122,9 +126,11 @@ const showPreview = ref(false)
 // frame links to its repo the same way a service does (`github_repos.block_id`).
 const repoLink = computed(() => github.repoForBlock(props.block.id))
 const detecting = ref(false)
-// The detect failure message to show, or null when there's no error. Holds the SERVER's real
-// message (the backend raises an actionable one for an unreadable repo) instead of a fixed line.
+// The translated reason detection cannot run (the repo is not in the connected projection).
 const detectError = ref<string | null>(null)
+// The detect CALL failed, classified like a failure toast: the server's actionable message (for an
+// unreadable repo) stays one click away behind "Show details".
+const detectFailure = ref<DescribedFailure | null>(null)
 const detectResult = ref<FrontendConfigRecommendation | null>(null)
 
 // A detection result is scoped to the inspected block — clear it (and any error) when the
@@ -134,6 +140,7 @@ watch(
   () => {
     detectResult.value = null
     detectError.value = null
+    detectFailure.value = null
   },
 )
 
@@ -142,11 +149,13 @@ async function detectFromRepo() {
   if (!repo) {
     // The frame points at a repo that isn't in the connected-repo projection, so we can't resolve
     // its owner/name to ask the backend. A "sync/connect GitHub" problem, not a read failure.
+    detectFailure.value = null
     detectError.value = t('inspector.detectRepoUnresolved')
     return
   }
   detecting.value = true
   detectError.value = null
+  detectFailure.value = null
   detectResult.value = null
   try {
     const result = await infra.detectFrontendConfig({
@@ -159,12 +168,7 @@ async function detectFromRepo() {
     // that field lives in the (collapsed) Build group, so open it so the advice is actionable.
     if (!result.detected) showBuild.value = true
   } catch (e) {
-    // Surface the server's real message (an actionable "couldn't read the repo — check App access"
-    // for a read fault), falling back to the generic line only when none is available.
-    detectError.value =
-      apiErrorEnvelope(e)?.message ??
-      (e instanceof Error ? e.message : null) ??
-      t('inspector.frontendConfig.detect.error')
+    detectFailure.value = describeFailure(e)
   } finally {
     detecting.value = false
   }
@@ -254,6 +258,11 @@ onUnmounted(() => preview.stopPolling(props.block.id))
       <p v-if="detectError" class="text-2xs text-app-error-300/80">
         {{ detectError }}
       </p>
+      <FailureMessage
+        :failure="detectFailure"
+        :title="t('inspector.frontendConfig.detect.error')"
+        class="text-2xs text-app-error-300/80"
+      />
 
       <template v-if="detectResult && !detecting">
         <p v-if="!detectResult.detected" class="text-2xs text-app-warning-300/80">
