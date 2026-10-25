@@ -37,7 +37,7 @@ import ReviewSkillQueue from '~/components/skills/ReviewSkillQueue.vue'
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
 import { isReviewDebtConflict, reviewFrictionContext } from '~/utils/reviewFriction'
-import { apiErrorEnvelope } from '~/composables/api/errors'
+import { apiErrorEnvelope, apiErrorStatus } from '~/composables/api/errors'
 import type { ReviewTargetReason } from '@cat-factory/contracts'
 import {
   defaultBuildPipelineId,
@@ -693,13 +693,23 @@ onModalOpen(open, () => {
     if (prefill.riskPolicyId) riskPolicyId.value = prefill.riskPolicyId
     if (prefill.modelPresetId) modelPresetId.value = prefill.modelPresetId
   }
-  documents.loadDocuments().catch(() => {})
-  tasks.loadTasks().catch(() => {})
+  documents.loadDocuments().catch(reportPickerLoadFailure('board.addTask.documentsLoadFailed'))
+  tasks.loadTasks().catch(reportPickerLoadFailure('board.addTask.tasksLoadFailed'))
   // Load the best-practice fragment catalog so the picker is populated (no-op while current).
-  fragments.ensureLoaded().catch(() => {})
+  fragments.ensureLoaded().catch(reportPickerLoadFailure('board.addTask.fragmentsLoadFailed'))
   // Fetch any staged search-hit issue's body so its description shows read-only below.
   resolvePendingIssueBodies().catch(() => {})
 })
+
+/**
+ * The context pickers load on open. A 503 is a source the deployment did not wire, whose picker
+ * stays empty by design; any other failure would read as "nothing to attach", so it is reported.
+ */
+function reportPickerLoadFailure(titleKey: string) {
+  return (error: unknown) => {
+    if (apiErrorStatus(error) !== 503) present(error, titleKey)
+  }
+}
 
 // UX-18: prompt before discarding typed input on Escape / backdrop / Cancel. Registered
 // after the reset watcher so the baseline is the seeded form (a prefill is the clean

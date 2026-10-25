@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { screen } from 'storybook/test'
 import type { PlatformObservability, PlatformObservabilityWindow } from '~/types/execution'
 import { getPlatformObservabilityContract } from '@cat-factory/contracts'
 import { apiFailure, apiPending, apiResponse } from '~/stories/api'
@@ -161,6 +162,18 @@ export const Failed: Story = {
     api: [
       apiFailure(getPlatformObservabilityContract, { pathParams: { accountId: orgAccount.id } }),
     ],
+  },
+}
+
+/** No active account: the body says there is nothing to show, rather than staying blank. */
+export const NoAccount: Story = {
+  decorators: [
+    withSeed(() => {
+      useAccountsStore().activeAccountId = null
+    }),
+  ],
+  play: async () => {
+    await screen.findByTestId('operator-no-account')
   },
 }
 

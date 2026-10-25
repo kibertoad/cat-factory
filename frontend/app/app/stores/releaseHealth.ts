@@ -12,6 +12,7 @@ import type {
 } from '~/types/incidentEnrichment'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { apiErrorStatus } from '~/composables/api/errors'
 
 /**
  * The workspace's post-release-health settings: the (single) observability connection —
@@ -41,9 +42,19 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
   // probed, then `true`/`false`. The hub + inspector hide their observability entry
   // points when this is false, so a disabled backend doesn't surface a dead control.
   const available = ref<boolean | null>(null)
+  /**
+   * True when the last load failed with anything but the 503 of a disabled module. `available`
+   * then goes back to unknown (so `ensureLoaded` asks again), because a read that did not answer
+   * says nothing about the gate.
+   */
+  const loadFailed = ref(false)
   let inFlight: Promise<void> | null = null
 
-  /** Force a refresh of the connection + per-block configs (used after a save/remove). */
+  /**
+   * Force a refresh of the connection + per-block configs (used after a save/remove). A 503
+   * resolves to `available: false`; any other failure is recorded on `loadFailed` and rethrown,
+   * so a caller with room to say so can report it.
+   */
   async function load() {
     const ws = useWorkspaceStore()
     loading.value = true
@@ -55,11 +66,19 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
       connection.value = conn
       configs.value = list
       available.value = true
-    } catch {
-      // 503 (observability disabled) or any error → hide the UI entry points.
-      available.value = false
+      loadFailed.value = false
+    } catch (error) {
       connection.value = { connected: false, provider: null, summary: null }
       configs.value = []
+      // Only a 503 means observability is disabled and hides the entry points.
+      if (apiErrorStatus(error) === 503) {
+        available.value = false
+        loadFailed.value = false
+      } else {
+        available.value = null
+        loadFailed.value = true
+        throw error
+      }
     } finally {
       loading.value = false
     }
@@ -137,6 +156,7 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
     incidentAvailable,
     loading,
     available,
+    loadFailed,
     load,
     ensureLoaded,
     saveConnection,

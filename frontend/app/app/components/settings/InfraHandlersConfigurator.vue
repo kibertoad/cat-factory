@@ -31,6 +31,7 @@ import CloudflareHandlerSection from '~/components/settings/CloudflareHandlerSec
 import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import { consumeKubernetesScrollAnchor } from '~/components/settings/InfraHandlersConfigurator.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 
 const { t } = useI18n()
 const infra = useInfraConfigStore()
@@ -413,7 +414,8 @@ function toastRemoved() {
 <template>
   <!-- Only render the configurator once the handler bundle has actually resolved (available
        === true). While it's still being probed (null) show skeleton sections instead of flashing
-       the full form, and render nothing when the integration is off (false). -->
+       the full form, render nothing when the integration is off (false), and state a read that
+       failed (`loadFailed`) rather than leave the skeleton up. -->
   <div v-if="infra.available === true" class="space-y-5">
     <p class="text-xs text-muted">{{ t('settings.infrastructure.handler.intro') }}</p>
 
@@ -625,6 +627,12 @@ function toastRemoved() {
       </div>
     </section>
   </div>
+  <LoadFailedState
+    v-else-if="infra.loadFailed"
+    :title="t('settings.infrastructure.handler.loadFailed')"
+    :retrying="infra.loading"
+    @retry="infra.load()"
+  />
   <div v-else-if="infra.available === null" class="space-y-5">
     <USkeleton class="h-4 w-2/3" />
     <USkeleton v-for="n in 3" :key="n" class="h-24 w-full rounded-lg" />

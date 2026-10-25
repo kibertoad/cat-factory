@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { RequirementRecommendation, RequirementReview } from '~/types/requirements'
 import { useRequirementsStore } from '~/stores/requirements'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { ApiError } from '~/composables/api/errors'
 
 /** Minimal review factory — only the fields the store getters touch. */
 function review(over: Partial<RequirementReview> = {}): RequirementReview {
@@ -64,9 +65,10 @@ describe('requirements store load() loading flag', () => {
     expect(store.reviewFor('b1')?.id).toBe('rr1')
   })
 
-  it('clears the loading flag even when the fetch rejects', async () => {
+  it('a 503 clears the loading flag and marks the feature off, not the load failed', async () => {
     vi.stubGlobal('useApi', () => ({
-      getRequirementReview: () => Promise.reject(new Error('503')),
+      getRequirementReview: () =>
+        Promise.reject(new ApiError(503, { error: { code: 'unavailable', message: 'off' } })),
     }))
 
     const store = useRequirementsStore()
@@ -74,7 +76,28 @@ describe('requirements store load() loading flag', () => {
 
     expect(store.isLoading('b1')).toBe(false)
     expect(store.available).toBe(false)
+    expect(store.loadFailed('b1')).toBe(false)
     expect(store.reviewFor('b1')).toBeNull()
+  })
+
+  it('any other failure marks the load failed and leaves the feature gate alone', async () => {
+    let fail = true
+    vi.stubGlobal('useApi', () => ({
+      getRequirementReview: () =>
+        fail ? Promise.reject(new Error('network down')) : Promise.resolve(review()),
+    }))
+
+    const store = useRequirementsStore()
+    await store.load('b1')
+
+    expect(store.isLoading('b1')).toBe(false)
+    expect(store.available).toBeNull()
+    expect(store.loadFailed('b1')).toBe(true)
+
+    fail = false
+    await store.load('b1')
+    expect(store.loadFailed('b1')).toBe(false)
+    expect(store.reviewFor('b1')?.id).toBe('rr1')
   })
 
   it('coalesces concurrent load() calls for the same block into one request', async () => {

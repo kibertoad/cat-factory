@@ -9,6 +9,7 @@ import type { ObservabilityProviderKind } from '~/types/releaseHealth'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import AppModal from '~/components/common/AppModal.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -38,19 +39,34 @@ const pagerDuty = reactive({ apiToken: '', fromEmail: '' })
 const incidentIo = reactive({ apiKey: '' })
 const incidentBusy = ref(false)
 
+const retrying = ref(false)
+
+async function loadPanel(force = false) {
+  try {
+    await (force ? store.load() : store.ensureLoaded())
+    if (store.connection.provider) provider.value = store.connection.provider
+    const site = store.connection.summary?.site
+    if (site) datadog.site = site
+  } catch (e) {
+    present(e, 'settings.observabilityConnection.toast.loadFailed')
+  }
+  // Its own gate and its own read, so a failed connection read does not leave it unasked.
+  await store.loadIncident()
+}
+
+async function retryLoad() {
+  retrying.value = true
+  try {
+    await loadPanel(true)
+  } finally {
+    retrying.value = false
+  }
+}
+
 watch(
   open,
-  async (isOpen) => {
-    if (!isOpen) return
-    try {
-      await store.ensureLoaded()
-      if (store.connection.provider) provider.value = store.connection.provider
-      const site = store.connection.summary?.site
-      if (site) datadog.site = site
-      await store.loadIncident()
-    } catch (e) {
-      present(e, 'settings.observabilityConnection.toast.loadFailed')
-    }
+  (isOpen) => {
+    if (isOpen) void loadPanel()
   },
   { immediate: true },
 )
@@ -154,7 +170,14 @@ const connectedLabel = computed(() => {
           </template>
         </i18n-t>
 
-        <section class="space-y-3 rounded-lg border border-muted p-3">
+        <!-- A read that did not answer must not show the connection as "not connected". -->
+        <LoadFailedState
+          v-if="store.loadFailed"
+          :title="t('settings.observabilityConnection.loadFailed')"
+          :retrying="retrying"
+          @retry="retryLoad"
+        />
+        <section v-else class="space-y-3 rounded-lg border border-muted p-3">
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-semibold">
               {{ t('settings.observabilityConnection.connection.heading') }}

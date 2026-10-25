@@ -547,6 +547,13 @@ watch(
               </section>
             </div>
           </div>
+          <!-- With no active account there is no dashboard to read, which is not a blank page. -->
+          <EmptyState
+            v-else-if="!platform.accountId"
+            icon="i-lucide-building-2"
+            :title="t('platformObservability.noAccount')"
+            data-testid="operator-no-account"
+          />
         </div>
       </TakeoverShell>
     </Transition>

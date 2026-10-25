@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { screen } from 'storybook/test'
 import type { IncidentEnrichmentView, ObservabilityConnectionView } from '@cat-factory/contracts'
 import {
   getIncidentEnrichmentContract,
@@ -85,9 +86,12 @@ export const IncidentUnavailable: Story = {
 }
 
 /**
- * The connection read failed. The store reads any failure as the feature being off and does not
- * throw, so there is no toast: the window shows Not connected and the connect form.
+ * The connection read failed: a toast, and the connection section says so with a retry instead
+ * of Not connected and the connect form.
  */
 export const Failed: Story = {
   parameters: { api: answers({ connectionFails: true }) },
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
 }

@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 import { showOverrideField } from '~/utils/uiMode'
 
 // Per-service (frame) post-release-health mapping: which observability monitors/SLOs the
@@ -39,10 +40,15 @@ function parseIds(csv: string): string[] {
     .filter((s) => s.length > 0)
 }
 
-// Load the connection + configs once, then hydrate the form from this block's saved config.
+// Load the connection + configs once, then hydrate the form from this block's saved config. A
+// failed load is stated by the section itself (`store.loadFailed`), so the mount does not toast.
 onMounted(() => {
   store.ensureLoaded().catch(() => {})
 })
+
+function retryLoad() {
+  store.load().catch((e) => present(e, 'inspector.releaseHealth.loadFailed'))
+}
 watch(
   saved,
   (config) => {
@@ -107,9 +113,17 @@ async function clear() {
       </UButton>
     </template>
 
+    <!-- A read that did not answer is not "no integration connected". -->
+    <LoadFailedState
+      v-if="store.loadFailed"
+      compact
+      :title="t('inspector.releaseHealth.loadFailed')"
+      @retry="retryLoad"
+    />
+
     <!-- Disabled affordance until an observability integration is connected. -->
     <div
-      v-if="!connected"
+      v-else-if="!connected"
       class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-2 py-1.5 text-2xs text-muted"
     >
       <span>{{ t('inspector.releaseHealth.connectPrompt') }}</span>

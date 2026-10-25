@@ -31,6 +31,7 @@ import type {
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import Spinner from '~/components/common/Spinner.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 
 const board = useBoardStore()
 const requirements = useRequirementsStore()
@@ -102,6 +103,10 @@ const busy = computed(() => (blockId.value ? requirements.isReviewing(blockId.va
 // True while the initial fetch of an existing review is in flight (opening the window),
 // before the cache is populated — so we show a spinner instead of the empty state.
 const loading = computed(() => (blockId.value ? requirements.isLoading(blockId.value) : false))
+const loadFailed = computed(() => (blockId.value ? requirements.loadFailed(blockId.value) : false))
+function retryLoad() {
+  if (blockId.value) void requirements.load(blockId.value)
+}
 const reworking = computed(() =>
   review.value ? requirements.isIncorporating(review.value.id) : false,
 )
@@ -735,8 +740,13 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 
         <!-- empty state — the reviewer runs automatically as the first pipeline
                  gate step, so there's nothing to do here until then -->
+        <LoadFailedState
+          v-if="loadFailed && !review && !busy && !loading"
+          :title="t('requirements.loadFailed')"
+          @retry="retryLoad"
+        />
         <EmptyState
-          v-if="!review && !busy && !loading"
+          v-else-if="!review && !busy && !loading"
           icon="i-lucide-list-checks"
           :title="t('requirements.empty')"
         />

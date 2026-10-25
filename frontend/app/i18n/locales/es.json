@@ -102,7 +102,8 @@
       "keep": "Seguir editando"
     },
     "edit": "Editar",
-    "pathInvalid": "Introduce una ruta dentro del repositorio (sin \"..\", rutas absolutas ni barras invertidas)."
+    "pathInvalid": "Introduce una ruta dentro del repositorio (sin \"..\", rutas absolutas ni barras invertidas).",
+    "loadFailed": "No se pudo cargar"
   },
   "access": {
     "noBoardWrite": "Acceso de solo lectura: puedes ver este tablero pero no editarlo.",
@@ -352,7 +353,10 @@
           "hint": "Número máximo de pasadas de solo lectura de esta expedición. Déjalo vacío para {count}. En una base de código grande cada ángulo se pesca por territorio, y lo que el presupuesto recorte queda registrado como no pescado.",
           "problem": "Introduce un número entero entre 1 y {max}, o déjalo vacío para el valor predeterminado."
         }
-      }
+      },
+      "documentsLoadFailed": "No se pudieron cargar los documentos para adjuntar",
+      "tasksLoadFailed": "No se pudieron cargar las incidencias para adjuntar",
+      "fragmentsLoadFailed": "No se pudieron cargar los fragmentos de buenas prácticas"
     },
     "recurring": {
       "title": "Añadir una pipeline recurrente",
@@ -1082,7 +1086,8 @@
       "savedToast": "Monitoreo guardado",
       "saveFailed": "No se pudo guardar la asignación",
       "clearFailed": "No se pudo limpiar la asignación",
-      "configNoun": "la configuración de salud de la versión"
+      "configNoun": "la configuración de salud de la versión",
+      "loadFailed": "No se pudo cargar la configuración de salud de la versión"
     },
     "testSecrets": {
       "title": "Credenciales de prueba (sensibles)",
@@ -2106,7 +2111,8 @@
       "helperFailures": "Fallos del reparador",
       "exhausted": "Pasadas a una persona",
       "hint": "Aprobada sin reparador significa que la comprobación previa quedó satisfecha y no se inició ningún reparador. Los fallos del reparador son intentos cuyo propio trabajo se cayó, a diferencia de los que se ejecutaron y dejaron la comprobación en rojo."
-    }
+    },
+    "noAccount": "No hay ninguna cuenta activa, así que no hay datos que mostrar."
   },
   "reports": {
     "title": "Informes",
@@ -2867,7 +2873,8 @@
       "roster": {
         "title": "Miembros",
         "empty": "Aún no hay miembros.",
-        "remove": "Quitar miembro"
+        "remove": "Quitar miembro",
+        "loadFailed": "No se pudieron cargar los miembros de este tablero"
       },
       "add": {
         "title": "Añadir un miembro",
@@ -3486,7 +3493,8 @@
         "disconnectFailed": "No se pudo desconectar"
       },
       "connectionNoun": "la conexión de observabilidad",
-      "incidentNoun": "el proveedor de incidencias"
+      "incidentNoun": "el proveedor de incidencias",
+      "loadFailed": "No se pudo cargar la conexión de observabilidad"
     },
     "packageRegistries": {
       "tab": "Registros de paquetes",
@@ -4161,7 +4169,8 @@
         "kubeNoun": "el controlador de Kubernetes",
         "kubeOverrideNoun": "la anulación de Kubernetes",
         "customNoun": "este controlador",
-        "cloudflareNoun": "el controlador de Cloudflare"
+        "cloudflareNoun": "el controlador de Cloudflare",
+        "loadFailed": "No se pudieron cargar los controladores de entorno"
       },
       "cloudflare": {
         "intro": "Levanta un Worker de Cloudflare por cada pull request activando el flujo de trabajo de vista previa del repositorio de destino. cat-factory nunca habla directamente con Cloudflare: crea un despliegue, lee su estado y publica un estado inactive para desmontarlo.",
@@ -4589,7 +4598,8 @@
         "loadProjection": "No se pudieron cargar los repositorios, las pull requests y las issues",
         "startInstall": "No se pudo iniciar la instalación de la GitHub App",
         "connect": "No se pudo conectar"
-      }
+      },
+      "listFailed": "No se pudieron listar las instalaciones de la GitHub App"
     },
     "panel": {
       "connectIntro": "Conecta una instalación de la GitHub App para respaldar los bloques del tablero con repositorios, explorar solicitudes de incorporación de cambios e incidencias, y permitir que los agentes envíen ramas y abran PR.",
@@ -4699,7 +4709,8 @@
       "errors": {
         "listDirectory": "No se pudo listar el directorio"
       },
-      "selectAllFiles": "Seleccionar {count} archivo | Seleccionar los {count} archivos"
+      "selectAllFiles": "Seleccionar {count} archivo | Seleccionar los {count} archivos",
+      "listFailed": "No se pudo listar esta carpeta"
     }
   },
   "slack": {
@@ -6001,7 +6012,8 @@
       "high": "Confianza alta",
       "medium": "Confianza media",
       "low": "Confianza baja"
-    }
+    },
+    "loadFailed": "No se pudo cargar la revisión de requisitos"
   },
   "clarity": {
     "title": "Clasificación del informe de error",
@@ -6111,7 +6123,8 @@
       "done": "Completado",
       "failed": "Fallido"
     },
-    "groupTitle": "El grupo de consenso al que escaló esta ejecución"
+    "groupTitle": "El grupo de consenso al que escaló esta ejecución",
+    "loadFailed": "No se pudo cargar la sesión de consenso"
   },
   "brainstorm": {
     "title": {
@@ -6204,7 +6217,8 @@
       "taskReset": "Tarea reiniciada — edítala y reenvíala",
       "extraRoundGranted": "Se concedió una ronda más de lluvia de ideas",
       "resolveError": "No se pudo resolver la lluvia de ideas"
-    }
+    },
+    "loadFailed": "No se pudo cargar la sesión de lluvia de ideas"
   },
   "spec": {
     "title": "Requisitos",
@@ -6255,6 +6269,14 @@
       "given": "Given",
       "when": "When",
       "then": "Then"
+    },
+    "anchorReadFailed": {
+      "title": "No se pudo leer la especificación",
+      "description": "Falló la lectura del repositorio, así que no se sabe si este servicio tiene una especificación. Inténtalo de nuevo."
+    },
+    "anchorUnparsed": {
+      "title": "El archivo de especificación no es válido",
+      "description": "spec/service.json está en la rama predeterminada, pero no se pudo analizar. Corrige el archivo en el repositorio."
     }
   },
   "followUp": {
@@ -7052,7 +7074,8 @@
       "checkSourceFailed": "No se pudo comprobar el repositorio",
       "sourceUnlinked": "Repositorio desvinculado",
       "unlinkSourceFailed": "No se pudo desvincular el repositorio"
-    }
+    },
+    "loadFailed": "No se pudo cargar el catálogo de servicios fundamentales"
   },
   "binaryOutput": {
     "heading": "Salidas binarias",
@@ -7981,7 +8004,8 @@
       "done": "Listo",
       "save": "Guardar",
       "revert": "Descartar"
-    }
+    },
+    "loadFailed": "No se pudo cargar la biblioteca de Claude Skills"
   },
   "merge": {
     "changeClass": {

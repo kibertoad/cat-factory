@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { listGitHubRepoTreeContract } from '@cat-factory/contracts'
 import { ref } from 'vue'
-import { userEvent, within } from 'storybook/test'
+import { screen, userEvent, within } from 'storybook/test'
 import { apiFailure, apiPending } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { PLATFORM_REPO_ID } from '~/stories/repoFiles.stories.mocks'
@@ -66,8 +66,11 @@ export const Loading: Story = {
 /** A folder with files only, picking a folder: no subfolders, and Use this folder. */
 export const Empty: Story = { args: { startPath: 'packages/shared' } }
 
-/** The read failed: the error toast, and an empty folder. */
+/** The read failed: the error toast, and the listing says so with a retry, not an empty folder. */
 export const Failed: Story = {
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
   parameters: {
     api: [
       apiFailure(listGitHubRepoTreeContract, {

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useConsensusStore } from '~/stores/consensus'
 import { useWorkspaceStore } from '~/stores/workspace'
 import type { ConsensusSession } from '~/types/consensus'
+import { ApiError } from '~/composables/api/errors'
 
 /** Minimal session factory — only the fields the store reconciles/reads. */
 function session(over: Partial<ConsensusSession> = {}): ConsensusSession {
@@ -72,5 +73,36 @@ describe('consensus store — load vs live-push reconcile', () => {
     await store.load('blk1')
     expect('blk1' in store.sessions).toBe(true)
     expect(store.sessionFor('blk1')).toBeNull()
+  })
+
+  it('a 503 (consensus off) reads as no session, not as a failed load', async () => {
+    vi.stubGlobal('useApi', () => ({
+      getConsensusSession: () =>
+        Promise.reject(new ApiError(503, { error: { code: 'unavailable', message: 'off' } })),
+    }))
+    const store = useConsensusStore()
+    await store.load('blk1')
+    expect(store.loadFailed('blk1')).toBe(false)
+    expect('blk1' in store.sessions).toBe(true)
+    expect(store.sessionFor('blk1')).toBeNull()
+  })
+
+  it('any other failure is recorded as a failed load, and a later success clears it', async () => {
+    let fail = true
+    vi.stubGlobal('useApi', () => ({
+      getConsensusSession: () =>
+        fail
+          ? Promise.reject(new ApiError(500, { error: { code: 'internal', message: 'boom' } }))
+          : Promise.resolve({ session: session() }),
+    }))
+    const store = useConsensusStore()
+    await store.load('blk1')
+    expect(store.loadFailed('blk1')).toBe(true)
+    expect('blk1' in store.sessions).toBe(false)
+
+    fail = false
+    await store.load('blk1')
+    expect(store.loadFailed('blk1')).toBe(false)
+    expect(store.sessionFor('blk1')?.id).toBe('s1')
   })
 })

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { screen } from 'storybook/test'
 import type { BrainstormItem, BrainstormSession, BrainstormStage } from '@cat-factory/contracts'
 import { getBrainstormContract } from '@cat-factory/contracts'
 import { apiFailure, apiPending, apiResponse } from '~/stories/api'
@@ -163,11 +164,11 @@ export const Loading: Story = {
 /** No session for this block and stage. */
 export const Empty: Story = { parameters: { api: [sessionIs(null)] } }
 
-/**
- * The session read failed: the store treats any failure as the feature being off and keeps no
- * session, so the window shows the same empty state as no session.
- */
+/** The session read failed: the window says so with a retry, not the no-session empty state. */
 export const Failed: Story = {
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
   parameters: {
     api: [
       apiFailure(getBrainstormContract, {

@@ -13,6 +13,7 @@ import type {
   UpsertEnvironmentUserHandlerBody,
 } from '@cat-factory/contracts'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { apiErrorStatus } from '~/composables/api/errors'
 
 // One predicate for "this handler is the (type, manifestId) one" — custom handlers are keyed by
 // manifestId, the rest by type alone (manifestId null). Defined once and reused across both the
@@ -48,6 +49,9 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
   // `null` until first probed; `false` ⇒ the test-env handler integration is off (503),
   // so the configurator hides. Mirrors the other infra stores' availability gate.
   const available = ref<boolean | null>(null)
+  // True when the last load failed with anything but the 503 of an unwired integration. The
+  // configurator states it; `available` goes back to `null`, so `ensureLoaded` asks again.
+  const loadFailed = ref(false)
   // Per-user overrides probe independently (local mode only).
   const userOverridesAvailable = ref<boolean | null>(null)
   let inFlight: Promise<void> | null = null
@@ -61,9 +65,13 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
       handlers.value = bundle.handlers
       customTypes.value = bundle.customTypes
       available.value = true
-    } catch {
-      // 503 (environments integration off) or any error → hide the configurator.
-      available.value = false
+      loadFailed.value = false
+    } catch (error) {
+      // Only a 503 means the environments integration is off and hides the configurator. Any
+      // other failure is a read that did not answer, which the configurator states.
+      const off = apiErrorStatus(error) === 503
+      available.value = off ? false : null
+      loadFailed.value = !off
       handlers.value = []
       customTypes.value = []
     } finally {
@@ -195,6 +203,7 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
     userHandlers,
     loading,
     available,
+    loadFailed,
     userOverridesAvailable,
     load,
     ensureLoaded,

@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import type { ContentStorageBackend, ContentStorageConfig } from '~/types/accountSettings'
 import SecretInput from '~/components/common/SecretInput.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 
 // Deployment integration secrets for an account (admin only): the Slack app OAuth
 // credentials, the container web-search upstream keys, and the binary-artifact (screenshot)
@@ -150,17 +151,25 @@ function hydrateStorage() {
   cs.secretAccessKey = ''
 }
 
-onMounted(async () => {
+// A load that failed for any reason but the store's 503 (which turns `available` false). The
+// panel states it instead of the form, which would show every integration as "Not set".
+const loadFailed = ref(false)
+
+async function loadSettings() {
   try {
     await store.load(props.accountId)
+    loadFailed.value = false
     hydrateStorage()
     // The storage section only renders once the settings load resolves, so attempt the
     // deep-link scroll here (the up-front watcher misses the target set before mount).
     void maybeScrollToStorage()
   } catch (e) {
+    loadFailed.value = true
     present(e, 'layout.accountDeployment.loadFailed')
   }
-})
+}
+
+onMounted(loadSettings)
 
 async function saveStorage() {
   const selected = csBackend.value
@@ -387,7 +396,13 @@ async function clearWeb() {
 </script>
 
 <template>
-  <div v-if="store.available !== false" class="space-y-6">
+  <LoadFailedState
+    v-if="loadFailed"
+    :title="t('layout.accountDeployment.loadFailed')"
+    :retrying="store.loading"
+    @retry="loadSettings"
+  />
+  <div v-else-if="store.available !== false" class="space-y-6">
     <div>
       <h3 class="mb-1 font-semibold text-highlighted">{{ t('layout.accountDeployment.title') }}</h3>
       <p class="text-2xs text-muted">

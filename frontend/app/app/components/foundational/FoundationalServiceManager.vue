@@ -21,6 +21,7 @@ import FoundationalServiceRegistry from '~/components/foundational/FoundationalS
 import FoundationalServiceSources from '~/components/foundational/FoundationalServiceSources.vue'
 import FoundationalSuppressions from '~/components/foundational/FoundationalSuppressions.vue'
 import ServiceCatalogConnection from '~/components/foundational/ServiceCatalogConnection.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -92,6 +93,13 @@ const activeTab = computed({
     >
       {{ t('foundational.unavailable') }}
     </div>
+
+    <!-- A probe that did not answer is neither "not enabled" nor an empty catalog. -->
+    <LoadFailedState
+      v-else-if="catalog.loadFailed"
+      :title="t('foundational.loadFailed')"
+      @retry="catalog.probe()"
+    />
 
     <UTabs
       v-else

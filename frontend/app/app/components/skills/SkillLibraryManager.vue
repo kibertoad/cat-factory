@@ -14,6 +14,7 @@ import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.v
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 
 const props = defineProps<{ accountId: string }>()
 
@@ -153,6 +154,13 @@ async function unlinkSource(id: string) {
     >
       {{ t('skills.unavailable') }}
     </div>
+
+    <!-- A read that did not answer is neither "not enabled" nor an empty library. -->
+    <LoadFailedState
+      v-else-if="library.loadFailed"
+      :title="t('skills.loadFailed')"
+      @retry="library.probe()"
+    />
 
     <template v-else>
       <!-- Synced skill catalog -->

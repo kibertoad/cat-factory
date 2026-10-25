@@ -5,7 +5,7 @@ import {
   listReleaseHealthConfigsContract,
 } from '@cat-factory/contracts'
 
-import { apiResponse } from '~/stories/api'
+import { apiFailure, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { authService, boardBlocks } from '~/stories/board.stories.mocks'
 import { seedBoard, seedUiMode, seedWorkspace, withSeed } from '~/stories/withStores'
@@ -97,6 +97,17 @@ export const NotConnected: Story = {
   play: opensTo((c) =>
     c.findByText('Connect an observability integration to watch this service after releases.'),
   ),
+}
+
+/** The read failed: the section says so with a retry, not "connect an integration". */
+export const Failed: Story = {
+  parameters: {
+    api: [
+      apiFailure(getObservabilityConnectionContract, { pathPrefix: storyWorkspacePrefix }),
+      ...answers(datadog, []).slice(1),
+    ],
+  },
+  play: opensTo((c) => c.findByText('Could not load the release-health settings')),
 }
 
 /**

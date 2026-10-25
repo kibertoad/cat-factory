@@ -321,6 +321,12 @@ spacing, because `UEmpty` pads `p-4 sm:p-6 lg:p-8` for a page body; and plain te
 because `UEmpty` renders it as an `<h2>`, which would put a heading into every picker. An inline
 value placeholder ("None", a dash in a table cell) is not an empty state.
 
+**A read that failed renders `common/LoadFailedState.vue`, never `EmptyState` and never the
+feature's "not enabled" notice.** Only a 503 means the deployment did not wire a feature
+(`apiErrorStatus(error) === 503`); a store records any other failure apart from its data (a
+`loadFailed` flag), so the surface can tell "nothing here", "switched off" and "could not ask"
+apart. A `@retry` listener adds the retry button.
+
 `scripts/check-frontend-feedback.mjs` (CI's `repo-guards` job) bans `useToast(` and `toast.add(`
 outside the two funnels and `animate-spin` outside `Spinner.vue`. Its `PENDING` list names files another open
 change is rewriting, and fails once one of them is clean so the entry cannot outlive the reason.

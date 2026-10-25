@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import type { WorkspaceAccessMode, WorkspaceRole } from '~/types/domain'
 import EmptyState from '~/components/common/EmptyState.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 
 // Workspace-membership management (workspace-rbac initiative, slice 9). The tier BELOW
 // account tenancy: an account admin restricts a board to an explicit member list (with
@@ -42,6 +43,8 @@ const restricted = computed(() => (board.value?.accessMode ?? 'account') === 're
  * roster + picker show a loading state rather than stale rows.
  */
 const rosterReady = computed(() => members.loadedFor === props.workspaceId)
+/** True when THIS board's latest roster load failed: the skeleton ends and the panel says so. */
+const rosterFailed = computed(() => !rosterReady.value && members.failedFor === props.workspaceId)
 
 /**
  * Account members not already on the board — the add picker's options. The service
@@ -174,7 +177,13 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
       <h3 class="mb-2 font-semibold text-highlighted">
         {{ t('layout.workspaceMembers.roster.title') }}
       </h3>
-      <div v-if="!rosterReady" class="space-y-1">
+      <LoadFailedState
+        v-if="rosterFailed"
+        compact
+        :title="t('layout.workspaceMembers.roster.loadFailed')"
+        @retry="loadAll(props.workspaceId)"
+      />
+      <div v-else-if="!rosterReady" class="space-y-1">
         <USkeleton v-for="i in 3" :key="i" class="h-8 w-full" />
       </div>
       <ul v-else class="space-y-1" data-testid="workspace-members-roster">

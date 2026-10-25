@@ -8,6 +8,8 @@
 // flow lives in one place.
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
+import { apiErrorStatus } from '~/composables/api/errors'
 
 const { t } = useI18n()
 const github = useGitHubStore()
@@ -19,6 +21,9 @@ const installationId = ref('')
 const connecting = ref(false)
 // Track which installation row is mid-connect so only its button spins.
 const connectingId = ref<number | null>(null)
+// The last installation listing failed (not the host-handled 503), so the list says so rather
+// than "no installations".
+const listFailed = ref(false)
 
 onMounted(() => {
   void refreshInstallations()
@@ -27,8 +32,10 @@ onMounted(() => {
 async function refreshInstallations() {
   try {
     await github.loadInstallations()
+    listFailed.value = false
   } catch (e) {
     // A 503 (integration off) is handled by the host; surface anything else.
+    listFailed.value = apiErrorStatus(e) !== 503
     present(e, 'github.connect.errors.listInstallations')
   }
 }
@@ -90,6 +97,14 @@ async function connectManually() {
       <div v-if="github.loadingInstallations && !github.installations.length" class="space-y-2">
         <USkeleton v-for="i in 2" :key="i" class="h-12 w-full" />
       </div>
+
+      <LoadFailedState
+        v-else-if="listFailed && !github.installations.length"
+        compact
+        :title="t('github.connect.listFailed')"
+        :retrying="github.loadingInstallations"
+        @retry="refreshInstallations"
+      />
 
       <EmptyState
         v-else-if="!github.installations.length"

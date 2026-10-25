@@ -12,6 +12,7 @@ import type {
   ResolvedFoundationalService,
   UpdateFoundationalServiceInput,
 } from '~/types/domain'
+import { apiErrorStatus } from '~/composables/api/errors'
 import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { createServiceCatalogState } from '~/stores/serviceCatalogConnection'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -35,6 +36,24 @@ import { useWorkspaceStore } from '~/stores/workspace'
  *   without the GitHub integration (contracts can be uploaded directly), while the repo-source
  *   routes 503 without it.
  */
+/**
+ * The merged catalog (workspace tier only, empty otherwise) and the owner's opt-outs, read in one
+ * pass. They are complements: an entry leaves one exactly as it enters the other, so a refresh of
+ * only the merge would leave the way BACK stale.
+ */
+function readMergeAndOptOuts(
+  api: ReturnType<typeof useApi>,
+  kind: FoundationalServiceOwnerKind,
+  id: string,
+): Promise<[ResolvedFoundationalService[], FoundationalServiceSuppression[]]> {
+  return Promise.all([
+    kind === 'workspace'
+      ? api.getResolvedFoundationalServices(id)
+      : Promise.resolve([] as ResolvedFoundationalService[]),
+    api.listFoundationalServiceSuppressions(kind, id),
+  ])
+}
+
 function foundationalServicesSetup(
   kind: FoundationalServiceOwnerKind,
   resolveOwnerId: () => string | null,
@@ -50,6 +69,11 @@ function foundationalServicesSetup(
 
   /** null = not probed yet; true/false = the catalog is on/off for this deployment. */
   const available = ref<boolean | null>(null)
+  /**
+   * True when the last probe failed with anything but the 503 of an unwired catalog. `available`
+   * then goes back to unknown, since a read that did not answer says nothing about the gate.
+   */
+  const loadFailed = ref(false)
   /** false when the GitHub integration is off: the catalog works, repo sources do not. */
   const sourcesAvailable = ref(true)
   /** This owner's own registered services (its tier, raw). */
@@ -105,22 +129,23 @@ function foundationalServicesSetup(
     const id = resolveOwnerId()
     if (!id) return
     try {
-      const [tier, merged, opted] = await Promise.all([
+      const [tier, [merged, opted]] = await Promise.all([
         api.listFoundationalServices(kind, id),
-        hasResolved
-          ? api.getResolvedFoundationalServices(id)
-          : Promise.resolve([] as ResolvedFoundationalService[]),
-        api.listFoundationalServiceSuppressions(kind, id),
+        readMergeAndOptOuts(api, kind, id),
       ])
       services.value = tier
       resolved.value = merged
       suppressions.value = opted
       available.value = true
-    } catch {
+      loadFailed.value = false
+    } catch (error) {
+      // Only a 503 means the catalog is not wired; anything else is a failed read.
+      const off = apiErrorStatus(error) === 503
+      available.value = off ? false : null
+      loadFailed.value = !off
       // Reset EVERY view, `sourcesAvailable` included. Leaving it at its previous value would
       // let a re-probe of an owner whose catalog is now unreachable keep claiming the repo-source
       // half is wired, which is the one flag here that gates an affordance rather than content.
-      available.value = false
       services.value = []
       resolved.value = []
       suppressions.value = []
@@ -151,16 +176,8 @@ function foundationalServicesSetup(
   }
 
   async function refreshResolved() {
-    const id = requireOwnerId()
-    // Both in one pass: a write that changes the merge routinely changes the opt-out list too
-    // (suppressing removes an entry from one and adds it to the other), and refreshing only the
-    // catalog would leave the way BACK stale — the exact state the pair exists to avoid.
-    const [merged, opted] = await Promise.all([
-      hasResolved
-        ? api.getResolvedFoundationalServices(id)
-        : Promise.resolve([] as ResolvedFoundationalService[]),
-      api.listFoundationalServiceSuppressions(kind, id),
-    ])
+    // Both in one pass: a write that changes the merge routinely changes the opt-out list too.
+    const [merged, opted] = await readMergeAndOptOuts(api, kind, requireOwnerId())
     resolved.value = merged
     suppressions.value = opted
   }
@@ -253,6 +270,7 @@ function foundationalServicesSetup(
     kind,
     hasResolved,
     available,
+    loadFailed,
     sourcesAvailable,
     services,
     resolved,
