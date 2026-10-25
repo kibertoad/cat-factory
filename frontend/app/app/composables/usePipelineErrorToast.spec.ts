@@ -253,6 +253,21 @@ describe('usePipelineErrorToast', () => {
     })
   })
 
+  it('gives a deduped failure a stable id so a repeat replaces the toast on screen', () => {
+    const failure = new ApiError(500, { error: { code: 'internal', message: 'Internal' } })
+    const { present } = usePipelineErrorToast()
+    present(failure, 'kaizen.loadFailed', undefined, { dedupe: true })
+    present(failure, 'kaizen.loadFailed', undefined, { dedupe: true })
+    present(conflict('some_unknown_reason'), 'kaizen.loadFailed', undefined, { dedupe: true })
+    const ids = add.mock.calls.map((call) => call[0].id)
+    expect(ids).toEqual(Array(3).fill('pipeline-error:kaizen.loadFailed'))
+  })
+
+  it('leaves the id to Nuxt UI when the call site does not dedupe', () => {
+    usePipelineErrorToast().present(new Error('boom'), 'errors.action.startFailed')
+    expect(add.mock.calls[0]![0].id).toBeUndefined()
+  })
+
   it('does NOT auto-dismiss, and can be copied whole in one click', () => {
     // Both properties are the reason a failure goes through this funnel at all: the toast a user
     // needs to read, quote or act on used to vanish after ~5s, and its detail could only be

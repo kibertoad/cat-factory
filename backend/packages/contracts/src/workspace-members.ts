@@ -5,8 +5,10 @@ import * as v from 'valibot'
 // account tenancy: an account admin can restrict a board to an explicit member
 // list (with per-member workspace roles), while an unrestricted board keeps the
 // legacy "every account member can see it" behaviour. These are the SPA-shared
-// wire shapes; the permission catalog + resolution logic are server policy and
-// live in `@cat-factory/kernel` (`domain/workspace-access.ts`), not here.
+// wire shapes, plus the static role → permission map, which the SPA needs to read a
+// board's `viewerRole` the way the backend enforces it. The resolution logic (which
+// role a caller holds on a board) is server policy and lives in `@cat-factory/kernel`
+// (`domain/workspace-access.ts`), not here.
 //
 // Mirrors the shape of the account tier (`accounts.ts`): the wire unions live in
 // this package and are re-exported by kernel `domain/types.ts`.
@@ -16,7 +18,7 @@ import * as v from 'valibot'
  * A workspace member's role. Unlike {@link accountRoleSchema} these are NOT
  * combinable — they form a strict hierarchy `viewer < member < admin`, so a set
  * would add no expressive power (`{viewer, admin}` ≡ `admin`). Fixed pre-1.0
- * (no custom roles); each maps onto a permission set via the kernel catalog.
+ * (no custom roles); each maps onto a permission set via {@link WORKSPACE_ROLE_PERMISSIONS}.
  */
 export const WORKSPACE_ROLES = ['admin', 'member', 'viewer'] as const
 
@@ -55,6 +57,31 @@ export const workspacePermissionSchema = v.picklist([
   'members.manage',
 ])
 export type WorkspacePermission = v.InferOutput<typeof workspacePermissionSchema>
+
+/** The full permission set an `admin` holds (also the catalog's canonical order). */
+const ALL_WORKSPACE_PERMISSIONS: readonly WorkspacePermission[] = workspacePermissionSchema.options
+
+/**
+ * The static role → permission map. `viewer` reads only; `member` adds board
+ * mutation + run execution (the developer surface); `admin` holds everything.
+ * `board.write` and `runs.execute` are carried separately even though both land on
+ * `member`, so a post-1.0 custom-role model (and machine principals) can split them
+ * without re-cataloguing: the cost of the split now is one array entry.
+ *
+ * Here rather than in kernel because the SPA must agree with it: the board list carries
+ * only the caller's ROLE per board (`viewerRole`), and a surface that offers a board for
+ * a permission-gated action reads the permission off this map.
+ */
+export const WORKSPACE_ROLE_PERMISSIONS: Record<WorkspaceRole, readonly WorkspacePermission[]> = {
+  viewer: ['workspace.read'],
+  member: ['workspace.read', 'board.write', 'runs.execute'],
+  admin: ALL_WORKSPACE_PERMISSIONS,
+}
+
+/** The permission set a role resolves to, as a `Set` for O(1) `requirePermission` checks. */
+export function permissionsForRole(role: WorkspaceRole): ReadonlySet<WorkspacePermission> {
+  return new Set(WORKSPACE_ROLE_PERMISSIONS[role])
+}
 
 /**
  * A board's access mode. `account` (the default) is the legacy behaviour — every

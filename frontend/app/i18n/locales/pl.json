@@ -2385,6 +2385,7 @@
       },
       "invite": {
         "title": "Zaproś członka zespołu",
+        "listTitle": "Zaproszenia",
         "submit": "Zaproś",
         "revoke": "Odwołaj zaproszenie",
         "created": "Utworzono zaproszenie",
@@ -2399,6 +2400,7 @@
       "email": {
         "title": "Nadawca e-maili",
         "notEnabled": "Wysyłka e-maili nie jest włączona w tym wdrożeniu. Zaproszenia nadal generują link akceptacji do udostępnienia.",
+        "notConnected": "Nie połączono nadawcy e-maili. Administrator konta może go połączyć.",
         "connectedAs": "Połączono przez {provider} jako {from}",
         "disconnect": "Rozłącz",
         "connect": "Połącz nadawcę e-maili",
@@ -2622,7 +2624,9 @@
       "budget": "Budżet",
       "tokens": "Tokeny",
       "resume": "Wznów mimo to",
-      "resumeHint": "Wznowienie nadal generuje wydatki; zostanie ponownie wstrzymane, jeśli budżet wciąż będzie przekroczony."
+      "resumeHint": "Wznowienie nadal generuje wydatki; zostanie ponownie wstrzymane, jeśli budżet wciąż będzie przekroczony.",
+      "resumeFailed": "Nie udało się wznowić wykonywania agentów",
+      "refreshFailed": "Uruchomienia wznowione, ale tablica się nie odświeżyła"
     },
     "personalSetup": {
       "title": "Moja konfiguracja",
@@ -2820,6 +2824,7 @@
       "status": {
         "connected": "Połączono",
         "keyConnected": "Klucz połączony",
+        "keyDisabled": "Klucz wyłączony",
         "notConnected": "Niepołączono",
         "recommended": "Zalecane",
         "connectedCount": "{count} połączony | {count} połączone | {count} połączonych"
@@ -2974,6 +2979,7 @@
     "deny": "Anuluj",
     "back": "Powrót do aplikacji",
     "noWorkspaces": "Nie masz jeszcze tablicy, z którą można to połączyć.",
+    "noAdminWorkspaces": "Nie jesteś administratorem żadnej ze swoich tablic. Poproś administratora tablicy o połączenie.",
     "revokeHint": "Zostanie wydany klucz API, który w każdej chwili możesz unieważnić w ustawieniach tablicy.",
     "error": {
       "title": "Nie udało się skonfigurować tego połączenia",
@@ -3393,7 +3399,9 @@
           "thresholds": "Według progów oceny",
           "always": "Zawsze scalaj automatycznie",
           "never": "Zawsze wymagaj przeglądu"
-        }
+        },
+        "loadFailed": "Nie udało się wczytać historii scaleń",
+        "unavailable": "Historia niedostępna"
       },
       "roleRules": {
         "heading": "Ograniczenia według roli uruchamiającego",
@@ -3827,6 +3835,7 @@
       "apiKey": "Klucz API",
       "connectAndBrowse": "Połącz i przeglądaj",
       "keyConnected": "Klucz OpenRouter połączony",
+      "keyDisabled": "Twój klucz OpenRouter jest wyłączony. Włącz go ponownie w Dostawcy i klucze, aby przeglądać modele.",
       "manageKeys": "Zarządzaj w Dostawcy i klucze",
       "refresh": "Odśwież katalog",
       "enableRecommended": "Włącz rekomendowane",
@@ -4689,7 +4698,8 @@
       },
       "repoType": "Typ repozytorium",
       "repoTypeHint": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i).",
-      "prefillProviderMismatch": "Link wskazywał {repo} u innego dostawcy, a ta tablica jest połączona z {connected}. Wyszukaj repozytorium ręcznie albo otwórz link na tablicy połączonej z jego dostawcą."
+      "prefillProviderMismatch": "Link wskazywał {repo} u innego dostawcy, a ta tablica jest połączona z {connected}. Wyszukaj repozytorium ręcznie albo otwórz link na tablicy połączonej z jego dostawcą.",
+      "searchFailed": "Nie udało się wyszukać repozytoriów"
     },
     "repoTree": {
       "root": "katalog główny",
@@ -5818,7 +5828,8 @@
       "park": "Zapytano człowieka",
       "bounce": "Odesłane do poprawki",
       "fail": "Przebieg nieudany"
-    }
+    },
+    "resolveFailed": "Nie udało się zapisać Twojego wyboru"
   },
   "inputGate": {
     "blockedTitle": "To zadanie wymaga więcej szczegółów, zanim ruszy",
@@ -6737,7 +6748,8 @@
         "recommendations": "Rekomendacje"
       },
       "empty": "Brak ocen."
-    }
+    },
+    "loadFailed": "Nie udało się wczytać ocen Kaizen"
   },
   "recurring": {
     "runEvery": "Uruchamiaj co",
