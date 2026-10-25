@@ -8,6 +8,7 @@ import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import PipelineProgress from '~/components/pipeline/PipelineProgress.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
+import { useRunGate } from '~/composables/useRunGate'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
@@ -40,11 +41,11 @@ const deps = computed(() =>
   (block.value?.dependsOn ?? []).map((id) => board.getBlock(id)).filter((b): b is Block => !!b),
 )
 
-// Hide UI-testing pipelines when this block's frame has no UI to exercise, `'recurring'`-only
+// Hide UI-testing pipelines when this task's frame has no UI to exercise, `'recurring'`-only
 // pipelines (a manual run of one is refused server-side), and every pipeline whose purpose doesn't
-// match this block's task type or LEVEL (per the `purpose` classifier) — see the backend gate. The
-// level is what keeps the planning presets on initiative blocks and off everything else, in both
-// directions, so this menu never offers a run the engine answers with a 409.
+// match this task (per the `purpose` classifier), so this menu never offers a run the engine
+// answers with a 409. Only a task reaches the picker, so the level passed here is always `task`,
+// which is what keeps the planning presets out of it.
 const runOptions = computed(() => {
   const frame = block.value ? board.serviceOf(block.value) : undefined
   return pipelines.pipelines.filter((p) =>
@@ -63,6 +64,9 @@ const runOptions = computed(() => {
 // START a run on click: a modifier reachable only by opening the list would be one the user has
 // to arm and re-open the menu to use.
 const runStart = useRunStart(() => block.value?.id)
+// The same lock and reason as the inspector's Run menu: a viewer without run permission, or a task
+// whose dependencies have not merged, sees a locked trigger that says why, not a refusal toast.
+const { canRun, blockedReason: runBlockedReason } = useRunGate(() => block.value?.id)
 
 /** Start the picked pipeline immediately — the Run menu chooses an ACTION, it stores no default. */
 function runPipeline(id: string) {
@@ -160,7 +164,7 @@ function openApprovalFor(approvalId: string) {
       <UBadge :color="statusMeta.chip" variant="subtle" class="ms-2">
         {{ statusMeta.label }}
       </UBadge>
-      <div class="ms-auto flex items-center gap-2">
+      <div class="ms-auto flex flex-wrap items-center justify-end gap-2">
         <!-- An initiative has one legal pipeline, so it gets the button, not the picker. -->
         <UButton
           v-if="isInitiative"
@@ -205,9 +209,21 @@ function openApprovalFor(approvalId: string) {
             <template #trigger>
               <UButton
                 variant="soft"
+                :color="canRun ? 'primary' : 'neutral'"
                 size="sm"
-                icon="i-lucide-play"
+                :icon="
+                  !canRun
+                    ? 'i-lucide-lock'
+                    : runStart.dryRun.value
+                      ? 'i-lucide-shield'
+                      : 'i-lucide-play'
+                "
                 trailing-icon="i-lucide-chevron-down"
+                :disabled="!canRun"
+                :title="
+                  runBlockedReason ??
+                  (runStart.dryRun.value ? t('panels.inspector.dryRunHint') : undefined)
+                "
                 data-testid="focus-run-pipeline"
               >
                 {{ instance ? t('focus.rerunPipeline') : t('focus.runPipeline') }}
@@ -223,6 +239,16 @@ function openApprovalFor(approvalId: string) {
           @click="close"
         />
       </div>
+      <!-- Named in text as well as on the trigger's title: a disabled button fires no hover, so
+           the title alone would hide the reason from pointer and touch users. -->
+      <p
+        v-if="isTask && runBlockedReason"
+        class="flex basis-full items-start justify-end gap-1.5 text-2xs text-app-warning-300/90"
+        data-testid="focus-run-blocked-reason"
+      >
+        <UIcon name="i-lucide-lock" class="mt-px h-3 w-3 shrink-0" />
+        <span>{{ runBlockedReason }}</span>
+      </p>
     </header>
 
     <div

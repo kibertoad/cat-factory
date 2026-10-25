@@ -62,9 +62,17 @@ export const Default: Story = {
   decorators: [focused(loginTask.id, running)],
 }
 
-/** Log out everywhere has not run: the empty pipeline, Run, and its two dependencies. */
+/**
+ * Log out everywhere has not run: the empty pipeline and its two dependencies. They have not
+ * merged, so Run is locked and the header names them, as the inspector does.
+ */
 export const Empty: Story = {
   decorators: [focused(logoutTask.id, taskFormSnapshot())],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(await canvas.findByTestId('focus-run-pipeline')).toBeDisabled()
+    await expect(canvas.getByTestId('focus-run-blocked-reason')).toBeVisible()
+  },
 }
 
 /** The initiative: Run planning, and no Run pipeline menu, because only a task picks its pipeline. */
