@@ -1,5 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { getAccountSettingsContract } from '@cat-factory/contracts'
+import { expect, within } from 'storybook/test'
 import { accountSettingsView, orgAccount } from '~/stories/accounts.stories.mocks'
+import { apiFailure } from '~/stories/api'
 import { withSeed } from '~/stories/withStores'
 import { useAccountSettingsStore } from '~/stores/accountSettings'
 import AccountRunCredentialSettings from './AccountRunCredentialSettings.vue'
@@ -33,3 +36,18 @@ export const Default: Story = { decorators: [seeded()] }
 
 /** Personal tokens forbidden: the switch is on, with the warning about what it costs. */
 export const Forbidden: Story = { decorators: [seeded(false)] }
+
+/**
+ * The account settings did not load: the panel says so and the save button is disabled, because a
+ * save replaces the whole account config and would wipe every other setting.
+ */
+export const LoadFailed: Story = {
+  parameters: {
+    api: [apiFailure(getAccountSettingsContract, { pathParams: { accountId: orgAccount.id } })],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await canvas.findByTestId('account-run-credential-unloaded')
+    await expect(canvas.getByTestId('account-run-credential-save')).toBeDisabled()
+  },
+}

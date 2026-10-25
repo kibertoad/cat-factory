@@ -4240,7 +4240,9 @@
         }
       },
       "saved": "Zapisano politykę dostępu do modeli",
-      "saveFailed": "Nie udało się zapisać polityki dostępu do modeli"
+      "saveFailed": "Nie udało się zapisać polityki dostępu do modeli",
+      "loadFailed": "Nie udało się wczytać polityki dostępu do modeli",
+      "notLoaded": "Nie udało się wczytać bieżących ustawień tego konta, więc zapis nadpisałby pozostałe. Odśwież przed edycją."
     },
     "defaultProvision": {
       "title": "Domyślne dla nowych usług",
@@ -4299,7 +4301,8 @@
       "onHint": "Każde uruchomienie w tym koncie będzie uwierzytelniać się jako instalacja aplikacji GitHub. Wypchnięcia i żądania ściągnięcia będą pochodzić od aplikacji, a nie od osoby, która rozpoczęła uruchomienie.",
       "offHint": "Nie ustawiono: każda tablica decyduje sama. Istniejące tablice zachowują swój wybór.",
       "saved": "Zapisano zasady poświadczeń uruchomień",
-      "saveFailed": "Nie udało się zapisać zasad poświadczeń uruchomień"
+      "saveFailed": "Nie udało się zapisać zasad poświadczeń uruchomień",
+      "notLoaded": "Nie udało się wczytać bieżących ustawień tego konta, więc zapis nadpisałby pozostałe. Odśwież przed edycją."
     },
     "platformAlerts": {
       "title": "Alerty o kondycji platformy",

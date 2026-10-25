@@ -4413,7 +4413,9 @@
         }
       },
       "saved": "Model access policy saved",
-      "saveFailed": "Could not save the model access policy"
+      "saveFailed": "Could not save the model access policy",
+      "loadFailed": "Could not load the model access policy",
+      "notLoaded": "This account's current settings could not be loaded, so saving would overwrite the rest of them. Reload before editing."
     },
     "defaultProvision": {
       "title": "Default for new services",
@@ -4472,7 +4474,8 @@
       "onHint": "Every run in this account will authenticate as the GitHub App installation. Pushes and pull requests will come from the app rather than from the person who started the run.",
       "offHint": "Not set: each board decides for itself. Existing boards keep whatever they have chosen.",
       "saved": "Run credential policy saved",
-      "saveFailed": "Could not save the run credential policy"
+      "saveFailed": "Could not save the run credential policy",
+      "notLoaded": "This account's current settings could not be loaded, so saving would overwrite the rest of them. Reload before editing."
     },
     "platformAlerts": {
       "title": "Platform health alerts",

@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { getAccountSettingsContract } from '@cat-factory/contracts'
 import type { ModelFamilyPolicy } from '@cat-factory/contracts'
+import { expect, within } from 'storybook/test'
 import { accountSettingsView, orgAccount } from '~/stories/accounts.stories.mocks'
+import { apiFailure } from '~/stories/api'
 import { withSeed } from '~/stories/withStores'
 import { useAccountSettingsStore } from '~/stores/accountSettings'
 import AccountModelPolicySettings from './AccountModelPolicySettings.vue'
@@ -54,4 +57,19 @@ export const Allowlist: Story = {
       trustedProviders: [],
     }),
   ],
+}
+
+/**
+ * The account settings did not load: the panel says so and the save button is disabled, because a
+ * save replaces the whole account config and would wipe every other setting.
+ */
+export const LoadFailed: Story = {
+  parameters: {
+    api: [apiFailure(getAccountSettingsContract, { pathParams: { accountId: orgAccount.id } })],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await canvas.findByTestId('account-model-policy-unloaded')
+    await expect(canvas.getByTestId('account-model-policy-save')).toBeDisabled()
+  },
 }

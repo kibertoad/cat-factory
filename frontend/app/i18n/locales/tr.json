@@ -4240,7 +4240,9 @@
         }
       },
       "saved": "Model erişim politikası kaydedildi",
-      "saveFailed": "Model erişim politikası kaydedilemedi"
+      "saveFailed": "Model erişim politikası kaydedilemedi",
+      "loadFailed": "Model erişim politikası yüklenemedi",
+      "notLoaded": "Bu hesabın mevcut ayarları yüklenemedi; kaydetmek diğerlerinin üzerine yazar. Düzenlemeden önce yeniden yükleyin."
     },
     "defaultProvision": {
       "title": "Yeni servisler için varsayılan",
@@ -4299,7 +4301,8 @@
       "onHint": "Bu hesaptaki her çalıştırma GitHub App kurulumu olarak kimlik doğrulayacak. Gönderimler ve çekme istekleri, çalıştırmayı başlatan kişiden değil uygulamadan gelecek.",
       "offHint": "Ayarlanmadı: her pano kendisi karar verir. Mevcut panolar seçimlerini korur.",
       "saved": "Çalıştırma kimlik bilgisi ilkesi kaydedildi",
-      "saveFailed": "Çalıştırma kimlik bilgisi ilkesi kaydedilemedi"
+      "saveFailed": "Çalıştırma kimlik bilgisi ilkesi kaydedilemedi",
+      "notLoaded": "Bu hesabın mevcut ayarları yüklenemedi; kaydetmek diğerlerinin üzerine yazar. Düzenlemeden önce yeniden yükleyin."
     },
     "platformAlerts": {
       "title": "Platform sağlığı uyarıları",

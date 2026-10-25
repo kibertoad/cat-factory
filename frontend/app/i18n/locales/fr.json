@@ -4240,7 +4240,9 @@
         }
       },
       "saved": "Politique d'accès aux modèles enregistrée",
-      "saveFailed": "Impossible d'enregistrer la politique d'accès aux modèles"
+      "saveFailed": "Impossible d'enregistrer la politique d'accès aux modèles",
+      "loadFailed": "Impossible de charger la politique d'accès aux modèles",
+      "notLoaded": "Les paramètres actuels de ce compte n'ont pas pu être chargés ; enregistrer écraserait les autres. Rechargez avant de modifier."
     },
     "defaultProvision": {
       "title": "Valeur par défaut pour les nouveaux services",
@@ -4299,7 +4301,8 @@
       "onHint": "Toutes les exécutions de ce compte s’authentifieront en tant qu’installation de l’App GitHub. Les poussées et les demandes de tirage proviendront de l’application et non de la personne ayant lancé l’exécution.",
       "offHint": "Non défini : chaque tableau décide pour lui-même. Les tableaux existants conservent leur choix.",
       "saved": "Politique d’identifiants d’exécution enregistrée",
-      "saveFailed": "Impossible d’enregistrer la politique d’identifiants d’exécution"
+      "saveFailed": "Impossible d’enregistrer la politique d’identifiants d’exécution",
+      "notLoaded": "Les paramètres actuels de ce compte n'ont pas pu être chargés ; enregistrer écraserait les autres. Rechargez avant de modifier."
     },
     "platformAlerts": {
       "title": "Alertes de santé de la plateforme",

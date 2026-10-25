@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 // The account-wide FLOOR under each board's "may a run act as its initiator's own personal
 // access token?" switch (admin only).
@@ -36,7 +36,18 @@ onMounted(async () => {
 })
 watch(() => store.view, hydrate)
 
+/**
+ * Whether the account's CURRENT config is in hand. The save below carries the rest of the config
+ * forward, so on top of a failed load it would carry nothing and wipe every sibling setting.
+ * Same guard as `AccountPlatformAlertSettings.vue`.
+ */
+const loaded = computed(() => !!store.view)
+
 async function save() {
+  if (!loaded.value) {
+    actionToast.error('settings.runCredentialPolicy.notLoaded')
+    return
+  }
   saving.value = true
   try {
     // `config` fully REPLACES the stored non-secret config, so the rest is carried forward —
@@ -78,11 +89,20 @@ async function save() {
       {{ t('settings.runCredentialPolicy.offHint') }}
     </p>
 
+    <p
+      v-if="!loaded && !store.loading"
+      class="rounded-lg border border-app-warning-800/60 bg-app-warning-950/30 px-3 py-2 text-xs text-app-warning-200"
+      data-testid="account-run-credential-unloaded"
+    >
+      {{ t('settings.runCredentialPolicy.notLoaded') }}
+    </p>
+
     <div class="flex justify-end">
       <UButton
         size="xs"
         icon="i-lucide-save"
         :loading="saving"
+        :disabled="!loaded"
         data-testid="account-run-credential-save"
         @click="save"
       >

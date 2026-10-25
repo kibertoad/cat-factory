@@ -111,15 +111,26 @@ onMounted(async () => {
   if (!store.view && store.available !== false) {
     try {
       await store.load(props.accountId)
-    } catch {
-      // The deployment-settings panel surfaces the load error; stay quiet here.
+    } catch (e) {
+      present(e, 'settings.modelPolicy.loadFailed')
     }
   }
   hydrate()
 })
 watch(() => store.view, hydrate)
 
+/**
+ * Whether the account's CURRENT config is in hand. A save REPLACES the whole non-secret config
+ * and this panel edits one key of it, so saving on top of a failed load would carry nothing
+ * forward and wipe every sibling setting. Same guard as `AccountPlatformAlertSettings.vue`.
+ */
+const loaded = computed(() => !!store.view)
+
 async function save() {
+  if (!loaded.value) {
+    actionToast.error('settings.modelPolicy.notLoaded')
+    return
+  }
   const policy: ModelFamilyPolicy = {
     mode: mode.value,
     // Families are irrelevant when the policy is off; keep them so a later re-enable
@@ -226,11 +237,22 @@ async function save() {
       </div>
     </div>
 
+    <!-- With the current config not in hand there is nothing to carry forward, so say so and
+         disable the button rather than show the empty "off" policy as if it were stored. -->
+    <p
+      v-if="!loaded && !store.loading"
+      class="rounded-lg border border-app-warning-800/60 bg-app-warning-950/30 px-3 py-2 text-xs text-app-warning-200"
+      data-testid="account-model-policy-unloaded"
+    >
+      {{ t('settings.modelPolicy.notLoaded') }}
+    </p>
+
     <div class="flex gap-2">
       <UButton
         size="xs"
         icon="i-lucide-save"
         :loading="saving"
+        :disabled="!loaded"
         data-testid="account-model-policy-save"
         @click="save"
       >
