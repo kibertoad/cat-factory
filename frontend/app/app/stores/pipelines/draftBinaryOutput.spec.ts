@@ -1,3 +1,4 @@
+import type { BinaryOutputConfig } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import { usePipelinesStore } from '~/stores/pipelines'
 
@@ -41,6 +42,42 @@ describe('pipelines store — per-step binary-output selection', () => {
 
     pipelines.setDraftBinaryOutput(0, { storageServiceId: 'file-storage', contextServiceIds: [] })
     expect(pipelines.draftBinaryOutput(0)).toEqual({ storageServiceId: 'file-storage' })
+  })
+
+  // The store copies what it is handed rather than a hand list of field names, so the formats,
+  // generation options and comparison a step carries survive an edit to any other field (#2408).
+  it('keeps every field of the selection through an edit', () => {
+    const pipelines = usePipelinesStore()
+    pipelines.addToDraft('coder')
+    const full: BinaryOutputConfig = {
+      storageServiceId: 'file-storage',
+      contextServiceIds: ['asset-management'],
+      generatorIds: ['nano-banana'],
+      modalities: ['image'],
+      mediaTypes: ['image/png'],
+      generation: { seed: 42, negativePrompt: 'text' },
+      comparison: { perGenerator: 2 },
+    }
+    pipelines.draftStepOptions[0] = { binaryOutput: full }
+
+    pipelines.setDraftBinaryOutput(0, { ...full, contextServiceIds: ['inventory'] })
+    expect(pipelines.draftBinaryOutput(0)).toEqual({ ...full, contextServiceIds: ['inventory'] })
+  })
+
+  // `mediaTypes` gets the empty-list rule the other lists have. An empty comparison object is a
+  // comparison switched on with its defaults, so it is kept.
+  it('drops an emptied format list and keeps an empty comparison', () => {
+    const pipelines = usePipelinesStore()
+    pipelines.addToDraft('coder')
+    pipelines.setDraftBinaryOutput(0, {
+      storageServiceId: 'file-storage',
+      mediaTypes: [],
+      comparison: {},
+    })
+    expect(pipelines.draftBinaryOutput(0)).toEqual({
+      storageServiceId: 'file-storage',
+      comparison: {},
+    })
   })
 
   // A blank storage id is not a selection: the backend refuses the step either way, so the

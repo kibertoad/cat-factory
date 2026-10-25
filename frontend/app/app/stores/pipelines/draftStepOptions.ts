@@ -152,17 +152,18 @@ export function createPipelineStepOptionActions(ctx: PipelinesContext) {
    * the same treatment for the same reason: an absent `generatorIds` means the step generates
    * through whatever its agent already has, and an absent `modalities` imposes no delivery
    * requirement — both of which the brief STATES, so persisting `[]` would have it state the
-   * wrong thing.
+   * wrong thing. The rule is applied to EVERY list field (`mediaTypes` too) rather than to named
+   * ones, and every other field is carried through as given, so a field the schema gains later
+   * survives an edit without this function having to learn its name. An empty OBJECT is kept:
+   * `comparison: {}` is a comparison switched on with its defaults.
    */
   function setDraftBinaryOutput(index: number, config: BinaryOutputConfig | undefined) {
-    const { storageServiceId, contextServiceIds, generatorIds, modalities } = config ?? {}
-    const selection = storageServiceId
-      ? {
-          storageServiceId,
-          ...(contextServiceIds?.length ? { contextServiceIds } : {}),
-          ...(generatorIds?.length ? { generatorIds } : {}),
-          ...(modalities?.length ? { modalities } : {}),
-        }
+    const selection = config?.storageServiceId
+      ? (Object.fromEntries(
+          Object.entries(config).filter(
+            ([, value]) => value !== undefined && !(Array.isArray(value) && value.length === 0),
+          ),
+        ) as BinaryOutputConfig)
       : undefined
     patchStepOption(draftStepOptions, index, 'binaryOutput', selection)
   }
