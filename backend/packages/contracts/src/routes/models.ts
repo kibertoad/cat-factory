@@ -1,4 +1,5 @@
 import { defineApiContract } from '@toad-contracts/valibot'
+import { configuredProvidersResultSchema } from '../api-keys.js'
 import { modelCatalogSchema } from '../entities.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
@@ -24,4 +25,14 @@ export const listWorkspaceModelsContract = defineApiContract({
   requestPathParamsSchema: workspaceIdParams,
   pathResolver: ({ workspaceId }) => `/workspaces/${workspaceId}/models`,
   responsesByStatusCode: { 200: modelCatalogSchema, ...errorResponses },
+})
+
+// The direct providers the caller's runs in this workspace can reach, from the same resolution the
+// catalog and the run-start guard use. Readable by any workspace reader, viewers included, like the
+// catalog: it names providers only, never a key.
+export const listConfiguredProvidersContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: workspaceIdParams,
+  pathResolver: ({ workspaceId }) => `/workspaces/${workspaceId}/configured-providers`,
+  responsesByStatusCode: { 200: configuredProvidersResultSchema, ...errorResponses },
 })

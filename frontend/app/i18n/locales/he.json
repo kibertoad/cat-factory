@@ -2814,6 +2814,7 @@
       "status": {
         "connected": "מחובר",
         "keyConnected": "מפתח מחובר",
+        "keyDisabled": "המפתח מושבת",
         "notConnected": "לא מחובר",
         "recommended": "מומלץ",
         "connectedCount": "לא מחוברים | {count} מחובר | {count} מחוברים | {count} מחוברים"
@@ -3962,6 +3963,7 @@
       "apiKey": "מפתח API",
       "connectAndBrowse": "התחבר ועיין",
       "keyConnected": "מפתח OpenRouter מחובר",
+      "keyDisabled": "מפתח ה-OpenRouter שלך מושבת. הפעל אותו מחדש ב'ספקים ומפתחות' כדי לעיין במודלים.",
       "manageKeys": "נהל ב'ספקים ומפתחות'",
       "refresh": "רענן קטלוג",
       "enableRecommended": "אפשר מומלצים",

@@ -44,9 +44,24 @@ export const Default: Story = {}
 /** Nothing connected: the callout, and OpenRouter marked recommended. */
 export const NothingConnected: Story = { parameters: { api: providersApi() } }
 
-/** The only OpenRouter key is disabled, so the provider is not configured: no Key connected. */
+/**
+ * The only OpenRouter key is disabled, so nothing is configured: the callout shows, and the row
+ * reads Key disabled rather than Not connected, since the fix is to turn the key back on.
+ */
 export const DisabledKeyOnly: Story = {
   parameters: { api: providersApi({ workspaceKeys: [apiKey({ enabled: false })] }) },
+  play: async () => {
+    await screen.findByText('Key disabled')
+    await screen.findByText('No provider connected yet')
+  },
+}
+
+/** The only OpenRouter key belongs to the account, which the key lists here never show. */
+export const AccountKeyOnly: Story = {
+  parameters: { api: providersApi({ configured: ['openrouter'] }) },
+  play: async () => {
+    await screen.findByText('Key connected')
+  },
 }
 
 /** A search that matches no provider. */

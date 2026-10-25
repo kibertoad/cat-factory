@@ -2814,6 +2814,7 @@
       "status": {
         "connected": "Bağlandı",
         "keyConnected": "Anahtar bağlandı",
+        "keyDisabled": "Anahtar devre dışı",
         "notConnected": "Bağlı değil",
         "recommended": "Önerilen",
         "connectedCount": "bağlı yok | {count} bağlı | {count} bağlı"
@@ -3962,6 +3963,7 @@
       "apiKey": "API anahtarı",
       "connectAndBrowse": "Bağlan ve göz at",
       "keyConnected": "OpenRouter anahtarı bağlandı",
+      "keyDisabled": "OpenRouter anahtarınız devre dışı. Modellere göz atmak için Sağlayıcılar ve anahtarlar bölümünde yeniden etkinleştirin.",
       "manageKeys": "Sağlayıcılar ve anahtarlar bölümünde yönet",
       "refresh": "Kataloğu yenile",
       "enableRecommended": "Önerilenleri etkinleştir",
