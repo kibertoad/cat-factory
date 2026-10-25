@@ -55,6 +55,10 @@ const RULE_OPTIONS = computed<{ value: MergeClassRule; label: string }[]>(() => 
   { value: 'never', label: t(RULE_LABEL_KEYS.never) },
 ])
 
+// The track record could not be read and none has landed before: the zero-filled rollups are
+// absent evidence, so the rows say so instead of "No history yet".
+const recordUnavailable = computed(() => trackRecords.loadFailed && !trackRecords.loaded)
+
 /** One row: the class, its current rule, and the evidence behind it. */
 const rows = computed(() =>
   RULEABLE_CHANGE_CLASSES.map((changeClass) => {
@@ -115,7 +119,10 @@ function setRule(changeClass: (typeof RULEABLE_CHANGE_CLASSES)[number], rule: Me
         @update:model-value="setRule(row.changeClass, $event as MergeClassRule)"
       />
       <span class="text-2xs text-dimmed" :data-testid="`merge-class-record-${row.changeClass}`">
-        <template v-if="row.merged === 0">
+        <template v-if="recordUnavailable">
+          {{ t('settings.riskPolicy.classRules.unavailable') }}
+        </template>
+        <template v-else-if="row.merged === 0">
           {{ t('settings.riskPolicy.classRules.noData') }}
         </template>
         <template v-else>

@@ -2775,7 +2775,8 @@
       "tokens": "Tokens",
       "resume": "Resume anyway",
       "resumeHint": "Resuming continues spending; it will pause again if still over budget.",
-      "resumeFailed": "Could not resume agent execution"
+      "resumeFailed": "Could not resume agent execution",
+      "refreshFailed": "Runs resumed, but the board did not refresh"
     },
     "personalSetup": {
       "title": "My setup",
@@ -3697,7 +3698,8 @@
           "always": "Always auto-merge",
           "never": "Always require review"
         },
-        "loadFailed": "Could not load the merge track record"
+        "loadFailed": "Could not load the merge track record",
+        "unavailable": "Track record unavailable"
       },
       "roleRules": {
         "heading": "Limits per initiator role",
@@ -6105,7 +6107,8 @@
       "park": "Asked a human",
       "bounce": "Sent back for rework",
       "fail": "Failed the run"
-    }
+    },
+    "resolveFailed": "Could not record your choice"
   },
   "inputGate": {
     "blockedTitle": "This task needs more detail before it can run",

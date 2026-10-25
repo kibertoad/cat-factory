@@ -2617,7 +2617,8 @@
       "tokens": "Tokeny",
       "resume": "Wznów mimo to",
       "resumeHint": "Wznowienie nadal generuje wydatki; zostanie ponownie wstrzymane, jeśli budżet wciąż będzie przekroczony.",
-      "resumeFailed": "Nie udało się wznowić wykonywania agentów"
+      "resumeFailed": "Nie udało się wznowić wykonywania agentów",
+      "refreshFailed": "Uruchomienia wznowione, ale tablica się nie odświeżyła"
     },
     "personalSetup": {
       "title": "Moja konfiguracja",
@@ -3389,7 +3390,8 @@
           "always": "Zawsze scalaj automatycznie",
           "never": "Zawsze wymagaj przeglądu"
         },
-        "loadFailed": "Nie udało się wczytać historii scaleń"
+        "loadFailed": "Nie udało się wczytać historii scaleń",
+        "unavailable": "Historia niedostępna"
       },
       "roleRules": {
         "heading": "Ograniczenia według roli uruchamiającego",
@@ -5814,7 +5816,8 @@
       "park": "Zapytano człowieka",
       "bounce": "Odesłane do poprawki",
       "fail": "Przebieg nieudany"
-    }
+    },
+    "resolveFailed": "Nie udało się zapisać Twojego wyboru"
   },
   "inputGate": {
     "blockedTitle": "To zadanie wymaga więcej szczegółów, zanim ruszy",

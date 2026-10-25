@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { getKaizenOverviewContract } from '@cat-factory/contracts'
-import { screen } from 'storybook/test'
+import { expect, screen, waitFor } from 'storybook/test'
 import { apiFailure, apiPending, apiRefusal, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { gradingHistory, verifiedCombos } from '~/stories/kaizen.stories.mocks'
@@ -72,12 +72,19 @@ export const NotConfigured: Story = {
   },
 }
 
-/** The overview read failed: one error toast, and the empty screen under it. */
+/**
+ * The overview read failed: the error toast, and both lists say they could not be loaded rather
+ * than claiming there are no gradings.
+ */
 export const LoadFailed: Story = {
   parameters: {
     api: [apiFailure(getKaizenOverviewContract, { pathPrefix: storyWorkspacePrefix })],
   },
   play: async () => {
-    await screen.findByText('Could not load Kaizen gradings')
+    // The toast's title and the two lists' empty states.
+    await waitFor(() =>
+      expect(screen.getAllByText('Could not load Kaizen gradings')).toHaveLength(3),
+    )
+    await expect(screen.queryByText('No gradings yet.')).toBeNull()
   },
 }

@@ -2617,7 +2617,8 @@
       "tokens": "Tokens",
       "resume": "Reanudar de todos modos",
       "resumeHint": "Reanudar sigue generando gasto; se pausará de nuevo si sigue por encima del presupuesto.",
-      "resumeFailed": "No se pudo reanudar la ejecución de agentes"
+      "resumeFailed": "No se pudo reanudar la ejecución de agentes",
+      "refreshFailed": "Ejecuciones reanudadas, pero el tablero no se actualizó"
     },
     "personalSetup": {
       "title": "Mi configuración",
@@ -3389,7 +3390,8 @@
           "always": "Fusionar siempre automáticamente",
           "never": "Exigir siempre revisión"
         },
-        "loadFailed": "No se pudo cargar el historial de fusiones"
+        "loadFailed": "No se pudo cargar el historial de fusiones",
+        "unavailable": "Historial no disponible"
       },
       "roleRules": {
         "heading": "Límites según el rol que inicia",
@@ -5814,7 +5816,8 @@
       "park": "Consultó a una persona",
       "bounce": "Devuelto para revisión",
       "fail": "Ejecución fallida"
-    }
+    },
+    "resolveFailed": "No se pudo registrar tu elección"
   },
   "inputGate": {
     "blockedTitle": "Esta tarea necesita más detalle antes de ejecutarse",

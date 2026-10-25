@@ -21,6 +21,7 @@ const execution = useExecutionStore()
 const judgeStore = useJudgeStore()
 const { t, n } = useI18n()
 const access = useWorkspaceAccess()
+const { present } = usePipelineErrorToast()
 
 // Synchronous window: it reads its state straight off the execution step, so there is nothing
 // to fetch on open. `ResultWindowShell` owns Escape (and focus trap + scroll lock + stacking).
@@ -124,9 +125,12 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
   try {
     await judgeStore.resolve(id, choice, feedback.value.trim() || undefined)
     feedback.value = ''
-  } catch {
-    // The store records the refusal in `judgeStore.error`, which this window shows under the
-    // feedback box, so a toast would say it twice. The typed feedback stays for the next try.
+  } catch (e) {
+    // Through the funnel rather than inline: a refusal can coincide with the verdict leaving
+    // `awaiting_decision` (another member resolved it, the run was stopped), which hides the
+    // decision section, and a conflict's `details.reason` gets its mapped copy here. The typed
+    // feedback stays for the next try.
+    present(e, 'judge.resolveFailed')
   }
 }
 </script>
@@ -262,9 +266,6 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
             class="w-full"
             :ui="{ base: 'resize-y' }"
           />
-          <p v-if="judgeStore.error" class="mt-2 text-xs text-app-error-300">
-            {{ judgeStore.error }}
-          </p>
           <div class="mt-2 flex flex-wrap justify-end gap-2">
             <UButton
               size="sm"

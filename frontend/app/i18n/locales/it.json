@@ -595,7 +595,8 @@
           "always": "Unisci sempre automaticamente",
           "never": "Richiedi sempre una revisione"
         },
-        "loadFailed": "Impossibile caricare lo storico dei merge"
+        "loadFailed": "Impossibile caricare lo storico dei merge",
+        "unavailable": "Storico non disponibile"
       },
       "roleRules": {
         "heading": "Limiti per ruolo di chi avvia",
@@ -2731,7 +2732,8 @@
       "tokens": "Token",
       "resume": "Riprendi comunque",
       "resumeHint": "Riprendere continua a generare spesa; verrà sospeso di nuovo se ancora oltre il budget.",
-      "resumeFailed": "Impossibile riprendere l’esecuzione degli agenti"
+      "resumeFailed": "Impossibile riprendere l’esecuzione degli agenti",
+      "refreshFailed": "Esecuzioni riprese, ma la bacheca non si è aggiornata"
     },
     "personalSetup": {
       "title": "La mia configurazione",
@@ -6854,7 +6856,8 @@
       "park": "Ha chiesto a una persona",
       "bounce": "Rimandato in revisione",
       "fail": "Esecuzione fallita"
-    }
+    },
+    "resolveFailed": "Impossibile registrare la tua scelta"
   },
   "inputGate": {
     "blockedTitle": "Questa attività richiede più dettagli prima di partire",

@@ -131,7 +131,7 @@ export const Empty: Story = { decorators: [opened(undefined)] }
  */
 export const AwaitingDecision: Story = { decorators: [opened(judgeState())] }
 
-/** Proceed anyway was refused: the backend's message shows under the field, and no toast. */
+/** Proceed anyway was refused: the error toast, and the typed guidance stays for the next try. */
 export const ResolveError: Story = {
   decorators: [opened(judgeState())],
   parameters: {
@@ -144,7 +144,7 @@ export const ResolveError: Story = {
   },
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Proceed anyway' }))
-    await screen.findByText('Internal server error')
+    await screen.findByText('Could not record your choice')
   },
 }
 

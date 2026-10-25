@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import type { KaizenGrading, KaizenVerifiedCombo } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useSingleFlight } from '~/composables/useSingleFlight'
+import { apiErrorReason, apiErrorStatus } from '~/composables/api/errors'
 
 /**
  * Kaizen state: per-run gradings (for the run-window status surface) and the
@@ -10,6 +11,16 @@ import { useSingleFlight } from '~/composables/useSingleFlight'
  * arrive both via lazy loads and live over the workspace stream (`upsert`). Never
  * surfaced on the board — only inside run details + the dedicated screen.
  */
+/**
+ * The 503 that means this deployment does not wire Kaizen: the controller's capability guard sends
+ * it with no `details.reason`. A 503 WITH a reason is an outage (a mothership node that cannot
+ * reach its mothership), so it is rethrown for the caller to report rather than hiding Kaizen for
+ * the rest of the session.
+ */
+function isNotConfigured(error: unknown): boolean {
+  return apiErrorStatus(error) === 503 && apiErrorReason(error) === null
+}
+
 export const useKaizenStore = defineStore('kaizen', () => {
   const api = useApi()
 
@@ -35,6 +46,11 @@ export const useKaizenStore = defineStore('kaizen', () => {
   const loadingExecution = ref<Set<string>>(new Set())
   /** 503 ⇒ the Kaizen feature isn't configured on this deployment. */
   const available = ref<boolean | null>(null)
+  /**
+   * The newest overview load failed, so the screen's empty history and combo lists are ABSENT
+   * rather than zero. Set only for a failure that is not {@link isNotConfigured}.
+   */
+  const overviewFailed = ref(false)
 
   /**
    * One in-flight per-run read. The run window and the run's grading badge both load on open, so
@@ -108,14 +124,18 @@ export const useKaizenStore = defineStore('kaizen', () => {
       // asked for is gone. Either way the result must not land: it would clobber the fresher
       // history, or seed the switched-to board with the previous one's gradings.
       if (latestOverviewLoad !== seq || generation !== boardGeneration) return
+      overviewFailed.value = false
       verified.value = overview.verified
       // History is newest-first; live-pushed gradings are the newest, so prepend the survivors.
       const { reconciled, liveOnly } = reconcileWithLive(overview.gradings, history.value)
       history.value = [...liveOnly, ...reconciled]
     } catch (e) {
-      if ((e as { statusCode?: number; status?: number })?.statusCode === 503)
+      if (isNotConfigured(e)) {
         available.value = false
-      else throw e
+        return
+      }
+      if (latestOverviewLoad === seq && generation === boardGeneration) overviewFailed.value = true
+      throw e
     } finally {
       loadingOverview.value = false
     }
@@ -144,8 +164,7 @@ export const useKaizenStore = defineStore('kaizen', () => {
       )
       byExecution.value = { ...byExecution.value, [executionId]: [...reconciled, ...liveOnly] }
     } catch (e) {
-      if ((e as { statusCode?: number; status?: number })?.statusCode === 503)
-        available.value = false
+      if (isNotConfigured(e)) available.value = false
       else throw e
     } finally {
       const next = new Set(loadingExecution.value)
@@ -183,6 +202,7 @@ export const useKaizenStore = defineStore('kaizen', () => {
     history.value = []
     historyLoaded.value = false
     verified.value = []
+    overviewFailed.value = false
   }
 
   const isLoadingExecution = (executionId: string) => loadingExecution.value.has(executionId)
@@ -194,6 +214,7 @@ export const useKaizenStore = defineStore('kaizen', () => {
     reset,
     verified,
     available,
+    overviewFailed,
     loadingOverview,
     verifiedCount,
     gradingsFor,

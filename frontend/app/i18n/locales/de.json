@@ -595,7 +595,8 @@
           "always": "Immer automatisch zusammenführen",
           "never": "Immer Review verlangen"
         },
-        "loadFailed": "Die Merge-Historie konnte nicht geladen werden"
+        "loadFailed": "Die Merge-Historie konnte nicht geladen werden",
+        "unavailable": "Historie nicht verfügbar"
       },
       "roleRules": {
         "heading": "Grenzen je startender Rolle",
@@ -2731,7 +2732,8 @@
       "tokens": "Tokens",
       "resume": "Trotzdem fortsetzen",
       "resumeHint": "Ein Fortsetzen führt zu weiteren Ausgaben; es pausiert erneut, wenn das Budget weiterhin überschritten wird.",
-      "resumeFailed": "Die Agentenausführung konnte nicht fortgesetzt werden"
+      "resumeFailed": "Die Agentenausführung konnte nicht fortgesetzt werden",
+      "refreshFailed": "Läufe fortgesetzt, aber das Board wurde nicht aktualisiert"
     },
     "personalSetup": {
       "title": "Meine Einrichtung",
@@ -6854,7 +6856,8 @@
       "park": "Nachfrage an einen Menschen",
       "bounce": "Zur Überarbeitung zurückgeschickt",
       "fail": "Lauf fehlgeschlagen"
-    }
+    },
+    "resolveFailed": "Ihre Entscheidung konnte nicht gespeichert werden"
   },
   "inputGate": {
     "blockedTitle": "Diese Aufgabe braucht mehr Details, bevor sie laufen kann",

@@ -2617,7 +2617,8 @@
       "tokens": "Belirteçler",
       "resume": "Yine de devam ettir",
       "resumeHint": "Devam etmek harcamayı sürdürür; hâlâ bütçe aşımı varsa tekrar duraklatılır.",
-      "resumeFailed": "Ajan yürütmesi devam ettirilemedi"
+      "resumeFailed": "Ajan yürütmesi devam ettirilemedi",
+      "refreshFailed": "Çalıştırmalar devam ettirildi, ancak pano yenilenemedi"
     },
     "personalSetup": {
       "title": "Kurulumum",
@@ -3530,7 +3531,8 @@
           "always": "Her zaman otomatik birleştir",
           "never": "Her zaman inceleme iste"
         },
-        "loadFailed": "Birleştirme geçmişi yüklenemedi"
+        "loadFailed": "Birleştirme geçmişi yüklenemedi",
+        "unavailable": "Geçmiş kullanılamıyor"
       },
       "roleRules": {
         "heading": "Başlatan role göre sınırlar",
@@ -5814,7 +5816,8 @@
       "park": "Bir kişiye sordu",
       "bounce": "Düzeltme için geri gönderildi",
       "fail": "Çalışma başarısız oldu"
-    }
+    },
+    "resolveFailed": "Seçiminiz kaydedilemedi"
   },
   "inputGate": {
     "blockedTitle": "Bu görev çalışmadan önce daha fazla ayrıntı gerektiriyor",

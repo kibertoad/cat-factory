@@ -24,13 +24,16 @@ const grading = computed(() => {
 })
 
 // Load the run's gradings once when we have an id and nothing cached yet. The stream
-// keeps them live afterwards. The store rethrows every failure except the 503 that means "Kaizen is
-// not wired here".
+// keeps them live afterwards. The store rethrows every failure except the reason-less 503 that
+// means this deployment does not wire Kaizen. While the read keeps failing, every reader of the run
+// reloads it, so the toast is deduped: one on screen, not one per step opened.
 watch(
   () => props.instanceId,
   (id) => {
     if (id && kaizen.gradingsFor(id).length === 0 && kaizen.available !== false) {
-      kaizen.loadForExecution(id).catch((e: unknown) => present(e, 'kaizen.loadFailed'))
+      kaizen
+        .loadForExecution(id)
+        .catch((e: unknown) => present(e, 'kaizen.loadFailed', undefined, { dedupe: true }))
     }
   },
   { immediate: true },

@@ -2617,7 +2617,8 @@
       "tokens": "Jetons",
       "resume": "Reprendre quand même",
       "resumeHint": "Reprendre continue à générer des dépenses ; cela se mettra de nouveau en pause si vous dépassez encore le budget.",
-      "resumeFailed": "Impossible de reprendre l’exécution des agents"
+      "resumeFailed": "Impossible de reprendre l’exécution des agents",
+      "refreshFailed": "Exécutions reprises, mais le tableau ne s’est pas actualisé"
     },
     "personalSetup": {
       "title": "Ma configuration",
@@ -3389,7 +3390,8 @@
           "always": "Toujours fusionner automatiquement",
           "never": "Toujours exiger une revue"
         },
-        "loadFailed": "Impossible de charger l’historique des fusions"
+        "loadFailed": "Impossible de charger l’historique des fusions",
+        "unavailable": "Historique indisponible"
       },
       "roleRules": {
         "heading": "Limites selon le rôle qui lance l'exécution",
@@ -5814,7 +5816,8 @@
       "park": "A demandé à une personne",
       "bounce": "Renvoyé pour reprise",
       "fail": "Exécution échouée"
-    }
+    },
+    "resolveFailed": "Impossible d’enregistrer votre choix"
   },
   "inputGate": {
     "blockedTitle": "Cette tâche a besoin de plus de détails avant de s'exécuter",

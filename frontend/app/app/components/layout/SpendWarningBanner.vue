@@ -24,9 +24,19 @@ const resuming = ref(false)
 async function resume() {
   resuming.value = true
   try {
-    await workspace.resumeSpend()
-  } catch (e) {
-    present(e, 'layout.spendWarningBanner.resumeFailed')
+    try {
+      await workspace.resumeSpend()
+    } catch (e) {
+      present(e, 'layout.spendWarningBanner.resumeFailed')
+      return
+    }
+    // The runs are resumed at this point, so a failed snapshot read gets its own title rather
+    // than telling the person the resume failed.
+    try {
+      await workspace.refresh()
+    } catch (e) {
+      present(e, 'layout.spendWarningBanner.refreshFailed')
+    }
   } finally {
     resuming.value = false
   }
