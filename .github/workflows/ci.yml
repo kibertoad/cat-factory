@@ -1314,18 +1314,13 @@ jobs:
       # are really in the node's containerd and retry the import if not — the import is provisioning
       # for the suite, not the thing under test, and a bounded retry here is what keeps the
       # "no pod pulls from a registry" property this step exists to provide.
-      # Import from a single-platform tarball, not by image name. Docker's containerd image store
-      # (the default from ubuntu-26.04) keeps a pulled image's full multi-platform index but only
-      # the runner platform's blobs. `docker save` writes that whole index, and k3d imports with
-      # `ctr import --all-platforms`, so every import fails with `ctr: content digest ... not
-      # found` for a platform that was never pulled. `--platform` writes only the runner's.
+      # Save one platform: k3d imports with ctr --all-platforms, which fails on an index whose
+      # other platforms were never pulled.
       - name: Build + import test images
         run: |
           docker build -t cat-factory-mock-harness:it \
             backend/packages/integrations/src/modules/kubernetes/test-support/mock-harness
           docker pull nginx:1.27-alpine
-          docker save --platform "linux/$(docker version --format '{{.Server.Arch}}')" \
-            -o "$RUNNER_TEMP/k3d-images.tar" cat-factory-mock-harness:it nginx:1.27-alpine
           imported() {
             docker exec k3d-cf-it-server-0 ctr -n k8s.io images ls -q \
               | grep -q "docker.io/library/cat-factory-mock-harness:it" \
@@ -1333,12 +1328,15 @@ jobs:
               | grep -q "docker.io/library/nginx:1.27-alpine"
           }
           for attempt in 1 2 3; do
-            k3d image import "$RUNNER_TEMP/k3d-images.tar" -c cf-it || true
+            if docker save --platform linux/amd64 -o "$RUNNER_TEMP/k3d-images.tar" \
+              cat-factory-mock-harness:it nginx:1.27-alpine; then
+              k3d image import "$RUNNER_TEMP/k3d-images.tar" -c cf-it || true
+            fi
             if imported; then
               echo "test images present in the cluster node (attempt ${attempt})"
               exit 0
             fi
-            echo "::warning::k3d reported success but an image is missing from the node (attempt ${attempt}/3); retrying"
+            echo "::warning::an image is missing from the node after save + import (attempt ${attempt}/3); retrying"
             sleep 5
           done
           echo "::error::test images could not be imported into the k3d node; the suite would fail with ErrImagePull"
@@ -1496,7 +1494,12 @@ jobs:
           loaded=""
           if command -v k3d >/dev/null 2>&1; then
             CLUSTER="$(k3d cluster list -o json 2>/dev/null | python3 -c 'import sys,json; cs=json.load(sys.stdin); print(cs[0]["name"] if cs else "")' 2>/dev/null || echo "")"
-            if [ -n "$CLUSTER" ] && k3d image import cat-factory-mock-harness:it -c "$CLUSTER"; then
+            # Same single-platform save and node check as `test-k8s`: k3d can exit 0 on a failed import.
+            if [ -n "$CLUSTER" ] \
+              && docker save --platform linux/amd64 -o "$RUNNER_TEMP/k3d-images.tar" cat-factory-mock-harness:it \
+              && k3d image import "$RUNNER_TEMP/k3d-images.tar" -c "$CLUSTER" \
+              && docker exec "k3d-${CLUSTER}-server-0" ctr -n k8s.io images ls -q \
+                | grep -q "docker.io/library/cat-factory-mock-harness:it"; then
               loaded=1
             fi
           fi
