@@ -27,7 +27,7 @@ import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import { appInstallationManageUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
-import { fromSelectValue, selectNoneItem, toSelectValue } from '~/utils/selectNone'
+import { selectNoneItem, selectNoneModel } from '~/utils/selectNone'
 import { prefilledRepoMatch, prefillProviderMismatch } from '~/composables/useAddRepoDeepLink'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
@@ -220,12 +220,12 @@ const frontendItems = computed(() => [
 ])
 
 // USelect needs a present value for its "none" row; the mark itself stays absent-or-a-path.
-const frontendSelection = computed({
-  get: () => toSelectValue(frontendDirectory.value),
-  set: (value: string) => {
-    frontendDirectory.value = fromSelectValue(value) || undefined
+const frontendSelection = selectNoneModel(
+  () => frontendDirectory.value,
+  (value) => {
+    frontendDirectory.value = value || undefined
   },
-})
+)
 
 function toggleMonorepo(value: boolean) {
   isMonorepo.value = value
@@ -629,7 +629,7 @@ function done() {
                   :description="t('github.addService.frontendHint')"
                 >
                   <USelect
-                    v-model="frontendSelection"
+                    v-model="frontendSelection.value"
                     :items="frontendItems"
                     value-key="value"
                     size="sm"

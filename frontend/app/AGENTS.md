@@ -50,8 +50,7 @@ standalone routes (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-passwor
   owns the tooltip. [Rule](./README.md#a-control-is-its-nuxt-ui-component), guarded by
   `scripts/check-frontend-primitives.mjs`.
 - **A select's "no value" row is `selectNoneItem(label)`**, never an item with `value: ''`, which
-  Reka's `SelectItem` and `ComboboxItem` throw on; the model maps through `toSelectValue` /
-  `fromSelectValue`. [Rule](./README.md#a-selects-no-value-row-is-never-the-empty-string), guarded
+  Reka's `SelectItem` and `ComboboxItem` throw on; the select binds through `selectNoneModel`. [Rule](./README.md#a-selects-no-value-row-is-never-the-empty-string), guarded
   by `scripts/check-frontend-select-values.mjs`.
 - **Buttons and badges state only what differs from Nuxt UI's default** (`primary solid md`,
   stated in `app.config.ts`): a primary action carries no props, ONE solid per view (no two

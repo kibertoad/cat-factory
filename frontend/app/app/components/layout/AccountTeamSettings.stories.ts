@@ -17,10 +17,7 @@ import AccountTeamSettings from './AccountTeamSettings.vue'
 // sender and the roster, and each section loads its own data, so each story answers those reads.
 // Each section's own states are in its own stories.
 //
-// The answers are `accountTeamApi`, shared with the Account settings window. There are no admin
-// stories until #2393 is fixed: the platform alert section gives its window select an item with
-// the value '', Reka's SelectItem throws for an empty value, and Storybook's error display covers
-// the tab for every admin viewer (#2393). The personal account's viewer is an admin too.
+// The answers are `accountTeamApi`, shared with the Account settings window.
 
 /** Tomás, a developer on the shared roster: the viewer whose row says what `account.roles` says. */
 const developerUser: AuthUser = {
@@ -58,3 +55,6 @@ type Story = StoryObj<typeof meta>
 export const Default: Story = {
   decorators: [active({ ...orgAccount, roles: ['developer'] }, developerUser)],
 }
+
+/** Maya, an admin of Acme: the roster and, below it, every admin section of the account. */
+export const Admin: Story = {}

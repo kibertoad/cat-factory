@@ -22,7 +22,7 @@ import { useBoardStore } from '~/stores/board'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useUiStore } from '~/stores/ui'
 import { pipelineAllowedForTaskType } from '~/utils/pipeline'
-import { fromSelectValue, selectNoneItem, toSelectValue } from '~/utils/selectNone'
+import { selectNoneItem, selectNoneModel } from '~/utils/selectNone'
 import { useBugFishingStore } from '~/stores/bugFishing'
 import { bugFishingSpawnIsClaimable } from '@cat-factory/contracts'
 import type { BugFishingFinding, BugFishingSeverity, BugFishingStepState } from '~/types/execution'
@@ -186,6 +186,12 @@ function phaseFindingCount(pass: { id: string; territoryId?: string | null }): n
  */
 /** '' means "use the board's default", the same spelling the workspace settings field uses. */
 const pipelineOverride = ref('')
+const pipelineOverrideModel = selectNoneModel(
+  () => pipelineOverride.value,
+  (value) => {
+    pipelineOverride.value = value
+  },
+)
 const defaultPipelineId = computed(() => state.value?.defaultFixPipelineId ?? null)
 /** What a mark made right now would run on — the override if one is set, else the board default. */
 const effectivePipelineName = computed(() => {
@@ -441,12 +447,11 @@ const PHASE_ICON: Record<string, string> = {
         >
           <span class="text-2xs text-muted">{{ t('bugFishing.fixPipeline.label') }}</span>
           <USelectMenu
-            :model-value="toSelectValue(pipelineOverride)"
+            v-model="pipelineOverrideModel.value"
             :items="pipelineOptions"
             value-key="value"
             size="xs"
             class="min-w-52"
-            @update:model-value="pipelineOverride = fromSelectValue($event)"
           />
           <span class="text-2xs text-dimmed">
             {{ t('bugFishing.fixPipeline.hint', { pipeline: effectivePipelineName ?? '—' }) }}

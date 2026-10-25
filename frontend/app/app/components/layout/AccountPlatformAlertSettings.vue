@@ -12,7 +12,7 @@ import {
   hasFailureKindRuleFaults,
   MAX_FAILURE_KIND_RULES,
 } from '~/utils/failureKinds'
-import { fromSelectValue, selectNoneItem, toSelectValue } from '~/utils/selectNone'
+import { selectNoneItem, selectNoneModel } from '~/utils/selectNone'
 
 // Per-account tuning for the platform-health alert sweep (admin only): the ceilings the
 // deployment's aggregate run health is checked against, and the window they are evaluated over.
@@ -94,6 +94,12 @@ const thresholdHints = computed<Record<ThresholdField, string>>(() => ({
 // cleared, and one of them is "leave the deployment default alone".
 const muted = ref(false)
 const alertWindow = ref<PlatformAlertWindow | ''>('')
+const alertWindowModel = selectNoneModel(
+  () => alertWindow.value,
+  (value) => {
+    alertWindow.value = value
+  },
+)
 const values = ref<Record<ThresholdField, string>>(blankValues())
 // Undefined is "inherit the deployment's rules"; an EMPTY array is "this account has none".
 // Kept apart for the same reason blank and 0 are above, and here the two are further apart
@@ -284,12 +290,11 @@ const hasOverrides = computed(
       </label>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <USelect
-          :model-value="toSelectValue(alertWindow)"
+          v-model="alertWindowModel.value"
           :items="windowItems"
           value-key="value"
           size="sm"
           data-testid="platform-alerts-window"
-          @update:model-value="alertWindow = fromSelectValue($event)"
         />
       </div>
       <p class="text-2xs text-muted">{{ t('settings.platformAlerts.windowHint') }}</p>

@@ -1875,7 +1875,6 @@
       "title": "Struttura",
       "hint": "Dove risiede questa attivita' nel suo servizio e quali standard di coding seguono i suoi agenti.",
       "module": "Modulo",
-      "modulePlaceholder": "Scegli o digita un modulo",
       "moduleHint": "Il modulo del servizio a cui appartiene questa attività; la board raggruppa le colonne in base a esso. Un modulo che non esiste ancora viene creato quando l’attività viene implementata.",
       "bestPractices": "Best practice",
       "bestPracticesEmpty": "Nessuna. Gli agenti seguono le loro linee guida predefinite.",

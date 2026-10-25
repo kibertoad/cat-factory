@@ -1370,7 +1370,6 @@
       "title": "Yapı",
       "hint": "Bu görevin servisi içinde nerede bulunduğu ve ajanlarının hangi kod standartlarını izlediği.",
       "module": "Modül",
-      "modulePlaceholder": "Bir modül seç veya yaz",
       "moduleHint": "Bu görevin ait olduğu servis modülü; pano kolonları buna göre gruplar. Henüz var olmayan bir modül, görev uygulandığında oluşturulur.",
       "bestPractices": "En iyi uygulamalar",
       "bestPracticesEmpty": "Yok. Ajanlar varsayılan yönergelerini izler.",

@@ -24,7 +24,7 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import type { AppSlots } from '~/modular/slots'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { pipelineAllowedForTaskType } from '~/utils/pipeline'
-import { fromSelectValue, selectNoneItem, toSelectValue } from '~/utils/selectNone'
+import { selectNoneItem, selectNoneModel } from '~/utils/selectNone'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t, te } = useI18n()
@@ -234,6 +234,12 @@ const draft = reactive({
   reviewFrictionBlockStuckEnabled: false,
   reviewFrictionBlockStuckMinutes: 1440 as number,
 })
+const fixPipelineModel = selectNoneModel(
+  () => draft.bugFishingFixPipelineId,
+  (value) => {
+    draft.bugFishingFixPipelineId = value
+  },
+)
 
 function hydrate() {
   const s = store.settings
@@ -677,13 +683,12 @@ async function save() {
                 {{ t('settings.workspaceSettings.bugFishing.body') }}
               </p>
               <USelectMenu
-                :model-value="toSelectValue(draft.bugFishingFixPipelineId)"
+                v-model="fixPipelineModel.value"
                 :items="fixPipelineOptions"
                 value-key="value"
                 size="sm"
                 class="max-w-md"
                 data-testid="workspace-settings-bug-fishing-pipeline"
-                @update:model-value="draft.bugFishingFixPipelineId = fromSelectValue($event)"
               />
             </section>
 

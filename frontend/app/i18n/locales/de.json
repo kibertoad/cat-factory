@@ -1875,7 +1875,6 @@
       "title": "Struktur",
       "hint": "Wo diese Aufgabe in ihrem Service liegt und welchen Coding-Standards ihre Agents folgen.",
       "module": "Modul",
-      "modulePlaceholder": "Modul wählen oder eingeben",
       "moduleHint": "Das Service-Modul, zu dem diese Aufgabe gehört; das Board gruppiert die Spalten danach. Ein noch nicht vorhandenes Modul wird bei der Umsetzung der Aufgabe erstellt.",
       "bestPractices": "Best Practices",
       "bestPracticesEmpty": "Keine. Agents folgen ihren Standardvorgaben.",

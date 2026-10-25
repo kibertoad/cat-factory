@@ -1370,7 +1370,6 @@
       "title": "Structure",
       "hint": "Où vit cette tâche dans son service et quelles normes de code ses agents suivent.",
       "module": "Module",
-      "modulePlaceholder": "Choisissez ou saisissez un module",
       "moduleHint": "Le module du service auquel appartient cette tâche ; le tableau groupe les colonnes par module. Un module qui n’existe pas encore est créé lors de l’implémentation de la tâche.",
       "bestPractices": "Bonnes pratiques",
       "bestPracticesEmpty": "Aucune. Les agents suivent leurs consignes par défaut.",

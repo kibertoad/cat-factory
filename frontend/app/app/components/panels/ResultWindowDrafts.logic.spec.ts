@@ -122,10 +122,9 @@ const VIEW_STATE_BINDINGS = [
   // The bug-fishing window's two controls. Neither holds unsubmitted work: marking and dismissing
   // a finding each commit on click, so the picker only decides which pipeline the NEXT mark runs
   // and the toggle only decides which rows are listed. Losing either on close loses a selection,
-  // not something the user wrote. The picker maps its "board default" row through
-  // `utils/selectNone.ts`, so it binds the explicit pair rather than `v-model`.
-  ':model-value="toSelectValue(pipelineOverride)"',
-  '@update:model-value="pipelineOverride = fromSelectValue($event)"',
+  // not something the user wrote. The picker binds `pipelineOverride` through the "board default"
+  // row's model (`utils/selectNone.ts`).
+  'v-model="pipelineOverrideModel.value"',
   'v-model="showTriaged"',
 ]
 

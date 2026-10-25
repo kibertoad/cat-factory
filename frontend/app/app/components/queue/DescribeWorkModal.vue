@@ -6,6 +6,7 @@ import { splitDescribedWork } from '~/utils/describeWork'
 import { isReviewDebtConflict, reviewFrictionContext } from '~/utils/reviewFriction'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import { showOverrideField } from '~/utils/uiMode'
+import { selectNoneItem, selectNoneModel } from '~/utils/selectNone'
 import AppModal from '~/components/common/AppModal.vue'
 
 /**
@@ -147,17 +148,17 @@ const KIND_LABEL_KEYS: Record<'feature' | 'bug', string> = {
   bug: 'describeWork.kind.bug',
 }
 
-// A select item cannot carry an empty value, so "the workspace default" has its own sentinel
-// and maps back to the empty string the create call reads as "no override".
-const DEFAULT_PRESET = '__workspace_default__'
+// "The workspace default" maps back to the empty string the create call reads as "no override".
 const modelPresetItems = computed(() => [
-  { label: t('describeWork.workspaceDefault'), value: DEFAULT_PRESET },
+  selectNoneItem(t('describeWork.workspaceDefault')),
   ...modelPresets.presets.map((p) => ({ label: p.name, value: p.id })),
 ])
-const modelPresetValue = computed({
-  get: () => modelPresetId.value || DEFAULT_PRESET,
-  set: (v: string) => (modelPresetId.value = v === DEFAULT_PRESET ? '' : v),
-})
+const modelPresetValue = selectNoneModel(
+  () => modelPresetId.value,
+  (value) => {
+    modelPresetId.value = value
+  },
+)
 
 /** Hand the text to the full form, for a kind or an attachment this dialog does not offer. */
 function openFullForm() {
@@ -319,7 +320,11 @@ async function submit(startNow: boolean, acknowledgeReviewDebt = false) {
                 />
               </UFormField>
               <UFormField v-if="showModelPreset" :label="t('board.addTask.modelPreset')">
-                <USelect v-model="modelPresetValue" :items="modelPresetItems" class="w-full" />
+                <USelect
+                  v-model="modelPresetValue.value"
+                  :items="modelPresetItems"
+                  class="w-full"
+                />
               </UFormField>
             </div>
           </template>
