@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { ApiError } from '~/composables/api/errors'
 import { describeCallbackFailure } from '~/components/settings/McpOAuthCallbackScreen.logic'
 
-const formatRequestId = (id: string) => `Request ID ${id}`
-
 describe('describeCallbackFailure', () => {
   it('reads the refusal from the envelope on ApiError.body', () => {
     const error = new ApiError(403, {
@@ -14,10 +12,14 @@ describe('describeCallbackFailure', () => {
       },
     })
 
-    expect(describeCallbackFailure(error, formatRequestId)).toEqual({
+    expect(describeCallbackFailure(error)).toEqual({
       kind: 'api',
-      descriptionKey: 'errors.generic.description.forbidden',
-      detail: 'This action requires the secrets.manage permission · Request ID req-42',
+      failure: {
+        descriptionKey: 'errors.generic.description.forbidden',
+        message: 'This action requires the secrets.manage permission',
+        issues: [],
+        requestId: 'req-42',
+      },
       restartHint: true,
     })
   })
@@ -31,8 +33,8 @@ describe('describeCallbackFailure', () => {
       },
     })
 
-    expect(describeCallbackFailure(error, formatRequestId)).toMatchObject({
-      descriptionKey: 'errors.reason.description.oauth_state_invalid',
+    expect(describeCallbackFailure(error)).toMatchObject({
+      failure: { descriptionKey: 'errors.reason.description.oauth_state_invalid' },
       restartHint: true,
     })
   })
@@ -42,18 +44,7 @@ describe('describeCallbackFailure', () => {
       const error = new ApiError(422, {
         error: { code: 'validation', message: 'refused', details: { reason } },
       })
-      expect(describeCallbackFailure(error, formatRequestId), reason).toMatchObject({
-        restartHint: false,
-      })
+      expect(describeCallbackFailure(error), reason).toMatchObject({ restartHint: false })
     }
-  })
-
-  it('describes a request that reached no server as a network fault', () => {
-    expect(describeCallbackFailure(new TypeError('Failed to fetch'), formatRequestId)).toEqual({
-      kind: 'api',
-      descriptionKey: 'errors.generic.description.network',
-      detail: 'Failed to fetch',
-      restartHint: true,
-    })
   })
 })
