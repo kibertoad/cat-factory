@@ -11,13 +11,13 @@ import type {
 import { formatMs, formatTokens } from '~/utils/observability'
 import {
   activitySegments,
-  columnPct,
   isUnattributed,
   maxOf,
   segmentPct,
   trendMagnitude,
 } from './ReportsPanel.logic'
 import ReportsSpendBreakdown from '~/components/panels/ReportsSpendBreakdown.vue'
+import TrendColumn from '~/components/panels/TrendColumn.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
@@ -378,22 +378,19 @@ watch(
                   icon="i-lucide-chart-column"
                   :title="t('reports.trend.empty')"
                 />
-                <div v-else class="flex h-28 items-end gap-0.5" data-testid="reports-trend">
-                  <div
+                <div v-else class="flex h-28 gap-0.5" data-testid="reports-trend">
+                  <TrendColumn
                     v-for="point in view.trend.points"
                     :key="point.start"
-                    class="flex h-full flex-1 flex-col justify-end gap-[2px]"
+                    :segments="[
+                      { value: point.subscriptionCost, class: 'bg-app-warning-600' },
+                      { value: point.meteredCost, class: 'bg-app-secondary-500' },
+                    ]"
+                    :max="maxTrend"
+                    :floor-pct="2"
+                    separated
                     :title="trendTooltip(point)"
-                  >
-                    <div
-                      class="w-full rounded-t-sm bg-app-warning-600"
-                      :style="{ height: `${columnPct(point.subscriptionCost, maxTrend)}%` }"
-                    />
-                    <div
-                      class="w-full rounded-sm bg-app-secondary-500"
-                      :style="{ height: `${columnPct(point.meteredCost, maxTrend)}%` }"
-                    />
-                  </div>
+                  />
                 </div>
                 <div class="mt-2 flex items-center gap-4 text-2xs text-dimmed">
                   <span class="flex items-center gap-1" :title="t('reports.legend.meteredHint')">

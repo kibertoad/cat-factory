@@ -8,6 +8,7 @@ import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import TakeoverShell from '~/components/common/TakeoverShell.vue'
+import TrendColumn from '~/components/panels/TrendColumn.vue'
 
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
 // active account's runs — outcome totals + success rate, a time-bucketed outcome trend, the
@@ -86,10 +87,6 @@ const gateColumns = computed<TableColumn<NonNullable<typeof view.value>['gates']
 
 function cleanRate(stat: { gates: number; cleanPasses: number }): number | null {
   return stat.gates > 0 ? stat.cleanPasses / stat.gates : null
-}
-function heightPct(count: number, max: number): number {
-  // Floor a non-zero column to 4% so a single run is still visible in the sparkline.
-  return count === 0 ? 0 : Math.max(4, Math.round((count / max) * 100))
 }
 function trendTooltip(p: { start: number; done: number; failed: number; other: number }): string {
   return `${d(new Date(p.start), 'short')} · ${t('platformObservability.trend.done')} ${p.done} · ${t('platformObservability.trend.failed')} ${p.failed} · ${t('platformObservability.trend.other')} ${p.other}`
@@ -303,26 +300,19 @@ watch(
                   icon="i-lucide-chart-column"
                   :title="t('platformObservability.trend.empty')"
                 />
-                <div v-else class="flex h-28 items-end gap-0.5" data-testid="operator-trend">
-                  <div
+                <div v-else class="flex h-28 gap-0.5" data-testid="operator-trend">
+                  <TrendColumn
                     v-for="p in view.trend.points"
                     :key="p.start"
-                    class="flex h-full flex-1 flex-col justify-end"
+                    :segments="[
+                      { value: p.failed, class: 'bg-app-error-500/80' },
+                      { value: p.other, class: 'bg-app-500/60' },
+                      { value: p.done, class: 'bg-app-success-500/80' },
+                    ]"
+                    :max="maxTrend"
+                    :floor-pct="4"
                     :title="trendTooltip(p)"
-                  >
-                    <div
-                      class="w-full rounded-t-sm bg-app-error-500/80"
-                      :style="{ height: `${heightPct(p.failed, maxTrend)}%` }"
-                    />
-                    <div
-                      class="w-full bg-app-500/60"
-                      :style="{ height: `${heightPct(p.other, maxTrend)}%` }"
-                    />
-                    <div
-                      class="w-full rounded-b-sm bg-app-success-500/80"
-                      :style="{ height: `${heightPct(p.done, maxTrend)}%` }"
-                    />
-                  </div>
+                  />
                 </div>
                 <div class="mt-2 flex items-center gap-4 text-2xs text-dimmed">
                   <span class="flex items-center gap-1"

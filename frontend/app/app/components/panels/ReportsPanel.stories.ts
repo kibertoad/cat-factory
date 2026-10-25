@@ -10,6 +10,7 @@ import { apiFailure, apiPending, apiResponse } from '~/stories/api'
 import { STORY_WORKSPACE_ID } from '~/stories/workspace'
 import { accountBoards, accounts, orgAccount } from '~/stories/accounts.stories.mocks'
 import { spendRow } from '~/stories/reports.stories.mocks'
+import { expectTrendToScale } from '~/stories/trend'
 import { withSeed } from '~/stories/withStores'
 import { useAccountsStore } from '~/stores/accounts'
 import { useReportsStore } from '~/stores/reports'
@@ -198,9 +199,15 @@ function report(overrides: Partial<ReportsView> = {}): ReportsView {
 /**
  * Seven days: the four totals, the daily spend trend, spend by model, agent kind, ticket
  * and run, and the boards with their runs. Model, agent kind and task type rows show their raw
- * keys; the bootstrap run has no task, so it shows its run id.
+ * keys; the bootstrap run has no task, so it shows its run id. Each trend column draws at its
+ * day's share of the dearest day.
  */
-export const Default: Story = {}
+export const Default: Story = {
+  play: async () => {
+    const totals = dailyTrend(7).map((p) => p.meteredCost + p.subscriptionCost)
+    await expectTrendToScale('reports-trend', totals, 2)
+  },
+}
 
 /** The first load in flight: placeholder blocks. */
 export const Loading: Story = {

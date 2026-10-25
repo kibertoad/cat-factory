@@ -3,6 +3,7 @@ import type { PlatformObservability, PlatformObservabilityWindow } from '~/types
 import { getPlatformObservabilityContract } from '@cat-factory/contracts'
 import { apiFailure, apiPending, apiResponse } from '~/stories/api'
 import { orgAccount } from '~/stories/accounts.stories.mocks'
+import { expectTrendToScale } from '~/stories/trend'
 import { withSeed } from '~/stories/withStores'
 import { useAccountsStore } from '~/stores/accounts'
 import { usePlatformObservabilityStore } from '~/stores/platformObservability'
@@ -137,9 +138,15 @@ function dailyTrend(days: number, through: number) {
 
 /**
  * The last 24 hours, counted live: the four tiles, the hourly trend, both gates with their clean
- * pass rates, four failure kinds, the runs live now, and the duration percentiles.
+ * pass rates, four failure kinds, the runs live now, and the duration percentiles. Each trend
+ * column draws at its hour's share of the busiest hour.
  */
-export const Default: Story = {}
+export const Default: Story = {
+  play: async () => {
+    const totals = hourlyTrend().map((p) => p.done + p.failed + p.other)
+    await expectTrendToScale('operator-trend', totals, 4)
+  },
+}
 
 /** The first load in flight: placeholder blocks. */
 export const Loading: Story = {
