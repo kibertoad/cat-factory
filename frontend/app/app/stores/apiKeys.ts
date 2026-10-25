@@ -1,3 +1,4 @@
+import { apiKeyConfiguresProvider } from '@cat-factory/contracts'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { AddApiKeyInput, ApiKey, ApiKeyProvider, UpdateApiKeyInput } from '~/types/domain'
@@ -107,9 +108,12 @@ export const useApiKeysStore = defineStore('apiKeys', () => {
   /** Every key reachable from the workspace (workspace + user scopes), newest first. */
   const allKeys = computed<ApiKey[]>(() => [...workspaceKeys.value, ...userKeys.value])
 
-  /** Providers with at least one reachable connected key. */
+  /** Providers with at least one reachable key that configures them (a disabled key does not). */
   const configuredProviders = computed(
-    () => new Set<ApiKeyProvider>(allKeys.value.map((k) => k.provider)),
+    () =>
+      new Set<ApiKeyProvider>(
+        allKeys.value.filter(apiKeyConfiguresProvider).map((k) => k.provider),
+      ),
   )
 
   function hasProvider(provider: ApiKeyProvider | undefined): boolean {

@@ -44,10 +44,7 @@ export const Default: Story = {}
 /** Nothing connected: the callout, and OpenRouter marked recommended. */
 export const NothingConnected: Story = { parameters: { api: providersApi() } }
 
-/**
- * The only OpenRouter key is disabled. The key contract says a disabled key does not make its
- * provider configured, but the row reads Key connected and there is no callout.
- */
+/** The only OpenRouter key is disabled, so the provider is not configured: no Key connected. */
 export const DisabledKeyOnly: Story = {
   parameters: { api: providersApi({ workspaceKeys: [apiKey({ enabled: false })] }) },
 }

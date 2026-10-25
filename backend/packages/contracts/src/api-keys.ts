@@ -58,6 +58,12 @@ export const apiKeySchema = v.object({
 })
 export type ApiKey = v.InferOutput<typeof apiKeySchema>
 
+/** Whether this key makes its provider "configured". Only an enabled key does: the backend
+ * applies the same rule in each runtime's `listConfiguredProviders` query. */
+export function apiKeyConfiguresProvider(key: Pick<ApiKey, 'enabled'>): boolean {
+  return key.enabled
+}
+
 export const apiKeyListSchema = v.array(apiKeySchema)
 export type ApiKeyList = v.InferOutput<typeof apiKeyListSchema>
 
