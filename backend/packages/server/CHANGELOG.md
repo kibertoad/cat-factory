@@ -1,5 +1,37 @@
 # @cat-factory/server
 
+## 0.342.0
+
+### Minor Changes
+
+- dff3a0d: A disabled API key no longer marks its provider as configured in the SPA. A new member-readable route, `GET /workspaces/:ws/configured-providers`, serves the direct providers a run can reach, from the same resolution the model catalog and the run-start guard use, so it also counts account-scoped keys and leaves out a gateway with no base URL. The model providers hub and the OpenRouter panel read it, and show a turned-off key as "Key disabled" with a way back to the key list instead of a form to paste a second key.
+
+### Patch Changes
+
+- fa0ba67: The SPA no longer offers writes the backend refuses for the caller's role. In the follow-up window,
+  the follow-up's Dismiss is off for a board viewer, like its siblings. The add-task form refuses a
+  viewer whichever surface opened it, and the describe-work dialog turns More kinds and Attach context
+  off for a viewer, with the read-only reason as the title. The account Team tab hides Invite, Revoke,
+  and the email sender's Connect and Disconnect from anyone who is not an account admin, and titles
+  the invitation list "Invitations" for them. The MCP consent screen offers only the boards where the
+  person holds the permission an approval needs, and says so when there are none.
+  
+  `WORKSPACE_ROLE_PERMISSIONS` and `permissionsForRole` move from `@cat-factory/kernel` to
+  `@cat-factory/contracts`, so the SPA reads a board's `viewerRole` with the same map the backend
+  enforces. Kernel re-exports both, so its imports do not change. Contracts also adds
+  `MCP_AUTHORIZATION_APPROVE_PERMISSION`, which the consent controller and the consent screen both
+  read.
+- 6220716: Completing a tool-server OAuth grant now refuses a bad `state` with a 422 (`details.reason: oauth_state_invalid`) and a grant started by someone else with a 403 (`oauth_started_by_other_user`), where both were a 401. The SPA signs out on every 401, so an expired link used to drop a valid session and, after sign-in, replay the same dead `state`. `TOOL_SERVER_OAUTH_REASONS` in contracts names every reason this flow refuses with, so the SPA can give each one translated copy. Internal route, not part of `/api/v1`.
+- Updated dependencies [dff3a0d]
+- Updated dependencies [fa0ba67]
+- Updated dependencies [6220716]
+  - @cat-factory/contracts@0.375.0
+  - @cat-factory/kernel@0.363.1
+  - @cat-factory/integrations@0.178.1
+  - @cat-factory/agents@0.172.9
+  - @cat-factory/orchestration@0.323.1
+  - @cat-factory/spend@0.23.23
+
 ## 0.341.0
 
 ### Minor Changes
