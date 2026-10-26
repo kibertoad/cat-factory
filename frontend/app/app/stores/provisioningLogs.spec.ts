@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { computed } from 'vue'
 import { useProvisioningLogsStore } from '~/stores/provisioningLogs'
 import { useWorkspaceStore } from '~/stores/workspace'
 import type { ProvisioningLogEntry } from '~/types/provisioningLogs'
@@ -44,6 +45,64 @@ describe('provisioningLogs store — loadForExecution', () => {
 
     expect(store.byExecution.exec1!.loading).toBe(false)
     expect(store.byExecution.exec1!.entries).toHaveLength(1)
+  })
+
+  describe('the first load for a run reaches a reader that tracks the store (#2394)', () => {
+    // The drawer reads `byExecution[id]` through a computed. A plain read after the load would see
+    // the values even if the store wrote them to the raw object, so these specs read through a
+    // computed, which only re-evaluates when the writes go through the reactive proxy.
+    function trackRun(store: ReturnType<typeof useProvisioningLogsStore>) {
+      return computed(() => {
+        const s = store.byExecution.exec1
+        return s ? { loading: s.loading, ids: s.entries.map((e) => e.id), error: s.error } : null
+      })
+    }
+
+    it('shows loading, then the entries', async () => {
+      let resolveFetch!: (r: { entries: ProvisioningLogEntry[] }) => void
+      vi.stubGlobal('useApi', () => ({
+        listProvisioningLogs: () =>
+          new Promise<{ entries: ProvisioningLogEntry[] }>((res) => {
+            resolveFetch = res
+          }),
+      }))
+      const store = useProvisioningLogsStore()
+      const run = trackRun(store)
+      expect(run.value).toBeNull()
+
+      const load = store.loadForExecution('exec1')
+      expect(run.value).toEqual({ loading: true, ids: [], error: null })
+
+      resolveFetch({ entries: [entry({ id: 'a' }), entry({ id: 'b' })] })
+      await load
+      expect(run.value).toEqual({ loading: false, ids: ['a', 'b'], error: null })
+    })
+
+    it('shows the error when the read fails', async () => {
+      vi.stubGlobal('useApi', () => ({
+        listProvisioningLogs: () => Promise.reject(new Error('503')),
+      }))
+      const store = useProvisioningLogsStore()
+      const run = trackRun(store)
+
+      const load = store.loadForExecution('exec1')
+      expect(run.value?.loading).toBe(true)
+      await load
+      expect(run.value).toEqual({ loading: false, ids: [], error: '503' })
+    })
+
+    it('shows an empty run as loaded with no entries', async () => {
+      vi.stubGlobal('useApi', () => ({
+        listProvisioningLogs: () => Promise.resolve({ entries: [] }),
+      }))
+      const store = useProvisioningLogsStore()
+      const run = trackRun(store)
+
+      const load = store.loadForExecution('exec1')
+      expect(run.value?.loading).toBe(true)
+      await load
+      expect(run.value).toEqual({ loading: false, ids: [], error: null })
+    })
   })
 
   it('a silent poll never flips the loading spinner', async () => {
@@ -137,30 +196,32 @@ describe('provisioningLogs store — loadForExecution', () => {
     expect(store.byExecution.exec1!.loading).toBe(false)
   })
 
-  it("evict drops a run's accumulated state (map does not grow unbounded)", async () => {
-    vi.stubGlobal('useApi', () => ({
-      listProvisioningLogs: () => Promise.resolve({ entries: [entry()] }),
-    }))
+  it('a silent poll never supersedes a visible load in flight', async () => {
+    // The drawer opens on a live run and its first load outlasts a poll tick. If the poll took over
+    // and then failed, the visible result would be discarded and the drawer would show the empty
+    // state for a run that has attempts.
+    let resolveVisible!: (r: { entries: ProvisioningLogEntry[] }) => void
+    const listProvisioningLogs = vi.fn(() =>
+      listProvisioningLogs.mock.calls.length === 1
+        ? new Promise<{ entries: ProvisioningLogEntry[] }>((res) => {
+            resolveVisible = res
+          })
+        : Promise.reject(new Error('network')),
+    )
+    vi.stubGlobal('useApi', () => ({ listProvisioningLogs }))
 
     const store = useProvisioningLogsStore()
-    await store.loadForExecution('exec1')
-    expect(store.byExecution.exec1).toBeDefined()
+    const visible = store.loadForExecution('exec1')
+    await store.loadForExecution('exec1', { silent: true })
+    resolveVisible({ entries: [entry({ id: 'a' })] })
+    await visible
 
-    store.evict('exec1')
-    expect(store.byExecution.exec1).toBeUndefined()
-
-    // After eviction a fresh load re-seeds cleanly (the drawer re-fetches on re-mount) — and the
-    // per-execution ticket record was dropped too, so the guard still holds for the new lifecycle.
-    await store.loadForExecution('exec1')
-    expect(store.byExecution.exec1!.entries).toHaveLength(1)
+    expect(listProvisioningLogs).toHaveBeenCalledTimes(1)
+    expect(store.byExecution.exec1!.entries.map((e) => e.id)).toEqual(['a'])
+    expect(store.byExecution.exec1!.loading).toBe(false)
   })
 
-  it('a load in flight when evict runs cannot resurrect stale state after the drawer re-opens', async () => {
-    // Close-then-reopen while the pre-close fetch is still pending: the drawer unmounts (evict), then
-    // re-mounts and issues a fresh load, then the OLD pre-evict fetch finally resolves. With a global
-    // (never-reset) load ticket the re-opened load out-ranks the straggler, so the stale result is
-    // discarded rather than clobbering the fresh timeline (a per-execution counter reset on evict
-    // would let the two collide on the same seq and the straggler would win).
+  it('an older visible load resolving first keeps the spinner on for the newer one', async () => {
     const deferred: Array<(r: { entries: ProvisioningLogEntry[] }) => void> = []
     vi.stubGlobal('useApi', () => ({
       listProvisioningLogs: () =>
@@ -168,16 +229,102 @@ describe('provisioningLogs store — loadForExecution', () => {
     }))
 
     const store = useProvisioningLogsStore()
-    const preEvict = store.loadForExecution('exec1', { silent: true }) // issued before close
-    store.evict('exec1') // drawer unmounts mid-flight
-    const reopened = store.loadForExecution('exec1', { silent: true }) // drawer re-opens, fresh load
+    const first = store.loadForExecution('exec1')
+    const second = store.loadForExecution('exec1')
 
-    // The re-opened load resolves first (fresh), then the stale pre-evict straggler.
+    deferred[0]!({ entries: [entry({ id: 'stale' })] })
+    await first
+    // Still loading with no entries: the drawer keeps its skeleton rather than the empty state.
+    expect(store.byExecution.exec1!.loading).toBe(true)
+    expect(store.byExecution.exec1!.entries).toHaveLength(0)
+
+    deferred[1]!({ entries: [entry({ id: 'fresh' })] })
+    await second
+    expect(store.byExecution.exec1!.loading).toBe(false)
+    expect(store.byExecution.exec1!.entries[0]!.id).toBe('fresh')
+  })
+
+  it('stateFor reads a run through the store, and an empty state before its first load', async () => {
+    vi.stubGlobal('useApi', () => ({
+      listProvisioningLogs: () => Promise.resolve({ entries: [entry({ id: 'a' })] }),
+    }))
+    const store = useProvisioningLogsStore()
+    const ids = computed(() => store.stateFor('exec1').entries.map((e) => e.id))
+
+    expect(ids.value).toEqual([])
+    expect(store.byExecution.exec1).toBeUndefined()
+    await store.loadForExecution('exec1')
+    expect(ids.value).toEqual(['a'])
+  })
+
+  it("the last release drops a run's state (map does not grow unbounded)", async () => {
+    vi.stubGlobal('useApi', () => ({
+      listProvisioningLogs: () => Promise.resolve({ entries: [entry()] }),
+    }))
+
+    const store = useProvisioningLogsStore()
+    store.retain('exec1')
+    await store.loadForExecution('exec1')
+    expect(store.byExecution.exec1).toBeDefined()
+
+    store.release('exec1')
+    expect(store.byExecution.exec1).toBeUndefined()
+
+    // A re-opened drawer re-seeds cleanly.
+    store.retain('exec1')
+    await store.loadForExecution('exec1')
+    expect(store.byExecution.exec1!.entries).toHaveLength(1)
+  })
+
+  it('a run shown by two drawers keeps its state until both release it', async () => {
+    // The step details and the test report window can both show one run's drawer. Closing one
+    // must not drop the state, or a load, out from under the other.
+    let resolveFetch!: (r: { entries: ProvisioningLogEntry[] }) => void
+    vi.stubGlobal('useApi', () => ({
+      listProvisioningLogs: () =>
+        new Promise<{ entries: ProvisioningLogEntry[] }>((res) => {
+          resolveFetch = res
+        }),
+    }))
+
+    const store = useProvisioningLogsStore()
+    store.retain('exec1')
+    store.retain('exec1')
+    const load = store.loadForExecution('exec1')
+    store.release('exec1')
+
+    resolveFetch({ entries: [entry({ id: 'a' })] })
+    await load
+    expect(store.byExecution.exec1!.entries.map((e) => e.id)).toEqual(['a'])
+
+    store.release('exec1')
+    expect(store.byExecution.exec1).toBeUndefined()
+  })
+
+  it('a load in flight when the run is released cannot resurrect stale state after the drawer re-opens', async () => {
+    // Close-then-reopen while the pre-close fetch is still pending: the drawer unmounts (release),
+    // then re-mounts and issues a fresh load, then the OLD pre-close fetch finally resolves. The
+    // straggler holds the dropped run's state and record, so it never reaches the re-opened one.
+    const deferred: Array<(r: { entries: ProvisioningLogEntry[] }) => void> = []
+    vi.stubGlobal('useApi', () => ({
+      listProvisioningLogs: () =>
+        new Promise<{ entries: ProvisioningLogEntry[] }>((res) => deferred.push(res)),
+    }))
+
+    const store = useProvisioningLogsStore()
+    store.retain('exec1')
+    const preClose = store.loadForExecution('exec1') // issued before close
+    store.release('exec1') // drawer unmounts mid-flight
+    store.retain('exec1')
+    const reopened = store.loadForExecution('exec1') // drawer re-opens, fresh load
+
+    // The re-opened load resolves first (fresh), then the stale pre-close straggler.
     deferred[1]!({ entries: [entry({ id: 'fresh', operation: 'release' })] })
     deferred[0]!({ entries: [entry({ id: 'stale', operation: 'dispatch' })] })
-    await Promise.all([preEvict, reopened])
+    await Promise.all([preClose, reopened])
 
     expect(store.byExecution.exec1!.entries).toHaveLength(1)
     expect(store.byExecution.exec1!.entries[0]!.id).toBe('fresh')
+    expect(store.byExecution.exec1!.loading).toBe(false)
   })
 })
