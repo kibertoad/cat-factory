@@ -1,5 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import type { AgentConfigDescriptor, Pipeline } from '@cat-factory/contracts'
+import {
+  AGENT_CONFIG_VALUE_MAX_LENGTH,
+  type AgentConfigDescriptor,
+  type Pipeline,
+} from '@cat-factory/contracts'
 
 import { boardWith, loginTask } from '~/stories/board.stories.mocks'
 import { buildPipeline, execution, snapshot } from '~/stories/snapshot.stories.mocks'
@@ -173,6 +177,11 @@ export const TextAndNumberOptions: Story = {
     )
     const cap = c.getByTestId('agent-config-ralph.maxIterations')
     await expect(cap).toHaveValue(10)
+    // The stored value's cap, so a longer command cannot reach a save that fails.
+    await expect(c.getByTestId('agent-config-ralph.validationCommand')).toHaveAttribute(
+      'maxlength',
+      String(AGENT_CONFIG_VALUE_MAX_LENGTH),
+    )
     await userEvent.clear(cap)
     await userEvent.type(cap, '15')
     await userEvent.tab()
