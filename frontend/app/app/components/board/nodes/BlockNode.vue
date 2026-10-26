@@ -433,7 +433,7 @@ const ITEM_ICON: Record<string, string | undefined> = {
                     {{ t('board.frame.shared') }}
                   </UBadge>
                 </div>
-                <div class="text-2xs text-muted">{{ typeMeta!.label }}</div>
+                <div class="text-2xs text-muted">{{ t(typeMeta!.labelKey) }}</div>
               </div>
             </div>
             <div class="flex items-center gap-1">

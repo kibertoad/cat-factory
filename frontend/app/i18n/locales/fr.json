@@ -184,6 +184,18 @@
       "library": "Bibliothèque",
       "document": "Dépôt de documentation"
     },
+    "blockTypes": {
+      "frontend": "Frontend",
+      "service": "Service",
+      "library": "Bibliothèque",
+      "document": "Dépôt de documentation",
+      "api": "API",
+      "database": "Base de données",
+      "queue": "File d'attente",
+      "integration": "Intégration",
+      "external": "Externe",
+      "environment": "Environnement"
+    },
     "toolbar": {
       "addService": "Ajouter un service",
       "decisionWord": "décision | décisions",
@@ -233,11 +245,17 @@
       "loadingIssue": "Chargement de la description du ticket lié…",
       "additionalNotes": "Notes supplémentaires",
       "description": "Description",
-      "notesPlaceholder": "Ajoutez tout ce que l’agent devrait savoir ; ce sera ajouté à la description du ticket ci-dessus…",
-      "descriptionPlaceholder": "Décrivez le travail : contexte, critères d’acceptation, tout ce que l’agent devrait savoir…",
+      "notesPlaceholder": "Ajoutez tout ce que l’agent devrait savoir. Ce sera ajouté à la description du ticket ci-dessus…",
+      "descriptionPlaceholder": "Décrivez le travail : contexte, critères d’acceptation, tout ce que l’agent doit savoir…",
       "technical": "Tâche technique",
       "technicalHint": "Un refactor / changement non fonctionnel / interne. L’implémenteur traite la définition de la tâche comme principale et la spec comme référence de régression ; laissez désactivé pour laisser la phase de spec décider.",
       "severity": "Gravité",
+      "severities": {
+        "low": "Faible",
+        "medium": "Moyenne",
+        "high": "Élevée",
+        "critical": "Critique"
+      },
       "stepsToReproduce": "Étapes de reproduction",
       "stepsToReproducePlaceholder": "Observé vs attendu, et comment reproduire…",
       "timebox": "Limite de temps (heures)",
@@ -322,7 +340,7 @@
       "agentConfiguration": "Configuration de l’agent",
       "noDocsHint": "Joignez une exigence, un RFC ou un PRD pour que les agents le voient en implémentant cette tâche.",
       "noIssuesHint": "Joignez un ticket du suivi pour que les agents voient sa description et ses commentaires en implémentant cette tâche.",
-      "plannedHint": "La tâche est ajoutée à l’état planifié. Elle ne s’exécutera pas tant que vous n’aurez pas lancé une pipeline dessus ; vous pouvez la modifier jusque-là.",
+      "plannedHint": "La tâche est ajoutée à l’état planifié. Elle ne s’exécutera pas tant que vous n’aurez pas lancé une pipeline dessus, et vous pouvez la modifier jusque-là.",
       "continue": "Continuer",
       "submit": "Ajouter la tâche",
       "addFailedTitle": "Impossible d’ajouter la tâche",
@@ -701,16 +719,16 @@
       "blockedTitle": "Trop de tâches en attente de revue",
       "warnToast": "Des tâches attendent une revue humaine. Pensez à les revoir avant de créer plus de travail.",
       "blockedToast": "La création de tâches est bloquée jusqu’à résorption de la file de revue.",
-      "warnBody": "{count} tâche(s) attendent une revue humaine. Pensez à les revoir avant de créer plus de travail.",
-      "blockedCountBody": "Création bloquée : {count} tâche(s) attendent une revue humaine (limite {threshold}). Résorbez d’abord la file de revue.",
-      "blockedStuckBody": "Création bloquée : une tâche attend une revue humaine depuis plus de {minutes} minute(s). Résorbez d’abord la file de revue.",
+      "warnBody": "{count} tâche attend une revue humaine. Pensez à la revoir avant de créer plus de travail. | {count} tâches attendent une revue humaine. Pensez à les revoir avant de créer plus de travail.",
+      "blockedCountBody": "Création bloquée : {count} tâche attend une revue humaine (limite {threshold}). Résorbez d’abord la file de revue. | Création bloquée : {count} tâches attendent une revue humaine (limite {threshold}). Résorbez d’abord la file de revue.",
+      "blockedStuckBody": "Création bloquée : une tâche attend une revue humaine depuis plus de {minutes} minute. Résorbez d’abord la file de revue. | Création bloquée : une tâche attend une revue humaine depuis plus de {minutes} minutes. Résorbez d’abord la file de revue.",
       "waitingHeading": "En attente de revue",
       "waiting": "{minutes} min d’attente",
       "untitled": "Tâche sans titre",
       "close": "Fermer",
       "createAnyway": "Créer quand même",
       "goReview": "Aller revoir",
-      "badge": "{count} tâche(s) en attente de revue"
+      "badge": "{count} tâche en attente de revue | {count} tâches en attente de revue"
     },
     "conflict": {
       "title": {
@@ -2771,6 +2789,12 @@
         "github": {
           "description": "Connectez la GitHub App de l'espace de travail, parcourez dépôts, PR et tickets."
         },
+        "gitlab": {
+          "description": "Connectez l'espace de travail à GitLab avec un jeton d'accès, parcourez projets, merge requests et tickets."
+        },
+        "sourceControl": {
+          "description": "Connectez un hébergeur de dépôts, parcourez dépôts, demandes de fusion et tickets."
+        },
         "slack": {
           "description": "Acheminez les notifications vers l'espace Slack de votre équipe."
         },
@@ -2920,7 +2944,11 @@
         "apiKey": "Clé d’API {id}"
       },
       "values": {
-        "none": "aucun"
+        "none": "aucun",
+        "accessMode": {
+          "account": "tout le compte",
+          "restricted": "les membres listés uniquement"
+        }
       },
       "actions": {
         "accountMemberAdded": "a ajouté {target} au compte en tant que {roles}",
@@ -2999,6 +3027,10 @@
       "back": "Retour",
       "closeEsc": "Fermer (Échap)",
       "quota": "quota",
+      "cost": "{input}/{output} {currency} par million de jetons",
+      "quotaCost": "consommation de quota ~{input}/{output} {currency} par million de jetons",
+      "promptCaching": "Mise en cache des prompts",
+      "noPromptCaching": "Pas de mise en cache des prompts",
       "list": {
         "intro": "Chaque préréglage définit un {baseModel} pour chaque agent, avec des remplacements facultatifs par agent. Un modèle épinglé sur une tâche individuelle prévaut tout de même sur le préréglage.",
         "introBaseModel": "modèle de base",
@@ -5025,6 +5057,18 @@
       "linkFailed": "Impossible de mettre à jour le lien du document",
       "loadFailed": "Impossible de charger les modèles de documents"
     },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "Conception",
+      "technical": "Technique",
+      "api": "API",
+      "runbook": "Procédure d'exploitation",
+      "research": "Recherche",
+      "reference": "Référence",
+      "other": "Autre"
+    },
     "startFromDesign": {
       "title": "Partir d'une maquette",
       "intro": "Collez le lien vers un frame ou un fichier entier. Il est attaché à la nouvelle tâche, et l'agent en lit la mise en page, les textes, les composants et les tokens.",
@@ -5635,6 +5679,18 @@
     "health": {
       "title": "État des pipelines",
       "allValid": "Tous les pipelines sont valides et à jour.",
+      "noEnabledSteps": "Aucune étape activée : le pipeline n'a rien à exécuter.",
+      "problems": {
+        "companion": "Le compagnon « {kind} » doit s'exécuter juste après une étape activée qu'il peut relire ({targets}).",
+        "gatingNotGatable": "L'étape « {kind} » ne peut pas dépendre de l'estimation : le reste de l'exécution a besoin de son résultat. Seule une étape dont le résultat sert de contexte aux étapes suivantes (une conception, une revue, une vérification supplémentaire) peut être sautée selon l'estimation.",
+        "gatingWithHumanGate": "L'étape « {kind} » porte une approbation humaine, elle ne peut donc pas aussi dépendre de l'estimation. L'estimation peut ajouter un contrôle humain, jamais en retirer un.",
+        "gatingNoThreshold": "L'étape « {kind} » dépend de l'estimation mais ne fixe aucun seuil (complexité, risque ou impact).",
+        "gatingNoEstimator": "L'étape « {kind} » dépend de l'estimation, mais aucune étape qui en produit une ne s'exécute avant elle.",
+        "conditionNotGatable": "L'étape « {kind} » ne peut pas porter de condition d'exécution : le reste de l'exécution a besoin de son résultat, donc une exécution hors du périmètre de la condition se terminerait sans elle, sans le signaler.",
+        "conditionWithHumanGate": "L'étape « {kind} » porte une approbation humaine, elle ne peut donc pas aussi porter une condition d'exécution. Une condition peut laisser un contrôle non atteint, jamais en retirer un.",
+        "unknownKinds": "Fait référence à un type d'agent inconnu : {kinds}. | Fait référence à des types d'agent inconnus : {kinds}.",
+        "outdated": "Une version plus récente de ce pipeline intégré est disponible (v{from} vers v{to})."
+      },
       "invalidHeading": "Pipelines non valides",
       "invalidDescription": "Ceux-ci référencent un agent manquant ou sont mal configurés et échoueraient (ou s'exécuteraient mal) au démarrage. Supprimez un pipeline personnalisé, ou régénérez un pipeline intégré pour restaurer sa définition du catalogue.",
       "builtinBadge": "intégré",
@@ -5729,6 +5785,14 @@
   "palette": {
     "hint": "Cliquez sur un agent pour l'ajouter au pipeline.",
     "customAgents": "Agents personnalisés",
+    "categories": {
+      "review": "Revue et tri",
+      "design": "Conception et recherche",
+      "build": "Implémentation",
+      "test": "Tests",
+      "docs": "Documentation",
+      "gates": "Portes et observabilité"
+    },
     "purposeHidden": "{count} agent masqué pour cet objectif. | {count} agents masqués pour cet objectif."
   },
   "gates": {
@@ -6118,6 +6182,7 @@
     "confidence": "confiance {pct}",
     "panel": "Panel",
     "topScore": "meilleur {label} {pct}",
+    "notScored": "non noté",
     "expert": "Expert {letter}",
     "participant": "Participant",
     "strategy": {
@@ -6165,8 +6230,8 @@
       "detail": "Faites une ronde de brainstorming supplémentaire, passez à l'étape suivante avec la dernière orientation malgré tout, ou arrêtez et réinitialisez la tâche pour pouvoir la modifier et la resoumettre."
     },
     "working": {
-      "incorporating": "Intégration de vos choix dans une {doc}… Vous pouvez fermer cette fenêtre ; nous vous préviendrons uniquement si davantage d'informations sont nécessaires.",
-      "reReviewing": "Relance du brainstorming sur l'orientation mise à jour… Vous pouvez fermer cette fenêtre ; nous vous préviendrons uniquement si davantage d'informations sont nécessaires."
+      "incorporating": "Intégration de vos choix dans une {doc}… Vous pouvez fermer cette fenêtre. Nous vous préviendrons uniquement si davantage d'informations sont nécessaires.",
+      "reReviewing": "Relance du brainstorming sur l'orientation mise à jour… Vous pouvez fermer cette fenêtre. Nous vous préviendrons uniquement si davantage d'informations sont nécessaires."
     },
     "severity": {
       "low": "faible",
@@ -6205,30 +6270,30 @@
     "proceedNothing": "Continuer (rien à intégrer)",
     "incorporateChoices": "Intégrer les choix",
     "hint": {
-      "allDismissed": "Toutes les options sont écartées — passez à l'étape suivante sans orientation.",
+      "allDismissed": "Toutes les options sont écartées. Passez à l'étape suivante sans orientation.",
       "incorporate": "Intègre vos choix dans une seule {doc}, puis relance le brainstorming automatiquement.",
       "chooseAll": "Choisissez ou écartez chaque option pour continuer."
     },
     "reRunning": "Relance en cours…",
-    "reRun": "C'est bon — relancer",
+    "reRun": "C'est bon, relancer",
     "redoIncorporation": "Refaire l'intégration",
     "redoPlaceholder": "Que devrait faire l'orientation différemment ?",
     "redoWithDirection": "Refaire avec cette orientation",
     "mergedHint": "Relancer exécute l'agent sur cette orientation. Si l'intégration ne vous convient pas, refaites-la plutôt avec un commentaire.",
-    "incorporatedFooter": "Orientation arrêtée — le pipeline continue avec le document à gauche.",
+    "incorporatedFooter": "Orientation arrêtée. Le pipeline continue avec le document à gauche.",
     "toast": {
       "saveChoiceError": "Impossible d'enregistrer le choix",
       "updateOptionError": "Impossible de mettre à jour l'option",
       "incorporateError": "Impossible d'intégrer les choix",
       "draftingTitle": "Rédaction de l'{doc} en arrière-plan",
-      "draftingDescription": "Vous êtes de retour sur le tableau — nous vous préviendrons uniquement si davantage d'informations sont nécessaires.",
-      "reReviewSettled": "Orientation arrêtée — poursuite du pipeline",
-      "reReviewExceeded": "Limite d'itérations atteinte — choisissez comment procéder",
+      "draftingDescription": "Vous êtes de retour sur le tableau. Nous vous préviendrons uniquement si davantage d'informations sont nécessaires.",
+      "reReviewSettled": "Orientation arrêtée, poursuite du pipeline",
+      "reReviewExceeded": "Limite d'itérations atteinte : choisissez comment procéder",
       "reReviewNewOptions": "aucune nouvelle option à traiter | une nouvelle option à traiter | {count} nouvelles options à traiter",
       "reReviewError": "Impossible de relancer le brainstorming",
       "proceeding": "Passage à l'étape suivante",
       "proceedError": "Impossible de continuer",
-      "taskReset": "Tâche réinitialisée — modifiez-la et resoumettez-la",
+      "taskReset": "Tâche réinitialisée : modifiez-la et resoumettez-la",
       "extraRoundGranted": "Une ronde de brainstorming supplémentaire accordée",
       "resolveError": "Impossible de résoudre le brainstorming"
     }
@@ -6325,10 +6390,10 @@
   },
   "humanTest": {
     "title": "Test humain",
-    "titleWithBlock": "Test humain — {title}",
+    "titleWithBlock": "Test humain · {title}",
     "subtitle": "Validez la modification dans un environnement en ligne",
     "notStarted": "Cette étape n'a pas encore commencé.",
-    "confirm": "C'est bon, continuer",
+    "confirm": "Tout est bon, continuer",
     "phase": {
       "provisioning": "Provisionnement de l'environnement…",
       "awaitingHuman": "En attente de votre validation",
@@ -6359,7 +6424,7 @@
       "heading": "Un problème ?",
       "cancel": "Annuler",
       "requestFix": "Demander une correction",
-      "placeholder": "Décrivez ce qui n'a pas fonctionné : l'agent réparateur reçoit ceci comme contexte, puis l'environnement est reconstruit pour un nouveau test.",
+      "placeholder": "Décrivez ce qui n'a pas fonctionné. L'agent réparateur reçoit ceci comme contexte, puis l'environnement est reconstruit pour un nouveau test.",
       "send": "Envoyer au réparateur"
     },
     "history": {
@@ -6819,7 +6884,7 @@
     },
     "intro": {
       "workspace": "Organisez les bonnes pratiques que les agents suivent sur ce tableau. Les fragments sont fusionnés depuis le catalogue intégré, votre compte et ce tableau (les niveaux ultérieurs priment sur les précédents), puis les plus pertinents sont sélectionnés pour chaque exécution d'agent.",
-      "account": "Organisez les bonnes pratiques partagées par tous les tableaux de ce compte. Les fragments du compte sont fusionnés au-dessus du catalogue intégré, et un tableau peut les remplacer ou ajouter les siens par-dessus. Les plus pertinents sont sélectionnés pour chaque exécution d'agent."
+      "account": "Organisez les bonnes pratiques partagées par tous les tableaux de ce compte. Les fragments du compte remplacent ceux du catalogue intégré, et un tableau peut les remplacer ou ajouter les siens par-dessus. Les plus pertinents sont sélectionnés pour chaque exécution d'agent."
     },
     "owner": {
       "workspace": "Ce tableau",
@@ -7017,7 +7082,7 @@
       "link": "Lier et synchroniser",
       "metaSynced": "synchronisé le {date} · réf {ref}",
       "metaNever": "jamais synchronisé · réf {ref}",
-      "metaFiles": "{service} · {count} fichiers de contrat",
+      "metaFiles": "{service} · {count} fichier de contrat | {service} · {count} fichiers de contrat",
       "metaFolder": "{service} · contrats de ce dossier",
       "metaFolderRecursive": "{service} · contrats de ce dossier et de ses sous-dossiers",
       "metaDirectory": "un service par sous-répertoire",
@@ -7180,11 +7245,11 @@
       "maxCells": "(max {max})",
       "run": "Lancer"
     },
-    "experimentStatus": {
-      "draft": "brouillon",
-      "running": "en cours",
-      "done": "terminé",
-      "failed": "échoué"
+    "statusChip": {
+      "draft": "Brouillon",
+      "running": "En cours",
+      "done": "Terminé",
+      "failed": "Échoué"
     },
     "results": {
       "col": {
@@ -7315,12 +7380,12 @@
       "open": "Ouvrir",
       "openPr": "Pull request"
     },
-    "status": {
-      "pending": "en attente",
-      "running": "en cours",
-      "succeeded": "réussi",
-      "failed": "échoué",
-      "awaitingReview": "en attente de revue"
+    "statusChip": {
+      "pending": "En attente",
+      "running": "En cours",
+      "succeeded": "Réussi",
+      "failed": "Échoué",
+      "awaitingReview": "En attente de revue"
     },
     "arch": {
       "title": "Architectures de référence",
@@ -7708,7 +7773,7 @@
       "awaiting": "En attente de revue",
       "cleared": "Revu",
       "pausedTitle": "En pause pour revue",
-      "pausedBody": "La phase « {phase} » est terminée. Examinez ci-dessus les artefacts et les PR validés, puis reprenez pour continuer ou annulez pour arrêter l'initiative."
+      "pausedBody": "La phase « {phase} » est terminée. Examinez ci-dessous les artefacts et les PR validés, puis reprenez pour continuer ou annulez pour arrêter l'initiative."
     }
   },
   "environmentWizard": {
@@ -8140,7 +8205,9 @@
       },
       "unprotectedHint": "l'identifiant d'une exécution peut pousser ici directement et fusionner sa propre demande de tirage",
       "detailUnavailable": "protégée, mais la règle n'a pas pu être lue — les poussées directes restent peut-être autorisées",
-      "requiresPr": "demande de tirage obligatoire, {reviews} revue(s) d'approbation, {checks} vérification(s) obligatoire(s)",
+      "requiresPr": "demande de tirage obligatoire, {reviews}, {checks}",
+      "approvingReviews": "{count} revue d'approbation | {count} revues d'approbation",
+      "requiredChecks": "{count} vérification obligatoire | {count} vérifications obligatoires",
       "noPrRequired": "protégée, mais aucune demande de tirage n'est exigée",
       "unknownReason": {
         "branch_not_found": "branche par défaut introuvable — la projection du dépôt est peut-être obsolète",
@@ -8205,6 +8272,7 @@
       "progress": "Étape {current} sur {total}",
       "ariaLabel": "Étape du tutoriel",
       "announcement": "Étape {current} sur {total}. {title}. {body}",
+      "announcementPunctuated": "Étape {current} sur {total}. {title} {body}",
       "abridged": "1 étape a été ignorée : ce contrôle ne fait pas partie de ce tableau. | {count} étapes ont été ignorées : ces contrôles ne font pas partie de ce tableau.",
       "searching": "Recherche du contrôle mis en évidence...",
       "clickHint": "Cliquez sur le contrôle mis en évidence pour continuer",
@@ -8648,9 +8716,9 @@
     "duplicateAlias": "Deux candidats conservés partagent un id. Deux artefacts au même emplacement, c’est un artefact.",
     "keepAction": "Conserver {count}",
     "warning": {
-      "omitted": "{count} candidats ont été écartés au-delà de la limite, cette liste est donc un préfixe. ",
-      "invalid": "{count} entrées déclarées étaient illisibles et manquent ici. ",
-      "previews": "{count} liens d’aperçu ont été refusés, ces candidats s’affichent donc sans image."
+      "omitted": "{count} candidat a été écarté au-delà de la limite, cette liste est donc un préfixe. | {count} candidats ont été écartés au-delà de la limite, cette liste est donc un préfixe.",
+      "invalid": "{count} entrée déclarée était illisible et manque ici. | {count} entrées déclarées étaient illisibles et manquent ici.",
+      "previews": "{count} lien d’aperçu a été refusé, ce candidat s’affiche donc sans image. | {count} liens d’aperçu ont été refusés, ces candidats s’affichent donc sans image."
     },
     "noChoice": {
       "undeclared": "L’étape n’a jamais déclaré ses candidats, il n’y avait donc rien à comparer. L’exécution a continué.",

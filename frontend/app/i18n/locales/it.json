@@ -54,6 +54,10 @@
         "body": "\"{name}\" verra rimosso. Le attivita che lo usano ricadono sul preset predefinito del workspace."
       },
       "quota": "quota",
+      "cost": "{input}/{output} {currency} per milione di token",
+      "quotaCost": "consumo della quota ~{input}/{output} {currency} per milione di token",
+      "promptCaching": "Cache dei prompt",
+      "noPromptCaching": "Nessuna cache dei prompt",
       "list": {
         "intro": "Ogni preset imposta un {baseModel} per ogni agente, con override facoltativi per singolo agente. Un modello fissato su una singola attivita ha comunque la precedenza sul preset.",
         "introBaseModel": "modello di base",
@@ -2890,6 +2894,12 @@
         "github": {
           "description": "Connetti la GitHub App del workspace, esplora repo, PR e issue."
         },
+        "gitlab": {
+          "description": "Connetti il workspace a GitLab con un token di accesso, esplora progetti, merge request e issue."
+        },
+        "sourceControl": {
+          "description": "Connetti un host di repository, esplora repo, richieste di pull e issue."
+        },
         "slack": {
           "description": "Instrada le notifiche verso il workspace Slack del tuo team."
         },
@@ -3032,7 +3042,11 @@
         "apiKey": "Chiave API {id}"
       },
       "values": {
-        "none": "nessuno"
+        "none": "nessuno",
+        "accessMode": {
+          "account": "tutti nell'account",
+          "restricted": "solo i membri elencati"
+        }
       },
       "actions": {
         "accountMemberAdded": "ha aggiunto {target} all’account come {roles}",
@@ -3089,6 +3103,18 @@
       "library": "Libreria",
       "document": "Repository di documenti"
     },
+    "blockTypes": {
+      "frontend": "Frontend",
+      "service": "Servizio",
+      "library": "Libreria",
+      "document": "Repository di documenti",
+      "api": "API",
+      "database": "Database",
+      "queue": "Coda",
+      "integration": "Integrazione",
+      "external": "Esterno",
+      "environment": "Ambiente"
+    },
     "toolbar": {
       "addService": "Aggiungi servizio",
       "decisionWord": "decisione | decisioni",
@@ -3138,11 +3164,17 @@
       "loadingIssue": "Caricamento della descrizione dell'issue collegata…",
       "additionalNotes": "Note aggiuntive",
       "description": "Descrizione",
-      "notesPlaceholder": "Aggiungi qualsiasi altra cosa che l'agente dovrebbe sapere — accodata alla descrizione dell'issue qui sopra…",
-      "descriptionPlaceholder": "Descrivi il lavoro — contesto, criteri di accettazione, qualsiasi cosa l'agente dovrebbe sapere…",
+      "notesPlaceholder": "Aggiungi qualsiasi altra cosa che l'agente dovrebbe sapere. Verrà accodata alla descrizione dell'issue qui sopra…",
+      "descriptionPlaceholder": "Descrivi il lavoro: contesto, criteri di accettazione, qualsiasi cosa l'agente dovrebbe sapere…",
       "technical": "Attività tecnica",
       "technicalHint": "Un refactoring / una modifica non funzionale / interna. L'implementatore tratta la definizione dell'attività come primaria e la spec come riferimento di regressione; lascia disattivato per far decidere alla fase di spec.",
       "severity": "Gravità",
+      "severities": {
+        "low": "Bassa",
+        "medium": "Media",
+        "high": "Alta",
+        "critical": "Critica"
+      },
       "stepsToReproduce": "Passaggi per riprodurre",
       "stepsToReproducePlaceholder": "Osservato vs atteso, e come riprodurre…",
       "timebox": "Time-box (ore)",
@@ -3227,7 +3259,7 @@
       "agentConfiguration": "Configurazione dell'agente",
       "noDocsHint": "Allega un requisito, un RFC o un PRD così gli agenti lo vedono mentre implementano questa attività.",
       "noIssuesHint": "Allega un'issue del tracker così gli agenti vedono la sua descrizione e i commenti mentre implementano questa attività.",
-      "plannedHint": "L'attività viene aggiunta in stato pianificato. Non verrà eseguita finché non avvii una pipeline su di essa — puoi continuare a modificarla fino ad allora.",
+      "plannedHint": "L'attività viene aggiunta in stato pianificato. Non verrà eseguita finché non avvii una pipeline su di essa, quindi puoi continuare a modificarla fino ad allora.",
       "continue": "Continua",
       "submit": "Aggiungi attività",
       "addFailedTitle": "Impossibile aggiungere l'attività",
@@ -4481,6 +4513,18 @@
       "linkFailed": "Impossibile aggiornare il collegamento del documento",
       "loadFailed": "Impossibile caricare i modelli di documento"
     },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "Progettazione",
+      "technical": "Tecnico",
+      "api": "API",
+      "runbook": "Manuale operativo",
+      "research": "Ricerca",
+      "reference": "Riferimento",
+      "other": "Altro"
+    },
     "startFromDesign": {
       "title": "Parti da un design",
       "intro": "Incolla il link a un frame o a un intero file. Viene allegato al nuovo task e l’agente ne legge layout, testi, componenti e token.",
@@ -5091,6 +5135,18 @@
     "health": {
       "title": "Stato delle pipeline",
       "allValid": "Tutte le pipeline sono valide e aggiornate.",
+      "noEnabledSteps": "Nessun passaggio abilitato: la pipeline non ha nulla da eseguire.",
+      "problems": {
+        "companion": "Il compagno «{kind}» deve essere eseguito subito dopo un passaggio abilitato che può revisionare ({targets}).",
+        "gatingNotGatable": "Il passaggio «{kind}» non può dipendere dalla stima: il resto dell'esecuzione richiede il suo output. Solo un passaggio il cui risultato è letto come contesto dai passaggi successivi (una progettazione, una revisione, una verifica aggiuntiva) può essere saltato in base alla stima.",
+        "gatingWithHumanGate": "Il passaggio «{kind}» ha un'approvazione umana, quindi non può dipendere anche dalla stima. La stima può aggiungere un controllo umano, mai rimuoverne uno.",
+        "gatingNoThreshold": "Il passaggio «{kind}» dipende dalla stima ma non imposta alcuna soglia (complessità, rischio o impatto).",
+        "gatingNoEstimator": "Il passaggio «{kind}» dipende dalla stima, ma prima di esso non viene eseguito alcun passaggio che la produca.",
+        "conditionNotGatable": "Il passaggio «{kind}» non può avere una condizione di esecuzione: il resto dell'esecuzione richiede il suo output, quindi un'esecuzione fuori dall'ambito della condizione terminerebbe senza di esso senza avvisare.",
+        "conditionWithHumanGate": "Il passaggio «{kind}» ha un'approvazione umana, quindi non può avere anche una condizione di esecuzione. Una condizione può lasciare un controllo non raggiunto, mai rimuoverne uno.",
+        "unknownKinds": "Fa riferimento a un tipo di agente sconosciuto: {kinds}. | Fa riferimento a tipi di agente sconosciuti: {kinds}.",
+        "outdated": "È disponibile una versione più recente di questa pipeline integrata (da v{from} a v{to})."
+      },
       "invalidHeading": "Pipeline non valide",
       "invalidDescription": "Queste fanno riferimento a un agente mancante o sono configurate male, quindi fallirebbero (o funzionerebbero male) all'avvio. Elimina una pipeline personalizzata, oppure ripristina una integrata per recuperare la sua definizione dal catalogo.",
       "builtinBadge": "integrata",
@@ -5399,12 +5455,12 @@
       "open": "Apri",
       "openPr": "Pull request"
     },
-    "status": {
-      "pending": "in attesa",
-      "running": "in esecuzione",
-      "succeeded": "riuscito",
-      "failed": "fallito",
-      "awaitingReview": "in attesa di revisione"
+    "statusChip": {
+      "pending": "In attesa",
+      "running": "In esecuzione",
+      "succeeded": "Riuscito",
+      "failed": "Fallito",
+      "awaitingReview": "In attesa di revisione"
     },
     "arch": {
       "title": "Architetture di riferimento",
@@ -5587,7 +5643,7 @@
     },
     "intro": {
       "workspace": "Cura le linee guida di best practice che gli agenti seguono su questa lavagna. I frammenti vengono uniti dal catalogo integrato, dal tuo account e da questa lavagna (i livelli successivi hanno la precedenza su quelli precedenti), poi vengono selezionati quelli pertinenti per ogni esecuzione dell'agente.",
-      "account": "Cura le linee guida di best practice condivise da ogni lavagna di questo account. I frammenti dell'account vengono uniti sotto il catalogo integrato e sopra il nulla, e una lavagna puo sovrascriverli o aggiungerne di propri al di sopra. Quelli pertinenti vengono selezionati per ogni esecuzione dell'agente."
+      "account": "Cura le linee guida di best practice condivise da ogni lavagna di questo account. I frammenti dell'account prevalgono sul catalogo integrato, e una lavagna può sovrascriverli o aggiungerne di propri al di sopra. Quelli pertinenti vengono selezionati per ogni esecuzione dell'agente."
     },
     "owner": {
       "workspace": "Questa lavagna",
@@ -5785,7 +5841,7 @@
       "link": "Collega e sincronizza",
       "metaSynced": "sincronizzato {date} · ref {ref}",
       "metaNever": "mai sincronizzato · ref {ref}",
-      "metaFiles": "{service} · {count} file di contratto",
+      "metaFiles": "{service} · {count} file di contratto | {service} · {count} file di contratto",
       "metaFolder": "{service} · contratti da questa cartella",
       "metaFolderRecursive": "{service} · contratti da questa cartella e dalle sue sottocartelle",
       "metaDirectory": "un servizio per sottocartella",
@@ -5939,8 +5995,8 @@
       "detail": "Esegui un altro giro di brainstorm, procedi alla fase successiva con l'ultima indicazione comunque, oppure interrompi e reimposta l'attivita per poterla modificare e inviarla di nuovo."
     },
     "working": {
-      "incorporating": "Unione delle tue scelte in un {doc}… Puoi chiudere questa finestra: ti avviseremo solo se occorrono altre indicazioni.",
-      "reReviewing": "Riesecuzione del brainstorm sull'indicazione aggiornata… Puoi chiudere questa finestra: ti avviseremo solo se occorrono altre indicazioni."
+      "incorporating": "Unione delle tue scelte in un {doc}… Puoi chiudere questa finestra. Ti avviseremo solo se occorrono altre indicazioni.",
+      "reReviewing": "Riesecuzione del brainstorm sull'indicazione aggiornata… Puoi chiudere questa finestra. Ti avviseremo solo se occorrono altre indicazioni."
     },
     "severity": {
       "low": "bassa",
@@ -5979,30 +6035,30 @@
     "proceedNothing": "Procedi (nulla da incorporare)",
     "incorporateChoices": "Incorpora le scelte",
     "hint": {
-      "allDismissed": "Ogni opzione e ignorata — procedi alla fase successiva senza un'indicazione.",
+      "allDismissed": "Ogni opzione è ignorata. Procedi alla fase successiva senza un'indicazione.",
       "incorporate": "Unisce le tue scelte in un unico {doc}, poi riesegue il brainstorm automaticamente.",
       "chooseAll": "Scegli o ignora ogni opzione per continuare."
     },
     "reRunning": "Riesecuzione in corso…",
-    "reRun": "Va bene — riesegui",
+    "reRun": "Va bene, riesegui",
     "redoIncorporation": "Rifai l'incorporazione",
     "redoPlaceholder": "Cosa dovrebbe fare diversamente l'indicazione?",
     "redoWithDirection": "Rifai con questa indicazione",
     "mergedHint": "La riesecuzione esegue l'agente su questa indicazione. Se non sei soddisfatto di come e stata unita, rifalla con un commento.",
-    "incorporatedFooter": "Indicazione definita — la pipeline prosegue con il documento a sinistra.",
+    "incorporatedFooter": "Indicazione definita. La pipeline prosegue con il documento a sinistra.",
     "toast": {
       "saveChoiceError": "Impossibile salvare la scelta",
       "updateOptionError": "Impossibile aggiornare l'opzione",
       "incorporateError": "Impossibile incorporare le scelte",
       "draftingTitle": "Stesura del {doc} in background",
-      "draftingDescription": "Sei di nuovo sulla lavagna — ti avviseremo solo se occorrono altre indicazioni.",
-      "reReviewSettled": "Indicazione definita — la pipeline prosegue",
-      "reReviewExceeded": "Limite di iterazioni raggiunto — scegli come procedere",
+      "draftingDescription": "Sei di nuovo sulla lavagna. Ti avviseremo solo se occorrono altre indicazioni.",
+      "reReviewSettled": "Indicazione definita, la pipeline prosegue",
+      "reReviewExceeded": "Limite di iterazioni raggiunto: scegli come procedere",
       "reReviewNewOptions": "nessuna nuova opzione a cui reagire | una nuova opzione a cui reagire | {count} nuove opzioni a cui reagire",
       "reReviewError": "Impossibile rieseguire il brainstorm",
       "proceeding": "Passaggio alla fase successiva",
       "proceedError": "Impossibile procedere",
-      "taskReset": "Attivita reimpostata — modificala e inviala di nuovo",
+      "taskReset": "Attività reimpostata: modificala e inviala di nuovo",
       "extraRoundGranted": "Concesso un altro giro di brainstorm",
       "resolveError": "Impossibile risolvere il brainstorm"
     }
@@ -6225,7 +6281,7 @@
       "awaiting": "In attesa di revisione",
       "cleared": "Revisionato",
       "pausedTitle": "In pausa per la revisione",
-      "pausedBody": "La fase «{phase}» è completa. Rivedi sopra gli artefatti e le PR salvati, poi riprendi per continuare o annulla per interrompere l'iniziativa."
+      "pausedBody": "La fase «{phase}» è completa. Rivedi sotto gli artefatti e le PR salvati, poi riprendi per continuare o annulla per interrompere l'iniziativa."
     }
   },
   "app": {
@@ -6444,16 +6500,16 @@
       "blockedTitle": "Troppe attività in attesa di revisione",
       "warnToast": "Alcune attività attendono la revisione umana. Valuta di revisionarle prima di creare altro lavoro.",
       "blockedToast": "La creazione di attività è bloccata finché non si riduce la coda di revisione.",
-      "warnBody": "{count} attività attendono la revisione umana. Valuta di revisionarle prima di creare altro lavoro.",
-      "blockedCountBody": "Creazione bloccata: {count} attività attendono la revisione umana (limite {threshold}). Riduci prima la coda di revisione.",
-      "blockedStuckBody": "Creazione bloccata: un’attività attende la revisione umana da oltre {minutes} minuto/i. Riduci prima la coda di revisione.",
+      "warnBody": "{count} attività attende la revisione umana. Valuta di revisionarla prima di creare altro lavoro. | {count} attività attendono la revisione umana. Valuta di revisionarle prima di creare altro lavoro.",
+      "blockedCountBody": "Creazione bloccata: {count} attività attende la revisione umana (limite {threshold}). Riduci prima la coda di revisione. | Creazione bloccata: {count} attività attendono la revisione umana (limite {threshold}). Riduci prima la coda di revisione.",
+      "blockedStuckBody": "Creazione bloccata: un’attività attende la revisione umana da oltre {minutes} minuto. Riduci prima la coda di revisione. | Creazione bloccata: un’attività attende la revisione umana da oltre {minutes} minuti. Riduci prima la coda di revisione.",
       "waitingHeading": "In attesa di revisione",
       "waiting": "{minutes} min di attesa",
       "untitled": "Attività senza titolo",
       "close": "Chiudi",
       "createAnyway": "Crea comunque",
       "goReview": "Vai a revisionare",
-      "badge": "{count} attività in attesa di revisione"
+      "badge": "{count} attività in attesa di revisione | {count} attività in attesa di revisione"
     },
     "conflict": {
       "title": {
@@ -6941,6 +6997,7 @@
     "confidence": "affidabilità {pct}",
     "panel": "Panel",
     "topScore": "migliore {label} {pct}",
+    "notScored": "non valutato",
     "expert": "Esperto {letter}",
     "participant": "Partecipante",
     "strategy": {
@@ -7055,10 +7112,10 @@
   },
   "humanTest": {
     "title": "Test umano",
-    "titleWithBlock": "Test umano — {title}",
+    "titleWithBlock": "Test umano · {title}",
     "subtitle": "Convalida la modifica in un ambiente attivo",
     "notStarted": "Questo passaggio non è ancora iniziato.",
-    "confirm": "Tutto a posto — continua",
+    "confirm": "Tutto a posto, continua",
     "phase": {
       "provisioning": "Provisioning dell'ambiente…",
       "awaitingHuman": "In attesa della tua convalida",
@@ -7089,7 +7146,7 @@
       "heading": "Hai trovato un problema?",
       "cancel": "Annulla",
       "requestFix": "Richiedi una correzione",
-      "placeholder": "Descrivi cosa è andato storto — l'agente Fixer riceve questo come contesto, poi l'ambiente viene ricostruito per un nuovo test.",
+      "placeholder": "Descrivi cosa è andato storto. L'agente Fixer riceve questo come contesto, poi l'ambiente viene ricostruito per un nuovo test.",
       "send": "Invia al Fixer"
     },
     "history": {
@@ -7577,11 +7634,11 @@
       "maxCells": "(max {max})",
       "run": "Esegui"
     },
-    "experimentStatus": {
-      "draft": "bozza",
-      "running": "in esecuzione",
-      "done": "completato",
-      "failed": "non riuscito"
+    "statusChip": {
+      "draft": "Bozza",
+      "running": "In esecuzione",
+      "done": "Completato",
+      "failed": "Non riuscito"
     },
     "results": {
       "col": {
@@ -7794,6 +7851,14 @@
   "palette": {
     "hint": "Clicca su un agente per aggiungerlo alla pipeline.",
     "customAgents": "Agenti personalizzati",
+    "categories": {
+      "review": "Revisione e smistamento",
+      "design": "Progettazione e ricerca",
+      "build": "Implementazione",
+      "test": "Test",
+      "docs": "Documentazione",
+      "gates": "Gate e osservabilità"
+    },
     "purposeHidden": "{count} agente nascosto per questo scopo. | {count} agenti nascosti per questo scopo."
   },
   "forkDecision": {
@@ -8140,7 +8205,9 @@
       },
       "unprotectedHint": "la credenziale di un'esecuzione può fare push qui direttamente e unire la propria richiesta di pull",
       "detailUnavailable": "protetto, ma la regola non è stata leggibile: potrebbe consentire ancora push diretti",
-      "requiresPr": "richiesta di pull obbligatoria, {reviews} revisione/i di approvazione, {checks} controllo/i obbligatorio/i",
+      "requiresPr": "richiesta di pull obbligatoria, {reviews}, {checks}",
+      "approvingReviews": "{count} revisione di approvazione | {count} revisioni di approvazione",
+      "requiredChecks": "{count} controllo obbligatorio | {count} controlli obbligatori",
       "noPrRequired": "protetto, ma non richiede una richiesta di pull",
       "unknownReason": {
         "branch_not_found": "ramo predefinito non trovato: la proiezione del repository potrebbe essere obsoleta",
@@ -8205,6 +8272,7 @@
       "progress": "Passaggio {current} di {total}",
       "ariaLabel": "Passaggio del tutorial",
       "announcement": "Passaggio {current} di {total}. {title}. {body}",
+      "announcementPunctuated": "Passaggio {current} di {total}. {title} {body}",
       "abridged": "1 passaggio è stato saltato: quel controllo non fa parte di questa board. | {count} passaggi sono stati saltati: quei controlli non fanno parte di questa board.",
       "searching": "Ricerca del controllo evidenziato...",
       "clickHint": "Clicca sul controllo evidenziato per continuare",
@@ -8648,9 +8716,9 @@
     "duplicateAlias": "Due candidati tenuti condividono un id. Due artefatti in una posizione sono un artefatto.",
     "keepAction": "Tieni {count}",
     "warning": {
-      "omitted": "{count} candidati sono stati scartati oltre il limite, quindi questo elenco è un prefisso. ",
-      "invalid": "{count} voci dichiarate erano illeggibili e mancano qui. ",
-      "previews": "{count} link di anteprima sono stati rifiutati, quindi quei candidati appaiono senza immagine."
+      "omitted": "{count} candidato è stato scartato oltre il limite, quindi questo elenco è un prefisso. | {count} candidati sono stati scartati oltre il limite, quindi questo elenco è un prefisso.",
+      "invalid": "{count} voce dichiarata era illeggibile e manca qui. | {count} voci dichiarate erano illeggibili e mancano qui.",
+      "previews": "{count} link di anteprima è stato rifiutato, quindi quel candidato appare senza immagine. | {count} link di anteprima sono stati rifiutati, quindi quei candidati appaiono senza immagine."
     },
     "noChoice": {
       "undeclared": "Il passo non ha mai dichiarato i suoi candidati, quindi non c’era nulla da confrontare. L’esecuzione è proseguita.",

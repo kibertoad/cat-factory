@@ -2,7 +2,12 @@ import { computed } from 'vue'
 import type { Pipeline } from '~/types/domain'
 import type { StepGating } from '~/types/consensus'
 import { isBuiltinGatableKind, producesTaskEstimate } from '@cat-factory/contracts'
-import { COMPANION_FOR_PRODUCER, isKnownAgentKind, isProducerCompanion } from '~/utils/catalog'
+import {
+  agentKindMeta,
+  COMPANION_FOR_PRODUCER,
+  isKnownAgentKind,
+  isProducerCompanion,
+} from '~/utils/catalog'
 import { usePipelinesStore } from '~/stores/pipelines'
 
 export type PipelineProblemType = 'unknown-kind' | 'shape' | 'outdated' | 'retired'
@@ -76,11 +81,20 @@ function companionTargets(companion: string): string[] {
 
 const isEnabledAt = (p: Pipeline, i: number) => p.enabled?.[i] !== false
 
+/** The app's translate function, as the composable resolves it outside a component setup. */
+type Translate = ReturnType<typeof useI18n>['t']
+
+/** A kind as the advisory names it: its catalog label, or its id when this build does not know it. */
+function kindName(kind: string | undefined): string {
+  if (!kind) return ''
+  return isKnownAgentKind(kind) ? agentKindMeta(kind).label : kind
+}
+
 /**
  * Companion adjacency: an enabled companion's nearest preceding ENABLED step must be a producer it
  * can review. Mirrors `assertValidCompanionPlacement`.
  */
-function companionProblem(p: Pipeline): string | null {
+function companionProblem(p: Pipeline, t: Translate): string | null {
   const kinds = p.agentKinds
   for (let i = 0; i < kinds.length; i++) {
     const kind = kinds[i]
@@ -94,7 +108,10 @@ function companionProblem(p: Pipeline): string | null {
       }
     }
     if (predecessor === undefined || !targets.includes(predecessor)) {
-      return `Companion '${kind}' must run immediately after an enabled step it can review (${targets.join(', ')}).`
+      return t('pipeline.health.problems.companion', {
+        kind: kindName(kind),
+        targets: targets.map(kindName).join(', '),
+      })
     }
   }
   return null
@@ -140,7 +157,7 @@ function skipAxisProblem(
  * through the same `producesTaskEstimate` predicate, so neither surface can drift from the other
  * about which kinds count.
  */
-function gatingProblem(p: Pipeline): string | null {
+function gatingProblem(p: Pipeline, t: Translate): string | null {
   const gating = p.gating
   if (!gating) return null
   const kinds = p.agentKinds
@@ -149,20 +166,20 @@ function gatingProblem(p: Pipeline): string | null {
     if (!g?.enabled || !isEnabledAt(p, i)) continue
     const shared = skipAxisProblem(p, i, {
       notGatable: (kind) =>
-        `Step '${kind}' may not be estimate-gated — its output is required by the rest of the run. Only a step whose result later steps read as context (a design, a review, an extra verification pass) may be skipped on the estimate.`,
+        t('pipeline.health.problems.gatingNotGatable', { kind: kindName(kind) }),
       withHumanGate: (kind) =>
-        `Step '${kind}' carries a human approval gate, so it cannot also be estimate-gated — the estimate may add a human checkpoint but never remove one.`,
+        t('pipeline.health.problems.gatingWithHumanGate', { kind: kindName(kind) }),
     })
     if (shared) return shared
     const kind = kinds[i]
     if (g.minComplexity === undefined && g.minRisk === undefined && g.minImpact === undefined) {
-      return `Step '${kind}' is estimate-gated but sets no threshold (complexity / risk / impact).`
+      return t('pipeline.health.problems.gatingNoThreshold', { kind: kindName(kind) })
     }
     const hasEstimator = kinds
       .slice(0, i)
       .some((k, j) => producesTaskEstimate(k) && isEnabledAt(p, j))
     if (!hasEstimator) {
-      return `Step '${kind}' is gated on the estimate but no step that produces one runs before it.`
+      return t('pipeline.health.problems.gatingNoEstimator', { kind: kindName(kind) })
     }
   }
   return null
@@ -173,16 +190,16 @@ function gatingProblem(p: Pipeline): string | null {
  * whichever axis caused it, so a condition on a non-gatable kind drops something the run needs.
  * Mirrors `assertValidRunConditions`. A condition BESIDE an estimate gate is deliberately fine.
  */
-function conditionProblem(p: Pipeline): string | null {
+function conditionProblem(p: Pipeline, t: Translate): string | null {
   const stepOptions = p.stepOptions
   if (!stepOptions) return null
   for (let i = 0; i < p.agentKinds.length; i++) {
     if (!stepOptions[i]?.condition || !isEnabledAt(p, i)) continue
     const problem = skipAxisProblem(p, i, {
       notGatable: (kind) =>
-        `Step '${kind}' may not carry a run condition — its output is required by the rest of the run, so a run outside the condition's scope would silently finish without it.`,
+        t('pipeline.health.problems.conditionNotGatable', { kind: kindName(kind) }),
       withHumanGate: (kind) =>
-        `Step '${kind}' carries a human approval gate, so it cannot also carry a run condition — a condition may leave a checkpoint un-reached but never remove one.`,
+        t('pipeline.health.problems.conditionWithHumanGate', { kind: kindName(kind) }),
     })
     if (problem) return problem
   }
@@ -203,12 +220,12 @@ function conditionProblem(p: Pipeline): string | null {
  * copy costs. Adding a rule to `validatePipelineShape` without adding it here is the milder half of
  * the same drift: a pipeline the engine refuses at save that this advisory calls healthy.
  */
-function shapeProblem(p: Pipeline): string | null {
+function shapeProblem(p: Pipeline, t: Translate): string | null {
   // No enabled steps ⇒ nothing would run.
   if (p.agentKinds.length === 0 || !p.agentKinds.some((_, i) => isEnabledAt(p, i))) {
-    return 'No enabled steps — the pipeline has nothing to run.'
+    return t('pipeline.health.noEnabledSteps')
   }
-  return companionProblem(p) ?? gatingProblem(p) ?? conditionProblem(p)
+  return companionProblem(p, t) ?? gatingProblem(p, t) ?? conditionProblem(p, t)
 }
 
 /**
@@ -224,6 +241,9 @@ function shapeProblem(p: Pipeline): string | null {
  */
 export function usePipelineHealth() {
   const store = usePipelinesStore()
+  // Resolve copy through the Nuxt app's i18n rather than `useI18n()`, so the scan does not need
+  // an active component instance (frontend/app/README.md, the store setup rule).
+  const { t } = useNuxtApp().$i18n as ReturnType<typeof useI18n>
 
   /** Catalog ids the backend reports as withdrawn, indexed to their (optional) replacement id. */
   const retiredIds = computed(
@@ -243,11 +263,15 @@ export function usePipelineHealth() {
       if (unknown.length) {
         problems.push({
           type: 'unknown-kind',
-          message: `References unknown agent ${unknown.length > 1 ? 'kinds' : 'kind'}: ${unknown.join(', ')}.`,
+          message: t(
+            'pipeline.health.problems.unknownKinds',
+            { kinds: unknown.join(', ') },
+            unknown.length,
+          ),
         })
       }
 
-      const shape = shapeProblem(pipeline)
+      const shape = shapeProblem(pipeline, t)
       if (shape) problems.push({ type: 'shape', message: shape })
 
       const catalogVersion = pipeline.builtin ? store.catalogVersions[pipeline.id] : undefined
@@ -255,7 +279,10 @@ export function usePipelineHealth() {
       if (outdated) {
         problems.push({
           type: 'outdated',
-          message: `A newer version of this built-in pipeline is available (v${pipeline.version ?? 0} → v${catalogVersion}).`,
+          message: t('pipeline.health.problems.outdated', {
+            from: pipeline.version ?? 0,
+            to: catalogVersion,
+          }),
         })
       }
 

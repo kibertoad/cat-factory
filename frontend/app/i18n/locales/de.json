@@ -54,6 +54,10 @@
         "body": "\"{name}\" wird entfernt. Aufgaben, die es verwenden, greifen auf den Workspace-Standard zurück."
       },
       "quota": "Kontingent",
+      "cost": "{input}/{output} {currency} pro Mio. Token",
+      "quotaCost": "Kontingentverbrauch ~{input}/{output} {currency} pro Mio. Token",
+      "promptCaching": "Prompt-Caching",
+      "noPromptCaching": "Kein Prompt-Caching",
       "list": {
         "intro": "Jedes Preset legt für jeden Agenten ein {baseModel} fest, mit optionalen Overrides je Agent. Ein an einer einzelnen Aufgabe angeheftetes Modell überschreibt weiterhin das Preset.",
         "introBaseModel": "Basismodell",
@@ -2890,6 +2894,12 @@
         "github": {
           "description": "Verbinden Sie die GitHub-App des Workspace, durchsuchen Sie Repos, PRs und Issues."
         },
+        "gitlab": {
+          "description": "Verbinden Sie den Workspace mit einem Zugriffstoken mit GitLab, durchsuchen Sie Projekte, Merge Requests und Issues."
+        },
+        "sourceControl": {
+          "description": "Verbinden Sie einen Repository-Host, durchsuchen Sie Repos, Pull Requests und Issues."
+        },
         "slack": {
           "description": "Leiten Sie Benachrichtigungen an den Slack-Workspace Ihres Teams weiter."
         },
@@ -3032,7 +3042,11 @@
         "apiKey": "API-Schlüssel {id}"
       },
       "values": {
-        "none": "keine"
+        "none": "keine",
+        "accessMode": {
+          "account": "alle im Konto",
+          "restricted": "nur aufgeführte Mitglieder"
+        }
       },
       "actions": {
         "accountMemberAdded": "hat {target} als {roles} zum Konto hinzugefügt",
@@ -3089,6 +3103,18 @@
       "library": "Bibliothek",
       "document": "Dokument-Repository"
     },
+    "blockTypes": {
+      "frontend": "Frontend",
+      "service": "Service",
+      "library": "Bibliothek",
+      "document": "Dokument-Repository",
+      "api": "API",
+      "database": "Datenbank",
+      "queue": "Warteschlange",
+      "integration": "Integration",
+      "external": "Extern",
+      "environment": "Umgebung"
+    },
     "toolbar": {
       "addService": "Service hinzufügen",
       "decisionWord": "Entscheidung | Entscheidungen",
@@ -3138,11 +3164,17 @@
       "loadingIssue": "Beschreibung des verknüpften Issues wird geladen…",
       "additionalNotes": "Zusätzliche Notizen",
       "description": "Beschreibung",
-      "notesPlaceholder": "Fügen Sie alles hinzu, was der Agent sonst noch wissen sollte — wird an die obige Issue-Beschreibung angehängt…",
-      "descriptionPlaceholder": "Beschreiben Sie die Arbeit — Kontext, Akzeptanzkriterien, alles, was der Agent wissen sollte…",
+      "notesPlaceholder": "Fügen Sie alles hinzu, was der Agent sonst noch wissen sollte. Es wird an die obige Issue-Beschreibung angehängt…",
+      "descriptionPlaceholder": "Beschreiben Sie die Arbeit: Kontext, Akzeptanzkriterien, alles, was der Agent wissen sollte…",
       "technical": "Technische Aufgabe",
       "technicalHint": "Ein Refactor / eine nicht-funktionale / interne Änderung. Der Implementierer behandelt die Aufgabendefinition als primär und die Spezifikation als Regressionsreferenz; lassen Sie es aus, damit die Spec-Phase entscheidet.",
       "severity": "Schweregrad",
+      "severities": {
+        "low": "Niedrig",
+        "medium": "Mittel",
+        "high": "Hoch",
+        "critical": "Kritisch"
+      },
       "stepsToReproduce": "Schritte zur Reproduktion",
       "stepsToReproducePlaceholder": "Beobachtet vs. erwartet und wie zu reproduzieren…",
       "timebox": "Zeitbudget (Stunden)",
@@ -3227,7 +3259,7 @@
       "agentConfiguration": "Agent-Konfiguration",
       "noDocsHint": "Hängen Sie eine Anforderung, ein RFC oder ein PRD an, damit Agenten es beim Implementieren dieser Aufgabe sehen.",
       "noIssuesHint": "Hängen Sie ein Tracker-Issue an, damit Agenten dessen Beschreibung und Kommentare beim Implementieren dieser Aufgabe sehen.",
-      "plannedHint": "Die Aufgabe wird in einem geplanten Zustand hinzugefügt. Sie läuft erst, wenn Sie eine Pipeline darauf starten — Sie können sie bis dahin weiter bearbeiten.",
+      "plannedHint": "Die Aufgabe wird in einem geplanten Zustand hinzugefügt. Sie läuft erst, wenn Sie eine Pipeline darauf starten, und Sie können sie bis dahin weiter bearbeiten.",
       "continue": "Weiter",
       "submit": "Aufgabe hinzufügen",
       "addFailedTitle": "Aufgabe konnte nicht hinzugefügt werden",
@@ -4481,6 +4513,18 @@
       "linkFailed": "Die Dokumentverknüpfung konnte nicht aktualisiert werden",
       "loadFailed": "Dokumentvorlagen konnten nicht geladen werden"
     },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "Design",
+      "technical": "Technisch",
+      "api": "API",
+      "runbook": "Betriebshandbuch",
+      "research": "Recherche",
+      "reference": "Referenz",
+      "other": "Sonstiges"
+    },
     "startFromDesign": {
       "title": "Mit einem Design starten",
       "intro": "Füge den Link zu einem Frame oder einer ganzen Datei ein. Er wird an die neue Aufgabe gehängt, und der Agent liest Layout, Texte, Komponenten und Tokens.",
@@ -5091,6 +5135,18 @@
     "health": {
       "title": "Pipeline-Zustand",
       "allValid": "Alle Pipelines sind gültig und aktuell.",
+      "noEnabledSteps": "Keine aktivierten Schritte: Die Pipeline hat nichts auszuführen.",
+      "problems": {
+        "companion": "Begleiter „{kind}“ muss direkt nach einem aktivierten Schritt laufen, den er prüfen kann ({targets}).",
+        "gatingNotGatable": "Schritt „{kind}“ darf nicht an die Schätzung gebunden werden: Seine Ausgabe wird vom restlichen Lauf benötigt. Nur ein Schritt, dessen Ergebnis spätere Schritte als Kontext lesen (ein Design, ein Review, ein zusätzlicher Prüfdurchlauf), darf anhand der Schätzung übersprungen werden.",
+        "gatingWithHumanGate": "Schritt „{kind}“ hat eine menschliche Freigabe und kann daher nicht zusätzlich an die Schätzung gebunden werden. Die Schätzung darf eine menschliche Prüfung hinzufügen, aber nie entfernen.",
+        "gatingNoThreshold": "Schritt „{kind}“ ist an die Schätzung gebunden, legt aber keinen Schwellenwert fest (Komplexität, Risiko oder Auswirkung).",
+        "gatingNoEstimator": "Schritt „{kind}“ ist an die Schätzung gebunden, aber vor ihm läuft kein Schritt, der eine liefert.",
+        "conditionNotGatable": "Schritt „{kind}“ darf keine Laufbedingung haben: Seine Ausgabe wird vom restlichen Lauf benötigt, sodass ein Lauf außerhalb der Bedingung stillschweigend ohne ihn enden würde.",
+        "conditionWithHumanGate": "Schritt „{kind}“ hat eine menschliche Freigabe und kann daher nicht zusätzlich eine Laufbedingung haben. Eine Bedingung darf eine Prüfung unerreicht lassen, aber nie entfernen.",
+        "unknownKinds": "Verweist auf eine unbekannte Agentenart: {kinds}. | Verweist auf unbekannte Agentenarten: {kinds}.",
+        "outdated": "Eine neuere Version dieser integrierten Pipeline ist verfügbar (v{from} auf v{to})."
+      },
       "invalidHeading": "Ungültige Pipelines",
       "invalidDescription": "Diese verweisen auf einen fehlenden Agenten oder sind falsch konfiguriert, sodass sie beim Start fehlschlagen (oder falsch laufen) würden. Löschen Sie eine benutzerdefinierte Pipeline oder setzen Sie eine integrierte neu auf, um ihre Katalogdefinition wiederherzustellen.",
       "builtinBadge": "integriert",
@@ -5399,12 +5455,12 @@
       "open": "Öffnen",
       "openPr": "Pull Request"
     },
-    "status": {
-      "pending": "ausstehend",
-      "running": "läuft",
-      "succeeded": "erfolgreich",
-      "failed": "fehlgeschlagen",
-      "awaitingReview": "wartet auf Prüfung"
+    "statusChip": {
+      "pending": "Ausstehend",
+      "running": "Läuft",
+      "succeeded": "Erfolgreich",
+      "failed": "Fehlgeschlagen",
+      "awaitingReview": "Wartet auf Prüfung"
     },
     "arch": {
       "title": "Referenzarchitekturen",
@@ -5587,7 +5643,7 @@
     },
     "intro": {
       "workspace": "Kuratieren Sie die Best-Practice-Richtlinien, denen Agenten auf diesem Board folgen. Fragmente werden aus dem integrierten Katalog, Ihrem Konto und diesem Board zusammengeführt (spätere Ebenen überschreiben frühere), dann werden die relevanten für jeden Agentenlauf ausgewählt.",
-      "account": "Kuratieren Sie Best-Practice-Richtlinien, die von jedem Board in diesem Konto geteilt werden. Konto-Fragmente werden unterhalb des integrierten Katalogs und über nichts zusammengeführt, und ein Board kann eigene darüber überschreiben oder hinzufügen. Die relevanten werden für jeden Agentenlauf ausgewählt."
+      "account": "Kuratieren Sie Best-Practice-Richtlinien, die von jedem Board in diesem Konto geteilt werden. Konto-Fragmente überschreiben den integrierten Katalog, und ein Board kann sie überschreiben oder eigene darüber hinzufügen. Die relevanten werden für jeden Agentenlauf ausgewählt."
     },
     "owner": {
       "workspace": "Dieses Board",
@@ -5785,7 +5841,7 @@
       "link": "Verknüpfen & synchronisieren",
       "metaSynced": "synchronisiert {date} · Ref {ref}",
       "metaNever": "nie synchronisiert · Ref {ref}",
-      "metaFiles": "{service} · {count} Vertragsdateien",
+      "metaFiles": "{service} · {count} Vertragsdatei | {service} · {count} Vertragsdateien",
       "metaFolder": "{service} · Verträge aus diesem Ordner",
       "metaFolderRecursive": "{service} · Verträge aus diesem Ordner und seinen Unterordnern",
       "metaDirectory": "ein Dienst je Unterverzeichnis",
@@ -5939,8 +5995,8 @@
       "detail": "Führen Sie eine weitere Brainstorm-Runde durch, fahren Sie trotzdem mit der letzten Richtung zur nächsten Phase fort, oder stoppen und setzen Sie die Aufgabe zurück, um sie zu bearbeiten und erneut einzureichen."
     },
     "working": {
-      "incorporating": "Ihre Auswahl wird in einen {doc} eingearbeitet… Sie können dies schließen — wir benachrichtigen Sie nur, wenn weitere Eingaben benötigt werden.",
-      "reReviewing": "Der Brainstorm wird auf der aktualisierten Richtung erneut ausgeführt… Sie können dies schließen — wir benachrichtigen Sie nur, wenn weitere Eingaben benötigt werden."
+      "incorporating": "Ihre Auswahl wird in einen {doc} eingearbeitet… Sie können dies schließen. Wir benachrichtigen Sie nur, wenn weitere Eingaben benötigt werden.",
+      "reReviewing": "Der Brainstorm wird auf der aktualisierten Richtung erneut ausgeführt… Sie können dies schließen. Wir benachrichtigen Sie nur, wenn weitere Eingaben benötigt werden."
     },
     "severity": {
       "low": "niedrig",
@@ -5979,30 +6035,30 @@
     "proceedNothing": "Fortfahren (nichts einzuarbeiten)",
     "incorporateChoices": "Auswahl einarbeiten",
     "hint": {
-      "allDismissed": "Jede Option ist verworfen — fahren Sie ohne Richtung zur nächsten Phase fort.",
+      "allDismissed": "Jede Option ist verworfen. Fahren Sie ohne Richtung zur nächsten Phase fort.",
       "incorporate": "Fügt Ihre Auswahl in einen {doc} zusammen und führt dann den Brainstorm automatisch erneut aus.",
       "chooseAll": "Wählen oder verwerfen Sie jede Option, um fortzufahren."
     },
     "reRunning": "Wird erneut ausgeführt…",
-    "reRun": "Sieht gut aus — erneut ausführen",
+    "reRun": "Sieht gut aus, erneut ausführen",
     "redoIncorporation": "Einarbeitung wiederholen",
     "redoPlaceholder": "Was soll die Richtung anders machen?",
     "redoWithDirection": "Mit dieser Vorgabe wiederholen",
     "mergedHint": "Die erneute Ausführung führt den Agenten gegen diese Richtung aus. Wenn Sie mit der Zusammenführung unzufrieden sind, wiederholen Sie sie stattdessen mit einem Kommentar.",
-    "incorporatedFooter": "Richtung festgelegt — die Pipeline wird mit dem Dokument links fortgesetzt.",
+    "incorporatedFooter": "Richtung festgelegt. Die Pipeline wird mit dem Dokument links fortgesetzt.",
     "toast": {
       "saveChoiceError": "Die Wahl konnte nicht gespeichert werden",
       "updateOptionError": "Die Option konnte nicht aktualisiert werden",
       "incorporateError": "Die Auswahl konnte nicht eingearbeitet werden",
       "draftingTitle": "Der {doc} wird im Hintergrund erstellt",
-      "draftingDescription": "Sie sind zurück auf dem Board — wir benachrichtigen Sie nur, wenn weitere Eingaben benötigt werden.",
-      "reReviewSettled": "Richtung festgelegt — Pipeline wird fortgesetzt",
-      "reReviewExceeded": "Iterationslimit erreicht — wählen Sie, wie Sie fortfahren",
+      "draftingDescription": "Sie sind zurück auf dem Board. Wir benachrichtigen Sie nur, wenn weitere Eingaben benötigt werden.",
+      "reReviewSettled": "Richtung festgelegt, Pipeline wird fortgesetzt",
+      "reReviewExceeded": "Iterationslimit erreicht: Wählen Sie, wie Sie fortfahren",
       "reReviewNewOptions": "keine neuen Optionen, auf die zu reagieren ist | eine neue Option, auf die zu reagieren ist | {count} neue Optionen, auf die zu reagieren ist",
       "reReviewError": "Der Brainstorm konnte nicht erneut ausgeführt werden",
       "proceeding": "Es wird zur nächsten Phase fortgefahren",
       "proceedError": "Es konnte nicht fortgefahren werden",
-      "taskReset": "Aufgabe zurückgesetzt — bearbeiten Sie sie und reichen Sie sie erneut ein",
+      "taskReset": "Aufgabe zurückgesetzt: Bearbeiten Sie sie und reichen Sie sie erneut ein",
       "extraRoundGranted": "Eine weitere Brainstorm-Runde gewährt",
       "resolveError": "Der Brainstorm konnte nicht abgeschlossen werden"
     }
@@ -6225,7 +6281,7 @@
       "awaiting": "Warten auf Prüfung",
       "cleared": "Geprüft",
       "pausedTitle": "Pausiert zur Prüfung",
-      "pausedBody": "Phase „{phase}\" ist abgeschlossen. Prüfe oben die committeten Artefakte und PRs, setze dann fort, um weiterzumachen, oder brich die Initiative ab."
+      "pausedBody": "Phase „{phase}\" ist abgeschlossen. Prüfe unten die committeten Artefakte und PRs, setze dann fort, um weiterzumachen, oder brich die Initiative ab."
     }
   },
   "app": {
@@ -6444,16 +6500,16 @@
       "blockedTitle": "Zu viele Aufgaben warten auf Prüfung",
       "warnToast": "Einige Aufgaben warten auf die menschliche Prüfung. Prüfe sie, bevor du mehr Arbeit anlegst.",
       "blockedToast": "Das Anlegen von Aufgaben ist gesperrt, bis der Prüf-Rückstau abgebaut ist.",
-      "warnBody": "{count} Aufgabe(n) warten auf die menschliche Prüfung. Prüfe sie, bevor du mehr Arbeit anlegst.",
-      "blockedCountBody": "Anlegen gesperrt: {count} Aufgabe(n) warten auf die menschliche Prüfung (Limit {threshold}). Baue zuerst den Prüf-Rückstau ab.",
-      "blockedStuckBody": "Anlegen gesperrt: Eine Aufgabe wartet seit über {minutes} Minute(n) auf die menschliche Prüfung. Baue zuerst den Prüf-Rückstau ab.",
+      "warnBody": "{count} Aufgabe wartet auf die menschliche Prüfung. Prüfe sie, bevor du mehr Arbeit anlegst. | {count} Aufgaben warten auf die menschliche Prüfung. Prüfe sie, bevor du mehr Arbeit anlegst.",
+      "blockedCountBody": "Anlegen gesperrt: {count} Aufgabe wartet auf die menschliche Prüfung (Limit {threshold}). Baue zuerst den Prüf-Rückstau ab. | Anlegen gesperrt: {count} Aufgaben warten auf die menschliche Prüfung (Limit {threshold}). Baue zuerst den Prüf-Rückstau ab.",
+      "blockedStuckBody": "Anlegen gesperrt: Eine Aufgabe wartet seit über {minutes} Minute auf die menschliche Prüfung. Baue zuerst den Prüf-Rückstau ab. | Anlegen gesperrt: Eine Aufgabe wartet seit über {minutes} Minuten auf die menschliche Prüfung. Baue zuerst den Prüf-Rückstau ab.",
       "waitingHeading": "Warten auf Prüfung",
       "waiting": "{minutes} Min. Wartezeit",
       "untitled": "Aufgabe ohne Titel",
       "close": "Schließen",
       "createAnyway": "Trotzdem anlegen",
       "goReview": "Zur Prüfung",
-      "badge": "{count} Aufgabe(n) warten auf Prüfung"
+      "badge": "{count} Aufgabe wartet auf Prüfung | {count} Aufgaben warten auf Prüfung"
     },
     "conflict": {
       "title": {
@@ -6941,6 +6997,7 @@
     "confidence": "Konfidenz {pct}",
     "panel": "Panel",
     "topScore": "Höchste {label} {pct}",
+    "notScored": "nicht bewertet",
     "expert": "Experte {letter}",
     "participant": "Teilnehmer",
     "strategy": {
@@ -7055,10 +7112,10 @@
   },
   "humanTest": {
     "title": "Manuelles Testen",
-    "titleWithBlock": "Manuelles Testen — {title}",
+    "titleWithBlock": "Manuelles Testen · {title}",
     "subtitle": "Die Änderung in einer Live-Umgebung validieren",
     "notStarted": "Dieser Schritt hat noch nicht begonnen.",
-    "confirm": "Sieht gut aus – fortfahren",
+    "confirm": "Sieht gut aus, fortfahren",
     "phase": {
       "provisioning": "Umgebung wird bereitgestellt…",
       "awaitingHuman": "Warten auf deine Validierung",
@@ -7089,7 +7146,7 @@
       "heading": "Ein Problem gefunden?",
       "cancel": "Abbrechen",
       "requestFix": "Eine Korrektur anfordern",
-      "placeholder": "Beschreibe, was schiefgelaufen ist – der Fixer-Agent erhält dies als Kontext, dann wird die Umgebung für erneute Tests neu aufgebaut.",
+      "placeholder": "Beschreibe, was schiefgelaufen ist. Der Fixer-Agent erhält dies als Kontext, dann wird die Umgebung für erneute Tests neu aufgebaut.",
       "send": "An Fixer senden"
     },
     "history": {
@@ -7577,11 +7634,11 @@
       "maxCells": "(max. {max})",
       "run": "Ausführen"
     },
-    "experimentStatus": {
+    "statusChip": {
       "draft": "Entwurf",
-      "running": "läuft",
-      "done": "fertig",
-      "failed": "fehlgeschlagen"
+      "running": "Läuft",
+      "done": "Fertig",
+      "failed": "Fehlgeschlagen"
     },
     "results": {
       "col": {
@@ -7794,6 +7851,14 @@
   "palette": {
     "hint": "Klicke auf einen Agenten, um ihn an die Pipeline anzuhängen.",
     "customAgents": "Benutzerdefinierte Agenten",
+    "categories": {
+      "review": "Review & Triage",
+      "design": "Design & Recherche",
+      "build": "Implementierung",
+      "test": "Tests",
+      "docs": "Dokumentation",
+      "gates": "Gates & Beobachtbarkeit"
+    },
     "purposeHidden": "{count} Agent ist für diesen Zweck ausgeblendet. | {count} Agenten sind für diesen Zweck ausgeblendet."
   },
   "forkDecision": {
@@ -8140,7 +8205,9 @@
       },
       "unprotectedHint": "der Zugang einer Ausführung kann hier direkt pushen und den eigenen Pull Request mergen",
       "detailUnavailable": "geschützt, aber die Regel konnte nicht gelesen werden — direkte Pushes sind möglicherweise weiterhin erlaubt",
-      "requiresPr": "Pull Request erforderlich, {reviews} zustimmende Review(s), {checks} erforderliche Prüfung(en)",
+      "requiresPr": "Pull Request erforderlich, {reviews}, {checks}",
+      "approvingReviews": "{count} zustimmendes Review | {count} zustimmende Reviews",
+      "requiredChecks": "{count} erforderliche Prüfung | {count} erforderliche Prüfungen",
       "noPrRequired": "geschützt, aber kein Pull Request erforderlich",
       "unknownReason": {
         "branch_not_found": "der Standard-Branch wurde nicht gefunden — die Repository-Projektion ist möglicherweise veraltet",
@@ -8205,6 +8272,7 @@
       "progress": "Schritt {current} von {total}",
       "ariaLabel": "Tutorial-Schritt",
       "announcement": "Schritt {current} von {total}. {title}. {body}",
+      "announcementPunctuated": "Schritt {current} von {total}. {title} {body}",
       "abridged": "1 Schritt wurde übersprungen: dieses Element gehört nicht zu diesem Board. | {count} Schritte wurden übersprungen: diese Elemente gehören nicht zu diesem Board.",
       "searching": "Suche das hervorgehobene Element...",
       "clickHint": "Klicke auf das hervorgehobene Element, um fortzufahren",
@@ -8648,9 +8716,9 @@
     "duplicateAlias": "Zwei behaltene Kandidaten teilen sich eine ID. Zwei Artefakte an einem Ort sind ein Artefakt.",
     "keepAction": "{count} behalten",
     "warning": {
-      "omitted": "{count} Kandidaten wurden über der Obergrenze verworfen, diese Liste ist also ein Anfang. ",
-      "invalid": "{count} deklarierte Einträge waren unlesbar und fehlen hier. ",
-      "previews": "{count} Vorschaulinks wurden abgelehnt, diese Kandidaten werden ohne Bild dargestellt."
+      "omitted": "{count} Kandidat wurde über der Obergrenze verworfen, diese Liste ist also ein Anfang. | {count} Kandidaten wurden über der Obergrenze verworfen, diese Liste ist also ein Anfang.",
+      "invalid": "{count} deklarierter Eintrag war unlesbar und fehlt hier. | {count} deklarierte Einträge waren unlesbar und fehlen hier.",
+      "previews": "{count} Vorschaulink wurde abgelehnt, dieser Kandidat wird ohne Bild dargestellt. | {count} Vorschaulinks wurden abgelehnt, diese Kandidaten werden ohne Bild dargestellt."
     },
     "noChoice": {
       "undeclared": "Der Schritt hat seine Kandidaten nie deklariert, es gab also nichts zu vergleichen. Der Lauf ging weiter.",

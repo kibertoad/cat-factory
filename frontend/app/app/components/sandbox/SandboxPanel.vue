@@ -30,10 +30,10 @@ const { t } = useI18n()
 // Exhaustive enum→label maps of literal `t(...)` keys (keeps the typed-key drift guard
 // live for these runtime-indexed status/kind/origin lookups).
 const EXPERIMENT_STATUS_LABEL = computed<Record<SandboxExperimentStatus, string>>(() => ({
-  draft: t('sandbox.experimentStatus.draft'),
-  running: t('sandbox.experimentStatus.running'),
-  done: t('sandbox.experimentStatus.done'),
-  failed: t('sandbox.experimentStatus.failed'),
+  draft: t('sandbox.statusChip.draft'),
+  running: t('sandbox.statusChip.running'),
+  done: t('sandbox.statusChip.done'),
+  failed: t('sandbox.statusChip.failed'),
 }))
 const FIXTURE_KIND_LABEL = computed<Record<SandboxFixtureKind, string>>(() => ({
   requirements: t('sandbox.fixtureKind.requirements'),
@@ -221,6 +221,13 @@ const detailRows = computed(() =>
   })),
 )
 const selectedRun = ref<SandboxRun | null>(null)
+
+// A run records the catalog id it ran on; the reader sees the catalog label. A model since
+// removed from the catalog keeps its id, the only name left for it.
+const modelLabels = computed(() => new Map(store.models.map((m) => [m.id, m.label])))
+function modelLabel(id: string): string {
+  return modelLabels.value.get(id) ?? id
+}
 
 // Column definitions rather than hand-written `<th>`s: the header typography then comes from the
 // table theme instead of a per-file recipe.
@@ -506,7 +513,9 @@ async function archive(prompt: SandboxPromptVersion) {
                     <span class="text-toned">{{ row.original.run.promptLabel }}</span>
                   </template>
                   <template #model-cell="{ row }">
-                    <span class="font-mono text-2xs text-muted">{{ row.original.run.model }}</span>
+                    <span class="text-2xs text-muted">{{
+                      modelLabel(row.original.run.model)
+                    }}</span>
                   </template>
                   <template #fixture-cell="{ row }">
                     <span class="text-muted">{{ row.original.fixtureName }}</span>
@@ -549,7 +558,7 @@ async function archive(prompt: SandboxPromptVersion) {
               <!-- selected cell output -->
               <div v-if="selectedRun" class="mt-3 border-t border-default pt-2">
                 <SectionLabel as="p" class="mb-1">
-                  {{ selectedRun.promptLabel }} · {{ selectedRun.model }}
+                  {{ selectedRun.promptLabel }} · {{ modelLabel(selectedRun.model) }}
                 </SectionLabel>
                 <p v-if="selectedRun.error" class="text-xs text-app-error-400">
                   {{ selectedRun.error }}
@@ -566,7 +575,7 @@ async function archive(prompt: SandboxPromptVersion) {
                   >
                     <span :class="scoreColor(d.score)" class="font-semibold">{{ d.score }}</span>
                     <span class="ms-1 text-toned">{{ d.key }}</span>
-                    <span v-if="d.rationale" class="ms-1 text-dimmed">— {{ d.rationale }}</span>
+                    <span v-if="d.rationale" class="text-dimmed">: {{ d.rationale }}</span>
                   </p>
                 </div>
               </div>

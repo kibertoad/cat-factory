@@ -1,5 +1,7 @@
 import { AUDIT_ACTION_DETAIL_KEYS, isRetiredAuditValue } from '@cat-factory/contracts'
-import type { AuditAction, AuditEventWire } from '@cat-factory/contracts'
+import type { AuditAction, AuditEventWire, WorkspaceAccessMode } from '@cat-factory/contracts'
+import { cloudProviderLabel, isCloudProvider } from '~/utils/cloudProviders'
+import { ACCOUNT_ROLE_LABEL_KEYS, WORKSPACE_ROLE_LABEL_KEYS } from '~/utils/roles'
 
 // How one audit row becomes one sentence. Kept out of the SFC on the same seam as
 // `StepToolServers.logic.ts`, because the two rules worth asserting here are both about rows a
@@ -33,6 +35,31 @@ export const ACTION_KEYS: Record<AuditAction, string> = {
 /** Translate a key with interpolation params. The component owns the i18n instance; this is pure. */
 export type Translate = (key: string, params?: Record<string, string>) => string
 
+const ACCESS_MODE_LABEL_KEYS: Record<WorkspaceAccessMode, string> = {
+  account: 'layout.auditLog.values.accessMode.account',
+  restricted: 'layout.auditLog.values.accessMode.restricted',
+}
+
+/** One id of a closed vocabulary as its label, or as itself when this build does not know it. */
+function fromKeys(keys: Readonly<Record<string, string>>) {
+  return (id: string, t: Translate) => (Object.hasOwn(keys, id) ? t(keys[id]!) : id)
+}
+
+/**
+ * The detail slots that hold ids, and how each id reads. The writer stores codes (a role list is
+ * joined as `'admin, developer'`), and a code on screen reads as one. An id this build does not
+ * know (say, a role retired after the row was written) stays as itself rather than being guessed
+ * onto a current member.
+ */
+const SLOT_LABELS: Readonly<Record<string, (id: string, t: Translate) => string>> = {
+  roles: fromKeys(ACCOUNT_ROLE_LABEL_KEYS),
+  previousRoles: fromKeys(ACCOUNT_ROLE_LABEL_KEYS),
+  role: fromKeys(WORKSPACE_ROLE_LABEL_KEYS),
+  previousRole: fromKeys(WORKSPACE_ROLE_LABEL_KEYS),
+  accessMode: fromKeys(ACCESS_MODE_LABEL_KEYS),
+  defaultCloudProvider: (id, t) => (isCloudProvider(id) ? cloudProviderLabel(id, t) : id),
+}
+
 /**
  * The row's detail fields as interpolation params.
  *
@@ -50,14 +77,29 @@ export type Translate = (key: string, params?: Record<string, string>) => string
 function detailParams(
   action: AuditAction,
   details: AuditEventWire['details'],
-  none: string,
+  t: Translate,
 ): Record<string, string> {
+  const none = t('layout.auditLog.values.none')
   const params: Record<string, string> = {}
   for (const key of AUDIT_ACTION_DETAIL_KEYS[action]) params[key] = none
   for (const [key, value] of Object.entries(details)) {
-    params[key] = value === null || value === '' ? none : String(value)
+    if (value === null || value === '') params[key] = none
+    else params[key] = slotLabel(SLOT_LABELS[key], String(value), t)
   }
   return params
+}
+
+/** A slot's value with each comma-separated id read through its labeller, if the slot has one. */
+function slotLabel(
+  label: ((id: string, t: Translate) => string) | undefined,
+  value: string,
+  t: Translate,
+): string {
+  if (!label) return value
+  return value
+    .split(',')
+    .map((id) => label(id.trim(), t))
+    .join(', ')
 }
 
 /** Who the action was performed ON: the resolved name, else the raw id. */
@@ -96,6 +138,6 @@ export function describeEvent(event: AuditEventWire, t: Translate): string {
   }
   return t(ACTION_KEYS[event.action], {
     target: targetLabel(event),
-    ...detailParams(event.action, event.details, t('layout.auditLog.values.none')),
+    ...detailParams(event.action, event.details, t),
   })
 }

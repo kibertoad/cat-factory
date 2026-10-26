@@ -184,6 +184,18 @@
       "library": "Biblioteka",
       "document": "Repozytorium dokumentacji"
     },
+    "blockTypes": {
+      "frontend": "Frontend",
+      "service": "Usługa",
+      "library": "Biblioteka",
+      "document": "Repozytorium dokumentacji",
+      "api": "API",
+      "database": "Baza danych",
+      "queue": "Kolejka",
+      "integration": "Integracja",
+      "external": "Zewnętrzny",
+      "environment": "Środowisko"
+    },
     "toolbar": {
       "addService": "Dodaj usługę",
       "decisionWord": "decyzja | decyzje | decyzji",
@@ -233,11 +245,17 @@
       "loadingIssue": "Wczytywanie opisu powiązanego zgłoszenia…",
       "additionalNotes": "Dodatkowe uwagi",
       "description": "Opis",
-      "notesPlaceholder": "Dodaj wszystko, co agent powinien wiedzieć; zostanie dołączone do opisu zgłoszenia powyżej…",
-      "descriptionPlaceholder": "Opisz pracę: kontekst, kryteria akceptacji i wszystko, co agent powinien wiedzieć…",
+      "notesPlaceholder": "Dodaj wszystko, co agent powinien wiedzieć. Zostanie to dołączone do opisu zgłoszenia powyżej…",
+      "descriptionPlaceholder": "Opisz pracę: kontekst, kryteria akceptacji, wszystko, co agent powinien wiedzieć…",
       "technical": "Zadanie techniczne",
       "technicalHint": "Refaktor / zmiana niefunkcjonalna / wewnętrzna. Implementujący traktuje definicję zadania jako nadrzędną, a specyfikację jako odniesienie regresyjne; pozostaw wyłączone, aby zdecydowała faza specyfikacji.",
       "severity": "Ważność",
+      "severities": {
+        "low": "Niska",
+        "medium": "Średnia",
+        "high": "Wysoka",
+        "critical": "Krytyczna"
+      },
       "stepsToReproduce": "Kroki do odtworzenia",
       "stepsToReproducePlaceholder": "Zaobserwowane vs oczekiwane oraz jak odtworzyć…",
       "timebox": "Limit czasu (godziny)",
@@ -322,7 +340,7 @@
       "agentConfiguration": "Konfiguracja agenta",
       "noDocsHint": "Dołącz wymaganie, RFC lub PRD, aby agenci widzieli je podczas realizacji tego zadania.",
       "noIssuesHint": "Dołącz zgłoszenie z systemu, aby agenci widzieli jego opis i komentarze podczas realizacji tego zadania.",
-      "plannedHint": "Zadanie zostaje dodane w stanie zaplanowanym. Nie uruchomi się, dopóki nie uruchomisz na nim pipeline’u; do tego czasu możesz je edytować.",
+      "plannedHint": "Zadanie zostaje dodane w stanie zaplanowanym. Nie uruchomi się, dopóki nie uruchomisz na nim pipeline’u, więc do tego czasu możesz je edytować.",
       "continue": "Dalej",
       "submit": "Dodaj zadanie",
       "addFailedTitle": "Nie udało się dodać zadania",
@@ -701,16 +719,16 @@
       "blockedTitle": "Zbyt wiele zadań czeka na przegląd",
       "warnToast": "Niektóre zadania czekają na przegląd przez człowieka. Rozważ ich przejrzenie przed tworzeniem kolejnej pracy.",
       "blockedToast": "Tworzenie zadań jest zablokowane do czasu zmniejszenia kolejki przeglądów.",
-      "warnBody": "{count} zadań czeka na przegląd przez człowieka. Rozważ ich przejrzenie przed tworzeniem kolejnej pracy.",
-      "blockedCountBody": "Tworzenie zablokowane: {count} zadań czeka na przegląd przez człowieka (limit {threshold}). Najpierw zmniejsz kolejkę przeglądów.",
-      "blockedStuckBody": "Tworzenie zablokowane: zadanie czeka na przegląd przez człowieka od ponad {minutes} minut(y). Najpierw zmniejsz kolejkę przeglądów.",
+      "warnBody": "{count} zadanie czeka na przegląd przez człowieka. Rozważ jego przejrzenie przed tworzeniem kolejnej pracy. | {count} zadania czekają na przegląd przez człowieka. Rozważ ich przejrzenie przed tworzeniem kolejnej pracy. | {count} zadań czeka na przegląd przez człowieka. Rozważ ich przejrzenie przed tworzeniem kolejnej pracy.",
+      "blockedCountBody": "Tworzenie zablokowane: {count} zadanie czeka na przegląd przez człowieka (limit {threshold}). Najpierw zmniejsz kolejkę przeglądów. | Tworzenie zablokowane: {count} zadania czekają na przegląd przez człowieka (limit {threshold}). Najpierw zmniejsz kolejkę przeglądów. | Tworzenie zablokowane: {count} zadań czeka na przegląd przez człowieka (limit {threshold}). Najpierw zmniejsz kolejkę przeglądów.",
+      "blockedStuckBody": "Tworzenie zablokowane: zadanie czeka na przegląd przez człowieka od ponad {minutes} minuty. Najpierw zmniejsz kolejkę przeglądów. | Tworzenie zablokowane: zadanie czeka na przegląd przez człowieka od ponad {minutes} minut. Najpierw zmniejsz kolejkę przeglądów. | Tworzenie zablokowane: zadanie czeka na przegląd przez człowieka od ponad {minutes} minut. Najpierw zmniejsz kolejkę przeglądów.",
       "waitingHeading": "Oczekujące na przegląd",
       "waiting": "{minutes} min oczekiwania",
       "untitled": "Zadanie bez tytułu",
       "close": "Zamknij",
       "createAnyway": "Utwórz mimo to",
       "goReview": "Przejdź do przeglądu",
-      "badge": "{count} zadań czeka na przegląd"
+      "badge": "{count} zadanie czeka na przegląd | {count} zadania czekają na przegląd | {count} zadań czeka na przegląd"
     },
     "conflict": {
       "title": {
@@ -2771,6 +2789,12 @@
         "github": {
           "description": "Połącz aplikację GitHub App obszaru roboczego, przeglądaj repozytoria, PR-y i zgłoszenia."
         },
+        "gitlab": {
+          "description": "Połącz obszar roboczy z GitLabem za pomocą tokenu dostępu, przeglądaj projekty, merge requesty i zgłoszenia."
+        },
+        "sourceControl": {
+          "description": "Połącz hosta repozytoriów, przeglądaj repozytoria, pull requesty i zgłoszenia."
+        },
         "slack": {
           "description": "Kieruj powiadomienia do przestrzeni Slack Twojego zespołu."
         },
@@ -2920,7 +2944,11 @@
         "apiKey": "Klucz API {id}"
       },
       "values": {
-        "none": "brak"
+        "none": "brak",
+        "accessMode": {
+          "account": "wszyscy na koncie",
+          "restricted": "tylko wymienieni członkowie"
+        }
       },
       "actions": {
         "accountMemberAdded": "dodał(a) {target} do konta jako {roles}",
@@ -2999,6 +3027,10 @@
       "back": "Wstecz",
       "closeEsc": "Zamknij (Esc)",
       "quota": "limit",
+      "cost": "{input}/{output} {currency} za mln tokenów",
+      "quotaCost": "zużycie limitu ~{input}/{output} {currency} za mln tokenów",
+      "promptCaching": "Buforowanie promptów",
+      "noPromptCaching": "Bez buforowania promptów",
       "list": {
         "intro": "Każde ustawienie wybiera {baseModel} dla każdego agenta, z opcjonalnymi nadpisaniami dla poszczególnych agentów. Model przypięty do pojedynczego zadania nadal ma pierwszeństwo przed ustawieniem.",
         "introBaseModel": "model bazowy",
@@ -5025,6 +5057,18 @@
       "linkFailed": "Nie udało się zaktualizować powiązania dokumentu",
       "loadFailed": "Nie udało się wczytać szablonów dokumentów"
     },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "Projekt",
+      "technical": "Techniczny",
+      "api": "API",
+      "runbook": "Instrukcja operacyjna",
+      "research": "Badanie",
+      "reference": "Dokumentacja referencyjna",
+      "other": "Inny"
+    },
     "startFromDesign": {
       "title": "Zacznij od projektu",
       "intro": "Wklej link do ramki lub całego pliku. Zostanie dołączony do nowego zadania, a agent odczyta układ, teksty, komponenty i tokeny.",
@@ -5635,6 +5679,18 @@
     "health": {
       "title": "Stan pipeline'ów",
       "allValid": "Wszystkie pipeline'y są prawidłowe i aktualne.",
+      "noEnabledSteps": "Brak włączonych kroków: potok nie ma nic do uruchomienia.",
+      "problems": {
+        "companion": "Towarzysz „{kind}” musi działać bezpośrednio po włączonym kroku, który może przejrzeć ({targets}).",
+        "gatingNotGatable": "Krok „{kind}” nie może zależeć od szacunku: reszta uruchomienia potrzebuje jego wyniku. Na podstawie szacunku można pominąć tylko krok, którego wynik późniejsze kroki czytają jako kontekst (projekt, przegląd, dodatkowa weryfikacja).",
+        "gatingWithHumanGate": "Krok „{kind}” ma zatwierdzenie przez człowieka, więc nie może też zależeć od szacunku. Szacunek może dodać kontrolę przez człowieka, ale nigdy jej nie usunie.",
+        "gatingNoThreshold": "Krok „{kind}” zależy od szacunku, ale nie ustawia progu (złożoność, ryzyko lub wpływ).",
+        "gatingNoEstimator": "Krok „{kind}” zależy od szacunku, ale przed nim nie działa żaden krok, który go tworzy.",
+        "conditionNotGatable": "Krok „{kind}” nie może mieć warunku uruchomienia: reszta uruchomienia potrzebuje jego wyniku, więc uruchomienie poza zakresem warunku zakończyłoby się bez niego bez ostrzeżenia.",
+        "conditionWithHumanGate": "Krok „{kind}” ma zatwierdzenie przez człowieka, więc nie może też mieć warunku uruchomienia. Warunek może pozostawić kontrolę nieosiągniętą, ale nigdy jej nie usunie.",
+        "unknownKinds": "Odwołuje się do nieznanego rodzaju agenta: {kinds}. | Odwołuje się do nieznanych rodzajów agentów: {kinds}. | Odwołuje się do nieznanych rodzajów agentów: {kinds}.",
+        "outdated": "Dostępna jest nowsza wersja tego wbudowanego potoku (z v{from} do v{to})."
+      },
       "invalidHeading": "Nieprawidłowe pipeline'y",
       "invalidDescription": "Odwołują się do brakującego agenta lub są źle skonfigurowane, więc zawiodłyby (lub wykonałyby się błędnie) przy starcie. Usuń pipeline niestandardowy albo zregeneruj wbudowany, aby przywrócić jego definicję z katalogu.",
       "builtinBadge": "wbudowany",
@@ -5729,6 +5785,14 @@
   "palette": {
     "hint": "Kliknij agenta, aby dodać go do pipeline'u.",
     "customAgents": "Agenci niestandardowi",
+    "categories": {
+      "review": "Przegląd i selekcja",
+      "design": "Projektowanie i badania",
+      "build": "Implementacja",
+      "test": "Testy",
+      "docs": "Dokumentacja",
+      "gates": "Bramki i obserwowalność"
+    },
     "purposeHidden": "{count} agent ukryty dla tego celu. | {count} agenci ukryci dla tego celu. | {count} agentów ukrytych dla tego celu."
   },
   "gates": {
@@ -6118,6 +6182,7 @@
     "confidence": "pewność {pct}",
     "panel": "Panel",
     "topScore": "najwyższy {label} {pct}",
+    "notScored": "brak oceny",
     "expert": "Ekspert {letter}",
     "participant": "Uczestnik",
     "strategy": {
@@ -6165,8 +6230,8 @@
       "detail": "Wykonaj jeszcze jedną rundę burzy mózgów, przejdź do następnego etapu z ostatnim kierunkiem mimo to, albo zatrzymaj i zresetuj zadanie, aby móc je edytować i przesłać ponownie."
     },
     "working": {
-      "incorporating": "Scalanie Twoich wyborów w {doc}… Możesz to zamknąć — powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
-      "reReviewing": "Ponowne uruchamianie burzy mózgów na zaktualizowanym kierunku… Możesz to zamknąć — powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje."
+      "incorporating": "Scalanie Twoich wyborów w {doc}… Możesz to zamknąć. Powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
+      "reReviewing": "Ponowne uruchamianie burzy mózgów na zaktualizowanym kierunku… Możesz to zamknąć. Powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje."
     },
     "severity": {
       "low": "niski",
@@ -6205,30 +6270,30 @@
     "proceedNothing": "Kontynuuj (nic do scalenia)",
     "incorporateChoices": "Scal wybory",
     "hint": {
-      "allDismissed": "Wszystkie opcje są odrzucone — przejdź do następnego etapu bez kierunku.",
+      "allDismissed": "Wszystkie opcje są odrzucone. Przejdź do następnego etapu bez kierunku.",
       "incorporate": "Scala Twoje wybory w jeden {doc}, a następnie automatycznie uruchamia burzę mózgów ponownie.",
       "chooseAll": "Wybierz lub odrzuć każdą opcję, aby kontynuować."
     },
     "reRunning": "Ponowne uruchamianie…",
-    "reRun": "Wygląda dobrze — uruchom ponownie",
+    "reRun": "Wygląda dobrze, uruchom ponownie",
     "redoIncorporation": "Ponów scalanie",
     "redoPlaceholder": "Co kierunek powinien zrobić inaczej?",
     "redoWithDirection": "Ponów z tym kierunkiem",
     "mergedHint": "Ponowne uruchomienie uruchamia agenta na tym kierunku. Jeśli nie jesteś zadowolony ze sposobu scalenia, zamiast tego ponów je z komentarzem.",
-    "incorporatedFooter": "Kierunek ustalony — pipeline kontynuuje pracę z dokumentem po lewej.",
+    "incorporatedFooter": "Kierunek ustalony. Pipeline kontynuuje pracę z dokumentem po lewej.",
     "toast": {
       "saveChoiceError": "Nie udało się zapisać wyboru",
       "updateOptionError": "Nie udało się zaktualizować opcji",
       "incorporateError": "Nie udało się scalić wyborów",
       "draftingTitle": "Tworzenie {doc} w tle",
-      "draftingDescription": "Wróciłeś do tablicy — powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
-      "reReviewSettled": "Kierunek ustalony — kontynuowanie pipeline'u",
-      "reReviewExceeded": "Osiągnięto limit iteracji — wybierz, jak kontynuować",
+      "draftingDescription": "Wróciłeś do tablicy. Powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
+      "reReviewSettled": "Kierunek ustalony, kontynuowanie pipeline'u",
+      "reReviewExceeded": "Osiągnięto limit iteracji: wybierz, jak kontynuować",
       "reReviewNewOptions": "jedna nowa opcja do rozpatrzenia | {count} nowe opcje do rozpatrzenia | {count} nowych opcji do rozpatrzenia",
       "reReviewError": "Nie udało się ponownie uruchomić burzy mózgów",
       "proceeding": "Przechodzenie do następnego etapu",
       "proceedError": "Nie udało się kontynuować",
-      "taskReset": "Zadanie zresetowane — edytuj je i prześlij ponownie",
+      "taskReset": "Zadanie zresetowane: edytuj je i prześlij ponownie",
       "extraRoundGranted": "Przyznano jeszcze jedną rundę burzy mózgów",
       "resolveError": "Nie udało się rozwiązać burzy mózgów"
     }
@@ -6325,10 +6390,10 @@
   },
   "humanTest": {
     "title": "Testy ręczne",
-    "titleWithBlock": "Testy ręczne — {title}",
+    "titleWithBlock": "Testy ręczne · {title}",
     "subtitle": "Zweryfikuj zmianę w działającym środowisku",
     "notStarted": "Ten krok jeszcze się nie rozpoczął.",
-    "confirm": "Wygląda dobrze — kontynuuj",
+    "confirm": "Wygląda dobrze, kontynuuj",
     "phase": {
       "provisioning": "Tworzenie środowiska…",
       "awaitingHuman": "Oczekiwanie na Twoją weryfikację",
@@ -6359,7 +6424,7 @@
       "heading": "Znalazłeś problem?",
       "cancel": "Anuluj",
       "requestFix": "Poproś o poprawkę",
-      "placeholder": "Opisz, co poszło nie tak — agent naprawiający otrzyma to jako kontekst, a następnie środowisko zostanie odbudowane do ponownych testów.",
+      "placeholder": "Opisz, co poszło nie tak. Agent naprawiający otrzyma to jako kontekst, a następnie środowisko zostanie odbudowane do ponownych testów.",
       "send": "Wyślij do naprawiacza"
     },
     "history": {
@@ -6819,7 +6884,7 @@
     },
     "intro": {
       "workspace": "Zarządzaj wytycznymi najlepszych praktyk, które agenci stosują na tej tablicy. Fragmenty są scalane z katalogu wbudowanego, Twojego konta i tej tablicy (późniejsze poziomy mają pierwszeństwo przed wcześniejszymi), a następnie odpowiednie z nich są wybierane dla każdego uruchomienia agenta.",
-      "account": "Zarządzaj wytycznymi najlepszych praktyk współdzielonymi przez wszystkie tablice na tym koncie. Fragmenty konta są scalane ponad katalogiem wbudowanym, a tablica może je nadpisać lub dodać własne na górze. Odpowiednie z nich są wybierane dla każdego uruchomienia agenta."
+      "account": "Zarządzaj wytycznymi najlepszych praktyk współdzielonymi przez wszystkie tablice na tym koncie. Fragmenty konta mają pierwszeństwo przed katalogiem wbudowanym, a tablica może je nadpisać lub dodać własne na górze. Odpowiednie z nich są wybierane dla każdego uruchomienia agenta."
     },
     "owner": {
       "workspace": "Ta tablica",
@@ -7017,7 +7082,7 @@
       "link": "Powiąż i zsynchronizuj",
       "metaSynced": "zsynchronizowano {date} · ref {ref}",
       "metaNever": "nigdy nie synchronizowano · ref {ref}",
-      "metaFiles": "{service} · {count} plików kontraktów",
+      "metaFiles": "{service} · {count} plik kontraktu | {service} · {count} pliki kontraktów | {service} · {count} plików kontraktów",
       "metaFolder": "{service} · kontrakty z tego folderu",
       "metaFolderRecursive": "{service} · kontrakty z tego folderu i jego podfolderów",
       "metaDirectory": "jedna usługa na podkatalog",
@@ -7180,11 +7245,11 @@
       "maxCells": "(maks. {max})",
       "run": "Uruchom"
     },
-    "experimentStatus": {
-      "draft": "wersja robocza",
-      "running": "w toku",
-      "done": "ukończono",
-      "failed": "niepowodzenie"
+    "statusChip": {
+      "draft": "Wersja robocza",
+      "running": "W toku",
+      "done": "Ukończono",
+      "failed": "Niepowodzenie"
     },
     "results": {
       "col": {
@@ -7315,12 +7380,12 @@
       "open": "Otwórz",
       "openPr": "Pull request"
     },
-    "status": {
-      "pending": "oczekuje",
-      "running": "w toku",
-      "succeeded": "powodzenie",
-      "failed": "niepowodzenie",
-      "awaitingReview": "czeka na przegląd"
+    "statusChip": {
+      "pending": "Oczekuje",
+      "running": "W toku",
+      "succeeded": "Powodzenie",
+      "failed": "Niepowodzenie",
+      "awaitingReview": "Czeka na przegląd"
     },
     "arch": {
       "title": "Architektury referencyjne",
@@ -7708,7 +7773,7 @@
       "awaiting": "Oczekuje na przegląd",
       "cleared": "Sprawdzono",
       "pausedTitle": "Wstrzymano do przeglądu",
-      "pausedBody": "Faza „{phase}\" została ukończona. Przejrzyj powyżej zatwierdzone artefakty i PR-y, a następnie wznów, aby kontynuować, albo anuluj, aby zatrzymać inicjatywę."
+      "pausedBody": "Faza „{phase}\" została ukończona. Przejrzyj poniżej zatwierdzone artefakty i PR-y, a następnie wznów, aby kontynuować, albo anuluj, aby zatrzymać inicjatywę."
     }
   },
   "environmentWizard": {
@@ -8140,7 +8205,9 @@
       },
       "unprotectedHint": "poświadczenie uruchomienia może wypchnąć zmiany bezpośrednio i scalić własnego pull requesta",
       "detailUnavailable": "chroniona, ale nie udało się odczytać reguły — bezpośrednie wypchnięcia mogą nadal być dozwolone",
-      "requiresPr": "wymagany pull request, {reviews} zatwierdzających recenzji, {checks} wymaganych sprawdzeń",
+      "requiresPr": "wymagany pull request, {reviews}, {checks}",
+      "approvingReviews": "{count} zatwierdzająca recenzja | {count} zatwierdzające recenzje | {count} zatwierdzających recenzji",
+      "requiredChecks": "{count} wymagane sprawdzenie | {count} wymagane sprawdzenia | {count} wymaganych sprawdzeń",
       "noPrRequired": "chroniona, ale nie wymaga pull requesta",
       "unknownReason": {
         "branch_not_found": "nie znaleziono gałęzi domyślnej — projekcja repozytorium może być nieaktualna",
@@ -8205,6 +8272,7 @@
       "progress": "Krok {current} z {total}",
       "ariaLabel": "Krok samouczka",
       "announcement": "Krok {current} z {total}. {title}. {body}",
+      "announcementPunctuated": "Krok {current} z {total}. {title} {body}",
       "abridged": "Pominięto 1 krok: tego elementu nie ma na tej tablicy. | Pominięto {count} kroki: tych elementów nie ma na tej tablicy. | Pominięto {count} kroków: tych elementów nie ma na tej tablicy.",
       "searching": "Szukanie podświetlonego elementu...",
       "clickHint": "Kliknij podświetlony element, aby kontynuować",
@@ -8648,9 +8716,9 @@
     "duplicateAlias": "Dwaj zachowani kandydaci mają to samo id. Dwa artefakty w jednym miejscu to jeden artefakt.",
     "keepAction": "Zachowaj {count}",
     "warning": {
-      "omitted": "{count} kandydatów odrzucono powyżej limitu, więc ta lista to tylko początek. ",
-      "invalid": "{count} zadeklarowanych wpisów było nieczytelnych i ich tu brakuje. ",
-      "previews": "{count} linków podglądu odrzucono, więc ci kandydaci są pokazani bez obrazu."
+      "omitted": "{count} kandydata odrzucono powyżej limitu, więc ta lista to tylko początek. | {count} kandydatów odrzucono powyżej limitu, więc ta lista to tylko początek. | {count} kandydatów odrzucono powyżej limitu, więc ta lista to tylko początek.",
+      "invalid": "{count} zadeklarowany wpis był nieczytelny i go tu brakuje. | {count} zadeklarowane wpisy były nieczytelne i ich tu brakuje. | {count} zadeklarowanych wpisów było nieczytelnych i ich tu brakuje.",
+      "previews": "{count} link podglądu odrzucono, więc ten kandydat jest pokazany bez obrazu. | {count} linki podglądu odrzucono, więc ci kandydaci są pokazani bez obrazu. | {count} linków podglądu odrzucono, więc ci kandydaci są pokazani bez obrazu."
     },
     "noChoice": {
       "undeclared": "Krok nigdy nie zadeklarował kandydatów, więc nie było czego porównywać. Przebieg trwał dalej.",

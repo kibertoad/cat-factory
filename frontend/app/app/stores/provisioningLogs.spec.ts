@@ -88,7 +88,11 @@ describe('provisioningLogs store — loadForExecution', () => {
       const load = store.loadForExecution('exec1')
       expect(run.value?.loading).toBe(true)
       await load
-      expect(run.value).toEqual({ loading: false, ids: [], error: '503' })
+      expect(run.value).toEqual({
+        loading: false,
+        ids: [],
+        error: expect.objectContaining({ message: '503' }),
+      })
     })
 
     it('shows an empty run as loaded with no entries', async () => {

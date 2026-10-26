@@ -184,6 +184,18 @@
       "library": "Kütüphane",
       "document": "Doküman deposu"
     },
+    "blockTypes": {
+      "frontend": "Frontend",
+      "service": "Servis",
+      "library": "Kütüphane",
+      "document": "Doküman deposu",
+      "api": "API",
+      "database": "Veritabanı",
+      "queue": "Kuyruk",
+      "integration": "Entegrasyon",
+      "external": "Harici",
+      "environment": "Ortam"
+    },
     "toolbar": {
       "addService": "Servis ekle",
       "decisionWord": "karar | karar",
@@ -233,11 +245,17 @@
       "loadingIssue": "Bağlantılı sorunun açıklaması yükleniyor…",
       "additionalNotes": "Ek notlar",
       "description": "Açıklama",
-      "notesPlaceholder": "Ajanın bilmesi gereken başka bir şey ekleyin, yukarıdaki sorun açıklamasına eklenir…",
-      "descriptionPlaceholder": "İşi tanımlayın: bağlam, kabul kriterleri, ajanın bilmesi gereken her şey…",
+      "notesPlaceholder": "Ajanın bilmesi gereken başka bir şey ekleyin. Yukarıdaki sorun açıklamasına eklenir…",
+      "descriptionPlaceholder": "İşi tanımlayın: bağlam, kabul kriterleri ve ajanın bilmesi gereken her şey…",
       "technical": "Teknik görev",
       "technicalHint": "Bir yeniden düzenleme / işlevsel olmayan / dahili değişiklik. Uygulayıcı, görev tanımını birincil, spesifikasyonu ise bir gerileme referansı olarak ele alır; spesifikasyon aşamasının karar vermesi için boş bırakın.",
       "severity": "Önem derecesi",
+      "severities": {
+        "low": "Düşük",
+        "medium": "Orta",
+        "high": "Yüksek",
+        "critical": "Kritik"
+      },
       "stepsToReproduce": "Yeniden oluşturma adımları",
       "stepsToReproducePlaceholder": "Gözlemlenen ile beklenen, ve nasıl yeniden oluşturulacağı…",
       "timebox": "Zaman kutusu (saat)",
@@ -322,7 +340,7 @@
       "agentConfiguration": "Ajan yapılandırması",
       "noDocsHint": "Ajanların bu görevi uygularken görebilmesi için bir gereksinim, RFC veya PRD ekleyin.",
       "noIssuesHint": "Ajanların bu görevi uygularken açıklamasını ve yorumlarını görebilmesi için bir izleyici sorunu ekleyin.",
-      "plannedHint": "Görev planlanmış bir durumda eklenir. Üzerinde bir işlem hattı başlatana kadar çalışmaz, o zamana kadar düzenlemeye devam edebilirsiniz.",
+      "plannedHint": "Görev planlanmış bir durumda eklenir. Üzerinde bir işlem hattı başlatana kadar çalışmaz, bu yüzden o zamana kadar düzenlemeye devam edebilirsiniz.",
       "continue": "Devam",
       "submit": "Görev ekle",
       "addFailedTitle": "Görev eklenemedi",
@@ -701,16 +719,16 @@
       "blockedTitle": "Çok fazla görev incelemeyi bekliyor",
       "warnToast": "Bazı görevler insan incelemesini bekliyor. Daha fazla iş oluşturmadan önce onları incelemeyi düşünün.",
       "blockedToast": "İnceleme kuyruğu azaltılana kadar görev oluşturma engellendi.",
-      "warnBody": "{count} görev insan incelemesini bekliyor. Daha fazla iş oluşturmadan önce onları incelemeyi düşünün.",
-      "blockedCountBody": "Oluşturma engellendi: {count} görev insan incelemesini bekliyor (sınır {threshold}). Önce inceleme kuyruğunu azaltın.",
-      "blockedStuckBody": "Oluşturma engellendi: bir görev {minutes} dakikadan uzun süredir insan incelemesini bekliyor. Önce inceleme kuyruğunu azaltın.",
+      "warnBody": "{count} görev insan incelemesini bekliyor. Daha fazla iş oluşturmadan önce onu incelemeyi düşünün. | {count} görev insan incelemesini bekliyor. Daha fazla iş oluşturmadan önce onları incelemeyi düşünün.",
+      "blockedCountBody": "Oluşturma engellendi: {count} görev insan incelemesini bekliyor (sınır {threshold}). Önce inceleme kuyruğunu azaltın. | Oluşturma engellendi: {count} görev insan incelemesini bekliyor (sınır {threshold}). Önce inceleme kuyruğunu azaltın.",
+      "blockedStuckBody": "Oluşturma engellendi: bir görev {minutes} dakikadan uzun süredir insan incelemesini bekliyor. Önce inceleme kuyruğunu azaltın. | Oluşturma engellendi: bir görev {minutes} dakikadan uzun süredir insan incelemesini bekliyor. Önce inceleme kuyruğunu azaltın.",
       "waitingHeading": "İncelemeyi bekliyor",
       "waiting": "{minutes} dk bekliyor",
       "untitled": "Başlıksız görev",
       "close": "Kapat",
       "createAnyway": "Yine de oluştur",
       "goReview": "İncelemeye git",
-      "badge": "{count} görev incelemeyi bekliyor"
+      "badge": "{count} görev incelemeyi bekliyor | {count} görev incelemeyi bekliyor"
     },
     "conflict": {
       "title": {
@@ -2771,6 +2789,12 @@
         "github": {
           "description": "Çalışma alanının GitHub App'ini bağlayın, depoları, PR'ları ve sorunları gözatın."
         },
+        "gitlab": {
+          "description": "Çalışma alanını bir erişim belirteciyle GitLab'e bağlayın, projelere, birleştirme isteklerine ve sorunlara göz atın."
+        },
+        "sourceControl": {
+          "description": "Bir depo barındırıcısı bağlayın, depolara, çekme isteklerine ve sorunlara göz atın."
+        },
         "slack": {
           "description": "Bildirimleri ekibinizin Slack çalışma alanına yönlendirin."
         },
@@ -2920,7 +2944,11 @@
         "apiKey": "API anahtarı {id}"
       },
       "values": {
-        "none": "yok"
+        "none": "yok",
+        "accessMode": {
+          "account": "hesaptaki herkes",
+          "restricted": "yalnızca listelenen üyeler"
+        }
       },
       "actions": {
         "accountMemberAdded": "{target} kullanıcısını hesaba {roles} olarak ekledi",
@@ -2999,6 +3027,10 @@
       "back": "Geri",
       "closeEsc": "Kapat (Esc)",
       "quota": "kota",
+      "cost": "milyon token başına {input}/{output} {currency}",
+      "quotaCost": "kota tüketimi milyon token başına ~{input}/{output} {currency}",
+      "promptCaching": "İstem önbelleğe alma",
+      "noPromptCaching": "İstem önbelleğe alma yok",
       "list": {
         "intro": "Her hazır ayar, isteğe bağlı ajan başına geçersiz kılmalarla birlikte her ajan için bir {baseModel} belirler. Bir görevde sabitlenmiş bir model yine de hazır ayarı geçersiz kılar.",
         "introBaseModel": "temel model",
@@ -5025,6 +5057,18 @@
       "linkFailed": "Belge bağlantısı güncellenemedi",
       "loadFailed": "Belge şablonları yüklenemedi"
     },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "Tasarım",
+      "technical": "Teknik",
+      "api": "API",
+      "runbook": "İşletim kılavuzu",
+      "research": "Araştırma",
+      "reference": "Başvuru",
+      "other": "Diğer"
+    },
     "startFromDesign": {
       "title": "Tasarımdan başla",
       "intro": "Bir çerçevenin ya da dosyanın bağlantısını yapıştır. Yeni göreve eklenir ve ajan düzenini, metinlerini, bileşenlerini ve token’larını okur.",
@@ -5635,6 +5679,18 @@
     "health": {
       "title": "Pipeline sağlığı",
       "allValid": "Tüm pipeline'lar geçerli ve güncel.",
+      "noEnabledSteps": "Etkin adım yok: işlem hattının çalıştıracağı bir şey yok.",
+      "problems": {
+        "companion": "'{kind}' yardımcısı, inceleyebileceği etkin bir adımın ({targets}) hemen ardından çalışmalıdır.",
+        "gatingNotGatable": "'{kind}' adımı tahmine bağlanamaz: çıktısı çalıştırmanın geri kalanı için gereklidir. Tahmine göre yalnızca sonucu sonraki adımlarca bağlam olarak okunan bir adım (tasarım, inceleme, ek doğrulama) atlanabilir.",
+        "gatingWithHumanGate": "'{kind}' adımında insan onayı var, bu yüzden ayrıca tahmine bağlanamaz. Tahmin bir insan denetimi ekleyebilir ama asla kaldıramaz.",
+        "gatingNoThreshold": "'{kind}' adımı tahmine bağlı ama hiçbir eşik (karmaşıklık, risk veya etki) belirlemiyor.",
+        "gatingNoEstimator": "'{kind}' adımı tahmine bağlı, ancak ondan önce tahmin üreten bir adım çalışmıyor.",
+        "conditionNotGatable": "'{kind}' adımı çalıştırma koşulu taşıyamaz: çıktısı çalıştırmanın geri kalanı için gereklidir, bu yüzden koşulun kapsamı dışındaki bir çalıştırma onsuz sessizce biter.",
+        "conditionWithHumanGate": "'{kind}' adımında insan onayı var, bu yüzden ayrıca çalıştırma koşulu taşıyamaz. Bir koşul bir denetimi ulaşılmamış bırakabilir ama asla kaldıramaz.",
+        "unknownKinds": "Bilinmeyen bir ajan türüne başvuruyor: {kinds}. | Bilinmeyen ajan türlerine başvuruyor: {kinds}.",
+        "outdated": "Bu yerleşik işlem hattının daha yeni bir sürümü var (v{from} sürümünden v{to} sürümüne)."
+      },
       "invalidHeading": "Geçersiz pipeline'lar",
       "invalidDescription": "Bunlar eksik bir agent'a referans veriyor veya yanlış yapılandırılmış, bu yüzden başlangıçta başarısız olur (veya hatalı çalışır). Özel bir pipeline'ı silin ya da katalog tanımını geri yüklemek için bir yerleşik pipeline'ı yeniden tohumlayın.",
       "builtinBadge": "yerleşik",
@@ -5729,6 +5785,14 @@
   "palette": {
     "hint": "Bir agent'ı pipeline'a eklemek için tıklayın.",
     "customAgents": "Özel agent'lar",
+    "categories": {
+      "review": "İnceleme ve önceliklendirme",
+      "design": "Tasarım ve araştırma",
+      "build": "Uygulama",
+      "test": "Test",
+      "docs": "Dokümantasyon",
+      "gates": "Kapılar ve gözlemlenebilirlik"
+    },
     "purposeHidden": "Bu amaç için {count} ajan gizli."
   },
   "gates": {
@@ -6118,6 +6182,7 @@
     "confidence": "güven {pct}",
     "panel": "Panel",
     "topScore": "en yüksek {label} {pct}",
+    "notScored": "puanlanmadı",
     "expert": "Uzman {letter}",
     "participant": "Katılımcı",
     "strategy": {
@@ -6165,8 +6230,8 @@
       "detail": "Bir beyin fırtınası turu daha yapın, son yönle yine de bir sonraki aşamaya geçin ya da görevi durdurup sıfırlayın; böylece düzenleyip yeniden gönderebilirsiniz."
     },
     "working": {
-      "incorporating": "Seçimleriniz bir {doc} içine katlanıyor… Bunu kapatabilirsiniz; yalnızca daha fazla girdi gerekirse sizi bilgilendiririz.",
-      "reReviewing": "Güncellenmiş yön üzerinde beyin fırtınası yeniden çalıştırılıyor… Bunu kapatabilirsiniz; yalnızca daha fazla girdi gerekirse sizi bilgilendiririz."
+      "incorporating": "Seçimleriniz bir {doc} içine katlanıyor… Bunu kapatabilirsiniz. Yalnızca daha fazla girdi gerekirse sizi bilgilendiririz.",
+      "reReviewing": "Güncellenmiş yön üzerinde beyin fırtınası yeniden çalıştırılıyor… Bunu kapatabilirsiniz. Yalnızca daha fazla girdi gerekirse sizi bilgilendiririz."
     },
     "severity": {
       "low": "düşük",
@@ -6205,30 +6270,30 @@
     "proceedNothing": "Devam et (dahil edilecek bir şey yok)",
     "incorporateChoices": "Seçimleri dahil et",
     "hint": {
-      "allDismissed": "Tüm seçenekler yok sayıldı; yönsüz olarak bir sonraki aşamaya geçin.",
+      "allDismissed": "Tüm seçenekler yok sayıldı. Yönsüz olarak bir sonraki aşamaya geçin.",
       "incorporate": "Seçimlerinizi tek bir {doc} içine katlar, ardından beyin fırtınasını otomatik olarak yeniden çalıştırır.",
       "chooseAll": "Devam etmek için her seçeneği seçin ya da yok sayın."
     },
     "reRunning": "Yeniden çalıştırılıyor…",
-    "reRun": "İyi görünüyor — yeniden çalıştır",
+    "reRun": "İyi görünüyor, yeniden çalıştır",
     "redoIncorporation": "Dahil etmeyi yeniden yap",
     "redoPlaceholder": "Yön ne farklı yapmalı?",
     "redoWithDirection": "Bu yönle yeniden yap",
     "mergedHint": "Yeniden çalıştırma, ajanı bu yöne karşı çalıştırır. Birleştirilme şeklinden memnun değilseniz, bunun yerine bir yorumla yeniden yapın.",
-    "incorporatedFooter": "Yön kesinleşti — hat soldaki belgeyle devam ediyor.",
+    "incorporatedFooter": "Yön kesinleşti. Hat soldaki belgeyle devam ediyor.",
     "toast": {
       "saveChoiceError": "Seçim kaydedilemedi",
       "updateOptionError": "Seçenek güncellenemedi",
       "incorporateError": "Seçimler dahil edilemedi",
       "draftingTitle": "{doc} arka planda hazırlanıyor",
-      "draftingDescription": "Panoya geri döndünüz; yalnızca daha fazla girdi gerekirse sizi bilgilendiririz.",
-      "reReviewSettled": "Yön kesinleşti — hat devam ediyor",
-      "reReviewExceeded": "Yineleme sınırına ulaşıldı — nasıl devam edileceğini seçin",
+      "draftingDescription": "Panoya geri döndünüz. Yalnızca daha fazla girdi gerekirse sizi bilgilendiririz.",
+      "reReviewSettled": "Yön kesinleşti, hat devam ediyor",
+      "reReviewExceeded": "Yineleme sınırına ulaşıldı: nasıl devam edileceğini seçin",
       "reReviewNewOptions": "tepki verilecek yeni seçenek yok | tepki verilecek bir yeni seçenek | tepki verilecek {count} yeni seçenek",
       "reReviewError": "Beyin fırtınası yeniden çalıştırılamadı",
       "proceeding": "Bir sonraki aşamaya geçiliyor",
       "proceedError": "Devam edilemedi",
-      "taskReset": "Görev sıfırlandı — düzenleyip yeniden gönderin",
+      "taskReset": "Görev sıfırlandı: düzenleyip yeniden gönderin",
       "extraRoundGranted": "Bir beyin fırtınası turu daha verildi",
       "resolveError": "Beyin fırtınası çözülemedi"
     }
@@ -6325,10 +6390,10 @@
   },
   "humanTest": {
     "title": "İnsan testi",
-    "titleWithBlock": "İnsan testi — {title}",
+    "titleWithBlock": "İnsan testi · {title}",
     "subtitle": "Değişikliği canlı bir ortamda doğrulayın",
     "notStarted": "Bu adım henüz başlamadı.",
-    "confirm": "İyi görünüyor — devam et",
+    "confirm": "İyi görünüyor, devam et",
     "phase": {
       "provisioning": "Ortam hazırlanıyor…",
       "awaitingHuman": "Doğrulamanız bekleniyor",
@@ -6359,7 +6424,7 @@
       "heading": "Bir sorun mu buldunuz?",
       "cancel": "İptal",
       "requestFix": "Düzeltme iste",
-      "placeholder": "Neyin yanlış gittiğini açıklayın — Fixer ajanı bunu bağlam olarak alır, ardından ortam yeniden test için yeniden oluşturulur.",
+      "placeholder": "Neyin yanlış gittiğini açıklayın. Fixer ajanı bunu bağlam olarak alır, ardından ortam yeniden test için yeniden oluşturulur.",
       "send": "Fixer'a gönder"
     },
     "history": {
@@ -6819,7 +6884,7 @@
     },
     "intro": {
       "workspace": "Aracıların bu panoda izlediği en iyi uygulama yönergelerini düzenleyin. Parçalar yerleşik katalog, hesabınız ve bu panodan birleştirilir (sonraki katmanlar öncekileri geçersiz kılar), ardından her aracı çalıştırması için ilgili olanlar seçilir.",
-      "account": "Bu hesaptaki her panonun paylaştığı en iyi uygulama yönergelerini düzenleyin. Hesap parçaları yerleşik kataloğun altında birleştirilir ve bir pano bunların üzerine kendi parçalarını ekleyebilir veya geçersiz kılabilir. Her aracı çalıştırması için ilgili olanlar seçilir."
+      "account": "Bu hesaptaki her panonun paylaştığı en iyi uygulama yönergelerini düzenleyin. Hesap parçaları yerleşik kataloğu geçersiz kılar ve bir pano bunları geçersiz kılabilir veya üzerine kendi parçalarını ekleyebilir. Her aracı çalıştırması için ilgili olanlar seçilir."
     },
     "owner": {
       "workspace": "Bu pano",
@@ -7017,7 +7082,7 @@
       "link": "Bağla ve eşitle",
       "metaSynced": "eşitlendi {date} · ref {ref}",
       "metaNever": "hiç eşitlenmedi · ref {ref}",
-      "metaFiles": "{service} · {count} sözleşme dosyası",
+      "metaFiles": "{service} · {count} sözleşme dosyası | {service} · {count} sözleşme dosyası",
       "metaFolder": "{service} · bu klasördeki sözleşmeler",
       "metaFolderRecursive": "{service} · bu klasördeki ve alt klasörlerindeki sözleşmeler",
       "metaDirectory": "her alt dizin için bir hizmet",
@@ -7180,11 +7245,11 @@
       "maxCells": "(en fazla {max})",
       "run": "Çalıştır"
     },
-    "experimentStatus": {
-      "draft": "taslak",
-      "running": "çalışıyor",
-      "done": "tamamlandı",
-      "failed": "başarısız"
+    "statusChip": {
+      "draft": "Taslak",
+      "running": "Çalışıyor",
+      "done": "Tamamlandı",
+      "failed": "Başarısız"
     },
     "results": {
       "col": {
@@ -7315,12 +7380,12 @@
       "open": "Aç",
       "openPr": "Pull request"
     },
-    "status": {
-      "pending": "beklemede",
-      "running": "çalışıyor",
-      "succeeded": "başarılı",
-      "failed": "başarısız",
-      "awaitingReview": "inceleme bekliyor"
+    "statusChip": {
+      "pending": "Beklemede",
+      "running": "Çalışıyor",
+      "succeeded": "Başarılı",
+      "failed": "Başarısız",
+      "awaitingReview": "İnceleme bekliyor"
     },
     "arch": {
       "title": "Referans mimariler",
@@ -7708,7 +7773,7 @@
       "awaiting": "İnceleme bekliyor",
       "cleared": "İncelendi",
       "pausedTitle": "İnceleme için duraklatıldı",
-      "pausedBody": "\"{phase}\" aşaması tamamlandı. Yukarıdaki işlenmiş yapıtları ve PR'leri inceleyin, ardından devam etmek için sürdürün ya da girişimi durdurmak için iptal edin."
+      "pausedBody": "\"{phase}\" aşaması tamamlandı. Aşağıdaki işlenmiş yapıtları ve PR'leri inceleyin, ardından devam etmek için sürdürün ya da girişimi durdurmak için iptal edin."
     }
   },
   "environmentWizard": {
@@ -8140,7 +8205,9 @@
       },
       "unprotectedHint": "bir çalıştırmanın kimlik bilgisi buraya doğrudan gönderim yapıp kendi çekme isteğini birleştirebilir",
       "detailUnavailable": "korumalı, ancak kural okunamadı — doğrudan gönderimlere hâlâ izin veriyor olabilir",
-      "requiresPr": "çekme isteği zorunlu, {reviews} onaylayan inceleme, {checks} zorunlu denetim",
+      "requiresPr": "çekme isteği zorunlu, {reviews}, {checks}",
+      "approvingReviews": "{count} onaylayan inceleme | {count} onaylayan inceleme",
+      "requiredChecks": "{count} zorunlu denetim | {count} zorunlu denetim",
       "noPrRequired": "korumalı, ancak çekme isteği zorunlu değil",
       "unknownReason": {
         "branch_not_found": "varsayılan dal bulunamadı — depo izdüşümü eskimiş olabilir",
@@ -8205,6 +8272,7 @@
       "progress": "Adım {current} / {total}",
       "ariaLabel": "Eğitim adımı",
       "announcement": "Adım {current} / {total}. {title}. {body}",
+      "announcementPunctuated": "Adım {current} / {total}. {title} {body}",
       "abridged": "1 adım atlandı: bu denetim bu panonun parçası değil. | {count} adım atlandı: bu denetimler bu panonun parçası değil.",
       "searching": "Vurgulanan denetim aranıyor...",
       "clickHint": "Devam etmek için vurgulanan denetime tıklayın",
@@ -8648,9 +8716,9 @@
     "duplicateAlias": "Tutulan iki aday aynı kimliği paylaşıyor. Tek konumdaki iki çıktı, tek çıktıdır.",
     "keepAction": "{count} tanesini tut",
     "warning": {
-      "omitted": "Üst sınırın ötesinde {count} aday elendi, bu liste yalnızca baştan bir bölüm. ",
-      "invalid": "Bildirilen {count} kayıt okunamadı ve burada yok. ",
-      "previews": "{count} önizleme bağlantısı reddedildi, o adaylar görselsiz gösteriliyor."
+      "omitted": "Üst sınırın ötesinde {count} aday elendi, bu liste yalnızca baştan bir bölüm. | Üst sınırın ötesinde {count} aday elendi, bu liste yalnızca baştan bir bölüm.",
+      "invalid": "Bildirilen {count} kayıt okunamadı ve burada yok. | Bildirilen {count} kayıt okunamadı ve burada yok.",
+      "previews": "{count} önizleme bağlantısı reddedildi, o aday görselsiz gösteriliyor. | {count} önizleme bağlantısı reddedildi, o adaylar görselsiz gösteriliyor."
     },
     "noChoice": {
       "undeclared": "Adım adaylarını hiç bildirmedi, bu yüzden karşılaştırılacak bir şey yoktu. Çalıştırma devam etti.",

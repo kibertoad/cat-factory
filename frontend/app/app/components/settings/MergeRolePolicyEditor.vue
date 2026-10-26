@@ -35,6 +35,7 @@ import {
   type RoleRuleSelection,
 } from '~/components/settings/MergeRolePolicyEditor.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import { WORKSPACE_ROLE_LABEL_KEYS } from '~/utils/roles'
 
 const props = defineProps<{
   /** The preset's per-role narrowing map; a role with no entry is exactly the base rules. */
@@ -70,12 +71,8 @@ const { t } = useI18n()
 
 // Role + class + rule labels. Exhaustive Records keyed off the contract unions (a new member fails
 // the typecheck) holding LITERAL catalog keys so the typed-message-key check sees them. The role
-// names are the roster's, so the two surfaces name a tier identically.
-const ROLE_LABEL_KEYS: Record<WorkspaceRole, string> = {
-  admin: 'layout.workspaceMembers.roles.admin',
-  member: 'layout.workspaceMembers.roles.member',
-  viewer: 'layout.workspaceMembers.roles.viewer',
-}
+// names are the roster's (`~/utils/roles`), so the two surfaces name a tier identically.
+const ROLE_LABEL_KEYS = WORKSPACE_ROLE_LABEL_KEYS
 const CLASS_LABEL_KEYS: Record<RuleableChangeClass, string> = {
   docs: 'merge.changeClass.docs',
   test: 'merge.changeClass.test',

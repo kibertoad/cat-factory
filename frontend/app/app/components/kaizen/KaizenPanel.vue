@@ -228,7 +228,7 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
                     <li v-for="(r, i) in row.original.recommendations" :key="i">{{ r }}</li>
                   </ul>
                   <span v-else-if="row.original.status === 'complete'" class="text-app-600">
-                    &mdash;
+                    {{ t('kaizen.noImprovements') }}
                   </span>
                   <span v-else-if="row.original.error" class="text-app-error-400/80">
                     {{ row.original.error }}

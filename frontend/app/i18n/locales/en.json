@@ -214,6 +214,18 @@
       "library": "Library",
       "document": "Document repository"
     },
+    "blockTypes": {
+      "frontend": "Frontend",
+      "service": "Service",
+      "library": "Library",
+      "document": "Document repository",
+      "api": "API",
+      "database": "Database",
+      "queue": "Queue",
+      "integration": "Integration",
+      "external": "External",
+      "environment": "Environment"
+    },
     "toolbar": {
       "addService": "Add service",
       "decisionWord": "decision | decisions",
@@ -269,11 +281,17 @@
       "loadingIssue": "Loading the linked issue's description…",
       "additionalNotes": "Additional notes",
       "description": "Description",
-      "notesPlaceholder": "Add anything else the agent should know — appended to the issue description above…",
-      "descriptionPlaceholder": "Describe the work — context, acceptance criteria, anything the agent should know…",
+      "notesPlaceholder": "Add anything else the agent should know. It is appended to the issue description above…",
+      "descriptionPlaceholder": "Describe the work: context, acceptance criteria, anything the agent should know…",
       "technical": "Technical task",
       "technicalHint": "A refactor / non-functional / internal change. The implementer treats the task definition as primary and the spec as a regression reference; leave off to let the spec phase decide.",
       "severity": "Severity",
+      "severities": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "critical": "Critical"
+      },
       "stepsToReproduce": "Steps to reproduce",
       "stepsToReproducePlaceholder": "Observed vs expected, and how to reproduce…",
       "timebox": "Time-box (hours)",
@@ -358,7 +376,7 @@
       "agentConfiguration": "Agent configuration",
       "noDocsHint": "Attach a requirement, RFC or PRD so agents see it while implementing this task.",
       "noIssuesHint": "Attach a tracker issue so agents see its description and comments while implementing this task.",
-      "plannedHint": "The task is added in a planned state. It won't run until you start a pipeline on it — you can keep editing it until then.",
+      "plannedHint": "The task is added in a planned state. It won't run until you start a pipeline on it, so you can keep editing it until then.",
       "continue": "Continue",
       "submit": "Add task",
       "addFailedTitle": "Could not add task",
@@ -776,16 +794,16 @@
       "blockedTitle": "Too many tasks waiting on review",
       "warnToast": "Some tasks are waiting on human review. Consider reviewing them before creating more work.",
       "blockedToast": "Task creation is blocked until the review queue is worked down.",
-      "warnBody": "{count} task(s) are waiting on human review. Consider reviewing them before creating more work.",
-      "blockedCountBody": "Task creation is blocked: {count} task(s) are waiting on human review (limit {threshold}). Work down the review queue first.",
-      "blockedStuckBody": "Task creation is blocked: a task has been waiting on human review for over {minutes} minute(s). Work down the review queue first.",
+      "warnBody": "{count} task is waiting on human review. Consider reviewing it before creating more work. | {count} tasks are waiting on human review. Consider reviewing them before creating more work.",
+      "blockedCountBody": "Task creation is blocked: {count} task is waiting on human review (limit {threshold}). Work down the review queue first. | Task creation is blocked: {count} tasks are waiting on human review (limit {threshold}). Work down the review queue first.",
+      "blockedStuckBody": "Task creation is blocked: a task has been waiting on human review for over {minutes} minute. Work down the review queue first. | Task creation is blocked: a task has been waiting on human review for over {minutes} minutes. Work down the review queue first.",
       "waitingHeading": "Waiting on review",
       "waiting": "{minutes} min waiting",
       "untitled": "Untitled task",
       "close": "Close",
       "createAnyway": "Create anyway",
       "goReview": "Go review",
-      "badge": "{count} task(s) waiting on review"
+      "badge": "{count} task waiting on review | {count} tasks waiting on review"
     },
     "conflict": {
       "title": {
@@ -2936,6 +2954,12 @@
         "github": {
           "description": "Connect the workspace's GitHub App, browse repos, PRs and issues."
         },
+        "gitlab": {
+          "description": "Connect the workspace to GitLab with an access token, browse projects, merge requests and issues."
+        },
+        "sourceControl": {
+          "description": "Connect a repository host, browse repos, pull requests and issues."
+        },
         "slack": {
           "description": "Route notifications to your team's Slack workspace."
         },
@@ -3078,7 +3102,11 @@
         "apiKey": "API key {id}"
       },
       "values": {
-        "none": "none"
+        "none": "none",
+        "accessMode": {
+          "account": "everyone in the account",
+          "restricted": "listed members only"
+        }
       },
       "actions": {
         "accountMemberAdded": "added {target} to the account as {roles}",
@@ -3161,6 +3189,10 @@
         "body": "\"{name}\" will be removed. Tasks using it fall back to the workspace default."
       },
       "quota": "quota",
+      "cost": "{input}/{output} {currency} per Mtok",
+      "quotaCost": "quota burn ~{input}/{output} {currency} per Mtok",
+      "promptCaching": "Prompt caching",
+      "noPromptCaching": "No prompt caching",
       "list": {
         "intro": "Each preset sets a {baseModel} for every agent, with optional per-agent overrides. A model pinned on an individual task still overrides the preset.",
         "introBaseModel": "base model",
@@ -5213,6 +5245,18 @@
       "linkFailed": "Couldn't update the document link",
       "loadFailed": "Couldn't load document templates"
     },
+    "kinds": {
+      "prd": "PRD",
+      "rfc": "RFC",
+      "adr": "ADR",
+      "design": "Design",
+      "technical": "Technical",
+      "api": "API",
+      "runbook": "Runbook",
+      "research": "Research",
+      "reference": "Reference",
+      "other": "Other"
+    },
     "startFromDesign": {
       "title": "Start from a design",
       "intro": "Paste a link to a frame or a whole file. It is attached to the new task, and the agent reads its layout, text, components and tokens.",
@@ -5841,6 +5885,18 @@
     "health": {
       "title": "Pipeline health",
       "allValid": "All pipelines are valid and up to date.",
+      "noEnabledSteps": "No enabled steps: the pipeline has nothing to run.",
+      "problems": {
+        "companion": "Companion '{kind}' must run immediately after an enabled step it can review ({targets}).",
+        "gatingNotGatable": "Step '{kind}' may not be estimate-gated: its output is required by the rest of the run. Only a step whose result later steps read as context (a design, a review, an extra verification pass) may be skipped on the estimate.",
+        "gatingWithHumanGate": "Step '{kind}' carries a human approval gate, so it cannot also be estimate-gated. The estimate may add a human checkpoint but never remove one.",
+        "gatingNoThreshold": "Step '{kind}' is estimate-gated but sets no threshold (complexity, risk or impact).",
+        "gatingNoEstimator": "Step '{kind}' is gated on the estimate but no step that produces one runs before it.",
+        "conditionNotGatable": "Step '{kind}' may not carry a run condition: its output is required by the rest of the run, so a run outside the condition's scope would silently finish without it.",
+        "conditionWithHumanGate": "Step '{kind}' carries a human approval gate, so it cannot also carry a run condition. A condition may leave a checkpoint unreached but never remove one.",
+        "unknownKinds": "References an unknown agent kind: {kinds}. | References unknown agent kinds: {kinds}.",
+        "outdated": "A newer version of this built-in pipeline is available (v{from} to v{to})."
+      },
       "invalidHeading": "Invalid pipelines",
       "invalidDescription": "These reference a missing agent or are misconfigured, so they would fail (or misrun) at start. Delete a custom pipeline, or reseed a built-in to restore its catalog definition.",
       "builtinBadge": "built-in",
@@ -6017,6 +6073,14 @@
   "palette": {
     "hint": "Click an agent to append it to the pipeline.",
     "customAgents": "Custom agents",
+    "categories": {
+      "review": "Review & triage",
+      "design": "Design & research",
+      "build": "Implementation",
+      "test": "Testing",
+      "docs": "Documentation",
+      "gates": "Gates & observability"
+    },
     "purposeHidden": "{count} agent hidden for this purpose. | {count} agents hidden for this purpose.",
     "@purposeHidden": {
       "description": "Shown under the pipeline-purpose control in the agent palette: how many agents are not offered because they are irrelevant to the pipeline's purpose (e.g. a coder in a documentation pipeline)."
@@ -6428,6 +6492,7 @@
     "confidence": "confidence {pct}",
     "panel": "Panel",
     "topScore": "top {label} {pct}",
+    "notScored": "not scored",
     "expert": "Expert {letter}",
     "participant": "Participant",
     "strategy": {
@@ -6475,8 +6540,8 @@
       "detail": "Do one more brainstorm round, proceed to the next phase with the last direction anyway, or stop and reset the task so you can edit it and resubmit."
     },
     "working": {
-      "incorporating": "Folding your choices into a {doc}… You can close this — we'll notify you only if more input is needed.",
-      "reReviewing": "Re-running the brainstorm on the updated direction… You can close this — we'll notify you only if more input is needed."
+      "incorporating": "Folding your choices into a {doc}… You can close this. We'll notify you only if more input is needed.",
+      "reReviewing": "Re-running the brainstorm on the updated direction… You can close this. We'll notify you only if more input is needed."
     },
     "severity": {
       "low": "low",
@@ -6515,25 +6580,25 @@
     "proceedNothing": "Proceed (nothing to incorporate)",
     "incorporateChoices": "Incorporate choices",
     "hint": {
-      "allDismissed": "Every option is dismissed — proceed to the next phase without a direction.",
+      "allDismissed": "Every option is dismissed. Proceed to the next phase without a direction.",
       "incorporate": "Folds your choices into one {doc}, then re-runs the brainstorm automatically.",
       "chooseAll": "Choose or dismiss every option to continue."
     },
     "reRunning": "Re-running…",
-    "reRun": "Looks good — re-run",
+    "reRun": "Looks good, re-run",
     "redoIncorporation": "Redo incorporation",
     "redoPlaceholder": "What should the direction do differently?",
     "redoWithDirection": "Redo with this direction",
     "mergedHint": "Re-run runs the agent against this direction. If you're unhappy with how it was merged, redo it with a comment instead.",
-    "incorporatedFooter": "Direction settled — the pipeline is continuing with the document on the left.",
+    "incorporatedFooter": "Direction settled. The pipeline is continuing with the document on the left.",
     "toast": {
       "saveChoiceError": "Could not save the choice",
       "updateOptionError": "Could not update the option",
       "incorporateError": "Could not incorporate the choices",
       "draftingTitle": "Drafting the {doc} in the background",
-      "draftingDescription": "You're back on the board — we'll notify you only if more input is needed.",
-      "reReviewSettled": "Direction settled — continuing the pipeline",
-      "reReviewExceeded": "Iteration limit reached — choose how to proceed",
+      "draftingDescription": "You're back on the board. We'll notify you only if more input is needed.",
+      "reReviewSettled": "Direction settled, continuing the pipeline",
+      "reReviewExceeded": "Iteration limit reached: choose how to proceed",
       "reReviewNewOptions": "no new options to react to | one new option to react to | {count} new options to react to",
       "@reReviewNewOptions": {
         "description": "Count of newly raised brainstorm options the user must react to; uses plural forms."
@@ -6541,7 +6606,7 @@
       "reReviewError": "Could not re-run the brainstorm",
       "proceeding": "Proceeding to the next phase",
       "proceedError": "Could not proceed",
-      "taskReset": "Task reset — edit it and resubmit",
+      "taskReset": "Task reset: edit it and resubmit",
       "extraRoundGranted": "One more brainstorm round granted",
       "resolveError": "Could not resolve the brainstorm"
     }
@@ -6656,10 +6721,10 @@
   },
   "humanTest": {
     "title": "Human testing",
-    "titleWithBlock": "Human testing — {title}",
+    "titleWithBlock": "Human testing · {title}",
     "subtitle": "Validate the change in a live environment",
     "notStarted": "This step hasn't started yet.",
-    "confirm": "Looks good — continue",
+    "confirm": "Looks good, continue",
     "phase": {
       "provisioning": "Provisioning environment…",
       "awaitingHuman": "Awaiting your validation",
@@ -6690,7 +6755,7 @@
       "heading": "Found a problem?",
       "cancel": "Cancel",
       "requestFix": "Request a fix",
-      "placeholder": "Describe what went wrong — the Fixer agent gets this as context, then the environment is rebuilt for re-testing.",
+      "placeholder": "Describe what went wrong. The Fixer agent gets this as context, then the environment is rebuilt for re-testing.",
       "send": "Send to Fixer"
     },
     "history": {
@@ -7159,7 +7224,7 @@
     },
     "intro": {
       "workspace": "Curate the best-practice guidelines agents follow on this board. Fragments are merged from the built-in catalog, your account, and this board (later tiers override earlier ones), then the relevant ones are selected for each agent run.",
-      "account": "Curate best-practice guidelines shared by every board in this account. Account fragments are merged below the built-in catalog and above nothing, and a board can override or add its own on top. The relevant ones are selected for each agent run."
+      "account": "Curate best-practice guidelines shared by every board in this account. Account fragments override the built-in catalog, and a board can override them or add its own on top. The relevant ones are selected for each agent run."
     },
     "owner": {
       "workspace": "This board",
@@ -7358,7 +7423,7 @@
       "link": "Link & sync",
       "metaSynced": "synced {date} · ref {ref}",
       "metaNever": "never synced · ref {ref}",
-      "metaFiles": "{service} · {count} contract files",
+      "metaFiles": "{service} · {count} contract file | {service} · {count} contract files",
       "metaFolder": "{service} · contracts from this folder",
       "metaFolderRecursive": "{service} · contracts from this folder and its subfolders",
       "metaDirectory": "one service per subdirectory",
@@ -7524,11 +7589,11 @@
       "maxCells": "(max {max})",
       "run": "Run"
     },
-    "experimentStatus": {
-      "draft": "draft",
-      "running": "running",
-      "done": "done",
-      "failed": "failed"
+    "statusChip": {
+      "draft": "Draft",
+      "running": "Running",
+      "done": "Done",
+      "failed": "Failed"
     },
     "results": {
       "col": {
@@ -7669,12 +7734,12 @@
       "open": "Open",
       "openPr": "Pull request"
     },
-    "status": {
-      "pending": "pending",
-      "running": "running",
-      "succeeded": "succeeded",
-      "failed": "failed",
-      "awaitingReview": "waiting for review"
+    "statusChip": {
+      "pending": "Pending",
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "awaitingReview": "Waiting for review"
     },
     "arch": {
       "title": "Reference architectures",
@@ -8003,7 +8068,7 @@
       "awaiting": "Awaiting review",
       "cleared": "Reviewed",
       "pausedTitle": "Paused for review",
-      "pausedBody": "Phase \"{phase}\" is complete. Review its committed artifacts and PRs above, then resume to continue or cancel to stop the initiative."
+      "pausedBody": "Phase \"{phase}\" is complete. Review its committed artifacts and PRs below, then resume to continue or cancel to stop the initiative."
     }
   },
   "environmentWizard": {
@@ -8447,7 +8512,9 @@
       },
       "unprotectedHint": "a run's credential can push here directly and merge its own pull request",
       "detailUnavailable": "protected, but the rule could not be read — it may still allow direct pushes",
-      "requiresPr": "pull request required, {reviews} approving review(s), {checks} required check(s)",
+      "requiresPr": "pull request required, {reviews}, {checks}",
+      "approvingReviews": "{count} approving review | {count} approving reviews",
+      "requiredChecks": "{count} required check | {count} required checks",
       "noPrRequired": "protected, but no pull request is required",
       "unknownReason": {
         "branch_not_found": "the default branch was not found — the repository projection may be stale",
@@ -8521,6 +8588,7 @@
       "progress": "Step {current} of {total}",
       "ariaLabel": "Tutorial step",
       "announcement": "Step {current} of {total}. {title}. {body}",
+      "announcementPunctuated": "Step {current} of {total}. {title} {body}",
       "@announcement": {
         "description": "Screen-reader-only announcement read out on every step change; it is never shown on screen. {title} and {body} are the step's own heading and full sentence, so the separators around them have to be real sentence punctuation in the target language."
       },
@@ -8973,9 +9041,9 @@
     "duplicateAlias": "Two kept candidates share an id. Two artifacts at one location is one artifact.",
     "keepAction": "Keep {count}",
     "warning": {
-      "omitted": "{count} candidates were dropped past the cap, so this list is a prefix. ",
-      "invalid": "{count} declared entries were unreadable and are missing here. ",
-      "previews": "{count} preview links were refused, so those candidates render without an image."
+      "omitted": "{count} candidate was dropped past the cap, so this list is a prefix. | {count} candidates were dropped past the cap, so this list is a prefix.",
+      "invalid": "{count} declared entry was unreadable and is missing here. | {count} declared entries were unreadable and are missing here.",
+      "previews": "{count} preview link was refused, so that candidate renders without an image. | {count} preview links were refused, so those candidates render without an image."
     },
     "noChoice": {
       "undeclared": "The step never declared its candidates, so there was nothing to compare. The run continued.",

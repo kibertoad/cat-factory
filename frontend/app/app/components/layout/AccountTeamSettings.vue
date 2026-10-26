@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import type { AccountRole } from '~/types/domain'
-import type { InvitationStatus } from '@cat-factory/contracts'
+import { accountRoleSchema, type InvitationStatus } from '@cat-factory/contracts'
+import { ACCOUNT_ROLE_LABEL_KEYS } from '~/utils/roles'
 import AccountAuditLog from '~/components/layout/AccountAuditLog.vue'
 import AccountDeploymentSettings from '~/components/layout/AccountDeploymentSettings.vue'
 import AccountModelPolicySettings from '~/components/layout/AccountModelPolicySettings.vue'
@@ -30,16 +31,22 @@ const busy = ref(false)
 // reports `false` in plain local mode, where there is no account admin to govern).
 const modelPolicySupported = computed(() => auth.infrastructure?.modelPolicy?.supported ?? false)
 
-const ROLE_ITEMS = computed<{ label: string; value: AccountRole }[]>(() => [
-  { label: t('layout.accountTeam.roles.admin'), value: 'admin' },
-  { label: t('layout.accountTeam.roles.developer'), value: 'developer' },
-  { label: t('layout.accountTeam.roles.product'), value: 'product' },
-])
+const ROLE_ITEMS = computed<{ label: string; value: AccountRole }[]>(() =>
+  accountRoleSchema.options.map((value) => ({ label: roleLabel(value), value })),
+)
 
 const EMAIL_PROVIDER_ITEMS = computed(() => [
   { label: t('layout.accountTeam.email.providers.resend'), value: 'resend' as const },
   { label: t('layout.accountTeam.email.providers.sendgrid'), value: 'sendgrid' as const },
 ])
+
+/** A role or email provider as its label: the ids are codes, not names a reader should see. */
+function roleLabel(role: AccountRole): string {
+  return t(ACCOUNT_ROLE_LABEL_KEYS[role])
+}
+function emailProviderLabel(provider: string): string {
+  return EMAIL_PROVIDER_ITEMS.value.find((item) => item.value === provider)?.label ?? provider
+}
 
 // Invitation status is a closed contract union; map each member to a literal key so the
 // typed-message-key check stays live, with a te()-guarded fallback if a locale omits one.
@@ -244,7 +251,7 @@ async function disconnectEmail() {
                a heading over it, so it keeps its own classes rather than adopting the eyebrow
                recipe (`common/SectionLabel.vue`). -->
           <span v-else class="text-xs uppercase tracking-wide text-muted">
-            {{ m.roles.join(', ') }}
+            {{ m.roles.map(roleLabel).join(', ') }}
           </span>
           <!-- Offboarding: end every session this member holds, leaving their membership and
                roles alone. Confirmed, because it is not undoable from here (the person simply
@@ -332,7 +339,7 @@ async function disconnectEmail() {
         >
           <i18n-t keypath="layout.accountTeam.email.connectedAs" tag="span" scope="global">
             <template #provider>
-              <strong>{{ accounts.emailConnection.provider }}</strong>
+              <strong>{{ emailProviderLabel(accounts.emailConnection.provider) }}</strong>
             </template>
             <template #from>{{ accounts.emailConnection.fromAddress }}</template>
           </i18n-t>

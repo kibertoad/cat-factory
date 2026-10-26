@@ -5,6 +5,7 @@ import { useAgentConfigStore } from '~/stores/agentConfig'
 import { useExecutionStore } from '~/stores/execution'
 import AgentConfigField from '~/components/common/AgentConfigField.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
 
 // Task-level configuration contributed by the agents in this task's selected
 // pipeline (e.g. the Playwright agent's e2e target: CI vs ephemeral). Each value is
@@ -78,7 +79,7 @@ function setValue(id: string, value: string) {
         commit="change"
         @update="(v) => setValue(d.id, v)"
       />
-      <p class="text-2xs leading-snug text-dimmed">{{ d.description }}</p>
+      <MarkdownProse class="text-2xs leading-snug text-dimmed" :text="d.description" />
     </div>
   </InspectorSection>
 </template>

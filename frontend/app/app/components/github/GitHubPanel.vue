@@ -10,7 +10,7 @@ import type { GitHubPullRequest, GitHubRepo, VcsProvider } from '~/types/domain'
 import BranchProtectionPreflight from './BranchProtectionPreflight.vue'
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
-import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
+import { VCS_PROVIDER_LABELS, vcsProviderIcon, vcsProviderLabel } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import AppModal from '~/components/common/AppModal.vue'
@@ -35,12 +35,8 @@ const back = useIntegrationBack(open)
 // actually connected; before that it names the sole connectable provider, or stays neutral when
 // the deployment serves several. Brand names are verbatim in every locale (see `~/utils/vcs`).
 const chromeProvider = computed(() => github.surfaceProvider)
-const panelTitle = computed(() =>
-  chromeProvider.value ? VCS_PROVIDER_LABELS[chromeProvider.value] : t('vcs.panel.title'),
-)
-const providerIcon = computed(() =>
-  chromeProvider.value ? VCS_PROVIDER_ICONS[chromeProvider.value] : 'i-lucide-git-branch',
-)
+const panelTitle = computed(() => vcsProviderLabel(chromeProvider.value, t('vcs.panel.title')))
+const providerIcon = computed(() => vcsProviderIcon(chromeProvider.value))
 
 // What the connection line says under the account: a GitHub App connection is identified by its
 // installation, a PAT connection by the credential it rides. Keyed by an exhaustive Record of
