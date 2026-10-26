@@ -13,7 +13,8 @@
 // (`role="tab"`, `role='tab'`), any string or template literal inside a bound `:role` expression
 // (`:role="'tab'"`, ``:role="`tab`"``, `:role="tabbed ? 'tab' : undefined"`), and the same inside
 // the `role` key of a `v-bind="{ … }"` object, which `check-frontend-variants.mjs` reads too. A
-// `:role` with no literal in it (`:role="kind"`) is not read: its value is decided at runtime.
+// `:role` whose literals name no tab role (`:role="kind"`, ``:role="`${kind}`"``) is not read: its
+// value is decided at runtime.
 //
 // What this guard does NOT see: a row of `UButton`s that switches views with no roles at all. A
 // tab bar and an option picker (a row that sets a value) have the same markup, so the difference
