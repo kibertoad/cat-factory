@@ -683,7 +683,8 @@
         "oauth_started_by_other_user": "Otra persona inició esta conexión, así que solo ella puede completarla.",
         "oauth_exchange_refused": "El servidor de autorización del servidor de herramientas rechazó la concesión. Pide a quien opera tu despliegue que revise la configuración del cliente OAuth del servidor de herramientas.",
         "oauth_client_secret_unavailable": "El secreto del cliente OAuth del servidor de herramientas no está disponible en este tablero. Añádelo en la ventana de Infraestructura.",
-        "tool_server_without_oauth": "Este servidor de herramientas ya no usa OAuth, así que no hay ninguna conexión que completar."
+        "tool_server_without_oauth": "Este servidor de herramientas ya no usa OAuth, así que no hay ninguna conexión que completar.",
+        "gate_config_fields_invalid": "Los ajustes de la compuerta de un paso están incompletos o tienen un valor que la compuerta no acepta, normalmente un ajuste obligatorio sin valor. Completa los ajustes de la compuerta del paso en el pipeline y vuelve a intentarlo."
       }
     },
     "action": {
@@ -5560,7 +5561,8 @@
         "claimUnattended": "Hacer predeterminada sin supervisión",
         "releaseUnattended": "Dejar de ser la predeterminada sin supervisión"
       },
-      "removeLabel": "Quitar la etiqueta {label}"
+      "removeLabel": "Quitar la etiqueta {label}",
+      "gateParametersInvalid": "Un paso con compuerta tiene un ajuste obligatorio sin valor o un valor que la compuerta no acepta. Completa los ajustes de la compuerta antes de guardar."
     },
     "progress": {
       "status": {

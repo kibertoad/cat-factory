@@ -1,8 +1,10 @@
 import { computed, type ComputedRef } from 'vue'
 import {
+  effectiveGateConfigFields,
   pipelineEnvironmentProblems,
   producesTaskEstimate,
   purposeAllowsAgentCategory,
+  validateDescriptorFields,
   type PipelineEnvironmentProblemReason,
 } from '@cat-factory/contracts'
 import type { AgentKind } from '~/types/domain'
@@ -107,6 +109,19 @@ export function usePipelineDraftWarnings(
     ),
   )
 
+  // An enabled step whose registered gate's EFFECTIVE parameters fail the fields it declared, most
+  // often a required parameter with no value and no default (mirrors `assertValidGateConfig`,
+  // through the same `effectiveGateConfigFields` the backend validates).
+  const gateParametersInvalid = computed(() =>
+    pipelines.draft.some((kind, i) => {
+      if (!enabled(i)) return false
+      const fields = pipelines.gateConfigForms.find((form) => form.kind === kind)?.fields
+      if (!fields?.length) return false
+      const values = effectiveGateConfigFields(fields, pipelines.draftGateConfig(i)?.fields)
+      return validateDescriptorFields(fields, values).length > 0
+    }),
+  )
+
   // Steps whose agent category the chosen purpose CONTRADICTS (a non-`build` purpose writes no
   // code and runs no tests, so the Implementation/Testing categories are disallowed). Only
   // reachable by switching an existing draft to a non-`build` purpose AFTER such steps were added,
@@ -128,6 +143,9 @@ export function usePipelineDraftWarnings(
     ...(skillStepNeedsPick.value ? [{ key: 'pipeline.builder.skillNeedsPick' }] : []),
     ...(binaryOutputStepNeedsPick.value
       ? [{ key: 'pipeline.builder.binaryOutputNeedsPick', testId: 'binary-output-needs-pick' }]
+      : []),
+    ...(gateParametersInvalid.value
+      ? [{ key: 'pipeline.builder.gateParametersInvalid', testId: 'gate-parameters-invalid' }]
       : []),
     ...(stepsDisallowedByPurpose.value.length
       ? [{ key: 'pipeline.builder.purposeStepsConflict' }]

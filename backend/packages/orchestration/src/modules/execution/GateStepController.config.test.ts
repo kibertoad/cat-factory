@@ -75,6 +75,10 @@ describe('GateStepController: the parameters frozen onto a gate', () => {
     expect(await frozenConfig(gateStep())).toEqual({ soakMinutes: 15 })
   })
 
+  it('fills a blank value with the default too, so a headless blank cannot suppress it', async () => {
+    expect(await frozenConfig(gateStep({ soakMinutes: '' }))).toEqual({ soakMinutes: 15 })
+  })
+
   it('keeps an explicit value over the default', async () => {
     expect(await frozenConfig(gateStep({ soakMinutes: 60, channel: '#ops' }))).toEqual({
       soakMinutes: 60,

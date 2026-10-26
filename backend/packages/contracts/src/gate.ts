@@ -120,13 +120,18 @@ export const gateStepStateSchema = v.object({
    */
   lastVerdict: v.optional(v.nullable(v.picklist(['pass', 'pending', 'fail']))),
   /**
-   * The step's own parameters for this gate (`stepOptions.gateConfig.fields`), copied onto the
-   * gate state ONCE on first entry alongside `maxAttempts` and validated, before it got here,
-   * against the descriptor fields the gate registered. This is how a gate reads a knob off the
-   * STEP rather than off the engine or the workspace-wide merge preset: `probe` receives the live
-   * gate state, so a registered gate reads `gateState.config` with no new plumbing per parameter.
+   * The step's EFFECTIVE parameters for this gate (`effectiveGateConfigFields`: the step's own
+   * `stepOptions.gateConfig.fields`, with every field the step left unanswered filled by the
+   * default the gate declared for it), copied onto the gate state ONCE on first entry alongside
+   * `maxAttempts` and validated, before it got here, against the descriptor fields the gate
+   * registered. This is how a gate reads a knob off the STEP rather than off the engine or the
+   * workspace-wide merge preset: `probe` receives the live gate state, so a registered gate reads
+   * `gateState.config` with no new plumbing per parameter.
    *
-   * Absent ⇒ the gate's shipped defaults (which for the built-ins means the preset's values).
+   * A present value may therefore be the gate's own declared default rather than an author's
+   * choice. A key is absent only when the step left it unanswered AND the gate declared no
+   * default for it; then the gate applies whatever fallback it has (for the built-ins, the
+   * preset's values).
    */
   config: v.optional(v.nullable(descriptorFieldValuesSchema)),
   /**

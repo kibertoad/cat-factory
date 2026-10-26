@@ -75,6 +75,18 @@ describe('validatePipelineShape: gate parameter defaults and required fields', (
     ).not.toThrow()
   })
 
+  it('answers a blank value with the default rather than refusing it', () => {
+    // A headless caller's `''` says nothing, so the declared default answers it, exactly as it
+    // answers an absent key: the same effective bag the engine freezes.
+    expect(() =>
+      validatePipelineShape({
+        agentKinds: ['coder', 'soak-gate'],
+        stepOptions: [null, { gateConfig: { fields: { channel: '' } } }],
+        gateRegistry: registryWith([{ ...required, default: '#ops' }]),
+      }),
+    ).not.toThrow()
+  })
+
   it('leaves a disabled gate step alone', () => {
     expect(() =>
       validatePipelineShape({

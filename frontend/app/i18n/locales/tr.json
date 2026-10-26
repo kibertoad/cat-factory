@@ -683,7 +683,8 @@
         "oauth_started_by_other_user": "Bu bağlantıyı başka biri başlattı, bu yüzden yalnızca o kişi tamamlayabilir.",
         "oauth_exchange_refused": "Araç sunucusunun yetkilendirme sunucusu izni reddetti. Dağıtım operatörünüzden araç sunucusunun OAuth istemci ayarlarını kontrol etmesini isteyin.",
         "oauth_client_secret_unavailable": "Araç sunucusunun OAuth istemci gizli anahtarı bu panoda kullanılamıyor. Altyapı penceresinden ekleyin.",
-        "tool_server_without_oauth": "Bu araç sunucusu artık OAuth kullanmıyor, bu yüzden tamamlanacak bir bağlantı yok."
+        "tool_server_without_oauth": "Bu araç sunucusu artık OAuth kullanmıyor, bu yüzden tamamlanacak bir bağlantı yok.",
+        "gate_config_fields_invalid": "Bir adımın kapı ayarları eksik ya da kapının kabul etmediği bir değer içeriyor, genellikle değeri olmayan zorunlu bir ayar. Pipeline'da adımın kapı ayarlarını doldurup yeniden deneyin."
       }
     },
     "action": {
@@ -5560,7 +5561,8 @@
         "claimUnattended": "Gözetimsiz varsayılan yap",
         "releaseUnattended": "Gözetimsiz varsayılan olmaktan çıkar"
       },
-      "removeLabel": "{label} etiketini kaldır"
+      "removeLabel": "{label} etiketini kaldır",
+      "gateParametersInvalid": "Kapılı bir adımda değeri olmayan zorunlu bir ayar ya da kapının kabul etmediği bir değer var. Kaydetmeden önce kapı ayarlarını doldurun."
     },
     "progress": {
       "status": {

@@ -683,7 +683,8 @@
         "oauth_started_by_other_user": "Quelqu’un d’autre a lancé cette connexion, donc seule cette personne peut la finaliser.",
         "oauth_exchange_refused": "Le serveur d’autorisation du serveur d’outils a refusé l’autorisation. Demandez à l’opérateur de votre déploiement de vérifier les paramètres du client OAuth du serveur d’outils.",
         "oauth_client_secret_unavailable": "Le secret du client OAuth du serveur d’outils n’est pas disponible sur ce tableau. Ajoutez-le dans la fenêtre Infrastructure.",
-        "tool_server_without_oauth": "Ce serveur d’outils n’utilise plus OAuth, il n’y a donc aucune connexion à finaliser."
+        "tool_server_without_oauth": "Ce serveur d’outils n’utilise plus OAuth, il n’y a donc aucune connexion à finaliser.",
+        "gate_config_fields_invalid": "Les paramètres du contrôle d'une étape sont incomplets ou contiennent une valeur que le contrôle n'accepte pas, le plus souvent un paramètre obligatoire sans valeur. Renseignez les paramètres du contrôle de l'étape dans le pipeline, puis réessayez."
       }
     },
     "action": {
@@ -5560,7 +5561,8 @@
         "claimUnattended": "Définir comme défaut sans surveillance",
         "releaseUnattended": "Ne plus être le défaut sans surveillance"
       },
-      "removeLabel": "Retirer le libellé {label}"
+      "removeLabel": "Retirer le libellé {label}",
+      "gateParametersInvalid": "Une étape avec contrôle a un paramètre obligatoire sans valeur, ou une valeur que le contrôle n'accepte pas. Renseignez les paramètres du contrôle avant d'enregistrer."
     },
     "progress": {
       "status": {

@@ -10,7 +10,7 @@ import type {
 } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { DescriptorField } from '@cat-factory/contracts'
-import { sanitizeDescriptorFields, withDescriptorFieldDefaults } from '@cat-factory/contracts'
+import { effectiveGateConfigFields, sanitizeDescriptorFields } from '@cat-factory/contracts'
 import type { AgentRunResult } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import type { GateHelperDispatcher } from './GateHelperDispatcher.js'
@@ -130,14 +130,13 @@ export class GateStepController {
       // would hand a gate's probe a value nothing ever inspected. Same rule, and the same helper,
       // every other descriptor form applies at its own write.
       //
-      // The gate's declared DEFAULTS are folded in first, so a parameter the author left empty
-      // reaches the gate as the value the gate itself stated, the same filled bag save and
-      // admission validated. The builder form does not seed them, so this is the only place a
-      // default can come from.
+      // What is frozen is the EFFECTIVE bag (`effectiveGateConfigFields`): a parameter the step
+      // left unanswered reaches the gate as the default the gate itself declared. The same
+      // composition save and admission validated, so what passed is what the gate receives.
       const declared = this.deps.declaredGateFields(step.agentKind) ?? []
       const config = sanitizeDescriptorFields(
         declared,
-        withDescriptorFieldDefaults(declared, step.stepOptions?.gateConfig?.fields ?? {}),
+        effectiveGateConfigFields(declared, step.stepOptions?.gateConfig?.fields),
       )
       step.gate = {
         phase: 'checking',

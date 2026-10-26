@@ -1,5 +1,12 @@
 import * as v from 'valibot'
-import { descriptorFieldSchema, descriptorFieldValuesSchema } from './form-fields.js'
+import {
+  descriptorFieldSchema,
+  descriptorFieldValuesSchema,
+  isDescriptorFieldAnswer,
+  withDescriptorFieldDefaults,
+  type DescriptorField,
+  type DescriptorFieldValues,
+} from './form-fields.js'
 import { workspaceRoleSchema } from './workspace-members.js'
 
 // ---------------------------------------------------------------------------
@@ -100,6 +107,49 @@ export const stepGateConfigSchema = v.object({
   fields: v.optional(descriptorFieldValuesSchema),
 })
 export type StepGateConfig = v.InferOutput<typeof stepGateConfigSchema>
+
+/**
+ * The gate parameters a step EFFECTIVELY has: the step's own `gateConfig.fields` with each
+ * unanswered field filled by the default the gate declared for it.
+ *
+ * The ONE composition every reader of a step's gate parameters goes through: pipeline save and
+ * run admission validate it, the engine freezes it onto the gate state, and the pipeline builder
+ * renders it. They must agree, because what passes validation has to be what the gate receives and
+ * what the author sees. A copy at each site is how they would drift apart again.
+ *
+ * "Unanswered" is wider than "absent": a blank string or an empty multi-select a headless caller
+ * sent says nothing, so it is replaced by the default too, where a bare
+ * {@link withDescriptorFieldDefaults} would keep the blank and the gate would fall back to its own
+ * hard-coded behaviour. An explicit `false` on a default-ON checkbox is an answer (the opt-out)
+ * and is kept. A key the gate does not declare is kept as it is, so validation still refuses it.
+ */
+export function effectiveGateConfigFields(
+  declared: readonly DescriptorField[],
+  fields: DescriptorFieldValues | undefined,
+): DescriptorFieldValues {
+  const byKey = new Map(declared.map((field) => [field.key, field]))
+  const answered: DescriptorFieldValues = {}
+  for (const [key, value] of Object.entries(fields ?? {})) {
+    const field = byKey.get(key)
+    if (!field || isDescriptorFieldAnswer(field, value)) answered[key] = value
+  }
+  return withDescriptorFieldDefaults(declared, answered)
+}
+
+/**
+ * Machine-readable reasons a step's gate configuration is refused (a 422 at pipeline save and at
+ * run admission), carried on `error.details.reason`.
+ *
+ *  - `gate_config_fields_invalid`: the step's EFFECTIVE gate parameters
+ *    ({@link effectiveGateConfigFields}) fail the fields the gate declared, most often a `required`
+ *    parameter with neither a value nor a declared default. `details.problems` lists each one.
+ *
+ * The SPA keys its translated description off this list, so a reason added here without wording
+ * trips the frontend typecheck.
+ */
+export const GATE_CONFIG_REFUSAL_REASONS = ['gate_config_fields_invalid'] as const
+
+export type GateConfigRefusalReason = (typeof GATE_CONFIG_REFUSAL_REASONS)[number]
 
 /**
  * A registered gate's own config form, as projected to the SPA on the workspace snapshot: the

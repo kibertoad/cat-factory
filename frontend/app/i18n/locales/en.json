@@ -758,7 +758,8 @@
         "oauth_started_by_other_user": "Someone else started this connection, so only they can finish it.",
         "oauth_exchange_refused": "The tool server's authorization server refused the grant. Ask your deployment operator to check the tool server's OAuth client settings.",
         "oauth_client_secret_unavailable": "The tool server's OAuth client secret is not available on this board. Add it in the Infrastructure window.",
-        "tool_server_without_oauth": "This tool server no longer uses OAuth, so there is no connection to finish."
+        "tool_server_without_oauth": "This tool server no longer uses OAuth, so there is no connection to finish.",
+        "gate_config_fields_invalid": "A gate step's settings are incomplete or hold a value the gate does not accept, usually a required setting with no value. Fill in the step's gate settings in the pipeline, then try again."
       }
     },
     "action": {
@@ -5766,7 +5767,8 @@
         "claimUnattended": "Make the unattended default",
         "releaseUnattended": "Stop being the unattended default"
       },
-      "removeLabel": "Remove the {label} label"
+      "removeLabel": "Remove the {label} label",
+      "gateParametersInvalid": "A gate step has a required setting with no value, or a value the gate does not accept. Fill in its gate settings before you save."
     },
     "progress": {
       "status": {

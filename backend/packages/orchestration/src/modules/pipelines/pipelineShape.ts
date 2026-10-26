@@ -11,8 +11,9 @@ import type { BinaryOutputConfig } from '@cat-factory/contracts'
 import {
   conflictingOutputSizeOptions,
   producesTaskEstimate,
+  effectiveGateConfigFields,
   validateDescriptorFields,
-  withDescriptorFieldDefaults,
+  type GateConfigRefusalReason,
 } from '@cat-factory/contracts'
 import {
   BINARY_OUTPUT_TRAIT,
@@ -211,11 +212,14 @@ export function assertValidPullRequestReaders({
  *     key must be one that gate declared. An undeclared key is indistinguishable from a typo'd
  *     one, and both read to whoever typed them as configuration that took effect.
  *  4. Every step whose kind IS a registered gate is checked against that gate's declared fields,
- *     with the gate's own DEFAULTS folded in first (`withDescriptorFieldDefaults`), whether or not
- *     the step carries any parameters. A `required` field the author left empty is answered by
- *     its default when the gate declares one, and refused when it does not: an empty bag is an
- *     unanswered form, not an exemption. The run freezes the same filled bag, so what passes here
- *     is what the gate receives.
+ *     on its EFFECTIVE parameters (`effectiveGateConfigFields`: the gate's own defaults filled in
+ *     over anything left unanswered), whether or not the step carries any parameters. A
+ *     `required` field the author left empty is answered by its default when the gate declares
+ *     one, and refused when it does not: an empty bag is an unanswered form, not an exemption.
+ *     The run freezes the same effective bag, so what passes here is what the gate receives.
+ *     Run admission runs this on a start, a retry and a restart alike, so a pipeline saved
+ *     before a gate's field became required is refused there until someone fills it. That is
+ *     deliberate: the alternative is a gate running without a value it declared it needs.
  *
  * Skipped when no registry is supplied (the kernel seed test's built-in catalog, which has no
  * deployment registrations in view); both real boundaries pass one.
@@ -254,12 +258,13 @@ function assertValidGateConfig({
     const declared = gateRegistry.configFields(kind) ?? []
     const problems = validateDescriptorFields(
       declared,
-      withDescriptorFieldDefaults(declared, supplied),
+      effectiveGateConfigFields(declared, supplied),
     )
     if (problems.length) {
+      const reason: GateConfigRefusalReason = 'gate_config_fields_invalid'
       throw new ValidationError(
         `Step '${kind}' has invalid gate parameters: ${problems.join(' ')}`,
-        { reason: 'gate_config_fields_invalid', problems },
+        { reason, problems },
       )
     }
   }
