@@ -3070,7 +3070,8 @@
         "skills": "Beceriler",
         "foundational": "Temel hizmetler",
         "riskPolicies": "Risk ilkeleri"
-      }
+      },
+      "configNotLoaded": "Bu hesabın mevcut ayarları yüklenemedi; kaydetmek diğerlerinin üzerine yazar. Düzenlemeden önce yeniden yükleyin."
     },
     "infrastructure": {
       "active": "Etkin: {backend}",
@@ -4257,9 +4258,7 @@
         }
       },
       "saved": "Model erişim politikası kaydedildi",
-      "saveFailed": "Model erişim politikası kaydedilemedi",
-      "loadFailed": "Model erişim politikası yüklenemedi",
-      "notLoaded": "Bu hesabın mevcut ayarları yüklenemedi; kaydetmek diğerlerinin üzerine yazar. Düzenlemeden önce yeniden yükleyin."
+      "saveFailed": "Model erişim politikası kaydedilemedi"
     },
     "defaultProvision": {
       "title": "Yeni servisler için varsayılan",
@@ -4318,8 +4317,7 @@
       "onHint": "Bu hesaptaki her çalıştırma GitHub App kurulumu olarak kimlik doğrulayacak. Gönderimler ve çekme istekleri, çalıştırmayı başlatan kişiden değil uygulamadan gelecek.",
       "offHint": "Ayarlanmadı: her pano kendisi karar verir. Mevcut panolar seçimlerini korur.",
       "saved": "Çalıştırma kimlik bilgisi ilkesi kaydedildi",
-      "saveFailed": "Çalıştırma kimlik bilgisi ilkesi kaydedilemedi",
-      "notLoaded": "Bu hesabın mevcut ayarları yüklenemedi; kaydetmek diğerlerinin üzerine yazar. Düzenlemeden önce yeniden yükleyin."
+      "saveFailed": "Çalıştırma kimlik bilgisi ilkesi kaydedilemedi"
     },
     "platformAlerts": {
       "title": "Platform sağlığı uyarıları",
@@ -4360,7 +4358,6 @@
         "maxFailureKindShare": "Tek bir nedenin kapsayabileceği hata payı; 0’ın üzerinde ve en fazla 1.",
         "maxSweepFailures": "Bir arka plan taramasının üst üste başarısız geçişi."
       },
-      "notLoaded": "Bu hesabın mevcut ayarları yüklenemedi; kaydetmek diğerlerinin üzerine yazar. Düzenlemeden önce yeniden yükleyin.",
       "invalidNumbers": "Bu üst sınırlar sayı değil",
       "failureKinds": {
         "label": "Hata türü başına kurallar",

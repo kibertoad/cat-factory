@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import AccountConfigNotLoaded from '~/components/layout/AccountConfigNotLoaded.vue'
 import { MODEL_FAMILY_POLICY_PRESETS } from '@cat-factory/contracts'
 import type {
   AccountRegion,
@@ -105,32 +106,10 @@ function applyPreset(policy: ModelFamilyPolicy) {
   trusted.value = [...policy.trustedProviders]
 }
 
-onMounted(async () => {
-  // The sibling deployment-settings panel loads the store on mount too; guard against a
-  // double-load being unnecessary by only loading when the view isn't present yet.
-  if (!store.view && store.available !== false) {
-    try {
-      await store.load(props.accountId)
-    } catch (e) {
-      present(e, 'settings.modelPolicy.loadFailed')
-    }
-  }
-  hydrate()
-})
-watch(() => store.view, hydrate)
-
-/**
- * Whether the account's CURRENT config is in hand. A save REPLACES the whole non-secret config
- * and this panel edits one key of it, so saving on top of a failed load would carry nothing
- * forward and wipe every sibling setting. Same guard as `AccountPlatformAlertSettings.vue`.
- */
-const loaded = computed(() => !!store.view)
+const { loaded, loadFailed } = useAccountConfig(() => props.accountId)
+watch(() => store.view, hydrate, { immediate: true })
 
 async function save() {
-  if (!loaded.value) {
-    actionToast.error('settings.modelPolicy.notLoaded')
-    return
-  }
   const policy: ModelFamilyPolicy = {
     mode: mode.value,
     // Families are irrelevant when the policy is off; keep them so a later re-enable
@@ -141,8 +120,7 @@ async function save() {
   }
   saving.value = true
   try {
-    // `config` fully replaces the stored non-secret config, so carry the rest forward.
-    await store.save(props.accountId, { config: { ...store.view?.config, modelPolicy: policy } })
+    await store.saveConfigPatch(props.accountId, { modelPolicy: policy })
     actionToast.success('settings.modelPolicy.saved')
   } catch (e) {
     present(e, 'settings.modelPolicy.saveFailed')
@@ -163,89 +141,84 @@ async function save() {
       <p class="text-2xs text-muted">{{ t('settings.modelPolicy.description') }}</p>
     </div>
 
-    <!-- Region + apply-preset templates -->
-    <div class="space-y-2">
-      <label class="text-2xs font-medium text-toned">
-        {{ t('settings.modelPolicy.regionLabel') }}
-      </label>
-      <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <USelect v-model="region" :items="regionItems" value-key="value" size="sm" />
+    <!-- Hidden until this account's config is in hand: an editor shown over a failed load reads
+         as the stored policy, and its changes could not be saved anyway. -->
+    <template v-if="loaded">
+      <!-- Region + apply-preset templates -->
+      <div class="space-y-2">
+        <label class="text-2xs font-medium text-toned">
+          {{ t('settings.modelPolicy.regionLabel') }}
+        </label>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <USelect v-model="region" :items="regionItems" value-key="value" size="sm" />
+        </div>
+        <div v-if="regionPresets.length" class="flex flex-wrap items-center gap-2">
+          <span class="text-2xs text-muted">{{ t('settings.modelPolicy.applyPreset') }}</span>
+          <UButton
+            v-for="preset in regionPresets"
+            :key="preset.id"
+            color="neutral"
+            variant="subtle"
+            size="xs"
+            icon="i-lucide-wand-2"
+            :title="t(`settings.modelPolicy.presets.${preset.id}.description`)"
+            @click="applyPreset(preset.policy)"
+          >
+            {{ t(`settings.modelPolicy.presets.${preset.id}.label`) }}
+          </UButton>
+        </div>
       </div>
-      <div v-if="regionPresets.length" class="flex flex-wrap items-center gap-2">
-        <span class="text-2xs text-muted">{{ t('settings.modelPolicy.applyPreset') }}</span>
-        <UButton
-          v-for="preset in regionPresets"
-          :key="preset.id"
-          color="neutral"
-          variant="subtle"
-          size="xs"
-          icon="i-lucide-wand-2"
-          :title="t(`settings.modelPolicy.presets.${preset.id}.description`)"
-          @click="applyPreset(preset.policy)"
-        >
-          {{ t(`settings.modelPolicy.presets.${preset.id}.label`) }}
-        </UButton>
-      </div>
-    </div>
 
-    <!-- Mode -->
-    <div class="space-y-2">
-      <label class="text-2xs font-medium text-toned">
-        {{ t('settings.modelPolicy.modeLabel') }}
-      </label>
-      <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <USelect v-model="mode" :items="modeItems" value-key="value" size="sm" />
+      <!-- Mode -->
+      <div class="space-y-2">
+        <label class="text-2xs font-medium text-toned">
+          {{ t('settings.modelPolicy.modeLabel') }}
+        </label>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <USelect v-model="mode" :items="modeItems" value-key="value" size="sm" />
+        </div>
       </div>
-    </div>
 
-    <!-- Families -->
-    <div v-if="mode !== 'off'" class="space-y-2">
-      <label class="text-2xs font-medium text-toned">
-        {{
-          mode === 'blocklist'
-            ? t('settings.modelPolicy.familiesBlockLabel')
-            : t('settings.modelPolicy.familiesAllowLabel')
-        }}
-      </label>
-      <div class="grid grid-cols-2 gap-1 sm:grid-cols-4">
-        <UCheckbox
-          v-for="fam in FAMILIES"
-          :key="fam"
-          :model-value="families.includes(fam)"
-          :label="familyLabels[fam]"
-          size="sm"
-          @update:model-value="toggleFamily(fam)"
-        />
+      <!-- Families -->
+      <div v-if="mode !== 'off'" class="space-y-2">
+        <label class="text-2xs font-medium text-toned">
+          {{
+            mode === 'blocklist'
+              ? t('settings.modelPolicy.familiesBlockLabel')
+              : t('settings.modelPolicy.familiesAllowLabel')
+          }}
+        </label>
+        <div class="grid grid-cols-2 gap-1 sm:grid-cols-4">
+          <UCheckbox
+            v-for="fam in FAMILIES"
+            :key="fam"
+            :model-value="families.includes(fam)"
+            :label="familyLabels[fam]"
+            size="sm"
+            @update:model-value="toggleFamily(fam)"
+          />
+        </div>
       </div>
-    </div>
 
-    <!-- Trusted (residency-guaranteed) routes -->
-    <div v-if="mode !== 'off'" class="space-y-2">
-      <label class="text-2xs font-medium text-toned">
-        {{ t('settings.modelPolicy.trustedLabel') }}
-      </label>
-      <p class="text-2xs text-muted">{{ t('settings.modelPolicy.trustedHint') }}</p>
-      <div class="grid grid-cols-2 gap-1 sm:grid-cols-4">
-        <UCheckbox
-          v-for="provider in TRUSTED_PROVIDERS"
-          :key="provider"
-          :model-value="trusted.includes(provider)"
-          :label="providerLabels[provider]"
-          size="sm"
-          @update:model-value="toggleTrusted(provider)"
-        />
+      <!-- Trusted (residency-guaranteed) routes -->
+      <div v-if="mode !== 'off'" class="space-y-2">
+        <label class="text-2xs font-medium text-toned">
+          {{ t('settings.modelPolicy.trustedLabel') }}
+        </label>
+        <p class="text-2xs text-muted">{{ t('settings.modelPolicy.trustedHint') }}</p>
+        <div class="grid grid-cols-2 gap-1 sm:grid-cols-4">
+          <UCheckbox
+            v-for="provider in TRUSTED_PROVIDERS"
+            :key="provider"
+            :model-value="trusted.includes(provider)"
+            :label="providerLabels[provider]"
+            size="sm"
+            @update:model-value="toggleTrusted(provider)"
+          />
+        </div>
       </div>
-    </div>
-
-    <!-- With the current config not in hand there is nothing to carry forward, so say so and
-         disable the button rather than show the empty "off" policy as if it were stored. -->
-    <p
-      v-if="!loaded && !store.loading"
-      class="rounded-lg border border-app-warning-800/60 bg-app-warning-950/30 px-3 py-2 text-xs text-app-warning-200"
-      data-testid="account-model-policy-unloaded"
-    >
-      {{ t('settings.modelPolicy.notLoaded') }}
-    </p>
+    </template>
+    <AccountConfigNotLoaded v-else-if="loadFailed" data-testid="account-model-policy-unloaded" />
 
     <div class="flex gap-2">
       <UButton

@@ -3070,7 +3070,8 @@
         "skills": "Compétences",
         "foundational": "Services fondamentaux",
         "riskPolicies": "Politiques de risque"
-      }
+      },
+      "configNotLoaded": "Les paramètres actuels de ce compte n'ont pas pu être chargés ; enregistrer écraserait les autres. Rechargez avant de modifier."
     },
     "providerConnection": {
       "fallbackTitle": "Fournisseur",
@@ -4257,9 +4258,7 @@
         }
       },
       "saved": "Politique d'accès aux modèles enregistrée",
-      "saveFailed": "Impossible d'enregistrer la politique d'accès aux modèles",
-      "loadFailed": "Impossible de charger la politique d'accès aux modèles",
-      "notLoaded": "Les paramètres actuels de ce compte n'ont pas pu être chargés ; enregistrer écraserait les autres. Rechargez avant de modifier."
+      "saveFailed": "Impossible d'enregistrer la politique d'accès aux modèles"
     },
     "defaultProvision": {
       "title": "Valeur par défaut pour les nouveaux services",
@@ -4318,8 +4317,7 @@
       "onHint": "Toutes les exécutions de ce compte s’authentifieront en tant qu’installation de l’App GitHub. Les poussées et les demandes de tirage proviendront de l’application et non de la personne ayant lancé l’exécution.",
       "offHint": "Non défini : chaque tableau décide pour lui-même. Les tableaux existants conservent leur choix.",
       "saved": "Politique d’identifiants d’exécution enregistrée",
-      "saveFailed": "Impossible d’enregistrer la politique d’identifiants d’exécution",
-      "notLoaded": "Les paramètres actuels de ce compte n'ont pas pu être chargés ; enregistrer écraserait les autres. Rechargez avant de modifier."
+      "saveFailed": "Impossible d’enregistrer la politique d’identifiants d’exécution"
     },
     "platformAlerts": {
       "title": "Alertes de santé de la plateforme",
@@ -4360,7 +4358,6 @@
         "maxFailureKindShare": "Part des échecs qu'une seule cause peut représenter, au-dessus de 0 et jusqu'à 1.",
         "maxSweepFailures": "Passages consécutifs en échec d'un balayage en arrière-plan."
       },
-      "notLoaded": "Les paramètres actuels de ce compte n'ont pas pu être chargés ; enregistrer écraserait les autres. Rechargez avant de modifier.",
       "invalidNumbers": "Ces plafonds ne sont pas des nombres",
       "failureKinds": {
         "label": "Règles par type d'échec",

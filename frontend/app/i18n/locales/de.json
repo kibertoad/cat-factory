@@ -124,7 +124,8 @@
         "skills": "Skills",
         "foundational": "Basisdienste",
         "riskPolicies": "Risikorichtlinien"
-      }
+      },
+      "configNotLoaded": "Die aktuellen Einstellungen dieses Kontos konnten nicht geladen werden; ein Speichern würde die übrigen überschreiben. Bitte vor dem Bearbeiten neu laden."
     },
     "infrastructure": {
       "active": "Aktiv: {backend}",
@@ -1311,9 +1312,7 @@
         }
       },
       "saved": "Modellzugriffsrichtlinie gespeichert",
-      "saveFailed": "Modellzugriffsrichtlinie konnte nicht gespeichert werden",
-      "loadFailed": "Modellzugriffsrichtlinie konnte nicht geladen werden",
-      "notLoaded": "Die aktuellen Einstellungen dieses Kontos konnten nicht geladen werden; ein Speichern würde die übrigen überschreiben. Bitte vor dem Bearbeiten neu laden."
+      "saveFailed": "Modellzugriffsrichtlinie konnte nicht gespeichert werden"
     },
     "defaultProvision": {
       "title": "Standard für neue Services",
@@ -1372,8 +1371,7 @@
       "onHint": "Jede Ausführung in diesem Konto authentifiziert sich als GitHub-App-Installation. Pushes und Pull Requests stammen dann von der App und nicht von der Person, die die Ausführung gestartet hat.",
       "offHint": "Nicht gesetzt: Jedes Board entscheidet selbst. Bestehende Boards behalten ihre Auswahl.",
       "saved": "Richtlinie für Ausführungs-Anmeldedaten gespeichert",
-      "saveFailed": "Richtlinie für Ausführungs-Anmeldedaten konnte nicht gespeichert werden",
-      "notLoaded": "Die aktuellen Einstellungen dieses Kontos konnten nicht geladen werden; ein Speichern würde die übrigen überschreiben. Bitte vor dem Bearbeiten neu laden."
+      "saveFailed": "Richtlinie für Ausführungs-Anmeldedaten konnte nicht gespeichert werden"
     },
     "platformAlerts": {
       "title": "Plattform-Zustandswarnungen",
@@ -1414,7 +1412,6 @@
         "maxFailureKindShare": "Anteil der Fehler, den eine einzelne Ursache ausmachen darf, über 0 und bis 1.",
         "maxSweepFailures": "Aufeinanderfolgende fehlgeschlagene Durchläufe einer Hintergrundprüfung."
       },
-      "notLoaded": "Die aktuellen Einstellungen dieses Kontos konnten nicht geladen werden; ein Speichern würde die übrigen überschreiben. Bitte vor dem Bearbeiten neu laden.",
       "invalidNumbers": "Diese Obergrenzen sind keine Zahlen",
       "failureKinds": {
         "label": "Regeln pro Fehlerart",

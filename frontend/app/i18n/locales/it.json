@@ -124,7 +124,8 @@
         "skills": "Competenze",
         "foundational": "Servizi fondamentali",
         "riskPolicies": "Criteri di rischio"
-      }
+      },
+      "configNotLoaded": "Non è stato possibile caricare le impostazioni correnti di questo account, quindi il salvataggio sovrascriverebbe le altre. Ricarica prima di modificare."
     },
     "infrastructure": {
       "active": "Attivo: {backend}",
@@ -1311,9 +1312,7 @@
         }
       },
       "saved": "Policy di accesso ai modelli salvata",
-      "saveFailed": "Impossibile salvare la policy di accesso ai modelli",
-      "loadFailed": "Impossibile caricare la policy di accesso ai modelli",
-      "notLoaded": "Non è stato possibile caricare le impostazioni correnti di questo account, quindi il salvataggio sovrascriverebbe le altre. Ricarica prima di modificare."
+      "saveFailed": "Impossibile salvare la policy di accesso ai modelli"
     },
     "defaultProvision": {
       "title": "Predefinito per i nuovi servizi",
@@ -1372,8 +1371,7 @@
       "onHint": "Ogni esecuzione di questo account si autenticherà come installazione dell'App GitHub. I push e le pull request proverranno dall'app e non dalla persona che ha avviato l'esecuzione.",
       "offHint": "Non impostato: ogni board decide da sé. Le board esistenti mantengono la loro scelta.",
       "saved": "Criterio per le credenziali di esecuzione salvato",
-      "saveFailed": "Impossibile salvare il criterio per le credenziali di esecuzione",
-      "notLoaded": "Non è stato possibile caricare le impostazioni correnti di questo account, quindi il salvataggio sovrascriverebbe le altre. Ricarica prima di modificare."
+      "saveFailed": "Impossibile salvare il criterio per le credenziali di esecuzione"
     },
     "platformAlerts": {
       "title": "Avvisi sullo stato della piattaforma",
@@ -1414,7 +1412,6 @@
         "maxFailureKindShare": "Quota degli errori che una sola causa può rappresentare, sopra 0 e fino a 1.",
         "maxSweepFailures": "Passaggi falliti consecutivi di una scansione in background."
       },
-      "notLoaded": "Non è stato possibile caricare le impostazioni correnti di questo account, quindi il salvataggio sovrascriverebbe le altre. Ricarica prima di modificare.",
       "invalidNumbers": "Questi limiti non sono numeri",
       "failureKinds": {
         "label": "Regole per tipo di errore",
