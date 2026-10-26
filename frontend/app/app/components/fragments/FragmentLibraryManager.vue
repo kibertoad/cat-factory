@@ -16,6 +16,7 @@ import type {
 } from '~/types/domain'
 import { useFragmentLibrary, useFragmentLibraryStore } from '~/stores/fragmentLibrary'
 import { showOverrideField } from '~/utils/uiMode'
+import { knownTab } from '~/utils/tabs'
 import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import GitHubDocUrlImport from '~/components/fragments/GitHubDocUrlImport.vue'
@@ -602,8 +603,12 @@ async function unlinkSource(id: string) {
         </template>
       </p>
 
-      <!-- The panels are the `v-if` chain below, so the tabs render no content of their own. -->
-      <UTabs v-model="tab" :items="tabs" :content="false" />
+      <UTabs
+        :model-value="tab"
+        :items="tabs"
+        :content="false"
+        @update:model-value="(v) => (tab = knownTab(tabs, v) ?? tab)"
+      />
 
       <!-- Resolved (merged) catalog — workspace scope only -->
       <div v-if="tab === 'catalog'" class="flex flex-col gap-2">

@@ -8,6 +8,7 @@ import GuidedReviewOverview from '~/components/guidedReview/GuidedReviewOverview
 import GuidedReviewThread from '~/components/guidedReview/GuidedReviewThread.vue'
 import GuidedReviewPicker from '~/components/guidedReview/GuidedReviewPicker.vue'
 import Spinner from '~/components/common/Spinner.vue'
+import { knownTab } from '~/utils/tabs'
 import {
   NEW_THREAD_TAB,
   isStale,
@@ -209,22 +210,27 @@ const title = computed(() =>
           />
         </div>
 
-        <div class="flex min-h-[24rem] flex-1 flex-col gap-3 lg:min-h-0">
-          <div class="flex flex-wrap items-center gap-1">
-            <!-- The thread below is keyed on the active tab, so the tabs render no content. -->
-            <UTabs v-model="activeTab" :items="tabs" :content="false" class="min-w-0">
+        <div class="flex min-h-[24rem] min-w-0 flex-1 flex-col gap-3 lg:min-h-0">
+          <div class="flex items-center gap-1">
+            <!-- Manual activation: selecting a thread remounts it and can fetch it, so the arrow
+                 keys only move focus and Enter or Space selects. The list scrolls rather than
+                 wraps: the pill indicator moves along one row only. -->
+            <UTabs
+              :model-value="activeTab"
+              :items="tabs"
+              :content="false"
+              activation-mode="manual"
+              :ui="{ list: 'overflow-x-auto', trigger: 'grow-0 shrink-0' }"
+              class="min-w-0"
+              @update:model-value="(v) => (activeTab = knownTab(tabs, v) ?? activeTab)"
+            >
               <!-- A spinner, not a disabled tab: a reader switches back to a thread precisely
                    while its reply is pending. -->
               <template #leading="{ item }">
                 <Spinner v-if="threadBusy(item.value)" class="size-4 shrink-0" />
               </template>
               <template #default="{ item }">
-                <span
-                  class="block max-w-48 truncate"
-                  :data-testid="`guided-review-tab-${item.value}`"
-                >
-                  {{ item.label }}
-                </span>
+                <span class="block max-w-48 truncate">{{ item.label }}</span>
               </template>
             </UTabs>
             <UButton

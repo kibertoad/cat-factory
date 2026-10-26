@@ -11,6 +11,7 @@ import BranchProtectionPreflight from './BranchProtectionPreflight.vue'
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
+import { knownTab } from '~/utils/tabs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import AppModal from '~/components/common/AppModal.vue'
@@ -344,8 +345,12 @@ async function merge(pr: GitHubPullRequest) {
             </div>
           </div>
 
-          <!-- The panels are the `v-if` chain below, so the tabs render no content of their own. -->
-          <UTabs v-model="tab" :items="tabs" :content="false" />
+          <UTabs
+            :model-value="tab"
+            :items="tabs"
+            :content="false"
+            @update:model-value="(v) => (tab = knownTab(tabs, v) ?? tab)"
+          />
 
           <div v-if="firstLoad" class="space-y-2">
             <USkeleton v-for="i in 3" :key="i" class="h-12 w-full" />
