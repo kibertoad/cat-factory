@@ -31,7 +31,9 @@ const saved = computed(() => store.configForBlock(props.block.id))
 // SERVICE and durable — once a teammate on the advanced tier maps monitors onto this frame,
 // hiding the panel would leave a basic-mode user with releases being watched (and an on-call
 // agent that can spawn) by a configuration they can neither see nor clear.
-const show = computed(() => showOverrideField(uiMode.isAdvanced, saved.value))
+// A failed load also shows the section: it emptied `configs`, so `saved` says nothing about whether
+// a teammate mapped this service, and hiding the section would read as "nothing mapped".
+const show = computed(() => store.loadFailed || showOverrideField(uiMode.isAdvanced, saved.value))
 
 function parseIds(csv: string): string[] {
   return csv
@@ -118,6 +120,7 @@ async function clear() {
       v-if="store.loadFailed"
       compact
       :title="t('inspector.releaseHealth.loadFailed')"
+      :retrying="store.loading"
       @retry="retryLoad"
     />
 

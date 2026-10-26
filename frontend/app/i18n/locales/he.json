@@ -2041,7 +2041,6 @@
     "title": "תצפית על הפלטפורמה",
     "refresh": "רענון",
     "close": "סגירה",
-    "retry": "נסה שוב",
     "window": {
       "oneHour": "השעה האחרונה",
       "oneDay": "24 השעות האחרונות",
@@ -3631,7 +3630,8 @@
         "pagerDutyToken": "אסימון API של PagerDuty",
         "pagerDutyFromEmail": "כתובת From של PagerDuty",
         "incidentIoKey": "מפתח API של incident.io",
-        "clear": "נקה"
+        "clear": "נקה",
+        "loadFailed": "לא ניתן היה לטעון את כלי התקריות"
       },
       "status": {
         "notConnected": "לא מחובר",

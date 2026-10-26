@@ -42,6 +42,17 @@ const catalog =
 const github = useGitHubStore()
 const { t } = useI18n()
 
+// The probe keeps no loading flag of its own, so the failed state shows its retry in flight here.
+const retrying = ref(false)
+async function retryProbe() {
+  retrying.value = true
+  try {
+    await catalog.probe()
+  } finally {
+    retrying.value = false
+  }
+}
+
 watch(
   () => props.ownerId,
   () => {
@@ -98,7 +109,8 @@ const activeTab = computed({
     <LoadFailedState
       v-else-if="catalog.loadFailed"
       :title="t('foundational.loadFailed')"
-      @retry="catalog.probe()"
+      :retrying="retrying"
+      @retry="retryProbe"
     />
 
     <UTabs

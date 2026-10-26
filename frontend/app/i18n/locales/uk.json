@@ -2041,7 +2041,6 @@
     "title": "Спостережуваність платформи",
     "refresh": "Оновити",
     "close": "Закрити",
-    "retry": "Повторити",
     "window": {
       "oneHour": "Остання година",
       "oneDay": "Останні 24 години",
@@ -3489,7 +3488,8 @@
         "pagerDutyToken": "Токен API PagerDuty",
         "pagerDutyFromEmail": "Електронна пошта відправника PagerDuty",
         "incidentIoKey": "Ключ API incident.io",
-        "clear": "Очистити"
+        "clear": "Очистити",
+        "loadFailed": "Не вдалося завантажити інструменти інцидентів"
       },
       "status": {
         "notConnected": "Не під'єднано",

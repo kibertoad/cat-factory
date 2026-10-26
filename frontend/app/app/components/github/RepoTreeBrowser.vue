@@ -68,6 +68,7 @@ const currentPath = ref(props.startPath)
 const treeEntries = ref<RepoTreeEntry[]>([])
 const loading = ref(false)
 // The current folder's listing failed, which the listing states rather than show an empty folder.
+// Picking it is off too: its contents (and so a name clash) are unknown, and the path may not exist.
 const listFailed = ref(false)
 
 const selectedSet = computed(() => new Set(props.selectedPaths.map(normalizeRepoPath)))
@@ -348,7 +349,7 @@ watch(
         size="xs"
         variant="soft"
         :color="isPicked(currentPath) ? 'primary' : 'neutral'"
-        :disabled="loading || nameTakenHere"
+        :disabled="loading || listFailed || nameTakenHere"
         data-testid="repo-tree-create-here"
         @click="pick(currentPath)"
       >
@@ -367,6 +368,7 @@ watch(
         size="xs"
         variant="soft"
         :color="isPicked(currentPath) ? 'primary' : 'neutral'"
+        :disabled="loading || listFailed"
         @click="pick(currentPath)"
       >
         {{

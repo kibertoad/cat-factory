@@ -22,7 +22,7 @@ const connecting = ref(false)
 // Track which installation row is mid-connect so only its button spins.
 const connectingId = ref<number | null>(null)
 // The last installation listing failed (not the host-handled 503), so the list says so rather
-// than "no installations".
+// than "no installations". A retry shows the skeleton above while it runs, as on the first load.
 const listFailed = ref(false)
 
 onMounted(() => {
@@ -102,7 +102,6 @@ async function connectManually() {
         v-else-if="listFailed && !github.installations.length"
         compact
         :title="t('github.connect.listFailed')"
-        :retrying="github.loadingInstallations"
         @retry="refreshInstallations"
       />
 

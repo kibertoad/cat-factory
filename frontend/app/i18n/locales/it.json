@@ -679,7 +679,8 @@
         "pagerDutyToken": "Token API PagerDuty",
         "pagerDutyFromEmail": "Email From di PagerDuty",
         "incidentIoKey": "Chiave API incident.io",
-        "clear": "Cancella"
+        "clear": "Cancella",
+        "loadFailed": "Impossibile caricare gli strumenti per gli incidenti"
       },
       "status": {
         "notConnected": "Non connesso",
@@ -4103,7 +4104,6 @@
     "title": "Osservabilità della piattaforma",
     "refresh": "Aggiorna",
     "close": "Chiudi",
-    "retry": "Riprova",
     "window": {
       "oneHour": "Ultima ora",
       "oneDay": "Ultime 24 ore",

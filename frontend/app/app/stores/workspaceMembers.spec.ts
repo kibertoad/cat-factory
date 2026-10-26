@@ -72,8 +72,10 @@ describe('workspaceMembers store', () => {
     expect(store.loadedFor).toBeNull()
 
     fail = false
-    await store.load('ws1')
+    const retry = store.load('ws1')
+    // The retry clears the failure at once, so the panel shows its skeleton while it runs.
     expect(store.failedFor).toBeNull()
+    await retry
     expect(store.loadedFor).toBe('ws1')
   })
 

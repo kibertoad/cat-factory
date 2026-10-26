@@ -1,8 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { DEFAULT_TRACKER_WRITEBACK, listUserSecretsContract } from '@cat-factory/contracts'
+import {
+  DEFAULT_TRACKER_WRITEBACK,
+  getObservabilityConnectionContract,
+  listReleaseHealthConfigsContract,
+  listUserSecretsContract,
+} from '@cat-factory/contracts'
 import { screen, userEvent } from 'storybook/test'
 import { signedInUser } from '~/stories/accounts.stories.mocks'
-import { apiResponse } from '~/stories/api'
+import { apiFailure, apiResponse } from '~/stories/api'
+import { storyWorkspacePrefix } from '~/stories/workspace'
 import {
   documentConnections,
   documentSources,
@@ -115,4 +121,26 @@ export const Advanced: Story = {
  */
 export const AuthDisabled: Story = {
   decorators: [opened(undefined, false)],
+}
+
+/**
+ * The observability read failed: the row shows on the basic tier too, with a failed badge, so the
+ * panel behind it (and its retry) stays reachable.
+ */
+export const ObservabilityFailed: Story = {
+  decorators: [
+    withSeed(() => {
+      useReleaseHealthStore().available = null
+    }),
+  ],
+  parameters: {
+    api: [
+      apiResponse(listUserSecretsContract, { body: { secrets: [], descriptors: [] } }),
+      apiFailure(getObservabilityConnectionContract, { pathPrefix: storyWorkspacePrefix }),
+      apiResponse(listReleaseHealthConfigsContract, { pathPrefix: storyWorkspacePrefix, body: [] }),
+    ],
+  },
+  play: async () => {
+    await screen.findByTestId('integrations-failed-observability')
+  },
 }

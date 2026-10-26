@@ -2041,7 +2041,6 @@
     "title": "Observabilidad de la plataforma",
     "refresh": "Actualizar",
     "close": "Cerrar",
-    "retry": "Reintentar",
     "window": {
       "oneHour": "Última hora",
       "oneDay": "Últimas 24 horas",
@@ -3489,7 +3488,8 @@
         "pagerDutyToken": "Token de API de PagerDuty",
         "pagerDutyFromEmail": "Correo remitente de PagerDuty",
         "incidentIoKey": "Clave de API de incident.io",
-        "clear": "Borrar"
+        "clear": "Borrar",
+        "loadFailed": "No se pudieron cargar las herramientas de incidentes"
       },
       "status": {
         "notConnected": "Sin conectar",

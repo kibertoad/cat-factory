@@ -2041,7 +2041,6 @@
     "title": "Obserwowalność platformy",
     "refresh": "Odśwież",
     "close": "Zamknij",
-    "retry": "Ponów",
     "window": {
       "oneHour": "Ostatnia godzina",
       "oneDay": "Ostatnie 24 godziny",
@@ -3489,7 +3488,8 @@
         "pagerDutyToken": "Token API PagerDuty",
         "pagerDutyFromEmail": "E-mail nadawcy PagerDuty",
         "incidentIoKey": "Klucz API incident.io",
-        "clear": "Wyczyść"
+        "clear": "Wyczyść",
+        "loadFailed": "Nie udało się wczytać narzędzi do incydentów"
       },
       "status": {
         "notConnected": "Nie połączono",

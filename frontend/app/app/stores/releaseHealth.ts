@@ -37,6 +37,10 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
   // store only ever holds the presence summary. Wired alongside observability.
   const incident = ref<IncidentEnrichmentView>({ connected: false, summary: null })
   const incidentAvailable = ref<boolean | null>(null)
+  /** True when the last incident read failed with anything but the module-off 503. */
+  const incidentLoadFailed = ref(false)
+  /** True while the incident read is in flight. */
+  const incidentLoading = ref(false)
   const loading = ref(false)
   // Mirrors the backend's opt-in gate (`OBSERVABILITY_ENABLED`): `null` until first
   // probed, then `true`/`false`. The hub + inspector hide their observability entry
@@ -125,15 +129,25 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
     dropConfig(blockId)
   }
 
-  /** Load the incident-enrichment connection (separate opt-in gate from observability). */
+  /**
+   * Load the incident-enrichment connection (separate opt-in gate from observability). Never
+   * rejects: the module-off 503 sets `incidentAvailable: false`, and any other failure is recorded
+   * on `incidentLoadFailed` for the panel to state.
+   */
   async function loadIncident() {
     const ws = useWorkspaceStore()
+    incidentLoading.value = true
     try {
       incident.value = await api.getIncidentEnrichment(ws.requireId())
       incidentAvailable.value = true
-    } catch {
-      incidentAvailable.value = false
+      incidentLoadFailed.value = false
+    } catch (error) {
       incident.value = { connected: false, summary: null }
+      const off = isModuleOffRefusal(error)
+      incidentAvailable.value = off ? false : null
+      incidentLoadFailed.value = !off
+    } finally {
+      incidentLoading.value = false
     }
   }
 
@@ -154,6 +168,8 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
     configs,
     incident,
     incidentAvailable,
+    incidentLoadFailed,
+    incidentLoading,
     loading,
     available,
     loadFailed,

@@ -3,6 +3,7 @@ import { ApiError } from '~/composables/api/errors'
 import { useSkillLibrary } from '~/stores/skillLibrary'
 import { useReleaseHealthStore } from '~/stores/releaseHealth'
 import { useInfraConfigStore } from '~/stores/infraConfig'
+import { useAccountSettingsStore } from '~/stores/accountSettings'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 // Each of these stores gates a whole surface on `available`. Only a 503 means the deployment did
@@ -11,6 +12,8 @@ import { useWorkspaceStore } from '~/stores/workspace'
 
 const unavailable = () => new ApiError(503, { error: { code: 'unavailable', message: 'off' } })
 const broken = () => new ApiError(500, { error: { code: 'internal', message: 'boom' } })
+// A 503 with no envelope: a proxy or platform outage, not the deployment saying "not wired".
+const outage = () => new ApiError(503, 'Service Unavailable')
 
 describe('skill library probe', () => {
   it('a 503 turns the library off', async () => {
@@ -106,5 +109,51 @@ describe('infra-config load', () => {
     expect(listEnvironmentHandlers).toHaveBeenCalledTimes(2)
     expect(store.available).toBe(true)
     expect(store.loadFailed).toBe(false)
+  })
+})
+
+describe('release-health incident load', () => {
+  beforeEach(() => {
+    useWorkspaceStore().workspaceId = 'ws1'
+  })
+
+  it('a module-off 503 turns the incident section off', async () => {
+    vi.stubGlobal('useApi', () => ({ getIncidentEnrichment: () => Promise.reject(unavailable()) }))
+    const store = useReleaseHealthStore()
+    await store.loadIncident()
+    expect(store.incidentAvailable).toBe(false)
+    expect(store.incidentLoadFailed).toBe(false)
+  })
+
+  it('any other failure is a failed load, and a later success clears it', async () => {
+    const getIncidentEnrichment = vi
+      .fn()
+      .mockRejectedValueOnce(broken())
+      .mockResolvedValue({ connected: true, summary: null })
+    vi.stubGlobal('useApi', () => ({ getIncidentEnrichment }))
+    const store = useReleaseHealthStore()
+    await store.loadIncident()
+    expect(store.incidentAvailable).toBeNull()
+    expect(store.incidentLoadFailed).toBe(true)
+
+    await store.loadIncident()
+    expect(store.incidentAvailable).toBe(true)
+    expect(store.incidentLoadFailed).toBe(false)
+  })
+})
+
+describe('account settings load', () => {
+  it('a module-off 503 hides the panel and resolves', async () => {
+    vi.stubGlobal('useApi', () => ({ getAccountSettings: () => Promise.reject(unavailable()) }))
+    const store = useAccountSettingsStore()
+    await store.load('acc1')
+    expect(store.available).toBe(false)
+  })
+
+  it('an outage 503 is rethrown for the panel to state, not read as "not enabled"', async () => {
+    vi.stubGlobal('useApi', () => ({ getAccountSettings: () => Promise.reject(outage()) }))
+    const store = useAccountSettingsStore()
+    await expect(store.load('acc1')).rejects.toBeInstanceOf(ApiError)
+    expect(store.available).toBeNull()
   })
 })

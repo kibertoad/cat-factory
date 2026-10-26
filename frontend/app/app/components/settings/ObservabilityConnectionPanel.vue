@@ -229,8 +229,15 @@ const connectedLabel = computed(() => {
 
         <!-- Incident enrichment (optional): annotate an incident PagerDuty / incident.io
              already opened from the same monitors/SLOs. -->
+        <LoadFailedState
+          v-if="store.incidentLoadFailed"
+          compact
+          :title="t('settings.observabilityConnection.incident.loadFailed')"
+          :retrying="store.incidentLoading"
+          @retry="store.loadIncident()"
+        />
         <section
-          v-if="store.incidentAvailable !== false"
+          v-else-if="store.incidentAvailable !== false"
           class="space-y-3 rounded-lg border border-muted p-3"
         >
           <div class="flex items-center justify-between">

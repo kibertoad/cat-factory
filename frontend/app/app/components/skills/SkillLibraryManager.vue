@@ -35,6 +35,17 @@ watch(
   { immediate: true },
 )
 
+// The probe keeps no loading flag of its own, so the failed state shows its retry in flight here.
+const retrying = ref(false)
+async function retryProbe() {
+  retrying.value = true
+  try {
+    await library.probe()
+  } finally {
+    retrying.value = false
+  }
+}
+
 // The rich GitHub pickers reuse the active board's App installation. When it isn't connected (or
 // the integration is off) the form falls back to manual text entry.
 const githubReady = computed(() => github.available === true && github.connected)
@@ -159,7 +170,8 @@ async function unlinkSource(id: string) {
     <LoadFailedState
       v-else-if="library.loadFailed"
       :title="t('skills.loadFailed')"
-      @retry="library.probe()"
+      :retrying="retrying"
+      @retry="retryProbe"
     />
 
     <template v-else>

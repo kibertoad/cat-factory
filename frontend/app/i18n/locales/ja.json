@@ -2041,7 +2041,6 @@
     "title": "プラットフォームの可観測性",
     "refresh": "更新",
     "close": "閉じる",
-    "retry": "再試行",
     "window": {
       "oneHour": "過去1時間",
       "oneDay": "過去24時間",
@@ -3631,7 +3630,8 @@
         "pagerDutyToken": "PagerDuty API トークン",
         "pagerDutyFromEmail": "PagerDuty From メール",
         "incidentIoKey": "incident.io API キー",
-        "clear": "クリア"
+        "clear": "クリア",
+        "loadFailed": "インシデントツールを読み込めませんでした"
       },
       "status": {
         "notConnected": "未接続",

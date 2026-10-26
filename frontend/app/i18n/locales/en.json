@@ -2172,7 +2172,6 @@
     "title": "Platform observability",
     "refresh": "Refresh",
     "close": "Close",
-    "retry": "Retry",
     "window": {
       "oneHour": "Last hour",
       "oneDay": "Last 24 hours",
@@ -3801,7 +3800,8 @@
         "pagerDutyToken": "PagerDuty API token",
         "pagerDutyFromEmail": "PagerDuty From email",
         "incidentIoKey": "incident.io API key",
-        "clear": "Clear"
+        "clear": "Clear",
+        "loadFailed": "Could not load the incident tools"
       },
       "status": {
         "notConnected": "Not connected",

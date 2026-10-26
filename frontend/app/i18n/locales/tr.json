@@ -2041,7 +2041,6 @@
     "title": "Platform gözlemlenebilirliği",
     "refresh": "Yenile",
     "close": "Kapat",
-    "retry": "Yeniden dene",
     "window": {
       "oneHour": "Son bir saat",
       "oneDay": "Son 24 saat",
@@ -3631,7 +3630,8 @@
         "pagerDutyToken": "PagerDuty API jetonu",
         "pagerDutyFromEmail": "PagerDuty Gönderen e-postası",
         "incidentIoKey": "incident.io API anahtarı",
-        "clear": "Temizle"
+        "clear": "Temizle",
+        "loadFailed": "Olay araçları yüklenemedi"
       },
       "status": {
         "notConnected": "Bağlı değil",

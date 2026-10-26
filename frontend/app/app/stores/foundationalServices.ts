@@ -18,6 +18,25 @@ import { createServiceCatalogState } from '~/stores/serviceCatalogConnection'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
+ * The merged catalog (workspace tier only, empty otherwise) and the owner's opt-outs, read in one
+ * pass. They are complements: an entry leaves one exactly as it enters the other, so a refresh of
+ * only the merge would leave the way BACK stale.
+ */
+function readMergeAndOptOuts(
+  api: ReturnType<typeof useApi>,
+  kind: FoundationalServiceOwnerKind,
+  id: string,
+  hasResolved: boolean,
+): Promise<[ResolvedFoundationalService[], FoundationalServiceSuppression[]]> {
+  return Promise.all([
+    hasResolved
+      ? api.getResolvedFoundationalServices(id)
+      : Promise.resolve([] as ResolvedFoundationalService[]),
+    api.listFoundationalServiceSuppressions(kind, id),
+  ])
+}
+
+/**
  * The foundational-services catalog for one owner — a board (`workspace`) or an `account`
  * (backend/docs/adr/0031-foundational-services.md). Holds that owner's own (raw) tier of registered
  * services, its linked repo sources, and — at the **workspace** tier only — the merged catalog an
@@ -36,24 +55,6 @@ import { useWorkspaceStore } from '~/stores/workspace'
  *   without the GitHub integration (contracts can be uploaded directly), while the repo-source
  *   routes 503 without it.
  */
-/**
- * The merged catalog (workspace tier only, empty otherwise) and the owner's opt-outs, read in one
- * pass. They are complements: an entry leaves one exactly as it enters the other, so a refresh of
- * only the merge would leave the way BACK stale.
- */
-function readMergeAndOptOuts(
-  api: ReturnType<typeof useApi>,
-  kind: FoundationalServiceOwnerKind,
-  id: string,
-): Promise<[ResolvedFoundationalService[], FoundationalServiceSuppression[]]> {
-  return Promise.all([
-    kind === 'workspace'
-      ? api.getResolvedFoundationalServices(id)
-      : Promise.resolve([] as ResolvedFoundationalService[]),
-    api.listFoundationalServiceSuppressions(kind, id),
-  ])
-}
-
 function foundationalServicesSetup(
   kind: FoundationalServiceOwnerKind,
   resolveOwnerId: () => string | null,
@@ -131,7 +132,7 @@ function foundationalServicesSetup(
     try {
       const [tier, [merged, opted]] = await Promise.all([
         api.listFoundationalServices(kind, id),
-        readMergeAndOptOuts(api, kind, id),
+        readMergeAndOptOuts(api, kind, id, hasResolved),
       ])
       services.value = tier
       resolved.value = merged
@@ -177,7 +178,7 @@ function foundationalServicesSetup(
 
   async function refreshResolved() {
     // Both in one pass: a write that changes the merge routinely changes the opt-out list too.
-    const [merged, opted] = await readMergeAndOptOuts(api, kind, requireOwnerId())
+    const [merged, opted] = await readMergeAndOptOuts(api, kind, requireOwnerId(), hasResolved)
     resolved.value = merged
     suppressions.value = opted
   }

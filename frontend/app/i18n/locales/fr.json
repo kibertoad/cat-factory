@@ -2041,7 +2041,6 @@
     "title": "Observabilité de la plateforme",
     "refresh": "Actualiser",
     "close": "Fermer",
-    "retry": "Réessayer",
     "window": {
       "oneHour": "Dernière heure",
       "oneDay": "Dernières 24 heures",
@@ -3489,7 +3488,8 @@
         "pagerDutyToken": "Jeton d'API PagerDuty",
         "pagerDutyFromEmail": "E-mail expéditeur PagerDuty",
         "incidentIoKey": "Clé d'API incident.io",
-        "clear": "Effacer"
+        "clear": "Effacer",
+        "loadFailed": "Impossible de charger les outils d'incident"
       },
       "status": {
         "notConnected": "Non connecté",

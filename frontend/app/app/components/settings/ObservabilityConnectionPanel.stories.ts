@@ -22,7 +22,7 @@ const pathPrefix = storyWorkspacePrefix
 function answers(options: {
   connection?: ObservabilityConnectionView
   connectionFails?: boolean
-  incident?: IncidentEnrichmentView | 'unavailable'
+  incident?: IncidentEnrichmentView | 'unavailable' | 'fails'
 }) {
   return [
     options.connectionFails
@@ -32,19 +32,21 @@ function answers(options: {
           body: options.connection ?? { connected: false, provider: null, summary: null },
         }),
     apiResponse(listReleaseHealthConfigsContract, { pathPrefix, body: [] }),
-    options.incident === 'unavailable'
-      ? apiRefusal(getIncidentEnrichmentContract, {
-          pathPrefix,
-          status: 503,
-          error: {
-            code: 'unavailable',
-            message: 'The incident-enrichment integration is not configured',
-          },
-        })
-      : apiResponse(getIncidentEnrichmentContract, {
-          pathPrefix,
-          body: options.incident ?? { connected: false, summary: null },
-        }),
+    options.incident === 'fails'
+      ? apiFailure(getIncidentEnrichmentContract, { pathPrefix })
+      : options.incident === 'unavailable'
+        ? apiRefusal(getIncidentEnrichmentContract, {
+            pathPrefix,
+            status: 503,
+            error: {
+              code: 'unavailable',
+              message: 'The incident-enrichment integration is not configured',
+            },
+          })
+        : apiResponse(getIncidentEnrichmentContract, {
+            pathPrefix,
+            body: options.incident ?? { connected: false, summary: null },
+          }),
   ]
 }
 
@@ -83,6 +85,14 @@ export const Empty: Story = { parameters: { api: answers({}) } }
 /** The deployment has no incident tools wired (the read answers 503): that section is gone. */
 export const IncidentUnavailable: Story = {
   parameters: { api: answers({ connection: datadogEu, incident: 'unavailable' }) },
+}
+
+/** The incident read failed: that section says so with a retry, rather than disappearing. */
+export const IncidentFailed: Story = {
+  parameters: { api: answers({ connection: datadogEu, incident: 'fails' }) },
+  play: async () => {
+    await screen.findByText('Could not load the incident tools')
+  },
 }
 
 /**

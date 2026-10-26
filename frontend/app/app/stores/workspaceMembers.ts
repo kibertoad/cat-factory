@@ -42,6 +42,8 @@ export const useWorkspaceMembersStore = defineStore('workspaceMembers', () => {
    */
   async function load(workspaceId: string) {
     const token = ++loadSeq
+    // A new load clears the previous failure, so a retry shows the skeleton while it runs.
+    if (failedFor.value === workspaceId) failedFor.value = null
     let roster: WorkspaceMember[]
     try {
       roster = await api.listWorkspaceMembers(workspaceId)

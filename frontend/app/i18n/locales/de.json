@@ -679,7 +679,8 @@
         "pagerDutyToken": "PagerDuty-API-Token",
         "pagerDutyFromEmail": "PagerDuty From-E-Mail",
         "incidentIoKey": "incident.io-API-Schlüssel",
-        "clear": "Leeren"
+        "clear": "Leeren",
+        "loadFailed": "Die Incident-Tools konnten nicht geladen werden"
       },
       "status": {
         "notConnected": "Nicht verbunden",
@@ -4103,7 +4104,6 @@
     "title": "Plattform-Observability",
     "refresh": "Aktualisieren",
     "close": "Schließen",
-    "retry": "Erneut versuchen",
     "window": {
       "oneHour": "Letzte Stunde",
       "oneDay": "Letzte 24 Stunden",

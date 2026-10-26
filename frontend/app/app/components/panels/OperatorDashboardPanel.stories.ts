@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { screen } from 'storybook/test'
 import type { PlatformObservability, PlatformObservabilityWindow } from '~/types/execution'
 import { getPlatformObservabilityContract } from '@cat-factory/contracts'
 import { apiFailure, apiPending, apiResponse } from '~/stories/api'
@@ -163,6 +162,7 @@ export const Loading: Story = {
 export const Failed: Story = {
   // The translated copy above Retry; the server's own text only behind "Show details".
   play: async () => {
+    await screen.findByTestId('load-failed-state')
     await screen.findByText('Platform observability could not be loaded.')
     await userEvent.click(await screen.findByTestId('failure-message-show-detail'))
     await screen.findByText(/Internal server error/)

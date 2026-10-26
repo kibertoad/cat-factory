@@ -111,6 +111,16 @@ export const Failed: Story = {
 }
 
 /**
+ * The read failed on the basic tier: the section still shows, because the failed read says
+ * nothing about whether a teammate mapped this service.
+ */
+export const BasicModeFailed: Story = {
+  decorators: [withService('basic')],
+  parameters: Failed.parameters,
+  play: Failed.play,
+}
+
+/**
  * The basic tier, and a teammate on the advanced tier mapped this service: the section stays, so
  * the mapping can still be seen and cleared.
  */
