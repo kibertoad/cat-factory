@@ -9,8 +9,11 @@
 // arrow keys did nothing in it.
 //
 // SCOPE: every opening tag in the TEMPLATE half of a `.vue` file under the SPA roots. A role is
-// read from a literal in either quote style (`role="tab"`, `role='tab'`) or a bound string literal
-// (`:role="'tab'"`). A computed `:role` is not read: its value is decided at runtime.
+// read wherever the template states it as a literal: a plain attribute in either quote style
+// (`role="tab"`, `role='tab'`), any string or template literal inside a bound `:role` expression
+// (`:role="'tab'"`, ``:role="`tab`"``, `:role="tabbed ? 'tab' : undefined"`), and the same inside
+// the `role` key of a `v-bind="{ … }"` object, which `check-frontend-variants.mjs` reads too. A
+// `:role` with no literal in it (`:role="kind"`) is not read: its value is decided at runtime.
 //
 // What this guard does NOT see: a row of `UButton`s that switches views with no roles at all. A
 // tab bar and an option picker (a row that sets a value) have the same markup, so the difference
@@ -31,10 +34,29 @@ const WAIVER = 'tabs-ok:'
 /** The ARIA roles that only a tab widget states. */
 export const TAB_ROLES = ['tablist', 'tab', 'tabpanel']
 
-const ROLE = new RegExp(
-  `\\s(?:role=(?:"(${TAB_ROLES.join('|')})"|'(${TAB_ROLES.join('|')})')` +
-    `|(?::|v-bind:)role=(?:"'(${TAB_ROLES.join('|')})'"|'"(${TAB_ROLES.join('|')})"'))(?=[\\s/>])`,
-)
+const NAMES = TAB_ROLES.join('|')
+const PLAIN = new RegExp(`\\srole=(?:"(${NAMES})"|'(${NAMES})')(?=[\\s/>])`)
+const BOUND = /\s(?::|v-bind:)role=(?:"([^"]*)"|'([^']*)')/
+const OBJECT_SPREAD = /\sv-bind=(?:"\s*\{([^"]*)\}\s*"|'\s*\{([^']*)\}\s*')/
+const OBJECT_ROLE = /(?:^|[,\s])(['"]?)role\1\s*:\s*([^,]*)/
+const LITERAL = new RegExp(`(['"\`])(${NAMES})\\1`)
+
+/** The first tab role an expression states as a string or template literal, or `undefined`. */
+function literalRole(expression) {
+  return expression ? LITERAL.exec(expression)?.[2] : undefined
+}
+
+/** The tab role one opening tag states as a literal, or `undefined`. */
+function statedRole(tag) {
+  const plain = PLAIN.exec(tag)
+  if (plain) return plain[1] ?? plain[2]
+  const bound = BOUND.exec(tag)
+  const fromBound = bound && literalRole(bound[1] ?? bound[2])
+  if (fromBound) return fromBound
+  const spread = OBJECT_SPREAD.exec(tag)
+  const key = spread && OBJECT_ROLE.exec(spread[1] ?? spread[2])
+  return key ? literalRole(key[2]) : undefined
+}
 
 /** Every hand-stated tab role in one `.vue` source, as `[{ line, role }]`. */
 export function findTabRoles(source) {
@@ -42,9 +64,9 @@ export function findTabRoles(source) {
   const found = []
   walkTemplate(source, {
     open(node) {
-      const m = ROLE.exec(node.tag)
-      if (!m || isWaivedAbove(raw, node.line, WAIVER)) return
-      found.push({ line: node.line, role: m.slice(1).find(Boolean) })
+      const role = statedRole(node.tag)
+      if (!role || isWaivedAbove(raw, node.line, WAIVER)) return
+      found.push({ line: node.line, role })
     },
   })
   return found

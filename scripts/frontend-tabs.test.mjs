@@ -36,8 +36,22 @@ describe('hand-stated tab roles', () => {
     assert.deepEqual(roles(`<div v-bind:role='"tab"' />`), ['tab'])
   })
 
+  it('flags a template literal and a literal operand of a bound expression', () => {
+    assert.deepEqual(roles('<div :role="`tablist`" />'), ['tablist'])
+    assert.deepEqual(roles(`<div :role="tabbed ? 'tab' : undefined" />`), ['tab'])
+    assert.deepEqual(roles(`<div v-bind:role='open ? "tabpanel" : "region"' />`), ['tabpanel'])
+  })
+
+  it('flags the role key of a `v-bind` object, quoted or not', () => {
+    assert.deepEqual(roles(`<div v-bind="{ role: 'tab', id: x }" />`), ['tab'])
+    assert.deepEqual(roles(`<div v-bind="{ id: x, 'role': on ? 'tab' : 'button' }" />`), ['tab'])
+    assert.deepEqual(roles(`<div v-bind="{ ariaRole: 'tab', role: kind }" />`), [])
+  })
+
   it('does not read a computed role, another role, or a longer role name', () => {
     assert.deepEqual(roles('<div :role="kind" />'), [])
+    assert.deepEqual(roles('<div :role="`${kind}`" />'), [])
+    assert.deepEqual(roles(`<div :role="on ? 'listbox' : 'tabular'" />`), [])
     assert.deepEqual(roles('<ul role="listbox"><li role="option">x</li></ul>'), [])
     assert.deepEqual(roles('<div role="tabular" />'), [])
     assert.deepEqual(roles('<div data-role="tab" />'), [])
