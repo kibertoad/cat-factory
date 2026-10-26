@@ -61,10 +61,17 @@ const makeReviewRepo = (
     failPaths?: string[]
     /** The PR head sha the fake reports; mutate between drives to simulate a branch update. */
     headSha?: string | null
+    /** File bodies `getFile` serves, by path; every read is logged to `fileReads`. */
+    files?: Record<string, string>
+    fileReads?: { path: string; gitRef: string | undefined }[]
   },
   headRef: string | null = 'feature/pr-42',
 ): RepoFiles => ({
-  getFile: async () => null,
+  getFile: async (path, gitRef) => {
+    ;(recorder.fileReads ??= []).push({ path, gitRef })
+    const content = recorder.files?.[path]
+    return content === undefined ? null : { content, sha: 'blob-sha' }
+  },
   listDirectory: async () => [],
   headSha: async () => 'base-sha',
   createBranch: async () => {},
@@ -133,6 +140,7 @@ type PublicReviewDecision = {
     line: number | null
     severity: string
     suggestedFix: string | null
+    excerpt: { startLine: number; endLine: number; side: string; text: string } | null
   }[]
   selectedFindingIds: string[]
   postReport: {
@@ -150,6 +158,7 @@ type PublicReviewDecision = {
   maxResumeAttempts: number
   reportedSlices: number
   lastActivityAt: number | null
+  reviewedHeadSha: string | null
 }
 
 /** The run's `pr-review` decision as `/api/v1` serves it, or undefined once it has settled. */
@@ -177,6 +186,7 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
     registerReviewChallengeTests(harness)
     registerReviewResolutionTests(harness)
     registerPublicReviewApiTests(harness)
+    registerPublicReviewExcerptTests(harness)
     registerPublicReviewLoopTests(harness)
   })
 }
@@ -995,5 +1005,46 @@ function registerPublicReviewLoopTests(harness: ConformanceHarness): void {
     const reparked = (await app.drive(wsId)).find((e) => e.blockId === taskId)!
     expect(reparked.status).toBe('blocked')
     expect(reparked.id).not.toBe(executionId)
+  })
+}
+
+/**
+ * The source excerpt each finding carries, read at the head the review started on. Per facade
+ * because the excerpt rides the step JSON through each runtime's execution mapper, and the read
+ * goes through the run-repo seam each facade wires for itself.
+ */
+function registerPublicReviewExcerptTests(harness: ConformanceHarness): void {
+  it('serves the reviewed head sha and an excerpt read at it over /api/v1', async () => {
+    const authSource = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join('\n')
+    const recorder: Parameters<typeof makeReviewRepo>[0] = {
+      headSha: 'sha-at-review-start',
+      files: { 'src/auth.ts': authSource },
+    }
+    // Async, as in production: the review-start head sha is captured on the async dispatch path.
+    const app = harness.makeApp(
+      { customResult: reviewerOutput, asyncKinds: ['pr-reviewer'], asyncPolls: 1 },
+      {
+        resolveRunRepoContext: async () => ({
+          repo: makeReviewRepo(recorder),
+          baseBranch: 'main',
+          repoId: 'repo_1',
+        }),
+      },
+    )
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const { executionId } = await seedReviewTask(app.call, app.drive, workspace.id)
+    const auth = await mintPublicApiKey(app, workspace.id, 'decide', 'pr-review')
+
+    const parked = (await readReview(app, executionId, auth))!
+    expect(parked.reviewedHeadSha).toBe('sha-at-review-start')
+    expect(parked.findings[0]!.excerpt).toEqual({
+      startLine: 9,
+      endLine: 15,
+      side: 'RIGHT',
+      text: ['line 9', 'line 10', 'line 11', 'line 12', 'line 13', 'line 14', 'line 15'].join('\n'),
+    })
+    // The nit has no line, so nothing was read for it and it carries no excerpt.
+    expect(parked.findings[1]!.excerpt).toBeNull()
+    expect(recorder.fileReads).toEqual([{ path: 'src/auth.ts', gitRef: 'sha-at-review-start' }])
   })
 }

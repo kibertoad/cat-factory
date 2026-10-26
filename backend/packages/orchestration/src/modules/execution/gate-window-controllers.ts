@@ -109,6 +109,9 @@ export interface GateWindowControllerDeps {
    */
   taskTypeRegistry: ExecutionServiceDependencies['taskTypeRegistry']
   promptFragmentSource: ExecutionServiceDependencies['promptFragmentSource']
+  /** The run's repo and credential scope, so recorded PR-review findings carry excerpts. */
+  resolveRunRepoContext: ExecutionServiceDependencies['resolveRunRepoContext']
+  runInitiatorScope: ExecutionServiceDependencies['runInitiatorScope']
   /** Board fan-out, so a spawned fix task appears on open boards without a refresh. */
   events: ExecutionServiceDependencies['executionEventPublisher']
   /** Bound `ExecutionService.start` — a spawned fix starts through the real entry point. */
@@ -265,6 +268,8 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     idGenerator,
     clock,
     notificationService,
+    ...(deps.resolveRunRepoContext ? { resolveRunRepoContext: deps.resolveRunRepoContext } : {}),
+    ...(deps.runInitiatorScope ? { runInitiatorScope: deps.runInitiatorScope } : {}),
   })
   const bugFishingController = new BugFishingController({
     executionRepository,

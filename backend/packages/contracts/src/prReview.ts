@@ -134,6 +134,19 @@ export const prReviewFindingChallengeSchema = v.object({
 export type PrReviewFindingChallenge = v.InferOutput<typeof prReviewFindingChallengeSchema>
 
 /**
+ * A few lines of source around a finding's anchor line, read by the engine from the reviewed
+ * head commit when the findings were recorded, so a reader needs no repository access to see what
+ * the finding points at. Lines are 1-based and inclusive; `text` is those lines joined by `\n`.
+ */
+export const prReviewFindingExcerptSchema = v.object({
+  startLine: v.number(),
+  endLine: v.number(),
+  side: v.picklist(['LEFT', 'RIGHT']),
+  text: v.string(),
+})
+export type PrReviewFindingExcerpt = v.InferOutput<typeof prReviewFindingExcerptSchema>
+
+/**
  * One prioritized review finding, id-stamped by the engine and anchored to a slice. Carries
  * everything the window needs to render it and everything PR 3's resolutions consume (the
  * `path`/`line`/`side` anchor for an inline PR comment; the `suggestedFix` for the Fixer).
@@ -157,6 +170,8 @@ export const prReviewFindingSchema = v.object({
   detail: v.string(),
   /** A concrete suggested change, when the reviewer offered one. */
   suggestedFix: v.optional(v.nullable(v.string())),
+  /** Source around `line` at the reviewed head (see {@link prReviewFindingExcerptSchema}). */
+  excerpt: v.optional(v.nullable(prReviewFindingExcerptSchema)),
   /**
    * The finding's challenge state, when a human challenged it (see
    * {@link prReviewFindingChallengeSchema}). Absent for an un-challenged finding.

@@ -216,6 +216,7 @@ function toPrReviewDecision(state: PrReviewStepState, step: PipelineStep): Publi
     status: state.status,
     summary: state.summary ?? null,
     prUrl: state.prUrl ?? null,
+    reviewedHeadSha: state.reviewedHeadSha ?? null,
     slices: (state.slices ?? []).map(toPrReviewSlice),
     findings: (state.findings ?? []).map(toPrReviewFinding),
     selectedFindingIds: state.selectedFindingIds ?? [],
@@ -291,6 +292,14 @@ function toPrReviewFinding(finding: PrReviewFinding): PublicPrReviewFinding {
     title: finding.title,
     detail: finding.detail,
     suggestedFix: finding.suggestedFix ?? null,
+    excerpt: finding.excerpt
+      ? {
+          startLine: finding.excerpt.startLine,
+          endLine: finding.excerpt.endLine,
+          side: finding.excerpt.side,
+          text: finding.excerpt.text,
+        }
+      : null,
     challenge: challenge
       ? {
           status: challenge.status,
