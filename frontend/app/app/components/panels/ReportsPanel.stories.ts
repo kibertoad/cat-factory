@@ -10,6 +10,7 @@ import { apiFailure, apiPending, apiResponse } from '~/stories/api'
 import { STORY_WORKSPACE_ID } from '~/stories/workspace'
 import { accountBoards, accounts, orgAccount } from '~/stories/accounts.stories.mocks'
 import { spendRow } from '~/stories/reports.stories.mocks'
+import { expectTrendToScale } from '~/stories/trend'
 import { withSeed } from '~/stories/withStores'
 import { useAccountsStore } from '~/stores/accounts'
 import { useReportsStore } from '~/stores/reports'
@@ -25,9 +26,6 @@ import ReportsPanel from './ReportsPanel.vue'
 // account's report when it opens, so each story opens it and answers that read. The keys and
 // labels follow the backend's (`D1ReportsRepository.ts`): model, agent kind and task type rows
 // carry no label, so they show their raw key. The amounts are made up.
-//
-// The spend trend draws no bars, for the same reason as the operator dashboard's: its row aligns
-// the columns to the end (`items-end`), so the bars' percentage heights resolve to nothing (#2395).
 
 const DAY = 24 * 3_600_000
 const NOW = Date.UTC(2026, 9, 11, 12, 0)
@@ -199,11 +197,17 @@ function report(overrides: Partial<ReportsView> = {}): ReportsView {
 }
 
 /**
- * Seven days: the four totals, an empty trend box (see above), spend by model, agent kind, ticket
+ * Seven days: the four totals, the daily spend trend, spend by model, agent kind, ticket
  * and run, and the boards with their runs. Model, agent kind and task type rows show their raw
- * keys; the bootstrap run has no task, so it shows its run id.
+ * keys; the bootstrap run has no task, so it shows its run id. Each trend column draws at its
+ * day's share of the dearest day.
  */
-export const Default: Story = {}
+export const Default: Story = {
+  play: async () => {
+    const totals = dailyTrend(7).map((p) => p.meteredCost + p.subscriptionCost)
+    await expectTrendToScale('reports-trend', totals, 2)
+  },
+}
 
 /** The first load in flight: placeholder blocks. */
 export const Loading: Story = {

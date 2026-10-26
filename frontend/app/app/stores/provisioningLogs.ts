@@ -2,11 +2,15 @@ import { defineStore } from 'pinia'
 import { reactive } from 'vue'
 import type { ProvisioningLogEntry, ProvisioningSubsystem } from '~/types/provisioningLogs'
 import { useWorkspaceStore } from '~/stores/workspace'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 interface LogState {
   entries: ProvisioningLogEntry[]
   loading: boolean
-  error: string | null
+  error: DescribedFailure | null
 }
 
 function emptyState(): LogState {
@@ -51,7 +55,7 @@ export const useProvisioningLogsStore = defineStore('provisioningLogs', () => {
       const { entries } = await api.listProvisioningLogs(ws.requireId(), { subsystem, limit: 200 })
       s.entries = entries
     } catch (err) {
-      s.error = err instanceof Error ? err.message : 'Failed to load logs'
+      s.error = describeFailure(err)
       s.entries = []
     } finally {
       s.loading = false
@@ -87,7 +91,7 @@ export const useProvisioningLogsStore = defineStore('provisioningLogs', () => {
       if (latestLoad.get(executionId) !== seq) return
       // A background poll keeps the last snapshot on a blip; only a visible load reports.
       if (!opts?.silent) {
-        s.error = err instanceof Error ? err.message : 'Failed to load logs'
+        s.error = describeFailure(err)
         s.entries = []
       }
     } finally {

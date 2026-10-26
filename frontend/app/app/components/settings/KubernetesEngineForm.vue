@@ -17,6 +17,7 @@ import type {
 } from '@cat-factory/contracts'
 import { isKubernetesUrlSource } from '@cat-factory/contracts'
 import type { K3sSetupPrefill } from '~/stores/ui'
+import type { DescribedFailure } from '~/composables/pipelineErrorToast/describeFailure'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The kube branch of the discriminated handler config this form produces (the `local-k3s` /
@@ -38,7 +39,7 @@ const props = defineProps<{
   supportsTest: boolean
   testing: boolean
   busy: boolean
-  testResult: { ok: boolean; message?: string } | null
+  testResult: { ok: boolean; message?: string; failure?: DescribedFailure } | null
   /**
    * Non-secret values from a `cat-factory k3s` CLI deep-link, seeded into a FRESH `local-k3s`
    * form so the user only pastes the token + saves. Ignored when editing a saved handler.

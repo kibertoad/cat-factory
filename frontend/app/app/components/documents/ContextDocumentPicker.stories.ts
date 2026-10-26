@@ -182,7 +182,7 @@ export const Searching: Story = {
   },
 }
 
-/** The search failed: the line under the box says so with the error. */
+/** The search failed: the line under the box says so, with the error behind "Show details". */
 export const SearchFailed: Story = {
   parameters: { api: answers(apiFailure(searchDocumentsContract, confluence)) },
   play: async ({ canvasElement }) => {

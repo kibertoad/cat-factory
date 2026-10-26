@@ -6,6 +6,7 @@
 import { computed, watch } from 'vue'
 import type { UsageBreakdownRow } from '@cat-factory/contracts'
 import EmptyState from '~/components/common/EmptyState.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 
 const { t, n, d } = useI18n()
 const usage = useUsageStore()
@@ -51,7 +52,12 @@ const hasAny = computed(() => usage.rows.length > 0)
       <USkeleton class="h-5 w-1/3" />
       <USkeleton v-for="n in 3" :key="n" class="h-8 w-full" />
     </div>
-    <p v-else-if="usage.error" class="text-2xs text-app-error-400">{{ usage.error }}</p>
+    <FailureMessage
+      v-else-if="usage.error"
+      :failure="usage.error"
+      :title="t('settings.usage.loadFailed')"
+      class="text-2xs text-app-error-400"
+    />
     <EmptyState
       v-else-if="!hasAny"
       compact

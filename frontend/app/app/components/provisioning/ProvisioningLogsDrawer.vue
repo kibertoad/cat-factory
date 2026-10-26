@@ -17,6 +17,7 @@
 // so a tear-down row that was missed or not yet persisted at the terminal instant can always be
 // refetched.
 import { onBeforeUnmount, onMounted, watch } from 'vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 import type {
   ProvisioningOperation,
   ProvisioningOutcome,
@@ -132,7 +133,12 @@ function when(epochMs: number): string {
       </UButton>
     </div>
 
-    <p v-if="state.error" class="px-3 py-2 text-xs text-app-error-300">{{ state.error }}</p>
+    <FailureMessage
+      v-if="state.error"
+      :failure="state.error"
+      :title="t('provisioning.loadFailed')"
+      class="px-3 py-2 text-xs text-app-error-300"
+    />
     <div v-else-if="state.loading && state.entries.length === 0" class="space-y-2 px-3 py-2">
       <USkeleton v-for="n in 3" :key="n" class="h-8 w-full" />
     </div>

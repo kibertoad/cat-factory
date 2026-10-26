@@ -58,6 +58,14 @@ export const apiKeySchema = v.object({
 })
 export type ApiKey = v.InferOutput<typeof apiKeySchema>
 
+/** The direct providers a workspace's runs can reach for the caller: an enabled key at any pool
+ * scope (workspace, owning account, the caller's own), minus a gateway whose base URL the
+ * deployment has not set. The server computes it, so the SPA never re-derives it from key rows. */
+export const configuredProvidersResultSchema = v.object({
+  providers: v.array(apiKeyProviderSchema),
+})
+export type ConfiguredProvidersResult = v.InferOutput<typeof configuredProvidersResultSchema>
+
 export const apiKeyListSchema = v.array(apiKeySchema)
 export type ApiKeyList = v.InferOutput<typeof apiKeyListSchema>
 

@@ -541,11 +541,15 @@ for real. The suite **self-skips** when the `K8S_IT_*` cluster env is unset, so 
 k3d cluster create cf-it --api-port 127.0.0.1:6443 \
   --k3s-arg "--disable=traefik@server:*" --wait
 
-# 2. Build the in-pod mock harness + pre-pull nginx, then import both into the cluster.
+# 2. Build the in-pod mock harness + pre-pull nginx, then import both into the cluster. Save one
+#    platform first: k3d imports with ctr --all-platforms, which fails on an index whose other
+#    platforms were never pulled (Docker's containerd image store) and still exits 0.
 docker build -t cat-factory-mock-harness:it \
   backend/packages/integrations/src/modules/kubernetes/test-support/mock-harness
 docker pull nginx:1.27-alpine
-k3d image import cat-factory-mock-harness:it nginx:1.27-alpine -c cf-it
+docker save --platform "linux/$(docker version --format '{{.Server.Arch}}')" \
+  -o /tmp/k3d-images.tar cat-factory-mock-harness:it nginx:1.27-alpine
+k3d image import /tmp/k3d-images.tar -c cf-it
 
 # 3. Mint a ServiceAccount token + RBAC (cluster-admin on a throwaway cluster) and export the
 #    connection. (CI does the equivalent in the `Test k8s (k3d)` job.)

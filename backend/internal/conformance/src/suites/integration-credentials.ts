@@ -213,6 +213,8 @@ export function defineCredentialsConformance(harness: ConformanceHarness): void 
       expect(dyn.cost?.outputPerMillion).toBe(15)
     })
 
+    defineConfiguredProvidersCase(harness)
+
     it('keeps every operator-hosted gateway unselectable with a key but no base URL', async () => {
       const { call, createWorkspace } = harness.makeApp(undefined, {
         cloudflareModelsEnabled: false,
@@ -370,5 +372,45 @@ export function defineCredentialsConformance(harness: ConformanceHarness): void 
       expect(restarted.status).toBe(409)
       expect(restarted.body.error.details?.reason).toBe('providers_unconfigured')
     })
+  })
+}
+
+/**
+ * `GET /workspaces/:ws/configured-providers` names only what a run can reach: a disabled key and a
+ * gateway with no base URL both leave their provider out. Its own function to keep
+ * {@link defineCredentialsConformance} inside the function-size budget; it registers into the
+ * caller's `describe`.
+ */
+function defineConfiguredProvidersCase(harness: ConformanceHarness): void {
+  it('lists only the providers a run can reach as configured (no disabled key, no gateway without a base URL)', async () => {
+    const { call, createWorkspace } = harness.makeApp(undefined, {
+      cloudflareModelsEnabled: false,
+    })
+    const { workspace } = await createWorkspace()
+    const configured = `/workspaces/${workspace.id}/configured-providers`
+    const providers = async () =>
+      (await call<{ providers: string[] }>('GET', configured)).body.providers.sort()
+
+    expect(await providers()).toEqual([])
+
+    const key = await call<{ id: string }>('POST', `/workspaces/${workspace.id}/api-keys`, {
+      provider: 'openrouter',
+      label: 'team',
+      key: 'sk-or-secret',
+    })
+    // A gateway with no base URL in the test env: a run would refuse it, so it is not configured.
+    await call('POST', `/workspaces/${workspace.id}/api-keys`, {
+      provider: 'litellm',
+      label: 'gateway',
+      key: 'sk-litellm-secret',
+    })
+    expect(await providers()).toEqual(['openrouter'])
+
+    // A disabled key stays listed but no longer configures its provider.
+    const disabled = await call('PATCH', `/workspaces/${workspace.id}/api-keys/${key.body.id}`, {
+      enabled: false,
+    })
+    expect(disabled.status).toBe(200)
+    expect(await providers()).toEqual([])
   })
 }

@@ -35,6 +35,7 @@ import { useCopyToClipboard } from '~/composables/useCopyToClipboard'
 import type {
   ApiErrorCode,
   BootstrapReferenceReason,
+  ToolServerOAuthReason,
   UnavailableReason,
 } from '@cat-factory/contracts'
 import { apiErrorEnvelope, apiErrorReason, apiErrorStatus } from './api/errors'
@@ -114,10 +115,22 @@ const GENERIC_DESCRIPTION_KEYS: Record<Exclude<ApiErrorCode, 'conflict'>, string
  * entry a specific person can go and fix. The launch dialog handles that one itself, since it can
  * open the entry. This is what every OTHER caller of the funnel is told instead of the status
  * class's generic wording, above all a retry driven from the run card.
+ *
+ * `ToolServerOAuthReason` joins it for the same argument: an OAuth grant refused for its state, its
+ * client secret or the vendor's answer is not "check the values you entered", and the person on
+ * the callback page entered nothing.
  */
-const REASON_DESCRIPTION_KEYS: Record<UnavailableReason | BootstrapReferenceReason, string> = {
+const REASON_DESCRIPTION_KEYS: Record<
+  UnavailableReason | BootstrapReferenceReason | ToolServerOAuthReason,
+  string
+> = {
   reference_repo_not_found: 'errors.reason.description.reference_repo_not_found',
   reference_repo_unreadable: 'errors.reason.description.reference_repo_unreadable',
+  oauth_state_invalid: 'errors.reason.description.oauth_state_invalid',
+  oauth_started_by_other_user: 'errors.reason.description.oauth_started_by_other_user',
+  oauth_exchange_refused: 'errors.reason.description.oauth_exchange_refused',
+  oauth_client_secret_unavailable: 'errors.reason.description.oauth_client_secret_unavailable',
+  tool_server_without_oauth: 'errors.reason.description.tool_server_without_oauth',
   binary_generators_unreachable: 'errors.unavailable.description.binary_generators_unreachable',
   foundational_builtins_unreachable:
     'errors.unavailable.description.foundational_builtins_unreachable',
@@ -166,6 +179,8 @@ export interface GenericFailure {
   issues: string[]
   /** The envelope's correlation id, so the user can quote it at whoever reads the logs. */
   requestId: string | null
+  /** The backend's machine-readable `details.reason`, for a surface that words a reason itself. */
+  reason: string | null
 }
 
 /**
@@ -200,7 +215,35 @@ export function describeGenericFailure(error: unknown): GenericFailure {
       issue.path ? `${issue.path}: ${issue.message}` : issue.message,
     ),
     requestId: typeof envelope?.requestId === 'string' ? envelope.requestId : null,
+    reason,
   }
+}
+
+/**
+ * The raw detail of a failure as one line: the prose, the validation issues and the request id,
+ * empty parts dropped. The toast's "Show details" and the inline `FailureMessage` both show this,
+ * so an empty result means there is nothing to disclose and no button is shown.
+ */
+export function failureDetail(
+  failure: GenericFailure,
+  t: (key: string, params: Record<string, unknown>) => string,
+): string {
+  return [
+    failure.message,
+    failure.issues.join(', '),
+    failure.requestId ? t('errors.generic.requestId', { id: failure.requestId }) : '',
+  ]
+    .filter((part): part is string => !!part && part.trim().length > 0)
+    .join(' · ')
+}
+
+/**
+ * What "Copy details" puts on the clipboard for a failure: its lines (title, description, raw
+ * detail), empty ones dropped. Shared by the failure toast and the inline `FailureMessage`, so a
+ * failure copies the same text wherever it surfaced.
+ */
+export function failureReport(...lines: string[]): string {
+  return lines.filter((line) => line.length > 0).join('\n')
 }
 
 export function usePipelineErrorToast() {
@@ -279,7 +322,8 @@ export function usePipelineErrorToast() {
   function presentMappedConflict(
     conflict: ParsedConflict,
     fallbackTitleKey: string,
-    titleParams?: Record<string, unknown>,
+    titleParams: Record<string, unknown> | undefined,
+    id: string | undefined,
   ): void {
     const info = conflictInfo(conflict.reason)
     const title =
@@ -297,6 +341,7 @@ export function usePipelineErrorToast() {
     const detail = conflict.message && conflict.message !== translated ? conflict.message : ''
     const report = conflictReport(conflict, title, description)
     const added = toast.add({
+      id,
       title,
       description,
       color: 'warning',
@@ -353,28 +398,24 @@ export function usePipelineErrorToast() {
   function presentGenericFailure(
     error: unknown,
     fallbackTitleKey: string,
-    titleParams?: Record<string, unknown>,
+    titleParams: Record<string, unknown> | undefined,
+    id: string | undefined,
   ): void {
     const failure = describeGenericFailure(error)
-    const detail = [
-      failure.message,
-      failure.issues.join(', '),
-      failure.requestId ? t('errors.generic.requestId', { id: failure.requestId }) : '',
-    ]
-      .filter((part) => part && part.trim().length > 0)
-      .join(' · ')
+    const detail = failureDetail(failure, t)
     // No `te` guard: the key comes from a Record exhaustive over the wire union and every entry
     // ships in the base `en` catalog, so a locale missing it renders English via `fallbackLocale`
     // (better than the raw prose this replaced) and a bare key can never leak.
     const title = t(fallbackTitleKey, titleParams ?? {})
-    showFailure(title, t(failure.descriptionKey), detail)
+    showFailure(title, t(failure.descriptionKey), detail, id)
   }
 
   /** The failure toast both generic paths render: translated title and description, the raw
    * detail behind "Show details", and the whole report copyable. */
-  function showFailure(title: string, description: string, detail: string): void {
-    const report = [title, description, detail].filter((part) => part.length > 0).join('\n')
+  function showFailure(title: string, description: string, detail: string, id?: string): void {
+    const report = failureReport(title, description, detail)
     const added = toast.add({
+      id,
       title,
       description,
       color: 'error',
@@ -425,19 +466,26 @@ export function usePipelineErrorToast() {
    * Present `error` as a toast. `fallbackTitleKey` is an i18n message key used for
    * non-conflict failures and any conflict reason without a dedicated title; `titleParams` carries
    * that key's interpolation when it takes any (a title naming the thing that failed).
+   *
+   * `dedupe` is for a call site that can fail again and again with nothing new to say: a search
+   * that refires on every debounced query, or a section every reader of a run reloads. The toast
+   * gets an id derived from `fallbackTitleKey`, so Nuxt UI replaces the toast already on screen
+   * instead of stacking an identical one. The bespoke conflict toasts keep their own handling.
    */
   function present(
     error: unknown,
     fallbackTitleKey = 'common.actionFailed',
     titleParams?: Record<string, unknown>,
+    options: { dedupe?: boolean } = {},
   ): void {
+    const id = options.dedupe ? `pipeline-error:${fallbackTitleKey}` : undefined
     const conflict = parseConflict(error)
     if (conflict) {
       if (presentBespokeConflict(conflict)) return
-      presentMappedConflict(conflict, fallbackTitleKey, titleParams)
+      presentMappedConflict(conflict, fallbackTitleKey, titleParams, id)
       return
     }
-    presentGenericFailure(error, fallbackTitleKey, titleParams)
+    presentGenericFailure(error, fallbackTitleKey, titleParams, id)
   }
 
   return { present, presentReported }

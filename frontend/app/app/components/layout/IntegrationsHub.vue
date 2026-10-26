@@ -3,6 +3,7 @@ import { showOverrideField } from '~/utils/uiMode'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import AppModal from '~/components/common/AppModal.vue'
+import { connectionRowState, type ConnectionRowState } from '~/utils/connectionRowState'
 
 // The Integrations hub: a single modal that lists the OPTIONAL external systems the WORKSPACE
 // can enable or link in — the ones that feed a run its context (source control, documents,
@@ -63,7 +64,8 @@ watch(
       query.value = ''
       void releaseHealth.ensureLoaded().catch(() => {})
       void publicApiKeys.ensureLoaded().catch(() => {})
-      void userSecrets.load().catch(() => {})
+      // Records a failed load in the store's `loadFailed` and never throws.
+      void userSecrets.load()
     }
   },
   // Lazy v-if mount: the hub mounts with `integrationsOpen` already true → load immediately.
@@ -88,6 +90,8 @@ interface IntegrationItem {
   connected?: boolean
   attention?: boolean
   attentionLabel?: string
+  /** A per-user row's load state (`connectionRowState`): checking and failed get their own copy. */
+  state?: ConnectionRowState
   recommended?: boolean
   onClick: () => void
 }
@@ -323,6 +327,7 @@ const groups = computed<IntegrationGroup[]>(() => {
           description: t('layout.integrationsHub.items.githubPat.description'),
           status: pat ? t('layout.integrationsHub.status.connected') : undefined,
           connected: pat,
+          state: connectionRowState(pat, userSecrets),
           onClick: () => go(ui.openUserSecrets),
         },
       ],
@@ -444,6 +449,18 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
                   </UBadge>
                   <UBadge v-else-if="item.attention" color="warning" variant="subtle" size="sm">
                     {{ item.attentionLabel || t('layout.integrationsHub.status.needsAttention') }}
+                  </UBadge>
+                  <span v-else-if="item.state === 'checking'" class="text-2xs text-dimmed">
+                    {{ t('common.checking') }}
+                  </span>
+                  <UBadge
+                    v-else-if="item.state === 'failed'"
+                    color="error"
+                    variant="subtle"
+                    size="sm"
+                    :data-testid="`integrations-failed-${item.key}`"
+                  >
+                    {{ t('common.loadFailed') }}
                   </UBadge>
                   <span v-else class="text-2xs text-dimmed">{{
                     t('layout.integrationsHub.status.notConnected')

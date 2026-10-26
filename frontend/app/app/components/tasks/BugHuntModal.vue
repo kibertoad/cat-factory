@@ -44,6 +44,12 @@ import {
 } from '~/utils/sourcePicker'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  failureDetail,
+  withReasonCopy,
+  type ReasonCopy,
+} from '~/composables/pipelineErrorToast/describeFailure'
 import { appliesIntakePredicate } from '~/utils/intakePredicates'
 import { boardFromService as isBoardFromService, huntRequest } from './BugHuntModal.logic'
 
@@ -169,7 +175,7 @@ const scopedRepo = computed(() => {
  * and it belongs beside the scope it invalidates.
  */
 const REPO_NOT_LINKED: TaskSourceReadReason = 'repo_not_linked'
-const huntNeedsRepo = computed(() => hunt.huntErrorReason === REPO_NOT_LINKED)
+const huntNeedsRepo = computed(() => hunt.huntError?.reason === REPO_NOT_LINKED)
 
 /**
  * The tracker CANNOT enumerate boards, so the user types the scope in themselves. Keyed on the
@@ -178,37 +184,29 @@ const huntNeedsRepo = computed(() => hunt.huntErrorReason === REPO_NOT_LINKED)
  */
 const BOARDS_UNSUPPORTED: TaskSourceReadReason = 'boards_unsupported'
 const boardIsFreeText = computed(
-  () => !hunt.boardsLoading && hunt.boardsErrorReason === BOARDS_UNSUPPORTED,
+  () => !hunt.boardsLoading && hunt.boardsError?.reason === BOARDS_UNSUPPORTED,
 )
 
 /**
  * The refusals this surface words ITSELF, keyed on the backend's reason.
  *
- * The backend does not localize prose, so a reason with no entry here renders the server's
- * untranslated English — the honest last resort for a cause this modal was not built to explain,
- * and the wrong answer for one it was. Both entries are reachable only from a client that
- * disagrees with the backend about which sources are repo-backed (a stale SPA build, a raced
+ * The backend does not localize prose, so a reason with no entry here gets the toast funnel's
+ * copy for its status class, with the server's English behind "Show details": fine for a cause
+ * this modal was not built to explain, and the wrong answer for one it was. Both entries are
+ * reachable only from a client that disagrees with the backend about which sources are repo-backed (a stale SPA build, a raced
  * `repoBacked` read), which is exactly when a user is least served by raw backend prose.
  * `repo_not_linked` is deliberately absent: it is not a message but a warning rendered beside the
  * scope it invalidates.
  */
-const REFUSAL_KEYS: Partial<Record<TaskSourceReadReason, string>> = {
+const REFUSAL_KEYS = {
   board_from_service: 'bugHunt.refusal.boardFromService',
   missing_board: 'bugHunt.refusal.missingBoard',
-}
-/** The translated key for a refusal reason this modal recognises, or undefined. */
-function refusalKey(reason: string | null): string | undefined {
-  return reason ? REFUSAL_KEYS[reason as TaskSourceReadReason] : undefined
-}
-function refusalText(reason: string | null, fallback: string | null): string | null {
-  const key = refusalKey(reason)
-  return key ? t(key) : fallback
-}
+} satisfies Partial<Record<TaskSourceReadReason, string>> & ReasonCopy
 
 /** A board read that failed for a reason the user has to fix — shown, never silently swallowed. */
 const boardsFailure = computed(() =>
   !hunt.boardsLoading && hunt.boardsError !== null && !boardIsFreeText.value
-    ? refusalText(hunt.boardsErrorReason, hunt.boardsError)
+    ? withReasonCopy(hunt.boardsError, REFUSAL_KEYS)
     : null,
 )
 
@@ -282,12 +280,13 @@ async function runHunt() {
   // Only a real failure is reported. A cancelled credential prompt leaves nothing to say, and
   // `repo_not_linked` is worded by the panel itself beside the scope it invalidates.
   const attempt = await hunt.hunt(source.value, input)
-  if (attempt === 'failed' && !huntNeedsRepo.value) {
-    // A recognised refusal reads in translated copy; anything else is the backend's prose, which
-    // is detail behind the disclosure rather than the headline.
-    const reasonKey = refusalKey(hunt.huntErrorReason)
-    if (reasonKey) actionToast.error('bugHunt.huntFailed', { description: t(reasonKey) })
-    else presentReported(hunt.huntError, 'bugHunt.huntFailed')
+  if (attempt === 'failed' && !huntNeedsRepo.value && hunt.huntError) {
+    // A recognised refusal reads in its own translated copy; anything else gets the funnel's copy
+    // for its status class. Either way the backend's prose is detail behind the disclosure.
+    const failure = withReasonCopy(hunt.huntError, REFUSAL_KEYS)
+    presentReported(failureDetail(failure, t), 'bugHunt.huntFailed', {
+      descriptionKey: failure.descriptionKey,
+    })
   }
 }
 
@@ -426,9 +425,12 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
             </p>
             <!-- A board read that failed for a fixable reason (unreachable site, expired
                  token): named, so the user isn't left with an empty picker and no cause. -->
-            <p v-else-if="boardsFailure" class="mt-1 text-xs text-app-warning-400">
-              {{ t('bugHunt.boardsFailed', { reason: boardsFailure }) }}
-            </p>
+            <FailureMessage
+              v-else-if="boardsFailure"
+              :failure="boardsFailure"
+              :title="t('bugHunt.boardsFailed')"
+              class="mt-1 text-xs text-app-warning-400"
+            />
           </UFormField>
 
           <UFormField

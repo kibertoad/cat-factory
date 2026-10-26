@@ -13,6 +13,7 @@ import { computed, ref } from 'vue'
 import type { ConsensusGroup, ConsensusStrategy } from '~/types/consensus'
 import { isSelectable } from '~/stores/models'
 import { uid } from '~/utils/catalog'
+import { selectNoneItem, selectNoneModel } from '~/utils/selectNone'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
@@ -118,16 +119,32 @@ const selectableModelIds = computed(() => {
     .map((m) => ({ id: m.id, label: m.label }))
 })
 
-// "Inherit the step's model" is a NAMED sentinel in the picker, never an empty string and never
-// `undefined`: a Select reserves both for "nothing selected", so an item carrying one either
-// throws (empty string) or renders the placeholder over its own label (undefined). One item list
-// serves both pickers; each binding below maps the sentinel to what its field holds on the wire,
-// which is `undefined` for a participant and an empty string for the synthesizer.
-const STEP_MODEL = '__step__'
+// "Inherit the step's model" is the shared "no value" row (`utils/selectNone.ts`), never an
+// `undefined` item: a Select reserves `undefined` for "nothing selected" and would render the
+// placeholder over the row's own label. One item list serves both pickers; each model below maps
+// the row to what its field holds on the wire, which is `undefined` for a participant and an
+// empty string for the synthesizer.
 const modelItems = computed(() => [
-  { label: t('settings.consensusGroups.editor.stepModel'), value: STEP_MODEL },
+  selectNoneItem(t('settings.consensusGroups.editor.stepModel')),
   ...selectableModelIds.value.map((m) => ({ label: m.label, value: m.id })),
 ])
+
+/** A participant's model pick; "the step's model" leaves `modelId` unset. */
+function participantModel(participant: EditorState['participants'][number]) {
+  return selectNoneModel(
+    () => participant.modelId,
+    (value) => {
+      participant.modelId = value || undefined
+    },
+  )
+}
+
+const synthesizerModel = selectNoneModel(
+  () => editor.value?.synthesizerModelId,
+  (value) => {
+    if (editor.value) editor.value.synthesizerModelId = value
+  },
+)
 
 /**
  * A threshold field's value as the contract wants it, or undefined when the author left it blank.
@@ -369,13 +386,7 @@ async function remove(group: ConsensusGroup) {
             class="min-w-40 flex-1"
             :placeholder="t('settings.consensusGroups.editor.framingPlaceholder')"
           />
-          <USelect
-            :model-value="p.modelId || STEP_MODEL"
-            :items="modelItems"
-            size="xs"
-            class="w-44"
-            @update:model-value="p.modelId = $event === STEP_MODEL ? undefined : String($event)"
-          />
+          <USelect v-model="participantModel(p).value" :items="modelItems" size="xs" class="w-44" />
           <IconButton
             icon="i-lucide-x"
             color="error"
@@ -393,15 +404,7 @@ async function remove(group: ConsensusGroup) {
           <SectionLabel as="label" class="mb-1 block">
             {{ t('settings.consensusGroups.editor.synthesizerLabel') }}
           </SectionLabel>
-          <USelect
-            :model-value="editor.synthesizerModelId || STEP_MODEL"
-            :items="modelItems"
-            size="sm"
-            class="w-full"
-            @update:model-value="
-              editor.synthesizerModelId = $event === STEP_MODEL ? '' : String($event)
-            "
-          />
+          <USelect v-model="synthesizerModel.value" :items="modelItems" size="sm" class="w-full" />
         </div>
         <div v-if="editor.strategy === 'debate'">
           <SectionLabel as="label" class="mb-1 block">
