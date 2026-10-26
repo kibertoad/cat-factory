@@ -4,11 +4,13 @@ import type { PlatformObservability, PlatformObservabilityWindow } from '~/types
 import { getPlatformObservabilityContract } from '@cat-factory/contracts'
 import { apiFailure, apiPending, apiResponse } from '~/stories/api'
 import { orgAccount } from '~/stories/accounts.stories.mocks'
+import { expectTrendToScale } from '~/stories/trend'
 import { withSeed } from '~/stories/withStores'
 import { useAccountsStore } from '~/stores/accounts'
 import { usePlatformObservabilityStore } from '~/stores/platformObservability'
 import { useUiStore } from '~/stores/ui'
 import OperatorDashboardPanel from './OperatorDashboardPanel.vue'
+import { screen, userEvent } from 'storybook/test'
 
 // The operator's dashboard for the active account, a full-screen overlay: run outcomes and the
 // success rate, an outcome trend, the gates' fixer statistics, the failure kinds, the runs live
@@ -16,10 +18,6 @@ import OperatorDashboardPanel from './OperatorDashboardPanel.vue'
 // 30 and 90 days come from a daily rollup, and the dashboard says how far that rollup reaches.
 // It loads the account's figures when it opens, so each story opens it and answers that read.
 // The figures are made up; the failure kinds and gate kinds are the backend's.
-//
-// The trend draws no bars: its row aligns the columns to the end (`items-end`), so each column
-// is only as tall as its content, and the bars' percentage heights resolve to nothing. Every
-// story that sends trend points shows an empty box with its legend (#2395).
 
 const HOUR = 3_600_000
 const DAY = 24 * HOUR
@@ -141,11 +139,16 @@ function dailyTrend(days: number, through: number) {
 }
 
 /**
- * The last 24 hours, counted live: the four tiles, an empty trend box (see above, #2395), both gates
- * with their clean pass rates, four failure kinds, the runs live now, and the duration
- * percentiles.
+ * The last 24 hours, counted live: the four tiles, the hourly trend, both gates with their clean
+ * pass rates, four failure kinds, the runs live now, and the duration percentiles. Each trend
+ * column draws at its hour's share of the busiest hour.
  */
-export const Default: Story = {}
+export const Default: Story = {
+  play: async () => {
+    const totals = hourlyTrend().map((p) => p.done + p.failed + p.other)
+    await expectTrendToScale('operator-trend', totals, 4)
+  },
+}
 
 /** The first load in flight: placeholder blocks. */
 export const Loading: Story = {
@@ -156,8 +159,14 @@ export const Loading: Story = {
   },
 }
 
-/** The read failed: the client's message as it arrives, and Retry. */
+/** The read failed: translated copy with the server's text behind "Show details", and Retry. */
 export const Failed: Story = {
+  // The translated copy above Retry; the server's own text only behind "Show details".
+  play: async () => {
+    await screen.findByText('Platform observability could not be loaded.')
+    await userEvent.click(await screen.findByTestId('failure-message-show-detail'))
+    await screen.findByText(/Internal server error/)
+  },
   parameters: {
     api: [
       apiFailure(getPlatformObservabilityContract, { pathParams: { accountId: orgAccount.id } }),

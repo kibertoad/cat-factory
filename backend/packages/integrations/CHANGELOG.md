@@ -1,5 +1,16 @@
 # @cat-factory/integrations
 
+## 0.178.1
+
+### Patch Changes
+
+- 6220716: Completing a tool-server OAuth grant now refuses a bad `state` with a 422 (`details.reason: oauth_state_invalid`) and a grant started by someone else with a 403 (`oauth_started_by_other_user`), where both were a 401. The SPA signs out on every 401, so an expired link used to drop a valid session and, after sign-in, replay the same dead `state`. `TOOL_SERVER_OAUTH_REASONS` in contracts names every reason this flow refuses with, so the SPA can give each one translated copy. Internal route, not part of `/api/v1`.
+- Updated dependencies [dff3a0d]
+- Updated dependencies [fa0ba67]
+- Updated dependencies [6220716]
+  - @cat-factory/contracts@0.375.0
+  - @cat-factory/kernel@0.363.1
+
 ## 0.178.0
 
 ### Minor Changes

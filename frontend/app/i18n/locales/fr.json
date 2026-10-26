@@ -102,7 +102,9 @@
       "keep": "Continuer l'édition"
     },
     "edit": "Modifier",
-    "pathInvalid": "Saisissez un chemin a l'interieur du depot (pas de \"..\", de chemins absolus ni d'antislashs)."
+    "pathInvalid": "Saisissez un chemin a l'interieur du depot (pas de \"..\", de chemins absolus ni d'antislashs).",
+    "checking": "Vérification…",
+    "loadFailed": "Échec du chargement"
   },
   "access": {
     "noBoardWrite": "Accès en lecture seule : vous pouvez consulter ce tableau mais pas le modifier.",
@@ -635,7 +637,7 @@
     "attachIssueDisabledConnect": "Connectez d’abord un suivi de tickets (Intégrations)",
     "attachIssueDisabledEnable": "Activez d’abord l’intégration du suivi de tickets",
     "importsOnAdd": "importé à l’ajout",
-    "unreadable": "Récupération impossible : {error}",
+    "unreadable": "Récupération impossible.",
     "pastedLink": {
       "offer": "Cette description renvoie à une page {source}. L’attacher comme contexte ?",
       "attach": "Attacher"
@@ -679,7 +681,12 @@
     "reason": {
       "description": {
         "reference_repo_not_found": "Le dépôt de l'architecture de référence de cette exécution n'est pas visible via la connexion de gestion de code de cet espace de travail. Soit l'entrée désigne le mauvais dépôt, soit la connexion n'y a pas accès : corrigez l'architecture de référence, ou accordez-lui l'accès, puis réessayez.",
-        "reference_repo_unreadable": "Le dépôt de l'architecture de référence de cette exécution n'a pas pu être lu pour l'instant, l'exécution n'a donc pas été lancée sur un modèle qu'elle pourrait ne pas savoir cloner. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie."
+        "reference_repo_unreadable": "Le dépôt de l'architecture de référence de cette exécution n'a pas pu être lu pour l'instant, l'exécution n'a donc pas été lancée sur un modèle qu'elle pourrait ne pas savoir cloner. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
+        "oauth_state_invalid": "Ce lien d’autorisation a expiré ou a déjà été utilisé, il ne peut donc pas finaliser la connexion.",
+        "oauth_started_by_other_user": "Quelqu’un d’autre a lancé cette connexion, donc seule cette personne peut la finaliser.",
+        "oauth_exchange_refused": "Le serveur d’autorisation du serveur d’outils a refusé l’autorisation. Demandez à l’opérateur de votre déploiement de vérifier les paramètres du client OAuth du serveur d’outils.",
+        "oauth_client_secret_unavailable": "Le secret du client OAuth du serveur d’outils n’est pas disponible sur ce tableau. Ajoutez-le dans la fenêtre Infrastructure.",
+        "tool_server_without_oauth": "Ce serveur d’outils n’utilise plus OAuth, il n’y a donc aucune connexion à finaliser."
       }
     },
     "action": {
@@ -1374,7 +1381,6 @@
       "title": "Structure",
       "hint": "Où vit cette tâche dans son service et quelles normes de code ses agents suivent.",
       "module": "Module",
-      "modulePlaceholder": "Choisissez ou saisissez un module",
       "moduleHint": "Le module du service auquel appartient cette tâche ; le tableau groupe les colonnes par module. Un module qui n’existe pas encore est créé lors de l’implémentation de la tâche.",
       "bestPractices": "Bonnes pratiques",
       "bestPracticesEmpty": "Aucune. Les agents suivent leurs consignes par défaut.",
@@ -2111,7 +2117,8 @@
       "helperFailures": "Échecs du réparateur",
       "exhausted": "Confiées à une personne",
       "hint": "Réussie sans réparateur veut dire que la vérification préalable a suffi et qu'aucun réparateur n'a été lancé. Les échecs du réparateur sont les tentatives dont le travail lui-même a planté, par opposition à celles qui se sont exécutées en laissant la vérification au rouge."
-    }
+    },
+    "loadFailed": "L'observabilité de la plateforme n'a pas pu être chargée."
   },
   "reports": {
     "title": "Rapports",
@@ -2384,6 +2391,7 @@
       },
       "invite": {
         "title": "Inviter un coéquipier",
+        "listTitle": "Invitations",
         "submit": "Inviter",
         "revoke": "Révoquer l'invitation",
         "created": "Invitation créée",
@@ -2398,6 +2406,7 @@
       "email": {
         "title": "Expéditeur des e-mails",
         "notEnabled": "L'envoi d'e-mails n'est pas activé sur ce déploiement. Les invitations produisent quand même un lien d'acceptation partageable.",
+        "notConnected": "Aucun expéditeur d'e-mails n'est connecté. Un administrateur du compte peut en connecter un.",
         "connectedAs": "Connecté via {provider} en tant que {from}",
         "disconnect": "Déconnecter",
         "connect": "Connecter l'expéditeur des e-mails",
@@ -2621,7 +2630,9 @@
       "budget": "Budget",
       "tokens": "Jetons",
       "resume": "Reprendre quand même",
-      "resumeHint": "Reprendre continue à générer des dépenses ; cela se mettra de nouveau en pause si vous dépassez encore le budget."
+      "resumeHint": "Reprendre continue à générer des dépenses ; cela se mettra de nouveau en pause si vous dépassez encore le budget.",
+      "resumeFailed": "Impossible de reprendre l’exécution des agents",
+      "refreshFailed": "Exécutions reprises, mais le tableau ne s’est pas actualisé"
     },
     "personalSetup": {
       "title": "Ma configuration",
@@ -2819,6 +2830,7 @@
       "status": {
         "connected": "Connecté",
         "keyConnected": "Clé connectée",
+        "keyDisabled": "Clé désactivée",
         "notConnected": "Non connecté",
         "recommended": "Recommandé",
         "connectedCount": "aucun connecté | {count} connecté | {count} connectés"
@@ -2974,12 +2986,13 @@
     "deny": "Annuler",
     "back": "Retour à l'application",
     "noWorkspaces": "Vous n'avez encore aucun tableau auquel le connecter.",
+    "noAdminWorkspaces": "Vous n'êtes administrateur d'aucun de vos tableaux. Demandez à un administrateur du tableau de le connecter.",
     "revokeHint": "Cela émet une clé d'API que vous pouvez révoquer à tout moment depuis les réglages du tableau.",
     "error": {
       "title": "Cette connexion n'a pas pu être établie",
       "noRequest": "Cette page a été ouverte sans demande d'autorisation. Lancez la connexion depuis votre hôte MCP.",
       "expired": "Cette demande d'autorisation est invalide ou a expiré. Relancez la connexion depuis votre hôte MCP.",
-      "failed": "La décision n'a pas pu être enregistrée. Relancez la connexion depuis votre hôte MCP."
+      "decisionFailed": "La décision n'a pas pu être enregistrée."
     }
   },
   "settings": {
@@ -3393,7 +3406,9 @@
           "thresholds": "Utiliser les seuils",
           "always": "Toujours fusionner automatiquement",
           "never": "Toujours exiger une revue"
-        }
+        },
+        "loadFailed": "Impossible de charger l’historique des fusions",
+        "unavailable": "Historique indisponible"
       },
       "roleRules": {
         "heading": "Limites selon le rôle qui lance l'exécution",
@@ -3552,7 +3567,7 @@
           "doneHint": "Les exécutions de ce tableau peuvent désormais utiliser le serveur d’outils avec le compte auquel vous vous êtes connecté.",
           "back": "Retour à l’application",
           "failedTitle": "La connexion n’a pas pu être finalisée",
-          "failed": "L’autorisation n’a pas pu être menée à bien. Relancez la connexion depuis la fenêtre Infrastructure.",
+          "restartHint": "Relancez la connexion depuis la fenêtre Infrastructure.",
           "missingParams": "Il manque à ce lien les valeurs renvoyées par le fournisseur, il n’y a donc rien à finaliser. Relancez la connexion."
         }
       },
@@ -3828,6 +3843,7 @@
       "apiKey": "Clé d'API",
       "connectAndBrowse": "Connecter et parcourir",
       "keyConnected": "Clé OpenRouter connectée",
+      "keyDisabled": "Votre clé OpenRouter est désactivée. Réactivez-la dans Fournisseurs et clés pour parcourir les modèles.",
       "manageKeys": "Gérer dans Fournisseurs et clés",
       "refresh": "Actualiser le catalogue",
       "enableRecommended": "Activer les recommandés",
@@ -3854,7 +3870,8 @@
       "metered": "API facturée",
       "illustrative": "Les coûts affichés pour les abonnements sont indicatifs : ces forfaits sont à tarif fixe et non facturés au jeton.",
       "tokens": "{input} entrée / {output} sortie",
-      "calls": "{count} appels"
+      "calls": "{count} appels",
+      "loadFailed": "L'utilisation n'a pas pu être chargée."
     },
     "workspaceSettings": {
       "title": "Paramètres de l'espace de travail",
@@ -4691,7 +4708,8 @@
       },
       "repoType": "Type de dépôt",
       "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement).",
-      "prefillProviderMismatch": "Le lien visait {repo} chez un autre hébergeur, et ce tableau est connecté à {connected}. Cherchez le dépôt à la main, ou ouvrez le lien sur un tableau connecté à son hébergeur."
+      "prefillProviderMismatch": "Le lien visait {repo} chez un autre hébergeur, et ce tableau est connecté à {connected}. Cherchez le dépôt à la main, ou ouvrez le lien sur un tableau connecté à son hébergeur.",
+      "searchFailed": "Impossible de rechercher des dépôts"
     },
     "repoTree": {
       "root": "racine",
@@ -4869,7 +4887,7 @@
     "picker": {
       "searchPlaceholder": "Recherchez des pages ou collez une URL ou un ID…",
       "refPlaceholder": "Collez l'URL ou l'ID d'une page…",
-      "searchFailed": "Échec de la recherche : {error}",
+      "searchFailed": "Échec de la recherche.",
       "importedBadge": "importé",
       "attachByReference": "Joindre {ref} par référence",
       "noMatches": "Aucune page correspondante.",
@@ -4897,7 +4915,7 @@
       "searchFilesPlaceholder": "Rechercher des fichiers par chemin…",
       "searchFilesHint": "Saisissez du texte pour rechercher des fichiers dans ce dépôt.",
       "noFileMatches": "Aucun fichier correspondant.",
-      "filesFailed": "Impossible de charger les fichiers : {error}",
+      "filesFailed": "Impossible de charger les fichiers.",
       "moreFiles": "Affichage des {count} premiers résultats ; affinez votre recherche pour la restreindre."
     },
     "import": {
@@ -5029,7 +5047,7 @@
     "picker": {
       "searchPlaceholder": "Rechercher des tickets ou coller une URL/clé…",
       "refPlaceholder": "Coller l'URL ou la clé d'un ticket…",
-      "searchFailed": "Échec de la recherche : {error}",
+      "searchFailed": "Échec de la recherche.",
       "searchNeedsRepo": "Ce service n'est encore lié à aucun dépôt, il n'y a donc rien à rechercher. Liez-le à un dépôt ou collez l'URL d'un ticket pour en joindre un directement.",
       "imported": "importé",
       "attachByReference": "Joindre {ref} par référence",
@@ -5119,7 +5137,7 @@
     "boardPlaceholder": "Clé de projet ou id d'équipe",
     "boardFromService": "Le dépôt lié à ce service",
     "boardNeedsRepo": "Aucun dépôt n'est lié à ce service : il n'y a donc pas de tickets à explorer. Liez-en un depuis le panneau du service.",
-    "boardsFailed": "Impossible de charger les tableaux : {reason}",
+    "boardsFailed": "Impossible de charger les tableaux.",
     "issueType": "Type de ticket",
     "issueTypeHelp": "Par défaut bug. Ignoré par les gestionnaires sans types de tickets.",
     "issueTypeUnsupported": "{tracker} n’a aucun type de ticket signifiant « bug », ce filtre n’est donc pas appliqué. Restreignez plutôt l’analyse avec une étiquette.",
@@ -5821,7 +5839,8 @@
       "park": "A demandé à une personne",
       "bounce": "Renvoyé pour reprise",
       "fail": "Exécution échouée"
-    }
+    },
+    "resolveFailed": "Impossible d’enregistrer votre choix"
   },
   "inputGate": {
     "blockedTitle": "Cette tâche a besoin de plus de détails avant de s'exécuter",
@@ -6709,7 +6728,8 @@
     "outcome": {
       "success": "réussite",
       "failure": "échec"
-    }
+    },
+    "loadFailed": "Les journaux de provisionnement n'ont pas pu être chargés."
   },
   "kaizen": {
     "title": "Kaizen",
@@ -6750,7 +6770,8 @@
         "recommendations": "Recommandations"
       },
       "empty": "Aucune évaluation pour l'instant."
-    }
+    },
+    "loadFailed": "Impossible de charger les évaluations Kaizen"
   },
   "recurring": {
     "runEvery": "Exécuter toutes les",
@@ -6873,7 +6894,8 @@
         "placeholder": "Collez l'URL d'un fichier ou d'un dossier GitHub (par ex. https://github.com/owner/repo/tree/main/docs)",
         "action": "Rechercher",
         "invalid": "Ceci ne ressemble pas à l'URL d'un fichier ou d'un dossier de dépôt.",
-        "notFound": "Aucun dépôt accessible ne correspond à {slug}. Vérifiez l'URL ou connectez d'abord le dépôt."
+        "notFound": "Aucun dépôt accessible ne correspond à {slug}. Vérifiez l'URL ou connectez d'abord le dépôt.",
+        "failed": "Impossible de rechercher cette URL."
       }
     },
     "sources": {
@@ -7766,18 +7788,25 @@
       "run": "Lancer les vérifications",
       "none": "Cette recette ne déclare aucune vérification préalable.",
       "unavailable": "Les vérifications préalables s'exécutent sur la machine locale et ne sont pas disponibles sur ce déploiement.",
-      "optional": "facultatif"
+      "optional": "facultatif",
+      "failed": "Les vérifications préalables n'ont pas pu s'exécuter."
     },
     "save": {
       "handlerLabel": "Libellé du gestionnaire",
       "handlerHint": "Le gestionnaire Docker Compose de l'espace de travail que le Deployer utilise pour provisionner cette stack.",
       "summary": "Enregistre une recette Docker Compose sur « {frame} » (exposant le service « {service} ») et enregistre le gestionnaire de l'espace de travail.",
       "saved": "Enregistré. Le Deployer provisionnera cette stack lors de l'exécution d'un pipeline.",
-      "save": "Enregistrer la configuration"
+      "save": "Enregistrer la configuration",
+      "failed": "L'environnement n'a pas pu être enregistré.",
+      "errors": {
+        "missingService": "Choisissez d'abord un cadre et un service compose exposé.",
+        "invalidPort": "Saisissez un port exposé valide (de 1 à 65535)."
+      }
     },
     "trial": {
       "hint": "Provisionnez éventuellement cet environnement maintenant pour tester la recette.",
-      "run": "Provisionnement d'essai"
+      "run": "Provisionnement d'essai",
+      "failed": "Le provisionnement d'essai n'a pas pu démarrer."
     }
   },
   "forkDecision": {

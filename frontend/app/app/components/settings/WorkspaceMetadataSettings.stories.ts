@@ -13,8 +13,6 @@ import WorkspaceMetadataSettings from './WorkspaceMetadataSettings.vue'
 // fields come from the `workspaceMetadataFields` slot of the app registry, which no first-party
 // module fills, so a decorator adds them to the slots this story's components see. The values
 // come from the board's stored settings. The deployment, its fields and the values are made up.
-// No story shows a select field: its not-set item has the value '', and Reka's SelectItem throws
-// for an empty value, so Storybook shows its error display (#2393).
 const studioFields: WorkspaceMetadataFieldDefinition[] = [
   { key: 'maxPlayers', label: 'Players per match', type: 'number', placeholder: '8' },
   {
@@ -22,6 +20,15 @@ const studioFields: WorkspaceMetadataFieldDefinition[] = [
     label: 'Map editor project',
     placeholder: 'proj-0000',
     description: 'The project id in the studio map editor.',
+  },
+  {
+    key: 'serverRegion',
+    label: 'Match server region',
+    type: 'select',
+    options: [
+      { value: 'eu-west', label: 'Europe (west)' },
+      { value: 'us-east', label: 'US (east)' },
+    ],
   },
 ]
 
@@ -61,7 +68,7 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-/** A number and a text field, each filled from the board's stored values. */
+/** A number and a text field filled from the board's stored values, and a select not set yet. */
 export const Default: Story = {}
 
 /**

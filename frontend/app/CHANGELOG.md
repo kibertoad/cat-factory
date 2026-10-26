@@ -1,5 +1,55 @@
 # @cat-factory/app
 
+## 0.321.7
+
+### Patch Changes
+
+- be8825e: Seven selects no longer throw when they render or open. Each gave its "no value" row (inherit, not set, the default) the value `''`, which Reka's `SelectItem` and `ComboboxItem` refuse. The row now carries a non-empty sentinel from `utils/selectNone.ts`, and each select binds through `selectNoneModel`, which maps it back to the empty value, so what is stored and sent does not change. `DescribeWorkModal` and `ConsensusGroupsSection` move from their own sentinels to the shared one. A workspace metadata `select` field whose options include `''` or `__none__` is dropped and named in the console, like a malformed key. The task module picker's unused placeholder copy is removed. A new guard, `scripts/check-frontend-select-values.mjs`, refuses a select item with `value: ''`.
+
+## 0.321.6
+
+### Patch Changes
+
+- dff3a0d: A disabled API key no longer marks its provider as configured in the SPA. A new member-readable route, `GET /workspaces/:ws/configured-providers`, serves the direct providers a run can reach, from the same resolution the model catalog and the run-start guard use, so it also counts account-scoped keys and leaves out a gateway with no base URL. The model providers hub and the OpenRouter panel read it, and show a turned-off key as "Key disabled" with a way back to the key list instead of a form to paste a second key.
+- 563c56a: The focus view shows the Run pipeline menu for a task beside the dry-run badge or switch, where before the dry-run control replaced it. An initiative no longer gets the menu: it keeps only Run planning, like the inspector. The menu locks and names the reason the same way the inspector does (no run permission, or unmerged dependencies), and its trigger shows the dry-run mode. The assistant no longer opens an added service frame in the focus view; it selects it on the board.
+- 72096e5: Failures shown inline in a panel now read the same as the failure toasts: a translated description
+  first, with the server's own message and the request ID behind "Show details", and a "Copy
+  details" button. This covers the sites listed in #2420: the settings connection tests, GitLab
+  connect, the MCP authorize screen, the audit log and usage, the inspector detect buttons and context
+  pickers, and the PR review, bug fishing, fork decision, follow-up, bug hunt, sandbox, platform
+  observability, provisioning log and environment wizard stores. A few sibling surfaces still show
+  raw text and follow separately.
+- 89bf0f6: Show a failed load or action as an error toast instead of an unhandled rejection: the Kaizen screen and the run window's Kaizen section, Resume anyway on the spend banner, the merge track record beside the class rules, the repository search, and a refused judge choice. A failed Kaizen overview or merge track record now says it could not be loaded instead of showing empty history, a Kaizen 503 that carries an outage reason is reported rather than read as "not configured", and repeated search or Kaizen failures replace one toast instead of stacking new ones.
+- 6220716: The MCP OAuth callback page now says why the backend refused a grant. It read the error from a field the API client does not set, so every refusal showed the same generic line. The page now renders the refusal through the shared inline `FailureMessage`: translated copy for the status class or reason, the backend's message behind "Show details", and "Copy details". Each reason the grant can be refused with has its own copy, and the page says to start the connection again where that helps.
+- 48fcc3d: My setup now loads its rows when it opens, so the GitHub token, local runner and personal
+  subscription badges show what you have connected. Before, the modal mounted already open and its
+  load never ran, so each row showed only what another screen had loaded.
+  
+  A row for one of these per-user connections, in My setup, the Model providers hub and the
+  Integrations hub, now says "Checking…" while its status loads and "Couldn't load" when the load
+  fails (a server error, an outage or no connection), instead of "Not connected". A signed-out
+  caller or a module the deployment has not configured still reads as nothing connected. The
+  notification routing panel now treats an outage 503 as a failed load too, where before any 503
+  read as "not configured".
+- fa0ba67: The SPA no longer offers writes the backend refuses for the caller's role. In the follow-up window,
+  the follow-up's Dismiss is off for a board viewer, like its siblings. The add-task form refuses a
+  viewer whichever surface opened it, and the describe-work dialog turns More kinds and Attach context
+  off for a viewer, with the read-only reason as the title. The account Team tab hides Invite, Revoke,
+  and the email sender's Connect and Disconnect from anyone who is not an account admin, and titles
+  the invitation list "Invitations" for them. The MCP consent screen offers only the boards where the
+  person holds the permission an approval needs, and says so when there are none.
+  
+  `WORKSPACE_ROLE_PERMISSIONS` and `permissionsForRole` move from `@cat-factory/kernel` to
+  `@cat-factory/contracts`, so the SPA reads a board's `viewerRole` with the same map the backend
+  enforces. Kernel re-exports both, so its imports do not change. Contracts also adds
+  `MCP_AUTHORIZATION_APPROVE_PERMISSION`, which the consent controller and the consent screen both
+  read.
+- 4766095: Draw the bars in the Reports spend trend and the Operator dashboard outcome trend (#2395). Both charts now share one column component: the minimum height applies once per column instead of to each segment, so columns stay to scale and in rank order; a segment with no value is not drawn; and the rounded corners follow whichever segment is at the top or bottom.
+- Updated dependencies [dff3a0d]
+- Updated dependencies [fa0ba67]
+- Updated dependencies [6220716]
+  - @cat-factory/contracts@0.375.0
+
 ## 0.321.5
 
 ### Patch Changes

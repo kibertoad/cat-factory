@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useKaizenStore } from '~/stores/kaizen'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { ApiError } from '~/composables/api/errors'
 import type { KaizenGrading } from '~/types/domain'
 
 /** Minimal grading factory — only the fields the store reconciles/reads. */
@@ -196,5 +197,59 @@ describe('kaizen store — live-push clobber guards', () => {
 
     expect(store.history).toHaveLength(1)
     expect(store.history[0]!.id).toBe('fresh')
+  })
+})
+
+describe('kaizen store: failed loads', () => {
+  beforeEach(() => {
+    useWorkspaceStore().workspaceId = 'ws1'
+  })
+
+  function refused(status: number, reason?: string) {
+    return new ApiError(status, {
+      error: {
+        code: 'unavailable',
+        message: 'refused',
+        ...(reason ? { details: { reason } } : {}),
+      },
+    })
+  }
+
+  it('reads a 503 with no reason as "not configured" and does not throw', async () => {
+    vi.stubGlobal('useApi', () => ({ getKaizenOverview: () => Promise.reject(refused(503)) }))
+    const store = useKaizenStore()
+    await store.loadOverview()
+    expect(store.available).toBe(false)
+    expect(store.overviewFailed).toBe(false)
+  })
+
+  it('rethrows a 503 that carries an outage reason, and records the overview as failed', async () => {
+    const outage = refused(503, 'service_catalog_unreachable')
+    vi.stubGlobal('useApi', () => ({ getKaizenOverview: () => Promise.reject(outage) }))
+    const store = useKaizenStore()
+    await expect(store.loadOverview()).rejects.toBe(outage)
+    expect(store.available).not.toBe(false)
+    expect(store.overviewFailed).toBe(true)
+  })
+
+  it('clears the failure once an overview lands', async () => {
+    let fail = true
+    vi.stubGlobal('useApi', () => ({
+      getKaizenOverview: () =>
+        fail ? Promise.reject(refused(500)) : Promise.resolve({ gradings: [], verified: [] }),
+    }))
+    const store = useKaizenStore()
+    await expect(store.loadOverview()).rejects.toThrow()
+    fail = false
+    await store.loadOverview()
+    expect(store.overviewFailed).toBe(false)
+  })
+
+  it('rethrows a run read that fails with an outage 503', async () => {
+    const outage = refused(503, 'service_catalog_unreachable')
+    vi.stubGlobal('useApi', () => ({ getKaizenForExecution: () => Promise.reject(outage) }))
+    const store = useKaizenStore()
+    await expect(store.loadForExecution('exec1')).rejects.toBe(outage)
+    expect(store.available).not.toBe(false)
   })
 })

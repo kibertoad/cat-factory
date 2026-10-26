@@ -519,3 +519,31 @@ export const BOOTSTRAP_REFERENCE_REASONS = [
 ] as const
 
 export type BootstrapReferenceReason = (typeof BOOTSTRAP_REFERENCE_REASONS)[number]
+
+/**
+ * Machine-readable reasons completing a tool-server OAuth grant is refused, carried on
+ * `error.details.reason` so the callback page can say what went wrong in translated copy.
+ *
+ *  - `oauth_state_invalid` (422): the sealed `state` is absent, forged, expired or not an
+ *    authorization request. One reason for all four, because telling them apart would only tell
+ *    someone guessing which guess was closer. Not a 401: the caller's session is fine, and the SPA
+ *    signs out on every 401, which would loop the page through login back to the same dead state.
+ *  - `oauth_started_by_other_user` (403): someone other than the signed-in user started the flow.
+ *  - `oauth_exchange_refused` (422): the vendor's authorization server refused the grant for a
+ *    reason a retry will not change. Also raised when STARTING a grant.
+ *  - `oauth_client_secret_unavailable` (422): the server declares a client secret this board
+ *    cannot resolve.
+ *  - `tool_server_without_oauth` (422): the server no longer declares OAuth.
+ *
+ * The SPA keys an exhaustive `Record<ToolServerOAuthReason, …>` of message keys off this, so
+ * adding a reason without wording trips the frontend typecheck.
+ */
+export const TOOL_SERVER_OAUTH_REASONS = [
+  'oauth_state_invalid',
+  'oauth_started_by_other_user',
+  'oauth_exchange_refused',
+  'oauth_client_secret_unavailable',
+  'tool_server_without_oauth',
+] as const
+
+export type ToolServerOAuthReason = (typeof TOOL_SERVER_OAUTH_REASONS)[number]

@@ -12,16 +12,26 @@ import TakeoverShell from '~/components/common/TakeoverShell.vue'
 const ui = useUiStore()
 const kaizen = useKaizenStore()
 const { t, d } = useI18n()
+const { present } = usePipelineErrorToast()
 
 const open = computed(() => ui.kaizenScreenOpen)
 
 watch(
   open,
   (isOpen) => {
-    if (isOpen) void kaizen.loadOverview()
+    if (isOpen) loadOverview()
   },
   { immediate: true },
 )
+
+// The store rethrows every failure except the reason-less 503 that means this deployment does
+// not wire Kaizen. A failed load also marks the lists as absent (`overviewFailed`), so the screen
+// says so after the toast is closed rather than claiming there are no gradings.
+function loadOverview() {
+  kaizen
+    .loadOverview()
+    .catch((e: unknown) => present(e, 'kaizen.loadFailed', undefined, { dedupe: true }))
+}
 
 function close() {
   ui.closeKaizen()
@@ -89,7 +99,7 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
               color="neutral"
               variant="ghost"
               :loading="kaizen.loadingOverview"
-              @click="kaizen.loadOverview()"
+              @click="loadOverview"
             >
               {{ t('kaizen.refresh') }}
             </UButton>
@@ -125,8 +135,10 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
             <EmptyState
               v-else-if="kaizen.verified.length === 0"
               compact
-              icon="i-lucide-badge-check"
-              :title="t('kaizen.verifiedCombos.empty')"
+              :icon="kaizen.overviewFailed ? 'i-lucide-triangle-alert' : 'i-lucide-badge-check'"
+              :title="
+                kaizen.overviewFailed ? t('kaizen.loadFailed') : t('kaizen.verifiedCombos.empty')
+              "
             />
             <ul v-else class="space-y-2">
               <li
@@ -231,7 +243,13 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
                 </div>
               </template>
               <template #empty>
-                <EmptyState compact icon="i-lucide-history" :title="t('kaizen.history.empty')" />
+                <EmptyState
+                  compact
+                  :icon="kaizen.overviewFailed ? 'i-lucide-triangle-alert' : 'i-lucide-history'"
+                  :title="
+                    kaizen.overviewFailed ? t('kaizen.loadFailed') : t('kaizen.history.empty')
+                  "
+                />
               </template>
             </UTable>
           </section>

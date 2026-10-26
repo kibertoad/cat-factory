@@ -1,4 +1,5 @@
 import type { WorkspaceMetadata } from '~/types/domain'
+import { SELECT_NONE } from '~/utils/selectNone'
 
 /**
  * CUSTOM WORKSPACE METADATA FIELDS — the deployment declares the fields in code, an operator
@@ -91,12 +92,23 @@ export function toMetadataBag(stored: WorkspaceMetadata): Readonly<Record<string
 }
 
 /**
+ * Whether a `select` field declares an option the editor cannot hold: an empty value, which
+ * Reka's `SelectItem` throws on and which breaks the whole metadata tab, or the "not set" row's
+ * sentinel (`utils/selectNone.ts`), which would read back as not set and never be saved.
+ */
+function hasUnholdableOption(definition: WorkspaceMetadataFieldDefinition): boolean {
+  if (definition.type !== 'select') return false
+  return (definition.options ?? []).some((o) => o.value === '' || o.value === SELECT_NONE)
+}
+
+/**
  * The fields to render: valid keys only, first declaration wins on a duplicate, ordered.
  *
  * A code-shipped definition is trusted the way a code-shipped task type is — no boot-time
  * registry validation — so a malformed key is dropped HERE, with the rejects returned rather
  * than swallowed, and the caller warns. Rendering it instead would produce an editor whose
- * every save 422s with a message about a key the operator never typed.
+ * every save 422s with a message about a key the operator never typed. A `select` field with
+ * an option value the editor cannot hold ({@link hasUnholdableOption}) is dropped the same way.
  */
 export function resolveMetadataFields(definitions: readonly WorkspaceMetadataFieldDefinition[]): {
   fields: WorkspaceMetadataFieldDefinition[]
@@ -106,7 +118,11 @@ export function resolveMetadataFields(definitions: readonly WorkspaceMetadataFie
   const rejected: WorkspaceMetadataFieldDefinition[] = []
   const seen = new Set<string>()
   for (const definition of definitions) {
-    if (!isValidMetadataKey(definition.key) || seen.has(definition.key)) {
+    if (
+      !isValidMetadataKey(definition.key) ||
+      seen.has(definition.key) ||
+      hasUnholdableOption(definition)
+    ) {
       rejected.push(definition)
       continue
     }

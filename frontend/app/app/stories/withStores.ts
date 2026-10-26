@@ -14,6 +14,7 @@
 // reads the store on first render already sees the data.
 import { h } from 'vue'
 import type { Decorator } from '@storybook/vue3'
+import { WORKSPACE_ROLE_PERMISSIONS } from '@cat-factory/contracts'
 import type {
   DocumentConnection,
   DocumentSourceDescriptor,
@@ -140,11 +141,14 @@ export function seedLaneView(groupKey: LaneGroupKey = 'none'): void {
 
 /**
  * Make the viewer a board viewer: read-only, so every write and run control disables. The
- * permissions are the backend's for the role (`WORKSPACE_ROLE_PERMISSIONS` in kernel). With no
+ * permissions are the backend's for the role (`WORKSPACE_ROLE_PERMISSIONS`). With no
  * access seeded the SPA allows everything, as it does before the snapshot arrives.
  */
 export function seedViewer(): void {
-  useWorkspaceStore().access = { role: 'viewer', permissions: ['workspace.read'] }
+  useWorkspaceStore().access = {
+    role: 'viewer',
+    permissions: [...WORKSPACE_ROLE_PERMISSIONS.viewer],
+  }
 }
 
 /**
@@ -154,7 +158,7 @@ export function seedViewer(): void {
 export function seedMember(): void {
   useWorkspaceStore().access = {
     role: 'member',
-    permissions: ['workspace.read', 'board.write', 'runs.execute'],
+    permissions: [...WORKSPACE_ROLE_PERMISSIONS.member],
   }
 }
 

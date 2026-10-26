@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
+import { createUserScopedLoad } from '~/stores/userScopedLoad'
 import type {
   PersonalSubscriptionStatus,
   StorePersonalSubscriptionInput,
@@ -120,22 +121,13 @@ export const usePersonalSubscriptionsStore = defineStore('personalSubscriptions'
     return personalPasswordCacheKey(apiBase, auth.user?.id)
   }
   const subscriptions = ref<PersonalSubscriptionStatus[]>([])
-  const loading = ref(false)
+  const { loading, loadFailed, load } = createUserScopedLoad({
+    fetch: () => api.listPersonalSubscriptions(),
+    apply: ({ subscriptions: list }) => (subscriptions.value = list),
+    reset: () => (subscriptions.value = []),
+  })
   /** When set, a credential modal should open to satisfy the pending prompt. */
   const pending = ref<PendingCredential | null>(null)
-
-  async function load() {
-    loading.value = true
-    try {
-      const { subscriptions: list } = await api.listPersonalSubscriptions()
-      subscriptions.value = list
-    } catch {
-      // Auth disabled / not signed in / feature off → no personal subscriptions surface.
-      subscriptions.value = []
-    } finally {
-      loading.value = false
-    }
-  }
 
   async function store(input: StorePersonalSubscriptionInput) {
     const status = await api.storePersonalSubscription(input)
@@ -288,6 +280,7 @@ export const usePersonalSubscriptionsStore = defineStore('personalSubscriptions'
   return {
     subscriptions,
     loading,
+    loadFailed,
     pending,
     renewals,
     load,

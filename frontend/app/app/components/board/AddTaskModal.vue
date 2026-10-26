@@ -49,6 +49,10 @@ import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import { buildTaskTypePickerRows } from '~/utils/taskTypePicker'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import AppModal from '~/components/common/AppModal.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 const ui = useUiStore()
 // Interface tier. In BASIC mode this form asks for the task itself (type, title,
@@ -59,6 +63,7 @@ const ui = useUiStore()
 // would have shown, so a basic-mode task behaves identically, it just asks less. The
 // inspector's `TaskRunSettings` applies the same split after creation.
 const uiMode = useUiModeStore()
+const access = useWorkspaceAccess()
 const board = useBoardStore()
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
@@ -594,7 +599,7 @@ async function resolvePendingIssueBodies() {
   resolvingIssueBodies.value = true
   try {
     const resolved: Record<string, string> = {}
-    const failed: Record<string, string> = {}
+    const failed: Record<string, DescribedFailure> = {}
     for (const item of unresolved) {
       const source = item.source as TaskSourceKind
       const cached = tasks.tasks.find(
@@ -609,7 +614,7 @@ async function resolvePendingIssueBodies() {
         const imported = await tasks.importTask(source, item.externalId)
         if ((imported.description ?? '').trim()) resolved[contextKey(item)] = imported.description
       } catch (e) {
-        failed[contextKey(item)] = e instanceof Error ? e.message : String(e)
+        failed[contextKey(item)] = describeFailure(e)
       }
     }
     if (Object.keys(resolved).length || Object.keys(failed).length) {
@@ -760,6 +765,8 @@ const modalOpen = computed({
 const RALPH_VALIDATION_COMMAND_ID = 'ralph.validationCommand'
 
 const canAdd = computed(() => {
+  // Every opener of this form is refused for a viewer here, so none of them has to remember to.
+  if (!access.canWriteBoard.value) return false
   if (isRecurring.value) return recurringFrameId.value !== null
   // A review task doesn't require a title (the PR reference is the subject — we derive one),
   // so it only needs a valid target PR. Every other type still requires a title.
@@ -1466,6 +1473,7 @@ function createRefusalMessage(error: unknown): string | null {
           :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
           :loading="saving"
           :disabled="!canAdd"
+          :title="access.canWriteBoard.value ? undefined : t('access.noBoardWrite')"
           @click="add"
         >
           {{ isRecurring ? t('board.addTask.continue') : t('board.addTask.submit') }}

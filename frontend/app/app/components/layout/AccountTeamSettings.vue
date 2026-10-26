@@ -14,7 +14,7 @@ import EmptyState from '~/components/common/EmptyState.vue'
 // Team settings for an org account: the member roster (with combinable admin /
 // developer / product roles), pending email invitations, and the per-account
 // transactional-email sender. Admin-only mutations are enforced by the backend; this
-// surface degrades to a read-only view when the caller isn't an admin (actions 4xx).
+// surface hides them when the caller isn't an admin, so it reads as a read-only view.
 const props = defineProps<{ accountId: string }>()
 
 const accounts = useAccountsStore()
@@ -270,12 +270,17 @@ async function disconnectEmail() {
       </ul>
     </section>
 
-    <!-- invitations -->
-    <section v-if="isOrg">
+    <!-- invitations: a non-admin cannot invite, so they get the list alone, and no section when
+         there is nothing to list -->
+    <section v-if="isOrg && (isAdmin || accounts.invitations.length)">
       <h3 class="mb-2 font-semibold text-highlighted">
-        {{ t('layout.accountTeam.invite.title') }}
+        {{
+          isAdmin ? t('layout.accountTeam.invite.title') : t('layout.accountTeam.invite.listTitle')
+        }}
       </h3>
-      <UForm class="flex gap-2" @submit="sendInvite">
+      <!-- Inviting, revoking and the email sender below are account-admin writes
+           (`InvitationService`, `AccountController`): hidden for anyone else. -->
+      <UForm v-if="isAdmin" class="flex gap-2" @submit="sendInvite">
         <UInput
           v-model="inviteEmail"
           type="email"
@@ -301,7 +306,7 @@ async function disconnectEmail() {
               {{ invitationStatusLabel(inv.status) }}
             </span>
             <UButton
-              v-if="inv.status === 'pending'"
+              v-if="isAdmin && inv.status === 'pending'"
               size="xs"
               color="error"
               variant="ghost"
@@ -331,11 +336,18 @@ async function disconnectEmail() {
             </template>
             <template #from>{{ accounts.emailConnection.fromAddress }}</template>
           </i18n-t>
-          <UButton size="xs" color="error" variant="soft" :loading="busy" @click="disconnectEmail">
+          <UButton
+            v-if="isAdmin"
+            size="xs"
+            color="error"
+            variant="soft"
+            :loading="busy"
+            @click="disconnectEmail"
+          >
             {{ t('layout.accountTeam.email.disconnect') }}
           </UButton>
         </div>
-        <UForm v-else class="space-y-2" @submit="connectEmail">
+        <UForm v-else-if="isAdmin" class="space-y-2" @submit="connectEmail">
           <USelect v-model="emailProvider" :items="EMAIL_PROVIDER_ITEMS" class="w-full" />
           <UInput
             v-model="emailFrom"
@@ -352,6 +364,7 @@ async function disconnectEmail() {
             {{ t('layout.accountTeam.email.connect') }}
           </UButton>
         </UForm>
+        <p v-else class="text-dimmed">{{ t('layout.accountTeam.email.notConnected') }}</p>
       </template>
     </section>
 

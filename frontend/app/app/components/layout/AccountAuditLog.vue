@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { apiErrorEnvelope } from '~/composables/api/errors'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 import type { AuditEventWire } from '@cat-factory/contracts'
 import { actorLabel, describeEvent } from './AccountAuditLog.logic'
 import EmptyState from '~/components/common/EmptyState.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 
 // The account audit log: who did what, when, for the privileged actions an account admin is
 // answerable for. Read-only by construction — the store exposes no mutation and the backend has
@@ -29,14 +33,14 @@ const loading = computed(() => accounts.auditLoading)
  * "nothing has happened" tells an admin the exact opposite of the truth, so the two states have
  * separate renderings and this one never silently resolves to an empty list.
  */
-const loadError = ref<string | null>(null)
+const loadError = ref<DescribedFailure | null>(null)
 
 async function load() {
   loadError.value = null
   try {
     await accounts.loadAuditEvents(props.accountId)
   } catch (e) {
-    loadError.value = apiErrorEnvelope(e)?.message ?? (e instanceof Error ? e.message : String(e))
+    loadError.value = describeFailure(e)
   }
 }
 
@@ -105,10 +109,13 @@ function timestamp(at: number): string {
     </div>
 
     <!-- A failed load is NOT an empty log; it says so and offers the retry. -->
-    <p v-if="loadError" class="text-app-error-400" data-testid="audit-log-error">
-      {{ t('layout.auditLog.errors.load') }}
-      <span class="text-muted">{{ loadError }}</span>
-    </p>
+    <FailureMessage
+      v-if="loadError"
+      :failure="loadError"
+      :title="t('layout.auditLog.errors.load')"
+      class="text-app-error-400"
+      data-testid="audit-log-error"
+    />
 
     <div v-else-if="events.length === 0 && loading" class="space-y-2">
       <USkeleton v-for="i in 3" :key="i" class="h-14 w-full" />

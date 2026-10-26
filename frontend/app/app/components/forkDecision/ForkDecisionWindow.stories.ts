@@ -172,7 +172,10 @@ export const ChatBudgetSpent: Story = {
   },
 }
 
-/** The pick was refused, because the run moved on: the refusal shows above the approaches. */
+/**
+ * The pick was refused, because the run moved on: translated copy above the approaches, the
+ * backend's refusal behind "Show details".
+ */
 export const Failed: Story = {
   decorators: [opened(waiting)],
   parameters: {
@@ -190,6 +193,9 @@ export const Failed: Story = {
   },
   play: async () => {
     await userEvent.click(await screen.findByTestId('fork-option-choose'))
+    // The translated copy first; the backend's refusal only behind "Show details".
+    await screen.findByText('This action conflicts with the current state.')
+    await userEvent.click(screen.getByTestId('failure-message-show-detail'))
     await screen.findByText(/no longer awaiting/)
   },
 }

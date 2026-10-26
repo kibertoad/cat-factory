@@ -50,6 +50,11 @@ import {
   sourceMenuItems,
 } from '~/utils/sourcePicker'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 // Repo-backed document sources pick a FILE out of a repository (repo search → file
 // search / tree browse) instead of the generic free-text catalogue search. Today only
@@ -145,7 +150,7 @@ const isRepoSource = computed(() => !!source.value && REPO_SOURCES.has(source.va
 const query = ref('')
 const results = ref<DocumentSearchResult[]>([])
 const searching = ref(false)
-const searchError = ref<string | null>(null)
+const searchError = ref<DescribedFailure | null>(null)
 
 // What the ref half of the picker knows about the current query. A refusal carries the backend's
 // machine-readable REASON rather than its prose, because the two reasons ask for different
@@ -212,7 +217,7 @@ async function runSearch() {
     results.value = await documents.search(source.value, q)
   } catch (e) {
     results.value = []
-    searchError.value = e instanceof Error ? e.message : String(e)
+    searchError.value = describeFailure(e)
   } finally {
     searching.value = false
   }
@@ -488,9 +493,11 @@ onMounted(() => {
         @keydown.enter="refRow && pickRef(refRow)"
       />
 
-      <p v-if="searchError" class="px-1 text-2xs text-app-warning-400">
-        {{ t('documents.picker.searchFailed', { error: searchError }) }}
-      </p>
+      <FailureMessage
+        :failure="searchError"
+        :title="t('documents.picker.searchFailed')"
+        class="px-1 text-2xs text-app-warning-400"
+      />
 
       <!-- The pre-flight's verdict on a pasted ref. A refusal is stated HERE, under the input
            the user can still edit, rather than as a toast after the task is created. -->

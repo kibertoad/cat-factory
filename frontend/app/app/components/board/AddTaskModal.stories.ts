@@ -3,13 +3,19 @@ import type {
   CustomTaskType as CustomTaskTypeEntry,
   WorkspaceSnapshot,
 } from '@cat-factory/contracts'
-import { screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent } from 'storybook/test'
 import { authService, boardBlocks } from '~/stories/board.stories.mocks'
 import { block } from '~/stories/block.stories.mocks'
 import { linkedIssue, sourceTask, taskSources } from '~/stories/integrations.stories.mocks'
 import { taskFormSnapshot } from '~/stories/taskForm.stories.mocks'
 import { taskFormApi } from '~/stories/taskFormApi'
-import { seedSnapshot, seedTaskSources, seedUiMode, withSeed } from '~/stories/withStores'
+import {
+  seedSnapshot,
+  seedTaskSources,
+  seedUiMode,
+  seedViewer,
+  withSeed,
+} from '~/stories/withStores'
 import { useUiStore } from '~/stores/ui'
 import type { UiMode } from '~/utils/uiMode'
 import AddTaskModal from './AddTaskModal.vue'
@@ -32,12 +38,14 @@ function opened({
   containerId = authService.id,
   prefill = null,
   trackers = false,
+  viewer = false,
 }: {
   mode?: UiMode
   board?: WorkspaceSnapshot
   containerId?: string
   prefill?: Parameters<ReturnType<typeof useUiStore>['openAddTask']>[1]
   trackers?: boolean
+  viewer?: boolean
 } = {}) {
   return withSeed(() => {
     seedSnapshot(board)
@@ -45,6 +53,7 @@ function opened({
     if (trackers) {
       seedTaskSources(taskSources)
     }
+    if (viewer) seedViewer()
     useUiStore().openAddTask(containerId, prefill)
   })
 }
@@ -144,6 +153,19 @@ export const DocumentRepository: Story = {
 export const FromIssue: Story = {
   decorators: [opened({ prefill: { title: issue.title, context: [linkedIssue] }, trackers: true })],
   parameters: { api: taskFormApi({ issues: [issue] }) },
+}
+
+/**
+ * Handed over from the describe-work dialog to a board viewer: the text is kept, but Add task is
+ * off, because the backend refuses a viewer's create whichever surface opened the form.
+ */
+export const ReadOnly: Story = {
+  decorators: [
+    opened({ prefill: { title: 'Lock the account after five failed sign-ins' }, viewer: true }),
+  ],
+  play: async () => {
+    await expect(await screen.findByTestId('add-task-submit')).toBeDisabled()
+  },
 }
 
 /** An operation a deployment registers (the public API's task type test uses the same one). */

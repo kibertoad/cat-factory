@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describeFailure } from '~/composables/pipelineErrorToast/describeFailure'
+import { ApiError } from '~/composables/api/errors'
 import {
   buildLinkFailureReport,
   contextKey,
@@ -31,6 +33,7 @@ describe('buildLinkFailureReport', () => {
         message: 'GitHub denied access to "docs/x.md" in acme/repo (HTTP 403).',
         status: 403,
         code: 'conflict',
+        failure: describeFailure(new Error('GitHub denied access')),
       },
     ]
 
@@ -50,7 +53,13 @@ describe('buildLinkFailureReport', () => {
   })
 
   it('omits absent optional fields (no status/code/context)', () => {
-    const report = buildLinkFailureReport([{ item: item(), message: 'network error' }])
+    const report = buildLinkFailureReport([
+      {
+        item: item(),
+        message: 'network error',
+        failure: describeFailure(new Error('network error')),
+      },
+    ])
     expect(report).toContain('Context link failures: 1')
     expect(report).not.toContain('status:')
     expect(report).not.toContain('code:')
@@ -66,6 +75,7 @@ describe('buildLinkFailureReport', () => {
         status: 409,
         code: 'conflict',
         details: { owner: 'acme', repo: 'repo', path: 'docs/x.md', status: 403 },
+        failure: describeFailure(new Error('GitHub denied access')),
       },
     ])
     // The mapped HTTP status and the upstream GitHub status are both present, unambiguously.
@@ -143,7 +153,7 @@ describe('resolvePending', () => {
     expect(resolved.map((c) => c.needsImport)).toEqual([true, true])
     // And MARKED, so the form the user is still looking at names which chip refused. The toast
     // names them too, but the toast is gone by the time they go looking for the one to remove.
-    expect(resolved.map((c) => c.unreadable)).toEqual([
+    expect(resolved.map((c) => c.unreadable?.message)).toEqual([
       'no access to acme/repo:a.md',
       'no access to acme/repo:b.md',
     ])
@@ -153,7 +163,9 @@ describe('resolvePending', () => {
     // A prior failure is not a standing verdict: leaving the mark on a page that has just been
     // fetched accuses a good attachment (and the retry is the whole point of keeping it staged).
     stub(async (_source, ref) => ({ externalId: `resolved:${ref}` }))
-    const previouslyFailed = item({ unreadable: 'GitHub denied access (HTTP 403).' })
+    const previouslyFailed = item({
+      unreadable: describeFailure(new Error('GitHub denied access (HTTP 403).')),
+    })
 
     const { resolved } = await useContextLinking().resolvePending([previouslyFailed])
 
@@ -215,6 +227,14 @@ describe('presentLinkFailures', () => {
         status: 409,
         code: 'conflict',
         details: { owner: 'acme', repo: 'repo', path: 'docs/x.md', status: 403 },
+        failure: describeFailure(
+          new ApiError(409, {
+            error: {
+              code: 'conflict',
+              message: 'GitHub denied access to "docs/x.md" in acme/repo (HTTP 403).',
+            },
+          }),
+        ),
       },
     ]
     useContextLinking().presentLinkFailures(failures, 'blk_1')
@@ -225,7 +245,9 @@ describe('presentLinkFailures', () => {
     expect(toast.title).toBe('board.addTask.linkFailed')
     expect(toast.color).toBe('warning')
     expect(toast.duration).toBe(0)
-    expect(toast.description).toContain('GitHub denied access')
+    // Translated per item, from the same classification the item's mark shows; the server's
+    // English stays in the copied report only.
+    expect(toast.description).toBe('x.md: errors.conflict.fallbackMessage')
     expect(toast.actions).toHaveLength(1)
     // The Copy action's payload is the full diagnostic report (block + upstream status).
     const report = copyAction.mock.calls[0]![0]

@@ -19,6 +19,10 @@ import type {
   InfraEngine,
   InfraHandlerConfig,
 } from '@cat-factory/contracts'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 // The discriminated config branches the two handler forms produce, so the save handlers stay
 // typed end-to-end (no `as never`): a wrong shape fails the typecheck here, not server-side.
@@ -130,7 +134,7 @@ const busy = ref(false)
 // Connection-probe state for the kube engine forms (workspace + per-user override kept
 // separate so a probe result lands on the form it came from). The probe reaches the apiserver
 // with the supplied config + token via the per-type handler test endpoint — nothing persisted.
-type TestResult = { ok: boolean; message?: string } | null
+type TestResult = { ok: boolean; message?: string; failure?: DescribedFailure } | null
 const kubeTesting = ref(false)
 const kubeTestResult = ref<TestResult>(null)
 const kubeOverrideTesting = ref(false)
@@ -145,7 +149,7 @@ async function testKube(payload: { config: KubeHandlerConfig; secrets: Record<st
       secrets: payload.secrets,
     })
   } catch (e) {
-    kubeTestResult.value = { ok: false, message: e instanceof Error ? e.message : String(e) }
+    kubeTestResult.value = { ok: false, failure: describeFailure(e) }
   } finally {
     kubeTesting.value = false
   }
@@ -165,7 +169,7 @@ async function testSavedKube() {
   try {
     kubeSavedTestResult.value = await infra.testHandler({ config, secrets: {} })
   } catch (e) {
-    kubeSavedTestResult.value = { ok: false, message: e instanceof Error ? e.message : String(e) }
+    kubeSavedTestResult.value = { ok: false, failure: describeFailure(e) }
   } finally {
     kubeSavedTesting.value = false
   }
@@ -205,10 +209,7 @@ async function testKubeOverride(payload: {
       secrets: payload.secrets,
     })
   } catch (e) {
-    kubeOverrideTestResult.value = {
-      ok: false,
-      message: e instanceof Error ? e.message : String(e),
-    }
+    kubeOverrideTestResult.value = { ok: false, failure: describeFailure(e) }
   } finally {
     kubeOverrideTesting.value = false
   }

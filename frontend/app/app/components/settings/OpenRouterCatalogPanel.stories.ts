@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { expect, screen } from 'storybook/test'
 import type { OpenRouterModelMeta, OpenRouterRefreshResult } from '@cat-factory/contracts'
 import {
   getOpenRouterCatalogContract,
@@ -56,13 +57,14 @@ const live: OpenRouterModelMeta[] = [
   }),
 ]
 
-function answers(options: { key: boolean; refresh?: OpenRouterRefreshResult }) {
+function answers(options: { key: boolean | 'disabled'; refresh?: OpenRouterRefreshResult }) {
+  const keys = options.key ? [apiKey({ enabled: options.key !== 'disabled' })] : []
   return [
-    ...providersApi({ workspaceKeys: options.key ? [apiKey()] : [] }),
+    ...providersApi({ workspaceKeys: keys }),
     apiResponse(getOpenRouterCatalogContract, {
       pathParams: { workspaceId: STORY_WORKSPACE_ID },
       body: {
-        models: options.key ? enabled : [],
+        models: options.key === true ? enabled : [],
         createdAt: Date.UTC(2026, 8, 2),
         updatedAt: Date.UTC(2026, 9, 1),
       },
@@ -97,6 +99,17 @@ export const Default: Story = {}
 
 /** No key yet: the steps to get one, and the form that connects it. */
 export const Empty: Story = { parameters: { api: answers({ key: false }) } }
+
+/** The only key is turned off: no form to paste a second one, and a way to the key list instead. */
+export const KeyDisabled: Story = {
+  parameters: { api: answers({ key: 'disabled' }) },
+  play: async () => {
+    await screen.findByText(
+      'Your OpenRouter key is turned off. Turn it back on in Vendors & keys to browse models.',
+    )
+    await expect(screen.queryByText('Connect & browse')).toBeNull()
+  },
+}
 
 /** OpenRouter refuses the key: the enabled models stay listed, under the backend's message. */
 export const RefreshError: Story = {

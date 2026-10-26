@@ -12,6 +12,7 @@ import { BLUEPRINT_AGENT_KIND } from '@cat-factory/contracts'
 import { VCS_PROVIDER_ICONS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import Spinner from '~/components/common/Spinner.vue'
+import { useRunGate } from '~/composables/useRunGate'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -90,27 +91,8 @@ const statusLabel = computed(() =>
   isContainer.value ? t(FRAME_LABEL_KEYS[effectiveStatus.value]) : statusMeta.value!.label,
 )
 
-const runnable = computed(() => (block.value ? board.isRunnable(block.value.id) : false))
-
-// A task runs only once every dependency has merged. When the Run trigger is locked
-// it must say WHY — name the unfinished dependencies rather than showing a bare lock.
-const unmetDepTitles = computed(() =>
-  block.value && isTask.value ? board.unmetDeps(block.value.id).map((b) => b.title) : [],
-)
-const runBlockedReason = computed(() => {
-  // A read-only viewer can inspect a task but never start/re-run it — surface WHY on the
-  // locked trigger, exactly like an unmet-dependency lock (the backend rejects it anyway).
-  if (!access.canExecuteRuns.value) return t('access.noRunExecute')
-  return unmetDepTitles.value.length
-    ? t(
-        'panels.inspector.runBlocked',
-        { count: unmetDepTitles.value.length, names: unmetDepTitles.value.join(', ') },
-        unmetDepTitles.value.length,
-      )
-    : null
-})
-// The Run trigger is enabled only when the task is runnable AND the caller may execute runs.
-const canRun = computed(() => runnable.value && access.canExecuteRuns.value)
+// The Run trigger's lock and the reason it names, shared with the focus view's picker.
+const { canRun, blockedReason: runBlockedReason } = useRunGate(() => block.value?.id)
 
 // The delete control names what it removes, so selecting a task and deleting it
 // reads as "Delete task" rather than ambiguously removing the whole service. An
