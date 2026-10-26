@@ -1,6 +1,6 @@
 # Initiative: one overlay shell per job (the SPA macro layer)
 
-**Status:** items 1 and 2 done, item 3 todo, item 4 waiting on a decision · **Owner:** frontend · **Started:** 2026-10-12
+**Status:** items 1 and 2 done, item 3 in progress, item 4 waiting on a decision · **Owner:** frontend · **Started:** 2026-10-12
 
 > Tracker for a multi-PR initiative. Read it before you start an item, and update the checklist at
 > the end of each PR. This is the "Later phase" of
@@ -83,6 +83,11 @@ guard), not a visible change.
       The GitHub panel, guided review, the fragment library and the view switcher build tabs from
       `UButton` rows. About 15 more `UButton` rows are option pickers, not navigation. They are a
       separate question (`URadioGroup` or a segmented control) and are out of scope here.
+
+  - [x] Stage 1: the GitHub panel, guided review and the fragment library become `UTabs`, and
+        `scripts/check-frontend-tabs.mjs` refuses a hand-written tab role:
+        [#2460](https://github.com/kibertoad/cat-factory/pull/2460).
+  - [ ] Stage 2: one variant, size and icon rule per surface for every `UTabs`.
 
 ### 4. Settings and detail panels as slideovers, and the workbench surfaces
 

@@ -57,6 +57,10 @@ standalone routes (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-passwor
   solid siblings), and quiet chrome says `color="neutral" variant="ghost" size="xs"`.
   [Rule](./README.md#buttons-and-badges-follow-one-variant-policy), guarded by
   `scripts/check-frontend-variants.mjs`.
+- **Switch views inside a surface with `UTabs`**, never a row of `UButton`s or a hand-written
+  `role="tablist"`: only `UTabs` gives the arrow keys. A row that SETS A VALUE is a picker, not a
+  tab bar. [Rule](./README.md#switch-views-inside-a-surface-with-utabs), guarded by
+  `scripts/check-frontend-tabs.mjs`.
 - **A component keeps its `Foo.stories.ts` current**: one story per state it can draw (`Default`
   first, then `Empty`, `Loading`, `Failed`, then its own), so a new component or a new state adds
   its story, unless the component draws nothing of its own.
@@ -89,7 +93,7 @@ is whole-tree from the root (AGENTS.md). Run these where stated:
   `node scripts/check-frontend-type-scale.mjs`, `node scripts/check-frontend-radius.mjs`,
   `node scripts/check-frontend-primitives.mjs`, `node scripts/check-frontend-variants.mjs`,
   `node scripts/check-frontend-feedback.mjs`, `node scripts/check-frontend-geometry.mjs`,
-  `node scripts/check-frontend-select-values.mjs`,
+  `node scripts/check-frontend-select-values.mjs`, `node scripts/check-frontend-tabs.mjs`,
   `node scripts/check-story-titles.mjs`, `node scripts/check-file-size.mjs` from the repo root
   (install-free guards CI runs).
 

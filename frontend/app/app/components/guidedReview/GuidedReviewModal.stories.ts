@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/vue3'
 import type { GuidedReviewSessionView } from '@cat-factory/contracts'
 import { getGuidedReviewContract, getGuidedReviewThreadContract } from '@cat-factory/contracts'
 import type { HttpHandler } from 'msw'
-import { screen } from 'storybook/test'
+import { expect, screen, userEvent } from 'storybook/test'
 import { apiPending, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { githubLoadApi } from '~/stories/githubApi'
@@ -124,4 +124,53 @@ export const OutOfDate: Story = {
 /** A review with no thread yet: the new question tab is the only one. */
 export const NewThread: Story = {
   parameters: { api: [...reads({ ...withThread, threads: [] }), ...pulls()] },
+}
+
+/** Questions a reviewer asked as separate threads, after the race thread. */
+const moreQuestions = [
+  'Does a revoked family survive a deploy?',
+  'Which clients still store the old token?',
+  'Is the generation column backfilled?',
+  'What does the 401 body say on reuse?',
+  'Can an admin revoke one family by hand?',
+  'How long is a revoked family kept?',
+  'Does the mobile app retry a refresh?',
+]
+
+/**
+ * A review with eight threads. The tabs keep their titles and the row scrolls, and an arrow key
+ * moves focus to the next thread without selecting it: selecting remounts the thread and fetches
+ * it, so only Enter or Space does.
+ */
+export const ManyThreads: Story = {
+  parameters: {
+    api: [
+      ...reads({
+        ...withThread,
+        threads: [
+          { ...raceThread.thread, pendingMessageId: null },
+          ...moreQuestions.map((title, i) => ({
+            ...raceThread.thread,
+            id: `grt_more_${i}`,
+            title,
+            pendingMessageId: null,
+          })),
+        ],
+      }),
+      ...pulls(),
+    ],
+  },
+  play: async () => {
+    await screen.findByText(raceQuestion.content, { selector: 'p' })
+    const list = await screen.findByRole('tablist')
+    await expect(list.scrollWidth).toBeGreaterThan(list.clientWidth)
+
+    const first = screen.getByRole('tab', { name: raceQuestion.content })
+    const second = screen.getByRole('tab', { name: moreQuestions[0] })
+    first.focus()
+    await userEvent.keyboard('{ArrowRight}')
+    await expect(second).toHaveFocus()
+    await expect(second).toHaveAttribute('aria-selected', 'false')
+    await expect(first).toHaveAttribute('aria-selected', 'true')
+  },
 }
