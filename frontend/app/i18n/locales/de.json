@@ -5434,12 +5434,12 @@
       "open": "Öffnen",
       "openPr": "Pull Request"
     },
-    "status": {
-      "pending": "ausstehend",
-      "running": "läuft",
-      "succeeded": "erfolgreich",
-      "failed": "fehlgeschlagen",
-      "awaitingReview": "wartet auf Prüfung"
+    "statusChip": {
+      "pending": "Ausstehend",
+      "running": "Läuft",
+      "succeeded": "Erfolgreich",
+      "failed": "Fehlgeschlagen",
+      "awaitingReview": "Wartet auf Prüfung"
     },
     "arch": {
       "title": "Referenzarchitekturen",
@@ -7613,11 +7613,11 @@
       "maxCells": "(max. {max})",
       "run": "Ausführen"
     },
-    "experimentStatus": {
+    "statusChip": {
       "draft": "Entwurf",
-      "running": "läuft",
-      "done": "fertig",
-      "failed": "fehlgeschlagen"
+      "running": "Läuft",
+      "done": "Fertig",
+      "failed": "Fehlgeschlagen"
     },
     "results": {
       "col": {

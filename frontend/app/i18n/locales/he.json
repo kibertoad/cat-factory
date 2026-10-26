@@ -7224,7 +7224,7 @@
       "maxCells": "(מקסימום {max})",
       "run": "הרץ"
     },
-    "experimentStatus": {
+    "statusChip": {
       "draft": "טיוטה",
       "running": "פועל",
       "done": "הושלם",
@@ -7359,7 +7359,7 @@
       "open": "פתח",
       "openPr": "Pull request"
     },
-    "status": {
+    "statusChip": {
       "pending": "ממתין",
       "running": "פועל",
       "succeeded": "הצליח",

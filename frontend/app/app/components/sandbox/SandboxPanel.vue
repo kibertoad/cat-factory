@@ -30,10 +30,10 @@ const { t } = useI18n()
 // Exhaustive enum→label maps of literal `t(...)` keys (keeps the typed-key drift guard
 // live for these runtime-indexed status/kind/origin lookups).
 const EXPERIMENT_STATUS_LABEL = computed<Record<SandboxExperimentStatus, string>>(() => ({
-  draft: t('sandbox.experimentStatus.draft'),
-  running: t('sandbox.experimentStatus.running'),
-  done: t('sandbox.experimentStatus.done'),
-  failed: t('sandbox.experimentStatus.failed'),
+  draft: t('sandbox.statusChip.draft'),
+  running: t('sandbox.statusChip.running'),
+  done: t('sandbox.statusChip.done'),
+  failed: t('sandbox.statusChip.failed'),
 }))
 const FIXTURE_KIND_LABEL = computed<Record<SandboxFixtureKind, string>>(() => ({
   requirements: t('sandbox.fixtureKind.requirements'),

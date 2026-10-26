@@ -7224,11 +7224,11 @@
       "maxCells": "(макс. {max})",
       "run": "Запустити"
     },
-    "experimentStatus": {
-      "draft": "чернетка",
-      "running": "виконується",
-      "done": "завершено",
-      "failed": "невдача"
+    "statusChip": {
+      "draft": "Чернетка",
+      "running": "Виконується",
+      "done": "Завершено",
+      "failed": "Невдача"
     },
     "results": {
       "col": {
@@ -7359,12 +7359,12 @@
       "open": "Відкрити",
       "openPr": "Pull request"
     },
-    "status": {
-      "pending": "очікує",
-      "running": "виконується",
-      "succeeded": "успішно",
-      "failed": "невдача",
-      "awaitingReview": "очікує перегляду"
+    "statusChip": {
+      "pending": "Очікує",
+      "running": "Виконується",
+      "succeeded": "Успішно",
+      "failed": "Невдача",
+      "awaitingReview": "Очікує перегляду"
     },
     "arch": {
       "title": "Еталонні архітектури",

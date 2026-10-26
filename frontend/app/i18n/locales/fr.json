@@ -7224,11 +7224,11 @@
       "maxCells": "(max {max})",
       "run": "Lancer"
     },
-    "experimentStatus": {
-      "draft": "brouillon",
-      "running": "en cours",
-      "done": "terminé",
-      "failed": "échoué"
+    "statusChip": {
+      "draft": "Brouillon",
+      "running": "En cours",
+      "done": "Terminé",
+      "failed": "Échoué"
     },
     "results": {
       "col": {
@@ -7359,12 +7359,12 @@
       "open": "Ouvrir",
       "openPr": "Pull request"
     },
-    "status": {
-      "pending": "en attente",
-      "running": "en cours",
-      "succeeded": "réussi",
-      "failed": "échoué",
-      "awaitingReview": "en attente de revue"
+    "statusChip": {
+      "pending": "En attente",
+      "running": "En cours",
+      "succeeded": "Réussi",
+      "failed": "Échoué",
+      "awaitingReview": "En attente de revue"
     },
     "arch": {
       "title": "Architectures de référence",

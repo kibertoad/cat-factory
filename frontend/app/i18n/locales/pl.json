@@ -7224,11 +7224,11 @@
       "maxCells": "(maks. {max})",
       "run": "Uruchom"
     },
-    "experimentStatus": {
-      "draft": "wersja robocza",
-      "running": "w toku",
-      "done": "ukończono",
-      "failed": "niepowodzenie"
+    "statusChip": {
+      "draft": "Wersja robocza",
+      "running": "W toku",
+      "done": "Ukończono",
+      "failed": "Niepowodzenie"
     },
     "results": {
       "col": {
@@ -7359,12 +7359,12 @@
       "open": "Otwórz",
       "openPr": "Pull request"
     },
-    "status": {
-      "pending": "oczekuje",
-      "running": "w toku",
-      "succeeded": "powodzenie",
-      "failed": "niepowodzenie",
-      "awaitingReview": "czeka na przegląd"
+    "statusChip": {
+      "pending": "Oczekuje",
+      "running": "W toku",
+      "succeeded": "Powodzenie",
+      "failed": "Niepowodzenie",
+      "awaitingReview": "Czeka na przegląd"
     },
     "arch": {
       "title": "Architektury referencyjne",

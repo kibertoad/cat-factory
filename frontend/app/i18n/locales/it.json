@@ -5434,12 +5434,12 @@
       "open": "Apri",
       "openPr": "Pull request"
     },
-    "status": {
-      "pending": "in attesa",
-      "running": "in esecuzione",
-      "succeeded": "riuscito",
-      "failed": "fallito",
-      "awaitingReview": "in attesa di revisione"
+    "statusChip": {
+      "pending": "In attesa",
+      "running": "In esecuzione",
+      "succeeded": "Riuscito",
+      "failed": "Fallito",
+      "awaitingReview": "In attesa di revisione"
     },
     "arch": {
       "title": "Architetture di riferimento",
@@ -7613,11 +7613,11 @@
       "maxCells": "(max {max})",
       "run": "Esegui"
     },
-    "experimentStatus": {
-      "draft": "bozza",
-      "running": "in esecuzione",
-      "done": "completato",
-      "failed": "non riuscito"
+    "statusChip": {
+      "draft": "Bozza",
+      "running": "In esecuzione",
+      "done": "Completato",
+      "failed": "Non riuscito"
     },
     "results": {
       "col": {

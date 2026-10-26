@@ -7224,11 +7224,11 @@
       "maxCells": "(en fazla {max})",
       "run": "Çalıştır"
     },
-    "experimentStatus": {
-      "draft": "taslak",
-      "running": "çalışıyor",
-      "done": "tamamlandı",
-      "failed": "başarısız"
+    "statusChip": {
+      "draft": "Taslak",
+      "running": "Çalışıyor",
+      "done": "Tamamlandı",
+      "failed": "Başarısız"
     },
     "results": {
       "col": {
@@ -7359,12 +7359,12 @@
       "open": "Aç",
       "openPr": "Pull request"
     },
-    "status": {
-      "pending": "beklemede",
-      "running": "çalışıyor",
-      "succeeded": "başarılı",
-      "failed": "başarısız",
-      "awaitingReview": "inceleme bekliyor"
+    "statusChip": {
+      "pending": "Beklemede",
+      "running": "Çalışıyor",
+      "succeeded": "Başarılı",
+      "failed": "Başarısız",
+      "awaitingReview": "İnceleme bekliyor"
     },
     "arch": {
       "title": "Referans mimariler",

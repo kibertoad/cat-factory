@@ -7224,11 +7224,11 @@
       "maxCells": "(máx. {max})",
       "run": "Ejecutar"
     },
-    "experimentStatus": {
-      "draft": "borrador",
-      "running": "en ejecución",
-      "done": "completado",
-      "failed": "fallido"
+    "statusChip": {
+      "draft": "Borrador",
+      "running": "En ejecución",
+      "done": "Completado",
+      "failed": "Fallido"
     },
     "results": {
       "col": {
@@ -7359,12 +7359,12 @@
       "open": "Abrir",
       "openPr": "Pull request"
     },
-    "status": {
-      "pending": "pendiente",
-      "running": "en ejecución",
-      "succeeded": "completado",
-      "failed": "fallido",
-      "awaitingReview": "esperando revisión"
+    "statusChip": {
+      "pending": "Pendiente",
+      "running": "En ejecución",
+      "succeeded": "Completado",
+      "failed": "Fallido",
+      "awaitingReview": "Esperando revisión"
     },
     "arch": {
       "title": "Arquitecturas de referencia",

@@ -7568,11 +7568,11 @@
       "maxCells": "(max {max})",
       "run": "Run"
     },
-    "experimentStatus": {
-      "draft": "draft",
-      "running": "running",
-      "done": "done",
-      "failed": "failed"
+    "statusChip": {
+      "draft": "Draft",
+      "running": "Running",
+      "done": "Done",
+      "failed": "Failed"
     },
     "results": {
       "col": {
@@ -7713,12 +7713,12 @@
       "open": "Open",
       "openPr": "Pull request"
     },
-    "status": {
-      "pending": "pending",
-      "running": "running",
-      "succeeded": "succeeded",
-      "failed": "failed",
-      "awaitingReview": "waiting for review"
+    "statusChip": {
+      "pending": "Pending",
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "awaitingReview": "Waiting for review"
     },
     "arch": {
       "title": "Reference architectures",

@@ -7224,7 +7224,7 @@
       "maxCells": "(最大 {max})",
       "run": "実行"
     },
-    "experimentStatus": {
+    "statusChip": {
       "draft": "下書き",
       "running": "実行中",
       "done": "完了",
@@ -7359,7 +7359,7 @@
       "open": "開く",
       "openPr": "プルリクエスト"
     },
-    "status": {
+    "statusChip": {
       "pending": "保留中",
       "running": "実行中",
       "succeeded": "成功",
