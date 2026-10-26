@@ -55,15 +55,17 @@ const RECOMMENDED_SLUGS = [
   'z-ai/glm-5.2',
 ]
 
-// Whether the workspace/user has an OpenRouter key connected at any reachable scope.
-const keyConnected = computed(() => apiKeys.configuredProviders.has('openrouter'))
+// Where the OpenRouter key stands: connected at any reachable scope, only present turned off (so
+// the panel offers it back rather than a form to paste a duplicate), or absent.
+const keyState = computed(() => apiKeys.keyState('openrouter'))
+const keyConnected = computed(() => keyState.value === 'connected')
 
 // The enabled slugs the user has ticked (seeded from the persisted catalog on open).
 const selected = ref<Set<string>>(new Set())
 const filter = ref('')
 const busy = ref(false)
 
-// Inline key-entry form state (shown until an OpenRouter key is connected).
+// Inline key-entry form state (shown while there is no OpenRouter key at all).
 const keyScope = ref<'workspace' | 'user'>('workspace')
 const keyLabel = ref('')
 const keyValue = ref('')
@@ -220,9 +222,9 @@ function manageKeys() {
           </i18n-t>
         </p>
 
-        <!-- Step 1: connect a key (inline) — hidden once a key is connected -->
+        <!-- Step 1: connect a key (inline), shown only while there is no key at all -->
         <div
-          v-if="!keyConnected"
+          v-if="keyState === 'none'"
           class="space-y-3 rounded-lg border border-muted bg-default/60 p-4"
         >
           <SectionLabel as="h4">
@@ -286,6 +288,21 @@ function manageKeys() {
               {{ t('settings.openRouterCatalog.connectAndBrowse') }}
             </UButton>
           </div>
+        </div>
+
+        <!-- A key exists but is turned off: send the user to re-enable it -->
+        <div
+          v-else-if="keyState === 'disabled'"
+          class="flex items-center justify-between gap-3 rounded-lg border border-muted bg-default/60 px-3 py-2 text-sm"
+          data-testid="openrouter-key-disabled"
+        >
+          <span class="flex items-center gap-2 text-toned">
+            <UIcon name="i-lucide-circle-pause" class="h-4 w-4 shrink-0 text-app-warning-400" />
+            {{ t('settings.openRouterCatalog.keyDisabled') }}
+          </span>
+          <UButton color="neutral" variant="ghost" size="xs" @click="manageKeys()">
+            {{ t('settings.openRouterCatalog.manageKeys') }}
+          </UButton>
         </div>
 
         <!-- Key connected status -->

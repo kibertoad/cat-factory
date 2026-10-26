@@ -223,10 +223,12 @@ export const useWorkspaceStore = defineStore(
       return workspaceId.value
     }
 
-    /** Resume runs paused by the spend safeguard, then refresh the snapshot. */
+    /**
+     * Resume runs paused by the spend safeguard. The caller refreshes the snapshot after it, so a
+     * failed refresh is never reported as a failed resume: the resume has already happened.
+     */
     async function resumeSpend() {
       await api.resumeSpend(requireId())
-      await refresh()
     }
 
     return {

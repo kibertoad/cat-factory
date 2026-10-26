@@ -12,6 +12,7 @@
 // appears stuck for only the slices that never reported (see `canResume` for why it is always
 // offered rather than gated on an activity heuristic).
 import { computed, ref, watch } from 'vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 import { useResultView } from '~/composables/useResultView'
 import { useExecutionStore } from '~/stores/execution'
 import { useBoardStore } from '~/stores/board'
@@ -442,13 +443,11 @@ const { requestClose } = useUnsavedGuard({
                slices that never reported; the finished ones are re-aggregated from their captured
                reports. -->
           <div class="mt-4 border-t border-default pt-3">
-            <p
-              v-if="prReview.error"
+            <FailureMessage
+              :failure="prReview.error"
               data-testid="pr-review-resume-error"
               class="mb-2 rounded-md bg-app-error-500/10 px-3 py-2 text-xs text-app-error-300"
-            >
-              {{ prReview.error }}
-            </p>
+            />
             <div class="flex items-start justify-between gap-3">
               <p class="min-w-0 text-2xs text-dimmed">{{ t('prReview.resume.hint') }}</p>
               <UButton
@@ -484,12 +483,10 @@ const { requestClose } = useUnsavedGuard({
         </div>
 
         <template v-else>
-          <p
-            v-if="prReview.error"
+          <FailureMessage
+            :failure="prReview.error"
             class="mb-3 rounded-md bg-app-error-500/10 px-3 py-2 text-xs text-app-error-300"
-          >
-            {{ prReview.error }}
-          </p>
+          />
 
           <!-- The outcome of the most recent `post` attempt: how many of how many comments landed,
              which failed + why, and how many findings were folded into the summary because their

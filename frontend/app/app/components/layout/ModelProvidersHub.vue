@@ -15,6 +15,7 @@
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import AppModal from '~/components/common/AppModal.vue'
+import { connectionRowState, type ConnectionRowState } from '~/utils/connectionRowState'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -39,14 +40,19 @@ watch(
     if (!isOpen) return
     query.value = ''
     if (workspace.workspaceId) void apiKeys.load(workspace.workspaceId).catch(() => {})
-    void localModels.load().catch(() => {})
-    void personalSubs.load().catch(() => {})
+    // These two record a failed load in their store's `loadFailed` and never throw.
+    void localModels.load()
+    void personalSubs.load()
   },
   // Lazy v-if mount: the hub mounts with `modelProvidersOpen` already true → load immediately.
   { immediate: true },
 )
 
-/** One provider row. `connected` drives the green badge; `status` is its line. */
+/**
+ * One provider row. `connected` drives the green badge; `status` is its line either way. A
+ * per-user row also carries `state` (`connectionRowState`), so a load in flight or a failed one
+ * does not read as "Not connected".
+ */
 interface ProviderItem {
   key: string
   icon: string
@@ -54,6 +60,7 @@ interface ProviderItem {
   description: string
   status?: string
   connected?: boolean
+  state?: ConnectionRowState
   /** Tags the fastest path to a working deployment while nothing is connected yet. */
   recommended?: boolean
   onClick: () => void
@@ -71,7 +78,7 @@ function go(fn: () => void) {
 }
 
 const groups = computed<ProviderGroup[]>(() => {
-  const openRouterKeyConnected = apiKeys.configuredProviders.has('openrouter')
+  const openRouterKey = apiKeys.keyState('openrouter')
   const runnerCount = localModels.endpoints.length
   const subCount = personalSubs.subscriptions.length
 
@@ -86,10 +93,15 @@ const groups = computed<ProviderGroup[]>(() => {
           icon: 'i-lucide-waypoints',
           label: 'OpenRouter',
           description: t('layout.modelProvidersHub.items.openrouter.description'),
-          status: openRouterKeyConnected
-            ? t('layout.modelProvidersHub.status.keyConnected')
-            : undefined,
-          connected: openRouterKeyConnected,
+          // A turned-off key reads as such, not as "not connected": the fix is a toggle, not a
+          // new key, and the row opens the panel that offers it.
+          status:
+            openRouterKey === 'connected'
+              ? t('layout.modelProvidersHub.status.keyConnected')
+              : openRouterKey === 'disabled'
+                ? t('layout.modelProvidersHub.status.keyDisabled')
+                : undefined,
+          connected: openRouterKey === 'connected',
           recommended: true,
           onClick: () => go(ui.openOpenRouter),
         },
@@ -120,6 +132,7 @@ const groups = computed<ProviderGroup[]>(() => {
             ? t('layout.modelProvidersHub.status.connectedCount', { count: subCount }, subCount)
             : undefined,
           connected: subCount > 0,
+          state: connectionRowState(subCount > 0, personalSubs),
           onClick: () => go(() => ui.openVendorCredentials('personal')),
         },
         {
@@ -135,6 +148,7 @@ const groups = computed<ProviderGroup[]>(() => {
               )
             : undefined,
           connected: runnerCount > 0,
+          state: connectionRowState(runnerCount > 0, localModels),
           onClick: () => go(ui.openLocalModels),
         },
       ],
@@ -223,9 +237,24 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
                   <UBadge v-if="item.connected" color="success" variant="subtle" size="sm">
                     {{ item.status || t('layout.modelProvidersHub.status.connected') }}
                   </UBadge>
-                  <span v-else class="text-2xs text-dimmed">{{
-                    t('layout.modelProvidersHub.status.notConnected')
-                  }}</span>
+                  <span v-else-if="item.state === 'checking'" class="text-2xs text-dimmed">
+                    {{ t('common.checking') }}
+                  </span>
+                  <UBadge
+                    v-else-if="item.state === 'failed'"
+                    color="error"
+                    variant="subtle"
+                    size="sm"
+                    :data-testid="`model-providers-failed-${item.key}`"
+                  >
+                    {{ t('common.loadFailed') }}
+                  </UBadge>
+                  <span
+                    v-else
+                    class="text-2xs"
+                    :class="item.status ? 'text-warning' : 'text-dimmed'"
+                    >{{ item.status || t('layout.modelProvidersHub.status.notConnected') }}</span
+                  >
                   <UBadge v-if="!anyConnected && item.recommended" variant="subtle" size="sm">
                     {{ t('layout.modelProvidersHub.status.recommended') }}
                   </UBadge>

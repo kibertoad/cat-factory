@@ -102,7 +102,9 @@
       "keep": "Kontynuuj edycję"
     },
     "edit": "Edytuj",
-    "pathInvalid": "Podaj sciezke wewnatrz repozytorium (bez \"..\", sciezek bezwzglednych ani ukosnikow wstecznych)."
+    "pathInvalid": "Podaj sciezke wewnatrz repozytorium (bez \"..\", sciezek bezwzglednych ani ukosnikow wstecznych).",
+    "checking": "Sprawdzanie…",
+    "loadFailed": "Nie udało się wczytać"
   },
   "access": {
     "noBoardWrite": "Dostęp tylko do odczytu: możesz przeglądać tę tablicę, ale nie możesz jej edytować.",
@@ -632,7 +634,7 @@
     "attachIssueDisabledConnect": "Najpierw połącz system zgłoszeń (Integracje)",
     "attachIssueDisabledEnable": "Najpierw włącz integrację systemu zgłoszeń",
     "importsOnAdd": "importowane przy dodaniu",
-    "unreadable": "Nie udało się pobrać: {error}",
+    "unreadable": "Nie udało się pobrać.",
     "pastedLink": {
       "offer": "Ten opis zawiera odnośnik do strony {source}. Dołączyć ją jako kontekst?",
       "attach": "Dołącz"
@@ -676,7 +678,12 @@
     "reason": {
       "description": {
         "reference_repo_not_found": "Repozytorium stojące za architekturą referencyjną tego uruchomienia nie jest widoczne przez połączenie kontroli źródeł tej przestrzeni roboczej. Albo wpis wskazuje niewłaściwe repozytorium, albo połączenie nie ma do niego dostępu: popraw architekturę referencyjną lub nadaj jej dostęp i spróbuj ponownie.",
-        "reference_repo_unreadable": "Nie udało się teraz odczytać repozytorium stojącego za architekturą referencyjną tego uruchomienia, więc nie zostało ono uruchomione na szablonie, którego może nie umieć sklonować. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci."
+        "reference_repo_unreadable": "Nie udało się teraz odczytać repozytorium stojącego za architekturą referencyjną tego uruchomienia, więc nie zostało ono uruchomione na szablonie, którego może nie umieć sklonować. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
+        "oauth_state_invalid": "Ten link autoryzacyjny wygasł lub został już użyty, więc nie może dokończyć połączenia.",
+        "oauth_started_by_other_user": "To połączenie rozpoczął ktoś inny, więc tylko ta osoba może je dokończyć.",
+        "oauth_exchange_refused": "Serwer autoryzacji serwera narzędzi odrzucił zgodę. Poproś operatora wdrożenia o sprawdzenie ustawień klienta OAuth serwera narzędzi.",
+        "oauth_client_secret_unavailable": "Sekret klienta OAuth serwera narzędzi nie jest dostępny na tej tablicy. Dodaj go w oknie Infrastruktura.",
+        "tool_server_without_oauth": "Ten serwer narzędzi nie używa już OAuth, więc nie ma połączenia do dokończenia."
       }
     },
     "action": {
@@ -1372,7 +1379,6 @@
       "title": "Struktura",
       "hint": "Gdzie w usłudze znajduje się to zadanie i jakich standardów kodu przestrzegają jego agenci.",
       "module": "Moduł",
-      "modulePlaceholder": "Wybierz lub wpisz moduł",
       "moduleHint": "Moduł usługi, do którego należy to zadanie; tablica grupuje po nim kolumny. Moduł, który jeszcze nie istnieje, powstaje w chwili wdrożenia zadania.",
       "bestPractices": "Dobre praktyki",
       "bestPracticesEmpty": "Brak. Agenci stosują swoje domyślne wytyczne.",
@@ -2108,7 +2114,8 @@
       "helperFailures": "Awarie naprawiacza",
       "exhausted": "Przekazane człowiekowi",
       "hint": "Zaliczenie bez naprawiacza oznacza, że wystarczyło wstępne sprawdzenie i naprawiacz w ogóle nie wystartował. Awarie naprawiacza to próby, w których padło samo zadanie, w odróżnieniu od prób, które się wykonały i zostawiły sprawdzenie na czerwono."
-    }
+    },
+    "loadFailed": "Nie udało się wczytać obserwowalności platformy."
   },
   "reports": {
     "title": "Raporty",
@@ -2381,6 +2388,7 @@
       },
       "invite": {
         "title": "Zaproś członka zespołu",
+        "listTitle": "Zaproszenia",
         "submit": "Zaproś",
         "revoke": "Odwołaj zaproszenie",
         "created": "Utworzono zaproszenie",
@@ -2395,6 +2403,7 @@
       "email": {
         "title": "Nadawca e-maili",
         "notEnabled": "Wysyłka e-maili nie jest włączona w tym wdrożeniu. Zaproszenia nadal generują link akceptacji do udostępnienia.",
+        "notConnected": "Nie połączono nadawcy e-maili. Administrator konta może go połączyć.",
         "connectedAs": "Połączono przez {provider} jako {from}",
         "disconnect": "Rozłącz",
         "connect": "Połącz nadawcę e-maili",
@@ -2618,7 +2627,9 @@
       "budget": "Budżet",
       "tokens": "Tokeny",
       "resume": "Wznów mimo to",
-      "resumeHint": "Wznowienie nadal generuje wydatki; zostanie ponownie wstrzymane, jeśli budżet wciąż będzie przekroczony."
+      "resumeHint": "Wznowienie nadal generuje wydatki; zostanie ponownie wstrzymane, jeśli budżet wciąż będzie przekroczony.",
+      "resumeFailed": "Nie udało się wznowić wykonywania agentów",
+      "refreshFailed": "Uruchomienia wznowione, ale tablica się nie odświeżyła"
     },
     "personalSetup": {
       "title": "Moja konfiguracja",
@@ -2816,6 +2827,7 @@
       "status": {
         "connected": "Połączono",
         "keyConnected": "Klucz połączony",
+        "keyDisabled": "Klucz wyłączony",
         "notConnected": "Niepołączono",
         "recommended": "Zalecane",
         "connectedCount": "{count} połączony | {count} połączone | {count} połączonych"
@@ -2970,12 +2982,13 @@
     "deny": "Anuluj",
     "back": "Powrót do aplikacji",
     "noWorkspaces": "Nie masz jeszcze tablicy, z którą można to połączyć.",
+    "noAdminWorkspaces": "Nie jesteś administratorem żadnej ze swoich tablic. Poproś administratora tablicy o połączenie.",
     "revokeHint": "Zostanie wydany klucz API, który w każdej chwili możesz unieważnić w ustawieniach tablicy.",
     "error": {
       "title": "Nie udało się skonfigurować tego połączenia",
       "noRequest": "Ta strona została otwarta bez żądania autoryzacji. Rozpocznij łączenie w swoim hoście MCP.",
       "expired": "To żądanie autoryzacji jest nieprawidłowe lub wygasło. Rozpocznij łączenie ponownie w swoim hoście MCP.",
-      "failed": "Nie udało się zapisać decyzji. Rozpocznij łączenie ponownie w swoim hoście MCP."
+      "decisionFailed": "Nie udało się zapisać decyzji."
     }
   },
   "settings": {
@@ -3392,7 +3405,9 @@
           "thresholds": "Według progów oceny",
           "always": "Zawsze scalaj automatycznie",
           "never": "Zawsze wymagaj przeglądu"
-        }
+        },
+        "loadFailed": "Nie udało się wczytać historii scaleń",
+        "unavailable": "Historia niedostępna"
       },
       "roleRules": {
         "heading": "Ograniczenia według roli uruchamiającego",
@@ -3550,7 +3565,7 @@
           "doneHint": "Uruchomienia tej tablicy mogą teraz korzystać z serwera narzędzi na koncie, na które się zalogowano.",
           "back": "Powrót do aplikacji",
           "failedTitle": "Nie udało się zakończyć połączenia",
-          "failed": "Nie udało się dokończyć autoryzacji. Rozpocznij połączenie ponownie w oknie Infrastruktura.",
+          "restartHint": "Rozpocznij połączenie ponownie w oknie Infrastruktura.",
           "missingParams": "W tym odnośniku brakuje wartości zwracanych przez dostawcę, więc nie ma czego kończyć. Rozpocznij połączenie ponownie."
         }
       },
@@ -3826,6 +3841,7 @@
       "apiKey": "Klucz API",
       "connectAndBrowse": "Połącz i przeglądaj",
       "keyConnected": "Klucz OpenRouter połączony",
+      "keyDisabled": "Twój klucz OpenRouter jest wyłączony. Włącz go ponownie w Dostawcy i klucze, aby przeglądać modele.",
       "manageKeys": "Zarządzaj w Dostawcy i klucze",
       "refresh": "Odśwież katalog",
       "enableRecommended": "Włącz rekomendowane",
@@ -3852,7 +3868,8 @@
       "metered": "Mierzone API",
       "illustrative": "Koszty pokazane dla abonamentów mają charakter poglądowy – te plany są ryczałtowe i nie są rozliczane za token.",
       "tokens": "{input} wej. / {output} wyj.",
-      "calls": "Wywołania: {count}"
+      "calls": "Wywołania: {count}",
+      "loadFailed": "Nie udało się wczytać użycia."
     },
     "workspaceSettings": {
       "title": "Ustawienia obszaru roboczego",
@@ -4687,7 +4704,8 @@
       },
       "repoType": "Typ repozytorium",
       "repoTypeHint": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i).",
-      "prefillProviderMismatch": "Link wskazywał {repo} u innego dostawcy, a ta tablica jest połączona z {connected}. Wyszukaj repozytorium ręcznie albo otwórz link na tablicy połączonej z jego dostawcą."
+      "prefillProviderMismatch": "Link wskazywał {repo} u innego dostawcy, a ta tablica jest połączona z {connected}. Wyszukaj repozytorium ręcznie albo otwórz link na tablicy połączonej z jego dostawcą.",
+      "searchFailed": "Nie udało się wyszukać repozytoriów"
     },
     "repoTree": {
       "root": "katalog główny",
@@ -4865,7 +4883,7 @@
     "picker": {
       "searchPlaceholder": "Wyszukaj strony lub wklej adres URL albo identyfikator…",
       "refPlaceholder": "Wklej adres URL lub identyfikator strony…",
-      "searchFailed": "Wyszukiwanie nie powiodło się: {error}",
+      "searchFailed": "Wyszukiwanie nie powiodło się.",
       "importedBadge": "zaimportowano",
       "attachByReference": "Dołącz {ref} przez odwołanie",
       "noMatches": "Brak pasujących stron.",
@@ -4893,7 +4911,7 @@
       "searchFilesPlaceholder": "Szukaj plików według ścieżki…",
       "searchFilesHint": "Wpisz, aby wyszukać pliki w tym repozytorium.",
       "noFileMatches": "Brak pasujących plików.",
-      "filesFailed": "Nie udało się wczytać plików: {error}",
+      "filesFailed": "Nie udało się wczytać plików.",
       "moreFiles": "Wyświetlono pierwsze {count} wyników — zawęź wyszukiwanie."
     },
     "import": {
@@ -5025,7 +5043,7 @@
     "picker": {
       "searchPlaceholder": "Szukaj zgłoszeń lub wklej adres URL/klucz…",
       "refPlaceholder": "Wklej adres URL lub klucz zgłoszenia…",
-      "searchFailed": "Wyszukiwanie nie powiodło się: {error}",
+      "searchFailed": "Wyszukiwanie nie powiodło się.",
       "searchNeedsRepo": "Ta usługa nie jest jeszcze powiązana z repozytorium, więc nie ma czego przeszukiwać. Powiąż ją z repozytorium lub wklej adres URL zgłoszenia, aby dołączyć je bezpośrednio.",
       "imported": "zaimportowane",
       "attachByReference": "Dołącz {ref} przez odniesienie",
@@ -5115,7 +5133,7 @@
     "boardPlaceholder": "Klucz projektu lub identyfikator zespołu",
     "boardFromService": "Repozytorium powiązane z tą usługą",
     "boardNeedsRepo": "Ta usługa nie ma powiązanego repozytorium, więc nie ma w niej zgłoszeń do przeszukania. Powiąż je w panelu usługi.",
-    "boardsFailed": "Nie udało się wczytać tablic: {reason}",
+    "boardsFailed": "Nie udało się wczytać tablic.",
     "issueType": "Typ zgłoszenia",
     "issueTypeHelp": "Domyślnie bug. Ignorowane przez systemy bez typów zgłoszeń.",
     "issueTypeUnsupported": "{tracker} nie ma typu zgłoszenia oznaczającego „bug”, więc ten filtr nie jest stosowany. Zawęż skanowanie etykietą.",
@@ -5817,7 +5835,8 @@
       "park": "Zapytano człowieka",
       "bounce": "Odesłane do poprawki",
       "fail": "Przebieg nieudany"
-    }
+    },
+    "resolveFailed": "Nie udało się zapisać Twojego wyboru"
   },
   "inputGate": {
     "blockedTitle": "To zadanie wymaga więcej szczegółów, zanim ruszy",
@@ -6694,7 +6713,8 @@
     "outcome": {
       "success": "sukces",
       "failure": "niepowodzenie"
-    }
+    },
+    "loadFailed": "Nie udało się wczytać dzienników provisioningu."
   },
   "kaizen": {
     "title": "Kaizen",
@@ -6735,7 +6755,8 @@
         "recommendations": "Rekomendacje"
       },
       "empty": "Brak ocen."
-    }
+    },
+    "loadFailed": "Nie udało się wczytać ocen Kaizen"
   },
   "recurring": {
     "runEvery": "Uruchamiaj co",
@@ -6858,7 +6879,8 @@
         "placeholder": "Wklej URL pliku lub folderu GitHub (np. https://github.com/owner/repo/tree/main/docs)",
         "action": "Znajdź",
         "invalid": "To nie wygląda na URL pliku ani folderu repozytorium.",
-        "notFound": "Żadne dostępne repozytorium nie pasuje do {slug}. Sprawdź URL lub najpierw połącz repozytorium."
+        "notFound": "Żadne dostępne repozytorium nie pasuje do {slug}. Sprawdź URL lub najpierw połącz repozytorium.",
+        "failed": "Nie udało się wyszukać tego adresu URL."
       }
     },
     "sources": {
@@ -7751,18 +7773,25 @@
       "run": "Uruchom kontrole",
       "none": "Ten przepis nie deklaruje kontroli wstępnych.",
       "unavailable": "Kontrole wstępne działają na komputerze lokalnym i nie są dostępne w tym wdrożeniu.",
-      "optional": "opcjonalne"
+      "optional": "opcjonalne",
+      "failed": "Nie udało się uruchomić kontroli wstępnych."
     },
     "save": {
       "handlerLabel": "Etykieta handlera",
       "handlerHint": "Handler Docker Compose obszaru roboczego, którego Deployer używa do udostępnienia tego stosu.",
       "summary": "Zapisuje przepis Docker Compose w „{frame}” (udostępniając usługę „{service}”) i rejestruje handler obszaru roboczego.",
       "saved": "Zapisano. Deployer udostępni ten stos, gdy uruchomi go potok.",
-      "save": "Zapisz konfigurację"
+      "save": "Zapisz konfigurację",
+      "failed": "Nie udało się zapisać środowiska.",
+      "errors": {
+        "missingService": "Najpierw wybierz ramkę i udostępnianą usługę compose.",
+        "invalidPort": "Wpisz prawidłowy udostępniany port (od 1 do 65535)."
+      }
     },
     "trial": {
       "hint": "Opcjonalnie udostępnij to środowisko teraz, aby przetestować przepis.",
-      "run": "Udostępnienie próbne"
+      "run": "Udostępnienie próbne",
+      "failed": "Nie udało się uruchomić udostępnienia próbnego."
     }
   },
   "forkDecision": {

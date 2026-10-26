@@ -3,6 +3,10 @@ import { ref } from 'vue'
 import type { PrReviewResolution, PrReviewStepState } from '~/types/execution'
 import { useApi } from '~/composables/useApi'
 import { useWorkspaceStore } from '~/stores/workspace'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 import { useExecutionStore } from '~/stores/execution'
 
 /**
@@ -27,7 +31,7 @@ export const usePrReviewStore = defineStore('prReview', () => {
    */
   const resuming = ref(false)
   /** The last error message from an action, surfaced inline; cleared on the next action. */
-  const error = ref<string | null>(null)
+  const error = ref<DescribedFailure | null>(null)
 
   /**
    * Apply an authoritative PR-review state to the run's `pr-reviewer` step. A pipeline could
@@ -66,7 +70,7 @@ export const usePrReviewStore = defineStore('prReview', () => {
         },
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to load'
+      error.value = describeFailure(e)
     }
   }
 
@@ -90,7 +94,7 @@ export const usePrReviewStore = defineStore('prReview', () => {
         (state, instance) => assign(instance, state as PrReviewStepState),
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to resolve review'
+      error.value = describeFailure(e)
       throw e
     } finally {
       resolving.value = false
@@ -112,7 +116,7 @@ export const usePrReviewStore = defineStore('prReview', () => {
         (state, instance) => assign(instance, state as PrReviewStepState),
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to resume review'
+      error.value = describeFailure(e)
       throw e
     } finally {
       resuming.value = false
@@ -130,7 +134,7 @@ export const usePrReviewStore = defineStore('prReview', () => {
         (state, instance) => assign(instance, state as PrReviewStepState),
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to dismiss finding'
+      error.value = describeFailure(e)
       throw e
     } finally {
       resolving.value = false
@@ -159,7 +163,7 @@ export const usePrReviewStore = defineStore('prReview', () => {
         (state, instance) => assign(instance, state as PrReviewStepState),
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to challenge finding'
+      error.value = describeFailure(e)
       throw e
     } finally {
       resolving.value = false

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { createUserScopedLoad } from '~/stores/userScopedLoad'
 import type {
   LocalModelEndpoint,
   LocalModelEndpointTestResult,
@@ -17,20 +18,11 @@ import type {
 export const useLocalModelsStore = defineStore('localModels', () => {
   const api = useApi()
   const endpoints = ref<LocalModelEndpoint[]>([])
-  const loading = ref(false)
-
-  async function load() {
-    loading.value = true
-    try {
-      const { endpoints: list } = await api.listLocalModelEndpoints()
-      endpoints.value = list
-    } catch {
-      // Auth disabled / not signed in / feature off → no local runners surface.
-      endpoints.value = []
-    } finally {
-      loading.value = false
-    }
-  }
+  const { loading, loadFailed, load } = createUserScopedLoad({
+    fetch: () => api.listLocalModelEndpoints(),
+    apply: ({ endpoints: list }) => (endpoints.value = list),
+    reset: () => (endpoints.value = []),
+  })
 
   async function upsert(input: UpsertLocalModelEndpointInput) {
     const endpoint = await api.upsertLocalModelEndpoint(input.provider, input)
@@ -47,5 +39,5 @@ export const useLocalModelsStore = defineStore('localModels', () => {
     return await api.testLocalModelEndpoint(input)
   }
 
-  return { endpoints, loading, load, upsert, remove, test }
+  return { endpoints, loading, loadFailed, load, upsert, remove, test }
 })

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { Account } from '@cat-factory/contracts'
+import { expect, screen } from 'storybook/test'
 import type { AuthUser } from '~/types/domain'
 import { orgAccount, signedInUser } from '~/stories/accounts.stories.mocks'
 import { accountTeamApi } from '~/stories/accountsApi'
@@ -17,10 +18,7 @@ import AccountTeamSettings from './AccountTeamSettings.vue'
 // sender and the roster, and each section loads its own data, so each story answers those reads.
 // Each section's own states are in its own stories.
 //
-// The answers are `accountTeamApi`, shared with the Account settings window. There are no admin
-// stories until #2393 is fixed: the platform alert section gives its window select an item with
-// the value '', Reka's SelectItem throws for an empty value, and Storybook's error display covers
-// the tab for every admin viewer (#2393). The personal account's viewer is an admin too.
+// The answers are `accountTeamApi`, shared with the Account settings window.
 
 /** Tomás, a developer on the shared roster: the viewer whose row says what `account.roles` says. */
 const developerUser: AuthUser = {
@@ -54,7 +52,32 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-/** Tomás, a developer of Acme: the roles as text, no way to end a session, and no admin section. */
+/**
+ * Tomás, a developer of Acme: the roles as text, no way to end a session, and no admin section.
+ * He sees the invitations, under a heading that does not offer to invite, and the sender, but
+ * cannot invite, revoke or disconnect: each is an account-admin write the backend refuses him.
+ */
 export const Default: Story = {
   decorators: [active({ ...orgAccount, roles: ['developer'] }, developerUser)],
+  play: async () => {
+    await screen.findByText('lena@acme.dev')
+    await screen.findByRole('heading', { name: 'Invitations' })
+    await screen.findByText('cat-factory@acme.dev', { exact: false })
+    await expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull()
+    await expect(screen.queryByRole('button', { name: 'Revoke invitation' })).toBeNull()
+    await expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull()
+  },
 }
+
+/** The same developer with no sender connected: a line saying so, not the admin's connect form. */
+export const NoSenderForDeveloper: Story = {
+  decorators: [active({ ...orgAccount, roles: ['developer'] }, developerUser)],
+  parameters: { api: accountTeamApi({ connection: null, configured: true }) },
+  play: async () => {
+    await screen.findByText('No email sender is connected. An account admin can connect one.')
+    await expect(screen.queryByRole('button', { name: 'Connect email sender' })).toBeNull()
+  },
+}
+
+/** Maya, an admin of Acme: the roster and, below it, every admin section of the account. */
+export const Admin: Story = {}

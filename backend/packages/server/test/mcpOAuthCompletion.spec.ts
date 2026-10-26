@@ -160,9 +160,14 @@ describe('mcpOAuthCompletionController', () => {
     expect(completed).toEqual([])
   })
 
-  it('refuses a state that will not open', async () => {
+  it('refuses a state that will not open without signing the caller out', async () => {
+    // A 401 would make the SPA drop a valid session, and after sign-in the page would replay the
+    // same dead state.
     const res = await post(build({ request: null }), { as: 'usr_1' })
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(422)
+    expect(await res.json()).toMatchObject({
+      error: { details: { reason: 'oauth_state_invalid' } },
+    })
   })
 
   it('refuses a completion by someone other than whoever started the flow', async () => {
@@ -177,7 +182,10 @@ describe('mcpOAuthCompletionController', () => {
       { as: 'usr_1' },
     )
 
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({
+      error: { details: { reason: 'oauth_started_by_other_user' } },
+    })
     expect(completed).toEqual([])
   })
 
