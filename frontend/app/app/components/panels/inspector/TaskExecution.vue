@@ -79,10 +79,8 @@ const isEmpty = computed(
 // A failed run is no longer executing: a step left mid-flight must stop showing
 // its live "Spinning up…" phase (the shared failure banner renders below).
 const runFailed = computed(() => instance.value?.status === 'failed')
-// Stop only applies while the run can still execute: a done or failed run has nothing to halt.
-const runLive = computed(
-  () => !!instance.value && instance.value.status !== 'done' && instance.value.status !== 'failed',
-)
+// Stop only applies while the run can still execute: a finished run has nothing to halt.
+const runLive = computed(() => !!instance.value && !execution.isTerminal(instance.value.status))
 /**
  * The run's PRE-DISPATCH INPUT GATE notice: the park while it holds the run, the waiver once
  * somebody overruled it, and the ADVISORY findings a `passed` verdict still carries (which is
