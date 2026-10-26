@@ -3217,6 +3217,17 @@
         "insecureSkipTlsVerify": "Pomiń weryfikację TLS",
         "insecureSkipTlsVerifyHelp": "Zdecydowanie odradzane. Wyłącza weryfikację TLS apiservera; używaj tylko dla lokalnych klastrów k3s/kind/dev.",
         "harnessPort": "Port harnessa"
+      },
+      "accountPool": {
+        "badge": "Pula konta",
+        "inherited": "Ta tablica nie ma własnej puli runnerów, więc używa puli swojego konta, {label}.",
+        "optOut": "Przestań używać puli konta",
+        "optOutHint": "Tablica nie będzie wtedy mogła uruchamiać agentów, dopóki nie podłączysz poniżej jej własnej puli.",
+        "alsoAvailable": "Ta tablica używa własnej puli. Jej konto też ma pulę: {label}.",
+        "fallBack": "Gdy usunę pulę tej tablicy, używaj puli konta",
+        "optedOut": "Ta tablica nie używa puli swojego konta, {label}, i nie ma własnej puli.",
+        "optIn": "Używaj puli konta",
+        "ownPoolForm": "Użyj innej puli dla tej tablicy"
       }
     },
     "serviceFragmentDefaults": {

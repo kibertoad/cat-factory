@@ -102,7 +102,10 @@ describe('RunnerPoolConnectionService account tier', () => {
   it('falls back to the account pool for a board with none of its own', async () => {
     const { service } = setup({ account: accountRow('acc_1') })
 
-    expect((await service.getConnection('ws_1'))?.label).toBe('Account pool')
+    expect(await service.getConnection('ws_1')).toMatchObject({
+      label: 'Account pool',
+      source: 'account',
+    })
     expect(await service.hasConnection('ws_1')).toBe(true)
     expect((await service.resolve('ws_1'))?.kind).toBe('kubernetes')
   })
@@ -110,7 +113,11 @@ describe('RunnerPoolConnectionService account tier', () => {
   it("prefers the board's own live row over the account's", async () => {
     const { service } = setup({ own: ownRow('ws_1'), account: accountRow('acc_1') })
 
-    expect((await service.getConnection('ws_1'))?.label).toBe('Board pool')
+    expect(await service.getConnection('ws_1')).toMatchObject({
+      label: 'Board pool',
+      source: 'workspace',
+    })
+    expect((await service.getAccountPool('ws_1'))?.label).toBe('Account pool')
   })
 
   it('answers nothing when the account has no pool', async () => {
@@ -124,6 +131,7 @@ describe('RunnerPoolConnectionService account tier', () => {
     const { service } = setup({ accountId: null, account: accountRow('acc_1') })
 
     expect(await service.hasConnection('ws_1')).toBe(false)
+    expect(await service.getAccountPool('ws_1')).toBeNull()
   })
 
   it('stops at the explicit "none" marker', async () => {
@@ -131,6 +139,13 @@ describe('RunnerPoolConnectionService account tier', () => {
 
     expect(await service.hasConnection('ws_1')).toBe(false)
     expect(await service.resolve('ws_1')).toBeNull()
+    // Opted out, the account's pool is still named, so the admin can opt back in knowingly.
+    expect(await service.getAccountPool('ws_1')).toEqual({
+      kind: 'kubernetes',
+      providerId: 'k8s',
+      label: 'Account pool',
+      baseUrl: 'https://k8s.example:6443',
+    })
   })
 
   it('inherits by default when the board has no settings row yet', async () => {

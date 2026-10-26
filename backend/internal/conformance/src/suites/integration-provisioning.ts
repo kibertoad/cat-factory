@@ -298,9 +298,15 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       expect(registered.body.kind).toBe('kubernetes')
       expect(registered.body.secretKeys).toContain('apiToken')
 
-      const got = await call<{ connection: RunnerConnection | null }>('GET', base)
+      const got = await call<{
+        connection: (RunnerConnection & { source?: string }) | null
+        accountPool: unknown
+      }>('GET', base)
       expect(got.status).toBe(200)
       expect(got.body.connection?.kind).toBe('kubernetes')
+      // The board's own registration reads as its own, and a board with no account pool says so.
+      expect(got.body.connection?.source).toBe('workspace')
+      expect(got.body.accountPool).toBeNull()
       // The non-secret config is exposed (sans token) so the connect form can prefill.
       expect(got.body.connection?.config?.kind).toBe('kubernetes')
       expect(got.body.connection?.config?.kubernetes?.namespace).toBe('cat-factory')
