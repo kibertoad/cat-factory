@@ -1,4 +1,5 @@
 import type { BinaryOutputConfig, StepOptions, StepServiceScope } from '@cat-factory/contracts'
+import { normalizeBinaryOutput } from '~/utils/binaryOutputSelection'
 import type { PipelinesContext } from './context'
 
 /**
@@ -142,30 +143,12 @@ export function createPipelineStepOptionActions(ctx: PipelinesContext) {
   /**
    * Set (or clear) the binary-output selection on the draft step at `index`. Merges into the
    * step's `StepOptions` bag rather than clobbering it; clearing drops the field and, if the
-   * bag empties, the whole entry — exactly like the other options here, so a step that never
-   * used it persists the shape it always did.
-   *
-   * An EMPTY `contextServiceIds` is dropped rather than stored, for the reason the consensus
-   * tier set drops its own empty array: the field's absence means "no scope service was
-   * selected", while `[]` reads as "context was considered and rejected" — a different claim,
-   * and one the brief renderer would repeat to the agent. `generatorIds` and `modalities` take
-   * the same treatment for the same reason: an absent `generatorIds` means the step generates
-   * through whatever its agent already has, and an absent `modalities` imposes no delivery
-   * requirement — both of which the brief STATES, so persisting `[]` would have it state the
-   * wrong thing. The rule is applied to EVERY list field (`mediaTypes` too) rather than to named
-   * ones, and every other field is carried through as given, so a field the schema gains later
-   * survives an edit without this function having to learn its name. An empty OBJECT is kept:
-   * `comparison: {}` is a comparison switched on with its defaults.
+   * bag empties, the whole entry, exactly like the other options here, so a step that never
+   * used it persists the shape it always did. Which values are stored is
+   * {@link normalizeBinaryOutput}'s rule, the same one the save applies.
    */
   function setDraftBinaryOutput(index: number, config: BinaryOutputConfig | undefined) {
-    const selection = config?.storageServiceId
-      ? (Object.fromEntries(
-          Object.entries(config).filter(
-            ([, value]) => value !== undefined && !(Array.isArray(value) && value.length === 0),
-          ),
-        ) as BinaryOutputConfig)
-      : undefined
-    patchStepOption(draftStepOptions, index, 'binaryOutput', selection)
+    patchStepOption(draftStepOptions, index, 'binaryOutput', normalizeBinaryOutput(config))
   }
 
   /**

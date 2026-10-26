@@ -18,8 +18,6 @@ import BinaryOutputStepPicker from './BinaryOutputStepPicker.vue'
 // is a line of its own. The storage list is the service catalog's `asset-storage` entries; the
 // integrations come from the snapshot.
 //
-// The stories seed `draftStepOptions` directly, the state a pipeline loaded for edit carries.
-//
 // The platform storage and Nano Banana are copies of the shipped ones (`platform-asset-service.ts`
 // in kernel, `nano-banana.ts` in `binary-generators`), with their contracts left out. The brand
 // service and the sprite renderer, which declares an exact size, are made up.
@@ -74,8 +72,7 @@ function picking(
       options.generatorsUnavailable ? [] : [nanoBanana, spriteRenderer],
       options.generatorsUnavailable ?? false,
     )
-    // Seeded as a pipeline loaded for edit carries it.
-    usePipelinesStore().draftStepOptions[0] = config ? { binaryOutput: config } : {}
+    usePipelinesStore().setDraftBinaryOutput(0, config)
   })
 }
 
