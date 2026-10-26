@@ -128,8 +128,9 @@ function applyUrl(k: Record<string, unknown>): void {
 }
 
 // A registered k8s env connection exposes its non-secret config, so prefill every
-// non-secret field from it (never the token — secrets are write-only and re-entered on
-// update). This lets an edit change one field without re-typing the whole form.
+// non-secret field from it. The token is never prefilled: secrets are write-only, and a blank
+// token keeps the saved one (see `tokenStored`). This lets an edit change one field without
+// re-typing the whole form.
 watch(
   () => props.connection,
   (c) => {
