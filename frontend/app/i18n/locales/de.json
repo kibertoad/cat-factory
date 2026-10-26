@@ -2894,6 +2894,12 @@
         "github": {
           "description": "Verbinden Sie die GitHub-App des Workspace, durchsuchen Sie Repos, PRs und Issues."
         },
+        "gitlab": {
+          "description": "Verbinden Sie den Workspace mit einem Zugriffstoken mit GitLab, durchsuchen Sie Projekte, Merge Requests und Issues."
+        },
+        "sourceControl": {
+          "description": "Verbinden Sie einen Repository-Host, durchsuchen Sie Repos, Pull Requests und Issues."
+        },
         "slack": {
           "description": "Leiten Sie Benachrichtigungen an den Slack-Workspace Ihres Teams weiter."
         },
@@ -3036,7 +3042,11 @@
         "apiKey": "API-Schlüssel {id}"
       },
       "values": {
-        "none": "keine"
+        "none": "keine",
+        "accessMode": {
+          "account": "alle im Konto",
+          "restricted": "nur aufgeführte Mitglieder"
+        }
       },
       "actions": {
         "accountMemberAdded": "hat {target} als {roles} zum Konto hinzugefügt",
@@ -5126,6 +5136,17 @@
       "title": "Pipeline-Zustand",
       "allValid": "Alle Pipelines sind gültig und aktuell.",
       "noEnabledSteps": "Keine aktivierten Schritte: Die Pipeline hat nichts auszuführen.",
+      "problems": {
+        "companion": "Begleiter „{kind}“ muss direkt nach einem aktivierten Schritt laufen, den er prüfen kann ({targets}).",
+        "gatingNotGatable": "Schritt „{kind}“ darf nicht an die Schätzung gebunden werden: Seine Ausgabe wird vom restlichen Lauf benötigt. Nur ein Schritt, dessen Ergebnis spätere Schritte als Kontext lesen (ein Design, ein Review, ein zusätzlicher Prüfdurchlauf), darf anhand der Schätzung übersprungen werden.",
+        "gatingWithHumanGate": "Schritt „{kind}“ hat eine menschliche Freigabe und kann daher nicht zusätzlich an die Schätzung gebunden werden. Die Schätzung darf eine menschliche Prüfung hinzufügen, aber nie entfernen.",
+        "gatingNoThreshold": "Schritt „{kind}“ ist an die Schätzung gebunden, legt aber keinen Schwellenwert fest (Komplexität, Risiko oder Auswirkung).",
+        "gatingNoEstimator": "Schritt „{kind}“ ist an die Schätzung gebunden, aber vor ihm läuft kein Schritt, der eine liefert.",
+        "conditionNotGatable": "Schritt „{kind}“ darf keine Laufbedingung haben: Seine Ausgabe wird vom restlichen Lauf benötigt, sodass ein Lauf außerhalb der Bedingung stillschweigend ohne ihn enden würde.",
+        "conditionWithHumanGate": "Schritt „{kind}“ hat eine menschliche Freigabe und kann daher nicht zusätzlich eine Laufbedingung haben. Eine Bedingung darf eine Prüfung unerreicht lassen, aber nie entfernen.",
+        "unknownKinds": "Verweist auf eine unbekannte Agentenart: {kinds}. | Verweist auf unbekannte Agentenarten: {kinds}.",
+        "outdated": "Eine neuere Version dieser integrierten Pipeline ist verfügbar (v{from} auf v{to})."
+      },
       "invalidHeading": "Ungültige Pipelines",
       "invalidDescription": "Diese verweisen auf einen fehlenden Agenten oder sind falsch konfiguriert, sodass sie beim Start fehlschlagen (oder falsch laufen) würden. Löschen Sie eine benutzerdefinierte Pipeline oder setzen Sie eine integrierte neu auf, um ihre Katalogdefinition wiederherzustellen.",
       "builtinBadge": "integriert",
@@ -8695,9 +8716,9 @@
     "duplicateAlias": "Zwei behaltene Kandidaten teilen sich eine ID. Zwei Artefakte an einem Ort sind ein Artefakt.",
     "keepAction": "{count} behalten",
     "warning": {
-      "omitted": "{count} Kandidaten wurden über der Obergrenze verworfen, diese Liste ist also ein Anfang. ",
+      "omitted": "{count} Kandidat wurde über der Obergrenze verworfen, diese Liste ist also ein Anfang. | {count} Kandidaten wurden über der Obergrenze verworfen, diese Liste ist also ein Anfang.",
       "invalid": "{count} deklarierter Eintrag war unlesbar und fehlt hier. | {count} deklarierte Einträge waren unlesbar und fehlen hier.",
-      "previews": "{count} Vorschaulinks wurden abgelehnt, diese Kandidaten werden ohne Bild dargestellt."
+      "previews": "{count} Vorschaulink wurde abgelehnt, dieser Kandidat wird ohne Bild dargestellt. | {count} Vorschaulinks wurden abgelehnt, diese Kandidaten werden ohne Bild dargestellt."
     },
     "noChoice": {
       "undeclared": "Der Schritt hat seine Kandidaten nie deklariert, es gab also nichts zu vergleichen. Der Lauf ging weiter.",

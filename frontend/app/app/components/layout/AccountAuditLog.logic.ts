@@ -1,10 +1,7 @@
 import { AUDIT_ACTION_DETAIL_KEYS, isRetiredAuditValue } from '@cat-factory/contracts'
-import type {
-  AccountRole,
-  AuditAction,
-  AuditEventWire,
-  WorkspaceRole,
-} from '@cat-factory/contracts'
+import type { AuditAction, AuditEventWire, WorkspaceAccessMode } from '@cat-factory/contracts'
+import { cloudProviderLabel, isCloudProvider } from '~/utils/cloudProviders'
+import { ACCOUNT_ROLE_LABEL_KEYS, WORKSPACE_ROLE_LABEL_KEYS } from '~/utils/roles'
 
 // How one audit row becomes one sentence. Kept out of the SFC on the same seam as
 // `StepToolServers.logic.ts`, because the two rules worth asserting here are both about rows a
@@ -35,29 +32,33 @@ export const ACTION_KEYS: Record<AuditAction, string> = {
   'workspace.access_mode_changed': 'layout.auditLog.actions.workspaceAccessModeChanged',
 }
 
-/**
- * Role id → label key, for the detail slots that carry roles. The writer stores the ids (a list
- * joined as `'admin, developer'`), and an id on screen reads as a code, not a role.
- */
-const ACCOUNT_ROLE_KEYS: Record<AccountRole, string> = {
-  admin: 'layout.accountTeam.roles.admin',
-  developer: 'layout.accountTeam.roles.developer',
-  product: 'layout.accountTeam.roles.product',
-}
-const WORKSPACE_ROLE_KEYS: Record<WorkspaceRole, string> = {
-  admin: 'layout.workspaceMembers.roles.admin',
-  member: 'layout.workspaceMembers.roles.member',
-  viewer: 'layout.workspaceMembers.roles.viewer',
-}
-const ROLE_SLOT_KEYS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
-  roles: ACCOUNT_ROLE_KEYS,
-  previousRoles: ACCOUNT_ROLE_KEYS,
-  role: WORKSPACE_ROLE_KEYS,
-  previousRole: WORKSPACE_ROLE_KEYS,
-}
-
 /** Translate a key with interpolation params. The component owns the i18n instance; this is pure. */
 export type Translate = (key: string, params?: Record<string, string>) => string
+
+const ACCESS_MODE_LABEL_KEYS: Record<WorkspaceAccessMode, string> = {
+  account: 'layout.auditLog.values.accessMode.account',
+  restricted: 'layout.auditLog.values.accessMode.restricted',
+}
+
+/** One id of a closed vocabulary as its label, or as itself when this build does not know it. */
+function fromKeys(keys: Readonly<Record<string, string>>) {
+  return (id: string, t: Translate) => (Object.hasOwn(keys, id) ? t(keys[id]!) : id)
+}
+
+/**
+ * The detail slots that hold ids, and how each id reads. The writer stores codes (a role list is
+ * joined as `'admin, developer'`), and a code on screen reads as one. An id this build does not
+ * know (say, a role retired after the row was written) stays as itself rather than being guessed
+ * onto a current member.
+ */
+const SLOT_LABELS: Readonly<Record<string, (id: string, t: Translate) => string>> = {
+  roles: fromKeys(ACCOUNT_ROLE_LABEL_KEYS),
+  previousRoles: fromKeys(ACCOUNT_ROLE_LABEL_KEYS),
+  role: fromKeys(WORKSPACE_ROLE_LABEL_KEYS),
+  previousRole: fromKeys(WORKSPACE_ROLE_LABEL_KEYS),
+  accessMode: fromKeys(ACCESS_MODE_LABEL_KEYS),
+  defaultCloudProvider: (id, t) => (isCloudProvider(id) ? cloudProviderLabel(id, t) : id),
+}
 
 /**
  * The row's detail fields as interpolation params.
@@ -83,25 +84,21 @@ function detailParams(
   for (const key of AUDIT_ACTION_DETAIL_KEYS[action]) params[key] = none
   for (const [key, value] of Object.entries(details)) {
     if (value === null || value === '') params[key] = none
-    else params[key] = roleLabels(ROLE_SLOT_KEYS[key], String(value), t)
+    else params[key] = slotLabel(SLOT_LABELS[key], String(value), t)
   }
   return params
 }
 
-/**
- * A role slot's ids as labels. An id this build does not know (a role retired after the row was
- * written) stays as itself rather than being guessed onto a current role.
- */
-function roleLabels(
-  keys: Readonly<Record<string, string>> | undefined,
+/** A slot's value with each comma-separated id read through its labeller, if the slot has one. */
+function slotLabel(
+  label: ((id: string, t: Translate) => string) | undefined,
   value: string,
   t: Translate,
 ): string {
-  if (!keys) return value
+  if (!label) return value
   return value
     .split(',')
-    .map((id) => id.trim())
-    .map((id) => (Object.hasOwn(keys, id) ? t(keys[id]!) : id))
+    .map((id) => label(id.trim(), t))
     .join(', ')
 }
 

@@ -2789,6 +2789,12 @@
         "github": {
           "description": "Conecta la GitHub App del espacio de trabajo y explora repositorios, PR e incidencias."
         },
+        "gitlab": {
+          "description": "Conecta el espacio de trabajo a GitLab con un token de acceso y explora proyectos, merge requests e incidencias."
+        },
+        "sourceControl": {
+          "description": "Conecta un alojamiento de repositorios y explora repositorios, solicitudes de incorporación e incidencias."
+        },
         "slack": {
           "description": "Envía las notificaciones al espacio de Slack de tu equipo."
         },
@@ -2938,7 +2944,11 @@
         "apiKey": "Clave de API {id}"
       },
       "values": {
-        "none": "ninguno"
+        "none": "ninguno",
+        "accessMode": {
+          "account": "todos los de la cuenta",
+          "restricted": "solo los miembros indicados"
+        }
       },
       "actions": {
         "accountMemberAdded": "añadió a {target} a la cuenta como {roles}",
@@ -5670,6 +5680,17 @@
       "title": "Estado de los pipelines",
       "allValid": "Todos los pipelines son válidos y están actualizados.",
       "noEnabledSteps": "No hay pasos habilitados: el pipeline no tiene nada que ejecutar.",
+      "problems": {
+        "companion": "El acompañante «{kind}» debe ejecutarse justo después de un paso habilitado que pueda revisar ({targets}).",
+        "gatingNotGatable": "El paso «{kind}» no puede condicionarse a la estimación: el resto de la ejecución necesita su resultado. Solo puede omitirse por la estimación un paso cuyo resultado los pasos posteriores leen como contexto (un diseño, una revisión, una verificación adicional).",
+        "gatingWithHumanGate": "El paso «{kind}» tiene una aprobación humana, así que no puede condicionarse también a la estimación. La estimación puede añadir una revisión humana, pero nunca quitarla.",
+        "gatingNoThreshold": "El paso «{kind}» está condicionado a la estimación, pero no fija ningún umbral (complejidad, riesgo o impacto).",
+        "gatingNoEstimator": "El paso «{kind}» está condicionado a la estimación, pero antes no se ejecuta ningún paso que la produzca.",
+        "conditionNotGatable": "El paso «{kind}» no puede tener una condición de ejecución: el resto de la ejecución necesita su resultado, así que una ejecución fuera del alcance de la condición terminaría sin él sin avisar.",
+        "conditionWithHumanGate": "El paso «{kind}» tiene una aprobación humana, así que no puede tener también una condición de ejecución. Una condición puede dejar una revisión sin alcanzar, pero nunca quitarla.",
+        "unknownKinds": "Hace referencia a un tipo de agente desconocido: {kinds}. | Hace referencia a tipos de agente desconocidos: {kinds}.",
+        "outdated": "Hay una versión más reciente de este pipeline integrado (v{from} a v{to})."
+      },
       "invalidHeading": "Pipelines no válidos",
       "invalidDescription": "Estos hacen referencia a un agente inexistente o están mal configurados, por lo que fallarían (o se ejecutarían mal) al iniciar. Elimina un pipeline personalizado o vuelve a generar uno integrado para restaurar su definición del catálogo.",
       "builtinBadge": "integrado",
@@ -8695,9 +8716,9 @@
     "duplicateAlias": "Dos candidatos conservados comparten un id. Dos artefactos en una ubicación son un artefacto.",
     "keepAction": "Conservar {count}",
     "warning": {
-      "omitted": "Se descartaron {count} candidatos por encima del límite, así que esta lista es un prefijo. ",
+      "omitted": "Se descartó {count} candidato por encima del límite, así que esta lista es un prefijo. | Se descartaron {count} candidatos por encima del límite, así que esta lista es un prefijo.",
       "invalid": "{count} entrada declarada era ilegible y falta aquí. | {count} entradas declaradas eran ilegibles y faltan aquí.",
-      "previews": "Se rechazaron {count} enlaces de vista previa, así que esos candidatos se muestran sin imagen."
+      "previews": "Se rechazó {count} enlace de vista previa, así que ese candidato se muestra sin imagen. | Se rechazaron {count} enlaces de vista previa, así que esos candidatos se muestran sin imagen."
     },
     "noChoice": {
       "undeclared": "El paso nunca declaró sus candidatos, así que no había nada que comparar. La ejecución continuó.",

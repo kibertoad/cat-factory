@@ -196,10 +196,22 @@ export const useModelsStore = defineStore('models', () => {
   function labelForRef(ref: string | undefined): string | undefined {
     if (!ref) return undefined
     const idx = ref.indexOf(':')
+    const model = idx === -1 ? '' : ref.slice(idx + 1)
+    return catalogLabelForRef(ref) ?? (model || ref)
+  }
+
+  /**
+   * The catalog's label for a `provider:model` ref, or undefined when the catalog does not hold
+   * it. For a caller that must keep two uncatalogued refs apart (a report over refs from other
+   * workspaces or removed models), where {@link labelForRef}'s bare-model fallback would merge
+   * `openrouter:foo` and `together:foo` into one "foo".
+   */
+  function catalogLabelForRef(ref: string): string | undefined {
+    const idx = ref.indexOf(':')
     const provider = idx === -1 ? ref : ref.slice(0, idx)
     const model = idx === -1 ? '' : ref.slice(idx + 1)
     const hit = models.value.find((m) => m.provider === provider && m.model === model)
-    return hit ? `${hit.label} · ${hit.providerLabel}` : model || ref
+    return hit ? `${hit.label} · ${hit.providerLabel}` : undefined
   }
 
   return {
@@ -215,5 +227,6 @@ export const useModelsStore = defineStore('models', () => {
     hasUsableModel,
     isUsableId,
     labelForRef,
+    catalogLabelForRef,
   }
 })

@@ -196,7 +196,7 @@ describe('catalog', () => {
   it('provides metadata for every block type', () => {
     for (const t of BLOCK_TYPES) {
       expect(BLOCK_TYPE_META[t]).toMatchObject({
-        label: expect.any(String),
+        labelKey: `board.blockTypes.${t}`,
         icon: expect.any(String),
         accent: expect.any(String),
       })
@@ -205,7 +205,7 @@ describe('catalog', () => {
 
   it('blockTypeMeta returns a usable fallback for an unknown block type', () => {
     expect(blockTypeMeta('totally-made-up' as BlockType)).toMatchObject({
-      label: expect.any(String),
+      labelKey: 'common.block',
       icon: expect.any(String),
       accent: expect.any(String),
     })

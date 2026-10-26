@@ -72,6 +72,24 @@ describe('audit sentence composition', () => {
     )
   })
 
+  it('names an access mode and a cloud provider by their label', () => {
+    expect(
+      describeEvent(
+        event({ action: 'workspace.access_mode_changed', details: { accessMode: 'restricted' } }),
+        fakeT,
+      ),
+    ).toBe(
+      'layout.auditLog.actions.workspaceAccessModeChanged(' +
+        'accessMode=layout.auditLog.values.accessMode.restricted,target=Grace)',
+    )
+    expect(
+      describeEvent(
+        event({ action: 'account.settings_changed', details: { defaultCloudProvider: 'aws' } }),
+        fakeT,
+      ),
+    ).toBe('layout.auditLog.actions.accountSettingsChanged(defaultCloudProvider=AWS,target=Grace)')
+  })
+
   it('keeps a role id this build does not know as itself', () => {
     expect(
       describeEvent(event({ details: { previousRoles: 'auditor', roles: 'admin' } }), fakeT),

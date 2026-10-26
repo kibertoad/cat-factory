@@ -2789,6 +2789,12 @@
         "github": {
           "description": "Çalışma alanının GitHub App'ini bağlayın, depoları, PR'ları ve sorunları gözatın."
         },
+        "gitlab": {
+          "description": "Çalışma alanını bir erişim belirteciyle GitLab'e bağlayın, projelere, birleştirme isteklerine ve sorunlara göz atın."
+        },
+        "sourceControl": {
+          "description": "Bir depo barındırıcısı bağlayın, depolara, çekme isteklerine ve sorunlara göz atın."
+        },
         "slack": {
           "description": "Bildirimleri ekibinizin Slack çalışma alanına yönlendirin."
         },
@@ -2938,7 +2944,11 @@
         "apiKey": "API anahtarı {id}"
       },
       "values": {
-        "none": "yok"
+        "none": "yok",
+        "accessMode": {
+          "account": "hesaptaki herkes",
+          "restricted": "yalnızca listelenen üyeler"
+        }
       },
       "actions": {
         "accountMemberAdded": "{target} kullanıcısını hesaba {roles} olarak ekledi",
@@ -5670,6 +5680,17 @@
       "title": "Pipeline sağlığı",
       "allValid": "Tüm pipeline'lar geçerli ve güncel.",
       "noEnabledSteps": "Etkin adım yok: işlem hattının çalıştıracağı bir şey yok.",
+      "problems": {
+        "companion": "'{kind}' yardımcısı, inceleyebileceği etkin bir adımın ({targets}) hemen ardından çalışmalıdır.",
+        "gatingNotGatable": "'{kind}' adımı tahmine bağlanamaz: çıktısı çalıştırmanın geri kalanı için gereklidir. Tahmine göre yalnızca sonucu sonraki adımlarca bağlam olarak okunan bir adım (tasarım, inceleme, ek doğrulama) atlanabilir.",
+        "gatingWithHumanGate": "'{kind}' adımında insan onayı var, bu yüzden ayrıca tahmine bağlanamaz. Tahmin bir insan denetimi ekleyebilir ama asla kaldıramaz.",
+        "gatingNoThreshold": "'{kind}' adımı tahmine bağlı ama hiçbir eşik (karmaşıklık, risk veya etki) belirlemiyor.",
+        "gatingNoEstimator": "'{kind}' adımı tahmine bağlı, ancak ondan önce tahmin üreten bir adım çalışmıyor.",
+        "conditionNotGatable": "'{kind}' adımı çalıştırma koşulu taşıyamaz: çıktısı çalıştırmanın geri kalanı için gereklidir, bu yüzden koşulun kapsamı dışındaki bir çalıştırma onsuz sessizce biter.",
+        "conditionWithHumanGate": "'{kind}' adımında insan onayı var, bu yüzden ayrıca çalıştırma koşulu taşıyamaz. Bir koşul bir denetimi ulaşılmamış bırakabilir ama asla kaldıramaz.",
+        "unknownKinds": "Bilinmeyen bir ajan türüne başvuruyor: {kinds}. | Bilinmeyen ajan türlerine başvuruyor: {kinds}.",
+        "outdated": "Bu yerleşik işlem hattının daha yeni bir sürümü var (v{from} sürümünden v{to} sürümüne)."
+      },
       "invalidHeading": "Geçersiz pipeline'lar",
       "invalidDescription": "Bunlar eksik bir agent'a referans veriyor veya yanlış yapılandırılmış, bu yüzden başlangıçta başarısız olur (veya hatalı çalışır). Özel bir pipeline'ı silin ya da katalog tanımını geri yüklemek için bir yerleşik pipeline'ı yeniden tohumlayın.",
       "builtinBadge": "yerleşik",
@@ -8695,9 +8716,9 @@
     "duplicateAlias": "Tutulan iki aday aynı kimliği paylaşıyor. Tek konumdaki iki çıktı, tek çıktıdır.",
     "keepAction": "{count} tanesini tut",
     "warning": {
-      "omitted": "Üst sınırın ötesinde {count} aday elendi, bu liste yalnızca baştan bir bölüm. ",
+      "omitted": "Üst sınırın ötesinde {count} aday elendi, bu liste yalnızca baştan bir bölüm. | Üst sınırın ötesinde {count} aday elendi, bu liste yalnızca baştan bir bölüm.",
       "invalid": "Bildirilen {count} kayıt okunamadı ve burada yok. | Bildirilen {count} kayıt okunamadı ve burada yok.",
-      "previews": "{count} önizleme bağlantısı reddedildi, o adaylar görselsiz gösteriliyor."
+      "previews": "{count} önizleme bağlantısı reddedildi, o aday görselsiz gösteriliyor. | {count} önizleme bağlantısı reddedildi, o adaylar görselsiz gösteriliyor."
     },
     "noChoice": {
       "undeclared": "Adım adaylarını hiç bildirmedi, bu yüzden karşılaştırılacak bir şey yoktu. Çalıştırma devam etti.",

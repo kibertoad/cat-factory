@@ -90,7 +90,7 @@ function sliceLabelWith(name: (key: string) => string) {
   }
 }
 const sliceLabel = sliceLabelWith((key) => key)
-const modelSliceLabel = sliceLabelWith((key) => models.labelForRef(key) ?? key)
+const modelSliceLabel = sliceLabelWith((key) => models.catalogLabelForRef(key) ?? key)
 const agentKindSliceLabel = sliceLabelWith((key) =>
   isKnownAgentKind(key) ? agentKindMeta(key).label : key,
 )

@@ -2789,6 +2789,12 @@
         "github": {
           "description": "Połącz aplikację GitHub App obszaru roboczego, przeglądaj repozytoria, PR-y i zgłoszenia."
         },
+        "gitlab": {
+          "description": "Połącz obszar roboczy z GitLabem za pomocą tokenu dostępu, przeglądaj projekty, merge requesty i zgłoszenia."
+        },
+        "sourceControl": {
+          "description": "Połącz hosta repozytoriów, przeglądaj repozytoria, pull requesty i zgłoszenia."
+        },
         "slack": {
           "description": "Kieruj powiadomienia do przestrzeni Slack Twojego zespołu."
         },
@@ -2938,7 +2944,11 @@
         "apiKey": "Klucz API {id}"
       },
       "values": {
-        "none": "brak"
+        "none": "brak",
+        "accessMode": {
+          "account": "wszyscy na koncie",
+          "restricted": "tylko wymienieni członkowie"
+        }
       },
       "actions": {
         "accountMemberAdded": "dodał(a) {target} do konta jako {roles}",
@@ -5670,6 +5680,17 @@
       "title": "Stan pipeline'ów",
       "allValid": "Wszystkie pipeline'y są prawidłowe i aktualne.",
       "noEnabledSteps": "Brak włączonych kroków: potok nie ma nic do uruchomienia.",
+      "problems": {
+        "companion": "Towarzysz „{kind}” musi działać bezpośrednio po włączonym kroku, który może przejrzeć ({targets}).",
+        "gatingNotGatable": "Krok „{kind}” nie może zależeć od szacunku: reszta uruchomienia potrzebuje jego wyniku. Na podstawie szacunku można pominąć tylko krok, którego wynik późniejsze kroki czytają jako kontekst (projekt, przegląd, dodatkowa weryfikacja).",
+        "gatingWithHumanGate": "Krok „{kind}” ma zatwierdzenie przez człowieka, więc nie może też zależeć od szacunku. Szacunek może dodać kontrolę przez człowieka, ale nigdy jej nie usunie.",
+        "gatingNoThreshold": "Krok „{kind}” zależy od szacunku, ale nie ustawia progu (złożoność, ryzyko lub wpływ).",
+        "gatingNoEstimator": "Krok „{kind}” zależy od szacunku, ale przed nim nie działa żaden krok, który go tworzy.",
+        "conditionNotGatable": "Krok „{kind}” nie może mieć warunku uruchomienia: reszta uruchomienia potrzebuje jego wyniku, więc uruchomienie poza zakresem warunku zakończyłoby się bez niego bez ostrzeżenia.",
+        "conditionWithHumanGate": "Krok „{kind}” ma zatwierdzenie przez człowieka, więc nie może też mieć warunku uruchomienia. Warunek może pozostawić kontrolę nieosiągniętą, ale nigdy jej nie usunie.",
+        "unknownKinds": "Odwołuje się do nieznanego rodzaju agenta: {kinds}. | Odwołuje się do nieznanych rodzajów agentów: {kinds}. | Odwołuje się do nieznanych rodzajów agentów: {kinds}.",
+        "outdated": "Dostępna jest nowsza wersja tego wbudowanego potoku (z v{from} do v{to})."
+      },
       "invalidHeading": "Nieprawidłowe pipeline'y",
       "invalidDescription": "Odwołują się do brakującego agenta lub są źle skonfigurowane, więc zawiodłyby (lub wykonałyby się błędnie) przy starcie. Usuń pipeline niestandardowy albo zregeneruj wbudowany, aby przywrócić jego definicję z katalogu.",
       "builtinBadge": "wbudowany",
@@ -8695,9 +8716,9 @@
     "duplicateAlias": "Dwaj zachowani kandydaci mają to samo id. Dwa artefakty w jednym miejscu to jeden artefakt.",
     "keepAction": "Zachowaj {count}",
     "warning": {
-      "omitted": "{count} kandydatów odrzucono powyżej limitu, więc ta lista to tylko początek. ",
+      "omitted": "{count} kandydata odrzucono powyżej limitu, więc ta lista to tylko początek. | {count} kandydatów odrzucono powyżej limitu, więc ta lista to tylko początek. | {count} kandydatów odrzucono powyżej limitu, więc ta lista to tylko początek.",
       "invalid": "{count} zadeklarowany wpis był nieczytelny i go tu brakuje. | {count} zadeklarowane wpisy były nieczytelne i ich tu brakuje. | {count} zadeklarowanych wpisów było nieczytelnych i ich tu brakuje.",
-      "previews": "{count} linków podglądu odrzucono, więc ci kandydaci są pokazani bez obrazu."
+      "previews": "{count} link podglądu odrzucono, więc ten kandydat jest pokazany bez obrazu. | {count} linki podglądu odrzucono, więc ci kandydaci są pokazani bez obrazu. | {count} linków podglądu odrzucono, więc ci kandydaci są pokazani bez obrazu."
     },
     "noChoice": {
       "undeclared": "Krok nigdy nie zadeklarował kandydatów, więc nie było czego porównywać. Przebieg trwał dalej.",

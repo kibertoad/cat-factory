@@ -1124,34 +1124,63 @@ export function isKnownTaskType(taskType: string): boolean {
   return taskType in TASK_TYPE_META || taskType in customTaskTypeMeta.value
 }
 
-type BlockTypeMeta = { label: string; icon: string; accent: string }
+/** `labelKey` is the i18n key of the type's name, resolved by the caller. */
+type BlockTypeMeta = { labelKey: string; icon: string; accent: string }
 
 /** Visual metadata for each architecture block type. */
 export const BLOCK_TYPE_META: Record<BlockType, BlockTypeMeta> = {
-  frontend: { label: 'Frontend', icon: 'i-lucide-monitor', accent: 'var(--app-hue-blue)' },
-  service: { label: 'Service', icon: 'i-lucide-server', accent: 'var(--app-hue-violet)' },
-  library: { label: 'Library', icon: 'i-lucide-package', accent: 'var(--app-hue-pink)' },
+  frontend: {
+    labelKey: 'board.blockTypes.frontend',
+    icon: 'i-lucide-monitor',
+    accent: 'var(--app-hue-blue)',
+  },
+  service: {
+    labelKey: 'board.blockTypes.service',
+    icon: 'i-lucide-server',
+    accent: 'var(--app-hue-violet)',
+  },
+  library: {
+    labelKey: 'board.blockTypes.library',
+    icon: 'i-lucide-package',
+    accent: 'var(--app-hue-pink)',
+  },
   document: {
-    label: 'Document repository',
+    labelKey: 'board.blockTypes.document',
     icon: 'i-lucide-book-text',
     accent: 'var(--app-hue-purple)',
   },
-  api: { label: 'API', icon: 'i-lucide-route', accent: 'var(--app-hue-cyan)' },
-  database: { label: 'Database', icon: 'i-lucide-database', accent: 'var(--app-hue-emerald)' },
-  queue: { label: 'Queue', icon: 'i-lucide-list-ordered', accent: 'var(--app-hue-amber)' },
+  api: { labelKey: 'board.blockTypes.api', icon: 'i-lucide-route', accent: 'var(--app-hue-cyan)' },
+  database: {
+    labelKey: 'board.blockTypes.database',
+    icon: 'i-lucide-database',
+    accent: 'var(--app-hue-emerald)',
+  },
+  queue: {
+    labelKey: 'board.blockTypes.queue',
+    icon: 'i-lucide-list-ordered',
+    accent: 'var(--app-hue-amber)',
+  },
   integration: {
-    label: 'Integration',
+    labelKey: 'board.blockTypes.integration',
     icon: 'i-lucide-workflow',
     accent: 'var(--app-hue-orange)',
   },
   // Not user-creatable, but still emitted by the backend (the seeded third-party
   // service and the environments integration), so they need display metadata.
-  external: { label: 'External', icon: 'i-lucide-globe', accent: 'var(--app-hue-slate)' },
-  environment: { label: 'Environment', icon: 'i-lucide-box', accent: 'var(--app-hue-teal)' },
+  external: {
+    labelKey: 'board.blockTypes.external',
+    icon: 'i-lucide-globe',
+    accent: 'var(--app-hue-slate)',
+  },
+  environment: {
+    labelKey: 'board.blockTypes.environment',
+    icon: 'i-lucide-box',
+    accent: 'var(--app-hue-teal)',
+  },
 }
 
 const FALLBACK_BLOCK_TYPE_META: BlockTypeMeta = {
-  label: 'Block',
+  labelKey: 'common.block',
   icon: 'i-lucide-box',
   accent: 'var(--app-hue-slate)',
 }

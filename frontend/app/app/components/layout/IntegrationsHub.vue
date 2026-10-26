@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { showOverrideField } from '~/utils/uiMode'
-import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
+import { vcsProviderIcon, vcsProviderLabel } from '~/utils/vcs'
+import type { VcsProvider } from '~/types/domain'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import AppModal from '~/components/common/AppModal.vue'
@@ -30,6 +31,13 @@ const { t } = useI18n()
 const ui = useUiStore()
 const auth = useAuthStore()
 const github = useGitHubStore()
+
+// The source control row's description, per provider (the GitHub one names the GitHub App, which a
+// GitLab deployment does not have). With no provider known the row reads neutrally.
+const SOURCE_CONTROL_DESCRIPTION_KEYS: Record<VcsProvider, string> = {
+  github: 'layout.integrationsHub.items.github.description',
+  gitlab: 'layout.integrationsHub.items.gitlab.description',
+}
 const slack = useSlackStore()
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
@@ -135,13 +143,13 @@ const groups = computed<IntegrationGroup[]>(() => {
       key: 'github',
       // Named for the provider the workspace connected (or the only one it could), never a
       // hard-coded GitHub: a GitLab deployment serves this same row (`~/utils/vcs`).
-      icon: github.surfaceProvider
-        ? VCS_PROVIDER_ICONS[github.surfaceProvider]
-        : 'i-lucide-git-branch',
-      label: github.surfaceProvider
-        ? VCS_PROVIDER_LABELS[github.surfaceProvider]
-        : t('vcs.panel.title'),
-      description: t('layout.integrationsHub.items.github.description'),
+      icon: vcsProviderIcon(github.surfaceProvider),
+      label: vcsProviderLabel(github.surfaceProvider, t('vcs.panel.title')),
+      description: t(
+        github.surfaceProvider
+          ? SOURCE_CONTROL_DESCRIPTION_KEYS[github.surfaceProvider]
+          : 'layout.integrationsHub.items.sourceControl.description',
+      ),
       status: github.connected ? github.connection?.accountLogin : undefined,
       connected: github.connected,
       recommended: true,

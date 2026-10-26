@@ -222,11 +222,11 @@ const { requestClose } = useUnsavedGuard({
            over all five. -->
       <p
         v-if="warnings"
-        class="mb-3 text-xs text-app-warning-300"
+        class="mb-3 flex flex-wrap gap-x-1 text-xs text-app-warning-300"
         data-testid="binary-candidates-warnings"
       >
         <span v-if="view.state.omitted">{{
-          t('binaryCandidates.warning.omitted', { count: view.state.omitted })
+          t('binaryCandidates.warning.omitted', { count: view.state.omitted }, view.state.omitted)
         }}</span>
         <span v-if="view.state.invalidEntries">
           {{
@@ -238,7 +238,13 @@ const { requestClose } = useUnsavedGuard({
           }}</span
         >
         <span v-if="view.state.unusablePreviews">
-          {{ t('binaryCandidates.warning.previews', { count: view.state.unusablePreviews }) }}</span
+          {{
+            t(
+              'binaryCandidates.warning.previews',
+              { count: view.state.unusablePreviews },
+              view.state.unusablePreviews,
+            )
+          }}</span
         >
       </p>
 

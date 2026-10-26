@@ -32,6 +32,22 @@ export const VCS_PROVIDER_ICONS: Record<VcsProvider, string> = {
   gitlab: 'i-lucide-gitlab',
 }
 
+/** A provider's icon, or the neutral source-control icon when no provider is known. */
+export function vcsProviderIcon(provider: VcsProvider | null | undefined): string {
+  return provider ? VCS_PROVIDER_ICONS[provider] : 'i-lucide-git-branch'
+}
+
+/**
+ * A provider's brand name, or `neutral` when no provider is known. The neutral wording is prose,
+ * so the caller passes it already translated.
+ */
+export function vcsProviderLabel(
+  provider: VcsProvider | null | undefined,
+  neutral: string,
+): string {
+  return provider ? VCS_PROVIDER_LABELS[provider] : neutral
+}
+
 /**
  * The public instance of each provider, used ONLY where no host is known and a wrong link costs
  * nothing but a click: the token-creation page during connect (see {@link vcsTokenCreateUrl}).

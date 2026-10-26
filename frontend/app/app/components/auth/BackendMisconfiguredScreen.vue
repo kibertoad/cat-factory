@@ -39,9 +39,13 @@ function reload() {
           <code class="text-sm font-semibold text-app-warning-300">{{ problem.key }}</code>
           <!-- The summary and remedy are Markdown (they name env vars and commands in code spans). -->
           <MarkdownProse class="mt-1 text-sm text-toned" :text="problem.summary" />
-          <div class="mt-2 text-sm text-muted">
-            <span class="font-medium text-toned">{{ t('app.misconfigured.howToFix') }}</span>
-            <MarkdownProse :text="problem.remedy" />
+          <!-- A row, so the label leads the remedy's first line rather than sitting alone above the
+               block the Markdown renders. -->
+          <div class="mt-2 flex gap-1 text-sm text-muted">
+            <span class="shrink-0 font-medium text-toned">{{
+              t('app.misconfigured.howToFix')
+            }}</span>
+            <MarkdownProse class="min-w-0" :text="problem.remedy" />
           </div>
           <ULink
             raw

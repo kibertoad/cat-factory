@@ -2789,6 +2789,12 @@
         "github": {
           "description": "Connectez la GitHub App de l'espace de travail, parcourez dépôts, PR et tickets."
         },
+        "gitlab": {
+          "description": "Connectez l'espace de travail à GitLab avec un jeton d'accès, parcourez projets, merge requests et tickets."
+        },
+        "sourceControl": {
+          "description": "Connectez un hébergeur de dépôts, parcourez dépôts, demandes de fusion et tickets."
+        },
         "slack": {
           "description": "Acheminez les notifications vers l'espace Slack de votre équipe."
         },
@@ -2938,7 +2944,11 @@
         "apiKey": "Clé d’API {id}"
       },
       "values": {
-        "none": "aucun"
+        "none": "aucun",
+        "accessMode": {
+          "account": "tout le compte",
+          "restricted": "les membres listés uniquement"
+        }
       },
       "actions": {
         "accountMemberAdded": "a ajouté {target} au compte en tant que {roles}",
@@ -5670,6 +5680,17 @@
       "title": "État des pipelines",
       "allValid": "Tous les pipelines sont valides et à jour.",
       "noEnabledSteps": "Aucune étape activée : le pipeline n'a rien à exécuter.",
+      "problems": {
+        "companion": "Le compagnon « {kind} » doit s'exécuter juste après une étape activée qu'il peut relire ({targets}).",
+        "gatingNotGatable": "L'étape « {kind} » ne peut pas dépendre de l'estimation : le reste de l'exécution a besoin de son résultat. Seule une étape dont le résultat sert de contexte aux étapes suivantes (une conception, une revue, une vérification supplémentaire) peut être sautée selon l'estimation.",
+        "gatingWithHumanGate": "L'étape « {kind} » porte une approbation humaine, elle ne peut donc pas aussi dépendre de l'estimation. L'estimation peut ajouter un contrôle humain, jamais en retirer un.",
+        "gatingNoThreshold": "L'étape « {kind} » dépend de l'estimation mais ne fixe aucun seuil (complexité, risque ou impact).",
+        "gatingNoEstimator": "L'étape « {kind} » dépend de l'estimation, mais aucune étape qui en produit une ne s'exécute avant elle.",
+        "conditionNotGatable": "L'étape « {kind} » ne peut pas porter de condition d'exécution : le reste de l'exécution a besoin de son résultat, donc une exécution hors du périmètre de la condition se terminerait sans elle, sans le signaler.",
+        "conditionWithHumanGate": "L'étape « {kind} » porte une approbation humaine, elle ne peut donc pas aussi porter une condition d'exécution. Une condition peut laisser un contrôle non atteint, jamais en retirer un.",
+        "unknownKinds": "Fait référence à un type d'agent inconnu : {kinds}. | Fait référence à des types d'agent inconnus : {kinds}.",
+        "outdated": "Une version plus récente de ce pipeline intégré est disponible (v{from} vers v{to})."
+      },
       "invalidHeading": "Pipelines non valides",
       "invalidDescription": "Ceux-ci référencent un agent manquant ou sont mal configurés et échoueraient (ou s'exécuteraient mal) au démarrage. Supprimez un pipeline personnalisé, ou régénérez un pipeline intégré pour restaurer sa définition du catalogue.",
       "builtinBadge": "intégré",
@@ -8695,9 +8716,9 @@
     "duplicateAlias": "Deux candidats conservés partagent un id. Deux artefacts au même emplacement, c’est un artefact.",
     "keepAction": "Conserver {count}",
     "warning": {
-      "omitted": "{count} candidats ont été écartés au-delà de la limite, cette liste est donc un préfixe. ",
+      "omitted": "{count} candidat a été écarté au-delà de la limite, cette liste est donc un préfixe. | {count} candidats ont été écartés au-delà de la limite, cette liste est donc un préfixe.",
       "invalid": "{count} entrée déclarée était illisible et manque ici. | {count} entrées déclarées étaient illisibles et manquent ici.",
-      "previews": "{count} liens d’aperçu ont été refusés, ces candidats s’affichent donc sans image."
+      "previews": "{count} lien d’aperçu a été refusé, ce candidat s’affiche donc sans image. | {count} liens d’aperçu ont été refusés, ces candidats s’affichent donc sans image."
     },
     "noChoice": {
       "undeclared": "L’étape n’a jamais déclaré ses candidats, il n’y avait donc rien à comparer. L’exécution a continué.",

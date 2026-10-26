@@ -2954,6 +2954,12 @@
         "github": {
           "description": "Connect the workspace's GitHub App, browse repos, PRs and issues."
         },
+        "gitlab": {
+          "description": "Connect the workspace to GitLab with an access token, browse projects, merge requests and issues."
+        },
+        "sourceControl": {
+          "description": "Connect a repository host, browse repos, pull requests and issues."
+        },
         "slack": {
           "description": "Route notifications to your team's Slack workspace."
         },
@@ -3096,7 +3102,11 @@
         "apiKey": "API key {id}"
       },
       "values": {
-        "none": "none"
+        "none": "none",
+        "accessMode": {
+          "account": "everyone in the account",
+          "restricted": "listed members only"
+        }
       },
       "actions": {
         "accountMemberAdded": "added {target} to the account as {roles}",
@@ -5876,6 +5886,17 @@
       "title": "Pipeline health",
       "allValid": "All pipelines are valid and up to date.",
       "noEnabledSteps": "No enabled steps: the pipeline has nothing to run.",
+      "problems": {
+        "companion": "Companion '{kind}' must run immediately after an enabled step it can review ({targets}).",
+        "gatingNotGatable": "Step '{kind}' may not be estimate-gated: its output is required by the rest of the run. Only a step whose result later steps read as context (a design, a review, an extra verification pass) may be skipped on the estimate.",
+        "gatingWithHumanGate": "Step '{kind}' carries a human approval gate, so it cannot also be estimate-gated. The estimate may add a human checkpoint but never remove one.",
+        "gatingNoThreshold": "Step '{kind}' is estimate-gated but sets no threshold (complexity, risk or impact).",
+        "gatingNoEstimator": "Step '{kind}' is gated on the estimate but no step that produces one runs before it.",
+        "conditionNotGatable": "Step '{kind}' may not carry a run condition: its output is required by the rest of the run, so a run outside the condition's scope would silently finish without it.",
+        "conditionWithHumanGate": "Step '{kind}' carries a human approval gate, so it cannot also carry a run condition. A condition may leave a checkpoint unreached but never remove one.",
+        "unknownKinds": "References an unknown agent kind: {kinds}. | References unknown agent kinds: {kinds}.",
+        "outdated": "A newer version of this built-in pipeline is available (v{from} to v{to})."
+      },
       "invalidHeading": "Invalid pipelines",
       "invalidDescription": "These reference a missing agent or are misconfigured, so they would fail (or misrun) at start. Delete a custom pipeline, or reseed a built-in to restore its catalog definition.",
       "builtinBadge": "built-in",
@@ -9020,9 +9041,9 @@
     "duplicateAlias": "Two kept candidates share an id. Two artifacts at one location is one artifact.",
     "keepAction": "Keep {count}",
     "warning": {
-      "omitted": "{count} candidates were dropped past the cap, so this list is a prefix. ",
+      "omitted": "{count} candidate was dropped past the cap, so this list is a prefix. | {count} candidates were dropped past the cap, so this list is a prefix.",
       "invalid": "{count} declared entry was unreadable and is missing here. | {count} declared entries were unreadable and are missing here.",
-      "previews": "{count} preview links were refused, so those candidates render without an image."
+      "previews": "{count} preview link was refused, so that candidate renders without an image. | {count} preview links were refused, so those candidates render without an image."
     },
     "noChoice": {
       "undeclared": "The step never declared its candidates, so there was nothing to compare. The run continued.",

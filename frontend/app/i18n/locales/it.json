@@ -2894,6 +2894,12 @@
         "github": {
           "description": "Connetti la GitHub App del workspace, esplora repo, PR e issue."
         },
+        "gitlab": {
+          "description": "Connetti il workspace a GitLab con un token di accesso, esplora progetti, merge request e issue."
+        },
+        "sourceControl": {
+          "description": "Connetti un host di repository, esplora repo, richieste di pull e issue."
+        },
         "slack": {
           "description": "Instrada le notifiche verso il workspace Slack del tuo team."
         },
@@ -3036,7 +3042,11 @@
         "apiKey": "Chiave API {id}"
       },
       "values": {
-        "none": "nessuno"
+        "none": "nessuno",
+        "accessMode": {
+          "account": "tutti nell'account",
+          "restricted": "solo i membri elencati"
+        }
       },
       "actions": {
         "accountMemberAdded": "ha aggiunto {target} all’account come {roles}",
@@ -5126,6 +5136,17 @@
       "title": "Stato delle pipeline",
       "allValid": "Tutte le pipeline sono valide e aggiornate.",
       "noEnabledSteps": "Nessun passaggio abilitato: la pipeline non ha nulla da eseguire.",
+      "problems": {
+        "companion": "Il compagno «{kind}» deve essere eseguito subito dopo un passaggio abilitato che può revisionare ({targets}).",
+        "gatingNotGatable": "Il passaggio «{kind}» non può dipendere dalla stima: il resto dell'esecuzione richiede il suo output. Solo un passaggio il cui risultato è letto come contesto dai passaggi successivi (una progettazione, una revisione, una verifica aggiuntiva) può essere saltato in base alla stima.",
+        "gatingWithHumanGate": "Il passaggio «{kind}» ha un'approvazione umana, quindi non può dipendere anche dalla stima. La stima può aggiungere un controllo umano, mai rimuoverne uno.",
+        "gatingNoThreshold": "Il passaggio «{kind}» dipende dalla stima ma non imposta alcuna soglia (complessità, rischio o impatto).",
+        "gatingNoEstimator": "Il passaggio «{kind}» dipende dalla stima, ma prima di esso non viene eseguito alcun passaggio che la produca.",
+        "conditionNotGatable": "Il passaggio «{kind}» non può avere una condizione di esecuzione: il resto dell'esecuzione richiede il suo output, quindi un'esecuzione fuori dall'ambito della condizione terminerebbe senza di esso senza avvisare.",
+        "conditionWithHumanGate": "Il passaggio «{kind}» ha un'approvazione umana, quindi non può avere anche una condizione di esecuzione. Una condizione può lasciare un controllo non raggiunto, mai rimuoverne uno.",
+        "unknownKinds": "Fa riferimento a un tipo di agente sconosciuto: {kinds}. | Fa riferimento a tipi di agente sconosciuti: {kinds}.",
+        "outdated": "È disponibile una versione più recente di questa pipeline integrata (da v{from} a v{to})."
+      },
       "invalidHeading": "Pipeline non valide",
       "invalidDescription": "Queste fanno riferimento a un agente mancante o sono configurate male, quindi fallirebbero (o funzionerebbero male) all'avvio. Elimina una pipeline personalizzata, oppure ripristina una integrata per recuperare la sua definizione dal catalogo.",
       "builtinBadge": "integrata",
@@ -8695,9 +8716,9 @@
     "duplicateAlias": "Due candidati tenuti condividono un id. Due artefatti in una posizione sono un artefatto.",
     "keepAction": "Tieni {count}",
     "warning": {
-      "omitted": "{count} candidati sono stati scartati oltre il limite, quindi questo elenco è un prefisso. ",
+      "omitted": "{count} candidato è stato scartato oltre il limite, quindi questo elenco è un prefisso. | {count} candidati sono stati scartati oltre il limite, quindi questo elenco è un prefisso.",
       "invalid": "{count} voce dichiarata era illeggibile e manca qui. | {count} voci dichiarate erano illeggibili e mancano qui.",
-      "previews": "{count} link di anteprima sono stati rifiutati, quindi quei candidati appaiono senza immagine."
+      "previews": "{count} link di anteprima è stato rifiutato, quindi quel candidato appare senza immagine. | {count} link di anteprima sono stati rifiutati, quindi quei candidati appaiono senza immagine."
     },
     "noChoice": {
       "undeclared": "Il passo non ha mai dichiarato i suoi candidati, quindi non c’era nulla da confrontare. L’esecuzione è proseguita.",

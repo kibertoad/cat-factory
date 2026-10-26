@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import type { AccountRole } from '~/types/domain'
-import type { InvitationStatus } from '@cat-factory/contracts'
+import { accountRoleSchema, type InvitationStatus } from '@cat-factory/contracts'
+import { ACCOUNT_ROLE_LABEL_KEYS } from '~/utils/roles'
 import AccountAuditLog from '~/components/layout/AccountAuditLog.vue'
 import AccountDeploymentSettings from '~/components/layout/AccountDeploymentSettings.vue'
 import AccountModelPolicySettings from '~/components/layout/AccountModelPolicySettings.vue'
@@ -30,11 +31,9 @@ const busy = ref(false)
 // reports `false` in plain local mode, where there is no account admin to govern).
 const modelPolicySupported = computed(() => auth.infrastructure?.modelPolicy?.supported ?? false)
 
-const ROLE_ITEMS = computed<{ label: string; value: AccountRole }[]>(() => [
-  { label: t('layout.accountTeam.roles.admin'), value: 'admin' },
-  { label: t('layout.accountTeam.roles.developer'), value: 'developer' },
-  { label: t('layout.accountTeam.roles.product'), value: 'product' },
-])
+const ROLE_ITEMS = computed<{ label: string; value: AccountRole }[]>(() =>
+  accountRoleSchema.options.map((value) => ({ label: roleLabel(value), value })),
+)
 
 const EMAIL_PROVIDER_ITEMS = computed(() => [
   { label: t('layout.accountTeam.email.providers.resend'), value: 'resend' as const },
@@ -43,7 +42,7 @@ const EMAIL_PROVIDER_ITEMS = computed(() => [
 
 /** A role or email provider as its label: the ids are codes, not names a reader should see. */
 function roleLabel(role: AccountRole): string {
-  return ROLE_ITEMS.value.find((item) => item.value === role)?.label ?? role
+  return t(ACCOUNT_ROLE_LABEL_KEYS[role])
 }
 function emailProviderLabel(provider: string): string {
   return EMAIL_PROVIDER_ITEMS.value.find((item) => item.value === provider)?.label ?? provider
