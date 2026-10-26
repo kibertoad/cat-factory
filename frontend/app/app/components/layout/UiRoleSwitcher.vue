@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { currentMenuItem } from '~/utils/currentMenuItem'
 import { ROLE_PRESENTATION, UI_ROLES } from '~/utils/uiRole'
 
 // Role picker, at the TOP of the sidebar beside the interface-tier switcher: one place answers
@@ -29,7 +30,7 @@ const items = computed(() =>
     label: t(ROLE_PRESENTATION[role].labelKey),
     icon: ROLE_PRESENTATION[role].icon,
     // The tick, so an open menu says which role is current as well as which are available.
-    trailingIcon: role === uiRole.role ? 'i-lucide-check' : undefined,
+    ...currentMenuItem(role === uiRole.role),
     onSelect: () => uiRole.setRole(role),
   })),
 )
@@ -37,6 +38,9 @@ const items = computed(() =>
 
 <template>
   <UDropdownMenu :items="items" :ui="{ content: 'min-w-48' }">
+    <template #current-trailing>
+      <UIcon name="i-lucide-check" class="h-4 w-4 shrink-0 text-primary" />
+    </template>
     <!-- Rail: glyph over the role name, matching the tier button beside it. -->
     <UButton
       color="neutral"

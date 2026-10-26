@@ -686,7 +686,8 @@
         "oauth_started_by_other_user": "To połączenie rozpoczął ktoś inny, więc tylko ta osoba może je dokończyć.",
         "oauth_exchange_refused": "Serwer autoryzacji serwera narzędzi odrzucił zgodę. Poproś operatora wdrożenia o sprawdzenie ustawień klienta OAuth serwera narzędzi.",
         "oauth_client_secret_unavailable": "Sekret klienta OAuth serwera narzędzi nie jest dostępny na tej tablicy. Dodaj go w oknie Infrastruktura.",
-        "tool_server_without_oauth": "Ten serwer narzędzi nie używa już OAuth, więc nie ma połączenia do dokończenia."
+        "tool_server_without_oauth": "Ten serwer narzędzi nie używa już OAuth, więc nie ma połączenia do dokończenia.",
+        "gate_config_fields_invalid": "Ustawienia bramki kroku są niekompletne lub zawierają wartość, której bramka nie akceptuje, zwykle wymagane ustawienie bez wartości. Uzupełnij ustawienia bramki kroku w pipeline'ie i spróbuj ponownie."
       }
     },
     "action": {
@@ -1185,9 +1186,11 @@
       "detect": {
         "title": "Autowykrywanie",
         "button": "Wykryj z repozytorium",
-        "hint": "Sprawdza repozytorium i proponuje konfigurację provisioningu. Potwierdzasz i edytujesz wszystko poniżej; nic nie jest zapisywane automatycznie.",
+        "hint": "Sprawdza repozytorium i proponuje konfigurację provisioningu. Nic nie jest zapisywane, dopóki jej nie zastosujesz.",
         "error": "Nie udało się odczytać repozytorium, aby wykryć provisioning.",
         "none": "Nie wykryto manifestów Kubernetes ani pliku Compose.",
+        "proposed": "Znaleziono konfigurację {type}.",
+        "apply": "Zastosuj",
         "applied": "Zaproponowano konfigurację {type}. Przejrzyj i dostosuj pola poniżej.",
         "overlayTitle": "Tymczasowy overlay",
         "serviceDirTitle": "Folder wdrożenia usługi",
@@ -3075,7 +3078,8 @@
         "skills": "Umiejętności",
         "foundational": "Usługi fundamentalne",
         "riskPolicies": "Zasady ryzyka"
-      }
+      },
+      "configNotLoaded": "Nie udało się wczytać bieżących ustawień tego konta, więc zapis nadpisałby pozostałe. Odśwież przed edycją."
     },
     "providerConnection": {
       "fallbackTitle": "Dostawca",
@@ -3167,6 +3171,9 @@
         "apiServerUrlHelp": "Główny adres kube-apiserver, np. https://10.0.0.1:6443. Orkiestrator stosuje manifesty każdego PR przez apiserver, więc tylko ten endpoint musi być osiągalny.",
         "apiToken": "Token ServiceAccount",
         "apiTokenHelp": "Token bearer z uprawnieniami RBAC do tworzenia namespace’ów i stosowania zasobów operatora. Przechowywany w postaci zaszyfrowanej; nie jest ponownie pokazywany.",
+        "apiTokenHelpStored": "Token jest zapisany. Zostaw puste, aby go zachować, albo wpisz nowy, aby go zastąpić. Test wymaga ponownego wpisania tokenu.",
+        "apiTokenPlaceholderStored": "Pozostaw puste, aby zachować zapisany token",
+        "tokenSaved": "Zapisano",
         "manifestSourceLabel": "Źródło manifestów",
         "sourceColocated": "W repozytorium PR",
         "sourceSeparate": "Osobne repozytorium",
@@ -4365,7 +4372,6 @@
         "maxFailureKindShare": "Udział awarii, jaki może przypaść jednej przyczynie, powyżej 0 i do 1.",
         "maxSweepFailures": "Kolejne nieudane przebiegi jednego zadania w tle."
       },
-      "notLoaded": "Nie udało się wczytać bieżących ustawień tego konta, więc zapis nadpisałby pozostałe. Odśwież przed edycją.",
       "invalidNumbers": "Te limity nie są liczbami",
       "failureKinds": {
         "label": "Reguły dla poszczególnych rodzajów awarii",
@@ -4875,7 +4881,8 @@
     "continueTitle": "Wyślij swoje odpowiedzi; ankieter może zadać dodatkowe pytania",
     "status": {
       "awaiting": "Oczekiwanie na odpowiedzi",
-      "done": "Gotowe"
+      "done": "Gotowe",
+      "failed": "Niepowodzenie"
     },
     "saveFailedCount": "Nie udało się zapisać {count} Twoich odpowiedzi",
     "continueFailed": "Nie udało się przesłać Twoich odpowiedzi",
@@ -5570,7 +5577,8 @@
         "claimUnattended": "Ustaw jako domyślny bez nadzoru",
         "releaseUnattended": "Przestań być domyślnym bez nadzoru"
       },
-      "removeLabel": "Usuń etykietę {label}"
+      "removeLabel": "Usuń etykietę {label}",
+      "gateParametersInvalid": "Krok z bramką ma wymagane ustawienie bez wartości albo wartość, której bramka nie akceptuje. Uzupełnij ustawienia bramki przed zapisaniem."
     },
     "progress": {
       "status": {
@@ -7750,6 +7758,7 @@
       "service": "Udostępniona usługa Compose",
       "servicePlaceholder": "np. app",
       "port": "Udostępniony port",
+      "portHelp": "Wykrywanie nie odczytuje portów, więc wartość startuje od 80. Wpisz port, na którym nasłuchuje usługa.",
       "composeFiles": "Pliki Compose",
       "profiles": "Profile",
       "seedDumps": "Zrzuty danych",

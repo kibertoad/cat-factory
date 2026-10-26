@@ -686,7 +686,8 @@
         "oauth_started_by_other_user": "この接続は別のユーザーが開始したため、そのユーザーだけが完了できます。",
         "oauth_exchange_refused": "ツールサーバーの認可サーバーが認可を拒否しました。デプロイメントの運用担当者に、ツールサーバーの OAuth クライアント設定を確認するよう依頼してください。",
         "oauth_client_secret_unavailable": "このボードではツールサーバーの OAuth クライアントシークレットを利用できません。インフラストラクチャ ウィンドウで追加してください。",
-        "tool_server_without_oauth": "このツールサーバーは OAuth を使用しなくなったため、完了する接続はありません。"
+        "tool_server_without_oauth": "このツールサーバーは OAuth を使用しなくなったため、完了する接続はありません。",
+        "gate_config_fields_invalid": "ステップのゲートの設定が不足しているか、ゲートが受け付けない値が含まれています。多くの場合、値のない必須の設定です。パイプラインでステップのゲートの設定を入力してから、もう一度お試しください。"
       }
     },
     "action": {
@@ -1185,9 +1186,11 @@
       "detect": {
         "title": "自動検出",
         "button": "リポジトリから検出",
-        "hint": "リポジトリを調べてプロビジョニング設定を提案します。以下の内容はすべて確認・編集でき、自動保存はされません。",
+        "hint": "リポジトリを調べてプロビジョニング設定を提案します。適用するまで何も保存されません。",
         "error": "リポジトリを読み取ってプロビジョニングを検出できませんでした。",
         "none": "Kubernetes マニフェストや Compose ファイルは検出されませんでした。",
+        "proposed": "{type} の設定が見つかりました。",
+        "apply": "適用",
         "applied": "{type} の設定を提案しました。以下のフィールドを確認して調整してください。",
         "overlayTitle": "一時環境のオーバーレイ",
         "serviceDirTitle": "サービスのデプロイフォルダ",
@@ -3075,7 +3078,8 @@
         "skills": "スキル",
         "foundational": "基盤サービス",
         "riskPolicies": "リスクポリシー"
-      }
+      },
+      "configNotLoaded": "このアカウントの現在の設定を読み込めなかったため、保存すると他の設定が上書きされます。編集する前に再読み込みしてください。"
     },
     "infrastructure": {
       "active": "アクティブ: {backend}",
@@ -3249,6 +3253,9 @@
         "apiServerUrlHelp": "kube-apiserver のルート (例: https://10.0.0.1:6443)。オーケストレーターは各 PR のマニフェストを apiserver 経由で適用するため、到達可能である必要があるのはこのエンドポイントだけです。",
         "apiToken": "ServiceAccount トークン",
         "apiTokenHelp": "namespace を作成し、オペレーターのリソースを適用する RBAC を持つベアラートークン。暗号化して保存され、再表示されません。",
+        "apiTokenHelpStored": "トークンは保存済みです。空欄のままにすると保持され、新しい値を入力すると置き換わります。テストにはトークンの再入力が必要です。",
+        "apiTokenPlaceholderStored": "保存済みトークンを保持するには空欄のままにします",
+        "tokenSaved": "保存済み",
         "manifestSourceLabel": "マニフェストソース",
         "sourceColocated": "PR リポジトリ内に同梱",
         "sourceSeparate": "別リポジトリ",
@@ -4365,7 +4372,6 @@
         "maxFailureKindShare": "単一の原因が占めてよい失敗の割合（0 より大きく 1 まで）。",
         "maxSweepFailures": "ひとつのバックグラウンド監視が連続して失敗した回数。"
       },
-      "notLoaded": "このアカウントの現在の設定を読み込めなかったため、保存すると他の設定が上書きされます。編集する前に再読み込みしてください。",
       "invalidNumbers": "これらの上限値が数値ではありません",
       "failureKinds": {
         "label": "失敗種別ごとのルール",
@@ -4875,7 +4881,8 @@
     "continueTitle": "回答を送信します。インタビュアーが追加の質問をする場合があります",
     "status": {
       "awaiting": "回答待ち",
-      "done": "完了"
+      "done": "完了",
+      "failed": "失敗"
     },
     "saveFailedCount": "回答のうち {count} 件を保存できませんでした",
     "continueFailed": "回答を送信できませんでした",
@@ -5570,7 +5577,8 @@
         "claimUnattended": "無人実行の既定にする",
         "releaseUnattended": "無人実行の既定を解除"
       },
-      "removeLabel": "ラベル {label} を削除"
+      "removeLabel": "ラベル {label} を削除",
+      "gateParametersInvalid": "ゲートのステップに、値のない必須の設定、またはゲートが受け付けない値があります。保存する前にゲートの設定を入力してください。"
     },
     "progress": {
       "status": {
@@ -7750,6 +7758,7 @@
       "service": "公開する Compose サービス",
       "servicePlaceholder": "例: app",
       "port": "公開ポート",
+      "portHelp": "検出ではポートを読み取らないため、初期値は 80 です。サービスが待ち受けるポートを入力してください。",
       "composeFiles": "Compose ファイル",
       "profiles": "プロファイル",
       "seedDumps": "シードダンプ",

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { BootstrapJob, ReferenceArchitecture } from '@cat-factory/contracts'
 import { listGitHubInstallationsContract, startBootstrapJobContract } from '@cat-factory/contracts'
-import { screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent, waitFor } from 'storybook/test'
 import { apiRefusal, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { bootstrapApi } from '~/stories/bootstrapApi'
@@ -28,7 +28,7 @@ import BootstrapModal from './BootstrapModal.vue'
 //
 // The architectures are seeded too, as an open after the first finds them in the store. On the
 // first open of a session the list is empty when the form mounts, so the form switches to From
-// scratch, and it stays there when the list arrives.
+// scratch, and goes back to the reference default when the list arrives (First Open).
 function opened({
   jobs = [],
   architectures = referenceArchitectures,
@@ -98,6 +98,46 @@ export const FromScratch: Story = {
 export const NoArchitectures: Story = {
   decorators: [opened({ architectures: [] })],
   parameters: { api: bootstrapApi({ architectures: [] }) },
+}
+
+/**
+ * The first open of a session: the list is still empty when the form mounts, and the form goes
+ * back to the reference default once the architectures load.
+ */
+export const FirstOpen: Story = {
+  decorators: [opened({ architectures: [] })],
+  play: async () => {
+    const reference = await screen.findByRole('radio', { name: 'From a reference architecture' })
+    await waitFor(() => expect(reference).toBeChecked())
+  },
+}
+
+/** No architectures loaded, From scratch picked: the arriving list keeps that choice. */
+export const FromScratchKeptOnLoad: Story = {
+  decorators: [opened({ architectures: [] })],
+  play: async () => {
+    await userEvent.click(await screen.findByText('From scratch'))
+    await waitFor(() => expect(useBootstrapStore().architectures).not.toHaveLength(0))
+    await expect(screen.getByRole('radio', { name: 'From scratch' })).toBeChecked()
+  },
+}
+
+/**
+ * Reference picked by hand, then the list empties (From scratch is the only flow) and fills
+ * again: the form goes back to the picked mode.
+ */
+export const PickedModeRestored: Story = {
+  play: async () => {
+    const reference = await screen.findByRole('radio', { name: 'From a reference architecture' })
+    await userEvent.click(await screen.findByText('From scratch'))
+    await userEvent.click(await screen.findByText('From a reference architecture'))
+    const store = useBootstrapStore()
+    const list = store.architectures
+    store.architectures = []
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'From scratch' })).toBeChecked())
+    store.architectures = list
+    await waitFor(() => expect(reference).toBeChecked())
+  },
 }
 
 /** Add opens the reference architecture form, with the repositories to pick a template from. */

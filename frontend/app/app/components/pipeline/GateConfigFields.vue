@@ -16,9 +16,14 @@
 // never grow the ratchet) and because the approver controls need a roster load this component can
 // own on its own terms.
 import { computed, ref, watch } from 'vue'
-import { MAX_GATE_APPROVALS, requiredGateApprovals } from '@cat-factory/contracts'
+import {
+  effectiveGateConfigFields,
+  MAX_GATE_APPROVALS,
+  requiredGateApprovals,
+} from '@cat-factory/contracts'
 import type { DescriptorFieldValues, StepGateConfig, WorkspaceRole } from '~/types/domain'
 import DescriptorFields from '~/components/common/DescriptorFields.vue'
+import { withoutDescriptorFieldDefaults } from '~/utils/descriptorFields'
 
 const props = defineProps<{
   /** The step's index in the draft, for the store patch. */
@@ -107,9 +112,19 @@ const gateFields = computed(
   () => pipelines.gateConfigForms.find((form) => form.kind === props.kind)?.fields,
 )
 
+/**
+ * The form shows the step's EFFECTIVE parameters (`effectiveGateConfigFields`, the same composition
+ * the backend validates and freezes onto the gate), so a declared default is on screen as the
+ * value the gate will receive, and a field another default reveals through `showWhen` is shown as
+ * it will be judged. Only what the author CHOSE is written back: a value that repeats its default
+ * is dropped, so a default the deployment changes later still reaches this step.
+ */
 const gateFieldValues = computed<DescriptorFieldValues>({
-  get: () => config.value.fields ?? {},
-  set: (fields) => pipelines.patchDraftGateConfig(props.index, { fields }),
+  get: () => effectiveGateConfigFields(gateFields.value ?? [], config.value.fields),
+  set: (fields) =>
+    pipelines.patchDraftGateConfig(props.index, {
+      fields: withoutDescriptorFieldDefaults(gateFields.value ?? [], fields),
+    }),
 })
 </script>
 

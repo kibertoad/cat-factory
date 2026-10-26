@@ -34,6 +34,7 @@ import {
   type ConflictingOutputSizeOption,
 } from '@cat-factory/contracts'
 import { binaryOutputPickIssues, type BinaryOutputPickIssue } from '~/utils/binaryOutput'
+import { withoutEmptySelectionValues } from '~/utils/binaryOutputSelection'
 import {
   formatExtent,
   formatReferenceImages,
@@ -249,9 +250,10 @@ function setMediaTypes(text: string) {
   unusableMediaTypes.value = unusable
   mediaTypeText.value = usable.join(', ')
   // Claimed BEFORE the patch, so the watch above reads this write as its own however it is
-  // flushed, and the entries just rejected survive to be rendered.
-  lastWritten = usable.length ? usable : undefined
-  patch({ mediaTypes: lastWritten })
+  // flushed, and the entries just rejected survive to be rendered. The store drops an empty
+  // list, which `sameFormats` reads as equal to `[]`.
+  lastWritten = usable
+  patch({ mediaTypes: usable })
 }
 
 /**
@@ -352,15 +354,8 @@ const editModeItems = computed(() => [
  * seed of zero, and admission judges the option's PRESENCE.
  */
 function setGeneration(fields: Partial<BinaryGenerationOptions>) {
-  const next: Record<string, unknown> = { ...generation.value, ...fields }
-  for (const [key, value] of Object.entries(fields)) {
-    if (value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
-      delete next[key]
-    }
-  }
-  patch({
-    generation: Object.keys(next).length > 0 ? (next as BinaryGenerationOptions) : undefined,
-  })
+  const next = withoutEmptySelectionValues({ ...generation.value, ...fields })
+  patch({ generation: Object.keys(next).length > 0 ? next : undefined })
 }
 
 /**

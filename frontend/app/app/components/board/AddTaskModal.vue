@@ -31,6 +31,7 @@ import { resolveComponentRegistry } from '@modular-vue/core'
 import { useReactiveSlots } from '@modular-vue/runtime'
 import type { AppSlots, ResultViewContribution } from '~/modular/slots'
 import ContextAttachmentFields from '~/components/context/ContextAttachmentFields.vue'
+import AgentConfigField from '~/components/common/AgentConfigField.vue'
 import DescriptorFields from '~/components/common/DescriptorFields.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
 import ReviewSkillQueue from '~/components/skills/ReviewSkillQueue.vue'
@@ -1405,26 +1406,10 @@ function createRefusalMessage(error: unknown): string | null {
             </SectionLabel>
             <div v-for="d in configDescriptors" :key="d.id" class="space-y-1">
               <div class="text-2xs text-muted">{{ d.label }}</div>
-              <div v-if="d.type === 'select'" class="flex flex-wrap gap-1">
-                <UButton
-                  v-for="opt in d.options"
-                  :key="opt.value"
-                  :color="configValue(d.id, d.default) === opt.value ? 'primary' : 'neutral'"
-                  :variant="configValue(d.id, d.default) === opt.value ? 'soft' : 'ghost'"
-                  size="xs"
-                  @click="setConfig(d.id, opt.value)"
-                >
-                  {{ opt.label }}
-                </UButton>
-              </div>
-              <UInput
-                v-else
-                :model-value="configValue(d.id, d.default)"
-                :type="d.type === 'number' ? 'number' : 'text'"
-                :placeholder="d.placeholder"
-                size="xs"
-                :data-testid="`agent-config-${d.id}`"
-                @update:model-value="(v: string | number) => setConfig(d.id, String(v))"
+              <AgentConfigField
+                :descriptor="d"
+                :value="configValue(d.id, d.default)"
+                @update="(v) => setConfig(d.id, v)"
               />
               <p class="text-2xs leading-snug text-dimmed">{{ d.description }}</p>
             </div>

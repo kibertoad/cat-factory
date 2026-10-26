@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import type { ContentStorageBackend, ContentStorageConfig } from '~/types/accountSettings'
+import type {
+  ContentStorageBackend,
+  ContentStorageConfig,
+  UpdateAccountSettingsInput,
+} from '~/types/accountSettings'
 import SecretInput from '~/components/common/SecretInput.vue'
 import LoadFailedState from '~/components/common/LoadFailedState.vue'
 
@@ -198,16 +202,12 @@ async function saveStorage() {
       ...(cs.forcePathStyle ? { forcePathStyle: true } : {}),
     }
   }
-  // `config` fully REPLACES the stored non-secret config, so carry the rest forward
-  // (e.g. the model-family policy) — only `contentStorage` is edited here.
-  const input: Parameters<typeof store.save>[1] = {
-    config: { ...store.view?.config, contentStorage: config },
-  }
+  let secrets: UpdateAccountSettingsInput['secrets']
   if (backend === 's3') {
     const id = cs.accessKeyId.trim()
     const key = cs.secretAccessKey.trim()
     if (id && key) {
-      input.secrets = { s3: { accessKeyId: id, secretAccessKey: key } }
+      secrets = { s3: { accessKeyId: id, secretAccessKey: key } }
     } else if (id || key) {
       actionToast.error('layout.accountDeployment.contentStorage.bothKeysValidation')
       return
@@ -218,11 +218,11 @@ async function saveStorage() {
     // else: keys already stored and none re-entered → leave them unchanged.
   } else {
     // Switching off S3: drop any stored S3 credentials.
-    input.secrets = { s3: null }
+    secrets = { s3: null }
   }
   savingStorage.value = true
   try {
-    await store.save(props.accountId, input)
+    await store.saveConfigPatch(props.accountId, { contentStorage: config }, secrets)
     hydrateStorage()
     actionToast.success('layout.accountDeployment.contentStorage.saved')
   } catch (e) {

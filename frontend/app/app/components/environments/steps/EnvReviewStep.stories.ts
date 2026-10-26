@@ -5,7 +5,7 @@ import {
   ENVIRONMENT_ANALYST_AGENT_KIND,
   mergeAnalystRecipeDraft,
 } from '@cat-factory/contracts'
-import { userEvent, within } from 'storybook/test'
+import { expect, userEvent, within } from 'storybook/test'
 import { apiRefusal } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { authService } from '~/stories/board.stories.mocks'
@@ -74,7 +74,15 @@ type Story = StoryObj<typeof meta>
  * The detector's recipe: `auth` exposed, the base file and its override layered, the macOS and
  * WSL overrides and the observability profile offered, and one seed dump to import.
  */
-export const Default: Story = { decorators: [onFrame()] }
+export const Default: Story = {
+  decorators: [onFrame()],
+  // Detection reads no port, so the field starts at 80 and says why.
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(await canvas.findByTestId('env-setup-port')).toHaveValue(80)
+    await canvas.findByText(/Detection does not read ports/)
+  },
+}
 
 /** The service has no linked repository: Re-detect is off, and the step says why. */
 export const NoRepo: Story = { decorators: [onFrame({ recommendation: null, linked: false })] }

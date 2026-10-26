@@ -686,7 +686,8 @@
         "oauth_started_by_other_user": "Otra persona inició esta conexión, así que solo ella puede completarla.",
         "oauth_exchange_refused": "El servidor de autorización del servidor de herramientas rechazó la concesión. Pide a quien opera tu despliegue que revise la configuración del cliente OAuth del servidor de herramientas.",
         "oauth_client_secret_unavailable": "El secreto del cliente OAuth del servidor de herramientas no está disponible en este tablero. Añádelo en la ventana de Infraestructura.",
-        "tool_server_without_oauth": "Este servidor de herramientas ya no usa OAuth, así que no hay ninguna conexión que completar."
+        "tool_server_without_oauth": "Este servidor de herramientas ya no usa OAuth, así que no hay ninguna conexión que completar.",
+        "gate_config_fields_invalid": "Los ajustes de la compuerta de un paso están incompletos o tienen un valor que la compuerta no acepta, normalmente un ajuste obligatorio sin valor. Completa los ajustes de la compuerta del paso en el pipeline y vuelve a intentarlo."
       }
     },
     "action": {
@@ -1185,9 +1186,11 @@
       "detect": {
         "title": "Detección automática",
         "button": "Detectar desde el repo",
-        "hint": "Inspecciona el repositorio y sugiere una configuración de aprovisionamiento. Confirmas y editas todo lo de abajo; nada se guarda automáticamente.",
+        "hint": "Inspecciona el repositorio y sugiere una configuración de aprovisionamiento. No se guarda nada hasta que la apliques.",
         "error": "No se pudo leer el repositorio para detectar el aprovisionamiento.",
         "none": "No se detectaron manifiestos de Kubernetes ni archivo Compose.",
+        "proposed": "Se encontró una configuración {type}.",
+        "apply": "Aplicar",
         "applied": "Se sugirió una configuración {type}. Revisa y ajusta los campos de abajo.",
         "overlayTitle": "Overlay efímero",
         "serviceDirTitle": "Carpeta de despliegue del servicio",
@@ -3075,7 +3078,8 @@
         "skills": "Habilidades",
         "foundational": "Servicios fundamentales",
         "riskPolicies": "Políticas de riesgo"
-      }
+      },
+      "configNotLoaded": "No se pudieron cargar los ajustes actuales de esta cuenta, así que guardar sobrescribiría el resto. Vuelve a cargar antes de editar."
     },
     "providerConnection": {
       "fallbackTitle": "Proveedor",
@@ -3167,6 +3171,9 @@
         "apiServerUrlHelp": "La raíz del kube-apiserver, p. ej. https://10.0.0.1:6443. El orquestador aplica los manifiestos de cada PR a través del apiserver, así que solo este endpoint debe ser accesible.",
         "apiToken": "Token de ServiceAccount",
         "apiTokenHelp": "Un token bearer con permisos RBAC para crear namespaces y aplicar los recursos del operador. Se almacena cifrado; no se vuelve a mostrar.",
+        "apiTokenHelpStored": "Hay un token guardado. Déjalo en blanco para conservarlo o introduce uno nuevo para sustituirlo. Para la prueba hay que volver a introducir el token.",
+        "apiTokenPlaceholderStored": "Déjalo en blanco para conservar el token guardado",
+        "tokenSaved": "Guardado",
         "manifestSourceLabel": "Origen de los manifiestos",
         "sourceColocated": "En el mismo repo de la PR",
         "sourceSeparate": "Repo aparte",
@@ -4365,7 +4372,6 @@
         "maxFailureKindShare": "Proporción de los fallos que puede acaparar una sola causa, por encima de 0 y hasta 1.",
         "maxSweepFailures": "Pasadas fallidas consecutivas de un barrido en segundo plano."
       },
-      "notLoaded": "No se pudieron cargar los ajustes actuales de esta cuenta, así que guardar sobrescribiría el resto. Vuelve a cargar antes de editar.",
       "invalidNumbers": "Estos límites no son números",
       "failureKinds": {
         "label": "Reglas por tipo de fallo",
@@ -4875,7 +4881,8 @@
     "continueTitle": "Envía tus respuestas; el entrevistador puede hacer preguntas de seguimiento",
     "status": {
       "awaiting": "Esperando respuestas",
-      "done": "Hecho"
+      "done": "Hecho",
+      "failed": "Fallido"
     },
     "saveFailedCount": "No se pudieron guardar {count} de tus respuestas",
     "continueFailed": "No se pudieron enviar tus respuestas",
@@ -5570,7 +5577,8 @@
         "claimUnattended": "Hacer predeterminada sin supervisión",
         "releaseUnattended": "Dejar de ser la predeterminada sin supervisión"
       },
-      "removeLabel": "Quitar la etiqueta {label}"
+      "removeLabel": "Quitar la etiqueta {label}",
+      "gateParametersInvalid": "Un paso con compuerta tiene un ajuste obligatorio sin valor o un valor que la compuerta no acepta. Completa los ajustes de la compuerta antes de guardar."
     },
     "progress": {
       "status": {
@@ -7750,6 +7758,7 @@
       "service": "Servicio Compose expuesto",
       "servicePlaceholder": "p. ej. app",
       "port": "Puerto expuesto",
+      "portHelp": "La detección no lee puertos, así que el valor empieza en 80. Escribe el puerto en el que escucha el servicio.",
       "composeFiles": "Archivos Compose",
       "profiles": "Perfiles",
       "seedDumps": "Volcados de datos",

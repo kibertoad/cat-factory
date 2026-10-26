@@ -290,10 +290,11 @@ function applyPicked() {
   browseOpen.value = false
 }
 
-// Auto-detect (slice 11): read the repo checkout-free and propose a NON-BINDING provisioning
-// config. The user always confirms — the result prefills the form (and the kube edit refs) but
-// every field stays editable, and the engine-level URL/namespace suggestions are surfaced
-// read-only (the workspace handler owns them). Nothing is persisted server-side by detection.
+// Auto-detect (slice 11): read the repo checkout-free and PROPOSE a provisioning config. Nothing
+// is written until the user applies the proposal: the form below shows the SAVED config, and every
+// edit there persists at once, so applying a detection would otherwise replace a hand-tuned path or
+// renderer on one click. After Apply the candidate chips refine the saved config, and the
+// engine-level URL/namespace suggestions are surfaced read-only (the workspace handler owns them).
 const detecting = ref(false)
 // The translated reason detection cannot run (the repo is not in the connected projection).
 const detectError = ref<string | null>(null)
@@ -301,6 +302,22 @@ const detectError = ref<string | null>(null)
 // unreadable repo) stays one click away behind "Show details".
 const detectFailure = ref<DescribedFailure | null>(null)
 const detectResult = ref<ProvisioningRecommendation | null>(null)
+// Whether the current proposal was applied to the service. The candidate chips refine the SAVED
+// config, so they show only after Apply.
+const detectApplied = ref(false)
+// A proposal there is something to apply: a detected config, or a `custom` one (which carries the
+// resolved or default manifest path even when the file was not found). A non-custom
+// `detected: false` recommendation is `infraless`, and applying it would wipe the saved config.
+const detectApplicable = computed(
+  () =>
+    !!detectResult.value &&
+    (detectResult.value.detected || detectResult.value.provisioning.type === 'custom'),
+)
+// The path the proposal points at, shown beside its type so the user knows what Apply saves.
+const detectProposedPath = computed(() => {
+  const p = detectResult.value?.provisioning
+  return p?.composePath ?? p?.manifestSource?.path ?? p?.manifestPath ?? null
+})
 // Advisory, LOCAL-ONLY selection: which compose `services:` key the user picked. It is NOT persisted
 // (the compose backend targets the file, not a single service), so it lives only in component state
 // and merely drives the chip highlight. Without it the highlight would compare `composePath` — which
@@ -313,11 +330,21 @@ watch(
   () => props.block.id,
   () => {
     detectResult.value = null
+    detectApplied.value = false
     detectError.value = null
     detectFailure.value = null
     pickedComposeService.value = null
   },
 )
+
+/** Save the proposal as the service's provisioning (the explicit step detection waits for). */
+function applyDetected() {
+  const rec = detectResult.value
+  if (!rec || !detectApplicable.value) return
+  board.updateBlock(props.block.id, { provisioning: rec.provisioning })
+  if (rec.provisioning.type === 'kubernetes') seedKubeSource(rec.provisioning.manifestSource)
+  detectApplied.value = true
+}
 
 async function detectFromRepo() {
   const ctx = repoContext.value
@@ -333,6 +360,7 @@ async function detectFromRepo() {
   }
   detecting.value = true
   detectError.value = null
+  detectApplied.value = false
   detectFailure.value = null
   try {
     const rec = await infra.detectProvisioning({
@@ -355,14 +383,6 @@ async function detectFromRepo() {
     // Pre-select the recommended compose service so the picker opens on a real choice.
     pickedComposeService.value =
       rec.composeServiceCandidates?.find((c) => c.recommended)?.service ?? null
-    // Prefill when the detector inferred something. A non-custom `detected: false` recommendation
-    // is `infraless`; applying it would WIPE the service's existing provisioning (updateBlock
-    // persists immediately) — so we skip it. A `custom` recommendation is non-destructive (it just
-    // carries the resolved/default manifest path), so we apply it even when the file wasn't found.
-    if (rec.detected || rec.provisioning.type === 'custom') {
-      board.updateBlock(props.block.id, { provisioning: rec.provisioning })
-      if (rec.provisioning.type === 'kubernetes') seedKubeSource(rec.provisioning.manifestSource)
-    }
   } catch (e) {
     detectFailure.value = describeFailure(e)
   } finally {
@@ -479,8 +499,8 @@ function setSize(value: InstanceSize) {
       </UButton>
     </div>
 
-    <!-- Auto-detect a recommended provisioning config from the repo (slice 11). Non-binding:
-         it prefills the form below + the kube edit refs; the user confirms/edits everything. -->
+    <!-- Auto-detect a recommended provisioning config from the repo (slice 11). It prefills and
+         saves the form below + the kube edit refs; the user can edit everything afterwards. -->
     <div v-if="repoContext" class="space-y-2 rounded-sm border border-default bg-default/40 p-2">
       <div class="flex items-center justify-between gap-2">
         <span class="text-2xs text-muted">{{ t('inspector.testConfig.detect.title') }}</span>
@@ -508,12 +528,31 @@ function setSize(value: InstanceSize) {
       />
 
       <template v-if="detectResult && !detecting">
-        <p
-          v-if="!detectResult.detected && detectResult.provisioning.type !== 'custom'"
-          class="text-2xs text-app-warning-300/80"
-        >
+        <p v-if="!detectApplicable" class="text-2xs text-app-warning-300/80">
           {{ t('inspector.testConfig.detect.none') }}
         </p>
+        <div
+          v-else-if="!detectApplied"
+          class="flex items-center justify-between gap-2"
+          data-testid="detect-proposal"
+        >
+          <p class="min-w-0 text-2xs text-toned">
+            {{
+              t('inspector.testConfig.detect.proposed', {
+                type: provisionTypeLabel(detectResult.provisioning.type),
+              })
+            }}
+            <span v-if="detectProposedPath" class="font-mono">{{ detectProposedPath }}</span>
+          </p>
+          <UButton
+            size="xs"
+            icon="i-lucide-check"
+            data-testid="detect-apply"
+            @click="applyDetected"
+          >
+            {{ t('inspector.testConfig.detect.apply') }}
+          </UButton>
+        </div>
         <template v-else>
           <p class="text-2xs text-app-success-300/80">
             {{
@@ -594,7 +633,8 @@ function setSize(value: InstanceSize) {
               </UButton>
             </div>
           </div>
-
+        </template>
+        <template v-if="detectApplicable">
           <p v-if="detectResult.urlSource" class="text-2xs text-dimmed">
             {{
               t('inspector.testConfig.detect.urlSource', { source: detectResult.urlSource.source })

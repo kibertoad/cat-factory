@@ -761,7 +761,8 @@
         "oauth_started_by_other_user": "Someone else started this connection, so only they can finish it.",
         "oauth_exchange_refused": "The tool server's authorization server refused the grant. Ask your deployment operator to check the tool server's OAuth client settings.",
         "oauth_client_secret_unavailable": "The tool server's OAuth client secret is not available on this board. Add it in the Infrastructure window.",
-        "tool_server_without_oauth": "This tool server no longer uses OAuth, so there is no connection to finish."
+        "tool_server_without_oauth": "This tool server no longer uses OAuth, so there is no connection to finish.",
+        "gate_config_fields_invalid": "A gate step's settings are incomplete or hold a value the gate does not accept, usually a required setting with no value. Fill in the step's gate settings in the pipeline, then try again."
       }
     },
     "action": {
@@ -1303,9 +1304,11 @@
       "detect": {
         "title": "Auto-detect",
         "button": "Detect from repo",
-        "hint": "Inspect the repository and suggest a provisioning config. You confirm and edit everything below; nothing is saved automatically.",
+        "hint": "Inspect the repository and suggest a provisioning config. Nothing is saved until you apply it.",
         "error": "Could not read the repository to detect provisioning.",
         "none": "No Kubernetes manifests or Compose file were detected.",
+        "proposed": "Found a {type} config.",
+        "apply": "Apply",
         "applied": "Suggested a {type} config. Review and adjust the fields below.",
         "overlayTitle": "Ephemeral overlay",
         "serviceDirTitle": "Service deploy folder",
@@ -3233,7 +3236,8 @@
         "skills": "Skills",
         "foundational": "Foundational services",
         "riskPolicies": "Risk policies"
-      }
+      },
+      "configNotLoaded": "This account's current settings could not be loaded, so saving would overwrite the rest of them. Reload before editing."
     },
     "infrastructure": {
       "active": "Active: {backend}",
@@ -3407,6 +3411,9 @@
         "apiServerUrlHelp": "The kube-apiserver root, e.g. https://10.0.0.1:6443. The orchestrator applies each PR's manifests through the apiserver, so only this endpoint must be reachable.",
         "apiToken": "ServiceAccount token",
         "apiTokenHelp": "A bearer token with RBAC to create namespaces and apply the operator's resources. Stored encrypted; never shown again.",
+        "apiTokenHelpStored": "A token is saved. Leave blank to keep it, or enter a new one to replace it. Test needs the token entered again.",
+        "apiTokenPlaceholderStored": "Leave blank to keep the saved token",
+        "tokenSaved": "Saved",
         "manifestSourceLabel": "Manifest source",
         "sourceColocated": "Co-located in the PR repo",
         "sourceSeparate": "Separate repo",
@@ -4538,7 +4545,6 @@
         "maxFailureKindShare": "Share of failures one cause may account for, above 0 and up to 1.",
         "maxSweepFailures": "Consecutive failed passes of one background sweep."
       },
-      "notLoaded": "This account's current settings could not be loaded, so saving would overwrite the rest of them. Reload before editing.",
       "invalidNumbers": "These ceilings are not numbers",
       "failureKinds": {
         "label": "Per-failure-kind rules",
@@ -5063,7 +5069,8 @@
     "continueTitle": "Send your answers; the interviewer may ask follow-up questions",
     "status": {
       "awaiting": "Awaiting answers",
-      "done": "Done"
+      "done": "Done",
+      "failed": "Failed"
     },
     "saveFailedCount": "Could not save {count} of your answers",
     "continueFailed": "Could not submit your answers",
@@ -5776,7 +5783,8 @@
         "claimUnattended": "Make the unattended default",
         "releaseUnattended": "Stop being the unattended default"
       },
-      "removeLabel": "Remove the {label} label"
+      "removeLabel": "Remove the {label} label",
+      "gateParametersInvalid": "A gate step has a required setting with no value, or a value the gate does not accept. Fill in its gate settings before you save."
     },
     "progress": {
       "status": {
@@ -8045,6 +8053,7 @@
       "service": "Exposed compose service",
       "servicePlaceholder": "e.g. app",
       "port": "Exposed port",
+      "portHelp": "Detection does not read ports, so this starts at 80. Enter the port the service listens on.",
       "composeFiles": "Compose files",
       "profiles": "Profiles",
       "seedDumps": "Seed dumps",

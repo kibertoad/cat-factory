@@ -124,7 +124,8 @@
         "skills": "Skills",
         "foundational": "Basisdienste",
         "riskPolicies": "Risikorichtlinien"
-      }
+      },
+      "configNotLoaded": "Die aktuellen Einstellungen dieses Kontos konnten nicht geladen werden; ein Speichern würde die übrigen überschreiben. Bitte vor dem Bearbeiten neu laden."
     },
     "infrastructure": {
       "active": "Aktiv: {backend}",
@@ -298,6 +299,9 @@
         "apiServerUrlHelp": "Die kube-apiserver-Root, z. B. https://10.0.0.1:6443. Der Orchestrator wendet die Manifeste jedes PR über den apiserver an, daher muss nur dieser Endpunkt erreichbar sein.",
         "apiToken": "ServiceAccount-Token",
         "apiTokenHelp": "Ein Bearer-Token mit RBAC-Rechten, um Namespaces zu erstellen und die Ressourcen des Operators anzuwenden. Verschlüsselt gespeichert; wird nie wieder angezeigt.",
+        "apiTokenHelpStored": "Ein Token ist gespeichert. Leer lassen, um es zu behalten, oder ein neues eingeben, um es zu ersetzen. Für den Test muss das Token erneut eingegeben werden.",
+        "apiTokenPlaceholderStored": "Leer lassen, um das gespeicherte Token beizubehalten",
+        "tokenSaved": "Gespeichert",
         "manifestSourceLabel": "Manifest-Quelle",
         "sourceColocated": "Im PR-Repo mit abgelegt",
         "sourceSeparate": "Separates Repo",
@@ -1414,7 +1418,6 @@
         "maxFailureKindShare": "Anteil der Fehler, den eine einzelne Ursache ausmachen darf, über 0 und bis 1.",
         "maxSweepFailures": "Aufeinanderfolgende fehlgeschlagene Durchläufe einer Hintergrundprüfung."
       },
-      "notLoaded": "Die aktuellen Einstellungen dieses Kontos konnten nicht geladen werden; ein Speichern würde die übrigen überschreiben. Bitte vor dem Bearbeiten neu laden.",
       "invalidNumbers": "Diese Obergrenzen sind keine Zahlen",
       "failureKinds": {
         "label": "Regeln pro Fehlerart",
@@ -1701,9 +1704,11 @@
       "detect": {
         "title": "Automatisch erkennen",
         "button": "Aus Repo erkennen",
-        "hint": "Untersucht das Repository und schlägt eine Bereitstellungskonfiguration vor. Du bestätigst und bearbeitest alles unten; es wird nichts automatisch gespeichert.",
+        "hint": "Untersucht das Repository und schlägt eine Bereitstellungskonfiguration vor. Es wird nichts gespeichert, bis du sie übernimmst.",
         "error": "Das Repository konnte nicht gelesen werden, um die Bereitstellung zu erkennen.",
         "none": "Es wurden keine Kubernetes-Manifeste oder Compose-Dateien erkannt.",
+        "proposed": "{type}-Konfiguration gefunden.",
+        "apply": "Übernehmen",
         "applied": "Eine {type}-Konfiguration wurde vorgeschlagen. Prüfe und passe die Felder unten an.",
         "overlayTitle": "Ephemeres Overlay",
         "serviceDirTitle": "Service-Deploy-Ordner",
@@ -5028,7 +5033,8 @@
         "claimUnattended": "Als Standard ohne Aufsicht festlegen",
         "releaseUnattended": "Nicht mehr Standard ohne Aufsicht"
       },
-      "removeLabel": "Label {label} entfernen"
+      "removeLabel": "Label {label} entfernen",
+      "gateParametersInvalid": "Ein Gate-Schritt hat eine Pflichteinstellung ohne Wert oder einen Wert, den das Gate nicht akzeptiert. Fülle seine Gate-Einstellungen aus, bevor du speicherst."
     },
     "progress": {
       "status": {
@@ -6433,7 +6439,8 @@
         "oauth_started_by_other_user": "Jemand anderes hat diese Verbindung gestartet, daher kann nur diese Person sie abschließen.",
         "oauth_exchange_refused": "Der Autorisierungsserver des Werkzeugservers hat die Freigabe abgelehnt. Bitten Sie Ihren Deployment-Betreiber, die OAuth-Client-Einstellungen des Werkzeugservers zu prüfen.",
         "oauth_client_secret_unavailable": "Das OAuth-Client-Secret des Werkzeugservers ist auf diesem Board nicht verfügbar. Fügen Sie es im Infrastruktur-Fenster hinzu.",
-        "tool_server_without_oauth": "Dieser Werkzeugserver verwendet kein OAuth mehr, daher gibt es keine Verbindung abzuschließen."
+        "tool_server_without_oauth": "Dieser Werkzeugserver verwendet kein OAuth mehr, daher gibt es keine Verbindung abzuschließen.",
+        "gate_config_fields_invalid": "Die Gate-Einstellungen eines Schritts sind unvollständig oder enthalten einen Wert, den das Gate nicht akzeptiert, meist eine Pflichteinstellung ohne Wert. Füllen Sie die Gate-Einstellungen des Schritts in der Pipeline aus und versuchen Sie es erneut."
       }
     },
     "action": {
@@ -6769,7 +6776,8 @@
     "continueTitle": "Deine Antworten senden; der Interviewer stellt möglicherweise Nachfragen",
     "status": {
       "awaiting": "Warten auf Antworten",
-      "done": "Fertig"
+      "done": "Fertig",
+      "failed": "Fehlgeschlagen"
     },
     "saveFailedCount": "{count} Ihrer Antworten konnten nicht gespeichert werden",
     "continueFailed": "Antworten konnten nicht gesendet werden",
@@ -7745,6 +7753,7 @@
       "service": "Bereitgestellter Compose-Service",
       "servicePlaceholder": "z. B. app",
       "port": "Bereitgestellter Port",
+      "portHelp": "Die Erkennung liest keine Ports aus, daher steht hier zuerst 80. Gib den Port ein, auf dem der Dienst lauscht.",
       "composeFiles": "Compose-Dateien",
       "profiles": "Profile",
       "seedDumps": "Seed-Dumps",
