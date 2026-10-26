@@ -739,6 +739,33 @@ describe('buildLocalContainer (mothership, no Postgres)', () => {
     // The SPA flag is surfaced so the UI can label local-vs-mothership storage.
     expect(container.config.localMode?.mothership).toBe(true)
   })
+
+  it('wires no account runner-pool tier and no seeder, since the node cannot open those rows', async () => {
+    const rpcBodies: string[] = []
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      const body = String(init.body)
+      rpcBodies.push(body)
+      // The board belongs to an account, so only a missing account tier stops the account read.
+      const value = body.includes('accountOf') ? 'acc_1' : null
+      return new Response(JSON.stringify({ ok: true, value }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+
+    const container = buildLocalContainer({
+      env: MOTHERSHIP_ENV,
+      seedAccountRunnerPool: () => undefined,
+    })
+
+    expect(container.runnerPoolSeeder).toBeUndefined()
+    // The API's own service reads the board's row and stops there: no account read crosses the RPC.
+    expect(await container.runners!.connectionService.dispatchReadiness('ws_1')).toEqual({
+      state: 'none',
+    })
+    expect(rpcBodies.length).toBeGreaterThan(0)
+    expect(rpcBodies.filter((body) => body.includes('accountRunnerPool'))).toEqual([])
+  })
 })
 
 describe('composeMothership realtime upstream adapter', () => {

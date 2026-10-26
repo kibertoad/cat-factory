@@ -331,6 +331,7 @@ export {
   RunnerPoolConnectionService,
   type RunnerPoolConnectionServiceDependencies,
   type ResolvedRunnerBackend,
+  type RunnerPoolReadiness,
 } from './modules/runners/RunnerPoolConnectionService.js'
 // The generic seeder that registers a deployment's declared runner pool onto an account that has
 // none: the concrete implementation of the kernel `RunnerPoolSeeder` port.

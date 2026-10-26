@@ -133,7 +133,24 @@ export function buildTraceSink(config: AppConfig): CoreDependencies['llmTraceSin
   return sink
 }
 
-export function buildNodeResolveTransport(
+/** What {@link buildNodeRunnerPoolService} takes beside the repositories it reads. */
+export interface NodeRunnerPoolServiceExtras {
+  // The shared HTTP provider the built-in `manifest` backend reuses when supplied (e.g.
+  // tests). NOT the custom-kind seam: a bespoke runner backend is registered by reference
+  // into `runnerBackendRegistry`. Absent → the generic manifest-driven HTTP provider.
+  injectedPoolProvider?: RunnerPoolProvider
+  // The account tier a board without its own pool falls back to (see the connection service).
+  accountRunnerPool?: RunnerPoolConnectionServiceDependencies['accountRunnerPool']
+}
+
+/**
+ * The runner-pool connection service the dispatch resolver reads through, or null when the
+ * runner-pool integration is off (no `runners.enabled` or no encryption key). Exposed apart from
+ * {@link buildNodeResolveTransport} so a facade that ALSO asks "does this board have a pool?" (the
+ * local start-time guard) reads the same effective pool, account tier included, through the same
+ * instance rather than through the board's own row.
+ */
+export function buildNodeRunnerPoolService(
   config: AppConfig,
   // The port, not the Drizzle concrete: in mothership mode the local facade passes a remote
   // (RPC-backed) connection repo, and the service layer only ever uses the port methods.
@@ -142,19 +159,12 @@ export function buildNodeResolveTransport(
   clock: Clock,
   // The app-owned runner-backend registry the service resolves a stored `kind` through.
   runnerBackendRegistry: RunnerBackendRegistry,
-  extras: {
-    // The shared HTTP provider the built-in `manifest` backend reuses when supplied (e.g.
-    // tests). NOT the custom-kind seam — a bespoke runner backend is registered by reference
-    // into `runnerBackendRegistry`. Absent → the generic manifest-driven HTTP provider.
-    injectedPoolProvider?: RunnerPoolProvider
-    // The account tier a board without its own pool falls back to (see the connection service).
-    accountRunnerPool?: RunnerPoolConnectionServiceDependencies['accountRunnerPool']
-  } = {},
-): ResolveRunnerTransport | null {
+  extras: NodeRunnerPoolServiceExtras = {},
+): RunnerPoolConnectionService | null {
   const { injectedPoolProvider, accountRunnerPool } = extras
   if (!config.runners.enabled || !config.runners.encryptionKey) return null
   const urlPolicy = resolveUrlSafetyPolicy(config.runners)
-  const runnerService = new RunnerPoolConnectionService({
+  return new RunnerPoolConnectionService({
     runnerPoolConnectionRepository,
     workspaceRepository,
     secretCipher: new WebCryptoSecretCipher({
@@ -169,6 +179,13 @@ export function buildNodeResolveTransport(
     runnerPoolProvider:
       injectedPoolProvider ?? new HttpRunnerPoolProvider(urlPolicy ? { urlPolicy } : {}),
   })
+}
+
+/** The dispatch resolver over a built {@link buildNodeRunnerPoolService} (null passes through). */
+export function runnerPoolResolveTransport(
+  runnerService: RunnerPoolConnectionService | null,
+): ResolveRunnerTransport | null {
+  if (!runnerService) return null
   return async (workspaceId) => {
     if (workspaceId) {
       const resolved = await runnerService.resolve(workspaceId)
@@ -181,6 +198,12 @@ export function buildNodeResolveTransport(
     // self-hosted runner pool / Kubernetes.
     throw noRunnerBackendAvailableError(workspaceId)
   }
+}
+
+export function buildNodeResolveTransport(
+  ...args: Parameters<typeof buildNodeRunnerPoolService>
+): ResolveRunnerTransport | null {
+  return runnerPoolResolveTransport(buildNodeRunnerPoolService(...args))
 }
 
 /**

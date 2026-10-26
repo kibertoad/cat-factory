@@ -69,6 +69,8 @@ export {
 export {
   buildNodeContainer,
   buildNodeResolveTransport,
+  buildNodeRunnerPoolService,
+  runnerPoolResolveTransport,
   withProvisioningLog,
   type NodeContainerOptions,
 } from './container.js'

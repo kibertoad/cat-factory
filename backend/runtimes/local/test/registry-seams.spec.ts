@@ -35,6 +35,17 @@ type _LocalExposesEveryNodeSeam = NodeEntryPointSeam extends keyof StartLocalOpt
 const _localSeamsAreReachable: _LocalExposesEveryNodeSeam = true
 
 /**
+ * Every DECLARED SEED the Node entry point takes (environment handlers, shared stacks, the account
+ * runner pool) must be an option here too. Derived from `StartOptions`, whose own spec derives it
+ * from `CoreDependencies`, so a seed added to the engine reaches this line through both. Reaching
+ * the option is the whole guard: whether a seed is HONOURED depends on the boot path, and the
+ * mothership path refuses `seedAccountRunnerPool` on purpose (`mothership.test.ts` pins that).
+ */
+type NodeDeclaredSeed = Extract<keyof StartOptions, `seed${string}`>
+type _LocalTakesEveryNodeSeed = NodeDeclaredSeed extends keyof StartLocalOptions ? true : never
+const _localSeedsAreReachable: _LocalTakesEveryNodeSeed = true
+
+/**
  * A name that BUILDS an app-owned registry: the registry class itself, a `default…Registry()` /
  * `create…Registries()` builder, or a `…WithBuiltins()` one.
  *
@@ -83,6 +94,11 @@ describe('local boot entry point', () => {
     // The compile-time assertion carries the guard; this gives it a failing assertion to point at
     // rather than only a red typecheck in a separate CI job.
     expect(_localSeamsAreReachable).toBe(true)
+  })
+
+  it('takes every declared seed the Node entry point does', () => {
+    // Carried by the type assertion above; the assertion gives it a failing test to point at.
+    expect(_localSeedsAreReachable).toBe(true)
   })
 
   it('publishes every registry CONSTRUCTOR the Node facade does', () => {

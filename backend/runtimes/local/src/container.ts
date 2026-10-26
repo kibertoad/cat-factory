@@ -3,13 +3,10 @@ import {
   DrizzleEnvironmentUserHandlerRepository,
   DrizzleGitHubInstallationRepository,
   DrizzleLocalSettingsRepository,
-  DrizzleAccountRunnerPoolRepository,
-  DrizzleRunnerPoolConnectionRepository,
   LayeredEventPropagator,
   ProvisioningLogRecorder,
   SystemClock,
   buildNodeContainer,
-  buildNodeResolveTransport,
   createDrizzleRepositories,
   executionRuntime,
   loadNodeConfig,
@@ -30,7 +27,6 @@ import {
 import { startMothershipTelemetrySweeps } from './telemetrySweeps.js'
 import { SqliteGuidedReviewRunner } from './guidedReviewRunner.js'
 import {
-  ConflictError,
   defaultProviderRegistry,
   getErrorMessage,
   MODEL_PRESET_SEED_IDS,
@@ -52,12 +48,7 @@ import {
   composeEnvironmentBackend,
   createBackendRegistries,
 } from '@cat-factory/integrations'
-import type {
-  HarnessKind,
-  AccountRunnerPoolRepository,
-  RunnerPoolConnectionRepository,
-  RunnerTransport,
-} from '@cat-factory/kernel'
+import type { HarnessKind, RunnerTransport } from '@cat-factory/kernel'
 import { NativeRoutingRunnerTransport } from './NativeRoutingRunnerTransport.js'
 import {
   detectHostInlineClis,
@@ -100,6 +91,7 @@ import { resolveHarnessImage } from './harnessImage.js'
 import { createRuntimeAdapter, resolveRuntimeId, runtimeProfile } from './runtimes/index.js'
 import { createDockerComposeRuntime } from './compose.js'
 import { createDockerPreflightProbes } from './preflight.js'
+import { buildLocalRunnerPoolBackend, localRunnerPoolSeed } from './runnerPoolBackend.js'
 
 // The local-mode composition root. It is intentionally thin: the ENTIRE Drizzle/
 // Postgres persistence, pg-boss durable execution, gateways and model provisioning
@@ -401,6 +393,8 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
     // Override the spread `options.realtimeSink` with the mothership-layered sink (a no-op wrap
     // when not in mothership mode — it stays the injected hub).
     ...(realtimeSink ? { realtimeSink } : {}),
+    // …and the spread declared runner pool with the one this node may seed (none in mothership mode).
+    seedAccountRunnerPool: localRunnerPoolSeed(options, mothership, logger),
     // Local mode seeds a fresh workspace's model-preset library with Claude Opus 5 as the
     // default: the local facade runs subscription-only models (via the developer's ambient
     // `claude` CLI for inline steps + a leased personal credential for container steps), so
@@ -560,6 +554,10 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
       // explicit test override still wins; in mothership boot there is no `boss`, so this is the
       // only runner wired.
       ...(inProcessRunner ? { workRunner: inProcessRunner } : {}),
+      // A mothership node wires no ACCOUNT runner-pool tier, so the API and the runners module agree
+      // with this node's dispatch: the account rows are sealed with the mothership's key, which this
+      // node cannot open (`runnerPoolBackend.ts`).
+      ...(mothership ? { accountRunnerPoolRepository: undefined } : {}),
       // The node drives its own guided-review jobs under its own driver id, so the mothership's
       // sweeper never re-drives them with the deployment's credentials.
       ...(guidedReviewRunner && mothership
@@ -912,31 +910,6 @@ function resolveLocalRunnerTransports(params: {
     ? new RunnerJobClient(() => Promise.resolve(localDeployTransport))
     : undefined
 
-  // The runner-pool resolver (the external opt-in target). In local mode `runners` is
-  // enabled (it keys off ENCRYPTION_KEY, which `applyLocalDefaults` always sets), so this
-  // is non-null and a workspace can register a pool via the API; a native adapter injected
-  // through `options.runnerPoolProvider` drives the actual dispatch. The connection repo is
-  // also held for the start-time guard's cheap "is a pool registered?" existence check.
-  // In mothership mode there is no local db, so resolve this repo REMOTELY (like the rest of the
-  // org state) rather than over an undefined db handle — a delegation check then returns a clean
-  // gated `unknown_method` (the repo joins the allow-list in the gating phase, see the tracker)
-  // instead of a `Cannot read properties of undefined` TypeError.
-  const runnerPoolConnectionRepository: RunnerPoolConnectionRepository = mothership
-    ? (
-        mothership.repos as unknown as {
-          runnerPoolConnectionRepository: RunnerPoolConnectionRepository
-        }
-      ).runnerPoolConnectionRepository
-    : new DrizzleRunnerPoolConnectionRepository(options.db!)
-  // The account tier the pool resolver falls back to, resolved the same way (remote in mothership
-  // mode). Local mode never SEEDS it (that is Node-only); it only reads a row that exists.
-  const accountRunnerPoolRepository: AccountRunnerPoolRepository = mothership
-    ? (
-        mothership.repos as unknown as {
-          accountRunnerPoolRepository: AccountRunnerPoolRepository
-        }
-      ).accountRunnerPoolRepository
-    : new DrizzleAccountRunnerPoolRepository(options.db!)
   // Build the app-owned backend registries once and share them with BOTH the pool resolver
   // here AND `buildNodeContainer` below (via `backendRegistries`), so the runner backend a
   // workspace's `kind` resolves to is the same instance everywhere. Defaults to the built-ins.
@@ -949,20 +922,16 @@ function resolveLocalRunnerTransports(params: {
     env,
     backendRegistries,
   )
-  const poolResolve = buildNodeResolveTransport(
+  // The self-hosted runner pool (the external opt-in target) and its start-time guard.
+  const { poolResolve, assertAgentBackendConfigured } = buildLocalRunnerPoolBackend({
+    options,
+    mothership,
+    repos,
+    wsSettings,
     config,
-    runnerPoolConnectionRepository,
-    repos.workspaceRepository,
     clock,
-    backendRegistries.runnerBackendRegistry,
-    {
-      injectedPoolProvider: options.runnerPoolProvider,
-      accountRunnerPool: {
-        repository: accountRunnerPoolRepository,
-        workspaceSettingsRepository: repos.workspaceSettingsRepository,
-      },
-    },
-  )
+    runnerBackendRegistry: backendRegistries.runnerBackendRegistry,
+  })
 
   // Per-branch provisioning-log tagging: the per-run local container logs under the
   // `container` subsystem, the runner pool under `runner-pool`, so the logs drawer filters
@@ -984,33 +953,6 @@ function resolveLocalRunnerTransports(params: {
     const delegate = !!workspaceId && (await wsSettings.get(workspaceId)).delegateAgentsToRunnerPool
     if (delegate && wrappedPool) return wrappedPool(workspaceId)
     return wrappedLocal(workspaceId)
-  }
-
-  // Start-time guard: refuse a run up front when the workspace delegates agents to a pool
-  // that isn't registered, so the human gets a clean 409 (an actionable message) instead of
-  // a mid-run dispatch failure. No-op when delegation is off. We throw a ConflictError for
-  // BOTH negative cases — the integration being disabled AND no pool registered for the
-  // workspace — rather than letting the pool resolver's plain Error escape (the error
-  // handler maps a non-DomainError to an opaque 500 with the message suppressed). The
-  // existence check uses `getByWorkspace` directly, so it neither decrypts the pool secrets
-  // nor builds a transport that the actual dispatch resolve would only build again.
-  const assertAgentBackendConfigured = async (workspaceId: string): Promise<void> => {
-    if (!(await wsSettings.get(workspaceId)).delegateAgentsToRunnerPool) return
-    if (!wrappedPool) {
-      throw new ConflictError(
-        'This workspace delegates container agents to a self-hosted runner pool, but the ' +
-          'runner-pool integration is not enabled on this deployment.',
-        'agent_backend_unconfigured',
-      )
-    }
-    if (!(await runnerPoolConnectionRepository.getByWorkspace(workspaceId))) {
-      throw new ConflictError(
-        'This workspace delegates container agents to a self-hosted runner pool, but none ' +
-          'is registered. Register one (Settings → Self-hosted runner pool) or turn ' +
-          'delegation off to run agents on host Docker, before starting.',
-        'agent_backend_unconfigured',
-      )
-    }
   }
 
   return {
