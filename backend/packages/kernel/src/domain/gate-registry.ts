@@ -171,8 +171,9 @@ export interface GateDefinition {
   probe(workspaceId: string, blockId: string, gateState: GateStepState): Promise<GateProbe>
   /**
    * Optional: the attempt budget for this gate, resolved from the task's merge preset and the
-   * STEP's own gate config (`stepOptions.gateConfig.fields`, already validated against
-   * {@link GateRegistration.configSchema}). Defaults to `ciMaxAttempts` when omitted (the
+   * STEP's effective gate config (`effectiveGateConfigFields`: the step's own
+   * `stepOptions.gateConfig.fields` with the declared defaults filled in, already validated
+   * against {@link GateRegistration.configFields}). Defaults to `ciMaxAttempts` when omitted (the
    * CI/conflicts gates use that).
    *
    * The per-step override is resolved BY THE GATE rather than by the engine on purpose: the

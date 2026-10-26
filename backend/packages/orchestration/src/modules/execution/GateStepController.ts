@@ -10,7 +10,7 @@ import type {
 } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { DescriptorField } from '@cat-factory/contracts'
-import { sanitizeDescriptorFields } from '@cat-factory/contracts'
+import { effectiveGateConfigFields, sanitizeDescriptorFields } from '@cat-factory/contracts'
 import type { AgentRunResult } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import type { GateHelperDispatcher } from './GateHelperDispatcher.js'
@@ -129,9 +129,14 @@ export class GateStepController {
       // a stale answer under a hidden field reaches here having passed no type check; freezing it
       // would hand a gate's probe a value nothing ever inspected. Same rule, and the same helper,
       // every other descriptor form applies at its own write.
+      //
+      // What is frozen is the EFFECTIVE bag (`effectiveGateConfigFields`): a parameter the step
+      // left unanswered reaches the gate as the default the gate itself declared. The same
+      // composition save and admission validated, so what passed is what the gate receives.
+      const declared = this.deps.declaredGateFields(step.agentKind) ?? []
       const config = sanitizeDescriptorFields(
-        this.deps.declaredGateFields(step.agentKind) ?? [],
-        step.stepOptions?.gateConfig?.fields ?? {},
+        declared,
+        effectiveGateConfigFields(declared, step.stepOptions?.gateConfig?.fields),
       )
       step.gate = {
         phase: 'checking',

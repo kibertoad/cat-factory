@@ -46,18 +46,18 @@ The pilot is slice 1, the queue view. The rules it sets for every later slice:
 
 ## Checklist
 
-| #   | Slice                                                                                   | Status       | PR                                                          |
-| --- | --------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------- |
-| 1   | Queue view beside the board, last-used view remembered, queue for a new person          | ✅ done      | [#2325](https://github.com/kibertoad/cat-factory/pull/2325) |
-| 2   | Inbox cards carry their verb ("Answer", "Review", ...), "Mark read" secondary           | ✅ done      | [#2341](https://github.com/kibertoad/cat-factory/pull/2341) |
-| 3   | Setup checklist: every prerequisite for "a task can run and merge" in one list          | ✅ done      | [#2342](https://github.com/kibertoad/cat-factory/pull/2342) |
-| 4   | Describe new work: one sentence, a service, feature or bug; overrides behind one toggle | ✅ done      | [#2343](https://github.com/kibertoad/cat-factory/pull/2343) |
-| 5   | Decide whether the setup checklist replaces the setup banners and startup dialogs       | ⬜ todo      |                                                             |
-| 6   | Decide the role prompt at first launch (two of its three answers map to one surface)    | ⬜ todo      |                                                             |
-| 7   | Deep links to a task, so the queue can be shared (needs `global-search-and-deep-links`) | ⬜ todo      |                                                             |
-| 8   | One failure block per task view: a one-line cause, one action, details behind a toggle  | 🟡 in review | [#2432](https://github.com/kibertoad/cat-factory/pull/2432) |
-| 9   | Vocabulary by surface: outcome words on the delivery surface, engine names elsewhere    | ⬜ todo      |                                                             |
-| 10  | Settings grouped by decision, label plus one line, operator settings in one place       | ⬜ todo      |                                                             |
+| #   | Slice                                                                                   | Status  | PR                                                          |
+| --- | --------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------- |
+| 1   | Queue view beside the board, last-used view remembered, queue for a new person          | ✅ done | [#2325](https://github.com/kibertoad/cat-factory/pull/2325) |
+| 2   | Inbox cards carry their verb ("Answer", "Review", ...), "Mark read" secondary           | ✅ done | [#2341](https://github.com/kibertoad/cat-factory/pull/2341) |
+| 3   | Setup checklist: every prerequisite for "a task can run and merge" in one list          | ✅ done | [#2342](https://github.com/kibertoad/cat-factory/pull/2342) |
+| 4   | Describe new work: one sentence, a service, feature or bug; overrides behind one toggle | ✅ done | [#2343](https://github.com/kibertoad/cat-factory/pull/2343) |
+| 5   | Decide whether the setup checklist replaces the setup banners and startup dialogs       | ⬜ todo |                                                             |
+| 6   | Decide the role prompt at first launch (two of its three answers map to one surface)    | ⬜ todo |                                                             |
+| 7   | Deep links to a task, so the queue can be shared (needs `global-search-and-deep-links`) | ⬜ todo |                                                             |
+| 8   | One failure block per task view: a one-line cause, one action, details behind a toggle  | ✅ done | [#2432](https://github.com/kibertoad/cat-factory/pull/2432) |
+| 9   | Vocabulary by surface: outcome words on the delivery surface, engine names elsewhere    | ⬜ todo |                                                             |
+| 10  | Settings grouped by decision, label plus one line, operator settings in one place       | ⬜ todo |                                                             |
 
 ## Withdrawn approaches
 
@@ -69,6 +69,44 @@ The pilot is slice 1, the queue view. The rules it sets for every later slice:
   the intake and the inbox verbs behind one per-browser switch, and switching it on also silenced
   the banners and the first-run prompts. Withdrawn: it made one large yes-or-no out of four
   independent proposals, and none of the four depends on which view is open.
+
+## Findings by slice (UX pass 2, 2026-10-17)
+
+The second UX pass ([UXA-25 to UXA-35](./ux-assessment-2026-09.md#pass-2-2026-10-17-surfaces-added-since))
+found little that needs a new slice. Most of it is evidence for the open slices:
+
+| Slice                            | Findings it absorbs                                              |
+| -------------------------------- | ---------------------------------------------------------------- |
+| 5. Setup checklist vs banners    | UXA-28 (setup destinations in the basic sidebar)                 |
+| 6. Role prompt                   | [Personas](./personas.md) (the roles and their surfaces), UXA-34 |
+| 8. One failure block (#2432)     | UXA-27 (backend English for operators), UXA-13; fixed by #2432   |
+| 9. Vocabulary by surface         | UXA-29, UXA-31, UXA-32, UXA-33, and the pipeline names in UXA-26 |
+| 10. Settings grouped by decision | UXA-28 (Kubernetes form in basic Infrastructure)                 |
+
+UXA-25, UXA-26 (the filter), UXA-30 and UXA-35 are bugs, fixed on their own outside the slices.
+
+Two slices are **proposed, not accepted**; each needs a maintainer yes before it joins the
+checklist:
+
+- **A short first-run pipeline.** Simple build, the smallest build rung, has 9 steps (8 run on a
+  single-scope service), and the website's first-task tutorial says to allow about thirty minutes.
+  A rung of code, review and pull request would put a first result in front of a new person in
+  minutes, before they meet gates.
+- **A size limit on the basic surface.** The basic tier shows 19 of 23 sidebar destinations
+  (UXA-28). A counted budget for what basic shows (nav entries, default form fields), checked like
+  the file-size ratchet, would make each addition displace something.
+
+The surface those findings measure, on `main` at `3c0b4e428`:
+
+| What                                                     | Count        |
+| -------------------------------------------------------- | ------------ |
+| English UI strings (`en.json` leaf keys)                 | 6,670        |
+| Modals, windows, panels, drawers, wizards                | 77           |
+| Sidebar destinations, basic / advanced (workspace admin) | 19 / 23      |
+| Agent kinds in the catalog                               | 53           |
+| Task types / built-in pipelines                          | 10 / 22      |
+| Workspace settings: tabs / first-tab fields              | up to 9 / 23 |
+| Required setup rows before a first run                   | 3 of 5       |
 
 ## Gotchas
 

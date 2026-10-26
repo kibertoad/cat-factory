@@ -7,6 +7,7 @@
 // chosen, the Coder re-runs with the chosen approach folded in. Chat replies are computed by an
 // inline grounded LLM in the durable driver and arrive live on the execution stream.
 import { computed, ref, watch } from 'vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 import { DEFAULT_FORK_MAX_CHAT_TURNS } from '@cat-factory/contracts'
 import { useResultView } from '~/composables/useResultView'
 import { useExecutionStore } from '~/stores/execution'
@@ -213,12 +214,10 @@ const { requestClose } = useUnsavedGuard({
 
       <!-- Awaiting the human's choice (or answering a chat turn). -->
       <div v-else-if="interactive" class="space-y-3">
-        <p
-          v-if="forkDecision.error"
+        <FailureMessage
+          :failure="forkDecision.error"
           class="rounded-md bg-app-error-500/10 px-3 py-2 text-xs text-app-error-300"
-        >
-          {{ forkDecision.error }}
-        </p>
+        />
 
         <p v-if="state?.seamSummary" class="rounded-md bg-elevated/50 px-3 py-2 text-xs text-toned">
           <span class="text-dimmed">{{ t('forkDecision.seam') }}</span>

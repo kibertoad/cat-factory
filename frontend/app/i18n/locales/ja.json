@@ -102,7 +102,9 @@
       "keep": "編集を続ける"
     },
     "edit": "編集",
-    "pathInvalid": "リポジトリ内のパスを入力してください（\"..\"、絶対パス、バックスラッシュは使用できません）。"
+    "pathInvalid": "リポジトリ内のパスを入力してください（\"..\"、絶対パス、バックスラッシュは使用できません）。",
+    "checking": "確認中…",
+    "loadFailed": "読み込めませんでした"
   },
   "access": {
     "noBoardWrite": "読み取り専用アクセス: このボードは閲覧できますが編集はできません。",
@@ -633,7 +635,7 @@
     "attachIssueDisabledConnect": "まず issue トラッカーを接続してください（連携）",
     "attachIssueDisabledEnable": "まず issue トラッカー連携を有効にしてください",
     "importsOnAdd": "追加時にインポート",
-    "unreadable": "取得できませんでした: {error}",
+    "unreadable": "取得できませんでした。",
     "pastedLink": {
       "offer": "この説明は {source} のページにリンクしています。コンテキストとして添付しますか？",
       "attach": "添付"
@@ -677,7 +679,13 @@
     "reason": {
       "description": {
         "reference_repo_not_found": "この実行のリファレンスアーキテクチャが指すリポジトリは、このワークスペースのソース管理接続からは参照できません。エントリが誤ったリポジトリを指しているか、接続にアクセス権が付与されていません。リファレンスアーキテクチャを修正するか、アクセス権を付与してから、もう一度お試しください。",
-        "reference_repo_unreadable": "この実行のリファレンスアーキテクチャが指すリポジトリを現在読み取れなかったため、クローンできない可能性のあるテンプレートに対して実行は開始されませんでした。設定に誤りはなく、変更も不要です。接続が回復してからもう一度お試しください。"
+        "reference_repo_unreadable": "この実行のリファレンスアーキテクチャが指すリポジトリを現在読み取れなかったため、クローンできない可能性のあるテンプレートに対して実行は開始されませんでした。設定に誤りはなく、変更も不要です。接続が回復してからもう一度お試しください。",
+        "oauth_state_invalid": "この認可リンクは期限切れか使用済みのため、接続を完了できません。",
+        "oauth_started_by_other_user": "この接続は別のユーザーが開始したため、そのユーザーだけが完了できます。",
+        "oauth_exchange_refused": "ツールサーバーの認可サーバーが認可を拒否しました。デプロイメントの運用担当者に、ツールサーバーの OAuth クライアント設定を確認するよう依頼してください。",
+        "oauth_client_secret_unavailable": "このボードではツールサーバーの OAuth クライアントシークレットを利用できません。インフラストラクチャ ウィンドウで追加してください。",
+        "tool_server_without_oauth": "このツールサーバーは OAuth を使用しなくなったため、完了する接続はありません。",
+        "gate_config_fields_invalid": "ステップのゲートの設定が不足しているか、ゲートが受け付けない値が含まれています。多くの場合、値のない必須の設定です。パイプラインでステップのゲートの設定を入力してから、もう一度お試しください。"
       }
     },
     "action": {
@@ -1175,9 +1183,11 @@
       "detect": {
         "title": "自動検出",
         "button": "リポジトリから検出",
-        "hint": "リポジトリを調べてプロビジョニング設定を提案します。以下の内容はすべて確認・編集でき、自動保存はされません。",
+        "hint": "リポジトリを調べてプロビジョニング設定を提案します。適用するまで何も保存されません。",
         "error": "リポジトリを読み取ってプロビジョニングを検出できませんでした。",
         "none": "Kubernetes マニフェストや Compose ファイルは検出されませんでした。",
+        "proposed": "{type} の設定が見つかりました。",
+        "apply": "適用",
         "applied": "{type} の設定を提案しました。以下のフィールドを確認して調整してください。",
         "overlayTitle": "一時環境のオーバーレイ",
         "serviceDirTitle": "サービスのデプロイフォルダ",
@@ -1371,7 +1381,6 @@
       "title": "構造",
       "hint": "このタスクがサービス内のどこに属し、エージェントがどのコーディング標準に従うか。",
       "module": "モジュール",
-      "modulePlaceholder": "モジュールを選択または入力",
       "moduleHint": "このタスクが属するサービスモジュールです。ボードはこれでレーンをグループ化します。まだ存在しないモジュールは、タスクの実装時に作成されます。",
       "bestPractices": "ベストプラクティス",
       "bestPracticesEmpty": "なし。エージェントは既定のガイダンスに従います。",
@@ -2107,7 +2116,8 @@
       "helperFailures": "修正エージェントの失敗",
       "exhausted": "人に引き継ぎ",
       "hint": "修正なしで通過とは、事前チェックだけで満たされ修正エージェントを一度も起動しなかったゲートのことです。修正エージェントの失敗とは、ジョブ自体が落ちた試行を指し、実行はされたがチェックが赤のままだった試行とは区別されます。"
-    }
+    },
+    "loadFailed": "プラットフォームの可観測性を読み込めませんでした。"
   },
   "reports": {
     "title": "レポート",
@@ -2380,6 +2390,7 @@
       },
       "invite": {
         "title": "メンバーを招待",
+        "listTitle": "招待",
         "submit": "招待",
         "revoke": "招待を取り消す",
         "created": "招待を作成しました",
@@ -2394,6 +2405,7 @@
       "email": {
         "title": "メール送信者",
         "notEnabled": "このデプロイではメール配信が有効になっていません。招待は共有可能な承諾用リンクを引き続き生成します。",
+        "notConnected": "メール送信元が接続されていません。アカウントの管理者が接続できます。",
         "connectedAs": "{provider} 経由で {from} として接続済み",
         "disconnect": "切断",
         "connect": "メール送信者を接続",
@@ -2617,7 +2629,9 @@
       "budget": "予算",
       "tokens": "トークン",
       "resume": "それでも再開",
-      "resumeHint": "再開すると支出が続きます。まだ予算を超過している場合は再び一時停止します。"
+      "resumeHint": "再開すると支出が続きます。まだ予算を超過している場合は再び一時停止します。",
+      "resumeFailed": "エージェントの実行を再開できませんでした",
+      "refreshFailed": "実行は再開されましたが、ボードを更新できませんでした"
     },
     "personalSetup": {
       "title": "マイセットアップ",
@@ -2815,6 +2829,7 @@
       "status": {
         "connected": "接続済み",
         "keyConnected": "キー接続済み",
+        "keyDisabled": "キーは無効です",
         "notConnected": "未接続",
         "recommended": "おすすめ",
         "connectedCount": "接続なし | {count}件接続済み | {count}件接続済み"
@@ -2969,12 +2984,13 @@
     "deny": "キャンセル",
     "back": "アプリに戻る",
     "noWorkspaces": "接続できるボードがまだありません。",
+    "noAdminWorkspaces": "管理者になっているボードがありません。ボードの管理者に接続を依頼してください。",
     "revokeHint": "これにより API キーが発行されます。ボードの設定からいつでも無効化できます。",
     "error": {
       "title": "この接続を設定できませんでした",
       "noRequest": "認可リクエストなしでこのページが開かれました。MCP ホストから接続を開始してください。",
       "expired": "この認可リクエストは無効か、有効期限が切れています。MCP ホストから接続をやり直してください。",
-      "failed": "判断を記録できませんでした。MCP ホストから接続をやり直してください。"
+      "decisionFailed": "判断を記録できませんでした。"
     }
   },
   "settings": {
@@ -3058,7 +3074,8 @@
         "skills": "スキル",
         "foundational": "基盤サービス",
         "riskPolicies": "リスクポリシー"
-      }
+      },
+      "configNotLoaded": "このアカウントの現在の設定を読み込めなかったため、保存すると他の設定が上書きされます。編集する前に再読み込みしてください。"
     },
     "infrastructure": {
       "active": "アクティブ: {backend}",
@@ -3231,6 +3248,9 @@
         "apiServerUrlHelp": "kube-apiserver のルート (例: https://10.0.0.1:6443)。オーケストレーターは各 PR のマニフェストを apiserver 経由で適用するため、到達可能である必要があるのはこのエンドポイントだけです。",
         "apiToken": "ServiceAccount トークン",
         "apiTokenHelp": "namespace を作成し、オペレーターのリソースを適用する RBAC を持つベアラートークン。暗号化して保存され、再表示されません。",
+        "apiTokenHelpStored": "トークンは保存済みです。空欄のままにすると保持され、新しい値を入力すると置き換わります。テストにはトークンの再入力が必要です。",
+        "apiTokenPlaceholderStored": "保存済みトークンを保持するには空欄のままにします",
+        "tokenSaved": "保存済み",
         "manifestSourceLabel": "マニフェストソース",
         "sourceColocated": "PR リポジトリ内に同梱",
         "sourceSeparate": "別リポジトリ",
@@ -3529,7 +3549,9 @@
           "thresholds": "スコアしきい値に従う",
           "always": "常に自動マージ",
           "never": "常にレビューを必須にする"
-        }
+        },
+        "loadFailed": "マージ履歴を読み込めませんでした",
+        "unavailable": "履歴を取得できません"
       },
       "roleRules": {
         "heading": "開始したロールごとの制限",
@@ -3687,7 +3709,7 @@
           "doneHint": "このボードの実行では、サインインしたアカウントとしてツールサーバーを利用できるようになりました。",
           "back": "アプリに戻る",
           "failedTitle": "接続を完了できませんでした",
-          "failed": "認可を完了できませんでした。インフラストラクチャ ウィンドウから接続をやり直してください。",
+          "restartHint": "インフラストラクチャ ウィンドウから接続をやり直してください。",
           "missingParams": "このリンクにはプロバイダーが返す値が含まれていないため、完了できる処理がありません。接続をやり直してください。"
         }
       },
@@ -3963,6 +3985,7 @@
       "apiKey": "API キー",
       "connectAndBrowse": "接続して閲覧",
       "keyConnected": "OpenRouter キーを接続しました",
+      "keyDisabled": "OpenRouter キーは無効になっています。モデルを参照するには、ベンダーとキーで再度有効にしてください。",
       "manageKeys": "ベンダーとキーで管理",
       "refresh": "カタログを更新",
       "enableRecommended": "おすすめを有効化",
@@ -3989,7 +4012,8 @@
       "metered": "従量制 API",
       "illustrative": "サブスクリプションに表示される料金は参考値です。これらのプランは定額制であり、トークン単位では課金されません。",
       "tokens": "入力 {input} / 出力 {output}",
-      "calls": "{count} 回の呼び出し"
+      "calls": "{count} 回の呼び出し",
+      "loadFailed": "使用状況を読み込めませんでした。"
     },
     "workspaceSettings": {
       "title": "ワークスペース設定",
@@ -4341,7 +4365,6 @@
         "maxFailureKindShare": "単一の原因が占めてよい失敗の割合（0 より大きく 1 まで）。",
         "maxSweepFailures": "ひとつのバックグラウンド監視が連続して失敗した回数。"
       },
-      "notLoaded": "このアカウントの現在の設定を読み込めなかったため、保存すると他の設定が上書きされます。編集する前に再読み込みしてください。",
       "invalidNumbers": "これらの上限値が数値ではありません",
       "failureKinds": {
         "label": "失敗種別ごとのルール",
@@ -4683,7 +4706,8 @@
       },
       "repoType": "リポジトリの種類",
       "repoTypeHint": "このリポジトリの種類: バックエンドサービス、フロントエンドアプリ、共有ライブラリ、またはドキュメントリポジトリ（ドキュメント/スパイクのみ）。",
-      "prefillProviderMismatch": "このリンクは別のホストにある {repo} を指していますが、このボードは {connected} に接続されています。リポジトリを手動で検索するか、そのホストに接続されたボードでリンクを開いてください。"
+      "prefillProviderMismatch": "このリンクは別のホストにある {repo} を指していますが、このボードは {connected} に接続されています。リポジトリを手動で検索するか、そのホストに接続されたボードでリンクを開いてください。",
+      "searchFailed": "リポジトリを検索できませんでした"
     },
     "repoTree": {
       "root": "ルート",
@@ -4848,7 +4872,8 @@
     "continueTitle": "回答を送信します。インタビュアーが追加の質問をする場合があります",
     "status": {
       "awaiting": "回答待ち",
-      "done": "完了"
+      "done": "完了",
+      "failed": "失敗"
     },
     "saveFailedCount": "回答のうち {count} 件を保存できませんでした",
     "continueFailed": "回答を送信できませんでした",
@@ -4860,7 +4885,7 @@
     "picker": {
       "searchPlaceholder": "ページを検索、または URL/ID を貼り付け…",
       "refPlaceholder": "ページの URL または ID を貼り付け…",
-      "searchFailed": "検索に失敗しました: {error}",
+      "searchFailed": "検索に失敗しました。",
       "importedBadge": "インポート済み",
       "attachByReference": "{ref} を参照で添付",
       "noMatches": "一致するページがありません。",
@@ -4888,7 +4913,7 @@
       "searchFilesPlaceholder": "パスでファイルを検索…",
       "searchFilesHint": "このリポジトリ内のファイルを検索するには入力してください。",
       "noFileMatches": "一致するファイルがありません。",
-      "filesFailed": "ファイルを読み込めませんでした: {error}",
+      "filesFailed": "ファイルを読み込めませんでした。",
       "moreFiles": "最初の{count}件の一致を表示しています。検索条件を絞り込んでください。"
     },
     "import": {
@@ -5020,7 +5045,7 @@
     "picker": {
       "searchPlaceholder": "課題を検索、または URL/キーを貼り付け…",
       "refPlaceholder": "課題の URL またはキーを貼り付け…",
-      "searchFailed": "検索に失敗しました: {error}",
+      "searchFailed": "検索に失敗しました。",
       "searchNeedsRepo": "このサービスはまだリポジトリに紐付けられていないため、検索する対象がありません。リポジトリに紐付けるか、課題の URL を貼り付けて直接添付してください。",
       "imported": "インポート済み",
       "attachByReference": "{ref} を参照で添付",
@@ -5110,7 +5135,7 @@
     "boardPlaceholder": "プロジェクトキーまたはチーム ID",
     "boardFromService": "このサービスにリンクされたリポジトリ",
     "boardNeedsRepo": "このサービスにはリポジトリがリンクされていないため、探索できる課題がありません。サービスパネルからリンクしてください。",
-    "boardsFailed": "ボードを読み込めませんでした: {reason}",
+    "boardsFailed": "ボードを読み込めませんでした。",
     "issueType": "課題タイプ",
     "issueTypeHelp": "既定は bug です。課題タイプを持たないトラッカーでは無視されます。",
     "issueTypeUnsupported": "{tracker} には「bug」を意味する課題タイプがないため、このフィルターは適用されません。代わりにラベルでスキャンを絞り込んでください。",
@@ -5543,7 +5568,8 @@
         "claimUnattended": "無人実行の既定にする",
         "releaseUnattended": "無人実行の既定を解除"
       },
-      "removeLabel": "ラベル {label} を削除"
+      "removeLabel": "ラベル {label} を削除",
+      "gateParametersInvalid": "ゲートのステップに、値のない必須の設定、またはゲートが受け付けない値があります。保存する前にゲートの設定を入力してください。"
     },
     "progress": {
       "status": {
@@ -5812,7 +5838,8 @@
       "park": "人に確認を求めた",
       "bounce": "差し戻した",
       "fail": "実行を失敗させた"
-    }
+    },
+    "resolveFailed": "選択を記録できませんでした"
   },
   "inputGate": {
     "blockedTitle": "このタスクは実行前にもう少し詳細が必要です",
@@ -6689,7 +6716,8 @@
     "outcome": {
       "success": "成功",
       "failure": "失敗"
-    }
+    },
+    "loadFailed": "プロビジョニングログを読み込めませんでした。"
   },
   "kaizen": {
     "title": "Kaizen",
@@ -6730,7 +6758,8 @@
         "recommendations": "推奨事項"
       },
       "empty": "グレーディングはまだありません。"
-    }
+    },
+    "loadFailed": "Kaizen グレーディングを読み込めませんでした"
   },
   "recurring": {
     "runEvery": "実行間隔",
@@ -6853,7 +6882,8 @@
         "placeholder": "GitHub のファイルまたはフォルダーの URL を貼り付け (例: https://github.com/owner/repo/tree/main/docs)",
         "action": "検索",
         "invalid": "リポジトリのファイルまたはフォルダーの URL ではないようです。",
-        "notFound": "{slug} に一致するアクセス可能なリポジトリがありません。URL を確認するか、まずリポジトリを接続してください。"
+        "notFound": "{slug} に一致するアクセス可能なリポジトリがありません。URL を確認するか、まずリポジトリを接続してください。",
+        "failed": "この URL を調べられませんでした。"
       }
     },
     "sources": {
@@ -7707,6 +7737,7 @@
       "service": "公開する Compose サービス",
       "servicePlaceholder": "例: app",
       "port": "公開ポート",
+      "portHelp": "検出ではポートを読み取らないため、初期値は 80 です。サービスが待ち受けるポートを入力してください。",
       "composeFiles": "Compose ファイル",
       "profiles": "プロファイル",
       "seedDumps": "シードダンプ",
@@ -7745,18 +7776,25 @@
       "run": "チェックを実行",
       "none": "このレシピにはプリフライトチェックが宣言されていません。",
       "unavailable": "プリフライトチェックはローカルマシンで実行され、このデプロイでは利用できません。",
-      "optional": "任意"
+      "optional": "任意",
+      "failed": "事前チェックを実行できませんでした。"
     },
     "save": {
       "handlerLabel": "ハンドラーのラベル",
       "handlerHint": "Deployer がこのスタックのプロビジョニングに使う、ワークスペースの Docker Compose ハンドラー。",
       "summary": "「{frame}」に Docker Compose レシピを保存し（サービス「{service}」を公開）、ワークスペースハンドラーを登録します。",
       "saved": "保存しました。パイプラインが実行されると Deployer がこのスタックをプロビジョニングします。",
-      "save": "設定を保存"
+      "save": "設定を保存",
+      "failed": "環境を保存できませんでした。",
+      "errors": {
+        "missingService": "先にフレームと公開する compose サービスを選んでください。",
+        "invalidPort": "有効な公開ポートを入力してください（1〜65535）。"
+      }
     },
     "trial": {
       "hint": "レシピをテストするため、この環境を今すぐプロビジョニングすることもできます。",
-      "run": "お試しプロビジョニング"
+      "run": "お試しプロビジョニング",
+      "failed": "お試しプロビジョニングを開始できませんでした。"
     }
   },
   "forkDecision": {

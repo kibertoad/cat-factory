@@ -34,12 +34,13 @@
     "deny": "Abbrechen",
     "back": "Zurück zur App",
     "noWorkspaces": "Sie haben noch kein Board, mit dem sich das verbinden ließe.",
+    "noAdminWorkspaces": "Sie sind auf keinem Ihrer Boards Admin. Bitten Sie einen Board-Admin, die Verbindung herzustellen.",
     "revokeHint": "Dabei wird ein API-Schlüssel ausgestellt, den Sie jederzeit in den Board-Einstellungen widerrufen können.",
     "error": {
       "title": "Diese Verbindung konnte nicht eingerichtet werden",
       "noRequest": "Diese Seite wurde ohne Autorisierungsanfrage geöffnet. Starten Sie die Verbindung in Ihrem MCP-Host.",
       "expired": "Diese Autorisierungsanfrage ist ungültig oder abgelaufen. Starten Sie die Verbindung in Ihrem MCP-Host erneut.",
-      "failed": "Die Entscheidung konnte nicht gespeichert werden. Starten Sie die Verbindung in Ihrem MCP-Host erneut."
+      "decisionFailed": "Die Entscheidung konnte nicht gespeichert werden."
     }
   },
   "settings": {
@@ -123,7 +124,8 @@
         "skills": "Skills",
         "foundational": "Basisdienste",
         "riskPolicies": "Risikorichtlinien"
-      }
+      },
+      "configNotLoaded": "Die aktuellen Einstellungen dieses Kontos konnten nicht geladen werden; ein Speichern würde die übrigen überschreiben. Bitte vor dem Bearbeiten neu laden."
     },
     "infrastructure": {
       "active": "Aktiv: {backend}",
@@ -296,6 +298,9 @@
         "apiServerUrlHelp": "Die kube-apiserver-Root, z. B. https://10.0.0.1:6443. Der Orchestrator wendet die Manifeste jedes PR über den apiserver an, daher muss nur dieser Endpunkt erreichbar sein.",
         "apiToken": "ServiceAccount-Token",
         "apiTokenHelp": "Ein Bearer-Token mit RBAC-Rechten, um Namespaces zu erstellen und die Ressourcen des Operators anzuwenden. Verschlüsselt gespeichert; wird nie wieder angezeigt.",
+        "apiTokenHelpStored": "Ein Token ist gespeichert. Leer lassen, um es zu behalten, oder ein neues eingeben, um es zu ersetzen. Für den Test muss das Token erneut eingegeben werden.",
+        "apiTokenPlaceholderStored": "Leer lassen, um das gespeicherte Token beizubehalten",
+        "tokenSaved": "Gespeichert",
         "manifestSourceLabel": "Manifest-Quelle",
         "sourceColocated": "Im PR-Repo mit abgelegt",
         "sourceSeparate": "Separates Repo",
@@ -594,7 +599,9 @@
           "thresholds": "Schwellenwerte verwenden",
           "always": "Immer automatisch zusammenführen",
           "never": "Immer Review verlangen"
-        }
+        },
+        "loadFailed": "Die Merge-Historie konnte nicht geladen werden",
+        "unavailable": "Historie nicht verfügbar"
       },
       "roleRules": {
         "heading": "Grenzen je startender Rolle",
@@ -752,7 +759,7 @@
           "doneHint": "Die Läufe dieses Boards können den Werkzeugserver jetzt mit dem Konto nutzen, mit dem Sie sich angemeldet haben.",
           "back": "Zurück zur App",
           "failedTitle": "Die Verbindung konnte nicht abgeschlossen werden",
-          "failed": "Die Autorisierung konnte nicht abgeschlossen werden. Starten Sie die Verbindung im Infrastruktur-Fenster erneut.",
+          "restartHint": "Starten Sie die Verbindung im Infrastruktur-Fenster erneut.",
           "missingParams": "In diesem Link fehlen die vom Anbieter zurückgesendeten Werte, daher gibt es nichts abzuschließen. Starten Sie die Verbindung erneut."
         }
       },
@@ -1028,6 +1035,7 @@
       "apiKey": "API-Schlüssel",
       "connectAndBrowse": "Verbinden & durchsuchen",
       "keyConnected": "OpenRouter-Schlüssel verbunden",
+      "keyDisabled": "Dein OpenRouter-Schlüssel ist deaktiviert. Aktiviere ihn unter Vendors & Schlüssel wieder, um Modelle zu durchsuchen.",
       "manageKeys": "In Vendors & Schlüssel verwalten",
       "refresh": "Katalog aktualisieren",
       "enableRecommended": "Empfohlene aktivieren",
@@ -1054,7 +1062,8 @@
       "metered": "Gemessene API",
       "illustrative": "Die für Abonnements angezeigten Kosten sind Richtwerte – diese Tarife sind Pauschalpreise und werden nicht pro Token abgerechnet.",
       "tokens": "{input} ein / {output} aus",
-      "calls": "{count} Aufrufe"
+      "calls": "{count} Aufrufe",
+      "loadFailed": "Die Nutzung konnte nicht geladen werden."
     },
     "workspaceSettings": {
       "title": "Workspace-Einstellungen",
@@ -1406,7 +1415,6 @@
         "maxFailureKindShare": "Anteil der Fehler, den eine einzelne Ursache ausmachen darf, über 0 und bis 1.",
         "maxSweepFailures": "Aufeinanderfolgende fehlgeschlagene Durchläufe einer Hintergrundprüfung."
       },
-      "notLoaded": "Die aktuellen Einstellungen dieses Kontos konnten nicht geladen werden; ein Speichern würde die übrigen überschreiben. Bitte vor dem Bearbeiten neu laden.",
       "invalidNumbers": "Diese Obergrenzen sind keine Zahlen",
       "failureKinds": {
         "label": "Regeln pro Fehlerart",
@@ -1692,9 +1700,11 @@
       "detect": {
         "title": "Automatisch erkennen",
         "button": "Aus Repo erkennen",
-        "hint": "Untersucht das Repository und schlägt eine Bereitstellungskonfiguration vor. Du bestätigst und bearbeitest alles unten; es wird nichts automatisch gespeichert.",
+        "hint": "Untersucht das Repository und schlägt eine Bereitstellungskonfiguration vor. Es wird nichts gespeichert, bis du sie übernimmst.",
         "error": "Das Repository konnte nicht gelesen werden, um die Bereitstellung zu erkennen.",
         "none": "Es wurden keine Kubernetes-Manifeste oder Compose-Dateien erkannt.",
+        "proposed": "{type}-Konfiguration gefunden.",
+        "apply": "Übernehmen",
         "applied": "Eine {type}-Konfiguration wurde vorgeschlagen. Prüfe und passe die Felder unten an.",
         "overlayTitle": "Ephemeres Overlay",
         "serviceDirTitle": "Service-Deploy-Ordner",
@@ -1875,7 +1885,6 @@
       "title": "Struktur",
       "hint": "Wo diese Aufgabe in ihrem Service liegt und welchen Coding-Standards ihre Agents folgen.",
       "module": "Modul",
-      "modulePlaceholder": "Modul wählen oder eingeben",
       "moduleHint": "Das Service-Modul, zu dem diese Aufgabe gehört; das Board gruppiert die Spalten danach. Ein noch nicht vorhandenes Modul wird bei der Umsetzung der Aufgabe erstellt.",
       "bestPractices": "Best Practices",
       "bestPracticesEmpty": "Keine. Agents folgen ihren Standardvorgaben.",
@@ -2492,6 +2501,7 @@
       },
       "invite": {
         "title": "Ein Teammitglied einladen",
+        "listTitle": "Einladungen",
         "submit": "Einladen",
         "revoke": "Einladung widerrufen",
         "created": "Einladung erstellt",
@@ -2506,6 +2516,7 @@
       "email": {
         "title": "E-Mail-Absender",
         "notEnabled": "Der E-Mail-Versand ist bei diesem Deployment nicht aktiviert. Einladungen erzeugen trotzdem einen teilbaren Annahme-Link.",
+        "notConnected": "Es ist kein E-Mail-Absender verbunden. Ein Konto-Admin kann einen verbinden.",
         "connectedAs": "Verbunden über {provider} als {from}",
         "disconnect": "Trennen",
         "connect": "E-Mail-Absender verbinden",
@@ -2729,7 +2740,9 @@
       "budget": "Budget",
       "tokens": "Tokens",
       "resume": "Trotzdem fortsetzen",
-      "resumeHint": "Ein Fortsetzen führt zu weiteren Ausgaben; es pausiert erneut, wenn das Budget weiterhin überschritten wird."
+      "resumeHint": "Ein Fortsetzen führt zu weiteren Ausgaben; es pausiert erneut, wenn das Budget weiterhin überschritten wird.",
+      "resumeFailed": "Die Agentenausführung konnte nicht fortgesetzt werden",
+      "refreshFailed": "Läufe fortgesetzt, aber das Board wurde nicht aktualisiert"
     },
     "personalSetup": {
       "title": "Meine Einrichtung",
@@ -2934,6 +2947,7 @@
       "status": {
         "connected": "Verbunden",
         "keyConnected": "Schlüssel verbunden",
+        "keyDisabled": "Schlüssel deaktiviert",
         "notConnected": "Nicht verbunden",
         "recommended": "Empfohlen",
         "connectedCount": "keine verbunden | {count} verbunden | {count} verbunden"
@@ -3526,7 +3540,7 @@
     "attachIssueDisabledConnect": "Verbinden Sie zuerst einen Issue-Tracker (Integrationen)",
     "attachIssueDisabledEnable": "Aktivieren Sie zuerst die Issue-Tracker-Integration",
     "importsOnAdd": "importiert beim Hinzufügen",
-    "unreadable": "Konnte nicht abgerufen werden: {error}",
+    "unreadable": "Konnte nicht abgerufen werden.",
     "pastedLink": {
       "offer": "Diese Beschreibung verlinkt eine {source}-Seite. Als Kontext anhängen?",
       "attach": "Anhängen"
@@ -3850,7 +3864,8 @@
         "frontendLinkedNote": "{directory} wurde als Frontend hinzugefügt und mit den übrigen verknüpft. Benennen Sie die Umgebungsvariablen für die Backend-URLs im Inspector.",
         "frontendWiringFailedNote": "Die Frontend-Einstellungen wurden nicht gespeichert. Öffnen Sie den Inspector jeder Frontend-App, um ihr Unterverzeichnis und ihre Backend-Services zu setzen."
       },
-      "prefillProviderMismatch": "Der Link verweist auf {repo} bei einem anderen Anbieter, dieses Board ist aber mit {connected} verbunden. Suche das Repository von Hand oder öffne den Link auf einem Board, das mit seinem Anbieter verbunden ist."
+      "prefillProviderMismatch": "Der Link verweist auf {repo} bei einem anderen Anbieter, dieses Board ist aber mit {connected} verbunden. Suche das Repository von Hand oder öffne den Link auf einem Board, das mit seinem Anbieter verbunden ist.",
+      "searchFailed": "Repositorys konnten nicht durchsucht werden"
     },
     "repoTree": {
       "root": "root",
@@ -4160,7 +4175,8 @@
       "helperFailures": "Fixer-Fehlschläge",
       "exhausted": "An Menschen übergeben",
       "hint": "Ohne Fixer bestanden heißt: die Vorprüfung war zufrieden und es wurde gar kein Fixer gestartet. Fixer-Fehlschläge sind Versuche, deren eigener Job abgestürzt ist, im Unterschied zu Versuchen, die liefen und die Prüfung rot ließen."
-    }
+    },
+    "loadFailed": "Die Plattform-Observability konnte nicht geladen werden."
   },
   "reports": {
     "title": "Berichte",
@@ -4325,7 +4341,7 @@
     "picker": {
       "searchPlaceholder": "Seiten durchsuchen oder eine URL/ID einfügen…",
       "refPlaceholder": "Eine Seiten-URL oder -ID einfügen…",
-      "searchFailed": "Suche fehlgeschlagen: {error}",
+      "searchFailed": "Suche fehlgeschlagen.",
       "importedBadge": "importiert",
       "attachByReference": "{ref} per Referenz anhängen",
       "noMatches": "Keine passenden Seiten.",
@@ -4353,7 +4369,7 @@
       "searchFilesPlaceholder": "Dateien nach Pfad suchen…",
       "searchFilesHint": "Tippen, um Dateien in diesem Repository zu suchen.",
       "noFileMatches": "Keine passenden Dateien.",
-      "filesFailed": "Dateien konnten nicht geladen werden: {error}",
+      "filesFailed": "Dateien konnten nicht geladen werden.",
       "moreFiles": "Es werden die ersten {count} Treffer angezeigt – grenzen Sie Ihre Suche ein."
     },
     "import": {
@@ -4485,7 +4501,7 @@
     "picker": {
       "searchPlaceholder": "Issues durchsuchen oder eine URL/einen Schlüssel einfügen…",
       "refPlaceholder": "Eine Issue-URL oder einen -Schlüssel einfügen…",
-      "searchFailed": "Suche fehlgeschlagen: {error}",
+      "searchFailed": "Suche fehlgeschlagen.",
       "searchNeedsRepo": "Dieser Service ist noch mit keinem Repository verknüpft, es gibt also nichts zu durchsuchen. Verknüpfen Sie ihn mit einem Repository oder fügen Sie eine Issue-URL ein, um ein Issue direkt anzuhängen.",
       "imported": "importiert",
       "attachByReference": "{ref} per Referenz anhängen",
@@ -4575,7 +4591,7 @@
     "boardPlaceholder": "Projektschlüssel oder Team-ID",
     "boardFromService": "Das mit diesem Service verknüpfte Repository",
     "boardNeedsRepo": "Mit diesem Service ist kein Repository verknüpft, es gibt also keine Tickets zu durchsuchen. Verknüpfe eines im Service-Panel.",
-    "boardsFailed": "Boards konnten nicht geladen werden: {reason}",
+    "boardsFailed": "Boards konnten nicht geladen werden.",
     "issueType": "Vorgangstyp",
     "issueTypeHelp": "Standard ist bug. Wird von Trackern ohne Vorgangstypen ignoriert.",
     "issueTypeUnsupported": "{tracker} kennt keinen Ticket-Typ mit der Bedeutung „Bug“, daher wird dieser Filter nicht angewendet. Grenzen Sie den Scan stattdessen mit einem Label ein.",
@@ -5008,7 +5024,8 @@
         "claimUnattended": "Als Standard ohne Aufsicht festlegen",
         "releaseUnattended": "Nicht mehr Standard ohne Aufsicht"
       },
-      "removeLabel": "Label {label} entfernen"
+      "removeLabel": "Label {label} entfernen",
+      "gateParametersInvalid": "Ein Gate-Schritt hat eine Pflichteinstellung ohne Wert oder einen Wert, den das Gate nicht akzeptiert. Fülle seine Gate-Einstellungen aus, bevor du speicherst."
     },
     "progress": {
       "status": {
@@ -5633,7 +5650,8 @@
         "placeholder": "GitHub-Datei- oder Ordner-URL einfügen (z. B. https://github.com/owner/repo/tree/main/docs)",
         "action": "Suchen",
         "invalid": "Das sieht nicht nach der URL einer Repository-Datei oder eines Ordners aus.",
-        "notFound": "Kein zugängliches Repository passt zu {slug}. Prüfen Sie die URL oder verbinden Sie das Repository zuerst."
+        "notFound": "Kein zugängliches Repository passt zu {slug}. Prüfen Sie die URL oder verbinden Sie das Repository zuerst.",
+        "failed": "Die URL konnte nicht nachgeschlagen werden."
       }
     },
     "sources": {
@@ -6314,7 +6332,9 @@
       "keep": "Weiter bearbeiten"
     },
     "edit": "Bearbeiten",
-    "pathInvalid": "Geben Sie einen Pfad innerhalb des Repositorys an (kein \"..\", keine absoluten Pfade und keine Backslashes)."
+    "pathInvalid": "Geben Sie einen Pfad innerhalb des Repositorys an (kein \"..\", keine absoluten Pfade und keine Backslashes).",
+    "checking": "Wird geprüft…",
+    "loadFailed": "Laden fehlgeschlagen"
   },
   "access": {
     "noBoardWrite": "Nur-Lese-Zugriff: Sie können dieses Board ansehen, aber nicht bearbeiten.",
@@ -6402,7 +6422,13 @@
     "reason": {
       "description": {
         "reference_repo_not_found": "Das Repository hinter der Referenzarchitektur dieses Laufs ist über die Quellcodeverwaltungs-Verbindung dieses Workspace nicht sichtbar. Entweder nennt der Eintrag das falsche Repository, oder die Verbindung hat keinen Zugriff darauf: Korrigieren Sie die Referenzarchitektur oder erteilen Sie den Zugriff, und versuchen Sie es erneut.",
-        "reference_repo_unreadable": "Das Repository hinter der Referenzarchitektur dieses Laufs konnte gerade nicht gelesen werden, deshalb wurde der Lauf nicht gegen eine Vorlage gestartet, die er möglicherweise nicht klonen kann. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht."
+        "reference_repo_unreadable": "Das Repository hinter der Referenzarchitektur dieses Laufs konnte gerade nicht gelesen werden, deshalb wurde der Lauf nicht gegen eine Vorlage gestartet, die er möglicherweise nicht klonen kann. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
+        "oauth_state_invalid": "Dieser Autorisierungslink ist abgelaufen oder wurde bereits verwendet, daher kann er die Verbindung nicht abschließen.",
+        "oauth_started_by_other_user": "Jemand anderes hat diese Verbindung gestartet, daher kann nur diese Person sie abschließen.",
+        "oauth_exchange_refused": "Der Autorisierungsserver des Werkzeugservers hat die Freigabe abgelehnt. Bitten Sie Ihren Deployment-Betreiber, die OAuth-Client-Einstellungen des Werkzeugservers zu prüfen.",
+        "oauth_client_secret_unavailable": "Das OAuth-Client-Secret des Werkzeugservers ist auf diesem Board nicht verfügbar. Fügen Sie es im Infrastruktur-Fenster hinzu.",
+        "tool_server_without_oauth": "Dieser Werkzeugserver verwendet kein OAuth mehr, daher gibt es keine Verbindung abzuschließen.",
+        "gate_config_fields_invalid": "Die Gate-Einstellungen eines Schritts sind unvollständig oder enthalten einen Wert, den das Gate nicht akzeptiert, meist eine Pflichteinstellung ohne Wert. Füllen Sie die Gate-Einstellungen des Schritts in der Pipeline aus und versuchen Sie es erneut."
       }
     },
     "action": {
@@ -6738,7 +6764,8 @@
     "continueTitle": "Deine Antworten senden; der Interviewer stellt möglicherweise Nachfragen",
     "status": {
       "awaiting": "Warten auf Antworten",
-      "done": "Fertig"
+      "done": "Fertig",
+      "failed": "Fehlgeschlagen"
     },
     "saveFailedCount": "{count} Ihrer Antworten konnten nicht gespeichert werden",
     "continueFailed": "Antworten konnten nicht gesendet werden",
@@ -6852,7 +6879,8 @@
       "park": "Nachfrage an einen Menschen",
       "bounce": "Zur Überarbeitung zurückgeschickt",
       "fail": "Lauf fehlgeschlagen"
-    }
+    },
+    "resolveFailed": "Ihre Entscheidung konnte nicht gespeichert werden"
   },
   "inputGate": {
     "blockedTitle": "Diese Aufgabe braucht mehr Details, bevor sie laufen kann",
@@ -7418,7 +7446,8 @@
     "outcome": {
       "success": "Erfolg",
       "failure": "Fehler"
-    }
+    },
+    "loadFailed": "Die Bereitstellungs-Logs konnten nicht geladen werden."
   },
   "kaizen": {
     "title": "Kaizen",
@@ -7459,7 +7488,8 @@
         "recommendations": "Empfehlungen"
       },
       "empty": "Noch keine Bewertungen."
-    }
+    },
+    "loadFailed": "Kaizen-Bewertungen konnten nicht geladen werden"
   },
   "recurring": {
     "runEvery": "Ausführen alle",
@@ -7702,6 +7732,7 @@
       "service": "Bereitgestellter Compose-Service",
       "servicePlaceholder": "z. B. app",
       "port": "Bereitgestellter Port",
+      "portHelp": "Die Erkennung liest keine Ports aus, daher steht hier zuerst 80. Gib den Port ein, auf dem der Dienst lauscht.",
       "composeFiles": "Compose-Dateien",
       "profiles": "Profile",
       "seedDumps": "Seed-Dumps",
@@ -7740,18 +7771,25 @@
       "run": "Prüfungen ausführen",
       "none": "Dieses Rezept deklariert keine Preflight-Prüfungen.",
       "unavailable": "Preflight-Prüfungen laufen auf der lokalen Maschine und sind für dieses Deployment nicht verfügbar.",
-      "optional": "optional"
+      "optional": "optional",
+      "failed": "Die Vorabprüfungen konnten nicht ausgeführt werden."
     },
     "save": {
       "handlerLabel": "Handler-Label",
       "handlerHint": "Der Docker-Compose-Handler des Workspaces, den der Deployer zum Bereitstellen dieses Stacks verwendet.",
       "summary": "Speichert ein Docker-Compose-Rezept auf \"{frame}\" (stellt Service \"{service}\" bereit) und registriert den Workspace-Handler.",
       "saved": "Gespeichert. Der Deployer stellt diesen Stack bereit, wenn eine Pipeline ihn ausführt.",
-      "save": "Konfiguration speichern"
+      "save": "Konfiguration speichern",
+      "failed": "Die Umgebung konnte nicht gespeichert werden.",
+      "errors": {
+        "missingService": "Wählen Sie zuerst einen Rahmen und einen freigegebenen Compose-Dienst.",
+        "invalidPort": "Geben Sie einen gültigen freigegebenen Port ein (1 bis 65535)."
+      }
     },
     "trial": {
       "hint": "Optional diese Umgebung jetzt bereitstellen, um das Rezept zu testen.",
-      "run": "Testbereitstellung"
+      "run": "Testbereitstellung",
+      "failed": "Die Testbereitstellung konnte nicht gestartet werden."
     }
   },
   "palette": {

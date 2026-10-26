@@ -18,6 +18,11 @@ import type { DocumentSourceKind, GitHubAvailableRepo, RepoTreeEntry } from '~/t
 import EmptyState from '~/components/common/EmptyState.vue'
 import RepoSearchEmpty from '~/components/github/RepoSearchEmpty.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 const props = defineProps<{
   /** The repo-backed document source (`github`) whose files are being attached. */
@@ -107,7 +112,7 @@ const files = computed<RepoTreeEntry[]>(() =>
   selectedRepoId.value !== undefined ? (github.repoFiles[selectedRepoId.value] ?? []) : [],
 )
 const loadingFiles = ref(false)
-const filesError = ref<string | null>(null)
+const filesError = ref<DescribedFailure | null>(null)
 
 async function ensureFilesLoaded() {
   if (selectedRepoId.value === undefined) return
@@ -117,7 +122,7 @@ async function ensureFilesLoaded() {
   try {
     await github.loadRepoFiles(selectedRepoId.value)
   } catch (e) {
-    filesError.value = e instanceof Error ? e.message : String(e)
+    filesError.value = describeFailure(e)
   } finally {
     loadingFiles.value = false
   }
@@ -238,9 +243,11 @@ onMounted(() => {
           class="w-full"
           :placeholder="t('documents.repoPicker.searchFilesPlaceholder')"
         />
-        <p v-if="filesError" class="px-1 text-2xs text-app-warning-400">
-          {{ t('documents.repoPicker.filesFailed', { error: filesError }) }}
-        </p>
+        <FailureMessage
+          :failure="filesError"
+          :title="t('documents.repoPicker.filesFailed')"
+          class="px-1 text-2xs text-app-warning-400"
+        />
         <div class="max-h-56 space-y-0.5 overflow-y-auto">
           <UButton
             color="neutral"

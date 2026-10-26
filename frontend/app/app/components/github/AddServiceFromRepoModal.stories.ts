@@ -38,10 +38,6 @@ import AddServiceFromRepoModal from './AddServiceFromRepoModal.vue'
 // shared `acme` App installation. Auth Service's repository is already on this board, and
 // `packages/shared` of the platform monorepo already backs a service elsewhere in the account.
 // The search and the picks are typed and clicked, as a person does.
-//
-// MonorepoFrontendMark leaves the frontend select closed: its none item has the value '', and
-// Reka's SelectItem throws for an empty value when the menu opens, so an open select shows
-// Storybook's error display (#2393). No story opens that select until #2393 is fixed.
 const pathPrefix = storyWorkspacePrefix
 
 /** A repository the App can see that is not on any board yet, for the whole-repo add. */
@@ -192,12 +188,12 @@ export const Monorepo: Story = {
   },
 }
 
-/** Two directories picked as backend services, so one can be marked the frontend for the other. */
+/** Two directories picked as backend services, and the select that marks one the frontend open. */
 export const MonorepoFrontendMark: Story = {
   play: async () => {
     await pick(platformRepo)
     await selectPackages(2)
-    await screen.findByTestId('add-service-frontend-select')
+    await userEvent.click(await screen.findByTestId('add-service-frontend-select'))
   },
 }
 

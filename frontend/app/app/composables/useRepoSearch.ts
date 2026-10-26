@@ -1,6 +1,7 @@
 import { computed, ref, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import type { GitHubAvailableRepo } from '~/types/domain'
+import { usePipelineErrorToast } from '~/composables/usePipelineErrorToast'
 
 /** Minimum characters before a search fires — a wide install has too many repos to prefetch. */
 export const REPO_SEARCH_MIN_LEN = 3
@@ -20,10 +21,15 @@ export type RepoFetcher = (query: string) => Promise<GitHubAvailableRepo[]>
  * keeps its OWN result list — two pickers never clobber each other through the shared
  * `availableRepos` singleton. A stale-response guard drops an out-of-order fetch so fast typing
  * can't leave older matches showing.
+ *
+ * A failed search clears the results and raises one deduped toast, so an outage does not stack a
+ * toast per debounced query. A failure of a query the person has already typed past is dropped
+ * like any other stale response.
  */
 export function useRepoSearch(fetcher?: RepoFetcher) {
   const github = useGitHubStore()
   const doFetch: RepoFetcher = fetcher ?? ((q) => github.searchAvailableRepos(q))
+  const { present } = usePipelineErrorToast()
 
   const search = ref('')
   const debounced = refDebounced(search, 250)
@@ -46,6 +52,10 @@ export function useRepoSearch(fetcher?: RepoFetcher) {
     try {
       const found = await doFetch(q)
       if (mine === seq) results.value = found
+    } catch (e) {
+      if (mine !== seq) return
+      results.value = []
+      present(e, 'github.addService.searchFailed', undefined, { dedupe: true })
     } finally {
       if (mine === seq) loading.value = false
     }

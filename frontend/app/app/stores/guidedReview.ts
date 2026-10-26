@@ -12,6 +12,7 @@ import type {
   OpenGuidedReviewThreadInput,
 } from '~/types/domain'
 import { ApiError } from '~/composables/api/errors'
+import { createRefetchFailures } from '~/stores/guidedReview/refetchFailures'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -27,11 +28,8 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
 
   const sessions = ref<Record<string, GuidedReviewSessionView>>({})
   const threads = ref<Record<string, GuidedReviewThreadView>>({})
-  /**
-   * The last error of a background refetch per session, cleared when that session or one of its
-   * threads lands again, so a window can say its view may be out of date.
-   */
-  const refetchFailures = ref<Record<string, unknown>>({})
+  const { failedLoads, refetchFailures, recordFailure, clearFailure, hasFailed, ...failures } =
+    createRefetchFailures()
   // One counter for every key and never reset, so a key dropped by `forget` or `reset` is never
   // landed on by a fetch that was in flight when it went.
   let issued = 0
@@ -46,21 +44,31 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
     return issued
   }
 
-  /** Run `fetch` for `key`, landing its result only if no newer fetch or write for it started. */
+  /**
+   * Run `fetch` for `key`, landing its result only if no newer fetch or write for it started. A
+   * superseded fetch neither lands nor fails: its error is dropped, so it cannot report a view
+   * that a newer fetch has already brought up to date as out of date.
+   */
   async function latest<T>(key: string, fetch: () => Promise<T>, land: (value: T) => void) {
     const ticket = claim(key)
-    const value = await fetch()
+    let value: T
+    try {
+      value = await fetch()
+    } catch (error) {
+      if (newest.get(key) === ticket) throw error
+      return
+    }
     if (newest.get(key) === ticket) land(value)
   }
 
   function putSession(view: GuidedReviewSessionView) {
     sessions.value[view.session.id] = view
-    delete refetchFailures.value[view.session.id]
+    clearFailure(view.session.id, sessionKey(view.session.id))
   }
 
   function putThread(view: GuidedReviewThreadView) {
     threads.value[view.thread.id] = view
-    delete refetchFailures.value[view.thread.sessionId]
+    clearFailure(view.thread.sessionId, threadKey(view.thread.sessionId, view.thread.id))
   }
 
   function loadSession(sessionId: string): Promise<void> {
@@ -84,9 +92,21 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
     return view
   }
 
-  function refresh(sessionId: string): Promise<void> {
+  /**
+   * Refresh the session from the pull request. Threads whose background refetch failed are
+   * loaded again with it, so an explicit refresh clears every reason the window has to say it may
+   * be out of date, not only the session's own.
+   */
+  async function refresh(sessionId: string): Promise<void> {
     const ws = workspace.requireId()
-    return latest(sessionKey(sessionId), () => api.refreshGuidedReview(ws, sessionId), putSession)
+    const failedThreads = Object.values(threads.value).filter(
+      ({ thread }) =>
+        thread.sessionId === sessionId && hasFailed(sessionId, threadKey(sessionId, thread.id)),
+    )
+    await Promise.all([
+      latest(sessionKey(sessionId), () => api.refreshGuidedReview(ws, sessionId), putSession),
+      ...failedThreads.map(({ thread }) => loadThread(sessionId, thread.id)),
+    ])
   }
 
   async function remove(sessionId: string): Promise<void> {
@@ -140,7 +160,7 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
 
   function forget(sessionId: string) {
     delete sessions.value[sessionId]
-    delete refetchFailures.value[sessionId]
+    failures.forgetSession(sessionId)
     newest.delete(sessionKey(sessionId))
     const threadPrefix = threadKey(sessionId, '')
     for (const key of newest.keys()) {
@@ -155,15 +175,16 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
   function reset() {
     sessions.value = {}
     threads.value = {}
-    refetchFailures.value = {}
+    failures.clearAll()
     newest.clear()
   }
 
   /**
    * A refetch nobody awaits (a live event, a reconnect). A session that answers 404 is gone and
-   * is forgotten; any other failure keeps the last view and is recorded in `refetchFailures`.
+   * is forgotten; any other failure keeps the last view and is recorded in `failedLoads`
+   * against `key`, the fetch that failed.
    */
-  async function follow(sessionId: string, load: () => Promise<void>): Promise<void> {
+  async function follow(sessionId: string, key: string, load: () => Promise<void>): Promise<void> {
     try {
       await load()
     } catch (error) {
@@ -171,7 +192,7 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
         forget(sessionId)
         return
       }
-      if (sessions.value[sessionId]) refetchFailures.value[sessionId] = error
+      if (sessions.value[sessionId]) recordFailure(sessionId, key, error)
     }
   }
 
@@ -185,12 +206,14 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
     const loads: Promise<void>[] = []
     // A thread change also moves the session's summary (its pending answer), so both refetch.
     if (sessions.value[sessionId]) {
-      loads.push(follow(sessionId, () => loadSession(sessionId)))
+      loads.push(follow(sessionId, sessionKey(sessionId), () => loadSession(sessionId)))
     }
     if (change.scope === 'thread' || change.scope === 'drafts') {
       const { threadId } = change
       if (threads.value[threadId]) {
-        loads.push(follow(sessionId, () => loadThread(sessionId, threadId)))
+        loads.push(
+          follow(sessionId, threadKey(sessionId, threadId), () => loadThread(sessionId, threadId)),
+        )
       }
     }
     await Promise.all(loads)
@@ -199,9 +222,11 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
   /** Refetch everything loaded here, for events missed while the stream was disconnected. */
   async function resync(): Promise<void> {
     const loads = [
-      ...Object.keys(sessions.value).map((id) => follow(id, () => loadSession(id))),
+      ...Object.keys(sessions.value).map((id) => follow(id, sessionKey(id), () => loadSession(id))),
       ...Object.values(threads.value).map(({ thread }) =>
-        follow(thread.sessionId, () => loadThread(thread.sessionId, thread.id)),
+        follow(thread.sessionId, threadKey(thread.sessionId, thread.id), () =>
+          loadThread(thread.sessionId, thread.id),
+        ),
       ),
     ]
     await Promise.all(loads)
@@ -210,6 +235,7 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
   return {
     sessions,
     threads,
+    failedLoads,
     refetchFailures,
     loadSession,
     loadThread,

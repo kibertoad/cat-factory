@@ -17,6 +17,7 @@
 // so a tear-down row that was missed or not yet persisted at the terminal instant can always be
 // refetched.
 import { onBeforeUnmount, onMounted, watch } from 'vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 import type {
   ProvisioningOperation,
   ProvisioningOutcome,
@@ -40,7 +41,7 @@ const { t, d } = useI18n()
 const store = useProvisioningLogsStore()
 const state = computed(() =>
   props.executionId
-    ? (store.byExecution[props.executionId] ?? { entries: [], loading: false, error: null })
+    ? store.stateFor(props.executionId)
     : store.bySubsystem[props.subsystem ?? 'environment'],
 )
 
@@ -83,12 +84,28 @@ watch(
   { immediate: true },
 )
 
-onMounted(() => reload())
+// executionId mode holds the run's state while this drawer shows it; the store drops it when the
+// last drawer showing that run lets go (a re-opened drawer re-fetches on mount). Subsystem mode
+// keeps its fixed-size state.
+onMounted(() => {
+  if (props.executionId) store.retain(props.executionId)
+  reload()
+})
+// A host can switch the drawer to another run without remounting it (the step panel passes the
+// selected step's run): let go of the old run and load the new one.
+watch(
+  () => props.executionId,
+  (executionId, previous) => {
+    if (previous) store.release(previous)
+    if (executionId) {
+      store.retain(executionId)
+      reload()
+    }
+  },
+)
 onBeforeUnmount(() => {
   stopPolling()
-  // Drop this run's accumulated log state so the per-execution map doesn't grow for the app's
-  // lifetime (a re-opened drawer re-fetches on mount). Subsystem mode keeps its fixed-size state.
-  if (props.executionId) store.evict(props.executionId)
+  if (props.executionId) store.release(props.executionId)
 })
 
 // Exhaustive enum→label maps of literal `t(...)` keys (keeps the typed-key drift guard
@@ -132,7 +149,12 @@ function when(epochMs: number): string {
       </UButton>
     </div>
 
-    <p v-if="state.error" class="px-3 py-2 text-xs text-app-error-300">{{ state.error }}</p>
+    <FailureMessage
+      v-if="state.error"
+      :failure="state.error"
+      :title="t('provisioning.loadFailed')"
+      class="px-3 py-2 text-xs text-app-error-300"
+    />
     <div v-else-if="state.loading && state.entries.length === 0" class="space-y-2 px-3 py-2">
       <USkeleton v-for="n in 3" :key="n" class="h-8 w-full" />
     </div>

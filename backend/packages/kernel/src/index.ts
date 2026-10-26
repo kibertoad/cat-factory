@@ -1166,10 +1166,9 @@ export {
   type SpendRollupWindow,
 } from './domain/spend-rollup-window.js'
 
+export { WORKSPACE_ROLE_PERMISSIONS, permissionsForRole } from '@cat-factory/contracts'
 export {
-  WORKSPACE_ROLE_PERMISSIONS,
   workspaceRoleAtLeast,
-  permissionsForRole,
   resolveWorkspaceAccess,
   type WorkspaceAccess,
   type WorkspaceAccessRow,

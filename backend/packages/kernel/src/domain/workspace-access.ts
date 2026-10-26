@@ -1,45 +1,23 @@
 // ---------------------------------------------------------------------------
-// Workspace-level RBAC: the permission catalog + effective-role resolution. This
-// is SERVER POLICY (below the HTTP layer so the workspaces-package services and the
-// conformance suite can reach it), NOT wire shape — the unions live in
-// `@cat-factory/contracts` and are re-exported by `./types`.
+// Workspace-level RBAC: effective-role resolution. This is SERVER POLICY (below the
+// HTTP layer so the workspaces-package services and the conformance suite can reach
+// it), NOT wire shape: the unions live in `@cat-factory/contracts` and are re-exported
+// by `./types`.
 //
 // The three fixed roles form a strict lattice `viewer < member < admin`; each maps
-// onto a set of {@link WorkspacePermission}s via the static table below. Enforcement
+// onto a set of {@link WorkspacePermission}s via the static table in contracts
+// (`WORKSPACE_ROLE_PERMISSIONS`), which the SPA reads too. Enforcement
 // resolves the caller's EFFECTIVE role once (the gate), then checks a permission set
 // — never scattered role comparisons.
 // ---------------------------------------------------------------------------
 
+import { permissionsForRole } from '@cat-factory/contracts'
 import type {
   AccountRole,
   WorkspaceAccessMode,
   WorkspacePermission,
   WorkspaceRole,
 } from './types.js'
-
-/** The full permission set an `admin` holds (also the catalog's canonical order). */
-const ALL_WORKSPACE_PERMISSIONS: readonly WorkspacePermission[] = [
-  'workspace.read',
-  'board.write',
-  'runs.execute',
-  'settings.manage',
-  'integrations.manage',
-  'secrets.manage',
-  'members.manage',
-]
-
-/**
- * The static role → permission map. `viewer` reads only; `member` adds board
- * mutation + run execution (the developer surface); `admin` holds everything.
- * `board.write` and `runs.execute` are carried separately even though both land on
- * `member`, so a post-1.0 custom-role model (and machine principals) can split them
- * without re-cataloguing — the cost of the split now is one array entry.
- */
-export const WORKSPACE_ROLE_PERMISSIONS: Record<WorkspaceRole, readonly WorkspacePermission[]> = {
-  viewer: ['workspace.read'],
-  member: ['workspace.read', 'board.write', 'runs.execute'],
-  admin: ALL_WORKSPACE_PERMISSIONS,
-}
 
 /** Rank in the `viewer < member < admin` lattice; higher wins when grants combine. */
 const ROLE_RANK: Record<WorkspaceRole, number> = { viewer: 0, member: 1, admin: 2 }
@@ -52,11 +30,6 @@ export function workspaceRoleAtLeast(role: WorkspaceRole, floor: WorkspaceRole):
 /** The higher of two roles in the lattice (the effective role when grants combine). */
 function maxRole(a: WorkspaceRole, b: WorkspaceRole): WorkspaceRole {
   return ROLE_RANK[a] >= ROLE_RANK[b] ? a : b
-}
-
-/** The permission set a role resolves to, as a `Set` for O(1) `requirePermission` checks. */
-export function permissionsForRole(role: WorkspaceRole): ReadonlySet<WorkspacePermission> {
-  return new Set(WORKSPACE_ROLE_PERMISSIONS[role])
 }
 
 /** The narrow access row the gate reads to resolve a board's membership tier. */

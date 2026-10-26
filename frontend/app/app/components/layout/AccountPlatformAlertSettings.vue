@@ -1,17 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type {
   PlatformAlertSettings,
   PlatformAlertThresholdOverrides,
   PlatformAlertWindow,
   PlatformFailureKindRule,
 } from '~/types/execution'
+import AccountConfigNotLoaded from '~/components/layout/AccountConfigNotLoaded.vue'
 import AccountFailureKindRules from '~/components/layout/AccountFailureKindRules.vue'
 import {
   failureKindRuleFaults,
   hasFailureKindRuleFaults,
   MAX_FAILURE_KIND_RULES,
 } from '~/utils/failureKinds'
+import { selectNoneItem, selectNoneModel } from '~/utils/selectNone'
 
 // Per-account tuning for the platform-health alert sweep (admin only): the ceilings the
 // deployment's aggregate run health is checked against, and the window they are evaluated over.
@@ -40,7 +42,7 @@ const windowLabels = computed<Record<PlatformAlertWindow, string>>(() => ({
 }))
 const windowItems = computed(() =>
   [
-    { label: t('settings.platformAlerts.window.inherit'), value: '' },
+    selectNoneItem(t('settings.platformAlerts.window.inherit')),
     ...WINDOWS.map((w) => ({ label: windowLabels.value[w], value: w })),
   ].map((i) => i),
 )
@@ -93,6 +95,12 @@ const thresholdHints = computed<Record<ThresholdField, string>>(() => ({
 // cleared, and one of them is "leave the deployment default alone".
 const muted = ref(false)
 const alertWindow = ref<PlatformAlertWindow | ''>('')
+const alertWindowModel = selectNoneModel(
+  () => alertWindow.value,
+  (value) => {
+    alertWindow.value = value
+  },
+)
 const values = ref<Record<ThresholdField, string>>(blankValues())
 // Undefined is "inherit the deployment's rules"; an EMPTY array is "this account has none".
 // Kept apart for the same reason blank and 0 are above, and here the two are further apart
@@ -132,31 +140,16 @@ function hydrate() {
   failureKindRules.value = stored?.thresholds?.failureKindRules?.map((rule) => ({ ...rule }))
 }
 
-onMounted(async () => {
-  // A sibling panel loads the same store on mount; only load when nothing is there yet.
-  if (!store.view && store.available !== false) {
-    try {
-      await store.load(props.accountId)
-    } catch {
-      // The deployment-settings panel surfaces the error text; what matters HERE is that the
-      // rest of the account's config never arrived, which `loaded` below turns into a refusal
-      // to save rather than a silent write of a config that is missing everything.
-    }
-  }
-  hydrate()
-})
-watch(() => store.view, hydrate)
-
 /**
- * Whether the account's CURRENT config is in hand.
+ * Whether this account's CURRENT config is in hand.
  *
  * Load-bearing because a save REPLACES the whole non-secret config and this panel only edits one
  * key of it: saving on top of a failed load would carry nothing forward and silently wipe the
- * model policy, the run-credential floor and every other sibling setting. The store only clears
- * `available` for a 503 (the settings module is unwired), so any other load failure leaves the
- * panel rendered with a null view, which is exactly the state this guards.
+ * model policy, the run-credential floor and every other sibling setting. `saveConfigPatch`
+ * refuses that case; this disables the button and says why.
  */
-const loaded = computed(() => !!store.view)
+const { loaded, loadFailed } = useAccountConfig(() => props.accountId)
+watch(() => store.view, hydrate, { immediate: true })
 
 /**
  * Fields whose text is not a number. Reported rather than dropped: `fromDisplay` returning
@@ -186,10 +179,6 @@ function collectThresholds(): PlatformAlertThresholdOverrides {
 const ruleFaults = computed(() => failureKindRuleFaults(failureKindRules.value ?? []))
 
 async function save() {
-  if (!loaded.value) {
-    actionToast.error('settings.platformAlerts.notLoaded')
-    return
-  }
   if (invalidFields.value.length > 0) {
     actionToast.error('settings.platformAlerts.invalidNumbers', {
       description: invalidFields.value.join(', '),
@@ -220,11 +209,7 @@ async function save() {
   }
   saving.value = true
   try {
-    // `config` fully replaces the stored non-secret config, so carry the rest forward (guarded
-    // by `loaded` above, or "the rest" would be nothing).
-    await store.save(props.accountId, {
-      config: { ...store.view?.config, platformAlerts: settings },
-    })
+    await store.saveConfigPatch(props.accountId, { platformAlerts: settings })
     actionToast.success('settings.platformAlerts.saved')
   } catch (e) {
     present(e, 'settings.platformAlerts.saveFailed')
@@ -283,7 +268,7 @@ const hasOverrides = computed(
       </label>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <USelect
-          v-model="alertWindow"
+          v-model="alertWindowModel.value"
           :items="windowItems"
           value-key="value"
           size="sm"
@@ -324,13 +309,7 @@ const hasOverrides = computed(
       current config not in hand there is nothing to carry forward. Say so and disable the
       button rather than letting a click wipe the sibling settings.
     -->
-    <p
-      v-if="!loaded"
-      class="rounded-lg border border-app-warning-800/60 bg-app-warning-950/30 px-3 py-2 text-xs text-app-warning-200"
-      data-testid="account-platform-alerts-unloaded"
-    >
-      {{ t('settings.platformAlerts.notLoaded') }}
-    </p>
+    <AccountConfigNotLoaded v-if="loadFailed" data-testid="account-platform-alerts-unloaded" />
 
     <div class="flex gap-2">
       <UButton

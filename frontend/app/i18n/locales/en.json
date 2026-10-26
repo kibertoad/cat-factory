@@ -123,7 +123,9 @@
       "keep": "Keep editing"
     },
     "edit": "Edit",
-    "pathInvalid": "Enter a path inside the repository (no \"..\", absolute paths, or backslashes)."
+    "pathInvalid": "Enter a path inside the repository (no \"..\", absolute paths, or backslashes).",
+    "checking": "Checking…",
+    "loadFailed": "Couldn't load"
   },
   "access": {
     "noBoardWrite": "Read-only access: you can view this board but can't edit it.",
@@ -699,7 +701,7 @@
     "attachIssueDisabledConnect": "Connect an issue tracker first (Integrations)",
     "attachIssueDisabledEnable": "Enable the issue-tracker integration first",
     "importsOnAdd": "imports on add",
-    "unreadable": "Could not be fetched: {error}",
+    "unreadable": "Could not be fetched.",
     "pastedLink": {
       "offer": "This description links a {source} page. Attach it as context?",
       "attach": "Attach"
@@ -752,7 +754,13 @@
     "reason": {
       "description": {
         "reference_repo_not_found": "The repository behind this run's reference architecture cannot be seen through this workspace's source-control connection. Either the entry names the wrong repository, or the connection has not been granted access to it: correct the reference architecture, or grant it access, then try again.",
-        "reference_repo_unreadable": "The repository behind this run's reference architecture could not be read just now, so the run was not started against a template it might be unable to clone. Nothing here is misconfigured and no change is needed: try again once the source-control connection recovers."
+        "reference_repo_unreadable": "The repository behind this run's reference architecture could not be read just now, so the run was not started against a template it might be unable to clone. Nothing here is misconfigured and no change is needed: try again once the source-control connection recovers.",
+        "oauth_state_invalid": "This authorization link has expired or was already used, so it cannot finish the connection.",
+        "oauth_started_by_other_user": "Someone else started this connection, so only they can finish it.",
+        "oauth_exchange_refused": "The tool server's authorization server refused the grant. Ask your deployment operator to check the tool server's OAuth client settings.",
+        "oauth_client_secret_unavailable": "The tool server's OAuth client secret is not available on this board. Add it in the Infrastructure window.",
+        "tool_server_without_oauth": "This tool server no longer uses OAuth, so there is no connection to finish.",
+        "gate_config_fields_invalid": "A gate step's settings are incomplete or hold a value the gate does not accept, usually a required setting with no value. Fill in the step's gate settings in the pipeline, then try again."
       }
     },
     "action": {
@@ -1293,9 +1301,11 @@
       "detect": {
         "title": "Auto-detect",
         "button": "Detect from repo",
-        "hint": "Inspect the repository and suggest a provisioning config. You confirm and edit everything below; nothing is saved automatically.",
+        "hint": "Inspect the repository and suggest a provisioning config. Nothing is saved until you apply it.",
         "error": "Could not read the repository to detect provisioning.",
         "none": "No Kubernetes manifests or Compose file were detected.",
+        "proposed": "Found a {type} config.",
+        "apply": "Apply",
         "applied": "Suggested a {type} config. Review and adjust the fields below.",
         "overlayTitle": "Ephemeral overlay",
         "serviceDirTitle": "Service deploy folder",
@@ -1491,7 +1501,6 @@
       "title": "Structure",
       "hint": "Where this task lives in its service and which coding standards its agents follow.",
       "module": "Module",
-      "modulePlaceholder": "Pick or type a module",
       "moduleHint": "The service module this task belongs to; the board groups lanes by it. A module that doesn't exist yet is created when the task is implemented.",
       "bestPractices": "Best practices",
       "bestPracticesEmpty": "None. Agents follow their default guidance.",
@@ -2238,7 +2247,8 @@
       "helperFailures": "Fixer failures",
       "exhausted": "Handed to a human",
       "hint": "A clean pass is a gate the precheck satisfied without starting a fixer at all. Fixer failures are attempts whose own job crashed, as opposed to attempts that ran and left the check red."
-    }
+    },
+    "loadFailed": "Platform observability could not be loaded."
   },
   "reports": {
     "title": "Reports",
@@ -2520,6 +2530,7 @@
       },
       "invite": {
         "title": "Invite a teammate",
+        "listTitle": "Invitations",
         "submit": "Invite",
         "revoke": "Revoke invitation",
         "created": "Invitation created",
@@ -2534,6 +2545,7 @@
       "email": {
         "title": "Email sender",
         "notEnabled": "Email delivery is not enabled on this deployment. Invitations still produce a shareable accept link.",
+        "notConnected": "No email sender is connected. An account admin can connect one.",
         "connectedAs": "Connected via {provider} as {from}",
         "disconnect": "Disconnect",
         "connect": "Connect email sender",
@@ -2775,7 +2787,9 @@
       "budget": "Budget",
       "tokens": "Tokens",
       "resume": "Resume anyway",
-      "resumeHint": "Resuming continues spending; it will pause again if still over budget."
+      "resumeHint": "Resuming continues spending; it will pause again if still over budget.",
+      "resumeFailed": "Could not resume agent execution",
+      "refreshFailed": "Runs resumed, but the board did not refresh"
     },
     "personalSetup": {
       "title": "My setup",
@@ -2980,6 +2994,7 @@
       "status": {
         "connected": "Connected",
         "keyConnected": "Key connected",
+        "keyDisabled": "Key disabled",
         "notConnected": "Not connected",
         "recommended": "Recommended",
         "connectedCount": "none connected | {count} connected | {count} connected"
@@ -3127,12 +3142,13 @@
     "deny": "Cancel",
     "back": "Back to the app",
     "noWorkspaces": "You have no boards to connect this to yet.",
+    "noAdminWorkspaces": "You are not an admin of any of your boards. Ask a board admin to connect it.",
     "revokeHint": "This issues an API key you can revoke at any time from the board's settings.",
     "error": {
       "title": "This connection could not be set up",
       "noRequest": "This page was opened without an authorization request. Start the connection from your MCP host.",
       "expired": "This authorization request is invalid or has expired. Start the connection again from your MCP host.",
-      "failed": "The decision could not be recorded. Start the connection again from your MCP host."
+      "decisionFailed": "The decision could not be recorded."
     }
   },
   "settings": {
@@ -3216,7 +3232,8 @@
         "skills": "Skills",
         "foundational": "Foundational services",
         "riskPolicies": "Risk policies"
-      }
+      },
+      "configNotLoaded": "This account's current settings could not be loaded, so saving would overwrite the rest of them. Reload before editing."
     },
     "infrastructure": {
       "active": "Active: {backend}",
@@ -3389,6 +3406,9 @@
         "apiServerUrlHelp": "The kube-apiserver root, e.g. https://10.0.0.1:6443. The orchestrator applies each PR's manifests through the apiserver, so only this endpoint must be reachable.",
         "apiToken": "ServiceAccount token",
         "apiTokenHelp": "A bearer token with RBAC to create namespaces and apply the operator's resources. Stored encrypted; never shown again.",
+        "apiTokenHelpStored": "A token is saved. Leave blank to keep it, or enter a new one to replace it. Test needs the token entered again.",
+        "apiTokenPlaceholderStored": "Leave blank to keep the saved token",
+        "tokenSaved": "Saved",
         "manifestSourceLabel": "Manifest source",
         "sourceColocated": "Co-located in the PR repo",
         "sourceSeparate": "Separate repo",
@@ -3696,7 +3716,9 @@
           "thresholds": "Use score ceilings",
           "always": "Always auto-merge",
           "never": "Always require review"
-        }
+        },
+        "loadFailed": "Could not load the merge track record",
+        "unavailable": "Track record unavailable"
       },
       "roleRules": {
         "heading": "Limits per initiator role",
@@ -3857,7 +3879,7 @@
           "doneHint": "This board's runs can now use the tool server as the account you signed in with.",
           "back": "Back to the app",
           "failedTitle": "The connection could not be finished",
-          "failed": "The authorization could not be completed. Start the connection again from the Infrastructure window.",
+          "restartHint": "Start the connection again from the Infrastructure window.",
           "missingParams": "This link is missing the values the vendor sends back, so there is nothing to complete. Start the connection again."
         }
       },
@@ -4133,6 +4155,7 @@
       "apiKey": "API key",
       "connectAndBrowse": "Connect & browse",
       "keyConnected": "OpenRouter key connected",
+      "keyDisabled": "Your OpenRouter key is turned off. Turn it back on in Vendors & keys to browse models.",
       "manageKeys": "Manage in Vendors & keys",
       "refresh": "Refresh catalog",
       "enableRecommended": "Enable recommended",
@@ -4159,7 +4182,8 @@
       "metered": "Metered API",
       "illustrative": "Costs shown for subscriptions are illustrative — these plans are flat-rate, not billed per token.",
       "tokens": "{input} in / {output} out",
-      "calls": "{count} calls"
+      "calls": "{count} calls",
+      "loadFailed": "Usage could not be loaded."
     },
     "workspaceSettings": {
       "title": "Workspace settings",
@@ -4514,7 +4538,6 @@
         "maxFailureKindShare": "Share of failures one cause may account for, above 0 and up to 1.",
         "maxSweepFailures": "Consecutive failed passes of one background sweep."
       },
-      "notLoaded": "This account's current settings could not be loaded, so saving would overwrite the rest of them. Reload before editing.",
       "invalidNumbers": "These ceilings are not numbers",
       "failureKinds": {
         "label": "Per-failure-kind rules",
@@ -4871,7 +4894,8 @@
         "frontendLinkedNote": "{directory} was added as the frontend and linked to the others. Name its backend URL environment variables in its inspector.",
         "frontendWiringFailedNote": "The frontend settings did not save. Open each frontend app's inspector to set its subdirectory and its backend services."
       },
-      "prefillProviderMismatch": "The link asked for {repo} on a different host, and this board is connected to {connected}. Search for the repository by hand, or open the link on a board connected to its host."
+      "prefillProviderMismatch": "The link asked for {repo} on a different host, and this board is connected to {connected}. Search for the repository by hand, or open the link on a board connected to its host.",
+      "searchFailed": "Could not search repositories"
     },
     "repoTree": {
       "root": "root",
@@ -5036,7 +5060,8 @@
     "continueTitle": "Send your answers; the interviewer may ask follow-up questions",
     "status": {
       "awaiting": "Awaiting answers",
-      "done": "Done"
+      "done": "Done",
+      "failed": "Failed"
     },
     "saveFailedCount": "Could not save {count} of your answers",
     "continueFailed": "Could not submit your answers",
@@ -5048,7 +5073,7 @@
     "picker": {
       "searchPlaceholder": "Search pages or paste a URL/ID…",
       "refPlaceholder": "Paste a page URL or ID…",
-      "searchFailed": "Search failed: {error}",
+      "searchFailed": "Search failed.",
       "importedBadge": "imported",
       "attachByReference": "Attach {ref} by reference",
       "noMatches": "No matching pages.",
@@ -5076,7 +5101,7 @@
       "searchFilesPlaceholder": "Search files by path…",
       "searchFilesHint": "Type to search files in this repository.",
       "noFileMatches": "No matching files.",
-      "filesFailed": "Couldn't load files: {error}",
+      "filesFailed": "Couldn't load files.",
       "moreFiles": "Showing the first {count} matches — refine your search to narrow it down."
     },
     "import": {
@@ -5208,7 +5233,7 @@
     "picker": {
       "searchPlaceholder": "Search issues or paste a URL/key…",
       "refPlaceholder": "Paste an issue URL or key…",
-      "searchFailed": "Search failed: {error}",
+      "searchFailed": "Search failed.",
       "searchNeedsRepo": "This service isn't linked to a repository yet, so there's nothing to search. Link it to a repo, or paste an issue URL to attach one directly.",
       "imported": "imported",
       "attachByReference": "Attach {ref} by reference",
@@ -5301,7 +5326,7 @@
     "boardPlaceholder": "Project key or team id",
     "boardFromService": "The repository this service is linked to",
     "boardNeedsRepo": "This service has no repository linked, so it has no issues to hunt. Link one from the service panel.",
-    "boardsFailed": "Boards could not be loaded: {reason}",
+    "boardsFailed": "Boards could not be loaded.",
     "issueType": "Issue type",
     "issueTypeHelp": "Defaults to bug. Ignored by trackers with no issue types.",
     "issueTypeUnsupported": "{tracker} has no issue type that means \"bug\", so this filter is not applied. Narrow the scan with a label instead.",
@@ -5749,7 +5774,8 @@
         "claimUnattended": "Make the unattended default",
         "releaseUnattended": "Stop being the unattended default"
       },
-      "removeLabel": "Remove the {label} label"
+      "removeLabel": "Remove the {label} label",
+      "gateParametersInvalid": "A gate step has a required setting with no value, or a value the gate does not accept. Fill in its gate settings before you save."
     },
     "progress": {
       "status": {
@@ -6103,7 +6129,8 @@
       "park": "Asked a human",
       "bounce": "Sent back for rework",
       "fail": "Failed the run"
-    }
+    },
+    "resolveFailed": "Could not record your choice"
   },
   "inputGate": {
     "blockedTitle": "This task needs more detail before it can run",
@@ -7023,7 +7050,8 @@
     "outcome": {
       "success": "success",
       "failure": "failure"
-    }
+    },
+    "loadFailed": "The provisioning logs could not be loaded."
   },
   "kaizen": {
     "title": "Kaizen",
@@ -7067,7 +7095,8 @@
         "recommendations": "Recommendations"
       },
       "empty": "No gradings yet."
-    }
+    },
+    "loadFailed": "Could not load Kaizen gradings"
   },
   "recurring": {
     "runEvery": "Run every",
@@ -7194,7 +7223,8 @@
         "placeholder": "Paste a GitHub file or folder URL (e.g. https://github.com/owner/repo/tree/main/docs)",
         "action": "Find",
         "invalid": "This doesn't look like a repository file or folder URL.",
-        "notFound": "No accessible repository matches {slug}. Check the URL or connect the repository first."
+        "notFound": "No accessible repository matches {slug}. Check the URL or connect the repository first.",
+        "failed": "This URL could not be looked up."
       }
     },
     "sources": {
@@ -8002,6 +8032,7 @@
       "service": "Exposed compose service",
       "servicePlaceholder": "e.g. app",
       "port": "Exposed port",
+      "portHelp": "Detection does not read ports, so this starts at 80. Enter the port the service listens on.",
       "composeFiles": "Compose files",
       "profiles": "Profiles",
       "seedDumps": "Seed dumps",
@@ -8040,18 +8071,25 @@
       "run": "Run checks",
       "none": "This recipe declares no preflight checks.",
       "unavailable": "Preflight checks run on the local machine and aren't available on this deployment.",
-      "optional": "optional"
+      "optional": "optional",
+      "failed": "The preflight checks could not run."
     },
     "save": {
       "handlerLabel": "Handler label",
       "handlerHint": "The workspace's Docker Compose handler the Deployer uses to provision this stack.",
       "summary": "Saves a Docker Compose recipe onto \"{frame}\" (exposing service \"{service}\") and registers the workspace handler.",
       "saved": "Saved. The Deployer will provision this stack when a pipeline runs it.",
-      "save": "Save configuration"
+      "save": "Save configuration",
+      "failed": "The environment could not be saved.",
+      "errors": {
+        "missingService": "Pick a frame and an exposed compose service first.",
+        "invalidPort": "Enter a valid exposed port (1 to 65535)."
+      }
     },
     "trial": {
       "hint": "Optionally provision this environment now to test the recipe.",
-      "run": "Trial provision"
+      "run": "Trial provision",
+      "failed": "The trial provision could not start."
     }
   },
   "forkDecision": {

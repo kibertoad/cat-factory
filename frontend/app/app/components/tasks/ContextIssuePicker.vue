@@ -19,7 +19,6 @@
 import { useId } from 'vue'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import type { SourceTask, TaskSearchResult, TaskSourceKind } from '~/types/domain'
-import { apiErrorReason } from '~/composables/api/errors'
 import EmptyState from '~/components/common/EmptyState.vue'
 import {
   type AddSourceLabels,
@@ -29,6 +28,12 @@ import {
   sourceMenuItems,
 } from '~/utils/sourcePicker'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+  type ReasonCopy,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 const props = defineProps<{
   /** contextKeys already staged by the caller, so they're filtered out / not re-offered. */
@@ -121,7 +126,11 @@ const searchable = computed(() => descriptor.value?.searchable ?? false)
 const query = ref('')
 const results = ref<TaskSearchResult[]>([])
 const searching = ref(false)
-const searchError = ref<string | null>(null)
+const searchError = ref<DescribedFailure | null>(null)
+/** The one search refusal this picker words itself: the service has no repo to search. */
+const SEARCH_FAILURE_COPY = {
+  repo_not_linked: 'tasks.picker.searchNeedsRepo',
+} satisfies Partial<Record<TaskSourceReadReason, string>> & ReasonCopy
 
 // Already-imported issues, scoped to the target container's repo on the backend
 // (GitHub narrows to the service's linked repo, exactly as search does; repo-less
@@ -167,13 +176,9 @@ async function runSearch() {
   } catch (e) {
     results.value = []
     // "This service has no repo" is the one failure with an action attached, so it gets its
-    // own localized copy off the backend's machine-readable reason rather than the raw
-    // message (AGENTS.md "Backend strings"). Anything else keeps the generic wording.
-    const notLinked: TaskSourceReadReason = 'repo_not_linked'
-    searchError.value =
-      apiErrorReason(e) === notLinked
-        ? t('tasks.picker.searchNeedsRepo')
-        : t('tasks.picker.searchFailed', { error: e instanceof Error ? e.message : String(e) })
+    // own localized copy off the backend's machine-readable reason (AGENTS.md "Backend
+    // strings"). Anything else gets the toast funnel's copy; the raw message stays as detail.
+    searchError.value = describeFailure(e, SEARCH_FAILURE_COPY)
   } finally {
     searching.value = false
   }
@@ -333,9 +338,11 @@ onMounted(() => {
       @keydown.enter="refRow && pickRef(refRow)"
     />
 
-    <p v-if="searchError" class="px-1 text-2xs text-app-warning-400">
-      {{ searchError }}
-    </p>
+    <FailureMessage
+      :failure="searchError"
+      :title="t('tasks.picker.searchFailed')"
+      class="px-1 text-2xs text-app-warning-400"
+    />
 
     <div class="max-h-56 space-y-0.5 overflow-y-auto">
       <!-- Already-imported issues (linked directly, no re-fetch). -->

@@ -413,6 +413,12 @@ Every CONTROL in the SPA is the Nuxt UI component for it, never the raw HTML ele
 - **Prose and layout markup is not in scope.** `<p>`, `<h1>`-`<h6>`, `<ul>`, `<li>`, `<dl>`, `<pre>`, `<code>`, `<img>`, `<nav>`, `<div>` and `<span>` are not controls and have no Nuxt UI component; heading typography is the type scale's rule above.
 - `scripts/check-frontend-primitives.mjs` (CI) holds the count at zero. There is deliberately **no allow-list**: the migration expected two exceptions (a Vue Flow gesture handle, a full-bleed media tile) and both converted cleanly, so the exception table would have had more surface than the thing it governed. A site that genuinely cannot convert says why with a `raw-control-ok:` comment, on that line or the one above; nothing in the tree needs one, and a second one appearing is the signal that the rule needs revisiting rather than the site.
 
+### A select's "no value" row is never the empty string
+
+Reka's `SelectItem` and `ComboboxItem`, which `USelect` and `USelectMenu` render, throw in `setup` when an item's value is `''`: Reka keeps the empty string on the root to mean "cleared, show the placeholder". The throw shows only in a browser console, and the select or its whole panel then renders broken or not at all. So a "no value" row (inherit, not set, the default) is [`selectNoneItem(label)`](./app/utils/selectNone.ts), which carries a non-empty sentinel, and the select binds through `selectNoneModel(get, set)`, which maps the stored value to the sentinel on the way in and back on the way out in one call (`v-model="model.value"`; a row inside a `v-for` builds its own in the template). What the component stores and sends stays the empty value it was. A list of options that comes from data (a deployment's metadata `select` field) is checked where it is resolved, because the guard below cannot see it.
+
+`scripts/check-frontend-select-values.mjs` (CI) refuses an object literal with a `label` key and a `value: ''` key, however it is laid out (across lines, with a parameterised `t()` label or nested objects beside them). An item list that never reaches a Reka select says why with a `select-empty-value-ok:` comment, on the `value` line or the one above it.
+
 ### Buttons and badges follow one variant policy
 
 What a primary, a secondary or a destructive action looks like is decided once, here, and not per call site. The weights are Nuxt UI's own [variant table](https://github.com/nuxt/ui/blob/v4/skills/nuxt-ui/references/design-system.md) (`solid` highest, then `outline`, `soft`, `subtle`, `ghost`, and `link` for a text link inside content), mapped onto the app's kinds of action:
@@ -672,10 +678,12 @@ The outermost of the three narrowing axes, and the only one the app **asks about
 launch it puts up one question, "what do you work on?", offering `engineer`, `product-manager` and
 `designer` with a line each on what picking it gives you. Vocabulary, resolution and the
 presentation table are in `app/utils/uiRole.ts`; the choice and its once-per-session prompt live in
-the `uiRole` store.
+the `uiRole` store. A proposal to change which surface each role gets, with its open questions, is
+in [`docs/initiatives/personas.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/personas.md).
 
-Two roles, three names. `engineer` and `product-manager` both map to the **`full`** surface, and
-that is the product decision rather than an oversight: the two do the same job in this app (plan
+Two roles, three names. `engineer` and `product-manager` both map to the **`full`** surface. That
+is the current product decision, not an oversight, and the persona proposal above questions it: the
+reasoning was that the two do the same job in this app (plan
 work on a board, run it, review and merge it), and what makes the question answerable is the copy a
 person recognises themselves in. `designer` maps to **`intake`**: the services already on the board,
 the work in flight on them, and the routes that bring new work IN (a new task, a task from a tracker

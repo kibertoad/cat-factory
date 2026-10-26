@@ -63,9 +63,8 @@ the infrastructure (#2367) and one per domain (#2384 to #2391).
   `pages/mcp-oauth-callback.vue`, the renderless hosts `AppOverlayHost` and `StepResultViewHost`,
   `AuthGate`, `DependencyConnectOverlay` and `TaskDependencyEdges`. The shells `AppModal` and
   `TakeoverShell` draw only around the content a consumer gives them, so the stories of the modals
-  and takeovers inside them show them. `AccountPlatformAlertSettings`
-  has no stories until #2393 is fixed, and other stories leave out the states that hit the same
-  bug.
+  and takeovers inside them show them. `AccountPlatformAlertSettings` has no stories of its own yet;
+  the admin story of `AccountTeamSettings` shows it.
 - **The stories found product defects.** Writing them surfaced wrong states, swallowed errors,
   raw backend text and copy problems. These PRs only add stories, so the defects are reported as
   issues (#2369, #2393 to #2396, #2405, and the follow-ups filed from the same work).
