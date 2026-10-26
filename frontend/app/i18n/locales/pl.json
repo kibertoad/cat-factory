@@ -683,7 +683,8 @@
         "oauth_started_by_other_user": "To połączenie rozpoczął ktoś inny, więc tylko ta osoba może je dokończyć.",
         "oauth_exchange_refused": "Serwer autoryzacji serwera narzędzi odrzucił zgodę. Poproś operatora wdrożenia o sprawdzenie ustawień klienta OAuth serwera narzędzi.",
         "oauth_client_secret_unavailable": "Sekret klienta OAuth serwera narzędzi nie jest dostępny na tej tablicy. Dodaj go w oknie Infrastruktura.",
-        "tool_server_without_oauth": "Ten serwer narzędzi nie używa już OAuth, więc nie ma połączenia do dokończenia."
+        "tool_server_without_oauth": "Ten serwer narzędzi nie używa już OAuth, więc nie ma połączenia do dokończenia.",
+        "gate_config_fields_invalid": "Ustawienia bramki kroku są niekompletne lub zawierają wartość, której bramka nie akceptuje, zwykle wymagane ustawienie bez wartości. Uzupełnij ustawienia bramki kroku w pipeline'ie i spróbuj ponownie."
       }
     },
     "action": {
@@ -5560,7 +5561,8 @@
         "claimUnattended": "Ustaw jako domyślny bez nadzoru",
         "releaseUnattended": "Przestań być domyślnym bez nadzoru"
       },
-      "removeLabel": "Usuń etykietę {label}"
+      "removeLabel": "Usuń etykietę {label}",
+      "gateParametersInvalid": "Krok z bramką ma wymagane ustawienie bez wartości albo wartość, której bramka nie akceptuje. Uzupełnij ustawienia bramki przed zapisaniem."
     },
     "progress": {
       "status": {

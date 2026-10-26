@@ -222,7 +222,14 @@ gateRegistry.register(MY_GATE_KIND, myGate, {
 
 The filled values are validated (unknown keys and out-of-range numbers are refused at SAVE, not
 clamped at read) and copied onto the live gate state once on first entry, so the gate reads them off
-`gateState.config` on every poll with no plumbing per parameter:
+`gateState.config` on every poll with no plumbing per parameter. A field's declared `default` fills
+any parameter the step leaves unanswered (absent, a blank string or an empty multi-select), and one
+contracts helper, `effectiveGateConfigFields`, does it for every reader: pipeline save and run
+admission validate its result, the engine freezes it, and the builder renders it. So a `required`
+field with a default always arrives filled, one with no default and no value is refused with
+`details.reason: 'gate_config_fields_invalid'`, and a value in `gateState.config` may be the gate's
+own default rather than an author's choice. A default that breaks its own field's rules (a number
+outside `min`/`max`, say) fails boot with `gate_field_default_invalid`:
 
 ```ts
 probe: async (workspaceId, blockId, gateState) => {

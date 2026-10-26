@@ -839,6 +839,13 @@ describe('gate config forms: the third descriptor-driven form', () => {
         },
       ]).map((p) => p.code),
     ).toEqual(['gate_field_default_outside_options'])
+    // A default its own field refuses: every door fills defaults in before validating, so this one
+    // would make every pipeline holding the step unsavable for a value its author never typed.
+    expect(
+      problemsFor([
+        { key: 'soakMinutes', label: 'Soak', type: 'number', min: 1, max: 60, default: '90' },
+      ]).map((p) => p.code),
+    ).toEqual(['gate_field_default_invalid'])
   })
 
   it('ERRORS on a section its config form would caption twice', () => {

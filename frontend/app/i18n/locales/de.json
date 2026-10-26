@@ -5018,7 +5018,8 @@
         "claimUnattended": "Als Standard ohne Aufsicht festlegen",
         "releaseUnattended": "Nicht mehr Standard ohne Aufsicht"
       },
-      "removeLabel": "Label {label} entfernen"
+      "removeLabel": "Label {label} entfernen",
+      "gateParametersInvalid": "Ein Gate-Schritt hat eine Pflichteinstellung ohne Wert oder einen Wert, den das Gate nicht akzeptiert. Fülle seine Gate-Einstellungen aus, bevor du speicherst."
     },
     "progress": {
       "status": {
@@ -6420,7 +6421,8 @@
         "oauth_started_by_other_user": "Jemand anderes hat diese Verbindung gestartet, daher kann nur diese Person sie abschließen.",
         "oauth_exchange_refused": "Der Autorisierungsserver des Werkzeugservers hat die Freigabe abgelehnt. Bitten Sie Ihren Deployment-Betreiber, die OAuth-Client-Einstellungen des Werkzeugservers zu prüfen.",
         "oauth_client_secret_unavailable": "Das OAuth-Client-Secret des Werkzeugservers ist auf diesem Board nicht verfügbar. Fügen Sie es im Infrastruktur-Fenster hinzu.",
-        "tool_server_without_oauth": "Dieser Werkzeugserver verwendet kein OAuth mehr, daher gibt es keine Verbindung abzuschließen."
+        "tool_server_without_oauth": "Dieser Werkzeugserver verwendet kein OAuth mehr, daher gibt es keine Verbindung abzuschließen.",
+        "gate_config_fields_invalid": "Die Gate-Einstellungen eines Schritts sind unvollständig oder enthalten einen Wert, den das Gate nicht akzeptiert, meist eine Pflichteinstellung ohne Wert. Füllen Sie die Gate-Einstellungen des Schritts in der Pipeline aus und versuchen Sie es erneut."
       }
     },
     "action": {

@@ -683,7 +683,8 @@
         "oauth_started_by_other_user": "この接続は別のユーザーが開始したため、そのユーザーだけが完了できます。",
         "oauth_exchange_refused": "ツールサーバーの認可サーバーが認可を拒否しました。デプロイメントの運用担当者に、ツールサーバーの OAuth クライアント設定を確認するよう依頼してください。",
         "oauth_client_secret_unavailable": "このボードではツールサーバーの OAuth クライアントシークレットを利用できません。インフラストラクチャ ウィンドウで追加してください。",
-        "tool_server_without_oauth": "このツールサーバーは OAuth を使用しなくなったため、完了する接続はありません。"
+        "tool_server_without_oauth": "このツールサーバーは OAuth を使用しなくなったため、完了する接続はありません。",
+        "gate_config_fields_invalid": "ステップのゲートの設定が不足しているか、ゲートが受け付けない値が含まれています。多くの場合、値のない必須の設定です。パイプラインでステップのゲートの設定を入力してから、もう一度お試しください。"
       }
     },
     "action": {
@@ -5560,7 +5561,8 @@
         "claimUnattended": "無人実行の既定にする",
         "releaseUnattended": "無人実行の既定を解除"
       },
-      "removeLabel": "ラベル {label} を削除"
+      "removeLabel": "ラベル {label} を削除",
+      "gateParametersInvalid": "ゲートのステップに、値のない必須の設定、またはゲートが受け付けない値があります。保存する前にゲートの設定を入力してください。"
     },
     "progress": {
       "status": {

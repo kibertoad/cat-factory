@@ -503,6 +503,21 @@ function isExplicitOptOut(field: DescriptorField, value: DescriptorFieldValue): 
 }
 
 /**
+ * Whether a value states an ANSWER for its field: a filled value, or the one unfilled value that
+ * is an answer all the same ({@link isExplicitOptOut}). The same judgement
+ * {@link sanitizeDescriptorFields} makes about what to keep, exported for a door that has to tell
+ * "the caller said nothing" from "the caller said something", e.g. to fill a declared default over
+ * a blank rather than only over an absent key.
+ */
+export function isDescriptorFieldAnswer(
+  field: DescriptorField,
+  value: DescriptorFieldValue | undefined,
+): boolean {
+  if (value === undefined) return false
+  return isFilled(value) || isExplicitOptOut(field, value)
+}
+
+/**
  * Validate filled values against a field list, returning a list of human-readable problems (EMPTY
  * means valid). Pure + total (never throws), so a controller maps a non-empty result to a single
  * `ValidationError` and the SPA disables its submit button off the same call. Enforces: no unknown
@@ -679,7 +694,7 @@ export function sanitizeDescriptorFields(
     if (!isDescriptorFieldVisible(field, values)) continue
     const value = values[field.key]
     if (value === undefined) continue
-    if (!isFilled(value) && !isExplicitOptOut(field, value)) continue
+    if (!isDescriptorFieldAnswer(field, value)) continue
     sanitized[field.key] = value
   }
   return sanitized
