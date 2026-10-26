@@ -183,7 +183,7 @@ export const DetectNothingFound: Story = {
   },
 }
 
-/** The repository could not be read: the backend's message under the button, as it came. */
+/** The repository could not be read: translated copy, the backend's message behind "Show details". */
 export const DetectError: Story = {
   args: { block: webFrame() },
   decorators: [seeded(webFrame())],
@@ -206,7 +206,13 @@ export const DetectError: Story = {
   },
   play: async ({ canvasElement }) => {
     await detect(canvasElement)
-    await within(canvasElement).findByText(/Underlying error: Not Found/)
+    const canvas = within(canvasElement)
+    // The translated copy first; the server's remedy only behind "Show details".
+    await canvas.findByText(
+      "Couldn't read the repo. Check the frontend is linked to a connected repository.",
+    )
+    await userEvent.click(canvas.getByTestId('failure-message-show-detail'))
+    await canvas.findByText(/Underlying error: Not Found/)
   },
 }
 

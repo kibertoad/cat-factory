@@ -28,10 +28,10 @@ catalog and enforced in exactly three shared seams.
   custom roles pre-1.0) and map onto a **seven-permission `WorkspacePermission` union**
   (`workspace.read`, `board.write`, `runs.execute`, `settings.manage`, `integrations.manage`,
   `secrets.manage`, `members.manage`) via a static `WORKSPACE_ROLE_PERMISSIONS` table. The wire
-  unions live in `@cat-factory/contracts` (`workspace-members.ts`, re-exported by kernel
-  `domain/types.ts`, the `AccountRole` pattern); the map + `resolveWorkspaceAccess` +
-  `workspaceRoleAtLeast` are kernel-only server policy (`domain/workspace-access.ts`, pure +
-  unit-tested). Seven permissions is exactly the number of distinct route groups the surface has, so
+  unions and that map live in `@cat-factory/contracts` (`workspace-members.ts`, re-exported by
+  kernel, the `AccountRole` pattern): the SPA reads a listed board's `viewerRole` through the same
+  map the backend enforces. `resolveWorkspaceAccess` + `workspaceRoleAtLeast` are kernel-only
+  server policy (`domain/workspace-access.ts`, pure + unit-tested). Seven permissions is exactly the number of distinct route groups the surface has, so
   every route maps unambiguously.
 
 - **Effective-role resolution.** One pure kernel function `resolveWorkspaceAccess` computes a

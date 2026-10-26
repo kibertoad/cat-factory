@@ -23,6 +23,7 @@ import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 
 const props = defineProps<{
   /** The staged attachments; the host owns the array and commits it after creating the block. */
@@ -303,13 +304,13 @@ function removePending(item: PendingContext) {
               @click="removePending(item)"
             />
           </div>
-          <p
+          <FailureMessage
             v-if="item.unreadable"
+            :failure="item.unreadable"
+            :title="t('contextAttachments.unreadable')"
             class="px-2 pb-1.5 text-2xs text-app-warning-400"
             data-testid="context-item-unreadable"
-          >
-            {{ t('contextAttachments.unreadable', { error: item.unreadable }) }}
-          </p>
+          />
         </div>
       </div>
       <p v-else class="text-2xs text-dimmed">
@@ -419,13 +420,13 @@ function removePending(item: PendingContext) {
           <!-- An issue reference gets no pre-flight of its own (there is no `parseRef` to ask a
                tracker), so this line IS its warning: the fetch is attempted when the form opens and
                again on submit, and a failure now blocks the create. -->
-          <p
+          <FailureMessage
             v-if="item.unreadable"
+            :failure="item.unreadable"
+            :title="t('contextAttachments.unreadable')"
             class="px-2 pb-1.5 text-2xs text-app-warning-400"
             data-testid="context-item-unreadable"
-          >
-            {{ t('contextAttachments.unreadable', { error: item.unreadable }) }}
-          </p>
+          />
         </div>
       </div>
       <p v-else class="text-2xs text-dimmed">

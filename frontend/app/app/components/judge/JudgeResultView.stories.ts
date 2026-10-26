@@ -1,9 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { CustomAgentKind, JudgeStepState, JudgeVerdict } from '@cat-factory/contracts'
+import { resolveJudgeContract } from '@cat-factory/contracts'
+import { screen, userEvent } from 'storybook/test'
+import { apiFailure } from '~/stories/api'
 import { step } from '~/stories/pipelineStep.stories.mocks'
 import { execution, snapshot } from '~/stories/snapshot.stories.mocks'
 import { seedResultView, seedSnapshot, withSeed } from '~/stories/withStores'
-import { useJudgeStore } from '~/stores/judge'
+import { storyWorkspacePrefix } from '~/stories/workspace'
 import JudgeResultView from './JudgeResultView.vue'
 
 // The window for a judge step: a rubric scores the work, and the score is held against the
@@ -128,19 +131,21 @@ export const Empty: Story = { decorators: [opened(undefined)] }
  */
 export const AwaitingDecision: Story = { decorators: [opened(judgeState())] }
 
-/**
- * A choice was refused: the backend's message shows under the field. The store holds the error
- * here. A real refused click also throws out of the window's click handler (`act` awaits
- * `judge.resolve`, which records the error and throws it again), and Storybook covers the canvas
- * with that uncaught error, so this story does not click.
- */
+/** Proceed anyway was refused: the error toast, and the typed guidance stays for the next try. */
 export const ResolveError: Story = {
-  decorators: [
-    opened(judgeState()),
-    withSeed(() => {
-      useJudgeStore().error = 'Internal server error'
-    }),
-  ],
+  decorators: [opened(judgeState())],
+  parameters: {
+    api: [
+      apiFailure(resolveJudgeContract, {
+        pathPrefix: storyWorkspacePrefix,
+        pathParams: { executionId: 'exec_login' },
+      }),
+    ],
+  },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Proceed anyway' }))
+    await screen.findByText('Could not record your choice')
+  },
 }
 
 /** The rubric asked for a model this deployment cannot run, so another model scored it. */

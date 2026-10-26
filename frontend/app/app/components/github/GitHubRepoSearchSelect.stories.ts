@@ -3,7 +3,7 @@ import type { GitHubAvailableRepo } from '@cat-factory/contracts'
 import { listGitHubAvailableReposContract } from '@cat-factory/contracts'
 import { ref } from 'vue'
 import { screen, userEvent, within } from 'storybook/test'
-import { apiResponse } from '~/stories/api'
+import { apiFailure, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { availableRepos } from '~/stories/vcs.stories.mocks'
 import { seedVcs, seedWorkspace, withSeed } from '~/stories/withStores'
@@ -81,5 +81,16 @@ export const Selected: Story = {
     await search(canvasElement, 'acme')
     await userEvent.click(await screen.findByRole('option', { name: /api-gateway/ }))
     await within(canvasElement).findByRole('button', { name: 'Clear selection' })
+  },
+}
+
+/** The search failed: one error toast, and no options. */
+export const SearchFailed: Story = {
+  parameters: {
+    api: [apiFailure(listGitHubAvailableReposContract, { pathPrefix: storyWorkspacePrefix })],
+  },
+  play: async ({ canvasElement }) => {
+    await search(canvasElement, 'acme')
+    await screen.findByText('Could not search repositories')
   },
 }
