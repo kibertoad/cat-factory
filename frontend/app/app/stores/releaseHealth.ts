@@ -12,6 +12,7 @@ import type {
 } from '~/types/incidentEnrichment'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { isModuleOffRefusal } from '~/composables/api/errors'
 
 /**
  * The workspace's post-release-health settings: the (single) observability connection —
@@ -36,14 +37,28 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
   // store only ever holds the presence summary. Wired alongside observability.
   const incident = ref<IncidentEnrichmentView>({ connected: false, summary: null })
   const incidentAvailable = ref<boolean | null>(null)
+  /** True when the last incident read failed with anything but the module-off 503. */
+  const incidentLoadFailed = ref(false)
+  /** True while the incident read is in flight. */
+  const incidentLoading = ref(false)
   const loading = ref(false)
   // Mirrors the backend's opt-in gate (`OBSERVABILITY_ENABLED`): `null` until first
   // probed, then `true`/`false`. The hub + inspector hide their observability entry
   // points when this is false, so a disabled backend doesn't surface a dead control.
   const available = ref<boolean | null>(null)
+  /**
+   * True when the last load failed with anything but the 503 of a disabled module. `available`
+   * then goes back to unknown (so `ensureLoaded` asks again), because a read that did not answer
+   * says nothing about the gate.
+   */
+  const loadFailed = ref(false)
   let inFlight: Promise<void> | null = null
 
-  /** Force a refresh of the connection + per-block configs (used after a save/remove). */
+  /**
+   * Force a refresh of the connection + per-block configs (used after a save/remove). A 503
+   * resolves to `available: false`; any other failure is recorded on `loadFailed` and rethrown,
+   * so a caller with room to say so can report it.
+   */
   async function load() {
     const ws = useWorkspaceStore()
     loading.value = true
@@ -55,11 +70,19 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
       connection.value = conn
       configs.value = list
       available.value = true
-    } catch {
-      // 503 (observability disabled) or any error → hide the UI entry points.
-      available.value = false
+      loadFailed.value = false
+    } catch (error) {
       connection.value = { connected: false, provider: null, summary: null }
       configs.value = []
+      // Only a 503 means observability is disabled and hides the entry points.
+      if (isModuleOffRefusal(error)) {
+        available.value = false
+        loadFailed.value = false
+      } else {
+        available.value = null
+        loadFailed.value = true
+        throw error
+      }
     } finally {
       loading.value = false
     }
@@ -106,15 +129,25 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
     dropConfig(blockId)
   }
 
-  /** Load the incident-enrichment connection (separate opt-in gate from observability). */
+  /**
+   * Load the incident-enrichment connection (separate opt-in gate from observability). Never
+   * rejects: the module-off 503 sets `incidentAvailable: false`, and any other failure is recorded
+   * on `incidentLoadFailed` for the panel to state.
+   */
   async function loadIncident() {
     const ws = useWorkspaceStore()
+    incidentLoading.value = true
     try {
       incident.value = await api.getIncidentEnrichment(ws.requireId())
       incidentAvailable.value = true
-    } catch {
-      incidentAvailable.value = false
+      incidentLoadFailed.value = false
+    } catch (error) {
       incident.value = { connected: false, summary: null }
+      const off = isModuleOffRefusal(error)
+      incidentAvailable.value = off ? false : null
+      incidentLoadFailed.value = !off
+    } finally {
+      incidentLoading.value = false
     }
   }
 
@@ -135,8 +168,11 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
     configs,
     incident,
     incidentAvailable,
+    incidentLoadFailed,
+    incidentLoading,
     loading,
     available,
+    loadFailed,
     load,
     ensureLoaded,
     saveConnection,

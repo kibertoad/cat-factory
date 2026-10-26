@@ -4,6 +4,7 @@ import {
   useFoundationalServicesStore,
 } from '~/stores/foundationalServices'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { ApiError } from '~/composables/api/errors'
 
 // The two store rules that the surface's correctness rests on, and that neither the backend
 // tests nor a component test would catch:
@@ -93,13 +94,53 @@ describe('foundational-services store', () => {
     await store.probe()
     expect(store.sourcesAvailable).toBe(true)
 
-    client.listFoundationalServices.mockRejectedValueOnce(new Error('503'))
+    client.listFoundationalServices.mockRejectedValueOnce(
+      new ApiError(503, { error: { code: 'unavailable', message: 'off' } }),
+    )
     useWorkspaceStore().workspaceId = 'ws2'
     await store.probe()
 
     expect(store.available).toBe(false)
+    expect(store.loadFailed).toBe(false)
     expect(store.sourcesAvailable).toBe(false)
     expect(store.sources).toEqual([])
+  })
+
+  it('a reasoned 503 is an outage, so it reads as a failed load too', async () => {
+    // `requireCapability` sends the unreasoned envelope; a 503 that names a reason is a wired
+    // module that is not answering right now.
+    const client = api()
+    vi.stubGlobal('useApi', () => client)
+    const store = useFoundationalServicesStore()
+    client.listFoundationalServices.mockRejectedValueOnce(
+      new ApiError(503, {
+        error: {
+          code: 'unavailable',
+          message: 'unreachable',
+          details: { reason: 'foundational_builtins_unreachable' },
+        },
+      }),
+    )
+    await store.probe()
+
+    expect(store.available).toBeNull()
+    expect(store.loadFailed).toBe(true)
+  })
+
+  it('a non-503 failure is a failed load, not a catalog that is switched off', async () => {
+    const client = api()
+    vi.stubGlobal('useApi', () => client)
+    const store = useFoundationalServicesStore()
+    client.listFoundationalServices.mockRejectedValueOnce(new Error('network down'))
+    await store.probe()
+
+    expect(store.available).toBeNull()
+    expect(store.loadFailed).toBe(true)
+    expect(store.sourcesAvailable).toBe(false)
+
+    await store.probe()
+    expect(store.available).toBe(true)
+    expect(store.loadFailed).toBe(false)
   })
 
   it('refreshes the opt-out list alongside the catalog on suppress and restore', async () => {

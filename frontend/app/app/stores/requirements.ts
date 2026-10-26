@@ -6,6 +6,7 @@ import type {
   ReviewItemStatus,
 } from '~/types/requirements'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { isModuleOffRefusal } from '~/composables/api/errors'
 // The settlement derivations over one review's findings (`stores/requirements/settlement.ts`):
 // pure, memoised per review object, and re-exported below so every caller keeps reading them off
 // the store.
@@ -28,7 +29,8 @@ import {
  * at once (status `incorporating`) and the user goes back to the board; they are summoned
  * again (a notification) only if the re-review yields findings or hits the cap. The store is
  * patched both from call responses and from live `requirements` stream events (see
- * `upsert`). `available` mirrors the backend's opt-in gate (a 503 hides the UI).
+ * `upsert`). `available` mirrors the backend's opt-in gate (a 503 hides the UI); any other failed
+ * load is recorded per block on `loadFailed`, so the window can tell it from "no review yet".
  * Per-workspace; nothing is persisted client-side.
  */
 export const useRequirementsStore = defineStore('requirements', () => {
@@ -47,6 +49,8 @@ export const useRequirementsStore = defineStore('requirements', () => {
   const recommending = ref<Set<string>>(new Set())
   /** Block ids whose current review is being fetched (the initial `load`). */
   const loadingByBlock = ref<Set<string>>(new Set())
+  /** Block ids whose last `load` failed with anything but the feature-off 503. */
+  const failedByBlock = ref<Set<string>>(new Set())
   /**
    * In-flight `load()` promises keyed by block id, so concurrent callers for the same
    * block (the inspector's badge watch + the review window opening together) share ONE
@@ -87,6 +91,9 @@ export const useRequirementsStore = defineStore('requirements', () => {
   function isLoading(blockId: string): boolean {
     return loadingByBlock.value.has(blockId)
   }
+  function loadFailed(blockId: string): boolean {
+    return failedByBlock.value.has(blockId)
+  }
   function isIncorporating(reviewId: string): boolean {
     return incorporating.value.has(reviewId)
   }
@@ -121,6 +128,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     incorporating.value = new Set()
     recommending.value = new Set()
     loadingByBlock.value = new Set()
+    failedByBlock.value = new Set()
     inFlight.clear()
   }
 
@@ -142,12 +150,15 @@ export const useRequirementsStore = defineStore('requirements', () => {
       try {
         const review = await api.getRequirementReview(workspace.requireId(), blockId)
         available.value = true
+        withFlag(failedByBlock, blockId, false)
         // Written by key like `store()`, and directly because a load resolving to "none exists"
         // caches a null the getter reads as "fetched, absent".
         reviews.value[blockId] = review
-      } catch {
-        // 503 (feature off) or any error → hide the UI entry points.
-        available.value = false
+      } catch (error) {
+        // Only a 503 means the feature is off. Any other failure is a read that did not answer,
+        // which the window states instead of showing "no review yet".
+        if (isModuleOffRefusal(error)) available.value = false
+        else withFlag(failedByBlock, blockId, true)
       } finally {
         withFlag(loadingByBlock, blockId, false)
         inFlight.delete(blockId)
@@ -245,6 +256,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     backgroundStage,
     isReviewing,
     isLoading,
+    loadFailed,
     isIncorporating,
     isRecommending,
     openCount,

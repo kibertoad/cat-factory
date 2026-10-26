@@ -247,7 +247,8 @@
         "kubeNoun": "l'handler Kubernetes",
         "kubeOverrideNoun": "l'override Kubernetes",
         "customNoun": "questo handler",
-        "cloudflareNoun": "l’handler Cloudflare"
+        "cloudflareNoun": "l’handler Cloudflare",
+        "loadFailed": "Impossibile caricare i gestori di ambiente"
       },
       "cloudflare": {
         "intro": "Avvia un Worker Cloudflare per ogni pull request attivando il workflow di anteprima del repository di destinazione. cat-factory non parla mai direttamente con Cloudflare: crea un deployment, ne legge lo stato e pubblica uno stato inactive per smantellarlo.",
@@ -682,7 +683,8 @@
         "pagerDutyToken": "Token API PagerDuty",
         "pagerDutyFromEmail": "Email From di PagerDuty",
         "incidentIoKey": "Chiave API incident.io",
-        "clear": "Cancella"
+        "clear": "Cancella",
+        "loadFailed": "Impossibile caricare gli strumenti per gli incidenti"
       },
       "status": {
         "notConnected": "Non connesso",
@@ -700,7 +702,8 @@
         "disconnectFailed": "Impossibile disconnettere"
       },
       "connectionNoun": "la connessione di osservabilita",
-      "incidentNoun": "il provider degli incidenti"
+      "incidentNoun": "il provider degli incidenti",
+      "loadFailed": "Impossibile caricare la connessione di osservabilità"
     },
     "packageRegistries": {
       "tab": "Registry di package",
@@ -1595,7 +1598,8 @@
       "savedToast": "Monitoraggio salvato",
       "saveFailed": "Impossibile salvare il mapping",
       "clearFailed": "Impossibile cancellare il mapping",
-      "configNoun": "la configurazione dello stato di rilascio"
+      "configNoun": "la configurazione dello stato di rilascio",
+      "loadFailed": "Impossibile caricare le impostazioni sullo stato dei rilasci"
     },
     "testSecrets": {
       "title": "Credenziali di test (sensibili)",
@@ -2994,7 +2998,8 @@
       "roster": {
         "title": "Membri",
         "empty": "Ancora nessun membro.",
-        "remove": "Rimuovi membro"
+        "remove": "Rimuovi membro",
+        "loadFailed": "Impossibile caricare i membri di questa bacheca"
       },
       "add": {
         "title": "Aggiungi un membro",
@@ -3259,7 +3264,10 @@
           "hint": "Numero massimo di passaggi in sola lettura di questa spedizione. Lascia vuoto per {count}. Su una codebase grande ogni angolazione viene pescata per territorio, e ciò che il budget taglia resta registrato come non pescato.",
           "problem": "Inserisci un numero intero compreso tra 1 e {max}, oppure lascia vuoto per il valore predefinito."
         }
-      }
+      },
+      "documentsLoadFailed": "Impossibile caricare i documenti da allegare",
+      "tasksLoadFailed": "Impossibile caricare le issue da allegare",
+      "fragmentsLoadFailed": "Impossibile caricare i frammenti di best practice"
     },
     "recurring": {
       "title": "Aggiungi una pipeline ricorrente",
@@ -3770,7 +3778,8 @@
         "loadProjection": "Impossibile caricare repository, pull request e issue",
         "startInstall": "Impossibile avviare l'installazione della GitHub App",
         "connect": "Impossibile collegare"
-      }
+      },
+      "listFailed": "Impossibile elencare le installazioni della GitHub App"
     },
     "panel": {
       "connectIntro": "Collega un'installazione della GitHub App per associare i blocchi della board ai repository, sfogliare pull request e issue, e permettere agli agenti di effettuare il push dei branch e aprire PR.",
@@ -3881,7 +3890,8 @@
       "errors": {
         "listDirectory": "Impossibile elencare la directory"
       },
-      "selectAllFiles": "Seleziona {count} file | Seleziona tutti i {count} file"
+      "selectAllFiles": "Seleziona {count} file | Seleziona tutti i {count} file",
+      "listFailed": "Impossibile elencare questa cartella"
     }
   },
   "personalSubscriptions": {
@@ -4099,7 +4109,6 @@
     "title": "Osservabilità della piattaforma",
     "refresh": "Aggiorna",
     "close": "Chiudi",
-    "retry": "Riprova",
     "window": {
       "oneHour": "Ultima ora",
       "oneDay": "Ultime 24 ore",
@@ -4107,6 +4116,7 @@
       "thirtyDays": "Ultimi 30 giorni",
       "ninetyDays": "Ultimi 90 giorni"
     },
+    "noAccount": "Nessun account è attivo, quindi non ci sono dati da mostrare.",
     "outcomes": {
       "title": "Esiti delle esecuzioni",
       "total": "Esecuzioni totali",
@@ -5320,7 +5330,8 @@
       "high": "Confidenza alta",
       "medium": "Confidenza media",
       "low": "Confidenza bassa"
-    }
+    },
+    "loadFailed": "Impossibile caricare la revisione dei requisiti"
   },
   "bootstrap": {
     "title": "Avvia un repository",
@@ -5850,7 +5861,8 @@
       "checkSourceFailed": "Impossibile controllare il repository",
       "sourceUnlinked": "Repository scollegato",
       "unlinkSourceFailed": "Impossibile scollegare il repository"
-    }
+    },
+    "loadFailed": "Impossibile caricare il catalogo dei servizi fondamentali"
   },
   "binaryOutput": {
     "heading": "Output binari",
@@ -6005,7 +6017,8 @@
       "taskReset": "Attivita reimpostata — modificala e inviala di nuovo",
       "extraRoundGranted": "Concesso un altro giro di brainstorm",
       "resolveError": "Impossibile risolvere il brainstorm"
-    }
+    },
+    "loadFailed": "Impossibile caricare la sessione di brainstorming"
   },
   "clarity": {
     "title": "Triage delle segnalazioni di bug",
@@ -6961,7 +6974,8 @@
       "done": "Fatto",
       "failed": "Non riuscito"
     },
-    "groupTitle": "Il gruppo di consenso a cui è salita questa esecuzione"
+    "groupTitle": "Il gruppo di consenso a cui è salita questa esecuzione",
+    "loadFailed": "Impossibile caricare la sessione di consenso"
   },
   "spec": {
     "title": "Requisiti",
@@ -7012,6 +7026,14 @@
       "given": "Given",
       "when": "When",
       "then": "Then"
+    },
+    "anchorReadFailed": {
+      "title": "Impossibile leggere la specifica",
+      "description": "La lettura del repository non è riuscita, quindi non si sa se questo servizio ha una specifica. Riprova."
+    },
+    "anchorUnparsed": {
+      "title": "Il file della specifica non è valido",
+      "description": "spec/service.json è sul branch predefinito ma non è stato possibile analizzarlo. Correggi il file nel repository."
     }
   },
   "followUp": {
@@ -8019,7 +8041,8 @@
       "done": "Fatto",
       "save": "Salva",
       "revert": "Ripristina"
-    }
+    },
+    "loadFailed": "Impossibile caricare la libreria Claude Skills"
   },
   "merge": {
     "changeClass": {

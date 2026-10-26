@@ -14,6 +14,7 @@ import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.v
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 
 const props = defineProps<{ accountId: string }>()
 
@@ -33,6 +34,17 @@ watch(
   },
   { immediate: true },
 )
+
+// The probe keeps no loading flag of its own, so the failed state shows its retry in flight here.
+const retrying = ref(false)
+async function retryProbe() {
+  retrying.value = true
+  try {
+    await library.probe()
+  } finally {
+    retrying.value = false
+  }
+}
 
 // The rich GitHub pickers reuse the active board's App installation. When it isn't connected (or
 // the integration is off) the form falls back to manual text entry.
@@ -153,6 +165,14 @@ async function unlinkSource(id: string) {
     >
       {{ t('skills.unavailable') }}
     </div>
+
+    <!-- A read that did not answer is neither "not enabled" nor an empty library. -->
+    <LoadFailedState
+      v-else-if="library.loadFailed"
+      :title="t('skills.loadFailed')"
+      :retrying="retrying"
+      @retry="retryProbe"
+    />
 
     <template v-else>
       <!-- Synced skill catalog -->

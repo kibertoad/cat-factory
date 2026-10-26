@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { screen } from 'storybook/test'
 import type { GitHubInstallationOption } from '@cat-factory/contracts'
 import { listGitHubInstallationsContract } from '@cat-factory/contracts'
 import { apiFailure, apiPending, apiResponse } from '~/stories/api'
@@ -41,8 +42,14 @@ export const Loading: Story = {
   },
 }
 
-/** The list failed: the error toast, and the empty list under it. */
+/**
+ * The list failed: the error toast, and the list says so with a retry instead of "no
+ * installations".
+ */
 export const Failed: Story = {
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
   parameters: {
     api: [apiFailure(listGitHubInstallationsContract, { pathPrefix: storyWorkspacePrefix })],
   },

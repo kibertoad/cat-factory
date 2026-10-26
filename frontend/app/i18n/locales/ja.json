@@ -354,7 +354,10 @@
           "hint": "この遠征が実行できる読み取り専用パスの上限です。空欄なら {count} 回。大規模なコードベースでは各観点を領域ごとに探索し、予算で削られた分は未探索として記録されます。",
           "problem": "1 から {max} までの整数を入力してください。空欄のままにすると既定値が使われます。"
         }
-      }
+      },
+      "documentsLoadFailed": "添付するドキュメントを読み込めませんでした",
+      "tasksLoadFailed": "添付する課題を読み込めませんでした",
+      "fragmentsLoadFailed": "ベストプラクティスのフラグメントを読み込めませんでした"
     },
     "recurring": {
       "title": "繰り返しパイプラインを追加",
@@ -1090,7 +1093,8 @@
       "savedToast": "監視を保存しました",
       "saveFailed": "マッピングを保存できませんでした",
       "clearFailed": "マッピングをクリアできませんでした",
-      "configNoun": "リリースヘルス設定"
+      "configNoun": "リリースヘルス設定",
+      "loadFailed": "リリースヘルスの設定を読み込めませんでした"
     },
     "testSecrets": {
       "title": "テスト用認証情報（機密）",
@@ -2040,7 +2044,6 @@
     "title": "プラットフォームの可観測性",
     "refresh": "更新",
     "close": "閉じる",
-    "retry": "再試行",
     "window": {
       "oneHour": "過去1時間",
       "oneDay": "過去24時間",
@@ -2048,6 +2051,7 @@
       "thirtyDays": "過去30日",
       "ninetyDays": "過去90日"
     },
+    "noAccount": "有効なアカウントがないため、表示するデータがありません。",
     "outcomes": {
       "title": "実行結果",
       "total": "実行数の合計",
@@ -2882,7 +2886,8 @@
       "roster": {
         "title": "メンバー",
         "empty": "まだメンバーがいません。",
-        "remove": "メンバーを削除"
+        "remove": "メンバーを削除",
+        "loadFailed": "このボードのメンバーを読み込めませんでした"
       },
       "add": {
         "title": "メンバーを追加",
@@ -3196,7 +3201,8 @@
         "kubeNoun": "Kubernetes ハンドラー",
         "kubeOverrideNoun": "Kubernetes のオーバーライド",
         "customNoun": "このハンドラー",
-        "cloudflareNoun": "Cloudflare ハンドラー"
+        "cloudflareNoun": "Cloudflare ハンドラー",
+        "loadFailed": "環境ハンドラーを読み込めませんでした"
       },
       "cloudflare": {
         "intro": "対象リポジトリのプレビュー用ワークフローを起動して、プルリクエストごとに Cloudflare Worker を立ち上げます。cat-factory が Cloudflare と直接やり取りすることはありません。デプロイメントを作成し、その状態を読み取り、破棄時には inactive 状態を書き込みます。",
@@ -3631,7 +3637,8 @@
         "pagerDutyToken": "PagerDuty API トークン",
         "pagerDutyFromEmail": "PagerDuty From メール",
         "incidentIoKey": "incident.io API キー",
-        "clear": "クリア"
+        "clear": "クリア",
+        "loadFailed": "インシデントツールを読み込めませんでした"
       },
       "status": {
         "notConnected": "未接続",
@@ -3649,7 +3656,8 @@
         "disconnectFailed": "切断できませんでした"
       },
       "connectionNoun": "オブザーバビリティ接続",
-      "incidentNoun": "インシデントプロバイダー"
+      "incidentNoun": "インシデントプロバイダー",
+      "loadFailed": "オブザーバビリティの接続を読み込めませんでした"
     },
     "packageRegistries": {
       "tab": "パッケージレジストリ",
@@ -4612,7 +4620,8 @@
         "loadProjection": "リポジトリ、プルリクエスト、イシューを読み込めませんでした",
         "startInstall": "GitHub App のインストールを開始できませんでした",
         "connect": "接続できませんでした"
-      }
+      },
+      "listFailed": "GitHub App のインストールを一覧表示できませんでした"
     },
     "panel": {
       "connectIntro": "GitHub App のインストールを接続すると、ボードのブロックにリポジトリを紐付け、プルリクエストやイシューを閲覧し、エージェントがブランチをプッシュして PR を開けるようになります。",
@@ -4723,7 +4732,8 @@
       "errors": {
         "listDirectory": "ディレクトリを一覧表示できませんでした"
       },
-      "selectAllFiles": "{count} 件のファイルを選択 | {count} 件のファイルをすべて選択"
+      "selectAllFiles": "{count} 件のファイルを選択 | {count} 件のファイルをすべて選択",
+      "listFailed": "このフォルダーを一覧表示できませんでした"
     }
   },
   "slack": {
@@ -6028,7 +6038,8 @@
       "high": "確信度: 高",
       "medium": "確信度: 中",
       "low": "確信度: 低"
-    }
+    },
+    "loadFailed": "要件レビューを読み込めませんでした"
   },
   "clarity": {
     "title": "バグ報告のトリアージ",
@@ -6138,7 +6149,8 @@
       "done": "完了",
       "failed": "失敗"
     },
-    "groupTitle": "この実行が引き上げられたコンセンサスグループ"
+    "groupTitle": "この実行が引き上げられたコンセンサスグループ",
+    "loadFailed": "合意セッションを読み込めませんでした"
   },
   "brainstorm": {
     "title": {
@@ -6231,7 +6243,8 @@
       "taskReset": "タスクをリセットしました。編集して再送信してください",
       "extraRoundGranted": "ブレインストームをもう1ラウンド許可しました",
       "resolveError": "ブレインストームを解決できませんでした"
-    }
+    },
+    "loadFailed": "ブレインストーミングのセッションを読み込めませんでした"
   },
   "spec": {
     "title": "要件",
@@ -6282,6 +6295,14 @@
       "given": "Given",
       "when": "When",
       "then": "Then"
+    },
+    "anchorReadFailed": {
+      "title": "仕様を読み取れませんでした",
+      "description": "リポジトリの読み取りに失敗したため、このサービスに仕様があるかどうかは不明です。もう一度お試しください。"
+    },
+    "anchorUnparsed": {
+      "title": "仕様ファイルが無効です",
+      "description": "spec/service.json はデフォルトブランチにありますが、解析できませんでした。リポジトリでファイルを修正してください。"
     }
   },
   "followUp": {
@@ -7082,7 +7103,8 @@
       "checkSourceFailed": "リポジトリを確認できませんでした",
       "sourceUnlinked": "リポジトリの連携を解除しました",
       "unlinkSourceFailed": "リポジトリの連携を解除できませんでした"
-    }
+    },
+    "loadFailed": "基盤サービスのカタログを読み込めませんでした"
   },
   "binaryOutput": {
     "heading": "バイナリ成果物",
@@ -8019,7 +8041,8 @@
       "done": "完了",
       "save": "保存",
       "revert": "元に戻す"
-    }
+    },
+    "loadFailed": "Claude Skills ライブラリを読み込めませんでした"
   },
   "merge": {
     "changeClass": {

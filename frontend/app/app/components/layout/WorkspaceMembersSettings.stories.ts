@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { screen } from 'storybook/test'
 import type { AccountMember, WorkspaceListItem, WorkspaceMember } from '@cat-factory/contracts'
 import {
   listAccountMembersContract,
   listInvitationsContract,
   listWorkspaceMembersContract,
 } from '@cat-factory/contracts'
-import { apiPending, apiResponse } from '~/stories/api'
+import { apiFailure, apiPending, apiResponse } from '~/stories/api'
 import { STORY_WORKSPACE_ID } from '~/stories/workspace'
 import {
   accountBoards,
@@ -76,6 +77,19 @@ export const Loading: Story = {
   parameters: {
     api: [
       apiPending(listWorkspaceMembersContract, { pathParams: { workspaceId: STORY_WORKSPACE_ID } }),
+      ...loads(workspaceMembers).slice(1),
+    ],
+  },
+}
+
+/** The roster read failed: a toast, and the roster says so with a retry instead of a skeleton. */
+export const Failed: Story = {
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
+  parameters: {
+    api: [
+      apiFailure(listWorkspaceMembersContract, { pathParams: { workspaceId: STORY_WORKSPACE_ID } }),
       ...loads(workspaceMembers).slice(1),
     ],
   },

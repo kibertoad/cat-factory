@@ -21,6 +21,7 @@ import FoundationalServiceRegistry from '~/components/foundational/FoundationalS
 import FoundationalServiceSources from '~/components/foundational/FoundationalServiceSources.vue'
 import FoundationalSuppressions from '~/components/foundational/FoundationalSuppressions.vue'
 import ServiceCatalogConnection from '~/components/foundational/ServiceCatalogConnection.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -40,6 +41,17 @@ const catalog =
     : useFoundationalServices(props.kind, props.ownerId)
 const github = useGitHubStore()
 const { t } = useI18n()
+
+// The probe keeps no loading flag of its own, so the failed state shows its retry in flight here.
+const retrying = ref(false)
+async function retryProbe() {
+  retrying.value = true
+  try {
+    await catalog.probe()
+  } finally {
+    retrying.value = false
+  }
+}
 
 watch(
   () => props.ownerId,
@@ -92,6 +104,14 @@ const activeTab = computed({
     >
       {{ t('foundational.unavailable') }}
     </div>
+
+    <!-- A probe that did not answer is neither "not enabled" nor an empty catalog. -->
+    <LoadFailedState
+      v-else-if="catalog.loadFailed"
+      :title="t('foundational.loadFailed')"
+      :retrying="retrying"
+      @retry="retryProbe"
+    />
 
     <UTabs
       v-else

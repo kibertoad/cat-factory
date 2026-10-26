@@ -62,6 +62,7 @@ watch(
   (isOpen) => {
     if (isOpen) {
       query.value = ''
+      // A failed load shows as the observability row's failed badge (`loadFailed`).
       void releaseHealth.ensureLoaded().catch(() => {})
       void publicApiKeys.ensureLoaded().catch(() => {})
       // Records a failed load in the store's `loadFailed` and never throws.
@@ -264,9 +265,13 @@ const groups = computed<IntegrationGroup[]>(() => {
   // Gated with `showOverrideField` rather than a bare `isAdvanced`: an already-connected
   // Datadog is live behaviour on this workspace, and a tier must never conceal a connection a
   // basic-mode user would then have no way to inspect or disconnect.
+  //
+  // A failed load shows the row on both tiers with a failed badge: it says nothing about whether
+  // the module is on or a connection exists, and the panel behind the row offers the retry.
   if (
-    releaseHealth.available &&
-    showOverrideField(uiMode.isAdvanced, releaseHealth.connection.connected || null)
+    releaseHealth.loadFailed ||
+    (releaseHealth.available &&
+      showOverrideField(uiMode.isAdvanced, releaseHealth.connection.connected || null))
   ) {
     out.push({
       title: t('layout.integrationsHub.groups.observability'),
@@ -280,6 +285,7 @@ const groups = computed<IntegrationGroup[]>(() => {
             ? t('layout.integrationsHub.status.connected')
             : undefined,
           connected: releaseHealth.connection.connected,
+          state: releaseHealth.loadFailed ? 'failed' : undefined,
           onClick: () => go(ui.openObservabilityConnection),
         },
       ],

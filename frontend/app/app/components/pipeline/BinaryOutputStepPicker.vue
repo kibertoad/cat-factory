@@ -155,7 +155,9 @@ const pick = computed(() =>
   binaryOutputPickIssues(
     config.value,
     catalog.resolved,
-    catalog.available,
+    // A failed read counts as unavailable here: the picker's copy says "unreachable", which is
+    // true of both, and either way nothing can be picked.
+    catalog.loadFailed ? false : catalog.available,
     agents.binaryGenerators,
     agents.binaryGeneratorsUnavailable,
   ),

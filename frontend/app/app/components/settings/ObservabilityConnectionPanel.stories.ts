@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { screen } from 'storybook/test'
 import type { IncidentEnrichmentView, ObservabilityConnectionView } from '@cat-factory/contracts'
 import {
   getIncidentEnrichmentContract,
@@ -21,7 +22,7 @@ const pathPrefix = storyWorkspacePrefix
 function answers(options: {
   connection?: ObservabilityConnectionView
   connectionFails?: boolean
-  incident?: IncidentEnrichmentView | 'unavailable'
+  incident?: IncidentEnrichmentView | 'unavailable' | 'fails'
 }) {
   return [
     options.connectionFails
@@ -31,19 +32,21 @@ function answers(options: {
           body: options.connection ?? { connected: false, provider: null, summary: null },
         }),
     apiResponse(listReleaseHealthConfigsContract, { pathPrefix, body: [] }),
-    options.incident === 'unavailable'
-      ? apiRefusal(getIncidentEnrichmentContract, {
-          pathPrefix,
-          status: 503,
-          error: {
-            code: 'unavailable',
-            message: 'The incident-enrichment integration is not configured',
-          },
-        })
-      : apiResponse(getIncidentEnrichmentContract, {
-          pathPrefix,
-          body: options.incident ?? { connected: false, summary: null },
-        }),
+    options.incident === 'fails'
+      ? apiFailure(getIncidentEnrichmentContract, { pathPrefix })
+      : options.incident === 'unavailable'
+        ? apiRefusal(getIncidentEnrichmentContract, {
+            pathPrefix,
+            status: 503,
+            error: {
+              code: 'unavailable',
+              message: 'The incident-enrichment integration is not configured',
+            },
+          })
+        : apiResponse(getIncidentEnrichmentContract, {
+            pathPrefix,
+            body: options.incident ?? { connected: false, summary: null },
+          }),
   ]
 }
 
@@ -84,10 +87,21 @@ export const IncidentUnavailable: Story = {
   parameters: { api: answers({ connection: datadogEu, incident: 'unavailable' }) },
 }
 
+/** The incident read failed: that section says so with a retry, rather than disappearing. */
+export const IncidentFailed: Story = {
+  parameters: { api: answers({ connection: datadogEu, incident: 'fails' }) },
+  play: async () => {
+    await screen.findByText('Could not load the incident tools')
+  },
+}
+
 /**
- * The connection read failed. The store reads any failure as the feature being off and does not
- * throw, so there is no toast: the window shows Not connected and the connect form.
+ * The connection read failed: a toast, and the connection section says so with a retry instead
+ * of Not connected and the connect form.
  */
 export const Failed: Story = {
   parameters: { api: answers({ connectionFails: true }) },
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
 }

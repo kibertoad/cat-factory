@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { screen } from 'storybook/test'
 import type { ConsensusSession } from '@cat-factory/contracts'
 import { getConsensusSessionContract } from '@cat-factory/contracts'
 import { apiFailure, apiPending, apiResponse } from '~/stories/api'
@@ -157,11 +158,11 @@ export const SessionFailed: Story = {
   },
 }
 
-/**
- * The read failed. The store drops every load error, so the window shows the empty state, the
- * same as a task with no session.
- */
+/** The read failed: the window says so and offers a retry, not the no-session empty state. */
 export const Failed: Story = {
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
   parameters: {
     api: [
       apiFailure(getConsensusSessionContract, {

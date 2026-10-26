@@ -93,9 +93,19 @@ export const Portal: Story = {
   },
 }
 
-/** The catalog read failed, which the manager reads as the feature being off: a note only. */
+/** The deployment has not enabled the catalog (a 503): a note only. */
 export const Unavailable: Story = {
   parameters: {
     api: [...foundationalApi('workspace', { available: false }), ...githubProbeApi()],
+  },
+}
+
+/** The catalog read failed: the manager says so with a retry, not the "not enabled" note. */
+export const Failed: Story = {
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
+  parameters: {
+    api: [...foundationalApi('workspace', { failed: true }), ...githubProbeApi()],
   },
 }

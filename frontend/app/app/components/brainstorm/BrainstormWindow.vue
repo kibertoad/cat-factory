@@ -22,6 +22,7 @@ import type {
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import Spinner from '~/components/common/Spinner.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 
 const board = useBoardStore()
 const brainstorm = useBrainstormStore()
@@ -65,6 +66,12 @@ const busy = computed(() =>
 const loading = computed(() =>
   blockId.value ? brainstorm.isLoading(blockId.value, activeStage.value) : false,
 )
+const loadFailed = computed(() =>
+  blockId.value ? brainstorm.loadFailed(blockId.value, activeStage.value) : false,
+)
+function retryLoad() {
+  if (blockId.value) void brainstorm.load(blockId.value, activeStage.value)
+}
 const reworking = computed(() =>
   session.value ? brainstorm.isIncorporating(session.value.id) : false,
 )
@@ -295,9 +302,16 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </i18n-t>
         </p>
 
+        <!-- the read failed: not the same as "no session yet" -->
+        <LoadFailedState
+          v-if="loadFailed && !session && !busy && !loading"
+          :title="t('brainstorm.loadFailed')"
+          @retry="retryLoad"
+        />
+
         <!-- empty state -->
         <EmptyState
-          v-if="!session && !busy && !loading"
+          v-else-if="!session && !busy && !loading"
           icon="i-lucide-lightbulb"
           :title="t('brainstorm.empty')"
         />

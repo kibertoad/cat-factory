@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type { ConsensusSession } from '~/types/consensus'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useSingleFlight } from '~/composables/useSingleFlight'
+import { isModuleOffRefusal } from '~/composables/api/errors'
 
 /**
  * Consensus session state. A consensus-enabled step runs a multi-model process (panel /
@@ -19,6 +20,11 @@ export const useConsensusStore = defineStore('consensus', () => {
   const sessions = ref<Record<string, ConsensusSession | null>>({})
   /** Block ids whose session is currently being fetched. */
   const loading = ref<Set<string>>(new Set())
+  /**
+   * Block ids whose last fetch failed with anything but the 503 of a deployment with consensus
+   * off. Kept apart from `sessions`: a failed read and "no session" need different renders.
+   */
+  const failed = ref<Set<string>>(new Set())
   /** One in-flight fetch per block: the window and its opener both load on open. */
   const loads = useSingleFlight<string, void>()
 
@@ -28,6 +34,18 @@ export const useConsensusStore = defineStore('consensus', () => {
 
   function isLoading(blockId: string): boolean {
     return loading.value.has(blockId)
+  }
+
+  function loadFailed(blockId: string): boolean {
+    return failed.value.has(blockId)
+  }
+
+  function setFailed(blockId: string, on: boolean) {
+    if (failed.value.has(blockId) === on) return
+    const next = new Set(failed.value)
+    if (on) next.add(blockId)
+    else next.delete(blockId)
+    failed.value = next
   }
 
   /**
@@ -47,7 +65,10 @@ export const useConsensusStore = defineStore('consensus', () => {
     store(session)
   }
 
-  /** Load the latest session for a block (window open / reload). Best-effort. */
+  /**
+   * Load the latest session for a block (window open / reload). Never rejects: a failure is
+   * recorded on `loadFailed` for the window to state.
+   */
   function load(blockId: string): Promise<void> {
     return loads.run(blockId, () => fetchSession(blockId))
   }
@@ -58,6 +79,7 @@ export const useConsensusStore = defineStore('consensus', () => {
     loading.value = new Set(loading.value).add(blockId)
     try {
       const { session } = await api.getConsensusSession(wsId, blockId)
+      setFailed(blockId, false)
       // Reconcile rather than blind-replace: a `load` resolving AFTER a fresher live
       // `consensus` push (or after a newer concurrent load) must not regress the transcript —
       // the out-of-order-overwrite hazard the AGENTS.md live-push rules warn about. Keep
@@ -69,8 +91,16 @@ export const useConsensusStore = defineStore('consensus', () => {
       } else if (existing === undefined) {
         sessions.value[blockId] = null
       }
-    } catch {
-      // Consensus off / no session — leave the cache as-is; the window shows its empty state.
+    } catch (error) {
+      // "No session" is a `session: null` answer, so only a failure reaches here. A 503 is a
+      // deployment with consensus off, which has no session to show. Anything else is a read that
+      // did not answer, and the window must say so rather than show its empty state.
+      if (isModuleOffRefusal(error)) {
+        setFailed(blockId, false)
+        if (sessions.value[blockId] === undefined) sessions.value[blockId] = null
+      } else {
+        setFailed(blockId, true)
+      }
     } finally {
       const next = new Set(loading.value)
       next.delete(blockId)
@@ -82,7 +112,8 @@ export const useConsensusStore = defineStore('consensus', () => {
   function reset() {
     sessions.value = {}
     loading.value = new Set()
+    failed.value = new Set()
   }
 
-  return { sessions, sessionFor, isLoading, load, upsert, reset }
+  return { sessions, sessionFor, isLoading, loadFailed, load, upsert, reset }
 })

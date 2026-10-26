@@ -399,7 +399,10 @@
           "hint": "Most read-only passes this expedition may run. Leave empty for {count}. On a large codebase each angle is fished per territory, and whatever the budget cuts is recorded as unfished.",
           "problem": "Enter a whole number between 1 and {max}, or leave it empty for the default."
         }
-      }
+      },
+      "documentsLoadFailed": "Could not load the documents to attach",
+      "tasksLoadFailed": "Could not load the issues to attach",
+      "fragmentsLoadFailed": "Could not load the best-practice fragments"
     },
     "recurring": {
       "title": "Add a recurring pipeline",
@@ -1189,7 +1192,8 @@
       "savedToast": "Monitoring saved",
       "saveFailed": "Could not save the mapping",
       "clearFailed": "Could not clear the mapping",
-      "configNoun": "the release health configuration"
+      "configNoun": "the release health configuration",
+      "loadFailed": "Could not load the release-health settings"
     },
     "testSecrets": {
       "title": "Test credentials (sensitive)",
@@ -2171,7 +2175,6 @@
     "title": "Platform observability",
     "refresh": "Refresh",
     "close": "Close",
-    "retry": "Retry",
     "window": {
       "oneHour": "Last hour",
       "oneDay": "Last 24 hours",
@@ -2179,6 +2182,7 @@
       "thirtyDays": "Last 30 days",
       "ninetyDays": "Last 90 days"
     },
+    "noAccount": "There is no active account, so there is no data to show.",
     "outcomes": {
       "title": "Run outcomes",
       "total": "Total runs",
@@ -3040,7 +3044,8 @@
       "roster": {
         "title": "Members",
         "empty": "No members yet.",
-        "remove": "Remove member"
+        "remove": "Remove member",
+        "loadFailed": "Could not load this board's members"
       },
       "add": {
         "title": "Add a member",
@@ -3354,7 +3359,8 @@
         "kubeNoun": "the Kubernetes handler",
         "kubeOverrideNoun": "the Kubernetes override",
         "customNoun": "this handler",
-        "cloudflareNoun": "the Cloudflare handler"
+        "cloudflareNoun": "the Cloudflare handler",
+        "loadFailed": "Could not load the environment handlers"
       },
       "cloudflare": {
         "intro": "Stands up a per-pull-request Cloudflare Worker by driving the target repository's own preview workflow. cat-factory never talks to Cloudflare directly: it creates a deployment, reads its status, and posts an inactive status to tear down.",
@@ -3801,7 +3807,8 @@
         "pagerDutyToken": "PagerDuty API token",
         "pagerDutyFromEmail": "PagerDuty From email",
         "incidentIoKey": "incident.io API key",
-        "clear": "Clear"
+        "clear": "Clear",
+        "loadFailed": "Could not load the incident tools"
       },
       "status": {
         "notConnected": "Not connected",
@@ -3819,7 +3826,8 @@
         "disconnectFailed": "Could not disconnect"
       },
       "connectionNoun": "the observability connection",
-      "incidentNoun": "the incident provider"
+      "incidentNoun": "the incident provider",
+      "loadFailed": "Could not load the observability connection"
     },
     "packageRegistries": {
       "tab": "Package registries",
@@ -4791,7 +4799,8 @@
         "loadProjection": "Could not load repositories, pull requests and issues",
         "startInstall": "Could not start the GitHub App install",
         "connect": "Could not connect"
-      }
+      },
+      "listFailed": "Could not list the GitHub App installations"
     },
     "panel": {
       "connectIntro": "Connect a GitHub App installation to back board blocks with repositories, browse pull requests and issues, and let agents push branches and open PRs.",
@@ -4911,7 +4920,8 @@
       "errors": {
         "listDirectory": "Could not list directory"
       },
-      "selectAllFiles": "Select {count} file | Select all {count} files"
+      "selectAllFiles": "Select {count} file | Select all {count} files",
+      "listFailed": "Could not list this folder"
     }
   },
   "slack": {
@@ -6323,7 +6333,8 @@
       "high": "High confidence",
       "medium": "Medium confidence",
       "low": "Low confidence"
-    }
+    },
+    "loadFailed": "Could not load the requirements review"
   },
   "clarity": {
     "title": "Bug-report triage",
@@ -6448,7 +6459,8 @@
       "done": "Done",
       "failed": "Failed"
     },
-    "groupTitle": "The consensus group this run escalated to"
+    "groupTitle": "The consensus group this run escalated to",
+    "loadFailed": "Could not load the consensus session"
   },
   "brainstorm": {
     "title": {
@@ -6544,7 +6556,8 @@
       "taskReset": "Task reset — edit it and resubmit",
       "extraRoundGranted": "One more brainstorm round granted",
       "resolveError": "Could not resolve the brainstorm"
-    }
+    },
+    "loadFailed": "Could not load the brainstorm session"
   },
   "spec": {
     "title": "Requirements",
@@ -6610,6 +6623,14 @@
       "@then": {
         "description": "Gherkin keyword that opens an expected-outcome clause. Keep verbatim — it is literal Gherkin syntax, not prose."
       }
+    },
+    "anchorReadFailed": {
+      "title": "Could not read the specification",
+      "description": "The repository read failed, so it is not known if this service has a specification. Try again."
+    },
+    "anchorUnparsed": {
+      "title": "The specification file is not valid",
+      "description": "spec/service.json is on the default branch but could not be parsed. Fix the file in the repository."
     }
   },
   "followUp": {
@@ -7423,7 +7444,8 @@
       "checkSourceFailed": "Could not check the repo",
       "sourceUnlinked": "Repo unlinked",
       "unlinkSourceFailed": "Could not unlink the repo"
-    }
+    },
+    "loadFailed": "Could not load the foundational-services catalog"
   },
   "binaryOutput": {
     "heading": "Binary outputs",
@@ -8314,7 +8336,8 @@
       "done": "Done",
       "save": "Save",
       "revert": "Revert"
-    }
+    },
+    "loadFailed": "Could not load the Claude Skills library"
   },
   "merge": {
     "changeClass": {

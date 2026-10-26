@@ -162,6 +162,7 @@ export const Loading: Story = {
 export const Failed: Story = {
   // The translated copy above Retry; the server's own text only behind "Show details".
   play: async () => {
+    await screen.findByTestId('load-failed-state')
     await screen.findByText('Platform observability could not be loaded.')
     await userEvent.click(await screen.findByTestId('failure-message-show-detail'))
     await screen.findByText(/Internal server error/)
@@ -170,6 +171,18 @@ export const Failed: Story = {
     api: [
       apiFailure(getPlatformObservabilityContract, { pathParams: { accountId: orgAccount.id } }),
     ],
+  },
+}
+
+/** No active account: the body says there is nothing to show, rather than staying blank. */
+export const NoAccount: Story = {
+  decorators: [
+    withSeed(() => {
+      useAccountsStore().activeAccountId = null
+    }),
+  ],
+  play: async () => {
+    await screen.findByTestId('operator-no-account')
   },
 }
 

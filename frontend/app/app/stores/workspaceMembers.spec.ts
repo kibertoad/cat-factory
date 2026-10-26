@@ -59,6 +59,49 @@ describe('workspaceMembers store', () => {
     expect(store.loadedFor).toBe('wsB')
   })
 
+  it('a failed load records which board failed, and a later success clears it', async () => {
+    let fail = true
+    vi.stubGlobal('useApi', () => ({
+      listWorkspaceMembers: () =>
+        fail ? Promise.reject(new Error('network down')) : Promise.resolve([member()]),
+    }))
+
+    const store = useWorkspaceMembersStore()
+    await expect(store.load('ws1')).rejects.toThrow('network down')
+    expect(store.failedFor).toBe('ws1')
+    expect(store.loadedFor).toBeNull()
+
+    fail = false
+    const retry = store.load('ws1')
+    // The retry clears the failure at once, so the panel shows its skeleton while it runs.
+    expect(store.failedFor).toBeNull()
+    await retry
+    expect(store.loadedFor).toBe('ws1')
+  })
+
+  it('a superseded load that fails does not mark the newer board failed', async () => {
+    const rejecters = new Map<string, (e: Error) => void>()
+    const resolvers = new Map<string, (v: WorkspaceMember[]) => void>()
+    vi.stubGlobal('useApi', () => ({
+      listWorkspaceMembers: (ws: string) =>
+        new Promise<WorkspaceMember[]>((resolve, reject) => {
+          resolvers.set(ws, resolve)
+          rejecters.set(ws, reject)
+        }),
+    }))
+
+    const store = useWorkspaceMembersStore()
+    const first = store.load('wsA')
+    const second = store.load('wsB')
+    resolvers.get('wsB')!([member({ workspaceId: 'wsB' })])
+    await second
+    rejecters.get('wsA')!(new Error('late failure'))
+    await expect(first).rejects.toThrow('late failure')
+
+    expect(store.failedFor).toBeNull()
+    expect(store.loadedFor).toBe('wsB')
+  })
+
   it('add upserts the returned member', async () => {
     vi.stubGlobal('useApi', () => ({
       listWorkspaceMembers: () => Promise.resolve([member({ userId: 'a' })]),

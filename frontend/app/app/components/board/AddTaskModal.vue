@@ -38,7 +38,7 @@ import ReviewSkillQueue from '~/components/skills/ReviewSkillQueue.vue'
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
 import { isReviewDebtConflict, reviewFrictionContext } from '~/utils/reviewFriction'
-import { apiErrorEnvelope } from '~/composables/api/errors'
+import { apiErrorEnvelope, isModuleOffRefusal } from '~/composables/api/errors'
 import type { ReviewTargetReason } from '@cat-factory/contracts'
 import {
   defaultBuildPipelineId,
@@ -699,10 +699,19 @@ onModalOpen(open, () => {
     if (prefill.riskPolicyId) riskPolicyId.value = prefill.riskPolicyId
     if (prefill.modelPresetId) modelPresetId.value = prefill.modelPresetId
   }
-  documents.loadDocuments().catch(() => {})
-  tasks.loadTasks().catch(() => {})
+  // The context pickers load on open. A module-off 503 is a source the deployment did not wire,
+  // whose picker stays empty by design; any other failure would read as "nothing to attach", so it
+  // is reported.
+  documents.loadDocuments().catch((e) => {
+    if (!isModuleOffRefusal(e)) present(e, 'board.addTask.documentsLoadFailed')
+  })
+  tasks.loadTasks().catch((e) => {
+    if (!isModuleOffRefusal(e)) present(e, 'board.addTask.tasksLoadFailed')
+  })
   // Load the best-practice fragment catalog so the picker is populated (no-op while current).
-  fragments.ensureLoaded().catch(() => {})
+  fragments.ensureLoaded().catch((e) => {
+    if (!isModuleOffRefusal(e)) present(e, 'board.addTask.fragmentsLoadFailed')
+  })
   // Fetch any staged search-hit issue's body so its description shows read-only below.
   resolvePendingIssueBodies().catch(() => {})
 })

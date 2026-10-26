@@ -273,8 +273,9 @@ onModalOpen(open, () => {
   agentSettings.load().catch(() => {})
   // The resolved foundational-services catalog, which the binary-output picker offers from.
   // Single-flighted per workspace, so this shares the panel's load rather than adding one. A
-  // failure is not swallowed into an empty picker: the store records `available: false`, and
-  // the picker says the catalog is unreachable rather than "no services exist".
+  // failure is not swallowed into an empty picker: the store records `available: false` for the
+  // module-off 503 and `loadFailed` for any other failure, and the picker says the catalog is
+  // unreachable for both rather than "no services exist".
   void foundational.ensureProbed()
 })
 
