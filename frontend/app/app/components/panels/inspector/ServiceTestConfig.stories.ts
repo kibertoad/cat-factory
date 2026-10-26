@@ -25,9 +25,9 @@ import ServiceTestConfig from './ServiceTestConfig.vue'
 // needs from its own repository (a compose file, Kubernetes manifests in this repo or another, or
 // a manifest of a type the deployment or workspace registered). The workspace decides how each
 // type is handled; this section only says what and where. Detect from repo reads the repository
-// and fills the form in. The section starts closed in the inspector, so each story opens it. The
-// Auth Service's repository is the shared one; its paths and the detection notes are made up, and
-// the detect failure is the backend's own wording.
+// and proposes a config, which Apply saves. The section starts closed in the inspector, so each
+// story opens it. The Auth Service's repository is the shared one; its paths and the detection
+// notes are made up, and the detect failure is the backend's own wording.
 const pathPrefix = storyWorkspacePrefix
 
 function seeded(provisioning?: ServiceProvisioning) {
@@ -91,8 +91,8 @@ type Story = StoryObj<typeof meta>
 export const Default: Story = {
   play: opensTo(async (c) => {
     await c.findByTestId('env-setup-nudge')
-    // Detect saves what it finds (see Detect Proposal), so the hint must not promise otherwise.
-    await c.findByText(/The result is saved at once/)
+    // Detect only proposes; Apply saves (see Detect Proposal), and the hint says so.
+    await c.findByText(/Nothing is saved until you apply it/)
   }),
 }
 
@@ -175,8 +175,8 @@ const kubernetesRecommendation: ProvisioningRecommendation = {
 }
 
 /**
- * Detect found Kubernetes manifests: the type applied, the overlays to choose from, the URL
- * pattern and namespace it read, and the notes with their confidence.
+ * Detect found Kubernetes manifests: the proposal with its path, the URL pattern and namespace it
+ * read, and the notes with their confidence. Apply saves it, then the overlays to choose from show.
  */
 export const DetectProposal: Story = {
   args: { block: service() },
@@ -206,10 +206,16 @@ export const DetectProposal: Story = {
     await within(canvasElement).findByText(
       'Manifests pin namespace "auth-preview"; recommend honoring it on the workspace handler.',
     )
-    // The hint says the result is saved at once: the block carries the detected type.
+    // Detect only proposes: the saved config is untouched until Apply.
+    const canvas = within(canvasElement)
+    await canvas.findByTestId('detect-proposal')
+    await expect(useBoardStore().getBlock(authService.id)?.provisioning).toBeUndefined()
+    await userEvent.click(canvas.getByTestId('detect-apply'))
     await waitFor(() =>
       expect(useBoardStore().getBlock(authService.id)?.provisioning?.type).toBe('kubernetes'),
     )
+    // Applied: the overlay chips refine the saved config.
+    await canvas.findByRole('button', { name: 'preview' })
   },
 }
 

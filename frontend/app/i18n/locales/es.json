@@ -1174,9 +1174,11 @@
       "detect": {
         "title": "Detección automática",
         "button": "Detectar desde el repo",
-        "hint": "Inspecciona el repositorio y rellena la configuración de aprovisionamiento de abajo con lo que encuentra. El resultado se guarda al momento y después puedes editar cada campo.",
+        "hint": "Inspecciona el repositorio y sugiere una configuración de aprovisionamiento. No se guarda nada hasta que la apliques.",
         "error": "No se pudo leer el repositorio para detectar el aprovisionamiento.",
         "none": "No se detectaron manifiestos de Kubernetes ni archivo Compose.",
+        "proposed": "Se encontró una configuración {type}.",
+        "apply": "Aplicar",
         "applied": "Se sugirió una configuración {type}. Revisa y ajusta los campos de abajo.",
         "overlayTitle": "Overlay efímero",
         "serviceDirTitle": "Carpeta de despliegue del servicio",

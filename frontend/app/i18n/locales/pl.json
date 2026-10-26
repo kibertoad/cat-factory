@@ -1174,9 +1174,11 @@
       "detect": {
         "title": "Autowykrywanie",
         "button": "Wykryj z repozytorium",
-        "hint": "Sprawdza repozytorium i wypełnia poniższą konfigurację provisioningu tym, co znajdzie. Wynik jest zapisywany od razu; potem możesz edytować każde pole.",
+        "hint": "Sprawdza repozytorium i proponuje konfigurację provisioningu. Nic nie jest zapisywane, dopóki jej nie zastosujesz.",
         "error": "Nie udało się odczytać repozytorium, aby wykryć provisioning.",
         "none": "Nie wykryto manifestów Kubernetes ani pliku Compose.",
+        "proposed": "Znaleziono konfigurację {type}.",
+        "apply": "Zastosuj",
         "applied": "Zaproponowano konfigurację {type}. Przejrzyj i dostosuj pola poniżej.",
         "overlayTitle": "Tymczasowy overlay",
         "serviceDirTitle": "Folder wdrożenia usługi",

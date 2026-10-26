@@ -1695,9 +1695,11 @@
       "detect": {
         "title": "Rilevamento automatico",
         "button": "Rileva dal repository",
-        "hint": "Ispeziona il repository e compila la configurazione di provisioning qui sotto con ciò che trova. Il risultato viene salvato subito; poi puoi modificare ogni campo.",
+        "hint": "Ispeziona il repository e suggerisce una configurazione di provisioning. Non viene salvato nulla finché non la applichi.",
         "error": "Impossibile leggere il repository per rilevare il provisioning.",
         "none": "Non sono stati rilevati manifest Kubernetes o file Compose.",
+        "proposed": "Trovata una configurazione {type}.",
+        "apply": "Applica",
         "applied": "Suggerita una configurazione {type}. Esamina e regola i campi qui sotto.",
         "overlayTitle": "Overlay effimero",
         "serviceDirTitle": "Cartella di deploy del servizio",

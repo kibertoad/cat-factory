@@ -1174,9 +1174,11 @@
       "detect": {
         "title": "Otomatik algılama",
         "button": "Depodan algıla",
-        "hint": "Depoyu inceler ve aşağıdaki provizyon yapılandırmasını bulduklarıyla doldurur. Sonuç hemen kaydedilir; ardından her alanı düzenleyebilirsiniz.",
+        "hint": "Depoyu inceleyip bir provizyon yapılandırması önerir. Uygulayana kadar hiçbir şey kaydedilmez.",
         "error": "Provizyonu algılamak için depo okunamadı.",
         "none": "Kubernetes manifesti veya Compose dosyası algılanmadı.",
+        "proposed": "Bir {type} yapılandırması bulundu.",
+        "apply": "Uygula",
         "applied": "{type} yapılandırması önerildi. Aşağıdaki alanları gözden geçirip ayarlayın.",
         "overlayTitle": "Geçici overlay",
         "serviceDirTitle": "Servis dağıtım klasörü",

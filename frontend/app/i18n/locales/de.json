@@ -1695,9 +1695,11 @@
       "detect": {
         "title": "Automatisch erkennen",
         "button": "Aus Repo erkennen",
-        "hint": "Untersucht das Repository und füllt die Bereitstellungskonfiguration unten mit dem Ergebnis aus. Das Ergebnis wird sofort gespeichert; danach kannst du jedes Feld bearbeiten.",
+        "hint": "Untersucht das Repository und schlägt eine Bereitstellungskonfiguration vor. Es wird nichts gespeichert, bis du sie übernimmst.",
         "error": "Das Repository konnte nicht gelesen werden, um die Bereitstellung zu erkennen.",
         "none": "Es wurden keine Kubernetes-Manifeste oder Compose-Dateien erkannt.",
+        "proposed": "{type}-Konfiguration gefunden.",
+        "apply": "Übernehmen",
         "applied": "Eine {type}-Konfiguration wurde vorgeschlagen. Prüfe und passe die Felder unten an.",
         "overlayTitle": "Ephemeres Overlay",
         "serviceDirTitle": "Service-Deploy-Ordner",

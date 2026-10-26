@@ -1292,9 +1292,11 @@
       "detect": {
         "title": "Auto-detect",
         "button": "Detect from repo",
-        "hint": "Inspect the repository and fill in the provisioning config below with what it finds. The result is saved at once, and you can edit every field afterwards.",
+        "hint": "Inspect the repository and suggest a provisioning config. Nothing is saved until you apply it.",
         "error": "Could not read the repository to detect provisioning.",
         "none": "No Kubernetes manifests or Compose file were detected.",
+        "proposed": "Found a {type} config.",
+        "apply": "Apply",
         "applied": "Suggested a {type} config. Review and adjust the fields below.",
         "overlayTitle": "Ephemeral overlay",
         "serviceDirTitle": "Service deploy folder",
