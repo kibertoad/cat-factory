@@ -678,10 +678,12 @@ The outermost of the three narrowing axes, and the only one the app **asks about
 launch it puts up one question, "what do you work on?", offering `engineer`, `product-manager` and
 `designer` with a line each on what picking it gives you. Vocabulary, resolution and the
 presentation table are in `app/utils/uiRole.ts`; the choice and its once-per-session prompt live in
-the `uiRole` store.
+the `uiRole` store. A proposal to change which surface each role gets, with its open questions, is
+in [`docs/initiatives/personas.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/personas.md).
 
-Two roles, three names. `engineer` and `product-manager` both map to the **`full`** surface, and
-that is the product decision rather than an oversight: the two do the same job in this app (plan
+Two roles, three names. `engineer` and `product-manager` both map to the **`full`** surface. That
+is the current product decision, not an oversight, and the persona proposal above questions it: the
+reasoning was that the two do the same job in this app (plan
 work on a board, run it, review and merge it), and what makes the question answerable is the copy a
 person recognises themselves in. `designer` maps to **`intake`**: the services already on the board,
 the work in flight on them, and the routes that bring new work IN (a new task, a task from a tracker
