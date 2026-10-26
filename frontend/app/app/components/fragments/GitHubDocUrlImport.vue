@@ -7,6 +7,11 @@
 // the manager stages a file or opens the tree browser at the directory for bulk picking.
 import { parseRepoWebUrl } from '@cat-factory/contracts'
 import type { GitHubAvailableRepo } from '~/types/domain'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 const emit = defineEmits<{
   resolved: [{ repo: GitHubAvailableRepo; path: string; kind: 'file' | 'dir' }]
@@ -18,17 +23,21 @@ const github = useGitHubStore()
 const url = ref('')
 const resolving = ref(false)
 const error = ref<string | null>(null)
+// The lookup CALL failed, classified like a failure toast (raw message behind "Show details").
+const failure = ref<DescribedFailure | null>(null)
 
 async function importUrl() {
   const input = url.value.trim()
   if (!input || resolving.value) return
   const parsed = parseRepoWebUrl(input)
   if (!parsed) {
+    failure.value = null
     error.value = t('fragments.documents.urlImport.invalid')
     return
   }
   resolving.value = true
   error.value = null
+  failure.value = null
   const slug = `${parsed.owner}/${parsed.repo}`
   try {
     // Load into the SHARED picker list (not the side-effect-free search) so the repo
@@ -46,7 +55,7 @@ async function importUrl() {
     emit('resolved', { repo, path: parsed.path, kind: parsed.kind })
     url.value = ''
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    failure.value = describeFailure(e)
   } finally {
     resolving.value = false
   }
@@ -79,5 +88,11 @@ async function importUrl() {
     <p v-if="error" class="text-xs text-app-error-400" data-testid="fragment-url-import-error">
       {{ error }}
     </p>
+    <FailureMessage
+      :failure="failure"
+      :title="t('fragments.documents.urlImport.failed')"
+      class="text-xs text-app-error-400"
+      data-testid="fragment-url-import-error"
+    />
   </div>
 </template>

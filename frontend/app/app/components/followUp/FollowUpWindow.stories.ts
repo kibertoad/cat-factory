@@ -4,7 +4,7 @@ import {
   type FollowUpItem,
   type FollowUpsStepState,
 } from '@cat-factory/contracts'
-import { screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent } from 'storybook/test'
 import { apiRefusal } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { step } from '~/stories/pipelineStep.stories.mocks'
@@ -135,12 +135,21 @@ export const Decided: Story = {
   ],
 }
 
-/** A board viewer: the answer boxes take text, but no action is on. */
+/** A board viewer: the answer boxes take text, but no action is on, Dismiss included. */
 export const ReadOnly: Story = {
   decorators: [opened(pending, seedViewer)],
+  play: async () => {
+    const dismiss = await screen.findAllByRole('button', { name: 'Dismiss' })
+    // One per item: the follow-up's and each question's.
+    await expect(dismiss).toHaveLength(pending.items.length)
+    for (const button of dismiss) await expect(button).toBeDisabled()
+  },
 }
 
-/** File failed, because the workspace has no issue tracker: the backend's reason over the items. */
+/**
+ * File failed, because the workspace has no issue tracker: translated copy over the items, the
+ * backend's reason behind "Show details".
+ */
 export const ActionFailed: Story = {
   decorators: [opened(pending)],
   parameters: {
@@ -155,5 +164,8 @@ export const ActionFailed: Story = {
   },
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'File as issue' }))
+    await screen.findByText('This action conflicts with the current state.')
+    await userEvent.click(screen.getByTestId('failure-message-show-detail'))
+    await screen.findByText(/No issue tracker is configured for this workspace/)
   },
 }

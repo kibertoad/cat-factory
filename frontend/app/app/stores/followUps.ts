@@ -4,6 +4,10 @@ import { useApi } from '~/composables/useApi'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useExecutionStore } from '~/stores/execution'
 import type { FollowUpResolution } from '~/types/execution'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 /**
  * The Follow-up companion action surface. The live item state lives on the run's Coder step
@@ -20,8 +24,8 @@ export const useFollowUpsStore = defineStore('followUps', () => {
 
   /** Item ids with an action in flight (drives per-row spinners / disabled buttons). */
   const acting = ref<Set<string>>(new Set())
-  /** The last error message from an action, surfaced inline; cleared on the next action. */
-  const error = ref<string | null>(null)
+  /** The last failed action, surfaced inline; cleared on the next action. */
+  const error = ref<DescribedFailure | null>(null)
 
   function isActing(itemId: string): boolean {
     return acting.value.has(itemId)
@@ -63,7 +67,7 @@ export const useFollowUpsStore = defineStore('followUps', () => {
         },
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Action failed'
+      error.value = describeFailure(e)
       throw e
     } finally {
       mark(itemId, false)

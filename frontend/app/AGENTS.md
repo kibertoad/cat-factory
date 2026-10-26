@@ -49,6 +49,9 @@ standalone routes (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-passwor
   `UForm`, `ULink`), never the raw element; an icon-only button is `common/IconButton.vue`, which
   owns the tooltip. [Rule](./README.md#a-control-is-its-nuxt-ui-component), guarded by
   `scripts/check-frontend-primitives.mjs`.
+- **A select's "no value" row is `selectNoneItem(label)`**, never an item with `value: ''`, which
+  Reka's `SelectItem` and `ComboboxItem` throw on; the select binds through `selectNoneModel`. [Rule](./README.md#a-selects-no-value-row-is-never-the-empty-string), guarded
+  by `scripts/check-frontend-select-values.mjs`.
 - **Buttons and badges state only what differs from Nuxt UI's default** (`primary solid md`,
   stated in `app.config.ts`): a primary action carries no props, ONE solid per view (no two
   solid siblings), and quiet chrome says `color="neutral" variant="ghost" size="xs"`.
@@ -86,6 +89,7 @@ is whole-tree from the root (AGENTS.md). Run these where stated:
   `node scripts/check-frontend-type-scale.mjs`, `node scripts/check-frontend-radius.mjs`,
   `node scripts/check-frontend-primitives.mjs`, `node scripts/check-frontend-variants.mjs`,
   `node scripts/check-frontend-feedback.mjs`, `node scripts/check-frontend-geometry.mjs`,
+  `node scripts/check-frontend-select-values.mjs`,
   `node scripts/check-story-titles.mjs`, `node scripts/check-file-size.mjs` from the repo root
   (install-free guards CI runs).
 

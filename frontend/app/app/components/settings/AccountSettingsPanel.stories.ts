@@ -15,10 +15,6 @@ import AccountSettingsPanel from './AccountSettingsPanel.vue'
 // the Team tab's reads (`accountTeamApi`). The other tabs are the `AccountFragmentSettings`,
 // `AccountSkillSettings`, `AccountFoundationalSettings` and `AccountRiskPolicySettings` stories,
 // and the Team tab's own states are the `AccountTeamSettings` stories.
-//
-// There are no stories with an account until #2393 is fixed: the viewer is an admin of both
-// accounts, the platform alert section on the Team tab gives a select item the value '', Reka's
-// SelectItem throws for an empty value, and Storybook's error display covers the window (#2393).
 
 /**
  * The window opened on `account`, by a signed-in viewer on a deployment that can govern model
@@ -51,3 +47,6 @@ export const Default: Story = {
   decorators: [opened(null)],
   parameters: { api: [] },
 }
+
+/** The window open on Acme for Maya, an admin: the five tabs, on Team. */
+export const Organisation: Story = {}

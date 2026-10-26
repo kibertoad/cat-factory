@@ -24,6 +24,7 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import type { AppSlots } from '~/modular/slots'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { pipelineAllowedForTaskType } from '~/utils/pipeline'
+import { selectNoneItem, selectNoneModel } from '~/utils/selectNone'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t, te } = useI18n()
@@ -192,11 +193,11 @@ const REVIEW_FRICTION_MODES = computed<{ value: ReviewFrictionMode; label: strin
  *
  * Narrowed by the same predicate the create form uses for a `bug` task, because a spawned fix IS
  * one — a board that could pin a document-authoring preset here would spawn tasks that author a
- * document instead of fixing the defect they were spawned for. The clearing row carries the empty
- * string rather than being absent, so "no board default" is a value someone can choose back to.
+ * document instead of fixing the defect they were spawned for. The clearing row is present rather
+ * than absent, so "no board default" is a value someone can choose back to.
  */
 const fixPipelineOptions = computed<{ value: string; label: string }[]>(() => [
-  { value: '', label: t('settings.workspaceSettings.bugFishing.builtInDefault') },
+  selectNoneItem(t('settings.workspaceSettings.bugFishing.builtInDefault')),
   ...pipelines.pipelines
     .filter((p) => pipelineAllowedForTaskType(p, 'bug'))
     .map((p) => ({ value: p.id, label: p.name })),
@@ -233,6 +234,12 @@ const draft = reactive({
   reviewFrictionBlockStuckEnabled: false,
   reviewFrictionBlockStuckMinutes: 1440 as number,
 })
+const fixPipelineModel = selectNoneModel(
+  () => draft.bugFishingFixPipelineId,
+  (value) => {
+    draft.bugFishingFixPipelineId = value
+  },
+)
 
 function hydrate() {
   const s = store.settings
@@ -676,7 +683,7 @@ async function save() {
                 {{ t('settings.workspaceSettings.bugFishing.body') }}
               </p>
               <USelectMenu
-                v-model="draft.bugFishingFixPipelineId"
+                v-model="fixPipelineModel.value"
                 :items="fixPipelineOptions"
                 value-key="value"
                 size="sm"
