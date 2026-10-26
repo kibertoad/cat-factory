@@ -545,6 +545,7 @@
         "title": "実行を開始しました",
         "body": "「{name}」を実行中です。"
       },
+      "stepPosition": "{current}/{total}",
       "openPrLink": "{pr} を開く"
     },
     "dryRunToast": {

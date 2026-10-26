@@ -545,6 +545,7 @@
         "title": "Exécution démarrée",
         "body": "Exécution de \"{name}\"."
       },
+      "stepPosition": "{current} sur {total}",
       "openPrLink": "Ouvrir {pr}"
     },
     "dryRunToast": {

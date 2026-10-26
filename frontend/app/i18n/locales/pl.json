@@ -545,6 +545,7 @@
         "title": "Uruchomiono",
         "body": "Trwa wykonywanie \"{name}\"."
       },
+      "stepPosition": "{current} z {total}",
       "openPrLink": "Otwórz {pr}"
     },
     "dryRunToast": {

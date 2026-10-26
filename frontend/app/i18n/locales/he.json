@@ -545,6 +545,7 @@
         "title": "ההרצה החלה",
         "body": "מריץ את \"{name}\"."
       },
+      "stepPosition": "{current} מתוך {total}",
       "openPrLink": "פתיחת {pr}"
     },
     "dryRunToast": {

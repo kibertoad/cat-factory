@@ -545,6 +545,7 @@
         "title": "Çalıştırma başladı",
         "body": "\"{name}\" çalıştırılıyor."
       },
+      "stepPosition": "{current}/{total}",
       "openPrLink": "{pr} aç"
     },
     "dryRunToast": {
