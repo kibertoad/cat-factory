@@ -1,5 +1,16 @@
 # @cat-factory/contracts
 
+## 0.376.0
+
+### Minor Changes
+
+- 09ccd89: Contracts exports `AGENT_CONFIG_VALUE_MAX_LENGTH`, the stored limit of one agent config value. The add-task form and the task inspector now draw agent config fields with one shared component, and a text field stops at that limit.
+- 31f32a1: A gate parameter's declared default now reaches the gate. The new contracts helper `effectiveGateConfigFields` fills every parameter a step leaves unanswered (absent, a blank string or an empty multi-select) with the default the gate declared, and every reader goes through it: pipeline save and run admission validate its result, the engine freezes it onto the gate state, and the pipeline builder renders it. The builder still stores only what the author chose, so a default the deployment changes later reaches existing pipelines.
+  
+  A `required` gate parameter with no value and no default is now refused at pipeline save and at run admission (start, retry and restart), also when the step carries no gate configuration at all. The refusal is a 422 with `details.reason: 'gate_config_fields_invalid'` and a `problems` list; the reason is exported as `GATE_CONFIG_REFUSAL_REASONS` and the SPA shows translated copy for it. The builder also shows a hint for such a step before save.
+  
+  Boot now refuses a descriptor field whose declared default breaks its own rules (for example a number outside `min`/`max`) with `<surface>_field_default_invalid`, because every door fills defaults in and such a default would refuse every creation for a value the caller never sent.
+
 ## 0.375.0
 
 ### Minor Changes
