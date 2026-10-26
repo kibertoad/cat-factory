@@ -122,6 +122,26 @@ export const FromScratchKeptOnLoad: Story = {
   },
 }
 
+/**
+ * Reference picked by hand, then the list empties (From scratch is the only flow) and fills
+ * again: the form goes back to the picked mode.
+ */
+export const PickedModeRestored: Story = {
+  play: async () => {
+    const reference = await screen.findByRole('radio', { name: 'From a reference architecture' })
+    await userEvent.click(await screen.findByText('From scratch'))
+    await userEvent.click(await screen.findByText('From a reference architecture'))
+    const store = useBootstrapStore()
+    const list = store.architectures
+    store.architectures = []
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: 'From scratch' })).toBeChecked(),
+    )
+    store.architectures = list
+    await waitFor(() => expect(reference).toBeChecked())
+  },
+}
+
 /** Add opens the reference architecture form, with the repositories to pick a template from. */
 export const ArchitectureForm: Story = {
   play: async () => {
