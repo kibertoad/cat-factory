@@ -92,6 +92,15 @@ const phase = computed(() =>
 /** The interview converged: the synthesized authoring brief is what the window shows. */
 const converged = computed(() => phase.value === 'converged')
 
+/** The header badge: done, failed, or still waiting on the interview. */
+const statusBadge = computed(() =>
+  converged.value
+    ? { color: 'success' as const, label: t('docInterview.status.done') }
+    : phase.value === 'failed'
+      ? { color: 'error' as const, label: t('docInterview.status.failed') }
+      : { color: 'primary' as const, label: t('docInterview.status.awaiting') },
+)
+
 /** Why Submit is unavailable, or undefined when it is. RBAC first: it outranks a draft gap. */
 const continueBlockedReason = computed(() => {
   if (!access.canExecuteRuns.value) return t('access.noRunExecute')
@@ -117,8 +126,13 @@ const onProceed = () =>
     @close="close"
   >
     <template v-if="session" #header-extras>
-      <UBadge :color="converged ? 'success' : 'primary'" variant="subtle" size="sm">
-        {{ t(converged ? 'docInterview.status.done' : 'docInterview.status.awaiting') }}
+      <UBadge
+        :color="statusBadge.color"
+        variant="subtle"
+        size="sm"
+        data-testid="doc-interview-status"
+      >
+        {{ statusBadge.label }}
       </UBadge>
     </template>
 

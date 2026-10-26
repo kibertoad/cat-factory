@@ -298,6 +298,9 @@
         "apiServerUrlHelp": "La radice del kube-apiserver, es. https://10.0.0.1:6443. L'orchestratore applica i manifest di ogni PR tramite l'apiserver, quindi solo questo endpoint deve essere raggiungibile.",
         "apiToken": "Token ServiceAccount",
         "apiTokenHelp": "Un bearer token con RBAC per creare namespace e applicare le risorse dell'operatore. Memorizzato cifrato; mai mostrato di nuovo.",
+        "apiTokenHelpStored": "Un token è salvato. Lascia vuoto per mantenerlo o inseriscine uno nuovo per sostituirlo. Per il test devi inserire di nuovo il token.",
+        "apiTokenPlaceholderStored": "Lascia vuoto per mantenere il token salvato",
+        "tokenSaved": "Salvato",
         "manifestSourceLabel": "Origine dei manifest",
         "sourceColocated": "Co-localizzati nel repository della PR",
         "sourceSeparate": "Repository separato",
@@ -1697,9 +1700,11 @@
       "detect": {
         "title": "Rilevamento automatico",
         "button": "Rileva dal repository",
-        "hint": "Ispeziona il repository e suggerisce una configurazione di provisioning. Confermi e modifichi tutto qui sotto; nulla viene salvato automaticamente.",
+        "hint": "Ispeziona il repository e suggerisce una configurazione di provisioning. Non viene salvato nulla finché non la applichi.",
         "error": "Impossibile leggere il repository per rilevare il provisioning.",
         "none": "Non sono stati rilevati manifest Kubernetes o file Compose.",
+        "proposed": "Trovata una configurazione {type}.",
+        "apply": "Applica",
         "applied": "Suggerita una configurazione {type}. Esamina e regola i campi qui sotto.",
         "overlayTitle": "Overlay effimero",
         "serviceDirTitle": "Cartella di deploy del servizio",
@@ -6758,7 +6763,8 @@
     "continueTitle": "Invia le tue risposte; l'intervistatore potrebbe porre altre domande",
     "status": {
       "awaiting": "In attesa di risposte",
-      "done": "Fatto"
+      "done": "Fatto",
+      "failed": "Non riuscito"
     },
     "saveFailedCount": "Impossibile salvare {count} delle tue risposte",
     "continueFailed": "Impossibile inviare le tue risposte",
@@ -7725,6 +7731,7 @@
       "service": "Servizio compose esposto",
       "servicePlaceholder": "es. app",
       "port": "Porta esposta",
+      "portHelp": "Il rilevamento non legge le porte, quindi il valore parte da 80. Inserisci la porta su cui il servizio è in ascolto.",
       "composeFiles": "File compose",
       "profiles": "Profili",
       "seedDumps": "Dump di seed",

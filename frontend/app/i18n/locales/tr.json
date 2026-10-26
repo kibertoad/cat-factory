@@ -1182,9 +1182,11 @@
       "detect": {
         "title": "Otomatik algılama",
         "button": "Depodan algıla",
-        "hint": "Depoyu inceleyip bir provizyon yapılandırması önerir. Aşağıdaki her şeyi onaylayıp düzenlersiniz; hiçbir şey otomatik kaydedilmez.",
+        "hint": "Depoyu inceleyip bir provizyon yapılandırması önerir. Uygulayana kadar hiçbir şey kaydedilmez.",
         "error": "Provizyonu algılamak için depo okunamadı.",
         "none": "Kubernetes manifesti veya Compose dosyası algılanmadı.",
+        "proposed": "Bir {type} yapılandırması bulundu.",
+        "apply": "Uygula",
         "applied": "{type} yapılandırması önerildi. Aşağıdaki alanları gözden geçirip ayarlayın.",
         "overlayTitle": "Geçici overlay",
         "serviceDirTitle": "Servis dağıtım klasörü",
@@ -3245,6 +3247,9 @@
         "apiServerUrlHelp": "kube-apiserver kök adresi, örn. https://10.0.0.1:6443. Orkestratör her PR'nin manifest'lerini apiserver aracılığıyla uygular, bu yüzden yalnızca bu uç noktanın erişilebilir olması gerekir.",
         "apiToken": "ServiceAccount token'ı",
         "apiTokenHelp": "Ad alanları oluşturmak ve operatörün kaynaklarını uygulamak için RBAC'ye sahip bir bearer token. Şifrelenmiş olarak saklanır; bir daha asla gösterilmez.",
+        "apiTokenHelpStored": "Bir token kayıtlı. Korumak için boş bırakın ya da değiştirmek için yenisini girin. Test için token'ı yeniden girmeniz gerekir.",
+        "apiTokenPlaceholderStored": "Kayıtlı token'ı korumak için boş bırakın",
+        "tokenSaved": "Kaydedildi",
         "manifestSourceLabel": "Manifest kaynağı",
         "sourceColocated": "PR deposunda bir arada",
         "sourceSeparate": "Ayrı depo",
@@ -4866,7 +4871,8 @@
     "continueTitle": "Yanıtlarınızı gönderin; görüşmeci ek sorular sorabilir",
     "status": {
       "awaiting": "Yanıt bekleniyor",
-      "done": "Tamamlandı"
+      "done": "Tamamlandı",
+      "failed": "Başarısız"
     },
     "saveFailedCount": "Yanıtlarınızdan {count} tanesi kaydedilemedi",
     "continueFailed": "Yanıtlarınız gönderilemedi",
@@ -7730,6 +7736,7 @@
       "service": "Açığa çıkarılan Compose servisi",
       "servicePlaceholder": "örn. app",
       "port": "Açığa çıkarılan port",
+      "portHelp": "Algılama portları okumaz, bu yüzden değer 80 ile başlar. Hizmetin dinlediği portu girin.",
       "composeFiles": "Compose dosyaları",
       "profiles": "Profiller",
       "seedDumps": "Tohum dökümleri",

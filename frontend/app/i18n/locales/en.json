@@ -1300,9 +1300,11 @@
       "detect": {
         "title": "Auto-detect",
         "button": "Detect from repo",
-        "hint": "Inspect the repository and suggest a provisioning config. You confirm and edit everything below; nothing is saved automatically.",
+        "hint": "Inspect the repository and suggest a provisioning config. Nothing is saved until you apply it.",
         "error": "Could not read the repository to detect provisioning.",
         "none": "No Kubernetes manifests or Compose file were detected.",
+        "proposed": "Found a {type} config.",
+        "apply": "Apply",
         "applied": "Suggested a {type} config. Review and adjust the fields below.",
         "overlayTitle": "Ephemeral overlay",
         "serviceDirTitle": "Service deploy folder",
@@ -3403,6 +3405,9 @@
         "apiServerUrlHelp": "The kube-apiserver root, e.g. https://10.0.0.1:6443. The orchestrator applies each PR's manifests through the apiserver, so only this endpoint must be reachable.",
         "apiToken": "ServiceAccount token",
         "apiTokenHelp": "A bearer token with RBAC to create namespaces and apply the operator's resources. Stored encrypted; never shown again.",
+        "apiTokenHelpStored": "A token is saved. Leave blank to keep it, or enter a new one to replace it. Test needs the token entered again.",
+        "apiTokenPlaceholderStored": "Leave blank to keep the saved token",
+        "tokenSaved": "Saved",
         "manifestSourceLabel": "Manifest source",
         "sourceColocated": "Co-located in the PR repo",
         "sourceSeparate": "Separate repo",
@@ -5054,7 +5059,8 @@
     "continueTitle": "Send your answers; the interviewer may ask follow-up questions",
     "status": {
       "awaiting": "Awaiting answers",
-      "done": "Done"
+      "done": "Done",
+      "failed": "Failed"
     },
     "saveFailedCount": "Could not save {count} of your answers",
     "continueFailed": "Could not submit your answers",
@@ -8025,6 +8031,7 @@
       "service": "Exposed compose service",
       "servicePlaceholder": "e.g. app",
       "port": "Exposed port",
+      "portHelp": "Detection does not read ports, so this starts at 80. Enter the port the service listens on.",
       "composeFiles": "Compose files",
       "profiles": "Profiles",
       "seedDumps": "Seed dumps",

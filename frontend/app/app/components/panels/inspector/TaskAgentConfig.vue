@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { Block } from '~/types/domain'
 import { useAgentConfigStore } from '~/stores/agentConfig'
 import { useExecutionStore } from '~/stores/execution'
+import AgentConfigField from '~/components/common/AgentConfigField.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 // Task-level configuration contributed by the agents in this task's selected
@@ -68,19 +69,15 @@ function setValue(id: string, value: string) {
           />
         </div>
       </div>
-      <div class="flex flex-wrap gap-1">
-        <UButton
-          v-for="opt in d.options"
-          :key="opt.value"
-          :color="valueOf(d.id, d.default) === opt.value ? 'primary' : 'neutral'"
-          :variant="valueOf(d.id, d.default) === opt.value ? 'soft' : 'ghost'"
-          size="xs"
-          :disabled="isFrozen(d.agentKind)"
-          @click="setValue(d.id, opt.value)"
-        >
-          {{ opt.label }}
-        </UButton>
-      </div>
+      <!-- A typed value saves on change (blur or Enter), not per keystroke: each save is a block
+           update. -->
+      <AgentConfigField
+        :descriptor="d"
+        :value="valueOf(d.id, d.default)"
+        :disabled="isFrozen(d.agentKind)"
+        commit="change"
+        @update="(v) => setValue(d.id, v)"
+      />
       <p class="text-2xs leading-snug text-dimmed">{{ d.description }}</p>
     </div>
   </InspectorSection>

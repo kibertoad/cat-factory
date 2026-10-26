@@ -1182,9 +1182,11 @@
       "detect": {
         "title": "Autowykrywanie",
         "button": "Wykryj z repozytorium",
-        "hint": "Sprawdza repozytorium i proponuje konfigurację provisioningu. Potwierdzasz i edytujesz wszystko poniżej; nic nie jest zapisywane automatycznie.",
+        "hint": "Sprawdza repozytorium i proponuje konfigurację provisioningu. Nic nie jest zapisywane, dopóki jej nie zastosujesz.",
         "error": "Nie udało się odczytać repozytorium, aby wykryć provisioning.",
         "none": "Nie wykryto manifestów Kubernetes ani pliku Compose.",
+        "proposed": "Znaleziono konfigurację {type}.",
+        "apply": "Zastosuj",
         "applied": "Zaproponowano konfigurację {type}. Przejrzyj i dostosuj pola poniżej.",
         "overlayTitle": "Tymczasowy overlay",
         "serviceDirTitle": "Folder wdrożenia usługi",
@@ -3164,6 +3166,9 @@
         "apiServerUrlHelp": "Główny adres kube-apiserver, np. https://10.0.0.1:6443. Orkiestrator stosuje manifesty każdego PR przez apiserver, więc tylko ten endpoint musi być osiągalny.",
         "apiToken": "Token ServiceAccount",
         "apiTokenHelp": "Token bearer z uprawnieniami RBAC do tworzenia namespace’ów i stosowania zasobów operatora. Przechowywany w postaci zaszyfrowanej; nie jest ponownie pokazywany.",
+        "apiTokenHelpStored": "Token jest zapisany. Zostaw puste, aby go zachować, albo wpisz nowy, aby go zastąpić. Test wymaga ponownego wpisania tokenu.",
+        "apiTokenPlaceholderStored": "Pozostaw puste, aby zachować zapisany token",
+        "tokenSaved": "Zapisano",
         "manifestSourceLabel": "Źródło manifestów",
         "sourceColocated": "W repozytorium PR",
         "sourceSeparate": "Osobne repozytorium",
@@ -4866,7 +4871,8 @@
     "continueTitle": "Wyślij swoje odpowiedzi; ankieter może zadać dodatkowe pytania",
     "status": {
       "awaiting": "Oczekiwanie na odpowiedzi",
-      "done": "Gotowe"
+      "done": "Gotowe",
+      "failed": "Niepowodzenie"
     },
     "saveFailedCount": "Nie udało się zapisać {count} Twoich odpowiedzi",
     "continueFailed": "Nie udało się przesłać Twoich odpowiedzi",
@@ -7730,6 +7736,7 @@
       "service": "Udostępniona usługa Compose",
       "servicePlaceholder": "np. app",
       "port": "Udostępniony port",
+      "portHelp": "Wykrywanie nie odczytuje portów, więc wartość startuje od 80. Wpisz port, na którym nasłuchuje usługa.",
       "composeFiles": "Pliki Compose",
       "profiles": "Profile",
       "seedDumps": "Zrzuty danych",

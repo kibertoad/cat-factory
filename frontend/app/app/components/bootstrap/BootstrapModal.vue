@@ -299,13 +299,20 @@ const archOptions = computed(() =>
   })),
 )
 
+// The mode the person picked themselves, or null. The list decides only when it is empty; once it
+// has entries, the form shows this choice, or the reference default when there is none.
+const pickedMode = ref<LaunchMode | null>(null)
+
 // Keep a sensible default selection + mode as the list loads/changes. With no
-// reference architectures available, only the from-scratch flow makes sense.
+// reference architectures available, only the from-scratch flow makes sense. The list is often
+// still empty when the form mounts (the first open of a session), so when it arrives the form
+// goes back to the person's own choice, or to the reference default when they made none.
 watch(
   () => bootstrap.architectures,
   (list) => {
     if (!selectedArchId.value && list.length) selectedArchId.value = list[0]!.id
     if (!list.length) mode.value = 'scratch'
+    else mode.value = pickedMode.value ?? 'reference'
   },
   { immediate: true },
 )
@@ -733,7 +740,11 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           </template>
 
           <UFormField :label="t('bootstrap.mode.label')" required>
-            <URadioGroup v-model="mode" :items="modeItems" />
+            <URadioGroup
+              v-model="mode"
+              :items="modeItems"
+              @update:model-value="(value) => (pickedMode = value as LaunchMode)"
+            />
           </UFormField>
 
           <template v-if="usingReference">
