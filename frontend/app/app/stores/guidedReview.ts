@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type {
   AskGuidedReviewInput,
   EditGuidedReviewDraftInput,
@@ -28,14 +28,23 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
   const sessions = ref<Record<string, GuidedReviewSessionView>>({})
   const threads = ref<Record<string, GuidedReviewThreadView>>({})
   /**
-   * The last error of a background refetch per session, so a window can say its view may be out
-   * of date. It clears only once every load that failed for the session (the session itself or
-   * one of its threads) has landed again: a thread landing says nothing about the session view.
+   * The errors of failed background refetches: per session, per fetch key (the session itself or
+   * one of its threads). A key's entry clears when that key lands again, so a thread landing says
+   * nothing about a failed session load, and the other way round.
    */
-  const refetchFailures = ref<Record<string, unknown>>({})
-  // The fetch keys whose background refetch failed, per session; `refetchFailures` holds an
-  // entry while this set is not empty.
-  const failedLoads = new Map<string, Set<string>>()
+  const failedLoads = ref<Record<string, Record<string, unknown>>>({})
+  /**
+   * Per session, the error of a load that is still failing, so a window can say its view may be
+   * out of date. Present while any of the session's failed loads has not landed again.
+   */
+  const refetchFailures = computed(() => {
+    const out: Record<string, unknown> = {}
+    for (const [sessionId, byKey] of Object.entries(failedLoads.value)) {
+      const errors = Object.values(byKey)
+      if (errors.length) out[sessionId] = errors.at(-1)
+    }
+    return out
+  })
   // One counter for every key and never reset, so a key dropped by `forget` or `reset` is never
   // landed on by a fetch that was in flight when it went.
   let issued = 0
@@ -50,26 +59,33 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
     return issued
   }
 
-  /** Run `fetch` for `key`, landing its result only if no newer fetch or write for it started. */
+  /**
+   * Run `fetch` for `key`, landing its result only if no newer fetch or write for it started. A
+   * superseded fetch neither lands nor fails: its error is dropped, so it cannot report a view
+   * that a newer fetch has already brought up to date as out of date.
+   */
   async function latest<T>(key: string, fetch: () => Promise<T>, land: (value: T) => void) {
     const ticket = claim(key)
-    const value = await fetch()
+    let value: T
+    try {
+      value = await fetch()
+    } catch (error) {
+      if (newest.get(key) === ticket) throw error
+      return
+    }
     if (newest.get(key) === ticket) land(value)
   }
 
   function recordFailure(sessionId: string, key: string, error: unknown) {
-    const failed = failedLoads.get(sessionId) ?? new Set<string>()
-    failed.add(key)
-    failedLoads.set(sessionId, failed)
-    refetchFailures.value[sessionId] = error
+    failedLoads.value[sessionId] = { ...failedLoads.value[sessionId], [key]: error }
   }
 
   function clearFailure(sessionId: string, key: string) {
-    const failed = failedLoads.get(sessionId)
-    failed?.delete(key)
-    if (failed?.size) return
-    failedLoads.delete(sessionId)
-    delete refetchFailures.value[sessionId]
+    const byKey = failedLoads.value[sessionId]
+    if (!byKey || !(key in byKey)) return
+    const { [key]: _landed, ...rest } = byKey
+    if (Object.keys(rest).length) failedLoads.value[sessionId] = rest
+    else delete failedLoads.value[sessionId]
   }
 
   function putSession(view: GuidedReviewSessionView) {
@@ -103,9 +119,22 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
     return view
   }
 
-  function refresh(sessionId: string): Promise<void> {
+  /**
+   * Refresh the session from the pull request. Threads whose background refetch failed are
+   * loaded again with it, so an explicit refresh clears every reason the window has to say it may
+   * be out of date, not only the session's own.
+   */
+  async function refresh(sessionId: string): Promise<void> {
     const ws = workspace.requireId()
-    return latest(sessionKey(sessionId), () => api.refreshGuidedReview(ws, sessionId), putSession)
+    const failedThreads = Object.values(threads.value).filter(
+      ({ thread }) =>
+        thread.sessionId === sessionId &&
+        threadKey(sessionId, thread.id) in (failedLoads.value[sessionId] ?? {}),
+    )
+    await Promise.all([
+      latest(sessionKey(sessionId), () => api.refreshGuidedReview(ws, sessionId), putSession),
+      ...failedThreads.map(({ thread }) => loadThread(sessionId, thread.id)),
+    ])
   }
 
   async function remove(sessionId: string): Promise<void> {
@@ -159,8 +188,7 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
 
   function forget(sessionId: string) {
     delete sessions.value[sessionId]
-    delete refetchFailures.value[sessionId]
-    failedLoads.delete(sessionId)
+    delete failedLoads.value[sessionId]
     newest.delete(sessionKey(sessionId))
     const threadPrefix = threadKey(sessionId, '')
     for (const key of newest.keys()) {
@@ -175,14 +203,13 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
   function reset() {
     sessions.value = {}
     threads.value = {}
-    refetchFailures.value = {}
-    failedLoads.clear()
+    failedLoads.value = {}
     newest.clear()
   }
 
   /**
    * A refetch nobody awaits (a live event, a reconnect). A session that answers 404 is gone and
-   * is forgotten; any other failure keeps the last view and is recorded in `refetchFailures`
+   * is forgotten; any other failure keeps the last view and is recorded in `failedLoads`
    * against `key`, the fetch that failed.
    */
   async function follow(sessionId: string, key: string, load: () => Promise<void>): Promise<void> {
@@ -236,6 +263,7 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
   return {
     sessions,
     threads,
+    failedLoads,
     refetchFailures,
     loadSession,
     loadThread,

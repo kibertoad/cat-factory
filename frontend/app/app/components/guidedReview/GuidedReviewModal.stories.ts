@@ -114,7 +114,9 @@ export const OutOfDate: Story = {
   play: async () => {
     // After the thread lands too: loading it clears the failure.
     await screen.findByText(raceQuestion.content, { selector: 'p' })
-    useGuidedReviewStore().refetchFailures[SESSION_ID] = new Error('Failed to fetch')
+    useGuidedReviewStore().failedLoads[SESSION_ID] = {
+      [`s:${SESSION_ID}`]: new Error('Failed to fetch'),
+    }
     await screen.findByTestId('guided-review-out-of-date')
   },
 }

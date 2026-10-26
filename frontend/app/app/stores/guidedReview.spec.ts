@@ -159,6 +159,50 @@ describe('guided review store', () => {
     expect(store.refetchFailures.s1).toBeUndefined()
   })
 
+  it('drops the failure of a background refetch that a newer fetch overtook', async () => {
+    let rejectSlow!: (error: unknown) => void
+    const slow = new Promise<never>((_, reject) => (rejectSlow = reject))
+    const replies = [Promise.resolve(view('s1', 'x')), slow, Promise.resolve(view('s1', 'newer'))]
+    vi.stubGlobal('useApi', () => ({ getGuidedReview: vi.fn(() => replies.shift()) }))
+    useWorkspaceStore().workspaceId = 'ws_1'
+    const store = useGuidedReviewStore()
+    await store.loadSession('s1')
+
+    const background = store.applyChange({ sessionId: 's1', scope: 'session' })
+    await store.loadSession('s1')
+    rejectSlow(new ApiError(503, { error: { code: 'unavailable' } }))
+    await background
+    expect(store.sessions.s1?.session.prTitle).toBe('newer')
+    expect(store.refetchFailures.s1).toBeUndefined()
+  })
+
+  it('reloads the threads whose refetch failed on an explicit refresh', async () => {
+    const failure = new ApiError(503, { error: { code: 'unavailable' } })
+    const getGuidedReview = vi.fn(async (_ws: string, id: string) => view(id, 'x'))
+    const refreshGuidedReview = vi.fn(async () => view('s1', 'refreshed'))
+    const getGuidedReviewThread = vi
+      .fn()
+      .mockResolvedValueOnce(threadView('t1', 1))
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce(threadView('t1', 2))
+    vi.stubGlobal('useApi', () => ({
+      getGuidedReview,
+      refreshGuidedReview,
+      getGuidedReviewThread,
+    }))
+    useWorkspaceStore().workspaceId = 'ws_1'
+    const store = useGuidedReviewStore()
+    await store.loadSession('s1')
+    await store.loadThread('s1', 't1')
+    await store.applyChange({ sessionId: 's1', scope: 'thread', threadId: 't1' })
+    expect(store.refetchFailures.s1).toBe(failure)
+
+    await store.refresh('s1')
+    expect(getGuidedReviewThread).toHaveBeenCalledTimes(3)
+    expect(store.threads.t1?.messages).toHaveLength(2)
+    expect(store.refetchFailures.s1).toBeUndefined()
+  })
+
   it('forgets a session whose refetch answers 404', async () => {
     const getGuidedReview = vi
       .fn()
