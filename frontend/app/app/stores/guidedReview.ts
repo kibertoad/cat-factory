@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import type {
   AskGuidedReviewInput,
   EditGuidedReviewDraftInput,
@@ -12,6 +12,7 @@ import type {
   OpenGuidedReviewThreadInput,
 } from '~/types/domain'
 import { ApiError } from '~/composables/api/errors'
+import { createRefetchFailures } from '~/stores/guidedReview/refetchFailures'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -27,24 +28,8 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
 
   const sessions = ref<Record<string, GuidedReviewSessionView>>({})
   const threads = ref<Record<string, GuidedReviewThreadView>>({})
-  /**
-   * The errors of failed background refetches: per session, per fetch key (the session itself or
-   * one of its threads). A key's entry clears when that key lands again, so a thread landing says
-   * nothing about a failed session load, and the other way round.
-   */
-  const failedLoads = ref<Record<string, Record<string, unknown>>>({})
-  /**
-   * Per session, the error of a load that is still failing, so a window can say its view may be
-   * out of date. Present while any of the session's failed loads has not landed again.
-   */
-  const refetchFailures = computed(() => {
-    const out: Record<string, unknown> = {}
-    for (const [sessionId, byKey] of Object.entries(failedLoads.value)) {
-      const errors = Object.values(byKey)
-      if (errors.length) out[sessionId] = errors.at(-1)
-    }
-    return out
-  })
+  const { failedLoads, refetchFailures, recordFailure, clearFailure, hasFailed, ...failures } =
+    createRefetchFailures()
   // One counter for every key and never reset, so a key dropped by `forget` or `reset` is never
   // landed on by a fetch that was in flight when it went.
   let issued = 0
@@ -74,18 +59,6 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
       return
     }
     if (newest.get(key) === ticket) land(value)
-  }
-
-  function recordFailure(sessionId: string, key: string, error: unknown) {
-    failedLoads.value[sessionId] = { ...failedLoads.value[sessionId], [key]: error }
-  }
-
-  function clearFailure(sessionId: string, key: string) {
-    const byKey = failedLoads.value[sessionId]
-    if (!byKey || !(key in byKey)) return
-    const { [key]: _landed, ...rest } = byKey
-    if (Object.keys(rest).length) failedLoads.value[sessionId] = rest
-    else delete failedLoads.value[sessionId]
   }
 
   function putSession(view: GuidedReviewSessionView) {
@@ -128,8 +101,7 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
     const ws = workspace.requireId()
     const failedThreads = Object.values(threads.value).filter(
       ({ thread }) =>
-        thread.sessionId === sessionId &&
-        threadKey(sessionId, thread.id) in (failedLoads.value[sessionId] ?? {}),
+        thread.sessionId === sessionId && hasFailed(sessionId, threadKey(sessionId, thread.id)),
     )
     await Promise.all([
       latest(sessionKey(sessionId), () => api.refreshGuidedReview(ws, sessionId), putSession),
@@ -188,7 +160,7 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
 
   function forget(sessionId: string) {
     delete sessions.value[sessionId]
-    delete failedLoads.value[sessionId]
+    failures.forgetSession(sessionId)
     newest.delete(sessionKey(sessionId))
     const threadPrefix = threadKey(sessionId, '')
     for (const key of newest.keys()) {
@@ -203,7 +175,7 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
   function reset() {
     sessions.value = {}
     threads.value = {}
-    failedLoads.value = {}
+    failures.clearAll()
     newest.clear()
   }
 

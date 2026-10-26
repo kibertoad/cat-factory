@@ -544,7 +544,12 @@ function setSize(value: InstanceSize) {
             }}
             <span v-if="detectProposedPath" class="font-mono">{{ detectProposedPath }}</span>
           </p>
-          <UButton size="xs" icon="i-lucide-check" data-testid="detect-apply" @click="applyDetected">
+          <UButton
+            size="xs"
+            icon="i-lucide-check"
+            data-testid="detect-apply"
+            @click="applyDetected"
+          >
             {{ t('inspector.testConfig.detect.apply') }}
           </UButton>
         </div>
@@ -628,7 +633,6 @@ function setSize(value: InstanceSize) {
               </UButton>
             </div>
           </div>
-
         </template>
         <template v-if="detectApplicable">
           <p v-if="detectResult.urlSource" class="text-2xs text-dimmed">

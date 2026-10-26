@@ -134,9 +134,7 @@ export const PickedModeRestored: Story = {
     const store = useBootstrapStore()
     const list = store.architectures
     store.architectures = []
-    await waitFor(() =>
-      expect(screen.getByRole('radio', { name: 'From scratch' })).toBeChecked(),
-    )
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'From scratch' })).toBeChecked())
     store.architectures = list
     await waitFor(() => expect(reference).toBeChecked())
   },
