@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@nuxt/ui": "^4.12.0",
-    "@storybook-vue/nuxt": "10.0.2",
+    "@storybook-vue/nuxt": "10.0.3",
     "@storybook/addon-a11y": "10.6.2",
     "@storybook/addon-vitest": "10.6.2",
     "@storybook/vue3": "10.6.2",

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { ProvisioningLogEntry } from '@cat-factory/contracts'
 import { listProvisioningLogsContract } from '@cat-factory/contracts'
-import { expect, within } from 'storybook/test'
+import { expect, userEvent, within } from 'storybook/test'
 import { apiFailure, apiPending, apiResponse } from '~/stories/api'
 import { STORY_WORKSPACE_ID, storyWorkspacePrefix } from '~/stories/workspace'
 import { seedWorkspace, withSeed } from '~/stories/withStores'
@@ -118,13 +118,20 @@ export const Loading: Story = {
   },
 }
 
-/** The read failed: the drawer shows the error. */
+/** The read failed: a translated message in place of the attempts. */
 export const Failed: Story = {
   parameters: {
     api: [apiFailure(listProvisioningLogsContract, { pathPrefix: storyWorkspacePrefix })],
   },
+  // The server's own text shows only behind "Show details".
   play: async ({ canvasElement }) => {
-    await within(canvasElement).findByText(/500 Internal Server Error/)
+    const canvas = within(canvasElement)
+    await canvas.findByText('The provisioning logs could not be loaded.')
+    await expect(canvas.queryByText(/500 Internal Server Error/)).toBeNull()
+    await userEvent.click(canvas.getByTestId('failure-message-show-detail'))
+    await expect(canvas.getByTestId('failure-message-detail')).toHaveTextContent(
+      /500 Internal Server Error/,
+    )
   },
 }
 

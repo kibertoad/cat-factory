@@ -54,7 +54,9 @@ describe('provisioningLogs store — loadForExecution', () => {
     function trackRun(store: ReturnType<typeof useProvisioningLogsStore>) {
       return computed(() => {
         const s = store.byExecution.exec1
-        return s ? { loading: s.loading, ids: s.entries.map((e) => e.id), error: s.error } : null
+        return s
+          ? { loading: s.loading, ids: s.entries.map((e) => e.id), error: s.error?.message ?? null }
+          : null
       })
     }
 

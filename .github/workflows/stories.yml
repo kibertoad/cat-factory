@@ -21,7 +21,7 @@ on:
     - cron: '50 2 * * *'
   # A change to the story lane ITSELF runs it on the PR making the change, so a broken config is
   # found before it merges rather than as a red nightly on main: the Storybook package and its
-  # dependencies, the shared story helpers, the patch and where it is registered, and the lockfile
+  # dependencies, the shared story helpers, the workspace file, and the lockfile
   # (a dependency sweep changes only that and the package files). An ordinary PR pays nothing.
   pull_request:
     paths:
@@ -29,7 +29,6 @@ on:
       - 'frontend/storybook/**'
       - 'frontend/app/app/stories/**'
       - 'frontend/app/package.json'
-      - 'patches/@storybook-vue__nuxt@*.patch'
       - 'pnpm-workspace.yaml'
       - 'pnpm-lock.yaml'
   workflow_dispatch:
