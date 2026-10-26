@@ -290,8 +290,9 @@ export interface StartLocalOptions {
    * seed the Node `start()` takes, stored once per account and inherited by every board of it.
    * Postgres path only: forwarded through `start()`, which boot-backfills every account and
    * replaces a stored pool whose declared seed changed. In mothership mode it is IGNORED with a
-   * boot warning, because the account rows live on the mothership and this node would seal their
-   * secrets with its own key; declare the seed on the mothership instead.
+   * boot warning: an account pool does not reach a mothership node, which opens pool secrets with
+   * its own key while account rows are sealed with the mothership's. A board there needs a pool
+   * registered on it from the node.
    *
    * A local board still runs its agents in host containers by default. The inherited pool takes
    * them only on a board with `delegateAgentsToRunnerPool` on. Omitted ⇒ no seeding.

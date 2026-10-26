@@ -97,8 +97,7 @@ describe('local boot entry point', () => {
   })
 
   it('takes every declared seed the Node entry point does', () => {
-    // `seedAccountRunnerPool` shipped on `start()` alone, with this guard blind to it because it
-    // matched only registries and sources.
+    // Carried by the type assertion above; the assertion gives it a failing test to point at.
     expect(_localSeedsAreReachable).toBe(true)
   })
 

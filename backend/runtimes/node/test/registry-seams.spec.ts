@@ -322,9 +322,8 @@ const _authoringVocabulary:
 // The DECLARED SEEDS: rows a deployment states in code (environment handlers, shared stacks, the
 // account runner pool) that the boot backfills and board creation applies. They are not registries,
 // so the guards above cannot see them, and they fail the same silent way: `createCore` treats an
-// absent seed as "none declared", so an unforwarded one boots clean and seeds nothing.
-// `seedAccountRunnerPool` shipped on `start()` alone; the local sibling spec holds `startLocal` to
-// the same set.
+// absent seed as "none declared", so an unforwarded one boots clean and seeds nothing. The local
+// sibling spec holds `startLocal` to the same set.
 // ---------------------------------------------------------------------------
 
 /** Every declared seed on `CoreDependencies`, derived rather than listed. */

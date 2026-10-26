@@ -394,7 +394,7 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
     // when not in mothership mode — it stays the injected hub).
     ...(realtimeSink ? { realtimeSink } : {}),
     // …and the spread declared runner pool with the one this node may seed (none in mothership mode).
-    seedAccountRunnerPool: localRunnerPoolSeed(options, mothership),
+    seedAccountRunnerPool: localRunnerPoolSeed(options, mothership, logger),
     // Local mode seeds a fresh workspace's model-preset library with Claude Opus 5 as the
     // default: the local facade runs subscription-only models (via the developer's ambient
     // `claude` CLI for inline steps + a leased personal credential for container steps), so
@@ -554,6 +554,10 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
       // explicit test override still wins; in mothership boot there is no `boss`, so this is the
       // only runner wired.
       ...(inProcessRunner ? { workRunner: inProcessRunner } : {}),
+      // A mothership node wires no ACCOUNT runner-pool tier, so the API and the runners module agree
+      // with this node's dispatch: the account rows are sealed with the mothership's key, which this
+      // node cannot open (`runnerPoolBackend.ts`).
+      ...(mothership ? { accountRunnerPoolRepository: undefined } : {}),
       // The node drives its own guided-review jobs under its own driver id, so the mothership's
       // sweeper never re-drives them with the deployment's credentials.
       ...(guidedReviewRunner && mothership

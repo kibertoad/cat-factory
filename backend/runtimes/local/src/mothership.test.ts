@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { noopLogger } from '@cat-factory/kernel'
-import { MachineTokenUnavailableError, logger } from '@cat-factory/server'
+import { MachineTokenUnavailableError } from '@cat-factory/server'
 import { type DriveConfig, NodeRealtimeHub, createDbClient } from '@cat-factory/node-server'
 import { buildLocalContainer } from './container.js'
 import {
@@ -740,24 +740,31 @@ describe('buildLocalContainer (mothership, no Postgres)', () => {
     expect(container.config.localMode?.mothership).toBe(true)
   })
 
-  it('refuses a declared runner pool seed, saying why, rather than sealing org rows locally', () => {
-    vi.stubGlobal('fetch', () => {
-      throw new Error('no network at build time')
+  it('wires no account runner-pool tier and no seeder, since the node cannot open those rows', async () => {
+    const rpcBodies: string[] = []
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      const body = String(init.body)
+      rpcBodies.push(body)
+      // The board belongs to an account, so only a missing account tier stops the account read.
+      const value = body.includes('accountOf') ? 'acc_1' : null
+      return new Response(JSON.stringify({ ok: true, value }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
     })
-    const warn = vi.spyOn(logger, 'warn')
-    const seedSource = vi.fn(() => undefined)
 
     const container = buildLocalContainer({
       env: MOTHERSHIP_ENV,
-      seedAccountRunnerPool: seedSource,
+      seedAccountRunnerPool: () => undefined,
     })
 
-    // No seeder, so neither the boot backfill nor board creation can write an account pool here:
-    // the rows live on the mothership and this node's key is not the one that opens them.
     expect(container.runnerPoolSeeder).toBeUndefined()
-    expect(seedSource).not.toHaveBeenCalled()
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('seedAccountRunnerPool is ignored'))
-    warn.mockRestore()
+    // The API's own service reads the board's row and stops there: no account read crosses the RPC.
+    expect(await container.runners!.connectionService.dispatchReadiness('ws_1')).toEqual({
+      state: 'none',
+    })
+    expect(rpcBodies.length).toBeGreaterThan(0)
+    expect(rpcBodies.filter((body) => body.includes('accountRunnerPool'))).toEqual([])
   })
 })
 
