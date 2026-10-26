@@ -3070,7 +3070,8 @@
         "skills": "Habilidades",
         "foundational": "Servicios fundamentales",
         "riskPolicies": "Políticas de riesgo"
-      }
+      },
+      "configNotLoaded": "No se pudieron cargar los ajustes actuales de esta cuenta, así que guardar sobrescribiría el resto. Vuelve a cargar antes de editar."
     },
     "providerConnection": {
       "fallbackTitle": "Proveedor",
@@ -4357,7 +4358,6 @@
         "maxFailureKindShare": "Proporción de los fallos que puede acaparar una sola causa, por encima de 0 y hasta 1.",
         "maxSweepFailures": "Pasadas fallidas consecutivas de un barrido en segundo plano."
       },
-      "notLoaded": "No se pudieron cargar los ajustes actuales de esta cuenta, así que guardar sobrescribiría el resto. Vuelve a cargar antes de editar.",
       "invalidNumbers": "Estos límites no son números",
       "failureKinds": {
         "label": "Reglas por tipo de fallo",

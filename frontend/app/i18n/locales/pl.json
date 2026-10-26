@@ -3070,7 +3070,8 @@
         "skills": "Umiejętności",
         "foundational": "Usługi fundamentalne",
         "riskPolicies": "Zasady ryzyka"
-      }
+      },
+      "configNotLoaded": "Nie udało się wczytać bieżących ustawień tego konta, więc zapis nadpisałby pozostałe. Odśwież przed edycją."
     },
     "providerConnection": {
       "fallbackTitle": "Dostawca",
@@ -4357,7 +4358,6 @@
         "maxFailureKindShare": "Udział awarii, jaki może przypaść jednej przyczynie, powyżej 0 i do 1.",
         "maxSweepFailures": "Kolejne nieudane przebiegi jednego zadania w tle."
       },
-      "notLoaded": "Nie udało się wczytać bieżących ustawień tego konta, więc zapis nadpisałby pozostałe. Odśwież przed edycją.",
       "invalidNumbers": "Te limity nie są liczbami",
       "failureKinds": {
         "label": "Reguły dla poszczególnych rodzajów awarii",

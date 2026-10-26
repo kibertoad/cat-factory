@@ -3070,7 +3070,8 @@
         "skills": "スキル",
         "foundational": "基盤サービス",
         "riskPolicies": "リスクポリシー"
-      }
+      },
+      "configNotLoaded": "このアカウントの現在の設定を読み込めなかったため、保存すると他の設定が上書きされます。編集する前に再読み込みしてください。"
     },
     "infrastructure": {
       "active": "アクティブ: {backend}",
@@ -4357,7 +4358,6 @@
         "maxFailureKindShare": "単一の原因が占めてよい失敗の割合（0 より大きく 1 まで）。",
         "maxSweepFailures": "ひとつのバックグラウンド監視が連続して失敗した回数。"
       },
-      "notLoaded": "このアカウントの現在の設定を読み込めなかったため、保存すると他の設定が上書きされます。編集する前に再読み込みしてください。",
       "invalidNumbers": "これらの上限値が数値ではありません",
       "failureKinds": {
         "label": "失敗種別ごとのルール",
