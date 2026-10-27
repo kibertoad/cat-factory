@@ -110,6 +110,7 @@ a tracker document](../../AGENTS.md).
 - [Frontend extension mechanism](./frontend-extension-mechanism.md)
 - [GitLab product-surface parity](./gitlab-ui-parity.md)
 - [Global search and deep-linkable routing](./global-search-and-deep-links.md)
+- [Framework-neutral app core (shared client, reducer and contribution vocabulary)](./headless-app-core.md)
 - [Mobile-friendly frontend](./mobile-friendly-frontend.md)
 - [One overlay shell per job (the SPA macro layer)](./overlay-shells.md)
 - [Personas: who each role is for, and the surfaces they should land on (proposal)](./personas.md)
