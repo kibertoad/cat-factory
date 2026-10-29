@@ -11,7 +11,7 @@ import {
   exceedsRequestSizeLimit,
   normalizeImageContentType,
 } from './imageArtifacts.js'
-import type { BinaryArtifactStore } from '@cat-factory/kernel'
+import type { BinaryArtifactKind, BinaryArtifactStore } from '@cat-factory/kernel'
 import { NotFoundError } from '@cat-factory/kernel'
 import { reclaimArtifactOverflow, reserveArtifactSlot } from './artifactSetCap.js'
 import { requireHarnessSession } from './harnessSession.js'
@@ -23,6 +23,9 @@ import { requireHarnessSession } from './harnessSession.js'
  * count is read back from the store per ingest (cheap, indexed by execution).
  */
 const MAX_SCREENSHOTS_PER_RUN = 100
+
+/** The kinds a container may fetch back: material a person handed the run, never another run's output. */
+const HANDED_KINDS: ReadonlySet<BinaryArtifactKind> = new Set(['reference', 'context'])
 
 /** One run's capture set, as {@link reserveArtifactSlot} / {@link reclaimArtifactOverflow} see it. */
 function runCap(store: BinaryArtifactStore, workspaceId: string, executionId: string) {
@@ -160,7 +163,8 @@ export function harnessArtifactController(): Hono<AppEnv> {
   // same store resolution (from the token's workspace, never the request).
   //
   // Two things bound what this can serve. It is scoped to the token's WORKSPACE, so a container
-  // can never read another board's designs; and it serves only `kind:'reference'`, so this route
+  // can never read another board's designs; and it serves only the kinds a person handed the run
+  // (`reference` designs and `context` images attached to the task), so this route
   // cannot become a way for one run to read another run's captured SCREENSHOTS, which is the
   // asymmetry that matters, since references are design material the run was handed on purpose
   // while a screenshot is another run's output. Anything outside that is a 404 rather than a 403:
@@ -172,7 +176,7 @@ export function harnessArtifactController(): Hono<AppEnv> {
     // Same two REASONS the public blob route separates, for the same reason: "not yours (or not a
     // reference)" is something to stop asking for, where a metadata row that outlived its bytes is
     // a storage fault. The harness reports either as a reference it could not fetch.
-    if (!got || got.record.kind !== 'reference') {
+    if (!got || !HANDED_KINDS.has(got.record.kind)) {
       throw new NotFoundError('Artifact', id, { reason: 'artifact_not_found' })
     }
     if (!got.bytes) {

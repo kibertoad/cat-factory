@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { BinaryArtifactRecord } from '@cat-factory/kernel'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import { resolveRunImages } from './run-images.js'
+import { MAX_TASK_IMAGES } from '@cat-factory/contracts'
 import { MAX_DESIGN_IMAGES } from './run-design-images.js'
 
 /**
@@ -137,5 +138,52 @@ describe('resolveRunImages', () => {
     )
     const names = resolved.designImages!.files.map((file) => file.fileName)
     expect(new Set(names).size).toBe(names.length)
+  })
+
+  it('hands the images attached to the task to a task-reading kind, never as a design', async () => {
+    const reads = { count: 0 }
+    const resolved = await resolveRunImages(
+      deps(
+        [
+          upload('Checkout'),
+          upload('crash.png', { id: 'art_ctx', kind: 'context', contentType: 'image/jpeg' }),
+        ],
+        reads,
+      ),
+      'coder',
+      'ws',
+      'blk',
+    )
+    // One listing serves the design half and the attached images alike.
+    expect(reads.count).toBe(1)
+    expect(resolved.taskImages).toEqual({
+      files: [
+        {
+          view: 'crash.png',
+          artifactId: 'art_ctx',
+          contentType: 'image/jpeg',
+          fileName: 'crash-png.jpg',
+        },
+      ],
+      omitted: [],
+    })
+    expect(resolved.designImages?.files.map((file) => file.artifactId)).toEqual(['art_1'])
+  })
+
+  it('resolves attached images only for a kind carrying the trait', async () => {
+    const attached = [upload('sketch', { kind: 'context' })]
+    expect(await resolveRunImages(deps(attached), 'merger', 'ws', 'blk')).toEqual({})
+    expect(
+      (await resolveRunImages(deps(attached), 'reviewer', 'ws', 'blk')).taskImages,
+    ).toBeDefined()
+  })
+
+  it('caps the attached images and names what it dropped', async () => {
+    const records = Array.from({ length: MAX_TASK_IMAGES + 2 }, (_, i) =>
+      upload(`image ${i}`, { id: `art_${i}`, kind: 'context' }),
+    )
+    const set = (await resolveRunImages(deps(records), 'reviewer', 'ws', 'blk')).taskImages!
+    expect(set.files).toHaveLength(MAX_TASK_IMAGES)
+    expect(set.omitted).toEqual(records.slice(MAX_TASK_IMAGES).map((r) => r.view))
   })
 })

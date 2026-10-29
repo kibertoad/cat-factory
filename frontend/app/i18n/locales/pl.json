@@ -5118,6 +5118,19 @@
       "oauthButton": "Połącz z {label}",
       "oauthOr": "lub połącz za pomocą klucza API",
       "disconnectFailed": "Nie można rozłączyć"
+    },
+    "images": {
+      "heading": "Obrazy",
+      "hint": "Zrzuty ekranu, szkice lub diagramy wyjaśniające to zadanie. Agenci pracujący nad nim widzą je wszędzie tam, gdzie ich model przyjmuje obrazy.",
+      "add": "Dodaj obrazy",
+      "count": "{count} z {max}",
+      "truncated": "Zadanie może mieć najwyżej {max} obrazów, więc dodano tylko pierwsze.",
+      "remove": "Usuń {name}",
+      "unnamed": "Załączony obraz",
+      "attached": "Załączono obrazy",
+      "uploadFailed": "Nie udało się załączyć obrazu",
+      "removeFailed": "Nie udało się usunąć obrazu",
+      "loadFailed": "Nie udało się wczytać załączonych obrazów"
     }
   },
   "bugHunt": {

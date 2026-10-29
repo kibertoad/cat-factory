@@ -243,6 +243,9 @@ naming them is composed by the BACKEND, since only it knows whether this harness
 shown an image at all and which views the run was not sent, so the harness speaks up only to
 CORRECT that list when a picture did not land.
 
+The images a person attached to the task ride the same shape under `taskImages`, downloaded into
+`.cat-context/task-images/`, with the same correction-only rule ([`task-images.md`](../../docs/task-images.md)).
+
 `omitted` carries the views the backend's cap dropped. They are stated to the agent beside the
 transfers that failed, since from where it stands both are a view to capture with nothing to compare
 against. This parser keeps a higher backstop of its own against a body claiming more files than any
@@ -538,6 +541,7 @@ verdict is stated.
 | `src/reproduction-proof.ts` | Bugfix reproduction proof: runs the job's declared reproduction command against two symmetric fresh worktrees (the pre-fix tree and the final tree) and computes red-then-green from the exit codes, with a repair loop that never fails the run. Generic: keyed off the job body, never the agent kind. |
 | `src/agent-capabilities.ts` | The agent CAPABILITIES a job body carries: the run's `skills` (a `SKILL.md` payload + resources) and its `mcpServers` (tool servers): with their defensive parsing and the per-CLI config writers (`--mcp-config` JSON for claude-code, `[mcp_servers.*]` TOML for Codex). Backend-authored data the harness only MATERIALISES: adding a skill or a tool server is a backend registration, never a harness change. |
 | `src/context-images.ts` | The TRANSFER half of both image manifests: downloads a manifest's images into a subdirectory of `.cat-context/` on the run's own container session token, bounded per image and per pass, and reports what did not land. Best-effort, time-bounded and IDEMPOTENT over the checkout, so a repair round re-costs a stat rather than a transfer. Shared, because the transfer is identical for both; what differs is what the files MEAN, which is each caller's own module below. |
+| `src/task-images.ts` | The images ATTACHED to the task: downloads the `taskImages` manifest into `.cat-context/task-images/` and, like the design pictures, speaks only to correct the backend prompt when one did not land. |
 | `src/design-images.ts` | The task's DESIGN PICTURES: downloads the manifest a building job body carries into `.cat-context/design-renders/`, for an agent CLI that can read an image into its turn. Says NOTHING on success (the backend's prompt already names every file and its view) and speaks only to correct that list when a picture is not here, because an agent told to open a file that is absent goes looking for the design rather than for the transfer. |
 | `src/reference-screenshots.ts` | The task's REFERENCE DESIGN images: downloads the manifest a capturing job body carries into `.cat-context/reference-screenshots/` (on the run's own container session token) and composes the prompt block naming each file's view. Best-effort, time-bounded and IDEMPOTENT over the checkout, so a repair round re-costs a stat rather than a transfer. A reference that is not on disk is NAMED to the agent, whether a transfer failed or the backend's cap dropped the view, because on disk an absent file and a screen the design does not have are the same thing. Backend-authored throughout, including the file names. |
 | `src/bootstrap-mode.ts` | The repo-bootstrap MODE: clone-a-reference-or-scaffold → run the agent → refuse to push an empty tree → reinit + force-push to the pre-created target repo. |

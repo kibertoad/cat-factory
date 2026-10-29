@@ -4574,6 +4574,19 @@
       "oauthButton": "Mit {label} verbinden",
       "oauthOr": "oder mit einem API-Schlüssel verbinden",
       "disconnectFailed": "Trennen nicht möglich"
+    },
+    "images": {
+      "heading": "Bilder",
+      "hint": "Screenshots, Skizzen oder Diagramme, die diese Aufgabe erklären. Agenten, die daran arbeiten, sehen sie überall dort, wo ihr Modell Bilder annimmt.",
+      "add": "Bilder hinzufügen",
+      "count": "{count} von {max}",
+      "truncated": "Eine Aufgabe enthält höchstens {max} Bilder, daher wurden nur die ersten hinzugefügt.",
+      "remove": "{name} entfernen",
+      "unnamed": "Angehängtes Bild",
+      "attached": "Bilder angehängt",
+      "uploadFailed": "Das Bild konnte nicht angehängt werden",
+      "removeFailed": "Das Bild konnte nicht entfernt werden",
+      "loadFailed": "Die angehängten Bilder konnten nicht geladen werden"
     }
   },
   "bugHunt": {

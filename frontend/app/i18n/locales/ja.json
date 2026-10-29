@@ -5118,6 +5118,19 @@
       "oauthButton": "{label} で接続",
       "oauthOr": "または API キーで接続",
       "disconnectFailed": "切断できませんでした"
+    },
+    "images": {
+      "heading": "画像",
+      "hint": "このタスクを説明するスクリーンショット、スケッチ、図。モデルが画像を受け付ける場合、このタスクに取り組むエージェントに表示されます。",
+      "add": "画像を追加",
+      "count": "{count} / {max}",
+      "truncated": "1つのタスクに添付できる画像は最大 {max} 件のため、最初の画像だけを追加しました。",
+      "remove": "{name} を削除",
+      "unnamed": "添付画像",
+      "attached": "画像を添付しました",
+      "uploadFailed": "画像を添付できませんでした",
+      "removeFailed": "画像を削除できませんでした",
+      "loadFailed": "添付画像を読み込めませんでした"
     }
   },
   "bugHunt": {

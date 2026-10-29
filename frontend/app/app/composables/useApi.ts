@@ -31,6 +31,7 @@ import { initiativeApi } from './api/initiative'
 import { docInterviewApi } from './api/docInterview'
 import { guidedReviewApi } from './api/guidedReview'
 import { visualConfirmApi } from './api/visualConfirm'
+import { taskImagesApi } from './api/taskImages'
 import { kaizenApi } from './api/kaizen'
 import { localSettingsApi } from './api/localSettings'
 import { modelsApi } from './api/models'
@@ -145,6 +146,7 @@ export function useApi() {
     ...bugFishingApi(ctx),
     ...humanTestApi(ctx),
     ...visualConfirmApi(ctx),
+    ...taskImagesApi(ctx),
     ...humanReviewApi(ctx),
     ...kaizenApi(ctx),
     ...localSettingsApi(ctx),

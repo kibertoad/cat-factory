@@ -56,6 +56,7 @@ describe('designImagesSection', () => {
       unknown_model_image_input: 'does not know whether',
       inline_harness_text_only: 'text-only channel',
       consensus_panel: 'multi-model panel',
+      delegated_brief: 'external executor',
       transfer_failed: 'could not be retrieved',
     }
     for (const [reason, phrase] of Object.entries(phrases) as [

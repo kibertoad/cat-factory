@@ -5118,6 +5118,19 @@
       "oauthButton": "Conectar con {label}",
       "oauthOr": "o conecta con una clave API",
       "disconnectFailed": "No se pudo desconectar"
+    },
+    "images": {
+      "heading": "Imágenes",
+      "hint": "Capturas, bocetos o diagramas que explican esta tarea. Los agentes que trabajan en ella los ven siempre que su modelo acepte imágenes.",
+      "add": "Añadir imágenes",
+      "count": "{count} de {max}",
+      "truncated": "Una tarea admite como máximo {max} imágenes, así que solo se añadieron las primeras.",
+      "remove": "Quitar {name}",
+      "unnamed": "Imagen adjunta",
+      "attached": "Imágenes adjuntadas",
+      "uploadFailed": "No se pudo adjuntar la imagen",
+      "removeFailed": "No se pudo quitar la imagen",
+      "loadFailed": "No se pudieron cargar las imágenes adjuntas"
     }
   },
   "bugHunt": {

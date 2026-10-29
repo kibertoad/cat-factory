@@ -20,6 +20,8 @@ export function buildDispatchPromptContext(
     tools: ResolvedToolServers
     /** Whether the design pictures were attached, and the reason when they were not. */
     designImageDelivery?: DesignImageDelivery | undefined
+    /** The same verdict for the images attached to the task. */
+    taskImageDelivery?: DesignImageDelivery | undefined
     /**
      * The frame's test credentials as resolved HERE, from the read that produced the values this
      * job carries. It overrides the engine's own earlier read of the same store, and normally says
@@ -31,7 +33,7 @@ export function buildDispatchPromptContext(
     testCredentials?: ResolvedTestCredentials | undefined
   },
 ): AgentRunContext {
-  const { tools, designImageDelivery, testCredentials } = resolved
+  const { tools, designImageDelivery, taskImageDelivery, testCredentials } = resolved
   return {
     ...context,
     ...(tools.toolServers.length ? { toolServers: tools.toolServers } : {}),
@@ -39,6 +41,7 @@ export function buildDispatchPromptContext(
       ? { unavailableToolServers: tools.unavailableToolServers }
       : {}),
     ...(designImageDelivery ? { designImageDelivery } : {}),
+    ...(taskImageDelivery ? { taskImageDelivery } : {}),
     ...(testCredentials ? { testSecrets: testCredentials.brief } : {}),
   }
 }

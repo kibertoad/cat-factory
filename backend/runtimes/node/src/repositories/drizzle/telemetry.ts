@@ -1226,6 +1226,29 @@ export class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadat
     return rows.map(rowToBinaryArtifact)
   }
 
+  async listByBlocks(
+    workspaceId: string,
+    blockIds: readonly string[],
+  ): Promise<BinaryArtifactRecord[]> {
+    const ids = [...new Set(blockIds)]
+    const rows: (typeof binaryArtifacts.$inferSelect)[] = []
+    for (let i = 0; i < ids.length; i += 500) {
+      const found = await this.db
+        .select()
+        .from(binaryArtifacts)
+        .where(
+          and(
+            eq(binaryArtifacts.workspace_id, workspaceId),
+            inArray(binaryArtifacts.block_id, ids.slice(i, i + 500)),
+          ),
+        )
+      rows.push(...found)
+    }
+    return rows
+      .sort((a, b) => a.created_at - b.created_at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .map(rowToBinaryArtifact)
+  }
+
   async listByDocument(
     workspaceId: string,
     document: DocumentArtifactRef,

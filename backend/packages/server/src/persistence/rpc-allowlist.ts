@@ -1273,6 +1273,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByExecution: { scope: { kind: 'workspace', arg: 0 } },
     countByExecution: { scope: { kind: 'workspace', arg: 0 } },
     listByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    // The block-delete reclaim's read: a task's attached images are retained until their block
+    // goes, so a delete must reach the mothership's rows or they would outlive the task.
+    listByBlocks: { scope: { kind: 'workspace', arg: 0 } },
     countByBlock: { scope: { kind: 'workspace', arg: 0 } },
     // The document reclaim's two halves: an import running on a node retains a design source's
     // rendered frames and replaces the previous revision's, so both have to reach the mothership's

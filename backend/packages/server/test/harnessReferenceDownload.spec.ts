@@ -108,6 +108,19 @@ describe('GET /v1/artifacts/reference/:id', () => {
     expect((await get(app, 'art_1', await mintToken('ws_2'))).status).toBe(404)
   })
 
+  it('serves an image attached to the task, which the run was handed too', async () => {
+    const { app } = makeApp({
+      rows: {
+        art_1: {
+          record: record({ kind: 'context', view: 'crash.png' }),
+          bytes: new Uint8Array([4]),
+        },
+      },
+    })
+
+    expect((await get(app, 'art_1', await mintToken())).status).toBe(200)
+  })
+
   it('will not serve another run’s captured SCREENSHOT through the reference route', async () => {
     const { app } = makeApp({
       rows: {

@@ -962,6 +962,7 @@ describe('binary-artifact metadata surface (visual-confirmation gate, workspace-
     { method: 'get', args: ['art_1'] },
     { method: 'listByExecution', args: ['ex_1'] },
     { method: 'listByBlock', args: ['blk_1'] },
+    { method: 'listByBlocks', args: [['blk_1', 'blk_2']] },
   ]
 
   for (const { method, args } of WORKSPACE_METHODS) {

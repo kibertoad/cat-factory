@@ -39,8 +39,12 @@ import * as v from 'valibot'
  * pairs against reference designs. An added enum member is the additive change the public API
  * makes freely; a consumer that branches on the two it knows treats this one as unrecognised,
  * which is the correct reading for it.
+ *
+ * `context` is an image a person attached to the task to explain it (a bug screenshot, a sketch).
+ * It is always `task`-scoped, it is what the run's agents were shown, and it is never a reference a
+ * screenshot is judged against.
  */
-export const publicArtifactKindSchema = v.picklist(['screenshot', 'reference', 'asset'])
+export const publicArtifactKindSchema = v.picklist(['screenshot', 'reference', 'asset', 'context'])
 export type PublicArtifactKind = v.InferOutput<typeof publicArtifactKindSchema>
 
 /**

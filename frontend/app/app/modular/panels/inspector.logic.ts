@@ -39,6 +39,7 @@ export const INSPECTOR_PANEL_IDS = [
   'task-review-target',
   'task-context-docs',
   'task-context-issues',
+  'task-context-images',
   'recurring-schedule',
   'task-execution',
   'task-estimate',
@@ -129,6 +130,9 @@ export const INSPECTOR_PANEL_SPECS: readonly InspectorPanelSpec[] = [
   // Shared with the initiative body — an initiative takes the same attachments a task does.
   { id: 'task-context-docs', order: 10, when: takesContext },
   { id: 'task-context-issues', order: 20, when: takesContext },
+  // A task only: the images reach the agents that work the task, and an initiative's planning
+  // pipeline does not read them.
+  { id: 'task-context-images', order: 25, when: isTask },
   { id: 'recurring-schedule', order: 30, when: isTask },
   // Shared with the initiative body — the panel renders a RUN, and an initiative has one.
   { id: 'task-execution', order: 40, when: hasRuns },

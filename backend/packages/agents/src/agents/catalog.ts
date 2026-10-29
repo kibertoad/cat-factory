@@ -6,6 +6,7 @@ import {
   e2eTargetSection,
 } from './prompts/acceptance.js'
 import { isStandardsContextFile } from './runtime/fragments.js'
+import { taskImagesSection } from './prompts/task-images.js'
 import { companionCheckoutSection, companionSystemPrompt } from './prompts/companion.js'
 import { companionTargets } from './kinds/companions.js'
 import { READ_ONLY_GUARDRAIL, isReadOnlyAgentKind } from './kinds/read-only.js'
@@ -418,6 +419,9 @@ export function userPromptFor(
   const composed = [
     (text: string) => withCompanionCheckout(text, context, registry, opts),
     (text: string) => withInjectedContext(text, context, opts),
+    // Invariant across a rework loop like the context fold, and applied here rather than in any
+    // one template so every kind, built-in or registered, states the task's attached images.
+    (text: string) => text + taskImagesSection(context),
     (text: string) => withRevision(text, context),
     (text: string) => withPriorReview(text, context),
     (text: string) => withGradingBar(text, context),
