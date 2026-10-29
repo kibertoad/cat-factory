@@ -268,6 +268,15 @@ export type OperationalCounter =
    * line at the increment site, as every id does.
    */
   | 'followup.send_back_dropped'
+  /**
+   * A finished run whose steps were NOT scheduled for Kaizen grading because the workspace's
+   * Kaizen model cannot drive the inline grader (a subscription-only model this deployment can't
+   * run inline, or a model with no usable provider). Counted per RUN skipped.
+   *
+   * The SPA's banner covers only the workspace default preset, so a climbing rate means grading is
+   * dark for tasks the banner does not see. UNDIMENSIONED: the run and workspace ride the log line.
+   */
+  | 'kaizen.grading_skipped'
 
 // Deliberately NOT a counter here: "jobs sitting in a dead-letter queue". It is a LEVEL, and
 // the only thing that can read it is a periodic `SELECT` over the queue tables — which returns
