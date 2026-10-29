@@ -434,6 +434,11 @@ function buildBoardConfigRepos() {
       settle: async () => undefined,
       get: async (key: { workspaceId: string }) => ({ ...key }),
     },
+    refinedRequirementsPostRepository: {
+      claim: async (key: { workspaceId: string }) => key.workspaceId === 'ws_in',
+      settle: async () => undefined,
+      get: async (key: { workspaceId: string }) => ({ ...key }),
+    },
     // Its INBOUND mirror image, wired here but deliberately OFF the allow-list: a tracker comment
     // reaches the deployment holding the public webhook URL, so a laptop never receives a delivery
     // and has nothing to claim. Wired so the refusal proves the allow-list rather than absent

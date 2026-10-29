@@ -2,6 +2,7 @@ import {
   acceptRequirementRecommendationContract,
   getRequirementReviewContract,
   incorporateRequirementsContract,
+  postRefinedRequirementsContract,
   proceedRequirementsContract,
   reRequestRequirementRecommendationContract,
   reReviewRequirementsContract,
@@ -213,6 +214,17 @@ export function requirementReviewController(): Hono<AppEnv> {
         c.req.valid('json').choice,
       )
     return c.json(review, 200)
+  })
+
+  // Post the refined requirements onto the block's linked tracker issue(s) as a comment, on the
+  // person's request. Idempotent per document; the per-issue outcome says what landed where.
+  buildHonoRoute(app, postRefinedRequirementsContract, async (c) => {
+    const publisher = requireCapability(
+      requireRequirements(c).publisher,
+      'Posting refined requirements to tracker issues is not configured',
+    )
+    const result = await publisher.publish(param(c, 'workspaceId'), c.req.valid('param').blockId)
+    return c.json(result, 200)
   })
 
   return app

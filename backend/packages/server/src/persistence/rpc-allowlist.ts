@@ -642,6 +642,15 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     settle: { scope: { kind: 'workspaceField', arg: 0 } },
     get: { scope: { kind: 'workspaceField', arg: 0 } },
   },
+  // Its sibling for the refined-requirements post: a person asks for it from the review window,
+  // which a mothership-mode node serves, so the claim taken before each comment must reach the org
+  // store or a second click would post the document again. Same key-as-arg0 `workspaceField` rule
+  // and the same secret-free row.
+  refinedRequirementsPostRepository: {
+    claim: { scope: { kind: 'workspaceField', arg: 0 } },
+    settle: { scope: { kind: 'workspaceField', arg: 0 } },
+    get: { scope: { kind: 'workspaceField', arg: 0 } },
+  },
   // The agent context resolves the block's provisioned environment per step
   // (`resolveForBlock`/`get`, both workspace-keyed), and, since the secrets-delegation slice,
   // a mothership-mode node PROVISIONS for real: the access handle and the provider's

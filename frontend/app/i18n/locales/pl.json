@@ -769,7 +769,9 @@
         "thread_busy": "Ten wątek wciąż odpowiada",
         "draft_conflict": "Ten szkic się zmienił",
         "session_stale": "Pull request poszedł dalej",
-        "cursor_expired": "Kanał zmian wyszedł poza ten kursor"
+        "cursor_expired": "Kanał zmian wyszedł poza ten kursor",
+        "refined_requirements_unavailable": "Brak jeszcze dopracowanych wymagań",
+        "no_linked_issues": "Brak powiązanego zgłoszenia"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -830,7 +832,9 @@
         "thread_busy": "Poprzednie pytanie w tym wątku nie ma jeszcze odpowiedzi. Poczekaj na nią albo zapytaj w innym wątku.",
         "draft_conflict": "Od wczytania ten szkic komentarza został edytowany, opublikowany lub odrzucony. Wczytaj szkice ponownie i wprowadź zmianę jeszcze raz.",
         "session_stale": "Po przygotowaniu tej recenzji pojawiły się nowe commity, więc szkice mogą wskazywać złe linie. Odśwież recenzję, sprawdź szkice i dopiero wtedy opublikuj.",
-        "cursor_expired": "Zmiany po tym kursorze nie są już przechowywane. Pobierz nowy zrzut katalogu, a potem śledź kanał od pozycji, którą zwróci."
+        "cursor_expired": "Zmiany po tym kursorze nie są już przechowywane. Pobierz nowy zrzut katalogu, a potem śledź kanał od pozycji, którą zwróci.",
+        "refined_requirements_unavailable": "Przegląd nie przygotował jeszcze poprawionego dokumentu albo właśnie go przepisuje. Poczekaj na koniec włączania odpowiedzi, a potem opublikuj ponownie.",
+        "no_linked_issues": "To zadanie nie ma powiązanego zgłoszenia w trackerze. Powiąż zgłoszenie, z którego pochodzi, a potem opublikuj ponownie."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -5967,6 +5971,23 @@
     "reRequest": "Poproś ponownie",
     "finalRequirements": "Ostateczne wymagania",
     "incorporatedDraft": "Włączone wymagania (wersja robocza)",
+    "postToIssues": {
+      "action": "Opublikuj w powiązanych zgłoszeniach",
+      "hint": "Dodaje te wymagania jako komentarz do każdego powiązanego zgłoszenia w trackerze. Opis zgłoszenia się nie zmienia.",
+      "error": "Nie udało się opublikować wymagań w powiązanych zgłoszeniach",
+      "toast": {
+        "posted": "Wymagania opublikowano w powiązanych zgłoszeniach",
+        "nothingNew": "Powiązane zgłoszenia mają już te wymagania",
+        "partial": "Niektóre powiązane zgłoszenia nie otrzymały wymagań"
+      },
+      "outcome": {
+        "posted": "opublikowano",
+        "already_posted": "już opublikowano",
+        "in_flight": "publikacja nadal trwa",
+        "failed": "nie powiodło się, opublikuj ponownie, aby spróbować jeszcze raz",
+        "unsupported": "do tego trackera nie można zapisywać"
+      }
+    },
     "stats": {
       "findings": "Uwagi",
       "open": "Otwarte",

@@ -1,7 +1,7 @@
 // Pure helpers for filing a Linear issue: the `issueCreate` GraphQL mutation, its
 // variables, and parsing the response. Kept out of the service so they are
-// unit-testable without a live API. Linear descriptions are Markdown, so (unlike
-// Jira's `markdownToAdf`) the body passes through unchanged.
+// unit-testable without a live API. Linear descriptions are Markdown, so the body passes through
+// unchanged (Jira's goes through `markdownToAdf`).
 
 /** The `issueCreate` mutation (returns the created issue's identifier + URL). */
 export const LINEAR_ISSUE_CREATE_MUTATION = `mutation CreateIssue($input: IssueCreateInput!) {

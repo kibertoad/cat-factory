@@ -86,6 +86,31 @@ software: an invention that now reads as researched. Its `groundedIn` provenance
 `project-spec` / `web` / `general-practice`) is reported per suggestion, and an unreported level
 stays NULL rather than defaulting.
 
+## Posting the refined requirements back to the source issue
+
+When the task came from a tracker issue (Jira, GitHub Issues, GitLab Issues, Linear, or a
+deployment's own source), the review window offers "Post to linked issues" once a document exists.
+`RefinedRequirementsPublisher` (orchestration) picks the document and refuses with
+`refined_requirements_unavailable` while there is none or a fold is rewriting it, and with
+`no_linked_issues` when nothing is linked. `IssueWritebackService.postRefinedRequirements`
+(integrations) does the rest through each source's `writeback.comment`, so a source gets it by
+declaring the adapter it already declares for the PR comments.
+
+- **A comment, never an edit of the description.** The reporter's text stays as written and the
+  revision sits under it, opened by the platform marker that keeps the inbound reply path from
+  reading it as a human's comment.
+- **Converted mechanically, with no model.** The document is Markdown in a fixed structure, GitHub,
+  GitLab and Linear take Markdown as it is, and Jira's transport converts it to ADF with
+  `tracker/markdown-adf.logic.ts` (nested lists, code, emphasis and links included). Nothing in that
+  mapping needs judgement, so an LLM step would only add cost and a chance to change the meaning.
+- **A person asks for it.** It is never automatic: a run that writes over someone's tracker unasked
+  is the outcome to avoid, and the opt-in writeback settings exist for one-line courtesy comments,
+  not for a document.
+- **At most once per document and issue.** The `refined_requirements_posts` marker is claimed
+  before each comment and keyed by `(workspace, review, issue, SHA-256 of the document)`, so a
+  repeated click reports `already_posted` and a revised document posts again. `failed` is retried
+  by posting again; a `pending` claim is re-taken only after its TTL.
+
 ## Inline engine kinds and prompt overrides
 
 These kinds run as bare inline `generateText` calls, so they bypass `systemPromptFor` and take

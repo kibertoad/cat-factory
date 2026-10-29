@@ -1,4 +1,13 @@
+import type { RefinedRequirementsPostResult } from '@cat-factory/contracts'
 import type { Block, PullRequestRef, TaskSourceKind } from '../domain/types.js'
+
+/** A requirements review's revised document, to be posted onto the block's linked issues. */
+export interface RefinedRequirementsPost {
+  /** The review the document belongs to: half of the idempotency key. */
+  reviewId: string
+  /** The incorporated requirements, as Markdown. Model-authored, so untrusted. */
+  document: string
+}
 
 /** One open finding of a parked review, as rendered onto a tracker issue. */
 export interface ReviewQuestionFinding {
@@ -177,6 +186,22 @@ export interface IssueWritebackProvider {
     issue: { source: TaskSourceKind; externalId: string },
     ack: ReviewReplyAck,
   ): Promise<void>
+  /**
+   * A person asked for the block's refined requirements to be posted back to the issue(s) the task
+   * came from. Posted as a COMMENT on each linked issue, never as an edit of its description, so
+   * the reporter's own text survives. Converted mechanically per vendor by the comment transport.
+   *
+   * Ungated by the workspace writeback settings: it is an explicit request, not a courtesy. Each
+   * issue is claimed through the per-`(review, issue, document)` marker before its comment is
+   * attempted, so a repeated request never posts the same document twice. Failures are isolated
+   * per issue and REPORTED in the result rather than thrown, so one broken tracker does not hide
+   * what landed on the others. An empty result means the block has no linked issues.
+   */
+  postRefinedRequirements(
+    workspaceId: string,
+    blockId: string,
+    post: RefinedRequirementsPost,
+  ): Promise<RefinedRequirementsPostResult>
 }
 
 /** How a ticket reply's command was disposed of, when it could not be applied. */

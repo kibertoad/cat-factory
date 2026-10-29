@@ -10,6 +10,9 @@ import {
   noopLogger,
   type PullRequestRef,
   redactSecrets,
+  REFINED_REQUIREMENTS_POST_CLAIM_TTL_MS,
+  type RefinedRequirementsPost,
+  type RefinedRequirementsPostRepository,
   resolveWritebackFlag,
   REVIEW_QUESTION_POLICIES,
   REVIEW_QUESTION_POST_CLAIM_TTL_MS,
@@ -28,15 +31,22 @@ import {
   type TaskWritebackContext,
   type TrackerSettingsRepository,
   trackerWebhookSecret,
+  UnavailableError,
 } from '@cat-factory/kernel'
+import type { RefinedRequirementsPostResult } from '@cat-factory/contracts'
 import { issueRefFor, renderReviewQuestionsComment } from './reviewQuestions.logic.js'
 import { renderReviewReplyAck } from './reviewReplies.logic.js'
+import {
+  refinedDocumentHash,
+  renderRefinedRequirementsComment,
+} from './refinedRequirements.logic.js'
 import { MapTaskSourceRegistry } from '../tasks/tasks.logic.js'
 
 // IssueWritebackService: the runtime-neutral `IssueWritebackProvider`. As a task's PR progresses
 // the execution engine calls it to write back to the task's linked tracker issue(s): comment when
 // the PR opens, comment + resolve when it merges, claim an issue the recurring intake picked up,
-// echo a parked review's open questions, and acknowledge a reply that answered them.
+// echo a parked review's open questions, acknowledge a reply that answered them, and post a
+// review's refined requirements when a person asks for it.
 //
 // It owns the SHARED half of every one of those: the workspace's writeback settings (with the
 // per-task override on the block), the linked-issue lookup, the per-issue failure isolation, and
@@ -87,6 +97,11 @@ export interface IssueWritebackServiceDependencies {
    * findings on every durable-driver replay (see the port doc).
    */
   reviewQuestionPostRepository?: ReviewQuestionPostRepository
+  /**
+   * Idempotency markers for posting refined requirements. Absent ⇒ that post REFUSES rather than
+   * posting unguarded: a repeated click would leave a second copy of a long document on the issue.
+   */
+  refinedRequirementsPostRepository?: RefinedRequirementsPostRepository
   /**
    * Wall clock for the marker rows and their abandonment window. The facade's shared `Clock`,
    * like every other service here; defaults to the real clock so a test can pin time without
@@ -350,6 +365,97 @@ export class IssueWritebackService implements IssueWritebackProvider {
   ): Promise<void> {
     const resolved = await this.resolveSources(workspaceId, [issue])
     await this.comment(workspaceId, resolved, issue, renderReviewReplyAck(ack))
+  }
+
+  async postRefinedRequirements(
+    workspaceId: string,
+    blockId: string,
+    post: RefinedRequirementsPost,
+  ): Promise<RefinedRequirementsPostResult> {
+    const markers = this.deps.refinedRequirementsPostRepository
+    if (!markers) {
+      throw new UnavailableError('Posting refined requirements to tracker issues is not configured')
+    }
+    const issues = await this.deps.taskRepository.listByBlock(workspaceId, blockId)
+    if (issues.length === 0) return { issues: [] }
+    const resolved = await this.resolveSources(workspaceId, issues)
+    const body = renderRefinedRequirementsComment(post.document)
+    const documentHash = await refinedDocumentHash(post.document)
+    const now = () => (this.deps.clock ?? Date).now()
+    const results: RefinedRequirementsPostResult['issues'] = []
+    // Sequential for the same reason as the question post: one long comment per tracker at a time.
+    for (const issue of issues) {
+      const ref = { source: issue.source, externalId: issue.externalId }
+      if (resolved.get(issue.source)?.status === 'unwired') {
+        this.log.warn('no writeback is wired for this source; refined requirements not posted', {
+          workspaceId,
+          blockId,
+          ...ref,
+        })
+        results.push({ ...ref, outcome: 'unsupported' })
+        continue
+      }
+      const key = {
+        workspaceId,
+        reviewId: post.reviewId,
+        issueRef: issueRefFor(issue),
+        documentHash,
+      }
+      const at = now()
+      try {
+        const claimed = await markers.claim(key, {
+          now: at,
+          reclaimPendingBefore: at - REFINED_REQUIREMENTS_POST_CLAIM_TTL_MS,
+        })
+        if (!claimed) {
+          const held = await markers.get(key)
+          results.push({
+            ...ref,
+            outcome: held?.status === 'posted' ? 'already_posted' : 'in_flight',
+          })
+          continue
+        }
+      } catch (error) {
+        // An unreadable marker is a failure to retry, never a reason to assume the post landed.
+        this.log.warn('refined requirements claim failed', {
+          workspaceId,
+          blockId,
+          ...ref,
+          ...describeError(error),
+        })
+        results.push({ ...ref, outcome: 'failed' })
+        continue
+      }
+      try {
+        await this.comment(workspaceId, resolved, issue, body)
+      } catch (e) {
+        const error = (redactSecrets(getErrorMessage(e)) ?? '').slice(0, 500)
+        this.log.warn('refined requirements post failed', {
+          workspaceId,
+          blockId,
+          ...ref,
+          err: error,
+        })
+        await runBestEffort(
+          this.log,
+          'refinedRequirementsPost.settleFailed',
+          () => markers.settle(key, { status: 'failed', error }, now()),
+          { workspaceId, blockId, ...ref },
+        )
+        results.push({ ...ref, outcome: 'failed' })
+        continue
+      }
+      // The comment landed, so a marker write that fails must not report it as failed: that would
+      // invite a second post. The row stays `pending` and only its TTL makes it claimable again.
+      await runBestEffort(
+        this.log,
+        'refinedRequirementsPost.settlePosted',
+        () => markers.settle(key, { status: 'posted' }, now()),
+        { workspaceId, blockId, ...ref },
+      )
+      results.push({ ...ref, outcome: 'posted' })
+    }
+    return { issues: results }
   }
 
   /**

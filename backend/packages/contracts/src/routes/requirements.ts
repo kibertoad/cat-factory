@@ -2,6 +2,7 @@ import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contrac
 import * as v from 'valibot'
 import {
   incorporateRequirementsSchema,
+  refinedRequirementsPostResultSchema,
   reRequestRecommendationSchema,
   replyReviewItemSchema,
   requestRecommendationsSchema,
@@ -117,4 +118,17 @@ export const resolveRequirementsExceededContract = defineApiContract({
   pathResolver: ({ blockId }) => `/blocks/${blockId}/requirement-review/resolve-exceeded`,
   requestBodySchema: resolveRequirementsExceededSchema,
   responsesByStatusCode: { 200: requirementReviewSchema, ...errorResponses },
+})
+
+/**
+ * Post the block's refined requirements onto its linked tracker issue(s) as a comment. The
+ * issue's own description is never rewritten. Idempotent per document: posting the same
+ * document again reports `already_posted` for every issue that already carries it.
+ */
+export const postRefinedRequirementsContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/requirement-review/post-to-issues`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: refinedRequirementsPostResultSchema, ...errorResponses },
 })

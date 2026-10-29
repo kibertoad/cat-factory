@@ -7,6 +7,7 @@ import {
   incorporateBrainstormContract,
   incorporateClarityContract,
   incorporateRequirementsContract,
+  postRefinedRequirementsContract,
   proceedBrainstormContract,
   proceedClarityContract,
   proceedRequirementsContract,
@@ -97,6 +98,14 @@ export function reviewsApi({ send, ws }: ApiContext) {
     // Proceed: settle the requirements and advance the parked run (all findings dismissed).
     proceedRequirements: (workspaceId: string, blockId: string) =>
       send(proceedRequirementsContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
+
+    // Post the refined requirements onto the block's linked tracker issues as a comment.
+    // Returns the per-issue outcome; posting the same document again is a no-op per issue.
+    postRefinedRequirements: (workspaceId: string, blockId: string) =>
+      send(postRefinedRequirementsContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+      }),
 
     // Resolve a review that hit its iteration cap: extra-round / proceed / stop-reset.
     resolveRequirementsExceeded: (

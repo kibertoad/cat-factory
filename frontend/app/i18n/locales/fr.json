@@ -769,7 +769,9 @@
         "thread_busy": "Ce fil répond encore",
         "draft_conflict": "Ce brouillon a changé",
         "session_stale": "La pull request a évolué",
-        "cursor_expired": "Le flux de modifications a dépassé ce curseur"
+        "cursor_expired": "Le flux de modifications a dépassé ce curseur",
+        "refined_requirements_unavailable": "Pas encore d’exigences affinées",
+        "no_linked_issues": "Aucun ticket lié"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -830,7 +832,9 @@
         "thread_busy": "La question précédente de ce fil n'a pas encore reçu de réponse. Attends cette réponse ou pose ta question dans un autre fil.",
         "draft_conflict": "Ce brouillon de commentaire a été modifié, publié ou abandonné depuis que tu l'as chargé. Recharge les brouillons et refais ta modification.",
         "session_stale": "De nouveaux commits sont arrivés après la préparation de cette revue, donc ses brouillons peuvent viser les mauvaises lignes. Actualise la revue, vérifie les brouillons, puis publie.",
-        "cursor_expired": "Les modifications après ce curseur ne sont plus conservées. Prenez un nouvel instantané de l’annuaire, puis suivez le flux à partir de la position qu’il indique."
+        "cursor_expired": "Les modifications après ce curseur ne sont plus conservées. Prenez un nouvel instantané de l’annuaire, puis suivez le flux à partir de la position qu’il indique.",
+        "refined_requirements_unavailable": "La revue n’a pas encore produit de document révisé, ou le réécrit en ce moment. Attendez la fin de l’intégration, puis publiez à nouveau.",
+        "no_linked_issues": "Aucun ticket n’est lié à cette tâche. Liez le ticket dont elle provient, puis publiez à nouveau."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -5967,6 +5971,23 @@
     "reRequest": "Redemander",
     "finalRequirements": "Exigences finales",
     "incorporatedDraft": "Exigences incorporées (brouillon)",
+    "postToIssues": {
+      "action": "Publier dans les tickets liés",
+      "hint": "Ajoute ces exigences en commentaire sur chaque ticket lié. La description du ticket n’est pas modifiée.",
+      "error": "Impossible de publier les exigences dans les tickets liés",
+      "toast": {
+        "posted": "Exigences publiées dans les tickets liés",
+        "nothingNew": "Les tickets liés contiennent déjà ces exigences",
+        "partial": "Certains tickets liés n’ont pas reçu les exigences"
+      },
+      "outcome": {
+        "posted": "publié",
+        "already_posted": "déjà publié",
+        "in_flight": "une publication est encore en cours",
+        "failed": "échec, publiez à nouveau pour réessayer",
+        "unsupported": "impossible d’écrire dans ce gestionnaire de tickets"
+      }
+    },
     "stats": {
       "findings": "Observations",
       "open": "Ouvertes",

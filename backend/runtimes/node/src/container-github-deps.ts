@@ -74,6 +74,7 @@ import {
   DrizzleReviewQuestionPostRepository,
   DrizzleTrackerCommentIngestRepository,
 } from './repositories/drizzle/settings.js'
+import { DrizzleRefinedRequirementsPostRepository } from './repositories/drizzle/refinedRequirementsPosts.js'
 import { DrizzleUserRepoAccessRepository } from './repositories/userRepoAccess.js'
 
 // The engine's CI/mergeability gate reads never persist rate-limit snapshots (that is the
@@ -637,6 +638,11 @@ function buildNodeIssueWriteback(args: {
     reviewQuestionPostRepository: sourced(
       'reviewQuestionPostRepository',
       (d) => new DrizzleReviewQuestionPostRepository(d),
+    ),
+    // Claimed before each refined-requirements comment, so a repeated request never re-posts.
+    refinedRequirementsPostRepository: sourced(
+      'refinedRequirementsPostRepository',
+      (d) => new DrizzleRefinedRequirementsPostRepository(d),
     ),
     clock,
     // Every hook here is fire-and-forget; without a logger a permanently broken tracker

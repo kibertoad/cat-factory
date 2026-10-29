@@ -959,6 +959,7 @@ export type {
 export type { CreateTicketRequest, CreatedTicket, TicketTrackerProvider } from './ticket-tracker.js'
 export type {
   IssueWritebackProvider,
+  RefinedRequirementsPost,
   ReviewQuestionFinding,
   ReviewQuestionPolicy,
   ReviewQuestionPost,
@@ -976,6 +977,14 @@ export type {
   ReviewQuestionPostStatus,
 } from './review-question-post-repositories.js'
 export { REVIEW_QUESTION_POST_CLAIM_TTL_MS } from './review-question-post-repositories.js'
+export type {
+  RefinedRequirementsPostClaimWindow,
+  RefinedRequirementsPostKey,
+  RefinedRequirementsPostRecord,
+  RefinedRequirementsPostRepository,
+  RefinedRequirementsPostStatus,
+} from './refined-requirements-post-repositories.js'
+export { REFINED_REQUIREMENTS_POST_CLAIM_TTL_MS } from './refined-requirements-post-repositories.js'
 export type {
   TrackerCommentIngestClaimWindow,
   TrackerCommentIngestKey,
