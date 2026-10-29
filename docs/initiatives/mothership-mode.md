@@ -1446,6 +1446,7 @@ never remotely invocable (mothership-internal cron).
 | `taskConnectionRepository`               | ✅ done | connect/list/disconnect (sealed `credentialsCipher`, opened via `/internal/secrets/unseal`)                         |
 | `taskSourceSettingsRepository`           | ✅ done | the per-workspace source on/off toggles (no secrets)                                                                |
 | `reviewQuestionPostRepository`           | ✅ done | engine-written park writeback markers: claim/settle/get on `workspaceField`                                         |
+| `refinedRequirementsPostRepository`      | ✅ done | refined-requirements post markers (a review-window action): claim/settle/get on `workspaceField`                    |
 | `trackerCommentIngestRepository`         | n/a     | inbound webhook dedupe: written where a delivery ARRIVES, which is never a node                                     |
 | `githubInstallationRepository`           | ✅ done | run-path + id-keyed reads; `upsert`/`softDelete` admin (`integrations.manage`), cron `listActive` internal          |
 | `repoProjectionRepository`               | ✅ done | reads + sync/repo-write writes + cursors; `listStale`/`listByInstallation` internal                                 |

@@ -16,6 +16,7 @@ import type { Env } from './env.js'
 import { buildAppRegistry, buildResolveRepoTarget } from './container.js'
 import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleRepository.js'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository.js'
+import { D1RefinedRequirementsPostRepository } from './repositories/D1RefinedRequirementsPostRepository.js'
 import { D1ReviewQuestionPostRepository } from './repositories/D1ReviewQuestionPostRepository.js'
 import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository.js'
 import { D1TaskRepository } from './repositories/D1TaskRepository.js'
@@ -62,6 +63,8 @@ export function selectRecurringDeps(
     // Idempotency markers for the headless clarification loop's question echo — without them
     // the writeback passes through, since a replaying driver would otherwise re-post.
     reviewQuestionPostRepository: new D1ReviewQuestionPostRepository({ db }),
+    // Claimed before each refined-requirements comment, so a repeated request never re-posts.
+    refinedRequirementsPostRepository: new D1RefinedRequirementsPostRepository({ db }),
     clock,
     // Every hook here is fire-and-forget; without a logger a permanently broken tracker
     // connection produces no symptom but comments that never appear.

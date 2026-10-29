@@ -325,6 +325,13 @@ export const CONFLICT_REASONS = [
   // pruned, so replaying cannot bring the consumer's copy up to date. Reconciling from a snapshot
   // is the remedy, which is what the directory-sync client does on its own.
   'cursor_expired',
+  // Posting refined requirements to a block's tracker issues needs a document to post: the review
+  // has not produced one yet, or a fold is rewriting it right now. Waiting for the incorporation is
+  // the remedy.
+  'refined_requirements_unavailable',
+  // Posting refined requirements needs a tracker issue linked to the block. Linking the issue the
+  // task came from is the remedy.
+  'no_linked_issues',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

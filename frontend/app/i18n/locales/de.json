@@ -5259,6 +5259,23 @@
     "reRequest": "Erneut anfordern",
     "finalRequirements": "Endgültige Anforderungen",
     "incorporatedDraft": "Eingearbeitete Anforderungen (Entwurf)",
+    "postToIssues": {
+      "action": "In verknüpften Issues posten",
+      "hint": "Fügt diese Anforderungen als Kommentar zu jedem verknüpften Tracker-Issue hinzu. Die Issue-Beschreibung bleibt unverändert.",
+      "error": "Die Anforderungen konnten nicht in den verknüpften Issues gepostet werden",
+      "toast": {
+        "posted": "Anforderungen in den verknüpften Issues gepostet",
+        "nothingNew": "Die verknüpften Issues enthalten diese Anforderungen bereits",
+        "partial": "Einige verknüpfte Issues haben die Anforderungen nicht erhalten"
+      },
+      "outcome": {
+        "posted": "gepostet",
+        "already_posted": "bereits gepostet",
+        "in_flight": "ein Beitrag läuft noch",
+        "failed": "fehlgeschlagen, zum Wiederholen erneut posten",
+        "unsupported": "in diesen Tracker kann nicht geschrieben werden"
+      }
+    },
     "stats": {
       "findings": "Befunde",
       "open": "Offen",
@@ -6512,7 +6529,9 @@
         "thread_busy": "Dieser Thread antwortet noch",
         "draft_conflict": "Dieser Entwurf hat sich geändert",
         "session_stale": "Der Pull Request hat sich weiterentwickelt",
-        "cursor_expired": "Der Änderungsfeed ist über diesen Cursor hinaus"
+        "cursor_expired": "Der Änderungsfeed ist über diesen Cursor hinaus",
+        "refined_requirements_unavailable": "Noch keine überarbeiteten Anforderungen",
+        "no_linked_issues": "Kein verknüpftes Tracker-Issue"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -6573,7 +6592,9 @@
         "thread_busy": "Die vorherige Frage in diesem Thread ist noch nicht beantwortet. Warte auf die Antwort oder frag in einem anderen Thread.",
         "draft_conflict": "Dieser Kommentarentwurf wurde seit dem Laden bearbeitet, gepostet oder verworfen. Lade die Entwürfe neu und nimm deine Änderung erneut vor.",
         "session_stale": "Nach der Vorbereitung dieser Review kamen neue Commits hinzu, daher zeigen die Entwürfe möglicherweise auf falsche Zeilen. Aktualisiere die Review, prüfe die Entwürfe und poste dann.",
-        "cursor_expired": "Die Änderungen nach diesem Cursor werden nicht mehr aufbewahrt. Erstelle einen neuen Snapshot des Verzeichnisses und folge dem Feed ab der Position, die er meldet."
+        "cursor_expired": "Die Änderungen nach diesem Cursor werden nicht mehr aufbewahrt. Erstelle einen neuen Snapshot des Verzeichnisses und folge dem Feed ab der Position, die er meldet.",
+        "refined_requirements_unavailable": "Die Prüfung hat noch kein überarbeitetes Dokument erstellt oder schreibt es gerade neu. Warte, bis die Einarbeitung abgeschlossen ist, und poste dann erneut.",
+        "no_linked_issues": "Mit dieser Aufgabe ist kein Tracker-Issue verknüpft. Verknüpfe das Issue, aus dem sie stammt, und poste dann erneut."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

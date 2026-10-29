@@ -457,6 +457,41 @@ export type ResolveRequirementsExceededInput = v.InferOutput<
 >
 export type ResolveRequirementsExceededChoice = ResolveRequirementsExceededInput['choice']
 
+/**
+ * What happened on ONE linked tracker issue when the refined requirements were posted to it:
+ *
+ * - `posted`: the comment landed just now.
+ * - `already_posted`: this exact document is already on the issue, so nothing was sent.
+ * - `in_flight`: another post of this document to this issue is still running.
+ * - `failed`: the tracker refused or could not be reached; posting again retries it.
+ * - `unsupported`: the issue's source has no writeback in this deployment.
+ */
+export const refinedRequirementsPostOutcomeSchema = v.picklist([
+  'posted',
+  'already_posted',
+  'in_flight',
+  'failed',
+  'unsupported',
+])
+export type RefinedRequirementsPostOutcome = v.InferOutput<
+  typeof refinedRequirementsPostOutcomeSchema
+>
+
+/** The per-issue result of posting a block's refined requirements to its linked issues. */
+export const refinedRequirementsPostResultSchema = v.object({
+  issues: v.array(
+    v.object({
+      /** The task source the issue was imported from (`jira`, `github`, a namespaced id). */
+      source: v.string(),
+      externalId: v.string(),
+      outcome: refinedRequirementsPostOutcomeSchema,
+    }),
+  ),
+})
+export type RefinedRequirementsPostResult = v.InferOutput<
+  typeof refinedRequirementsPostResultSchema
+>
+
 // NOTE: the durable, in-repo PRESCRIPTIVE specification (the `spec.json` tree with its
 // requirements, domain rules and acceptance criteria) lives in `./spec.ts`. This file
 // is only the transient, per-block CONTEXT review of the linked-prose brief.

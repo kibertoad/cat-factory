@@ -5259,6 +5259,23 @@
     "reRequest": "Richiedi di nuovo",
     "finalRequirements": "Requisiti finali",
     "incorporatedDraft": "Requisiti incorporati (bozza)",
+    "postToIssues": {
+      "action": "Pubblica nelle issue collegate",
+      "hint": "Aggiunge questi requisiti come commento a ogni issue collegata del tracker. La descrizione della issue non cambia.",
+      "error": "Impossibile pubblicare i requisiti nelle issue collegate",
+      "toast": {
+        "posted": "Requisiti pubblicati nelle issue collegate",
+        "nothingNew": "Le issue collegate contengono già questi requisiti",
+        "partial": "Alcune issue collegate non hanno ricevuto i requisiti"
+      },
+      "outcome": {
+        "posted": "pubblicato",
+        "already_posted": "già pubblicato",
+        "in_flight": "una pubblicazione è ancora in corso",
+        "failed": "non riuscito, pubblica di nuovo per riprovare",
+        "unsupported": "non è possibile scrivere in questo tracker"
+      }
+    },
     "stats": {
       "findings": "Rilievi",
       "open": "Aperti",
@@ -6512,7 +6529,9 @@
         "thread_busy": "Questa discussione sta ancora rispondendo",
         "draft_conflict": "Questa bozza è cambiata",
         "session_stale": "La pull request è andata avanti",
-        "cursor_expired": "Il feed delle modifiche ha superato questo cursore"
+        "cursor_expired": "Il feed delle modifiche ha superato questo cursore",
+        "refined_requirements_unavailable": "Nessun requisito raffinato per ora",
+        "no_linked_issues": "Nessuna issue collegata"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6573,7 +6592,9 @@
         "thread_busy": "La domanda precedente in questa discussione non ha ancora una risposta. Attendi la risposta o chiedi in un'altra discussione.",
         "draft_conflict": "Questa bozza di commento è stata modificata, pubblicata o scartata da quando l'hai caricata. Ricarica le bozze e ripeti la modifica.",
         "session_stale": "Sono arrivati nuovi commit dopo la preparazione di questa revisione, quindi le bozze potrebbero puntare alle righe sbagliate. Aggiorna la revisione, controlla le bozze e poi pubblica.",
-        "cursor_expired": "Le modifiche successive a questo cursore non sono più conservate. Acquisisci una nuova istantanea della directory, poi segui il feed dalla posizione che riporta."
+        "cursor_expired": "Le modifiche successive a questo cursore non sono più conservate. Acquisisci una nuova istantanea della directory, poi segui il feed dalla posizione che riporta.",
+        "refined_requirements_unavailable": "La revisione non ha ancora prodotto un documento rivisto, oppure lo sta riscrivendo ora. Attendi la fine dell’incorporazione, poi pubblica di nuovo.",
+        "no_linked_issues": "Questa attività non ha issue del tracker collegate. Collega la issue da cui proviene, poi pubblica di nuovo."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

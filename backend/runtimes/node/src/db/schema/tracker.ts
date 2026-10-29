@@ -45,6 +45,25 @@ export const reviewQuestionPosts = pgTable(
   (t) => [primaryKey({ columns: [t.workspace_id, t.review_id, t.iteration, t.issue_ref] })],
 )
 
+// Idempotency markers for posting refined requirements onto a linked issue (mirror of D1 migration
+// 0111): one row per (workspace, review, linked issue, document hash), CLAIMED before the comment is
+// attempted so a repeated request never posts the same document twice. A revised document has a
+// different hash and posts again.
+export const refinedRequirementsPosts = pgTable(
+  'refined_requirements_posts',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    review_id: text('review_id').notNull(),
+    issue_ref: text('issue_ref').notNull(),
+    document_hash: text('document_hash').notNull(),
+    status: text('status').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    error: text('error'),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.review_id, t.issue_ref, t.document_hash] })],
+)
+
 // Idempotency markers for INBOUND tracker comments (mirror of D1 migration 0064): one row per
 // (workspace, source, external_id, comment_id). Every tracker redelivers, and an async queue job is
 // retried on any error, so the row is CLAIMED before a comment's review commands are applied —

@@ -9,6 +9,7 @@
 // agent step and the spec-writer consume.
 import { parseOutputOutline } from '~/utils/agentOutput'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
+import RefinedRequirementsIssuePost from '~/components/requirements/RefinedRequirementsIssuePost.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import {
   orderFindings,
@@ -1143,6 +1144,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                  `width` prop): the window is `full`-width now, and this is continuous prose that
                  would otherwise run to 200-character lines. Left-aligned rather than centred, so
                  it starts where every finding above it starts. -->
+            <RefinedRequirementsIssuePost
+              v-if="blockId"
+              :block-id="blockId"
+              :disabled="incorporating || !access.canWriteBoard.value"
+            />
             <div v-show="!docCollapsed" class="max-w-3xl">
               <div v-for="s in outline.sections" :key="s.id" class="mb-2">
                 <UButton

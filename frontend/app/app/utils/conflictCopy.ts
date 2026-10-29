@@ -164,6 +164,14 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
     titleKey: 'errors.conflict.title.cursor_expired',
     descriptionKey: 'errors.conflict.description.cursor_expired',
   },
+  refined_requirements_unavailable: {
+    titleKey: 'errors.conflict.title.refined_requirements_unavailable',
+    descriptionKey: 'errors.conflict.description.refined_requirements_unavailable',
+  },
+  no_linked_issues: {
+    titleKey: 'errors.conflict.title.no_linked_issues',
+    descriptionKey: 'errors.conflict.description.no_linked_issues',
+  },
   task_limit_reached: {
     titleKey: 'errors.conflict.title.task_limit_reached',
     descriptionKey: 'errors.conflict.description.task_limit_reached',

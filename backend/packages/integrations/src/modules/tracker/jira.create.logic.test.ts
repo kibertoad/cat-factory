@@ -1,20 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildJiraIssuePayload, markdownToAdf } from './jira.create.logic.js'
-
-describe('markdownToAdf', () => {
-  it('maps headings, paragraphs and bullet lists', () => {
-    const doc = markdownToAdf('# Title\n\nSome prose.\n\n- one\n- two')
-    expect(doc.type).toBe('doc')
-    expect(doc.content[0]).toMatchObject({ type: 'heading', attrs: { level: 1 } })
-    expect(doc.content[1]).toMatchObject({ type: 'paragraph' })
-    expect(doc.content[2]).toMatchObject({ type: 'bulletList' })
-    expect(doc.content[2]!.content).toHaveLength(2)
-  })
-
-  it('never yields empty content (ADF requires non-empty)', () => {
-    expect(markdownToAdf('').content).toHaveLength(1)
-  })
-})
+import { buildJiraIssuePayload } from './jira.create.logic.js'
 
 describe('buildJiraIssuePayload', () => {
   it('builds the create body with project, summary, type and ADF description', () => {

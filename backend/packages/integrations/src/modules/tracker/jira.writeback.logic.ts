@@ -1,4 +1,4 @@
-import { markdownToAdf } from './jira.create.logic.js'
+import { markdownToAdf } from './markdown-adf.logic.js'
 
 // Pure helpers for Jira issue-tracker writeback: building the add-comment payload
 // (POST /rest/api/3/issue/{key}/comment) and picking the transition that resolves

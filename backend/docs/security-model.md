@@ -594,6 +594,10 @@ Everything the agent writes that reaches a parsed surface is treated as hostile:
   boundary" has to be written down to stay a decision rather than an oversight; folding these
   through `hostMarkdown` is the obvious next step and belongs on whichever half moves first, since
   the GitHub and GitLab posters must not diverge on it.
+- Refined requirements posted back to a task's source issue are model-authored (the requirements
+  incorporation editor's document), so they cross `redactSecrets` and `hostMarkdown.prose` before
+  they are posted, and they are posted as a COMMENT: the reporter's description is never rewritten.
+  The Jira transport converts to ADF, where text is inert, and decodes the defusing entities there.
 - Inbound tracker-comment commands are explicit first-token commands only, behind identity,
   data-not-instructions, and iteration-budget guards, and route through the same service methods
   the UI calls: there is no parallel webhook-driven mutation path into the engine.

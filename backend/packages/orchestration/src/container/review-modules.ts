@@ -1,6 +1,7 @@
 import { applicableFragmentIds, resolveServiceFrameBlock } from '@cat-factory/kernel'
 import type { LinkedDocumentRefresher } from '@cat-factory/kernel'
 import { getFragment } from '@cat-factory/prompt-fragments'
+import { RefinedRequirementsPublisher } from '../modules/requirements/RefinedRequirementsPublisher.js'
 import { RequirementReviewService } from '../modules/requirements/RequirementReviewService.js'
 import { ClarityReviewService } from '../modules/clarity/ClarityReviewService.js'
 import { BrainstormService } from '../modules/brainstorm/BrainstormService.js'
@@ -128,7 +129,18 @@ export function createRequirementsModule(
         }
       : undefined,
   })
-  return { service }
+  const issueWriteback = deps.issueWritebackProvider
+  return {
+    service,
+    ...(issueWriteback
+      ? {
+          publisher: new RefinedRequirementsPublisher({
+            requirementReviewRepository,
+            issueWriteback,
+          }),
+        }
+      : {}),
+  }
 }
 
 /**

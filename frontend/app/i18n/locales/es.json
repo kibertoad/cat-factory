@@ -769,7 +769,9 @@
         "thread_busy": "Este hilo todavía está respondiendo",
         "draft_conflict": "Este borrador ha cambiado",
         "session_stale": "La pull request ha avanzado",
-        "cursor_expired": "El registro de cambios ya superó este cursor"
+        "cursor_expired": "El registro de cambios ya superó este cursor",
+        "refined_requirements_unavailable": "Todavía no hay requisitos refinados",
+        "no_linked_issues": "No hay ninguna incidencia vinculada"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -830,7 +832,9 @@
         "thread_busy": "La pregunta anterior de este hilo aún no tiene respuesta. Espera esa respuesta o pregunta en otro hilo.",
         "draft_conflict": "Este borrador de comentario se ha editado, publicado o descartado desde que lo cargaste. Vuelve a cargar los borradores y repite tu cambio.",
         "session_stale": "Llegaron commits nuevos después de preparar esta revisión, así que sus borradores pueden apuntar a líneas equivocadas. Actualiza la revisión, revisa los borradores y luego publica.",
-        "cursor_expired": "Los cambios posteriores a este cursor ya no se conservan. Toma una instantánea nueva del directorio y sigue el registro desde la posición que indique."
+        "cursor_expired": "Los cambios posteriores a este cursor ya no se conservan. Toma una instantánea nueva del directorio y sigue el registro desde la posición que indique.",
+        "refined_requirements_unavailable": "La revisión aún no ha producido un documento revisado o lo está reescribiendo ahora. Espera a que termine la incorporación y vuelve a publicar.",
+        "no_linked_issues": "Esta tarea no tiene ninguna incidencia del gestor vinculada. Vincula la incidencia de la que proviene y vuelve a publicar."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -5967,6 +5971,23 @@
     "reRequest": "Volver a pedir",
     "finalRequirements": "Requisitos finales",
     "incorporatedDraft": "Requisitos incorporados (borrador)",
+    "postToIssues": {
+      "action": "Publicar en las incidencias vinculadas",
+      "hint": "Añade estos requisitos como comentario en cada incidencia vinculada del gestor. La descripción de la incidencia no cambia.",
+      "error": "No se pudieron publicar los requisitos en las incidencias vinculadas",
+      "toast": {
+        "posted": "Requisitos publicados en las incidencias vinculadas",
+        "nothingNew": "Las incidencias vinculadas ya tienen estos requisitos",
+        "partial": "Algunas incidencias vinculadas no recibieron los requisitos"
+      },
+      "outcome": {
+        "posted": "publicado",
+        "already_posted": "ya publicado",
+        "in_flight": "una publicación sigue en curso",
+        "failed": "falló, vuelve a publicar para reintentarlo",
+        "unsupported": "no se puede escribir en este gestor"
+      }
+    },
     "stats": {
       "findings": "Hallazgos",
       "open": "Abiertos",

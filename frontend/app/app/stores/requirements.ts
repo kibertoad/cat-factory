@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { RefinedRequirementsPostResult } from '@cat-factory/contracts'
 import type {
   RequirementReview,
   ResolveRequirementsExceededChoice,
@@ -204,6 +205,14 @@ export const useRequirementsStore = defineStore('requirements', () => {
     }
   }
 
+  /**
+   * Post the refined requirements onto the block's linked tracker issues as a comment. The
+   * per-issue outcome comes back for the caller to report; the review itself is unchanged.
+   */
+  async function postToIssues(blockId: string): Promise<RefinedRequirementsPostResult> {
+    return api.postRefinedRequirements(workspace.requireId(), blockId)
+  }
+
   /** Proceed: settle the requirements and advance the parked run. */
   async function proceed(blockId: string): Promise<RequirementReview> {
     const updated = await api.proceedRequirements(workspace.requireId(), blockId)
@@ -258,6 +267,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     incorporate,
     reReview,
     proceed,
+    postToIssues,
     resolveExceeded,
     requestRecommendations,
     acceptRecommendation,
