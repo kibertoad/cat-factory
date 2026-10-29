@@ -17,6 +17,7 @@ public enum PublicRunArtifactKind {
     SCREENSHOT("screenshot"),
     REFERENCE("reference"),
     ASSET("asset"),
+    CONTEXT("context"),
 
     /**
      * A value this SDK release does not know.

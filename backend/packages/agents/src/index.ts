@@ -107,6 +107,7 @@ export {
   SPEC_AWARE_TRAIT,
   BINARY_STORAGE_TRAIT,
   DESIGN_IMAGES_TRAIT,
+  TASK_IMAGES_TRAIT,
   INTERVIEW_GATE_TRAIT,
   CURATION_GATE_TRAIT,
   REVIEW_SKILLS_TRAIT,
@@ -249,6 +250,17 @@ export {
   GENERATED_BINARY_DIR,
   designImagesSection,
 } from './agents/prompts/standard.js'
+export {
+  TASK_IMAGE_DIR,
+  renderTaskImages,
+  taskImagesSection,
+} from './agents/prompts/task-images.js'
+export {
+  type InlineImageOutcome,
+  type LoadedDesignImage,
+  imageParts,
+  prepareInlineImages,
+} from './agents/runtime/design-images.js'
 export { toolServersSection } from './agents/prompts/capabilities.js'
 export {
   type AcceptanceAgentKind,

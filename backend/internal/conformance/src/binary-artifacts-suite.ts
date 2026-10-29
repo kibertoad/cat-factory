@@ -31,6 +31,19 @@ export class MemoryBinaryBlobBackend implements BinaryBlobBackend {
 
 const png = (n: number) => new Uint8Array([0x89, 0x50, 0x4e, 0x47, n])
 
+/** An image a person attached to a task: block-anchored, no run. */
+const contextImage = (workspaceId: string, blockId: string, n: number) => ({
+  meta: {
+    workspaceId,
+    executionId: null,
+    blockId,
+    kind: 'context' as const,
+    view: `sketch-${n}.png`,
+    contentType: 'image/png',
+  },
+  blob: png(n),
+})
+
 /**
  * Assert a runtime's {@link BinaryArtifactStore} (real metadata store + in-memory
  * blob backend) behaves identically across runtimes. `makeStore` builds a store over
@@ -362,6 +375,29 @@ export function defineBinaryArtifactsSuite(
       expect(await store.getBlob(ws, asset.id)).not.toBeNull()
       // It is still listed as the run's, which is what the report's read-back resolves against.
       expect((await store.listByExecution(ws, e1)).map((r) => r.id)).toEqual([asset.id])
+    })
+
+    it('keeps a task CONTEXT image past the age sweep and reclaims it with its block', async () => {
+      // A context image is part of the task's definition, so the age sweep must not take it (the
+      // task would lose its pictures while still on the board) and the block delete must, or it
+      // outlives the task with nothing left that would ever reclaim it.
+      const store = makeStore()
+      const { ws, blk } = ids()
+      const blk2 = `${blk}-2`
+      const mk = (blockId: string, n: number) => store.store(contextImage(ws, blockId, n))
+      const a = await mk(blk, 41)
+      const b = await mk(blk2, 42)
+      const kept = await mk(`${blk}-kept`, 43)
+
+      expect(await store.pruneOlderThan(ws, Date.now() + 60_000)).toBe(0)
+      expect(await store.getMetadata(ws, a.id)).not.toBeNull()
+
+      expect(await store.pruneByBlocks(ws, [blk, blk2])).toBe(2)
+      for (const rec of [a, b]) {
+        expect(await store.getMetadata(ws, rec.id)).toBeNull()
+        expect(await store.getBlob(ws, rec.id)).toBeNull()
+      }
+      expect(await store.getBlob(ws, kept.id)).toEqual(png(43))
     })
 
     it('deleteByWorkspace reclaims every artifact (rows + bytes) and scopes by workspace', async () => {

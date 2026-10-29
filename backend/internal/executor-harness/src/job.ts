@@ -742,6 +742,11 @@ export interface AgentJob extends HarnessAuthFields {
    */
   designImages?: ImageManifestSpec
   /**
+   * The images a person attached to the task, downloaded into `.cat-context/task-images/` and
+   * named by the backend's prompt. Same wire shape and seam as {@link AgentJob.designImages}.
+   */
+  taskImages?: ImageManifestSpec
+  /**
    * Where this job uploads the artifacts it PRODUCES (see {@link ArtifactUploadSpec}) — the
    * outbound leg of the seam {@link AgentJob.referenceScreenshots} and {@link
    * AgentJob.designImages} are the inbound legs of. Surfaced to the agent as
@@ -1288,6 +1293,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     contextFiles: parseContextFiles(o.contextFiles),
     referenceScreenshots: parseImageManifest(o.referenceScreenshots),
     designImages: parseImageManifest(o.designImages),
+    taskImages: parseImageManifest(o.taskImages),
     artifactUpload: parseArtifactUpload(o.artifactUpload),
     packageRegistries: parsePackageRegistries(o.packageRegistries),
     skills: parseSkillSpecs(o.skills),
@@ -1333,6 +1339,7 @@ interface ParsedAgentJobParts {
   contextFiles: ReturnType<typeof parseContextFiles>
   referenceScreenshots: ReturnType<typeof parseImageManifest>
   designImages: ReturnType<typeof parseImageManifest>
+  taskImages: ReturnType<typeof parseImageManifest>
   artifactUpload: ReturnType<typeof parseArtifactUpload>
   packageRegistries: ReturnType<typeof parsePackageRegistries>
   skills: ReturnType<typeof parseSkillSpecs>
@@ -1393,6 +1400,7 @@ function assembleAgentJob(
     contextFiles,
     referenceScreenshots,
     designImages,
+    taskImages,
     artifactUpload,
     packageRegistries,
     skills,
@@ -1423,6 +1431,7 @@ function assembleAgentJob(
     ...(contextFiles.length ? { contextFiles } : {}),
     ...(referenceScreenshots ? { referenceScreenshots } : {}),
     ...(designImages ? { designImages } : {}),
+    ...(taskImages ? { taskImages } : {}),
     ...(artifactUpload ? { artifactUpload } : {}),
     ...(packageRegistries.length ? { packageRegistries } : {}),
     ...(skills ? { skills } : {}),

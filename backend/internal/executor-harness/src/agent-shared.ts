@@ -37,6 +37,7 @@ export function agentCapabilities(job: AgentJob): {
   generateImages?: boolean
   referenceScreenshots?: ImageManifestSpec
   designImages?: ImageManifestSpec
+  taskImages?: ImageManifestSpec
   webSearchProxy?: boolean
   webToolsGuidance?: string
 } {
@@ -46,6 +47,7 @@ export function agentCapabilities(job: AgentJob): {
     ...(job.generateImages ? { generateImages: true } : {}),
     ...(job.referenceScreenshots ? { referenceScreenshots: job.referenceScreenshots } : {}),
     ...(job.designImages ? { designImages: job.designImages } : {}),
+    ...(job.taskImages ? { taskImages: job.taskImages } : {}),
     ...(job.webSearch ? { webSearchProxy: true } : {}),
     ...(job.webToolsGuidance ? { webToolsGuidance: job.webToolsGuidance } : {}),
   }

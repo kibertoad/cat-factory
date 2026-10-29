@@ -69,6 +69,7 @@ in [`backend/docs/adr/`](../backend/docs/adr); the file names are the index.
 
 ### Integrations & features
 
+- [Images attached to a task: storage, retention and delivery to each agent path](../backend/docs/task-images.md)
 - [Model support: selection, fallbacks, harnesses & provisioning](../backend/docs/model-support.md)
   (using it: [Model providers](https://www.catfactory.ai/guide/model-providers.html))
 - [Authentication: the sign-in legs and how a session is ended](../backend/docs/auth.md)

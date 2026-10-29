@@ -47,6 +47,7 @@ const EMPTY_BINARY_ARTIFACT_STORE: BinaryArtifactStore = {
   countByExecution: () => Promise.resolve(0),
   listByBlock: () => Promise.resolve([]),
   countByBlock: () => Promise.resolve(0),
+  pruneByBlocks: () => Promise.resolve(0),
   listByDocument: () => Promise.resolve([]),
   listByDocuments: () => Promise.resolve([]),
   pruneByDocument: () => Promise.resolve(0),
@@ -146,6 +147,15 @@ export function memoryBinaryArtifactStore(): BinaryArtifactStore & {
     // real and whose deletes are not is worse than an unimplemented one: a suite asserting that a
     // re-import REPLACES a document's renders would see both revisions accumulate and still pass,
     // which is exactly the bug such a suite is written to catch.
+    pruneByBlocks: (workspaceId, blockIds) =>
+      Promise.resolve(
+        reclaim(
+          (record) =>
+            record.workspaceId === workspaceId &&
+            record.blockId !== null &&
+            blockIds.includes(record.blockId),
+        ),
+      ),
     pruneByDocument: (workspaceId, document) =>
       Promise.resolve(
         reclaim(

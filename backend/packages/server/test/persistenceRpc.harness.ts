@@ -721,6 +721,7 @@ function buildReviewAndIntegrationRepos() {
       listByExecution: async (ws: string) => [{ ws }],
       countByExecution: async (_ws: string) => 0,
       listByBlock: async (ws: string) => [{ ws }],
+      listByBlocks: async (ws: string) => [{ ws }],
       insert: async () => undefined,
       delete: async () => undefined,
       listOlderThan: async () => [],

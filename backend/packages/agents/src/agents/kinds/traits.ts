@@ -90,6 +90,17 @@ export const BINARY_STORAGE_TRAIT: AgentTrait = 'binary-storage'
 export const DESIGN_IMAGES_TRAIT: AgentTrait = 'design-images'
 
 /**
+ * Task-image kinds are handed the images a person ATTACHED to the task as context (a bug
+ * screenshot, a sketch, a diagram), as real image input wherever the dispatch can carry one.
+ *
+ * A pure MARKER, the sibling of {@link DESIGN_IMAGES_TRAIT}: the engine reads it to decide whether
+ * a dispatch resolves the task's attached images at all, and the dispatch states whether they
+ * reached the model. Carried by the kinds that reason about what the task asks for; a kind that
+ * only mechanically lands a change (merging, resolving conflicts) pays nothing for them.
+ */
+export const TASK_IMAGES_TRAIT: AgentTrait = 'task-images'
+
+/**
  * Interview-gate kinds run the shared interactive-INTERVIEWER spine
  * (`InterviewGateController`): they PARK the run on a durable decision-wait while a human answers
  * the interviewer's clarifying questions in a dedicated window, then RESUME by re-running the
@@ -277,34 +288,50 @@ export const SPEC_AWARE_GUIDANCE = [
 export const STANDARD_AGENT_TRAITS: Partial<Record<AgentKind, AgentTrait[]>> = {
   // The architect DESIGNS, so it is the one built-in kind that chooses foundational services
   // and declares them; `researcher` and `coder` CONSUME that declaration.
-  architect: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, FOUNDATIONAL_CATALOG_TRAIT, DESIGN_IMAGES_TRAIT],
+  architect: [
+    CODE_AWARE_TRAIT,
+    SPEC_AWARE_TRAIT,
+    FOUNDATIONAL_CATALOG_TRAIT,
+    DESIGN_IMAGES_TRAIT,
+    TASK_IMAGES_TRAIT,
+  ],
   coder: [
     CODE_AWARE_TRAIT,
     SPEC_AWARE_TRAIT,
     BRIEF_STANDARDS_TRAIT,
     FOUNDATIONAL_CONTRACTS_TRAIT,
     DESIGN_IMAGES_TRAIT,
+    TASK_IMAGES_TRAIT,
   ],
   // The researcher plans the solution against the design, so it needs the same contracts the
   // coder will build to — investigating prior art for a capability the org already runs, from
   // the catalog entry alone, is how a plan ends up proposing a library beside a shared service.
-  researcher: [FOUNDATIONAL_CONTRACTS_TRAIT],
-  reviewer: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
+  researcher: [FOUNDATIONAL_CONTRACTS_TRAIT, TASK_IMAGES_TRAIT],
+  reviewer: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, TASK_IMAGES_TRAIT],
   'ci-fixer': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT],
   // The fixer is the kind a visual-confirmation `request-fix` dispatches, so it is acting on a
   // human's "this does not match the design" the moment it runs: it needs the design as much as
   // the coder that produced the screen.
-  fixer: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT, DESIGN_IMAGES_TRAIT],
+  fixer: [
+    CODE_AWARE_TRAIT,
+    SPEC_AWARE_TRAIT,
+    BRIEF_STANDARDS_TRAIT,
+    DESIGN_IMAGES_TRAIT,
+    TASK_IMAGES_TRAIT,
+  ],
   'conflict-resolver': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT],
-  'tester-api': [SPEC_AWARE_TRAIT],
+  'tester-api': [SPEC_AWARE_TRAIT, TASK_IMAGES_TRAIT],
   // The UI Tester captures screenshots and uploads them to the binary-artifact store
   // (the visual-confirmation gate reads them back), so it needs storage configured.
-  'tester-ui': [SPEC_AWARE_TRAIT, BINARY_STORAGE_TRAIT],
+  'tester-ui': [SPEC_AWARE_TRAIT, BINARY_STORAGE_TRAIT, TASK_IMAGES_TRAIT],
   playwright: [SPEC_AWARE_TRAIT],
   blueprints: [SPEC_AWARE_TRAIT],
   'business-documenter': [SPEC_AWARE_TRAIT],
   'business-reviewer': [SPEC_AWARE_TRAIT],
-  analysis: [SPEC_AWARE_TRAIT],
+  analysis: [SPEC_AWARE_TRAIT, TASK_IMAGES_TRAIT],
+  // The spec-writer turns the task into the specification increment, so it reads what the task's
+  // author showed as much as what they wrote.
+  'spec-writer': [TASK_IMAGES_TRAIT],
   mocker: [SPEC_AWARE_TRAIT],
   merger: [SPEC_AWARE_TRAIT],
   // The on-call agent clones the released change and reads the code to correlate the diff
@@ -439,6 +466,9 @@ export const STANDARD_TRAIT_DEFINITIONS: readonly AgentTraitDefinition[] = [
   // static guidance to fold. Standing advice about consuming a design lives in the
   // `design.context` fragment, which the engine folds by the same presence rule.
   { id: DESIGN_IMAGES_TRAIT },
+  // A marker for the same reason: the section naming the images is rendered from what the
+  // dispatch achieved (`taskImagesSection`), so there is no static guidance to fold.
+  { id: TASK_IMAGES_TRAIT },
 ]
 
 /**

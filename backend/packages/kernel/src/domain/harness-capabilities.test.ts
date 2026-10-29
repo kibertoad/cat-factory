@@ -85,6 +85,9 @@ describe('requiredHarnessCapabilities', () => {
       designImages: {
         designImages: { url: 'https://x/y', token: 't', files: [{ artifactId: 'a' }] },
       },
+      taskImages: {
+        taskImages: { url: 'https://x/y', token: 't', files: [{ artifactId: 'b' }] },
+      },
       generateImages: { generateImages: true },
     }
     for (const capability of HARNESS_BODY_CAPABILITIES) {

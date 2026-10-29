@@ -214,6 +214,8 @@ export interface CodingAgentSpec extends HarnessAuthFields {
    * is the commonest holder of both. Absent ⇒ none (the normal case).
    */
   designImages?: ImageManifestSpec
+  /** The images attached to the task, into `.cat-context/task-images/`. Absent ⇒ none. */
+  taskImages?: ImageManifestSpec
 }
 
 /** The outcome of a coding agent run, before each caller maps it to its own result shape. */
@@ -586,6 +588,7 @@ export async function runCodingAgent(
               ? { referenceScreenshots: spec.referenceScreenshots }
               : {}),
             ...(spec.designImages ? { designImages: spec.designImages } : {}),
+            ...(spec.taskImages ? { taskImages: spec.taskImages } : {}),
           },
           opts,
         )

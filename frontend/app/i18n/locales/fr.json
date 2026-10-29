@@ -5118,6 +5118,19 @@
       "oauthButton": "Se connecter avec {label}",
       "oauthOr": "ou connectez-vous avec une clé API",
       "disconnectFailed": "Impossible de déconnecter"
+    },
+    "images": {
+      "heading": "Images",
+      "hint": "Captures, croquis ou schémas qui expliquent cette tâche. Les agents qui y travaillent les voient partout où leur modèle accepte les images.",
+      "add": "Ajouter des images",
+      "count": "{count} sur {max}",
+      "truncated": "Une tâche contient au plus {max} images : seules les premières ont été ajoutées.",
+      "remove": "Retirer {name}",
+      "unnamed": "Image jointe",
+      "attached": "Images jointes",
+      "uploadFailed": "Impossible de joindre l'image",
+      "removeFailed": "Impossible de retirer l'image",
+      "loadFailed": "Impossible de charger les images jointes"
     }
   },
   "bugHunt": {

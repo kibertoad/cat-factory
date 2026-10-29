@@ -2,7 +2,6 @@ import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import type {
   AgentContextRecorder,
-  DesignImageDelivery,
   Logger,
   ModelFlavor,
   ModelProvider,
@@ -10,12 +9,7 @@ import type {
   ModelRef,
   ResolveBinaryArtifactStore,
 } from '@cat-factory/kernel'
-import {
-  agentRunScopeSubject,
-  noopLogger,
-  resolveDesignImageDelivery,
-  resolveInlineScope,
-} from '@cat-factory/kernel'
+import { agentRunScopeSubject, noopLogger, resolveInlineScope } from '@cat-factory/kernel'
 import { recordInlineAgentContext } from './inline-context-record.js'
 import { type AgentKindRegistry, defaultAgentKindRegistry } from '../kinds/registry.js'
 import { standardsVerbosityFor, traitDeliveryFor } from '../kinds/traits.js'
@@ -30,11 +24,7 @@ import {
   providerWebSearchTools,
   webResearchGuidanceFor,
 } from './web-search.js'
-import {
-  type LoadedDesignImage,
-  foldLoadedDesignImages,
-  loadDesignImages,
-} from './design-images.js'
+import { type LoadedDesignImage, imageParts, prepareInlineImages } from './design-images.js'
 
 export interface AiAgentExecutorDependencies {
   /**
@@ -175,8 +165,8 @@ export class AiAgentExecutor implements AgentExecutor {
   }
 
   /**
-   * Settle what this inline call can do with the task's design pictures, and load the bytes when it
-   * can carry them.
+   * Settle what this inline call can do with the task's images (its design pictures and the images
+   * attached to it), and load the bytes when it can carry them.
    *
    * An ordinary inline call carries them as MESSAGE PARTS whatever harness the ref names:
    * `harness: 'pi'` describes how a CONTAINER dispatch of that model is served, and here this
@@ -186,38 +176,38 @@ export class AiAgentExecutor implements AgentExecutor {
    * refusal rather than a second carrier. The deployment serves the ref by driving its CLI as a
    * host subprocess: `CliInlineLanguageModel` flattens the prompt to system + user TEXT on stdin,
    * so an image part is dropped on the way out, and there is no checkout to write a file into
-   * either. Reading the container answer for the same CLI (`claude-code` opens image files) is what
-   * once left this path claiming `channel: 'files'` for a directory nothing ever wrote.
+   * either.
    */
-  private async resolveDesignImages(
+  private async resolveImages(
     context: AgentRunContext,
     ref: ModelRef,
   ): Promise<{
-    context: Pick<AgentRunContext, 'designImages' | 'designImageDelivery'>
+    context: Pick<
+      AgentRunContext,
+      'designImages' | 'designImageDelivery' | 'taskImages' | 'taskImageDelivery'
+    >
     images: LoadedDesignImage[]
   }> {
-    const set = context.designImages
-    if (!set?.files.length) return { context: {}, images: [] }
-    const delivery: DesignImageDelivery = this.runsInline?.(ref)
-      ? { attached: false, reason: 'inline_harness_text_only' }
-      : resolveDesignImageDelivery({ channel: 'message' }, ref)
-    if (!delivery.attached)
-      return { context: { designImages: set, designImageDelivery: delivery }, images: [] }
-    const resolveStore = this.resolveBinaryArtifactStore
-    if (!resolveStore || !context.workspaceId) {
-      // The set exists and this executor has no way to read its bytes: a facade that resolved
-      // pictures and wired no store. Reported as the transfer failure it is, never as an
-      // attachment of nothing.
-      return {
-        context: {
-          designImages: set,
-          designImageDelivery: { attached: false, reason: 'transfer_failed' },
-        },
-        images: [],
-      }
+    const common = {
+      ref,
+      textOnly: this.runsInline?.(ref) ?? false,
+      resolveStore: this.resolveBinaryArtifactStore,
+      workspaceId: context.workspaceId,
     }
-    const loaded = await loadDesignImages(resolveStore, context.workspaceId, set)
-    return { context: foldLoadedDesignImages(set, loaded, delivery), images: loaded.images }
+    const design = await prepareInlineImages({ ...common, set: context.designImages })
+    const task = await prepareInlineImages({ ...common, set: context.taskImages })
+    return {
+      context: {
+        ...(design.outcome
+          ? { designImages: design.outcome.set, designImageDelivery: design.outcome.delivery }
+          : {}),
+        ...(task.outcome
+          ? { taskImages: task.outcome.set, taskImageDelivery: task.outcome.delivery }
+          : {}),
+      },
+      // The design pictures first, then the attached images: the order the prompt names them in.
+      images: [...design.images, ...task.images],
+    }
   }
 
   /** Resolve the model provider for a run's scope (per-scope DB pool, else the static one). */
@@ -344,10 +334,10 @@ export class AiAgentExecutor implements AgentExecutor {
       ? `${composed}${webResearchGuidanceFor(context.agentKind, this.agentKindRegistry, { fetch: false })}`
       : composed
 
-    // The task's design pictures: whether this model can be shown them, and their bytes when it
-    // can. Resolved BEFORE the prompt, because the prompt states what became of them.
-    const design = await this.resolveDesignImages(context, ref)
-    const promptContext: AgentRunContext = { ...context, ...design.context }
+    // The task's images: whether this model can be shown them, and their bytes when it can.
+    // Resolved BEFORE the prompt, because the prompt states what became of them.
+    const attached = await this.resolveImages(context, ref)
+    const promptContext: AgentRunContext = { ...context, ...attached.context }
     const userPrompt = userPromptFor(promptContext, this.agentKindRegistry)
 
     // The complete provided context, filed exactly as the container executor files its own at
@@ -371,19 +361,15 @@ export class AiAgentExecutor implements AgentExecutor {
       system,
       // One user message carrying the prompt plus an image part per delivered picture, in the order
       // the prompt names them. A plain `prompt` string whenever there is nothing to attach, so
-      // every run that carries no design is byte-identical on the wire to what it was before.
-      ...(design.images.length
+      // every run that carries no image is byte-identical on the wire to what it was before.
+      ...(attached.images.length
         ? {
             messages: [
               {
                 role: 'user' as const,
                 content: [
                   { type: 'text' as const, text: userPrompt },
-                  ...design.images.map((image) => ({
-                    type: 'image' as const,
-                    image: image.data,
-                    mediaType: image.mediaType,
-                  })),
+                  ...imageParts(attached.images),
                 ],
               },
             ],

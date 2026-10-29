@@ -5,12 +5,14 @@ import type {
   DocumentRepository,
   ExecutionRepository,
   InitiativeRepository,
+  Logger,
   PreloadedBlocks,
+  ResolveBinaryArtifactStore,
   ServiceRepository,
   TaskRepository,
   WorkspaceMountRepository,
 } from '@cat-factory/kernel'
-import { ValidationError } from '@cat-factory/kernel'
+import { ValidationError, noopLogger, runBestEffort } from '@cat-factory/kernel'
 import { descendantIds, unfinishedTasksUnder } from './board.logic.js'
 import type { BoardChangeReason } from './board.logic.js'
 import { pruneDanglingEdges, reclaimDoomedEntities } from './removal-cascade.js'
@@ -34,6 +36,12 @@ export interface BlockRemovalDeps {
   initiativeRepository?: InitiativeRepository
   documentRepository?: DocumentRepository
   taskRepository?: TaskRepository
+  /**
+   * The account's artifact store, so a delete reclaims what the doomed blocks carried (a task's
+   * attached images are retained until then). Absent or unconfigured ⇒ nothing to reclaim.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  logger?: Logger
   /** 404s an unknown board before anything is read. */
   requireWorkspace: (workspaceId: string) => Promise<unknown>
   /**
@@ -137,6 +145,17 @@ export function createBlockRemoval(deps: BlockRemovalDeps) {
       { homeWorkspaceId, deletedId: id, blocks, doomed },
     )
     await deps.blockRepository.deleteMany(homeWorkspaceId, [...doomed])
+    // After the rows, and best-effort: the blocks are gone either way, and a blob backend that is
+    // briefly down must not turn a delete into an error the board then disagrees with.
+    await runBestEffort(
+      deps.logger ?? noopLogger,
+      'block delete: reclaim artifacts',
+      async () => {
+        const store = await deps.resolveBinaryArtifactStore?.(homeWorkspaceId)
+        await store?.pruneByBlocks(homeWorkspaceId, [...doomed])
+      },
+      { workspaceId: homeWorkspaceId, blockId: id },
+    )
 
     await pruneDanglingEdges(deps.blockRepository, homeWorkspaceId, blocks, doomed)
 

@@ -5309,6 +5309,19 @@
       "oauthButton": "Connect with {label}",
       "oauthOr": "or connect with an API key",
       "disconnectFailed": "Could not disconnect"
+    },
+    "images": {
+      "heading": "Images",
+      "hint": "Screenshots, sketches or diagrams that explain this task. Agents working on it are shown them wherever their model accepts images.",
+      "add": "Add images",
+      "count": "{count} of {max}",
+      "truncated": "A task holds at most {max} images, so only the first ones were added.",
+      "remove": "Remove {name}",
+      "unnamed": "Attached image",
+      "attached": "Images attached",
+      "uploadFailed": "Could not attach the image",
+      "removeFailed": "Could not remove the image",
+      "loadFailed": "Could not load the attached images"
     }
   },
   "bugHunt": {

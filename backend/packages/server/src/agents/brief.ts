@@ -136,7 +136,7 @@ export function composeDelegationBrief(
     // kind's prompt describe checkouts the external system never makes.
     multiRepo: false,
   }
-  const core = composeAgentBriefCore(context, registry, dispatch)
+  const core = composeAgentBriefCore(withImagesWithheld(context), registry, dispatch)
   // Bug-fix guidance rides the brief for the same reason it rides a container coding dispatch: it
   // is about the WORK (fix the reported defect, do not merely satisfy the reproduction test), not
   // about the machine. Empty for every kind and every run that no `repro-test` preceded.
@@ -164,6 +164,19 @@ export function composeDelegationBrief(
     userPrompt: core.userPrompt,
     contextFiles: core.contextFiles,
     ownService: ownServiceFor(context),
+  }
+}
+
+/**
+ * State that a delegated step is shown none of the task's images: the brief has no channel for
+ * bytes, and an agent told nothing reads the text as everything the task had.
+ */
+function withImagesWithheld(context: AgentRunContext): AgentRunContext {
+  const withheld = { attached: false, reason: 'delegated_brief' } as const
+  return {
+    ...context,
+    ...(context.designImages?.files.length ? { designImageDelivery: withheld } : {}),
+    ...(context.taskImages?.files.length ? { taskImageDelivery: withheld } : {}),
   }
 }
 

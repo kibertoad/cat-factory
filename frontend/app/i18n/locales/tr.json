@@ -5118,6 +5118,19 @@
       "oauthButton": "{label} ile bağlan",
       "oauthOr": "veya bir API anahtarıyla bağlan",
       "disconnectFailed": "Bağlantı kesilemedi"
+    },
+    "images": {
+      "heading": "Görseller",
+      "hint": "Bu görevi açıklayan ekran görüntüleri, eskizler veya diyagramlar. Görev üzerinde çalışan ajanlar, modelleri görsel kabul ettiği her yerde bunları görür.",
+      "add": "Görsel ekle",
+      "count": "{count} / {max}",
+      "truncated": "Bir görev en fazla {max} görsel içerebilir, bu yüzden yalnızca ilkleri eklendi.",
+      "remove": "{name} öğesini kaldır",
+      "unnamed": "Eklenen görsel",
+      "attached": "Görseller eklendi",
+      "uploadFailed": "Görsel eklenemedi",
+      "removeFailed": "Görsel kaldırılamadı",
+      "loadFailed": "Eklenen görseller yüklenemedi"
     }
   },
   "bugHunt": {

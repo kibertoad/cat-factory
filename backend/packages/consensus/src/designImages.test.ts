@@ -45,4 +45,14 @@ describe('panelDesignImageCeiling', () => {
     expect(prompt).not.toContain('attached to this message')
     expect(prompt).not.toContain('.cat-context/design-renders')
   })
+
+  it('states the withholding of the attached task images too', () => {
+    const withSet = context({ taskImages: { files: FILES, omitted: [] } })
+    expect(userPromptFor(withSet, registry)).not.toContain('Images attached to this task')
+
+    const prompt = userPromptFor({ ...withSet, ...panelDesignImageCeiling(withSet) }, registry)
+    expect(prompt).toContain('Images attached to this task')
+    expect(prompt).toContain('multi-model panel')
+    expect(prompt).not.toContain('.cat-context/task-images')
+  })
 })

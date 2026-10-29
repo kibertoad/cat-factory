@@ -153,6 +153,25 @@ export class D1BinaryArtifactMetadataStore implements BinaryArtifactMetadataStor
     return (results ?? []).map(rowToRecord)
   }
 
+  async listByBlocks(
+    workspaceId: string,
+    blockIds: readonly string[],
+  ): Promise<BinaryArtifactRecord[]> {
+    const rows: ArtifactRow[] = []
+    for (const chunk of chunkForIn([...new Set(blockIds)])) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(
+          `SELECT * FROM binary_artifacts
+           WHERE workspace_id = ? AND block_id IN (${placeholders})`,
+        )
+        .bind(workspaceId, ...chunk)
+        .all<ArtifactRow>()
+      rows.push(...(results ?? []))
+    }
+    return sortArtifactRows(rows).map(rowToRecord)
+  }
+
   async listByDocument(
     workspaceId: string,
     document: DocumentArtifactRef,

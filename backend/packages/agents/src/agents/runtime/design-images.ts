@@ -1,13 +1,14 @@
 import type {
-  AgentRunContext,
   DesignImageDelivery,
   DesignImageSet,
+  ModelRef,
   ResolveBinaryArtifactStore,
 } from '@cat-factory/kernel'
+import { resolveDesignImageDelivery } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
-// The INLINE half of design-picture delivery: turning the set the engine resolved into the image
-// content parts an inline model call carries.
+// The INLINE half of image delivery (a task's design pictures and the images attached to it):
+// turning a set the engine resolved into the image content parts an inline model call carries.
 //
 // The container half needs nothing like this — the harness downloads the bytes into the checkout
 // and the CLI reads them — which is why the bytes are fetched HERE, at the one call site that has
@@ -60,11 +61,17 @@ export async function loadDesignImages(
   return { images, missing }
 }
 
+/** A set and the verdict on it, after a load: what an inline call's prompt is rendered from. */
+export interface InlineImageOutcome {
+  set: DesignImageSet
+  delivery: DesignImageDelivery
+}
+
 /**
- * Fold a load outcome back into the context the prompt is rendered from.
+ * Fold a load outcome back into the set the prompt is rendered from.
  *
  * The prompt section names the views it was handed, so a view whose bytes never arrived has to
- * leave the FILE list and join `omitted` — otherwise the agent is told to look at a picture that is
+ * leave the FILE list and join `omitted`: otherwise the agent is told to look at a picture that is
  * not in the message, which reads to it as its own failure to find something. `omitted` states no
  * cause for exactly this reason: a capped view and a lost one are the same instruction to an agent
  * (work from the text), and the difference is an operator's question, answered by the log.
@@ -72,23 +79,62 @@ export async function loadDesignImages(
  * A set that loaded NOTHING settles as `transfer_failed` rather than as an empty attachment: those
  * are opposite facts, and only the first sends anyone to look at the store.
  */
-export function foldLoadedDesignImages(
+export function foldLoadedImages(
   set: DesignImageSet,
   loaded: LoadedDesignImages,
   attached: DesignImageDelivery,
-): Pick<AgentRunContext, 'designImages' | 'designImageDelivery'> {
+): InlineImageOutcome {
   if (!loaded.images.length) {
-    return {
-      designImages: set,
-      designImageDelivery: { attached: false, reason: 'transfer_failed' },
-    }
+    return { set, delivery: { attached: false, reason: 'transfer_failed' } }
   }
   const shown = new Set(loaded.images.map((image) => image.view))
   return {
-    designImages: {
+    set: {
       files: set.files.filter((file) => shown.has(file.view)),
       omitted: [...set.omitted, ...loaded.missing],
     },
-    designImageDelivery: attached,
+    delivery: attached,
   }
+}
+
+/**
+ * Settle what one inline model call can do with an image set, and load the bytes when it can carry
+ * them. Shared by every inline caller (the agent executor and the inline review services), so the
+ * verdict and the transfer-failure rule cannot differ between them.
+ *
+ * `textOnly` is the ambient inline path: a deployment serving the ref by driving its CLI as a host
+ * subprocess flattens the request to text, so an image part would be dropped on the way out.
+ */
+export async function prepareInlineImages(args: {
+  set: DesignImageSet | undefined
+  ref: Pick<ModelRef, 'acceptsImages'>
+  textOnly: boolean
+  resolveStore: ResolveBinaryArtifactStore | undefined
+  workspaceId: string | undefined
+}): Promise<{ outcome?: InlineImageOutcome; images: LoadedDesignImage[] }> {
+  const { set } = args
+  if (!set?.files.length) return { images: [] }
+  const delivery: DesignImageDelivery = args.textOnly
+    ? { attached: false, reason: 'inline_harness_text_only' }
+    : resolveDesignImageDelivery({ channel: 'message' }, args.ref)
+  if (!delivery.attached) return { outcome: { set, delivery }, images: [] }
+  if (!args.resolveStore || !args.workspaceId) {
+    // A set exists and this caller has no way to read its bytes: reported as the transfer failure
+    // it is, never as an attachment of nothing.
+    return {
+      outcome: { set, delivery: { attached: false, reason: 'transfer_failed' } },
+      images: [],
+    }
+  }
+  const loaded = await loadDesignImages(args.resolveStore, args.workspaceId, set)
+  return { outcome: foldLoadedImages(set, loaded, delivery), images: loaded.images }
+}
+
+/** The image content parts an inline request carries, in the order the prompt names them. */
+export function imageParts(images: readonly LoadedDesignImage[]) {
+  return images.map((image) => ({
+    type: 'image' as const,
+    image: image.data,
+    mediaType: image.mediaType,
+  }))
 }

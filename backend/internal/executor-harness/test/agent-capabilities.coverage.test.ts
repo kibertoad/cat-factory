@@ -97,6 +97,7 @@ describe('every agent-running mode forwards the job’s capabilities', () => {
         generateImages: true,
         referenceScreenshots: { images: [] },
         designImages: { images: [] },
+        taskImages: { images: [] },
         webSearch: true,
         webToolsGuidance: 'g',
       } as unknown as AgentJob),

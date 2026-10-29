@@ -353,6 +353,7 @@ export const HARNESS_BODY_CAPABILITIES: readonly string[] = [
   'piMcpServers',
   'skills',
   'designImages',
+  'taskImages',
   'generateImages',
 ]
 

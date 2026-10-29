@@ -4574,6 +4574,19 @@
       "oauthButton": "Collega con {label}",
       "oauthOr": "oppure collega con una chiave API",
       "disconnectFailed": "Impossibile scollegare"
+    },
+    "images": {
+      "heading": "Immagini",
+      "hint": "Screenshot, bozzetti o diagrammi che spiegano questa attività. Gli agenti che ci lavorano li vedono ovunque il loro modello accetti immagini.",
+      "add": "Aggiungi immagini",
+      "count": "{count} di {max}",
+      "truncated": "Un'attività contiene al massimo {max} immagini, quindi sono state aggiunte solo le prime.",
+      "remove": "Rimuovi {name}",
+      "unnamed": "Immagine allegata",
+      "attached": "Immagini allegate",
+      "uploadFailed": "Impossibile allegare l'immagine",
+      "removeFailed": "Impossibile rimuovere l'immagine",
+      "loadFailed": "Impossibile caricare le immagini allegate"
     }
   },
   "bugHunt": {

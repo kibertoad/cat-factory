@@ -41,6 +41,7 @@ import type {
   TaskTypeRegistry,
   TaskTypeSuppressionRepository,
   PromptFragmentSource,
+  ResolveBinaryArtifactStore,
   WorkspaceMount,
   WorkspaceMountRepository,
   WorkspaceRepository,
@@ -197,6 +198,8 @@ export interface BoardServiceDependencies {
    * supplies a real one.
    */
   logger?: Logger
+  /** The account's artifact store, so a block delete reclaims what the block carried. */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   /**
    * The run-repo seam (checkout-free {@link RepoFiles} bound to the repo a block's run targets).
    * Wired whenever a VCS provider is connected; used at task creation to validate a `review`
@@ -347,6 +350,7 @@ export class BoardService {
     accountRiskPolicyRepository,
     riskPolicySuppressionRepository,
     modelPresetRepository,
+    resolveBinaryArtifactStore,
     logger,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
@@ -447,6 +451,8 @@ export class BoardService {
       initiativeRepository,
       documentRepository,
       taskRepository,
+      resolveBinaryArtifactStore,
+      logger: this.log,
       requireWorkspace: (workspaceId) => this.requireWorkspace(workspaceId),
       resolveBlockHomeForRemoval: (workspaceId, id) =>
         this.resolveBlockHomeForRemoval(workspaceId, id),

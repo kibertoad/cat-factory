@@ -34,6 +34,13 @@ class FakeMetadataStore implements BinaryArtifactMetadataStore {
   listByBlock(): Promise<BinaryArtifactRecord[]> {
     return Promise.resolve([])
   }
+  listByBlocks(workspaceId: string, blockIds: readonly string[]): Promise<BinaryArtifactRecord[]> {
+    return Promise.resolve(
+      [...this.rows.values()].filter(
+        (r) => r.workspaceId === workspaceId && r.blockId !== null && blockIds.includes(r.blockId),
+      ),
+    )
+  }
   countByBlock(): Promise<number> {
     return Promise.resolve(0)
   }
@@ -202,5 +209,28 @@ describe('createBinaryArtifactStore reclaim (fail-safe partial-failure branch)',
     expect(removed).toBe(1)
     expect(await store.getMetadata('ws', a.id)).not.toBeNull() // failed blob → row retained
     expect(await store.getMetadata('ws', b.id)).toBeNull()
+  })
+})
+
+describe('createBinaryArtifactStore pruneByBlocks', () => {
+  it('reclaims every artifact on the named blocks, bytes first, and nothing else', async () => {
+    const metadata = new FakeMetadataStore()
+    const blob = new FlakyBlobBackend(new Set())
+    const store = createBinaryArtifactStore(deps(metadata, blob))
+    const onBlock = (blockId: string, n: number) => ({
+      meta: { ...meta('ws', n), blockId, kind: 'context' as const },
+      blob: png(n),
+    })
+    const a = await store.store(onBlock('blk-a', 1))
+    const b = await store.store(onBlock('blk-b', 2))
+    const kept = await store.store(onBlock('blk-c', 3))
+
+    expect(await store.pruneByBlocks('ws', ['blk-a', 'blk-b'])).toBe(2)
+    for (const rec of [a, b]) {
+      expect(await store.getMetadata('ws', rec.id)).toBeNull()
+      expect(blob.blobs.has(rec.storageKey)).toBe(false)
+    }
+    expect(await store.getMetadata('ws', kept.id)).not.toBeNull()
+    expect(await store.pruneByBlocks('ws', [])).toBe(0)
   })
 })
