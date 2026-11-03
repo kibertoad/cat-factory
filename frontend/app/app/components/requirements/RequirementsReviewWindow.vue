@@ -107,6 +107,8 @@ const loading = computed(() => (blockId.value ? requirements.isLoading(blockId.v
 const reworking = computed(() =>
   review.value ? requirements.isIncorporating(review.value.id) : false,
 )
+// Which incorporate choice is in flight, so only the clicked button spins.
+const incorporatingAfter = ref<IncorporateAfter | null>(null)
 const acting = ref(false)
 
 const openCount = computed(() => (review.value ? requirements.openCount(review.value) : 0))
@@ -627,12 +629,15 @@ async function reRequestRecommendation(rec: RequirementRecommendation) {
 
 async function incorporate(feedback?: string, after: IncorporateAfter = 'rereview') {
   if (!review.value || !blockId.value) return
+  incorporatingAfter.value = after
   try {
     await flushDrafts()
     await requirements.incorporate(review.value, { feedback, after })
   } catch (e) {
     present(e, 'requirements.errors.incorporate')
     return
+  } finally {
+    incorporatingAfter.value = null
   }
   redoComment.value = ''
   showRedo.value = false
@@ -1295,8 +1300,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 size="sm"
                 block
                 icon="i-lucide-wand-sparkles"
-                :loading="reworking"
-                :disabled="!canIncorporate || !access.canExecuteRuns.value"
+                :loading="reworking && incorporatingAfter !== 'proceed'"
+                :disabled="reworking || !canIncorporate || !access.canExecuteRuns.value"
                 :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                 data-testid="requirements-incorporate"
                 @click="incorporate()"
@@ -1309,8 +1314,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 block
                 icon="i-lucide-arrow-right"
                 :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
-                :loading="reworking"
-                :disabled="!canIncorporate || !access.canExecuteRuns.value"
+                :loading="reworking && incorporatingAfter === 'proceed'"
+                :disabled="reworking || !canIncorporate || !access.canExecuteRuns.value"
                 :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                 data-testid="requirements-incorporate-proceed"
                 @click="incorporate(undefined, 'proceed')"
