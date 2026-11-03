@@ -170,6 +170,11 @@ describe('harness body-capability list conforms to kernel', () => {
         token: 'sess',
         files: [{ artifactId: 'art1', fileName: 'checkout.png', view: 'Checkout' }],
       },
+      taskImages: {
+        url: 'https://proxy.example.com/v1/artifacts/reference',
+        token: 'sess',
+        files: [{ artifactId: 'art2', fileName: 'crash.png', view: 'crash.png' }],
+      },
       generateImages: true,
     })
     for (const capability of HARNESS_BODY_CAPABILITIES) {

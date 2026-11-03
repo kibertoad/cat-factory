@@ -5,6 +5,7 @@ import type {
   BlockRepository,
   Clock,
   IdGenerator,
+  Logger,
   ModelProvider,
   ModelProviderResolver,
   ModelRef,
@@ -13,6 +14,7 @@ import type {
   RequirementConcernLevel,
   RequirementReviewItem,
   RequirementReviewStatus,
+  ResolveBinaryArtifactStore,
   ReviewItemStatus,
 } from '@cat-factory/kernel'
 import {
@@ -34,6 +36,7 @@ import {
 
 import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
+import { reviewRequestWithTaskImages } from './reviewTaskImages.js'
 import {
   type ReviewDisposition,
   coerceReviewItems,
@@ -130,6 +133,13 @@ export interface IterativeReviewDeps {
    * absent in tests/conformance → workspace-only scope (pooled lease only), unchanged.
    */
   resolveRunContext?: ResolveBlockRunContext
+  /**
+   * The account's artifact store, for the images attached to the task under review: the reviewer
+   * and the rework call carry them as image input. Absent ⇒ text only, as before.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /** Where a failed attached-image read reports itself. Absent ⇒ `noopLogger`. */
+  logger?: Logger
   /** Raises a notification when a review yields findings. Optional. */
   notificationService?: NotificationService
   /**
@@ -440,7 +450,13 @@ export abstract class IterativeReviewService<
       const result = await generateText({
         model,
         system: await this.systemPromptFor(workspaceId, this.reworkAgentKind, this.reworkPrompt),
-        prompt: this.buildReworkPrompt(context, review.items),
+        ...(await reviewRequestWithTaskImages(
+          this.deps,
+          workspaceId,
+          block,
+          ref,
+          this.buildReworkPrompt(context, review.items),
+        )),
         temperature: 0.2,
         // The reworked doc is a full standard-format document that becomes the SOLE source of
         // truth fed to every downstream agent step; a generous budget keeps a real spec from
@@ -604,7 +620,13 @@ export abstract class IterativeReviewService<
       const result = await generateText({
         model,
         system: await this.systemPromptFor(workspaceId, this.reviewAgentKind, this.reviewPrompt),
-        prompt: this.buildReviewPrompt(context),
+        ...(await reviewRequestWithTaskImages(
+          this.deps,
+          workspaceId,
+          block,
+          ref,
+          this.buildReviewPrompt(context),
+        )),
         temperature: 0.2,
         maxOutputTokens: 5000,
         providerOptions: catFactoryObservability({ agentKind: this.reviewAgentKind, workspaceId }),

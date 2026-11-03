@@ -13,6 +13,7 @@ import { CONTEXT_DIR } from '../src/pi.js'
 import { PR_DESCRIPTION_FILE } from '../src/pr-description.js'
 import { REFERENCE_SCREENSHOT_DIR } from '../src/reference-screenshots.js'
 import { DESIGN_RENDER_DIR } from '../src/design-images.js'
+import { TASK_IMAGE_DIR } from '../src/task-images.js'
 import { GENERATED_BINARY_DIR } from '../src/codex-images.js'
 import { DEFAULT_HARNESS_PORT } from '../src/harness-port.js'
 
@@ -185,6 +186,7 @@ describe('harness ⇄ backend sentinel paths', () => {
       HARNESS_SENTINEL_PATHS.referenceScreenshots,
     ],
     ['design renders directory', DESIGN_RENDER_DIR, HARNESS_SENTINEL_PATHS.designRenders],
+    ['task images directory', TASK_IMAGE_DIR, HARNESS_SENTINEL_PATHS.taskImages],
     [
       'generated binaries directory',
       GENERATED_BINARY_DIR,

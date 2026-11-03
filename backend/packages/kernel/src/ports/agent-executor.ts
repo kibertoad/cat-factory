@@ -601,6 +601,18 @@ export interface AgentRunContext {
    */
   designImageDelivery?: DesignImageDelivery
   /**
+   * The images a person attached to this task as context (`context` artifacts), for a kind
+   * carrying the `task-images` trait. Same shape as {@link designImages}, with `view` holding the
+   * name the image was uploaded under. Absent when the kind carries no such trait, when the
+   * deployment stores no binaries, or when the task has no attached image.
+   */
+  taskImages?: DesignImageSet
+  /**
+   * What THIS dispatch could do with {@link taskImages}, set by the executor exactly like
+   * {@link designImageDelivery}. Never absent while `taskImages` is present.
+   */
+  taskImageDelivery?: DesignImageDelivery
+  /**
    * A live ephemeral environment a deployer step provisioned earlier in this run
    * (resolved from the run's block). Present only when the environment
    * integration is wired and a deployer step has produced a ready environment —

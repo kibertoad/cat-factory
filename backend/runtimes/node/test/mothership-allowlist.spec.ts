@@ -447,6 +447,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     deleteOlderThan: 'sweeper',
     listByWorkspace: 'sweeper',
     deleteByWorkspace: 'sweeper',
+    listBlockAnchorsOlderThan: 'sweeper',
     documentScope: 'helper',
     agedScope: 'helper',
   },

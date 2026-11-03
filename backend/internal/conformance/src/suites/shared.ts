@@ -47,6 +47,9 @@ const EMPTY_BINARY_ARTIFACT_STORE: BinaryArtifactStore = {
   countByExecution: () => Promise.resolve(0),
   listByBlock: () => Promise.resolve([]),
   countByBlock: () => Promise.resolve(0),
+  pruneByBlocks: () => Promise.resolve(0),
+  moveBlocks: () => Promise.resolve(0),
+  listBlockAnchorsOlderThan: () => Promise.resolve([]),
   listByDocument: () => Promise.resolve([]),
   listByDocuments: () => Promise.resolve([]),
   pruneByDocument: () => Promise.resolve(0),
@@ -146,6 +149,40 @@ export function memoryBinaryArtifactStore(): BinaryArtifactStore & {
     // real and whose deletes are not is worse than an unimplemented one: a suite asserting that a
     // re-import REPLACES a document's renders would see both revisions accumulate and still pass,
     // which is exactly the bug such a suite is written to catch.
+    pruneByBlocks: (workspaceId, blockIds) =>
+      Promise.resolve(
+        reclaim(
+          (record) =>
+            record.workspaceId === workspaceId &&
+            record.blockId !== null &&
+            blockIds.includes(record.blockId),
+        ),
+      ),
+    moveBlocks: ([from, to], blockIds) => {
+      let moved = 0
+      for (const held of rows.values()) {
+        const { record } = held
+        if (record.workspaceId !== from || !record.blockId || !blockIds.includes(record.blockId))
+          continue
+        held.record = { ...record, workspaceId: to }
+        moved += 1
+      }
+      return Promise.resolve(moved)
+    },
+    listBlockAnchorsOlderThan: (workspaceId, olderThan) =>
+      Promise.resolve([
+        ...new Set(
+          [...rows.values()]
+            .map((held) => held.record)
+            .filter(
+              (record) =>
+                record.workspaceId === workspaceId &&
+                record.kind === 'context' &&
+                record.createdAt < olderThan,
+            )
+            .flatMap((record) => (record.blockId ? [record.blockId] : [])),
+        ),
+      ]),
     pruneByDocument: (workspaceId, document) =>
       Promise.resolve(
         reclaim(

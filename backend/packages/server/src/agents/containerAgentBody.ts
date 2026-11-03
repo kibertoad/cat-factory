@@ -68,21 +68,42 @@ export function buildRepoSpec(repo: RepoTarget, origin: RepoOrigin) {
 }
 
 /**
- * What THIS dispatch can do with the task's design pictures, or `undefined` when it holds none.
+ * What THIS dispatch can do with the task's images (its design pictures and the images attached
+ * to it), each `undefined` when the task holds none of that set.
  *
  * A DISPATCH fact for the same reason the tool servers are: it takes the resolved harness AND the
  * resolved model, neither of which the engine knows while it is building the context. Resolved even
  * when the answer is no, because the prompt has to STATE a withheld picture rather than leave the
- * agent reading the textual design description as everything the platform had.
+ * agent reading the text as everything the platform had.
  */
-export function dispatchDesignImageDelivery(
+export function dispatchImageDeliveries(
   context: AgentRunContext,
   harness: HarnessKind,
   ref: Pick<ModelRef, 'acceptsImages'>,
-): DesignImageDelivery | undefined {
-  return context.designImages?.files.length
-    ? resolveDesignImageDelivery({ channel: 'files', harness }, ref)
-    : undefined
+): { designImageDelivery?: DesignImageDelivery; taskImageDelivery?: DesignImageDelivery } {
+  const verdict = (set: DesignImageSet | undefined) =>
+    set?.files.length ? resolveDesignImageDelivery({ channel: 'files', harness }, ref) : undefined
+  const designImageDelivery = verdict(context.designImages)
+  const taskImageDelivery = verdict(context.taskImages)
+  return {
+    ...(designImageDelivery ? { designImageDelivery } : {}),
+    ...(taskImageDelivery ? { taskImageDelivery } : {}),
+  }
+}
+
+/**
+ * The image sets a job body carries: only those this dispatch can actually show. A harness with no
+ * image input would download them into a directory nothing ever opens, and its prompt already says
+ * (from the same verdict) that they could not be delivered.
+ */
+export function deliverableImageSets(
+  context: AgentRunContext,
+  deliveries: ReturnType<typeof dispatchImageDeliveries>,
+): { designImages?: DesignImageSet; taskImages?: DesignImageSet } {
+  return {
+    ...(deliveries.designImageDelivery?.attached ? { designImages: context.designImages } : {}),
+    ...(deliveries.taskImageDelivery?.attached ? { taskImages: context.taskImages } : {}),
+  }
 }
 
 /** One image manifest as the harness parses it: where to fetch, with what, and which files. */
@@ -94,8 +115,8 @@ interface ImageManifestBody {
 }
 
 /**
- * The two image manifests a job body may carry: the reference designs a CAPTURING kind compares
- * against, and the design pictures a BUILDING kind is shown.
+ * The image manifests a job body may carry: the reference designs a CAPTURING kind compares
+ * against, the design pictures a BUILDING kind is shown, and the images attached to the task.
  *
  * One builder, because both ride the same seam: only identities travel (a run's frames are
  * megabytes of PNG and a job body is JSON that crosses every transport and is persisted with the
@@ -116,7 +137,12 @@ function buildImageManifests(
   context: AgentRunContext,
   auth: Record<string, unknown>,
   designImages: DesignImageSet | undefined,
-): { referenceScreenshots?: ImageManifestBody; designImages?: ImageManifestBody } {
+  taskImages: DesignImageSet | undefined,
+): {
+  referenceScreenshots?: ImageManifestBody
+  designImages?: ImageManifestBody
+  taskImages?: ImageManifestBody
+} {
   const { proxyBaseUrl, sessionToken } = auth
   if (typeof proxyBaseUrl !== 'string' || typeof sessionToken !== 'string') return {}
   const url = `${proxyBaseUrl}/artifacts/reference`
@@ -143,6 +169,9 @@ function buildImageManifests(
       : {}),
     ...(designImages?.files.length
       ? { designImages: { url, token: sessionToken, files: files(designImages) } }
+      : {}),
+    ...(taskImages?.files.length
+      ? { taskImages: { url, token: sessionToken, files: files(taskImages) } }
       : {}),
   }
 }
@@ -218,6 +247,7 @@ export function buildCommonBody(
     capabilitySecrets?: CapabilitySecretJobSpec[]
     guardLimits?: unknown
     designImages?: DesignImageSet
+    taskImages?: DesignImageSet
   },
   deps: ContainerAgentExecutorDependencies,
   agentKindRegistry: AgentKindRegistry,
@@ -228,10 +258,11 @@ export function buildCommonBody(
   const artifactUpload = artifactUploadFor(context, auth, agentKindRegistry)
   // The other direction of the same seam: the images the engine resolved for this task, as
   // manifests the harness downloads before the agent's first turn.
-  const { referenceScreenshots, designImages } = buildImageManifests(
+  const { referenceScreenshots, designImages, taskImages } = buildImageManifests(
     context,
     auth,
     args.designImages,
+    args.taskImages,
   )
   return {
     jobId,
@@ -290,6 +321,7 @@ export function buildCommonBody(
     ...(artifactUpload ? { artifactUpload } : {}),
     ...(referenceScreenshots ? { referenceScreenshots } : {}),
     ...(designImages ? { designImages } : {}),
+    ...(taskImages ? { taskImages } : {}),
     ...(guardLimits ? { guardLimits } : {}),
   }
 }

@@ -14,6 +14,7 @@ import {
 } from '~/modular/panels/inspector.logic'
 import TaskContextDocs from '~/components/documents/TaskContextDocs.vue'
 import TaskContextIssues from '~/components/tasks/TaskContextIssues.vue'
+import TaskContextImages from '~/components/tasks/TaskContextImages.vue'
 import RecurringScheduleSettings from '~/components/panels/inspector/RecurringScheduleSettings.vue'
 import TaskExecution from '~/components/panels/inspector/TaskExecution.vue'
 import TaskReviewTarget from '~/components/panels/inspector/TaskReviewTarget.vue'
@@ -71,6 +72,7 @@ const COMPONENTS: Record<InspectorPanelId, Component> = {
   'task-review-target': TaskReviewTarget,
   'task-context-docs': TaskContextDocs,
   'task-context-issues': TaskContextIssues,
+  'task-context-images': TaskContextImages,
   'recurring-schedule': RecurringScheduleSettings,
   'task-execution': TaskExecution,
   'task-estimate': TaskEstimateBadge,

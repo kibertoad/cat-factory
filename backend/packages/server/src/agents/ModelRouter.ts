@@ -110,7 +110,7 @@ export class ModelRouter {
         ...(context.providerPreference ? { providerPreference: context.providerPreference } : {}),
         // Likewise the initiator's local-model declarations, folded onto the ref by the shared
         // resolver. Nothing on the CONTAINER path reads the modality today: a local ref names no
-        // harness, so this dispatch runs it on Pi, and `dispatchDesignImageDelivery` answers
+        // harness, so this dispatch runs it on Pi, and `dispatchImageDeliveries` answers
         // `harness_no_image_input` before it ever asks the ref (the inline executor is the reader
         // that benefits). Threaded here anyway because ONE resolution serving every path is what
         // stops them disagreeing about what a step ran on, so the day an image-carrying harness

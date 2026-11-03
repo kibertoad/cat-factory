@@ -32,7 +32,14 @@ import type { AgentRunContext } from '@cat-factory/kernel'
  */
 export function panelDesignImageCeiling(
   context: AgentRunContext,
-): Pick<AgentRunContext, 'designImageDelivery'> {
-  if (!context.designImages?.files.length) return {}
-  return { designImageDelivery: { attached: false, reason: 'consensus_panel' } }
+): Pick<AgentRunContext, 'designImageDelivery' | 'taskImageDelivery'> {
+  return {
+    ...(context.designImages?.files.length
+      ? { designImageDelivery: { attached: false, reason: 'consensus_panel' } }
+      : {}),
+    // The images attached to the task are withheld for the same reason and stated the same way.
+    ...(context.taskImages?.files.length
+      ? { taskImageDelivery: { attached: false, reason: 'consensus_panel' } }
+      : {}),
+  }
 }

@@ -75,7 +75,8 @@ import { ContainerJobAccounting } from './containerJobAccounting.js'
 import type { ResolveRepoTargets } from './resolveRepoTarget.js'
 import {
   buildCommonBody,
-  dispatchDesignImageDelivery,
+  deliverableImageSets,
+  dispatchImageDeliveries,
   buildRepoSpec,
   githubRepoOrigin,
   resolveAuxiliaryRepos,
@@ -804,7 +805,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Resolve the repo origin once so both the harness `RepoSpec` and the diagnostics repo
     // summary (returned below) agree on the VCS provider.
     const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)
-    const designImageDelivery = dispatchDesignImageDelivery(context, harness, ref)
+    const imageDeliveries = dispatchImageDeliveries(context, harness, ref)
     const common = buildCommonBody(
       context,
       {
@@ -825,10 +826,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           tuning?.guardLimits,
           context.block.estimate?.complexity,
         ),
-        // Only a dispatch that can actually show them sends a manifest: a harness with no image
-        // input would download the frames into a directory nothing ever opens, and its prompt
-        // already says (from the same verdict) that the pictures could not be delivered.
-        ...(designImageDelivery?.attached ? { designImages: context.designImages } : {}),
+        ...deliverableImageSets(context, imageDeliveries),
       },
       this.deps,
       this.agentKindRegistry,
@@ -843,7 +841,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // fact rather than something the engine could have put on the context.
     const promptContext = buildDispatchPromptContext(context, {
       tools,
-      designImageDelivery,
+      ...imageDeliveries,
       testCredentials,
     })
     // The proxy-backed web-tools nudge + switch, shared by the kinds that allow web access

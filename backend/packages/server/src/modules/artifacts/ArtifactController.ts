@@ -2,6 +2,8 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { BinaryArtifactKind, BinaryArtifactStore } from '@cat-factory/kernel'
+import { NotFoundError, ValidationError } from '@cat-factory/kernel'
+import { MAX_TASK_IMAGES } from '@cat-factory/contracts'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import {
@@ -15,6 +17,7 @@ import {
 import { requireCapability } from '../../http/guards.js'
 import { reclaimArtifactOverflow, reserveArtifactSlot } from './artifactSetCap.js'
 import { requestLogger } from '../../http/requestLogging.js'
+import { mountTaskImageRoutes, resolveTaskImageHome } from './taskImageRoutes.js'
 
 /**
  * Resolve the binary-artifact store for the request's workspace (its account's configured
@@ -29,7 +32,14 @@ async function requireStore<E extends AppEnv>(c: Context<E>): Promise<BinaryArti
   )
 }
 
-const ALLOWED_KINDS: BinaryArtifactKind[] = ['screenshot', 'reference']
+const ALLOWED_KINDS: BinaryArtifactKind[] = ['screenshot', 'reference', 'context']
+
+/**
+ * The kinds this endpoint deletes: a reference design a person uploaded. A run's captures and a
+ * step's generated assets are evidence and deliverables, never a person's to undo, and an attached
+ * task image is removed through its task (`taskImageRoutes.ts`), which resolves where it lives.
+ */
+const DELETABLE_KINDS: ReadonlySet<BinaryArtifactKind> = new Set(['reference'])
 
 /**
  * Standing row-count bound on one board block's uploaded artifacts, the sibling of the harness
@@ -51,6 +61,29 @@ function blockCap(store: BinaryArtifactStore, workspaceId: string, blockId: stri
     list: () => store.listByBlock(workspaceId, blockId),
     remove: (id: string) => store.delete(workspaceId, id),
   }
+}
+
+/**
+ * The images attached to one task, as the cap sees them: {@link MAX_TASK_IMAGES}, the number the
+ * SPA offers and a dispatch hands its agents. Counted off the block listing, which the per-block
+ * cap already bounds.
+ */
+function taskImageCap(store: BinaryArtifactStore, workspaceId: string, blockId: string) {
+  const list = async () =>
+    (await store.listByBlock(workspaceId, blockId)).filter((record) => record.kind === 'context')
+  return {
+    limit: MAX_TASK_IMAGES,
+    count: async () => (await list()).length,
+    list,
+    remove: (id: string) => store.delete(workspaceId, id),
+  }
+}
+
+function taskImageLimitReached(): ValidationError {
+  return new ValidationError(`A task holds at most ${MAX_TASK_IMAGES} attached images`, {
+    reason: 'task_image_limit_reached',
+    limit: MAX_TASK_IMAGES,
+  })
 }
 
 /** The one refusal both cap checks answer with, so the pre-check and the reconcile cannot differ. */
@@ -85,7 +118,6 @@ export function artifactController(): Hono<AppEnv> {
         c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413),
     }),
     async (c) => {
-      const store = await requireStore(c)
       // Refuse a grossly oversized body up-front (from Content-Length) so it is never buffered
       // into memory; the exact per-file ceiling is still enforced after parsing below.
       if (exceedsRequestSizeLimit(c.req.header('content-length'))) {
@@ -131,10 +163,23 @@ export function artifactController(): Hono<AppEnv> {
       // run, so `executionId` is always null here — a run-scoped capture goes through the
       // token-authed harness ingest route instead, where the execution is derived from the verified
       // session token (never the request body). We deliberately ignore any client-supplied
-      // `executionId` rather than trust it. `blockId` is non-authoritative but harmless: every read
-      // filters by the path's (authenticated) `workspaceId`, so a row tagged with a foreign/bogus
-      // block is simply never surfaced by the gate.
-      const workspaceId = param(c, 'workspaceId')
+      // `executionId` rather than trust it. For a reference design `blockId` is non-authoritative but
+      // harmless: every read filters by the path's (authenticated) `workspaceId`, and a reference is
+      // swept by age, so a row tagged with a foreign/bogus block is never surfaced and never kept.
+      // An attached task image is RETAINED until its block goes, so its block is resolved instead.
+      if (kind === 'context' && !blockId) {
+        throw new ValidationError('An attached task image needs a blockId', {
+          reason: 'task_image_block_required',
+        })
+      }
+      const { workspaceId, store } =
+        kind === 'context' && blockId
+          ? await resolveTaskImageHome(c, blockId)
+          : { workspaceId: param(c, 'workspaceId'), store: await requireStore(c) }
+      const imageCap =
+        kind === 'context' && blockId ? taskImageCap(store, workspaceId, blockId) : null
+      const priorImages = imageCap ? await reserveArtifactSlot(imageCap) : 0
+      if (priorImages === null) throw taskImageLimitReached()
       // Per-block ceiling, enforced only for a row that HAS a block: an untagged upload joins no
       // set this endpoint can bound, and counting it against a null `blockId` would make every
       // such upload contend with every other one in the workspace.
@@ -156,6 +201,9 @@ export function artifactController(): Hono<AppEnv> {
       // lands; the reconcile rolls THIS record back when it is the one that overflowed.
       if (cap && (await reclaimArtifactOverflow(cap, priorCount, record.id))) {
         return refuseFullBlock(c, blockId, MAX_ARTIFACTS_PER_BLOCK)
+      }
+      if (imageCap && (await reclaimArtifactOverflow(imageCap, priorImages, record.id))) {
+        throw taskImageLimitReached()
       }
       return c.json({ artifact: record }, 201)
     },
@@ -182,6 +230,20 @@ export function artifactController(): Hono<AppEnv> {
     })
   })
 
+  // Remove an artifact a person uploaded against a task (an attached image, a reference design),
+  // bytes first. Anything else answers 404: it is not theirs to delete, and not a thing to probe for.
+  app.delete('/artifacts/:id', async (c) => {
+    const store = await requireStore(c)
+    const workspaceId = param(c, 'workspaceId')
+    const id = param(c, 'id')
+    const record = await store.getMetadata(workspaceId, id)
+    if (!record || !DELETABLE_KINDS.has(record.kind)) {
+      throw new NotFoundError('Artifact', id, { reason: 'artifact_not_found' })
+    }
+    await store.delete(workspaceId, id)
+    return c.body(null, 204)
+  })
+
   // List a run's artifacts (metadata only; the gate pairs screenshots vs references by view).
   app.get('/executions/:executionId/artifacts', async (c) => {
     const store = await requireStore(c)
@@ -196,6 +258,8 @@ export function artifactController(): Hono<AppEnv> {
     const artifacts = await store.listByBlock(param(c, 'workspaceId'), param(c, 'blockId'))
     return c.json({ artifacts }, 200)
   })
+
+  mountTaskImageRoutes(app)
 
   return app
 }

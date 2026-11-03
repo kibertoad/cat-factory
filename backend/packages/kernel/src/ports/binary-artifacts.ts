@@ -54,8 +54,13 @@ export type BinaryArtifactStorageKind = BuiltinBinaryArtifactStorageKind | (stri
  * storage ({@link PLATFORM_ASSET_STORAGE_SERVICE_ID} in `@cat-factory/contracts`), so it
  * outlives the run that made it and is EXEMPT from the age-based retention sweep. See
  * {@link BinaryArtifactStore.pruneOlderThan}.
+ *
+ * `context` is a picture a person attached to a task to explain it (a bug screenshot, a sketch, a
+ * diagram). It reaches the agents working the task as TASK material, never as a design to match, so
+ * it joins no visual-confirmation pairing. It is part of the task's definition rather than run
+ * debris, so it is retained like an asset and reclaimed with its block.
  */
-export type BinaryArtifactKind = 'screenshot' | 'reference' | 'asset'
+export type BinaryArtifactKind = 'screenshot' | 'reference' | 'asset' | 'context'
 
 /**
  * The artifact kinds the age-based retention sweep may reclaim, as the ONE statement both
@@ -63,9 +68,20 @@ export type BinaryArtifactKind = 'screenshot' | 'reference' | 'asset'
  *
  * Stated as what the sweep KEEPS rather than as what it drops, so a kind added later is swept by
  * default and has to be named here to be exempted: the opposite reading would silently retain a
- * new kind forever, which nothing would ever surface. Today the exempt set is `asset` alone.
+ * new kind forever, which nothing would ever surface. A `context` image lives as long as its task
+ * does: {@link BinaryArtifactStore.pruneByBlocks} reclaims it when the block is deleted.
  */
-export const RETAINED_BINARY_ARTIFACT_KINDS: readonly BinaryArtifactKind[] = ['asset']
+export const RETAINED_BINARY_ARTIFACT_KINDS: readonly BinaryArtifactKind[] = ['asset', 'context']
+
+/**
+ * The retained kinds whose lifetime is their BLOCK's, so the age sweep reclaims a row of one once
+ * its block no longer exists in the row's workspace.
+ *
+ * {@link BinaryArtifactStore.pruneByBlocks} on a block delete is the prompt reclaim, and this is
+ * its backstop: a blob delete that failed there, a best-effort reclaim that never ran, and a delete
+ * path that does not call it all leave a row no later delete would ever name.
+ */
+export const BLOCK_ANCHORED_BINARY_ARTIFACT_KINDS: readonly BinaryArtifactKind[] = ['context']
 
 /**
  * The document an artifact was rendered FROM, when it came from one.
@@ -174,6 +190,27 @@ export interface BinaryArtifactStore {
    */
   countByBlock(workspaceId: string, blockId: string): Promise<number>
   /**
+   * Block-delete reclaim: delete every artifact anchored on any of the named blocks, BOTH the
+   * metadata rows AND their bytes, and return how many were removed. One batched read for the
+   * whole doomed subtree, then the same fail-safe blobs-first reclaim as {@link pruneOlderThan}.
+   */
+  pruneByBlocks(workspaceId: string, blockIds: readonly string[]): Promise<number>
+  /**
+   * Cross-home move: re-key every artifact anchored on the named blocks from one workspace to
+   * another, metadata only, and return how many rows moved. The bytes stay where they are, since
+   * a row's `storageKey` is the only handle on them and it does not change.
+   */
+  moveBlocks(
+    workspaceIds: readonly [from: string, to: string],
+    blockIds: readonly string[],
+  ): Promise<number>
+  /**
+   * The distinct blocks carrying a {@link BLOCK_ANCHORED_BINARY_ARTIFACT_KINDS} row created before
+   * `olderThan` (epoch ms): what the age sweep checks against the board to find rows whose block
+   * is gone.
+   */
+  listBlockAnchorsOlderThan(workspaceId: string, olderThan: number): Promise<string[]>
+  /**
    * Artifacts rendered from one imported document — the design renders an import retained, read
    * back by the surfaces that pair them with a task's screenshots.
    */
@@ -252,8 +289,24 @@ export interface BinaryArtifactMetadataStore {
   /** Count a run's artifacts without materialising rows (the per-run upload cap precheck). */
   countByExecution(workspaceId: string, executionId: string): Promise<number>
   listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]>
+  /**
+   * The records anchored on any of the named blocks, in ONE chunked statement per call. Empty
+   * input reads nothing. Ordered like {@link listByBlock} across the whole result.
+   */
+  listByBlocks(workspaceId: string, blockIds: readonly string[]): Promise<BinaryArtifactRecord[]>
   /** Count a block's artifacts without materialising rows (the per-block upload cap precheck). */
   countByBlock(workspaceId: string, blockId: string): Promise<number>
+  /**
+   * Re-key the rows anchored on the named blocks from `workspaceIds[0]` to `workspaceIds[1]`, in
+   * ONE chunked statement per call; returns how many moved. Empty input is a no-op. Both
+   * workspaces travel in one list so a remote caller is scoped against BOTH of them.
+   */
+  moveBlocks(
+    workspaceIds: readonly [from: string, to: string],
+    blockIds: readonly string[],
+  ): Promise<number>
+  /** See {@link BinaryArtifactStore.listBlockAnchorsOlderThan}. A `DISTINCT` read, no row materialised. */
+  listBlockAnchorsOlderThan(workspaceId: string, olderThan: number): Promise<string[]>
   /** Records rendered from one imported document (the design renders an import retained). */
   listByDocument(
     workspaceId: string,
@@ -302,6 +355,13 @@ export interface BinaryArtifactMetadataStore {
   /** Delete every metadata row in the workspace; returns the count. */
   deleteByWorkspace(workspaceId: string): Promise<number>
 }
+
+/**
+ * The metadata half a caller reads when it needs to know WHAT a block carries and none of the
+ * bytes: no account settings are read and no blob backend is built, so it is cheap enough to ask
+ * on every dispatch. The rows it lists are the ones the resolved store would list.
+ */
+export type BinaryArtifactBlockIndex = Pick<BinaryArtifactMetadataStore, 'listByBlock'>
 
 /**
  * The pluggable blob backend — the "custom adapter interface". Implement this to
@@ -482,6 +542,23 @@ export function createBinaryArtifactStore(deps: {
     },
     listByBlock(workspaceId, blockId) {
       return metadata.listByBlock(workspaceId, blockId)
+    },
+    async pruneByBlocks(workspaceId, blockIds) {
+      if (!blockIds.length) return 0
+      const doomed = await metadata.listByBlocks(workspaceId, blockIds)
+      if (!doomed.length) return 0
+      return reclaim(doomed, () =>
+        metadata.deleteByIds(
+          workspaceId,
+          doomed.map((record) => record.id),
+        ),
+      )
+    },
+    moveBlocks(workspaceIds, blockIds) {
+      return blockIds.length ? metadata.moveBlocks(workspaceIds, blockIds) : Promise.resolve(0)
+    },
+    listBlockAnchorsOlderThan(workspaceId, olderThan) {
+      return metadata.listBlockAnchorsOlderThan(workspaceId, olderThan)
     },
     listByDocument(workspaceId, document) {
       return metadata.listByDocument(workspaceId, document)

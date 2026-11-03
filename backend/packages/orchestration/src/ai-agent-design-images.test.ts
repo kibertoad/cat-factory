@@ -139,3 +139,47 @@ describe('AiAgentExecutor design-picture delivery', () => {
     expect(userText(captured())).toContain('does not know whether')
   })
 })
+
+describe('AiAgentExecutor task-image delivery', () => {
+  function withTaskImages(): AgentRunContext {
+    return {
+      ...contextFor(),
+      taskImages: {
+        files: [
+          {
+            view: 'crash.png',
+            artifactId: 'art_ctx',
+            contentType: 'image/png',
+            fileName: 'crash-png.png',
+          },
+        ],
+        omitted: [],
+      },
+    }
+  }
+
+  it('attaches the images attached to the task beside the design pictures', async () => {
+    const { exec, captured } = executorFor({
+      provider: 'anthropic',
+      model: 'claude',
+      acceptsImages: true,
+    })
+    await exec.run(withTaskImages())
+    expect(imageParts(captured())).toHaveLength(2)
+    expect(userText(captured())).toContain('Images attached to this task')
+    expect(userText(captured())).toContain('crash.png')
+    expect(userText(captured())).not.toContain('.cat-context/task-images')
+  })
+
+  it('states the withholding on a model that does not take images', async () => {
+    const { exec, captured } = executorFor({
+      provider: 'anthropic',
+      model: 'claude',
+      acceptsImages: false,
+    })
+    await exec.run(withTaskImages())
+    expect(imageParts(captured())).toHaveLength(0)
+    expect(userText(captured())).toContain('could NOT put in front of you')
+    expect(userText(captured())).toContain('does not accept image input')
+  })
+})

@@ -721,9 +721,12 @@ function buildReviewAndIntegrationRepos() {
       listByExecution: async (ws: string) => [{ ws }],
       countByExecution: async (_ws: string) => 0,
       listByBlock: async (ws: string) => [{ ws }],
+      listByBlocks: async (ws: string) => [{ ws }],
+      moveBlocks: async () => 1,
       insert: async () => undefined,
       delete: async () => undefined,
       listOlderThan: async () => [],
+      listBlockAnchorsOlderThan: async () => [],
     },
   }
 }

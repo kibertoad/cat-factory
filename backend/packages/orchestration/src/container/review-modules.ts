@@ -37,6 +37,14 @@ function resolveInlinePromptOverride(
     (await repository.head(workspaceId, agentKind))?.text ?? undefined
 }
 
+/**
+ * The images attached to the task under review reach every inline reviewer through these two:
+ * the account's artifact store, and where a failed read reports itself.
+ */
+function reviewTaskImageDeps(deps: CoreDependencies) {
+  return { resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore, logger: deps.logger }
+}
+
 export function createRequirementsModule(
   deps: CoreDependencies,
   notificationService?: NotificationService,
@@ -66,6 +74,7 @@ export function createRequirementsModule(
     // The routing default, the block-model resolver, the local-mode inline predicate, and the
     // preset's per-kind default model + route order — wired as ONE slice (see the factory).
     ...inlineModelResolutionDeps(deps),
+    ...reviewTaskImageDeps(deps),
     // The reviewer runs during a parked run, so its execution + initiator come from the
     // block's active run — threaded into the model scope so an inline subscription ref served
     // through a leased per-run activation (local container inline backend) can lease it.
@@ -178,6 +187,7 @@ export function createBrainstormModule(
     // The routing default, the block-model resolver, the local-mode inline predicate, and the
     // preset's per-kind default model + route order — wired as ONE slice (see the factory).
     ...inlineModelResolutionDeps(deps),
+    ...reviewTaskImageDeps(deps),
     // Brainstorm stages are pipeline gate steps that run during a parked run, so their
     // execution + initiator come from the block's active run — threaded into the model scope
     // so an inline subscription ref served through a leased per-run activation (local container
@@ -222,6 +232,7 @@ export function createClarityModule(
     // The routing default, the block-model resolver, the local-mode inline predicate, and the
     // preset's per-kind default model + route order — wired as ONE slice (see the factory).
     ...inlineModelResolutionDeps(deps),
+    ...reviewTaskImageDeps(deps),
     resolveRunContext: resolveBlockRunContext(deps),
   })
   return { service }

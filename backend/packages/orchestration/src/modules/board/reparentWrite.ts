@@ -6,6 +6,8 @@ import type {
   BlockType,
   BoardChange,
   ExecutionRepository,
+  Logger,
+  ResolveBinaryArtifactStore,
   ServiceRepository,
   WorkspaceMountRepository,
 } from '@cat-factory/kernel'
@@ -13,6 +15,7 @@ import { assertFound, ValidationError } from '@cat-factory/kernel'
 import type { BoardChangeReason } from './board.logic.js'
 import { canReparent, descendantIds, serviceOf } from './board.logic.js'
 import { pruneDanglingEdges } from './removal-cascade.js'
+import { moveBlockArtifacts } from './blockArtifacts.js'
 import type { RiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
 
 /**
@@ -33,6 +36,9 @@ export interface BoardReparentDeps {
   /** Absent ⇒ sharing isn't wired, so blocks are plain workspace-local and never re-stamped. */
   serviceRepository?: ServiceRepository
   workspaceMountRepository?: WorkspaceMountRepository
+  /** Carries the moved subtree's artifacts (a task's attached images) to its new home. */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  logger?: Logger
   /** Refuses a move that would drop a role-scoped merge restriction (ADR 0037). */
   riskPolicySelection: RiskPolicySelectionGuard
   /** 404s an unknown board before anything is written. */
@@ -187,6 +193,7 @@ export function createBoardReparentWrite(deps: BoardReparentDeps) {
         await deps.executionRepository.upsert(parentHome, exec)
       }
     }
+    await moveBlockArtifacts(deps, [blockHome, parentHome], ids)
     await deps.blockRepository.deleteMany(blockHome, ids)
     // Drop dependency + epic edges in the source workspace that now dangle to the moved subtree.
     await pruneDanglingEdges(deps.blockRepository, blockHome, srcBlocks, new Set(ids))

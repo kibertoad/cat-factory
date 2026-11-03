@@ -112,6 +112,7 @@ import {
   describeError,
 } from '@cat-factory/kernel'
 import { D1WorkspaceRepository } from './infrastructure/repositories/D1WorkspaceRepository'
+import { D1BlockRepository } from './infrastructure/repositories/D1BlockRepository'
 import { D1WorkspaceSettingsRepository } from './infrastructure/repositories/D1WorkspaceSettingsRepository'
 import { D1KeyFingerprintStore } from './infrastructure/repositories/D1KeyFingerprintStore'
 import {
@@ -716,6 +717,7 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
             .then(
               (s) => s?.artifactRetentionDays ?? DEFAULT_WORKSPACE_SETTINGS.artifactRetentionDays,
             ),
+        findBlocks: (blockIds) => new D1BlockRepository({ db: env.DB }).findByIds(blockIds),
         now: clock.now(),
       }).then((removed) =>
         logger.info('artifact retention sweep complete', {

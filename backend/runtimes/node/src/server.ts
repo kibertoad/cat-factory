@@ -653,8 +653,7 @@ function startBackgroundSweepers(deps: {
   const stopArtifactRetention = container.resolveBinaryArtifactStore
     ? startArtifactRetentionSweeper(
         container.resolveBinaryArtifactStore,
-        repos.workspaceRepository,
-        repos.workspaceSettingsRepository,
+        repos,
         clock,
         logger,
         sweepHealth,
