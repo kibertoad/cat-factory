@@ -17,24 +17,19 @@ a story fakes the data, and a fake cannot prove the two sides agree.
 The design record for the stories is
 [ADR 0068](../../backend/docs/adr/0068-component-stories.md).
 
-## The patch
-
-`patches/@storybook-vue__nuxt@10.0.2.patch` fixes one upstream bug in the Storybook preset, and
-`pnpm-workspace.yaml` applies it. It pins the exact version, so a bump fails the install instead
-of applying a stale fix. Remove the patch when a release fixes the bug.
-
-**Every story test throws "StoryContext is not provided".** `setup()` takes its key from
-`storyContext.canvasElement.id`, and under `@storybook/addon-vitest` the canvas is a `div` with an
-empty `id`. Upstream:
-[nuxt-modules/storybook#1140](https://github.com/nuxt-modules/storybook/issues/1140). The key only
-names the story's Nuxt app, so the patch uses a constant name when the id is empty, and each story
-overwrites it the way the canvas id does in Storybook itself. A missing canvas still throws. The
-patch covers both entry points, `dist/preview.mjs` and `dist/preview.cjs`.
+## The preset's app context
 
 The preset writes each story's Nuxt app through Nuxt's own `getNuxtAppCtx`
 ([nuxt-modules/storybook#1139](https://github.com/nuxt-modules/storybook/pull/1139)). Any story
 whose component reads `useAppConfig()` (`Spinner` does) throws `NUXT_E1001` if that write breaks,
 in the preset or in Nuxt.
+
+**A file keeps every story it has run.** Under addon-vitest the canvas has no `id`, so the preset
+names each story's app after its canvas element (`nuxt-app-canvas-N`) and keeps it in unctx's
+global namespace until the file's iframe goes. That is not what holds the memory: in
+`AgentFailureCard.stories.ts` (15 stories) the heap after a full collection grew by about 12 MB per
+story, from 109 MB to 291 MB, and grew the same with one constant name in place of the per-canvas
+one. A file's peak heap therefore grows with its story count.
 
 ## Traps this setup already paid for
 
@@ -267,17 +262,17 @@ every later story in the session.
 
 ## Checks
 
-| What                                                                                    | Where it runs                   |
-| --------------------------------------------------------------------------------------- | ------------------------------- |
-| The stories typecheck                                                                   | the app's `typecheck`, every PR |
-| `fixtures.spec.ts`                                                                      | the app's unit tests, every PR  |
-| `node scripts/check-story-titles.mjs` (titles, one file per component, `Default` first) | CI's guard steps, every PR      |
-| `test:stories`: every story renders in headless Chromium, with an axe check             | nightly, and on request         |
+| What                                                                                    | Where it runs                                       |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| The stories typecheck                                                                   | the app's `typecheck`, every PR                     |
+| `fixtures.spec.ts`                                                                      | the app's unit tests, every PR                      |
+| `node scripts/check-story-titles.mjs` (titles, one file per component, `Default` first) | CI's guard steps, every PR                          |
+| `test:stories`: every story renders in headless Chromium, with an axe check             | nightly, on a PR that edits a story, and on request |
 
 `test:stories` takes about 10 minutes for the whole tree on a laptop and about half an hour on CI's
-runner, where the job's limit is 45 minutes, so no PR waits on it. Each new stories file adds a
-garbage collection to that time. It also runs on a PR that changes the lane itself, except a
-release PR, which changes only package versions.
+runner, where the job's limit is 45 minutes, so an ordinary PR does not wait on it. Each new
+stories file adds a garbage collection to that time. It also runs on a PR that changes the lane
+itself or edits a story, except a release PR, which changes only package versions.
 `--browser.isolate=false` cut that to about 2 minutes, and was rejected: with the files shuffled,
 2 of 4 runs timed out on stories that pass alone, and no story failed twice. Those runs used
 Vitest's default worker count, before the cap below, so contention may explain the timeouts; the
