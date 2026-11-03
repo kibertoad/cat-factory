@@ -5978,12 +5978,13 @@
       "toast": {
         "posted": "Wymagania opublikowano w powiązanych zgłoszeniach",
         "nothingNew": "Powiązane zgłoszenia mają już te wymagania",
-        "partial": "Niektóre powiązane zgłoszenia nie otrzymały wymagań"
+        "partial": "Niektóre powiązane zgłoszenia nie otrzymały wymagań",
+        "inFlight": "Publikacja w powiązanych zgłoszeniach już trwa"
       },
       "outcome": {
         "posted": "opublikowano",
         "already_posted": "już opublikowano",
-        "in_flight": "publikacja nadal trwa",
+        "in_flight": "publikacja już trwa albo jej wynik nie został zapisany",
         "failed": "nie powiodło się, opublikuj ponownie, aby spróbować jeszcze raz",
         "unsupported": "do tego trackera nie można zapisywać"
       }

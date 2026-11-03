@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { memoryWritebackPosts } from './test-support/memory-writeback-posts.js'
 import { DEFAULT_TRACKER_WRITEBACK } from '@cat-factory/contracts'
-import { REVIEW_QUESTION_POST_CLAIM_TTL_MS } from '@cat-factory/kernel'
+import { WRITEBACK_POST_CLAIM_TTL_MS } from '@cat-factory/kernel'
 import type {
   Block,
   PullRequestRef,
   ReviewQuestionPost,
-  ReviewQuestionPostKey,
-  ReviewQuestionPostRecord,
-  ReviewQuestionPostRepository,
   TaskConnectionStore,
   SealedConnectionOpenResult,
   TaskConnectionRecord,
@@ -18,6 +16,7 @@ import type {
   TaskWritebackContext,
   TrackerSettings,
   TrackerSettingsRepository,
+  WritebackPostKey,
   TaskRepository,
 } from '@cat-factory/kernel'
 import { IssueWritebackService } from './IssueWritebackService.js'
@@ -444,8 +443,14 @@ describe('IssueWritebackService — issue pickup (bug intake)', () => {
 // ---------------------------------------------------------------------------
 
 /** The marker key every case below reads back: the one linked issue of `block()`. */
-function markerKey(): ReviewQuestionPostKey {
-  return { workspaceId: 'ws', reviewId: 'rr_1', iteration: 1, issueRef: 'github:acme/web#3' }
+function markerKey(): WritebackPostKey {
+  return {
+    workspaceId: 'ws',
+    kind: 'review_questions',
+    subjectId: 'rr_1',
+    issueRef: 'github:acme/web#3',
+    discriminator: '1',
+  }
 }
 
 function questionPost(over: Partial<ReviewQuestionPost> = {}): ReviewQuestionPost {
@@ -460,53 +465,14 @@ function questionPost(over: Partial<ReviewQuestionPost> = {}): ReviewQuestionPos
   }
 }
 
-/** An in-memory marker store with the same claim-once/retry-on-failure contract as both repos. */
-function fakeMarkers(): ReviewQuestionPostRepository & {
-  rows: Map<string, ReviewQuestionPostRecord>
-} {
-  const rows = new Map<string, ReviewQuestionPostRecord>()
-  const k = (key: ReviewQuestionPostKey) =>
-    `${key.workspaceId}|${key.reviewId}|${key.iteration}|${key.issueRef}`
-  return {
-    rows,
-    async claim(key, window) {
-      const existing = rows.get(k(key))
-      // Mirrors both repos' claim predicate: a `failed` row retries, and a `pending` one is
-      // stealable only once it is old enough to be abandoned rather than in flight.
-      const abandoned =
-        existing?.status === 'pending' && existing.updatedAt <= window.reclaimPendingBefore
-      if (existing && existing.status !== 'failed' && !abandoned) return false
-      rows.set(k(key), {
-        ...key,
-        status: 'pending',
-        attempts: (existing?.attempts ?? 0) + 1,
-        error: null,
-        updatedAt: window.now,
-      })
-      return true
-    },
-    async settle(key, outcome, now) {
-      const existing = rows.get(k(key))
-      if (!existing) return
-      rows.set(k(key), {
-        ...existing,
-        status: outcome.status,
-        error: outcome.status === 'failed' ? outcome.error : null,
-        updatedAt: now,
-      })
-    },
-    async get(key) {
-      return rows.get(k(key)) ?? null
-    },
-  }
-}
+const fakeMarkers = memoryWritebackPosts
 
 describe('IssueWritebackService.postReviewQuestions', () => {
   it('posts the rendered questions when the workspace opted in', async () => {
     const { svc, recorded } = serviceWith({
       trackerSettingsRepository: fakeTrackerSettings(settings({ writebackQuestionsOnPark: true })),
       taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-      reviewQuestionPostRepository: fakeMarkers(),
+      writebackPostRepository: fakeMarkers(),
     })
     const outcome = await svc.postReviewQuestions('ws', block(), questionPost())
     expect(outcome).toEqual({ posted: 1, skipped: 0, failed: 0 })
@@ -517,7 +483,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
     const { svc, recorded } = serviceWith({
       trackerSettingsRepository: fakeTrackerSettings(settings()),
       taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-      reviewQuestionPostRepository: fakeMarkers(),
+      writebackPostRepository: fakeMarkers(),
     })
     expect(await svc.postReviewQuestions('ws', block(), questionPost())).toEqual({
       posted: 0,
@@ -533,7 +499,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
       // asking the reporter for what they left out is how the bug gets fixed at all.
       trackerSettingsRepository: fakeTrackerSettings(settings()),
       taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-      reviewQuestionPostRepository: fakeMarkers(),
+      writebackPostRepository: fakeMarkers(),
       taskConnectionStore: fakeConnections({ webhookSecret: 'whsec' }),
     })
     const outcome = await svc.postReviewQuestions(
@@ -554,7 +520,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
     const on = serviceWith({
       trackerSettingsRepository: fakeTrackerSettings(settings()),
       taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-      reviewQuestionPostRepository: fakeMarkers(),
+      writebackPostRepository: fakeMarkers(),
     })
     await on.svc.postReviewQuestions('ws', block({ trackerQuestionsOnPark: 'on' }), questionPost())
     expect(on.recorded.comments).toHaveLength(1)
@@ -562,7 +528,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
     const off = serviceWith({
       trackerSettingsRepository: fakeTrackerSettings(settings({ writebackQuestionsOnPark: true })),
       taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-      reviewQuestionPostRepository: fakeMarkers(),
+      writebackPostRepository: fakeMarkers(),
     })
     await off.svc.postReviewQuestions(
       'ws',
@@ -576,7 +542,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
     const { svc, recorded } = serviceWith({
       trackerSettingsRepository: fakeTrackerSettings(settings({ writebackQuestionsOnPark: true })),
       taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-      reviewQuestionPostRepository: fakeMarkers(),
+      writebackPostRepository: fakeMarkers(),
     })
     await svc.postReviewQuestions('ws', block(), questionPost())
     const replay = await svc.postReviewQuestions('ws', block(), questionPost())
@@ -597,7 +563,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
           settings({ writebackQuestionsOnPark: true }),
         ),
         taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-        reviewQuestionPostRepository: markers,
+        writebackPostRepository: markers,
       },
       recordingSource('github', { failComment: () => (fail ? new Error('tracker down') : null) }),
     )
@@ -637,7 +603,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
     const svc = new IssueWritebackService({
       trackerSettingsRepository: fakeTrackerSettings(settings({ writebackQuestionsOnPark: true })),
       taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-      reviewQuestionPostRepository: markers,
+      writebackPostRepository: markers,
       // No `github` provider registered at all.
       taskSourceProviders: [],
     })
@@ -657,7 +623,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
     const { svc } = serviceWith({
       trackerSettingsRepository: fakeTrackerSettings(settings({ writebackQuestionsOnPark: true })),
       taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-      reviewQuestionPostRepository: markers,
+      writebackPostRepository: markers,
       taskConnectionStore: fakeConnections({ unreadable: ['github'] }),
     })
     expect(await svc.postReviewQuestions('ws', block(), questionPost())).toEqual({
@@ -678,7 +644,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
           settings({ writebackQuestionsOnPark: true }),
         ),
         taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-        reviewQuestionPostRepository: markers,
+        writebackPostRepository: markers,
       },
       recordingSource('github', {
         failComment: () => new Error('Cannot resolve GitHub issue acme/web#3 for this workspace'),
@@ -701,7 +667,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
           settings({ writebackQuestionsOnPark: true }),
         ),
         taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-        reviewQuestionPostRepository: markers,
+        writebackPostRepository: markers,
       },
       recordingSource('github', {
         failComment: () =>
@@ -719,11 +685,11 @@ describe('IssueWritebackService.postReviewQuestions', () => {
     // step) leaves a `pending` row nobody will settle. Without the takeover window that row is
     // terminal in practice: the questions never arrive AND nothing retries.
     const markers = fakeMarkers()
-    let now = 10 * REVIEW_QUESTION_POST_CLAIM_TTL_MS
+    let now = 10 * WRITEBACK_POST_CLAIM_TTL_MS
     const { svc, recorded } = serviceWith({
       trackerSettingsRepository: fakeTrackerSettings(settings({ writebackQuestionsOnPark: true })),
       taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-      reviewQuestionPostRepository: markers,
+      writebackPostRepository: markers,
       clock: { now: () => now },
     })
 
@@ -731,7 +697,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
     await markers.claim(markerKey(), { now, reclaimPendingBefore: now - 1 })
 
     // A replay one tick short of the window must NOT steal a post that may still be in flight.
-    now += REVIEW_QUESTION_POST_CLAIM_TTL_MS - 1
+    now += WRITEBACK_POST_CLAIM_TTL_MS - 1
     expect(await svc.postReviewQuestions('ws', block(), questionPost())).toEqual({
       posted: 0,
       skipped: 1,
@@ -771,7 +737,7 @@ describe('IssueWritebackService.postReviewQuestions — answer channels', () => 
     const { svc, recorded } = serviceWith({
       trackerSettingsRepository: fakeTrackerSettings(settings({ writebackQuestionsOnPark: true })),
       taskRepository: fakeTasks(issues),
-      reviewQuestionPostRepository: fakeMarkers(),
+      writebackPostRepository: fakeMarkers(),
       ...(connections ? { taskConnectionStore: connections } : {}),
     })
     expect(await svc.postReviewQuestions('ws', block(), questionPost())).toEqual({
@@ -809,7 +775,7 @@ describe('IssueWritebackService.postReviewQuestions — answer channels', () => 
     const { svc } = serviceWith({
       trackerSettingsRepository: fakeTrackerSettings(settings({ writebackQuestionsOnPark: true })),
       taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-      reviewQuestionPostRepository: fakeMarkers(),
+      writebackPostRepository: fakeMarkers(),
       taskConnectionStore: fakeConnections({ throws: true }),
     })
     expect(await svc.postReviewQuestions('ws', block(), questionPost())).toEqual({
@@ -831,7 +797,7 @@ describe('IssueWritebackService.postReviewQuestions — answer channels', () => 
           settings({ writebackQuestionsOnPark: true }),
         ),
         taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-        reviewQuestionPostRepository: fakeMarkers(),
+        writebackPostRepository: fakeMarkers(),
         taskConnectionStore: fakeConnections({ throws: true }),
       },
       recordingSource('github', { authenticates: 'out-of-band' }),
@@ -886,7 +852,7 @@ describe('IssueWritebackService.postReviewQuestions — answer channels', () => 
         githubIssue('acme/web#4'),
         githubIssue('acme/web#5'),
       ]),
-      reviewQuestionPostRepository: fakeMarkers(),
+      writebackPostRepository: fakeMarkers(),
       taskConnectionStore: counting,
     })
     expect(await svc.postReviewQuestions('ws', block(), questionPost())).toEqual({

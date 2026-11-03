@@ -5266,12 +5266,13 @@
       "toast": {
         "posted": "Requisiti pubblicati nelle issue collegate",
         "nothingNew": "Le issue collegate contengono già questi requisiti",
-        "partial": "Alcune issue collegate non hanno ricevuto i requisiti"
+        "partial": "Alcune issue collegate non hanno ricevuto i requisiti",
+        "inFlight": "Una pubblicazione nelle issue collegate è già in corso"
       },
       "outcome": {
         "posted": "pubblicato",
         "already_posted": "già pubblicato",
-        "in_flight": "una pubblicazione è ancora in corso",
+        "in_flight": "pubblicazione già in corso, o il risultato non è stato registrato",
         "failed": "non riuscito, pubblica di nuovo per riprovare",
         "unsupported": "non è possibile scrivere in questo tracker"
       }

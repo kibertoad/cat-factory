@@ -625,9 +625,10 @@ function buildNodePersistenceRegistry(bundle: {
     // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
     // connections.
     testSecretsRepository: repos.testSecretsRepository,
-    // The refined-requirements post marker is built inside the issue writeback, not the Core, so
-    // it is folded in here for a mothership-mode node's claim to reach.
-    refinedRequirementsPostRepository: repos.refinedRequirementsPostRepository,
+    // The writeback exactly-once marker is built inside the issue writeback, not the Core, so it is
+    // folded in here for a mothership-mode node's claims (the parked-review question echo and the
+    // refined-requirements post) to reach.
+    writebackPostRepository: repos.writebackPostRepository,
     // GitHub projection + installation reads the mothership serves over the persistence RPC even
     // when its OWN github service is off. A mothership-mode local node reaches GitHub by token
     // DELEGATION (no local App), which enables `container.github`, so its board snapshot

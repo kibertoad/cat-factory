@@ -5978,12 +5978,13 @@
       "toast": {
         "posted": "Exigences publiées dans les tickets liés",
         "nothingNew": "Les tickets liés contiennent déjà ces exigences",
-        "partial": "Certains tickets liés n’ont pas reçu les exigences"
+        "partial": "Certains tickets liés n’ont pas reçu les exigences",
+        "inFlight": "Une publication dans les tickets liés est déjà en cours"
       },
       "outcome": {
         "posted": "publié",
         "already_posted": "déjà publié",
-        "in_flight": "une publication est encore en cours",
+        "in_flight": "publication déjà en cours, ou son résultat n’a pas été enregistré",
         "failed": "échec, publiez à nouveau pour réessayer",
         "unsupported": "impossible d’écrire dans ce gestionnaire de tickets"
       }

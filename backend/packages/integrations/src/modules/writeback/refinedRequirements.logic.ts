@@ -15,11 +15,12 @@ import { PLATFORM_COMMENT_MARKER } from './reviewReplies.logic.js'
 // inbound reply path from reading it as a human's comment.
 
 /**
- * Longest document rendered. Jira Cloud rejects a comment over roughly 32k characters, and a
- * rejected comment posts nothing, so a pathological document is cut (and the cut marked) rather
- * than lost. A realistic requirements document is far below it.
+ * Longest document rendered, under GitHub's 65,536-character comment limit with room for the
+ * header: a rejected comment posts nothing, so a pathological document is cut (and the cut marked)
+ * rather than lost. Jira's limit counts the converted ADF instead, so its transport sizes its own
+ * cut (`buildJiraCommentPayload`).
  */
-const MAX_DOCUMENT_CHARS = 28_000
+const MAX_DOCUMENT_CHARS = 64_000
 
 /** Render the revised requirements as one tracker comment, Markdown being the shared format. */
 export function renderRefinedRequirementsComment(document: string): string {

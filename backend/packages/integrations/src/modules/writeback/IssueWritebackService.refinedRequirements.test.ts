@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { createRecordingLogger, WRITEBACK_POST_CLAIM_TTL_MS } from '@cat-factory/kernel'
 import type {
-  RefinedRequirementsPostKey,
-  RefinedRequirementsPostRecord,
-  RefinedRequirementsPostRepository,
   TaskRecord,
   TaskRepository,
   TaskSourceKind,
@@ -11,6 +9,7 @@ import type {
 } from '@cat-factory/kernel'
 import { IssueWritebackService } from './IssueWritebackService.js'
 import { PLATFORM_COMMENT_MARKER } from './reviewReplies.logic.js'
+import { memoryWritebackPosts } from './test-support/memory-writeback-posts.js'
 
 const DOCUMENT = '# Export Requirements\n\n## Overview\nAsk @alice whether this closes #42.'
 
@@ -24,43 +23,7 @@ function tasks(issues: TaskRecord[]): TaskRepository {
 
 const NO_SETTINGS = { get: async () => null } as unknown as TrackerSettingsRepository
 
-/** An in-memory marker store with the same claim rules the two SQL dialects implement. */
-function memoryMarkers(): RefinedRequirementsPostRepository & {
-  rows: Map<string, RefinedRequirementsPostRecord>
-} {
-  const rows = new Map<string, RefinedRequirementsPostRecord>()
-  const id = (key: RefinedRequirementsPostKey) =>
-    [key.workspaceId, key.reviewId, key.issueRef, key.documentHash].join('|')
-  return {
-    rows,
-    async claim(key, window) {
-      const row = rows.get(id(key))
-      const stale = row?.status === 'pending' && row.updatedAt <= window.reclaimPendingBefore
-      if (row && row.status !== 'failed' && !stale) return false
-      rows.set(id(key), {
-        ...key,
-        status: 'pending',
-        attempts: (row?.attempts ?? 0) + 1,
-        error: null,
-        updatedAt: window.now,
-      })
-      return true
-    },
-    async settle(key, outcome, now) {
-      const row = rows.get(id(key))
-      if (!row) return
-      rows.set(id(key), {
-        ...row,
-        status: outcome.status,
-        error: outcome.status === 'failed' ? outcome.error : null,
-        updatedAt: now,
-      })
-    },
-    async get(key) {
-      return rows.get(id(key)) ?? null
-    },
-  }
-}
+const memoryMarkers = memoryWritebackPosts
 
 function recordingSource(kind: TaskSourceKind, fail = false) {
   const bodies: { externalId: string; body: string }[] = []
@@ -85,7 +48,7 @@ describe('IssueWritebackService.postRefinedRequirements', () => {
       trackerSettingsRepository: NO_SETTINGS,
       taskRepository: tasks([issue('github', 'acme/web#3'), issue('jira', 'ENG-7')]),
       taskSourceProviders: [github.provider, jira.provider],
-      refinedRequirementsPostRepository: memoryMarkers(),
+      writebackPostRepository: memoryMarkers(),
     })
 
     const first = await svc.postRefinedRequirements('ws', 'blk_1', {
@@ -118,7 +81,7 @@ describe('IssueWritebackService.postRefinedRequirements', () => {
       trackerSettingsRepository: NO_SETTINGS,
       taskRepository: tasks([issue('github', 'acme/web#3')]),
       taskSourceProviders: [github.provider],
-      refinedRequirementsPostRepository: memoryMarkers(),
+      writebackPostRepository: memoryMarkers(),
     })
     await svc.postRefinedRequirements('ws', 'blk_1', { reviewId: 'rr_1', document: DOCUMENT })
     const revised = await svc.postRefinedRequirements('ws', 'blk_1', {
@@ -132,12 +95,12 @@ describe('IssueWritebackService.postRefinedRequirements', () => {
   it('reports a live claim as in flight rather than posting a second copy', async () => {
     const github = recordingSource('github')
     const markers = memoryMarkers()
-    markers.claim = async () => false
+    markers.claim = async () => 'held'
     const svc = new IssueWritebackService({
       trackerSettingsRepository: NO_SETTINGS,
       taskRepository: tasks([issue('github', 'acme/web#3')]),
       taskSourceProviders: [github.provider],
-      refinedRequirementsPostRepository: markers,
+      writebackPostRepository: markers,
     })
     const result = await svc.postRefinedRequirements('ws', 'blk_1', {
       reviewId: 'rr_1',
@@ -145,6 +108,72 @@ describe('IssueWritebackService.postRefinedRequirements', () => {
     })
     expect(result.issues[0]!.outcome).toBe('in_flight')
     expect(github.bodies).toHaveLength(0)
+  })
+
+  it('never re-takes an unsettled claim, however old: the comment may already have landed', async () => {
+    const github = recordingSource('github')
+    const markers = memoryMarkers()
+    let now = 1
+    const logger = createRecordingLogger()
+    const svc = new IssueWritebackService({
+      trackerSettingsRepository: NO_SETTINGS,
+      taskRepository: tasks([issue('github', 'acme/web#3')]),
+      taskSourceProviders: [github.provider],
+      writebackPostRepository: markers,
+      clock: { now: () => now },
+      sleep: async () => {},
+      logger,
+    })
+    // The comment lands, then every settle attempt fails: the row is left `pending`.
+    markers.settle = async () => {
+      throw new Error('persistence RPC unreachable')
+    }
+    const first = await svc.postRefinedRequirements('ws', 'blk_1', {
+      reviewId: 'rr_1',
+      document: DOCUMENT,
+    })
+    expect(first.issues[0]!.outcome).toBe('posted')
+    expect(logger.lines.filter((line) => line.level === 'error')).toMatchObject([
+      {
+        msg: 'writeback marker could not be settled; the post stays held',
+        fields: { attempts: 3 },
+      },
+    ])
+
+    now += 1_000 * WRITEBACK_POST_CLAIM_TTL_MS
+    const later = await svc.postRefinedRequirements('ws', 'blk_1', {
+      reviewId: 'rr_1',
+      document: DOCUMENT,
+    })
+    expect(later.issues[0]!.outcome).toBe('in_flight')
+    expect(github.bodies).toHaveLength(1)
+  })
+
+  it('retries a settle that fails transiently, so the post reads as already posted', async () => {
+    const github = recordingSource('github')
+    const markers = memoryMarkers()
+    const settle = markers.settle.bind(markers)
+    let failures = 2
+    markers.settle = async (...args) => {
+      if (failures-- > 0) throw new Error('blip')
+      return settle(...args)
+    }
+    const logger = createRecordingLogger()
+    const svc = new IssueWritebackService({
+      trackerSettingsRepository: NO_SETTINGS,
+      taskRepository: tasks([issue('github', 'acme/web#3')]),
+      taskSourceProviders: [github.provider],
+      writebackPostRepository: markers,
+      sleep: async () => {},
+      logger,
+    })
+    await svc.postRefinedRequirements('ws', 'blk_1', { reviewId: 'rr_1', document: DOCUMENT })
+    const again = await svc.postRefinedRequirements('ws', 'blk_1', {
+      reviewId: 'rr_1',
+      document: DOCUMENT,
+    })
+    expect(again.issues[0]!.outcome).toBe('already_posted')
+    expect(logger.lines.filter((line) => line.level === 'error')).toEqual([])
   })
 
   it('isolates a failing tracker, records the scrubbed cause, and retries it on the next post', async () => {
@@ -155,7 +184,7 @@ describe('IssueWritebackService.postRefinedRequirements', () => {
       trackerSettingsRepository: NO_SETTINGS,
       taskRepository: tasks([issue('jira', 'ENG-7'), issue('github', 'acme/web#3')]),
       taskSourceProviders: [broken.provider, github.provider],
-      refinedRequirementsPostRepository: markers,
+      writebackPostRepository: markers,
     })
     const result = await svc.postRefinedRequirements('ws', 'blk_1', {
       reviewId: 'rr_1',
@@ -179,7 +208,7 @@ describe('IssueWritebackService.postRefinedRequirements', () => {
       trackerSettingsRepository: NO_SETTINGS,
       taskRepository: tasks([issue('acme-tracker' as TaskSourceKind, 'A-1')]),
       taskSourceProviders: [],
-      refinedRequirementsPostRepository: markers,
+      writebackPostRepository: markers,
     })
     const result = await svc.postRefinedRequirements('ws', 'blk_1', {
       reviewId: 'rr_1',
@@ -193,7 +222,7 @@ describe('IssueWritebackService.postRefinedRequirements', () => {
     const svc = new IssueWritebackService({
       trackerSettingsRepository: NO_SETTINGS,
       taskRepository: tasks([]),
-      refinedRequirementsPostRepository: memoryMarkers(),
+      writebackPostRepository: memoryMarkers(),
     })
     expect(
       await svc.postRefinedRequirements('ws', 'blk_1', { reviewId: 'rr_1', document: DOCUMENT }),

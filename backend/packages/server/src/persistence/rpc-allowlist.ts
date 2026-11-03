@@ -620,33 +620,20 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
   },
-  // The parked-review question writeback's idempotency marker (`IssueWritebackService.
-  // postReviewQuestions`): one row per `(workspace, review, iteration, linked issue)`, claimed
-  // BEFORE the comment is posted so a replaying durable driver cannot post a review's findings onto
-  // the reporter's issue twice.
+  // The tracker writeback's exactly-once marker (`IssueWritebackService`): one row per
+  // `(workspace, kind, subject, linked issue, discriminator)`, claimed BEFORE a comment is posted.
+  // Two callers claim through it: the parked-review question echo, which the ENGINE drives from a
+  // replaying durable driver, and the refined-requirements post a person asks for in the review
+  // window. A mothership-mode node reaches both, and a claim that answered `unknown_method` would
+  // read as "someone else holds the claim", silently skipping the ticket comment.
   //
-  // The ENGINE writes it, so a mothership-mode node genuinely reaches it — and its failure mode was
-  // the quiet kind this bucket exists to prevent. `claim` answered `unknown_method`, which the
-  // caller's deliberate fallback reads as "someone else holds the claim", so every parked review on
-  // a local run silently skipped its ticket comment: the reporter is never asked the question, the
-  // run parks waiting for an answer to something nobody was told about, and the only trace is a
-  // `warn`. Its INBOUND sibling (`trackerCommentIngestRepository`) stays off for a different and
-  // permanent reason: a webhook delivery reaches the deployment holding the public URL, never a
-  // laptop, so there is nothing there to claim.
+  // Its INBOUND sibling (`trackerCommentIngestRepository`) stays off for a permanent reason: a
+  // webhook delivery reaches the deployment holding the public URL, never a laptop.
   //
-  // All three methods take the `ReviewQuestionPostKey` as arg0, whose `workspaceId` is a FIELD →
-  // the `workspaceField` rule, exactly like the record-based `upsert`s above. The marker carries no
-  // secrets (a status, an attempt count, and a `redactSecrets`-scrubbed error string).
-  reviewQuestionPostRepository: {
-    claim: { scope: { kind: 'workspaceField', arg: 0 } },
-    settle: { scope: { kind: 'workspaceField', arg: 0 } },
-    get: { scope: { kind: 'workspaceField', arg: 0 } },
-  },
-  // Its sibling for the refined-requirements post: a person asks for it from the review window,
-  // which a mothership-mode node serves, so the claim taken before each comment must reach the org
-  // store or a second click would post the document again. Same key-as-arg0 `workspaceField` rule
-  // and the same secret-free row.
-  refinedRequirementsPostRepository: {
+  // All three methods take the `WritebackPostKey` as arg0, whose `workspaceId` is a FIELD: the
+  // `workspaceField` rule. The marker carries no secrets (a status, an attempt count, a claim
+  // token and a `redactSecrets`-scrubbed error string).
+  writebackPostRepository: {
     claim: { scope: { kind: 'workspaceField', arg: 0 } },
     settle: { scope: { kind: 'workspaceField', arg: 0 } },
     get: { scope: { kind: 'workspaceField', arg: 0 } },

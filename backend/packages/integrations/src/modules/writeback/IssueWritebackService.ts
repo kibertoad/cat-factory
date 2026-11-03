@@ -10,15 +10,11 @@ import {
   noopLogger,
   type PullRequestRef,
   redactSecrets,
-  REFINED_REQUIREMENTS_POST_CLAIM_TTL_MS,
   type RefinedRequirementsPost,
-  type RefinedRequirementsPostRepository,
   resolveWritebackFlag,
   REVIEW_QUESTION_POLICIES,
-  REVIEW_QUESTION_POST_CLAIM_TTL_MS,
   type ReviewQuestionPost,
   type ReviewQuestionPostOutcome,
-  type ReviewQuestionPostRepository,
   type ReviewReplyAck,
   runBestEffort,
   type TaskConnectionStore,
@@ -32,6 +28,9 @@ import {
   type TrackerSettingsRepository,
   trackerWebhookSecret,
   UnavailableError,
+  WRITEBACK_POST_CLAIM_TTL_MS,
+  type WritebackPostKey,
+  type WritebackPostRepository,
 } from '@cat-factory/kernel'
 import type { RefinedRequirementsPostResult } from '@cat-factory/contracts'
 import { issueRefFor, renderReviewQuestionsComment } from './reviewQuestions.logic.js'
@@ -61,6 +60,11 @@ import { MapTaskSourceRegistry } from '../tasks/tasks.logic.js'
 // others, and the engine calls these fire-and-forget. Best-effort is not silent, though. An
 // unwired source, an unreadable connection and a capability the vendor lacks are three different
 // facts, and each is reported with the remedy it needs.
+
+/** Attempts at settling a claimed marker before it is left `pending`. */
+const SETTLE_ATTEMPTS = 3
+/** Base pause between settle attempts, multiplied by the attempt number. */
+const SETTLE_RETRY_DELAY_MS = 250
 
 export interface IssueWritebackServiceDependencies {
   trackerSettingsRepository: TrackerSettingsRepository
@@ -92,16 +96,14 @@ export interface IssueWritebackServiceDependencies {
    */
   taskConnectionStore?: TaskConnectionStore
   /**
-   * Idempotency markers for the parked-review question writeback. Absent → the writeback
-   * passes through entirely, because posting without a marker would re-post the same
-   * findings on every durable-driver replay (see the port doc).
+   * The exactly-once markers every guarded post claims through. Absent: the parked-review
+   * question echo passes through entirely (posting without a marker would re-post the same
+   * findings on every durable-driver replay), and the refined-requirements post REFUSES rather
+   * than posting unguarded (a repeated click would leave a second copy of a long document).
    */
-  reviewQuestionPostRepository?: ReviewQuestionPostRepository
-  /**
-   * Idempotency markers for posting refined requirements. Absent ⇒ that post REFUSES rather than
-   * posting unguarded: a repeated click would leave a second copy of a long document on the issue.
-   */
-  refinedRequirementsPostRepository?: RefinedRequirementsPostRepository
+  writebackPostRepository?: WritebackPostRepository
+  /** Pause between settle attempts. Defaults to a real timer; a test passes one that resolves at once. */
+  sleep?: (ms: number) => Promise<void>
   /**
    * Wall clock for the marker rows and their abandonment window. The facade's shared `Clock`,
    * like every other service here; defaults to the real clock so a test can pin time without
@@ -225,7 +227,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
     post: ReviewQuestionPost,
   ): Promise<ReviewQuestionPostOutcome> {
     const empty: ReviewQuestionPostOutcome = { posted: 0, skipped: 0, failed: 0 }
-    const markers = this.deps.reviewQuestionPostRepository
+    const markers = this.deps.writebackPostRepository
     // No marker store ⇒ no idempotency ⇒ a replaying driver would spam the issue. Pass through
     // rather than post unsafely; the park is still surfaced by the in-app review card.
     if (!markers || post.findings.length === 0) return empty
@@ -263,11 +265,12 @@ export class IssueWritebackService implements IssueWritebackProvider {
     // long comment to several trackers at once buys nothing while making a rate-limit
     // response more likely.
     for (const issue of issues) {
-      const key = {
+      const key: WritebackPostKey = {
         workspaceId,
-        reviewId: post.reviewId,
-        iteration: post.iteration,
+        kind: 'review_questions',
+        subjectId: post.reviewId,
         issueRef: issueRefFor(issue),
+        discriminator: String(post.iteration),
       }
       // Claim BEFORE posting: a crash between the comment and the marker write must not
       // re-post on the next replay. A `failed` marker is re-claimable, so a tracker outage is
@@ -276,22 +279,28 @@ export class IssueWritebackService implements IssueWritebackProvider {
       const at = now()
       const window = {
         now: at,
-        reclaimPendingBefore: at - REVIEW_QUESTION_POST_CLAIM_TTL_MS,
+        reclaimPendingBefore: at - WRITEBACK_POST_CLAIM_TTL_MS,
       }
       // A store failure reads as "someone else holds the claim", which silently suppresses this
       // iteration's post — so it is the one fallback-value catch here that must still say why.
-      const claimed = await markers.claim(key, window).catch((error: unknown) => {
+      const claim = await markers.claim(key, window).catch((error: unknown) => {
         this.log.warn('review question claim unreadable; treating it as already claimed', {
           workspaceId,
           blockId: block.id,
           issueRef: key.issueRef,
           ...describeError(error),
         })
-        return false
+        return 'held' as const
       })
-      if (!claimed) {
+      if (claim !== 'claimed') {
         outcome.skipped += 1
         continue
+      }
+      const fields = {
+        workspaceId,
+        blockId: block.id,
+        source: issue.source,
+        externalId: issue.externalId,
       }
       const source = resolved.get(issue.source)
       const ticketReplies = source?.status === 'ready' && source.ticketReplies
@@ -318,8 +327,6 @@ export class IssueWritebackService implements IssueWritebackProvider {
         // row re-claimable — self-healing without ever inventing a duplicate.
         const delivered = await this.comment(workspaceId, resolved, issue, bodyFor(ticketReplies))
         if (!delivered) throw new Error(`No ${issue.source} writeback is wired`)
-        await markers.settle(key, { status: 'posted' }, now())
-        outcome.posted += 1
       } catch (e) {
         outcome.failed += 1
         // Scrubbed like every other stored free text: a transport error can quote the request
@@ -334,14 +341,14 @@ export class IssueWritebackService implements IssueWritebackProvider {
           err: error,
         })
         // A settle that ALSO fails leaves the claim `pending` until its TTL reclaims it, so the
-        // post still self-heals — but the marker store being the second broken thing needs saying.
-        await runBestEffort(
-          this.log,
-          'reviewQuestionPost.settleFailed',
-          () => markers.settle(key, { status: 'failed', error }, now()),
-          { workspaceId, blockId: block.id, source: issue.source, externalId: issue.externalId },
-        )
+        // post still self-heals.
+        await this.settleMarker(markers, key, { status: 'failed', error }, fields)
+        continue
       }
+      // Outside the `try`: the comment landed, so a marker write that fails must not settle the
+      // row `failed`, which the next replay would read as "post again".
+      await this.settleMarker(markers, key, { status: 'posted' }, fields)
+      outcome.posted += 1
     }
     return outcome
   }
@@ -372,7 +379,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
     blockId: string,
     post: RefinedRequirementsPost,
   ): Promise<RefinedRequirementsPostResult> {
-    const markers = this.deps.refinedRequirementsPostRepository
+    const markers = this.deps.writebackPostRepository
     if (!markers) {
       throw new UnavailableError('Posting refined requirements to tracker issues is not configured')
     }
@@ -395,34 +402,27 @@ export class IssueWritebackService implements IssueWritebackProvider {
         results.push({ ...ref, outcome: 'unsupported' })
         continue
       }
-      const key = {
+      const key: WritebackPostKey = {
         workspaceId,
-        reviewId: post.reviewId,
+        kind: 'refined_requirements',
+        subjectId: post.reviewId,
         issueRef: issueRefFor(issue),
-        documentHash,
+        discriminator: documentHash,
       }
-      const at = now()
+      const fields = { workspaceId, blockId, ...ref }
       try {
-        const claimed = await markers.claim(key, {
-          now: at,
-          reclaimPendingBefore: at - REFINED_REQUIREMENTS_POST_CLAIM_TTL_MS,
-        })
-        if (!claimed) {
-          const held = await markers.get(key)
-          results.push({
-            ...ref,
-            outcome: held?.status === 'posted' ? 'already_posted' : 'in_flight',
-          })
+        // A `pending` claim is never re-taken here. This poster is a live request that settles its
+        // own row, so a `pending` that outlives it means a settle that did not land, possibly
+        // after the comment did, and re-taking it would post a second copy of the document. The
+        // settles below retry for that reason; a revised document is a new key and posts again.
+        const claim = await markers.claim(key, { now: now(), reclaimPendingBefore: null })
+        if (claim !== 'claimed') {
+          results.push({ ...ref, outcome: claim === 'posted' ? 'already_posted' : 'in_flight' })
           continue
         }
       } catch (error) {
         // An unreadable marker is a failure to retry, never a reason to assume the post landed.
-        this.log.warn('refined requirements claim failed', {
-          workspaceId,
-          blockId,
-          ...ref,
-          ...describeError(error),
-        })
+        this.log.warn('refined requirements claim failed', { ...fields, ...describeError(error) })
         results.push({ ...ref, outcome: 'failed' })
         continue
       }
@@ -430,32 +430,49 @@ export class IssueWritebackService implements IssueWritebackProvider {
         await this.comment(workspaceId, resolved, issue, body)
       } catch (e) {
         const error = (redactSecrets(getErrorMessage(e)) ?? '').slice(0, 500)
-        this.log.warn('refined requirements post failed', {
-          workspaceId,
-          blockId,
-          ...ref,
-          err: error,
-        })
-        await runBestEffort(
-          this.log,
-          'refinedRequirementsPost.settleFailed',
-          () => markers.settle(key, { status: 'failed', error }, now()),
-          { workspaceId, blockId, ...ref },
-        )
+        this.log.warn('refined requirements post failed', { ...fields, err: error })
+        await this.settleMarker(markers, key, { status: 'failed', error }, fields)
         results.push({ ...ref, outcome: 'failed' })
         continue
       }
-      // The comment landed, so a marker write that fails must not report it as failed: that would
-      // invite a second post. The row stays `pending` and only its TTL makes it claimable again.
-      await runBestEffort(
-        this.log,
-        'refinedRequirementsPost.settlePosted',
-        () => markers.settle(key, { status: 'posted' }, now()),
-        { workspaceId, blockId, ...ref },
-      )
+      // The comment landed, so it is reported as posted whatever the marker write does: reporting
+      // it failed would invite a second post.
+      await this.settleMarker(markers, key, { status: 'posted' }, fields)
       results.push({ ...ref, outcome: 'posted' })
     }
     return { issues: results }
+  }
+
+  /**
+   * Settle a claimed marker, retrying a transient store failure. A marker that cannot be settled
+   * stays `pending`, which a caller that never re-takes a claim reads as held for good, so the
+   * attempts are spent here and the last failure is logged as an error.
+   */
+  private async settleMarker(
+    markers: WritebackPostRepository,
+    key: WritebackPostKey,
+    outcome: { status: 'posted' } | { status: 'failed'; error: string },
+    fields: Record<string, unknown>,
+  ): Promise<void> {
+    const sleep = this.deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await markers.settle(key, outcome, (this.deps.clock ?? Date).now())
+        return
+      } catch (error) {
+        if (attempt >= SETTLE_ATTEMPTS) {
+          this.log.error('writeback marker could not be settled; the post stays held', {
+            ...fields,
+            kind: key.kind,
+            outcome: outcome.status,
+            attempts: attempt,
+            ...describeError(error),
+          })
+          return
+        }
+        await sleep(SETTLE_RETRY_DELAY_MS * attempt)
+      }
+    }
   }
 
   /**

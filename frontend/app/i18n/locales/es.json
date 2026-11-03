@@ -5978,12 +5978,13 @@
       "toast": {
         "posted": "Requisitos publicados en las incidencias vinculadas",
         "nothingNew": "Las incidencias vinculadas ya tienen estos requisitos",
-        "partial": "Algunas incidencias vinculadas no recibieron los requisitos"
+        "partial": "Algunas incidencias vinculadas no recibieron los requisitos",
+        "inFlight": "Ya hay una publicación en curso en las incidencias vinculadas"
       },
       "outcome": {
         "posted": "publicado",
         "already_posted": "ya publicado",
-        "in_flight": "una publicación sigue en curso",
+        "in_flight": "ya se está publicando, o no se registró el resultado",
         "failed": "falló, vuelve a publicar para reintentarlo",
         "unsupported": "no se puede escribir en este gestor"
       }

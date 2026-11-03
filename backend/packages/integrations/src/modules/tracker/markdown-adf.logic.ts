@@ -42,6 +42,46 @@ export function markdownToAdf(markdown: string): AdfDoc {
   return { type: 'doc', version: 1, content }
 }
 
+/**
+ * Convert Markdown into an ADF document whose serialized JSON is at most `maxChars` long, which is
+ * how Jira counts its field limits. A body that does not fit is cut at a line boundary, at the
+ * longest prefix that still fits once `note` is appended as a closing paragraph saying so. The size
+ * is measured on the ADF rather than the Markdown because the conversion grows the text several
+ * times over (every paragraph, list item and mark is a JSON object), and by a factor that depends
+ * on the document's shape.
+ */
+export function markdownToAdfWithin(markdown: string, maxChars: number, note: string): AdfDoc {
+  const whole = markdownToAdf(markdown)
+  if (JSON.stringify(whole).length <= maxChars) return whole
+  const withNote = (prefix: string): AdfDoc => {
+    const doc = markdownToAdf(prefix)
+    const content = prefix.trim() ? doc.content : []
+    return {
+      ...doc,
+      content: [...content, { type: 'paragraph', content: [{ type: 'text', text: note }] }],
+    }
+  }
+  const cutAt = (length: number): string => {
+    const prefix = markdown.slice(0, length)
+    const newline = prefix.lastIndexOf('\n')
+    return newline > 0 ? prefix.slice(0, newline) : prefix
+  }
+  let best = withNote('')
+  let low = 0
+  let high = markdown.length
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2)
+    const candidate = withNote(cutAt(mid))
+    if (JSON.stringify(candidate).length <= maxChars) {
+      best = candidate
+      low = mid
+    } else {
+      high = mid - 1
+    }
+  }
+  return best
+}
+
 const FENCE = /^ {0,3}(`{3,}|~{3,})\s*([^`\s]*)/
 const HEADING = /^ {0,3}(#{1,6})\s+(.*?)(?:\s+#+\s*)?$/
 const RULE = /^ {0,3}(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,})$/
@@ -200,13 +240,17 @@ function listItemContent(blocks: AdfNode[]): AdfNode[] {
   return out
 }
 
-/** ADF quotes hold paragraphs, lists and code blocks; a heading is folded to its paragraph. */
+/**
+ * ADF quotes hold paragraphs, lists and code blocks, and cannot nest. A heading is folded to its
+ * paragraph and a nested quote to its children, which already went through this fold.
+ */
 function quoteContent(blocks: AdfNode[]): AdfNode[] {
-  const out = blocks
-    .filter((block) => block.type !== 'rule' && block.type !== 'blockquote')
-    .map((block) =>
-      block.type === 'heading' ? { type: 'paragraph', content: block.content ?? [] } : block,
-    )
+  const out: AdfNode[] = []
+  for (const block of blocks) {
+    if (block.type === 'heading') out.push({ type: 'paragraph', content: block.content ?? [] })
+    else if (block.type === 'blockquote') out.push(...(block.content as AdfNode[]))
+    else if (block.type !== 'rule') out.push(block)
+  }
   return out.length > 0 ? out : [{ type: 'paragraph', content: [] }]
 }
 
@@ -254,7 +298,9 @@ function parseInline(text: string, marks: readonly AdfMark[] = []): AdfText[] {
       const link = /^\[([^\]]+)\]\(([^)\s]+)\)/.exec(text.slice(i))
       if (link) {
         flush()
-        const href = link[2]!
+        // A destination is defused like the text around it (`@` and `#<digit>` as entities), and
+        // a Markdown host decodes it; ADF does not, so it is decoded before it becomes a target.
+        const href = decodeEntities(link[2]!)
         const inner = SAFE_LINK.test(href)
           ? [...marks, { type: 'link' as const, attrs: { href } }]
           : marks

@@ -52,7 +52,7 @@ else imports its **ports** and domain types from here.
   (`issue` | `comment`, keyed `(source, externalId)`) plus the optional
   `TaskSourceProvider.webhook` capability a provider implements to verify + parse its vendor's
   deliveries. Its dedup marker port is `ports/tracker-comment-ingest-repositories.ts`, the
-  `review_question_posts` claim shape, applied to the other direction of the same loop. See
+  `writeback_posts` claim shape (`ports/writeback-post-repositories.ts`), applied to the other direction of the same loop. See
   AGENTS.md → "Inbound tracker webhooks".
 - `domain/mount-layout.ts`: `applyMountLayout`, the projection that puts a service frame where
   THIS board mounts it. A frame's position (and any size override) lives on the `WorkspaceMount`,

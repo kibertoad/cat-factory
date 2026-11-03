@@ -1140,15 +1140,15 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 }}
               </span>
             </UButton>
-            <!-- The same reading measure the findings' own prose takes above (see the shell's
-                 `width` prop): the window is `full`-width now, and this is continuous prose that
-                 would otherwise run to 200-character lines. Left-aligned rather than centred, so
-                 it starts where every finding above it starts. -->
             <RefinedRequirementsIssuePost
               v-if="blockId"
               :block-id="blockId"
               :disabled="incorporating || !access.canWriteBoard.value"
             />
+            <!-- The same reading measure the findings' own prose takes above (see the shell's
+                 `width` prop): the window is `full`-width now, and this is continuous prose that
+                 would otherwise run to 200-character lines. Left-aligned rather than centred, so
+                 it starts where every finding above it starts. -->
             <div v-show="!docCollapsed" class="max-w-3xl">
               <div v-for="s in outline.sections" :key="s.id" class="mb-2">
                 <UButton

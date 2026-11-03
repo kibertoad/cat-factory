@@ -6273,12 +6273,13 @@
       "toast": {
         "posted": "Requirements posted to the linked issues",
         "nothingNew": "The linked issues already have these requirements",
-        "partial": "Some linked issues did not get the requirements"
+        "partial": "Some linked issues did not get the requirements",
+        "inFlight": "A post to the linked issues is already in progress"
       },
       "outcome": {
         "posted": "posted",
         "already_posted": "already posted",
-        "in_flight": "a post is still in progress",
+        "in_flight": "already being posted, or the result was not recorded",
         "failed": "failed, post again to retry",
         "unsupported": "this tracker cannot be written to"
       }

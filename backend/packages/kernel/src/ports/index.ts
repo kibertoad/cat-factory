@@ -970,21 +970,15 @@ export type {
 } from './issue-writeback.js'
 export { REVIEW_QUESTION_POLICIES } from './issue-writeback.js'
 export type {
-  ReviewQuestionPostClaimWindow,
-  ReviewQuestionPostKey,
-  ReviewQuestionPostRecord,
-  ReviewQuestionPostRepository,
-  ReviewQuestionPostStatus,
-} from './review-question-post-repositories.js'
-export { REVIEW_QUESTION_POST_CLAIM_TTL_MS } from './review-question-post-repositories.js'
-export type {
-  RefinedRequirementsPostClaimWindow,
-  RefinedRequirementsPostKey,
-  RefinedRequirementsPostRecord,
-  RefinedRequirementsPostRepository,
-  RefinedRequirementsPostStatus,
-} from './refined-requirements-post-repositories.js'
-export { REFINED_REQUIREMENTS_POST_CLAIM_TTL_MS } from './refined-requirements-post-repositories.js'
+  WritebackPostClaim,
+  WritebackPostClaimWindow,
+  WritebackPostKey,
+  WritebackPostKind,
+  WritebackPostRecord,
+  WritebackPostRepository,
+  WritebackPostStatus,
+} from './writeback-post-repositories.js'
+export { WRITEBACK_POST_CLAIM_TTL_MS, WRITEBACK_POST_KINDS } from './writeback-post-repositories.js'
 export type {
   TrackerCommentIngestClaimWindow,
   TrackerCommentIngestKey,

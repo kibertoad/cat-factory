@@ -5266,12 +5266,13 @@
       "toast": {
         "posted": "Anforderungen in den verknüpften Issues gepostet",
         "nothingNew": "Die verknüpften Issues enthalten diese Anforderungen bereits",
-        "partial": "Einige verknüpfte Issues haben die Anforderungen nicht erhalten"
+        "partial": "Einige verknüpfte Issues haben die Anforderungen nicht erhalten",
+        "inFlight": "Ein Beitrag in den verknüpften Issues läuft bereits"
       },
       "outcome": {
         "posted": "gepostet",
         "already_posted": "bereits gepostet",
-        "in_flight": "ein Beitrag läuft noch",
+        "in_flight": "wird bereits gepostet, oder das Ergebnis wurde nicht gespeichert",
         "failed": "fehlgeschlagen, zum Wiederholen erneut posten",
         "unsupported": "in diesen Tracker kann nicht geschrieben werden"
       }

@@ -106,10 +106,16 @@ declaring the adapter it already declares for the PR comments.
 - **A person asks for it.** It is never automatic: a run that writes over someone's tracker unasked
   is the outcome to avoid, and the opt-in writeback settings exist for one-line courtesy comments,
   not for a document.
-- **At most once per document and issue.** The `refined_requirements_posts` marker is claimed
-  before each comment and keyed by `(workspace, review, issue, SHA-256 of the document)`, so a
-  repeated click reports `already_posted` and a revised document posts again. `failed` is retried
-  by posting again; a `pending` claim is re-taken only after its TTL.
+- **At most once per document and issue.** A `writeback_posts` marker (kind
+  `refined_requirements`, discriminator the document's SHA-256) is claimed before each comment, so
+  a repeated click reports `already_posted`, a concurrent one `in_flight`, and a revised document
+  posts again. `failed` is retried by posting again. A `pending` claim is never re-taken: the
+  poster is a live request, so a `pending` that outlives it is a settle that did not land, possibly
+  after the comment did. The settles retry for that reason, and one that still fails leaves the
+  issue reporting `in_flight` for that document rather than risking a second copy.
+- **Jira's size limit is counted on the ADF.** Jira caps a comment at 32,767 characters of stored
+  ADF JSON, which outgrows the Markdown by a shape-dependent factor, so the Jira transport cuts the
+  converted document to fit and marks the cut (`markdownToAdfWithin`).
 
 ## Inline engine kinds and prompt overrides
 
