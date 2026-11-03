@@ -50,12 +50,17 @@ describe('provisioningLogs store — loadForExecution', () => {
   describe('the first load for a run reaches a reader that tracks the store (#2394)', () => {
     // The drawer reads `byExecution[id]` through a computed. A plain read after the load would see
     // the values even if the store wrote them to the raw object, so these specs read through a
-    // computed, which only re-evaluates when the writes go through the reactive proxy.
+    // computed, which only re-evaluates when the writes go through the reactive proxy. The error is
+    // projected to its message inside an object, so "no error" and "an error with no message" differ.
     function trackRun(store: ReturnType<typeof useProvisioningLogsStore>) {
       return computed(() => {
         const s = store.byExecution.exec1
         return s
-          ? { loading: s.loading, ids: s.entries.map((e) => e.id), error: s.error?.message ?? null }
+          ? {
+              loading: s.loading,
+              ids: s.entries.map((e) => e.id),
+              error: s.error ? { message: s.error.message } : null,
+            }
           : null
       })
     }
@@ -90,7 +95,7 @@ describe('provisioningLogs store — loadForExecution', () => {
       const load = store.loadForExecution('exec1')
       expect(run.value?.loading).toBe(true)
       await load
-      expect(run.value).toEqual({ loading: false, ids: [], error: '503' })
+      expect(run.value).toEqual({ loading: false, ids: [], error: { message: '503' } })
     })
 
     it('shows an empty run as loaded with no entries', async () => {

@@ -24,6 +24,13 @@ The preset writes each story's Nuxt app through Nuxt's own `getNuxtAppCtx`
 whose component reads `useAppConfig()` (`Spinner` does) throws `NUXT_E1001` if that write breaks,
 in the preset or in Nuxt.
 
+**A file keeps every story it has run.** Under addon-vitest the canvas has no `id`, so the preset
+names each story's app after its canvas element (`nuxt-app-canvas-N`) and keeps it in unctx's
+global namespace until the file's iframe goes. That is not what holds the memory: in
+`AgentFailureCard.stories.ts` (15 stories) the heap after a full collection grew by about 12 MB per
+story, from 109 MB to 291 MB, and grew the same with one constant name in place of the per-canvas
+one. A file's peak heap therefore grows with its story count.
+
 ## Traps this setup already paid for
 
 **`UApp` is IMPORTED in `preview.ts`, not written as a tag.** A decorator's template string is
@@ -263,9 +270,9 @@ every later story in the session.
 | `test:stories`: every story renders in headless Chromium, with an axe check             | nightly, on a PR that edits a story, and on request |
 
 `test:stories` takes about 10 minutes for the whole tree on a laptop and about half an hour on CI's
-runner, where the job's limit is 45 minutes, so an ordinary PR does not wait on it. Each new stories file adds a
-garbage collection to that time. It also runs on a PR that changes the lane itself or edits a
-story, except a release PR, which changes only package versions.
+runner, where the job's limit is 45 minutes, so an ordinary PR does not wait on it. Each new
+stories file adds a garbage collection to that time. It also runs on a PR that changes the lane
+itself or edits a story, except a release PR, which changes only package versions.
 `--browser.isolate=false` cut that to about 2 minutes, and was rejected: with the files shuffled,
 2 of 4 runs timed out on stories that pass alone, and no story failed twice. Those runs used
 Vitest's default worker count, before the cap below, so contention may explain the timeouts; the

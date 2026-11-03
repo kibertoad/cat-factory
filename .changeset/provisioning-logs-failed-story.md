@@ -1,5 +1,4 @@
 ---
-'@cat-factory/app': patch
 ---
 
-The provisioning logs drawer's Failed story checks the translated failure copy, and finds the server's text only behind "Show details".
+The provisioning logs drawer's Failed story and the provisioning logs store spec match the described failure the drawer shows. Nothing in the published package changes.

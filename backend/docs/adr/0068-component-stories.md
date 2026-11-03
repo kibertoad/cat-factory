@@ -50,9 +50,6 @@ the infrastructure (#2367) and one per domain (#2384 to #2391).
 
 ## Consequences
 
-- **The preset was patched until 10.0.3.** `@storybook-vue/nuxt@10.0.2` carried a pnpm patch for
-  nuxt-modules/storybook#1140, the empty canvas id under addon-vitest. The 10.0.3 release fixes
-  it, so the preset now runs unpatched.
 - **Stories must not ship.** `@cat-factory/app` publishes `app/`, so its `files` excludes
   `app/stories` and `app/**/*.stories.ts`.
 - **State can survive a story.** Cookies and the modular registry reset in `beforeEach`, and the

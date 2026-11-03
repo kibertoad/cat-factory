@@ -118,7 +118,7 @@ export const Loading: Story = {
   },
 }
 
-/** The read failed: a translated message in place of the attempts. */
+/** The read failed: a translated message in place of the attempts, worded for a server fault. */
 export const Failed: Story = {
   parameters: {
     api: [apiFailure(listProvisioningLogsContract, { pathPrefix: storyWorkspacePrefix })],
@@ -127,6 +127,9 @@ export const Failed: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await canvas.findByText('The provisioning logs could not be loaded.')
+    await expect(canvas.getByTestId('failure-message-description')).toHaveTextContent(
+      'Something went wrong on the server.',
+    )
     await expect(canvas.queryByText(/500 Internal Server Error/)).toBeNull()
     await userEvent.click(canvas.getByTestId('failure-message-show-detail'))
     await expect(canvas.getByTestId('failure-message-detail')).toHaveTextContent(
