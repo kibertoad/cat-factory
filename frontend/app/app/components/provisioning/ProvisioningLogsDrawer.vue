@@ -41,7 +41,7 @@ const { t, d } = useI18n()
 const store = useProvisioningLogsStore()
 const state = computed(() =>
   props.executionId
-    ? (store.byExecution[props.executionId] ?? { entries: [], loading: false, error: null })
+    ? store.stateFor(props.executionId)
     : store.bySubsystem[props.subsystem ?? 'environment'],
 )
 
@@ -84,12 +84,28 @@ watch(
   { immediate: true },
 )
 
-onMounted(() => reload())
+// executionId mode holds the run's state while this drawer shows it; the store drops it when the
+// last drawer showing that run lets go (a re-opened drawer re-fetches on mount). Subsystem mode
+// keeps its fixed-size state.
+onMounted(() => {
+  if (props.executionId) store.retain(props.executionId)
+  reload()
+})
+// A host can switch the drawer to another run without remounting it (the step panel passes the
+// selected step's run): let go of the old run and load the new one.
+watch(
+  () => props.executionId,
+  (executionId, previous) => {
+    if (previous) store.release(previous)
+    if (executionId) {
+      store.retain(executionId)
+      reload()
+    }
+  },
+)
 onBeforeUnmount(() => {
   stopPolling()
-  // Drop this run's accumulated log state so the per-execution map doesn't grow for the app's
-  // lifetime (a re-opened drawer re-fetches on mount). Subsystem mode keeps its fixed-size state.
-  if (props.executionId) store.evict(props.executionId)
+  if (props.executionId) store.release(props.executionId)
 })
 
 // Exhaustive enum→label maps of literal `t(...)` keys (keeps the typed-key drift guard

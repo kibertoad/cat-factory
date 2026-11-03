@@ -248,7 +248,10 @@ const canLeaveReview = computed(
             data-testid="env-setup-service-input"
           />
         </UFormField>
-        <UFormField :label="t('environmentWizard.review.port')">
+        <UFormField
+          :label="t('environmentWizard.review.port')"
+          :help="t('environmentWizard.review.portHelp')"
+        >
           <UInput
             v-model.number="store.exposedPort"
             type="number"

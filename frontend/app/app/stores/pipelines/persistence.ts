@@ -1,5 +1,6 @@
 import type { Pipeline } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { savedStepOptions } from '~/utils/binaryOutputSelection'
 import type { PipelinesContext } from './context'
 
 /**
@@ -59,7 +60,7 @@ export function createPipelinePersistence(
       // toggling the last opt-out back to its default on a saved pipeline would silently not
       // persist. Sending the aligned array always lets `update` overwrite; the backend normalizes
       // an all-default array away (stores nothing), so this is a no-op on create / all-default.
-      stepOptions: ctx.draftStepOptions.value.map((o) => o ?? null),
+      stepOptions: ctx.draftStepOptions.value.map(savedStepOptions),
       // Only send labels when there are any.
       ...(ctx.draftLabels.value.length ? { labels: [...ctx.draftLabels.value] } : {}),
       // ALWAYS sent, like `stepOptions` above and for the same reason: `purpose` is mandatory on

@@ -4,6 +4,7 @@ import {
   type DocInterviewQa,
   type DocInterviewSession,
 } from '@cat-factory/contracts'
+import { expect, screen } from 'storybook/test'
 import type { ExecutionInstance } from '~/types/domain'
 import { apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
@@ -166,16 +167,22 @@ export const Preparing: Story = opened(
 /** The interviewer reads the answers and writes its next round: the notice replaces the list. */
 export const Working: Story = opened(docRun('running', INTERVIEWER), session())
 
-/** The run failed before the interview settled: the failed notice, and no actions. */
-export const Failed: Story = opened(
-  docRun('failed', INTERVIEWER, {
-    failure: failure({
-      message: 'The interviewer returned no questions and no brief.',
-      stepIndex: INTERVIEWER,
+/** The run failed before the interview settled: the failed notice and badge, and no actions. */
+export const Failed: Story = {
+  ...opened(
+    docRun('failed', INTERVIEWER, {
+      failure: failure({
+        message: 'The interviewer returned no questions and no brief.',
+        stepIndex: INTERVIEWER,
+      }),
     }),
-  }),
-  session(),
-)
+    session(),
+  ),
+  play: async () => {
+    await screen.findByTestId('doc-interview-failed')
+    await expect(screen.getByTestId('doc-interview-status')).toHaveTextContent('Failed')
+  },
+}
 
 /** The interview settled and the writer drafts: the authoring brief. */
 export const Converged: Story = opened(

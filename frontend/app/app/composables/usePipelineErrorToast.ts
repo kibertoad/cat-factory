@@ -35,6 +35,7 @@ import { useCopyToClipboard } from '~/composables/useCopyToClipboard'
 import type {
   ApiErrorCode,
   BootstrapReferenceReason,
+  GateConfigRefusalReason,
   ToolServerOAuthReason,
   UnavailableReason,
 } from '@cat-factory/contracts'
@@ -119,11 +120,15 @@ const GENERIC_DESCRIPTION_KEYS: Record<Exclude<ApiErrorCode, 'conflict'>, string
  * `ToolServerOAuthReason` joins it for the same argument: an OAuth grant refused for its state, its
  * client secret or the vendor's answer is not "check the values you entered", and the person on
  * the callback page entered nothing.
+ *
+ * `GateConfigRefusalReason` joins it because the 422 it names points at one place to fix (a gate
+ * step's parameters in the pipeline), which the generic validation wording does not say.
  */
 const REASON_DESCRIPTION_KEYS: Record<
-  UnavailableReason | BootstrapReferenceReason | ToolServerOAuthReason,
+  UnavailableReason | BootstrapReferenceReason | ToolServerOAuthReason | GateConfigRefusalReason,
   string
 > = {
+  gate_config_fields_invalid: 'errors.reason.description.gate_config_fields_invalid',
   reference_repo_not_found: 'errors.reason.description.reference_repo_not_found',
   reference_repo_unreadable: 'errors.reason.description.reference_repo_unreadable',
   oauth_state_invalid: 'errors.reason.description.oauth_state_invalid',

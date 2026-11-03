@@ -11,7 +11,9 @@ import type { BinaryOutputConfig } from '@cat-factory/contracts'
 import {
   conflictingOutputSizeOptions,
   producesTaskEstimate,
+  effectiveGateConfigFields,
   validateDescriptorFields,
+  type GateConfigRefusalReason,
 } from '@cat-factory/contracts'
 import {
   BINARY_OUTPUT_TRAIT,
@@ -209,6 +211,15 @@ export function assertValidPullRequestReaders({
  *  3. The gate-declared half (`fields`) needs a REGISTERED gate on this step's kind, and every
  *     key must be one that gate declared. An undeclared key is indistinguishable from a typo'd
  *     one, and both read to whoever typed them as configuration that took effect.
+ *  4. Every step whose kind IS a registered gate is checked against that gate's declared fields,
+ *     on its EFFECTIVE parameters (`effectiveGateConfigFields`: the gate's own defaults filled in
+ *     over anything left unanswered), whether or not the step carries any parameters. A
+ *     `required` field the author left empty is answered by its default when the gate declares
+ *     one, and refused when it does not: an empty bag is an unanswered form, not an exemption.
+ *     The run freezes the same effective bag, so what passes here is what the gate receives.
+ *     Run admission runs this on a start, a retry and a restart alike, so a pipeline saved
+ *     before a gate's field became required is refused there until someone fills it. That is
+ *     deliberate: the alternative is a gate running without a value it declared it needs.
  *
  * Skipped when no registry is supplied (the kernel seed test's built-in catalog, which has no
  * deployment registrations in view); both real boundaries pass one.
@@ -220,30 +231,41 @@ function assertValidGateConfig({
   stepOptions,
   gateRegistry,
 }: PipelineShape): void {
-  if (!stepOptions) return
   for (let i = 0; i < agentKinds.length; i++) {
-    const config = stepOptions[i]?.gateConfig
+    const config = stepOptions?.[i]?.gateConfig
     const kind = agentKinds[i]
-    if (!config || kind === undefined || enabled?.[i] === false) continue
-    const configuresApproval =
-      hasApproverPolicy(config.approvers) || config.minApprovals !== undefined
-    if (configuresApproval && gates?.[i] !== true) {
-      throw new ValidationError(
-        `Step '${kind}' configures an approval gate (approvers / required approvals) but carries no approval gate. Turn the step's approval gate on, or drop the configuration.`,
-      )
+    if (kind === undefined || enabled?.[i] === false) continue
+    if (config) {
+      const configuresApproval =
+        hasApproverPolicy(config.approvers) || config.minApprovals !== undefined
+      if (configuresApproval && gates?.[i] !== true) {
+        throw new ValidationError(
+          `Step '${kind}' configures an approval gate (approvers / required approvals) but carries no approval gate. Turn the step's approval gate on, or drop the configuration.`,
+        )
+      }
+      assertSatisfiableQuorum(kind, config)
     }
-    assertSatisfiableQuorum(kind, config)
     // The gate-declared half needs the registry to judge it: with none in view the caller is
     // validating a catalog it cannot resolve registrations for, so it checks the platform half only.
-    if (!gateRegistry || !config.fields || Object.keys(config.fields).length === 0) continue
+    if (!gateRegistry) continue
+    const supplied = config?.fields ?? {}
     if (!gateRegistry.has(kind)) {
+      if (Object.keys(supplied).length === 0) continue
       throw new ValidationError(
         `Step '${kind}' carries gate parameters, but this deployment registers no gate for that step kind.`,
       )
     }
-    const problems = validateDescriptorFields(gateRegistry.configFields(kind) ?? [], config.fields)
+    const declared = gateRegistry.configFields(kind) ?? []
+    const problems = validateDescriptorFields(
+      declared,
+      effectiveGateConfigFields(declared, supplied),
+    )
     if (problems.length) {
-      throw new ValidationError(`Step '${kind}' has invalid gate parameters: ${problems.join(' ')}`)
+      const reason: GateConfigRefusalReason = 'gate_config_fields_invalid'
+      throw new ValidationError(
+        `Step '${kind}' has invalid gate parameters: ${problems.join(' ')}`,
+        { reason, problems },
+      )
     }
   }
 }

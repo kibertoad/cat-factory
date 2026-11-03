@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
+import AccountConfigNotLoaded from '~/components/layout/AccountConfigNotLoaded.vue'
 
 // The account-wide FLOOR under each board's "may a run act as its initiator's own personal
 // access token?" switch (admin only).
@@ -30,23 +31,16 @@ function hydrate() {
   forbid.value = store.view?.config?.allowInitiatorPat === false
 }
 
-onMounted(async () => {
-  if (!store.view && store.available !== false) await store.load(props.accountId)
-  hydrate()
-})
-watch(() => store.view, hydrate)
+const { loaded, loadFailed } = useAccountConfig(() => props.accountId)
+watch(() => store.view, hydrate, { immediate: true })
 
 async function save() {
   saving.value = true
   try {
-    // `config` fully REPLACES the stored non-secret config, so the rest is carried forward —
-    // the same contract the model-policy editor honours. Clearing the floor writes `undefined`
-    // rather than `true`, keeping "no opinion" distinguishable from "explicitly permitted".
-    await store.save(props.accountId, {
-      config: {
-        ...store.view?.config,
-        ...(forbid.value ? { allowInitiatorPat: false } : { allowInitiatorPat: undefined }),
-      },
+    // Clearing the floor writes `undefined` rather than `true`, keeping "no opinion"
+    // distinguishable from "explicitly permitted".
+    await store.saveConfigPatch(props.accountId, {
+      allowInitiatorPat: forbid.value ? false : undefined,
     })
     actionToast.success('settings.runCredentialPolicy.saved')
   } catch (e) {
@@ -64,25 +58,31 @@ async function save() {
     </h3>
     <p class="text-2xs text-muted">{{ t('settings.runCredentialPolicy.body') }}</p>
 
-    <label class="flex items-center gap-2">
-      <USwitch v-model="forbid" size="sm" data-testid="account-forbid-initiator-pat" />
-      <span class="text-sm text-default">{{ t('settings.runCredentialPolicy.toggle') }}</span>
-    </label>
+    <!-- Hidden until this account's config is in hand: a switch shown over a failed load reads
+         as the stored floor, and flipping it could not be saved anyway. -->
+    <template v-if="loaded">
+      <label class="flex items-center gap-2">
+        <USwitch v-model="forbid" size="sm" data-testid="account-forbid-initiator-pat" />
+        <span class="text-sm text-default">{{ t('settings.runCredentialPolicy.toggle') }}</span>
+      </label>
 
-    <!-- What the choice actually costs, stated at the point of choosing rather than discovered
-         later: attribution is a real feature, and turning this on is what trades it away. -->
-    <p v-if="forbid" class="text-2xs text-app-warning-300">
-      {{ t('settings.runCredentialPolicy.onHint') }}
-    </p>
-    <p v-else class="text-2xs text-dimmed">
-      {{ t('settings.runCredentialPolicy.offHint') }}
-    </p>
+      <!-- What the choice actually costs, stated at the point of choosing rather than discovered
+           later: attribution is a real feature, and turning this on is what trades it away. -->
+      <p v-if="forbid" class="text-2xs text-app-warning-300">
+        {{ t('settings.runCredentialPolicy.onHint') }}
+      </p>
+      <p v-else class="text-2xs text-dimmed">
+        {{ t('settings.runCredentialPolicy.offHint') }}
+      </p>
+    </template>
+    <AccountConfigNotLoaded v-else-if="loadFailed" data-testid="account-run-credential-unloaded" />
 
     <div class="flex justify-end">
       <UButton
         size="xs"
         icon="i-lucide-save"
         :loading="saving"
+        :disabled="!loaded"
         data-testid="account-run-credential-save"
         @click="save"
       >

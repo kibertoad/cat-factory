@@ -95,7 +95,8 @@ export function createFlowActions(ctx: WizardContext) {
         prefer: 'docker-compose',
       })
       recommendation.value = rec
-      // Seed the exposed port + build flag from the detected provisioning where present.
+      // Seed the working recipe and the exposed compose service. Detection reads no port, so
+      // `exposedPort` keeps its reset default and the review step says so beside the field.
       seedFromMerged()
     } catch {
       detectError.value = true

@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import type { ExecutionInstance, Pipeline, RunInputGate } from '@cat-factory/contracts'
 import { listMergeClassRollupsContract } from '@cat-factory/contracts'
+import { expect, within } from 'storybook/test'
 import { apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { boardWith, loginTask } from '~/stories/board.stories.mocks'
@@ -84,7 +85,18 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 /** A running build: the architect done, the coder working with its slice count and standards. */
-export const Default: Story = {}
+export const Default: Story = {
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByTestId('run-stop')).toBeVisible()
+  },
+}
+
+/** A finished run has nothing to halt, so it offers no Stop. */
+async function noStop({ canvasElement }: { canvasElement: HTMLElement }) {
+  const canvas = within(canvasElement)
+  await canvas.findByTestId('run-reset')
+  await expect(canvas.queryByTestId('run-stop')).toBeNull()
+}
 
 /** No run, no pull request: the empty state. */
 export const Empty: Story = {
@@ -131,6 +143,7 @@ export const Failed: Story = {
       }),
     ),
   ],
+  play: noStop,
 }
 
 /** A dry run: the Dry run badge beside the pipeline name, because nothing will merge. */
@@ -209,6 +222,7 @@ export const AwaitingMerge: Story = {
       }),
     ],
   },
+  play: noStop,
 }
 
 /** Merged, with the run long gone: Read the result and the merged pull request. */

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { screen, userEvent, within } from 'storybook/test'
+import { expect, screen, userEvent, within } from 'storybook/test'
 import { withSeed } from '~/stories/withStores'
 import { useUiRoleStore } from '~/stores/uiRole'
 import UiRoleSwitcher from './UiRoleSwitcher.vue'
@@ -43,15 +43,16 @@ export const Collapsed: Story = {
   }),
 }
 
-/**
- * The three roles. The component marks the current one with a `trailingIcon` check, which Nuxt
- * UI's dropdown item does not have, so nothing marks it.
- */
+/** The three roles, the current one (engineer) marked with a check. */
 export const Open: Story = {
   render: withMenuRoom,
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Your role' }))
     await screen.findByText('Product manager')
+    const current = screen.getAllByRole('menuitem').filter((r) => r.ariaCurrent)
+    await expect(current).toHaveLength(1)
+    await expect(current[0]).toHaveTextContent('Engineer')
+    await expect(current[0]!.querySelector('[data-slot="itemTrailing"]')?.childElementCount).toBe(1)
   },
 }
 

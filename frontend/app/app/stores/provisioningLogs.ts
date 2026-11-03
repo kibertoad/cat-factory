@@ -13,6 +13,13 @@ interface LogState {
   error: DescribedFailure | null
 }
 
+interface RunRecord {
+  mounts: number
+  latest: number
+  latestVisible: number
+  visiblePending: boolean
+}
+
 function emptyState(): LogState {
   return { entries: [], loading: false, error: null }
 }
@@ -34,17 +41,35 @@ export const useProvisioningLogsStore = defineStore('provisioningLogs', () => {
     container: emptyState(),
   })
   const byExecution = reactive<Record<string, LogState>>({})
-  // Monotonic load-ordering guard: the drawer's silent background poll and a manual/visible refresh
-  // can be in flight at once, and each ends in a REPLACE-style `s.entries = entries`. Without ordering
-  // a slower/staler fetch resolving AFTER a newer one clobbers the fresher timeline (the same
-  // out-of-order-overwrite hazard the AGENTS.md live-push rules warn about, and that
-  // stores/workspace.ts guards its full refresh with). Each load takes a ticket from a single
-  // ever-increasing counter; `latestLoad` records the newest ticket issued per execution, and only
-  // that load commits. The counter is GLOBAL (never reset on `evict`) so a drawer re-opened for an
-  // evicted execution always out-ranks any still-in-flight prior load — no seq collision can let a
-  // stale fetch win. NOT reactive — pure bookkeeping the UI never reads.
-  let loadTicket = 0
-  const latestLoad = new Map<string, number>()
+  // Per-run bookkeeping the UI never reads, so NOT reactive. It lives and dies with the run's
+  // `byExecution` entry: a load holds the record it started with, so after `release` drops a run
+  // its stragglers write only to the detached state and record, never to a re-opened drawer's.
+  //   - `mounts`: how many drawers show the run. Two surfaces can show one run at once, so the
+  //     entry goes only when the last one releases it.
+  //   - `latest`: the newest load ticket. The silent poll and a visible refresh can be in flight at
+  //     once, each ending in a REPLACE-style `s.entries = entries`, so only the newest commits and a
+  //     slower, staler fetch never clobbers a fresher timeline.
+  //   - `latestVisible` / `visiblePending`: the newest visible load, and whether it is still in
+  //     flight. It owns the spinner, and a silent poll never supersedes it.
+  const runs = new Map<string, RunRecord>()
+  const EMPTY: Readonly<LogState> = Object.freeze(emptyState())
+
+  function ensureRun(executionId: string) {
+    // Read the state back through the map: an assignment expression yields the raw object, and
+    // writes to it would not reach the drawer (#2394).
+    byExecution[executionId] ??= emptyState()
+    let record = runs.get(executionId)
+    if (!record) {
+      record = { mounts: 0, latest: 0, latestVisible: 0, visiblePending: false }
+      runs.set(executionId, record)
+    }
+    return { s: byExecution[executionId], record }
+  }
+
+  /** A run's log state for a reader, or a frozen empty state before its first load. */
+  function stateFor(executionId: string): Readonly<LogState> {
+    return byExecution[executionId] ?? EMPTY
+  }
 
   async function load(subsystem: ProvisioningSubsystem) {
     const ws = useWorkspaceStore()
@@ -66,54 +91,64 @@ export const useProvisioningLogsStore = defineStore('provisioningLogs', () => {
    * Load a run's provisioning attempts. `silent` is for the drawer's background poll
    * while the run is live: it must NOT flip the `loading` spinner (it would flicker
    * every poll) and a transient failure must NOT clear the last-good entries or surface
-   * an error banner — the visible refresh path (initial open / manual refresh) owns those.
+   * an error banner. The visible refresh path (initial open / manual refresh) owns those, so a
+   * poll that fires while a visible load is in flight is skipped: superseding it would discard
+   * the visible result and leave the drawer empty if the poll then failed.
    */
   async function loadForExecution(executionId: string, opts?: { silent?: boolean }) {
     const ws = useWorkspaceStore()
-    const s = (byExecution[executionId] ??= emptyState())
+    const { s, record } = ensureRun(executionId)
+    if (opts?.silent && record.visiblePending) return
+    const seq = ++record.latest
     if (!opts?.silent) {
+      record.latestVisible = seq
+      record.visiblePending = true
       s.loading = true
       s.error = null
     }
-    const seq = ++loadTicket
-    latestLoad.set(executionId, seq)
     try {
       const { entries } = await api.listProvisioningLogs(ws.requireId(), {
         executionId,
         limit: 200,
       })
-      // A newer load (silent poll or manual refresh) superseded this one while it was in flight —
-      // discard this staler result so it can't clobber the fresher timeline.
-      if (latestLoad.get(executionId) !== seq) return
+      // A newer load superseded this one while it was in flight: discard this staler result so it
+      // can't clobber the fresher timeline.
+      if (record.latest !== seq) return
       s.entries = entries
       s.error = null
     } catch (err) {
-      if (latestLoad.get(executionId) !== seq) return
+      if (record.latest !== seq) return
       // A background poll keeps the last snapshot on a blip; only a visible load reports.
       if (!opts?.silent) {
         s.error = describeFailure(err)
         s.entries = []
       }
     } finally {
-      // The visible spinner is owned by the visible request that turned it on, so clear it in its
-      // own finally regardless of supersession — a superseded load still ends its own spinner.
-      if (!opts?.silent) s.loading = false
+      // Only the newest visible load ends the spinner: an older one resolving first would show the
+      // empty state while the newer one is still on its way.
+      if (record.latestVisible === seq) {
+        record.visiblePending = false
+        s.loading = false
+      }
     }
   }
 
-  /**
-   * Drop a run's accumulated log state (called by the drawer on unmount). `byExecution` would
-   * otherwise accrete one entry per execution viewed and never evict — a slow memory creep across
-   * a long board session. The drawer re-fetches on re-mount, so dropping a closed run's state is
-   * free; keeping it while OPEN is what the manual-refresh-after-terminal affordance relies on.
-   */
-  function evict(executionId: string) {
-    delete byExecution[executionId]
-    // Drop the per-execution ticket record too (its map must not grow unbounded either). The global
-    // `loadTicket` counter is deliberately NOT reset, so a re-opened drawer still out-ranks any load
-    // that was in flight when this ran.
-    latestLoad.delete(executionId)
+  /** A drawer starts showing a run. Pair every call with `release`. */
+  function retain(executionId: string) {
+    ensureRun(executionId).record.mounts++
   }
 
-  return { bySubsystem, byExecution, load, loadForExecution, evict }
+  /**
+   * A drawer stops showing a run. The last release drops the run's state, so `byExecution` does
+   * not grow by one entry per run viewed across a long board session; a drawer re-fetches when it
+   * opens again.
+   */
+  function release(executionId: string) {
+    const record = runs.get(executionId)
+    if (!record || --record.mounts > 0) return
+    delete byExecution[executionId]
+    runs.delete(executionId)
+  }
+
+  return { bySubsystem, byExecution, stateFor, load, loadForExecution, retain, release }
 })

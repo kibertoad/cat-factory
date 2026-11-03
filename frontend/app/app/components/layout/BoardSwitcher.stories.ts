@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { screen, userEvent, within } from 'storybook/test'
+import { expect, screen, userEvent, within } from 'storybook/test'
 import { accountBoards as boards, accounts, orgAccount } from '~/stories/accounts.stories.mocks'
 import { STORY_WORKSPACE_ID } from '~/stories/workspace'
 import { seedViewer, withSeed } from '~/stories/withStores'
@@ -11,8 +11,7 @@ import BoardSwitcher from './BoardSwitcher.vue'
 // the user has accounts (auth on). Both menus open on click, so the open stories click in a play,
 // and the wrapper leaves room below for the menu.
 //
-// The menus mark the open board, the active account and the account's provider with a
-// `trailingIcon` check, which Nuxt UI's dropdown item does not have, so no check shows.
+// The menus mark the open board, the active account and the account's provider with a check.
 const meta = {
   title: 'Shell/Components/BoardSwitcher',
   component: BoardSwitcher,
@@ -38,6 +37,12 @@ function seedBoards() {
   workspace.workspaceId = STORY_WORKSPACE_ID
 }
 
+/** A menu row marked current: the `aria-current` state and the check in its trailing slot. */
+async function expectCurrent(row: HTMLElement) {
+  await expect(row).toHaveAttribute('aria-current', 'true')
+  await expect(row.querySelector('[data-slot="itemTrailing"]')?.childElementCount).toBe(1)
+}
+
 async function openBoardMenu(canvasElement: HTMLElement) {
   await userEvent.click(within(canvasElement).getByTestId('board-switcher'))
   await screen.findByTestId('board-new')
@@ -51,7 +56,11 @@ export const Default: Story = {}
  * delete.
  */
 export const BoardMenuOpen: Story = {
-  play: async ({ canvasElement }) => openBoardMenu(canvasElement),
+  play: async ({ canvasElement }) => {
+    await openBoardMenu(canvasElement)
+    await expectCurrent(screen.getByTestId(`board-option-${STORY_WORKSPACE_ID}`))
+    await expect(screen.getAllByRole('menuitem').filter((r) => r.ariaCurrent)).toHaveLength(1)
+  },
 }
 
 /**
@@ -61,8 +70,11 @@ export const BoardMenuOpen: Story = {
 export const AccountMenuOpen: Story = {
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Acme' }))
+    await expectCurrent(await screen.findByRole('menuitem', { name: 'Acme' }))
     await userEvent.hover(await screen.findByText('Default cloud provider'))
     await screen.findByText('Docker (local)')
+    // No provider is set, so the account inherits Cloudflare.
+    await expectCurrent(screen.getByRole('menuitem', { name: 'Cloudflare' }))
   },
 }
 
