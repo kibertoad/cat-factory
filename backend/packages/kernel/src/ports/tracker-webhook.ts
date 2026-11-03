@@ -94,6 +94,19 @@ export interface TrackerCommentEvent {
 export type TrackerWebhookEvent = TrackerIssueEvent | TrackerCommentEvent
 
 /**
+ * The receiver's answer to a vendor's endpoint-verification request (Slack's `url_verification`
+ * echoes a `challenge` back, for example). The receiver always sends it with a 200: a handshake is
+ * the vendor checking that the URL is live, so there is no failure answer for an adapter to pick.
+ * A delivery the adapter cannot answer is not a handshake, and a refusal stays the receiver's.
+ */
+export interface TrackerWebhookHandshake {
+  /** The response `content-type`, e.g. `text/plain` or `application/json`. */
+  contentType: string
+  /** The response body, exactly as the vendor expects to read it back. */
+  body: string
+}
+
+/**
  * A task source's inbound-webhook capability. Optional on {@link TaskSourceProvider}: a source
  * that cannot push (or whose push we don't support yet) simply omits it.
  */
@@ -105,6 +118,17 @@ export interface TaskSourceWebhookAdapter {
    * signature over their own body).
    */
   verify(secret: string, delivery: TrackerWebhookDelivery): Promise<boolean>
+  /**
+   * Answer a VERIFIED delivery that is the vendor's endpoint-verification request, or return null
+   * for every other delivery. When it answers, the receiver sends that response and does NOT call
+   * {@link parse} or enqueue anything. Optional: a vendor with no handshake omits it, and omitting
+   * it is the same as always returning null.
+   *
+   * The receiver calls it only after {@link verify} returned true, so a handshake never answers an
+   * unsigned caller. A vendor whose handshake cannot be signed (one that delivers the secret IN the
+   * handshake) does not fit this member.
+   */
+  handshake?(delivery: TrackerWebhookDelivery): TrackerWebhookHandshake | null
   /**
    * Map a VERIFIED delivery onto the neutral event, or null when it is a delivery kind this
    * integration does not act on (a project update, a sprint change, a vendor ping). A null is

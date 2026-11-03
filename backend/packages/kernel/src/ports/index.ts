@@ -439,6 +439,7 @@ export type {
   TrackerIssueEvent,
   TrackerWebhookDelivery,
   TrackerWebhookEvent,
+  TrackerWebhookHandshake,
 } from './tracker-webhook.js'
 export {
   BUILTIN_TASK_SOURCE_KINDS,

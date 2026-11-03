@@ -26,6 +26,10 @@ import type { AppEnv } from '../../http/env.js'
  * The shape is otherwise the GitHub receiver's, step for step: verify over the RAW body before any
  * parse, ack fast (202), and hand the parsed event to the facade's queue — falling back to inline
  * handling when no async consumer is wired, so local/dev still works.
+ *
+ * One delivery kind is answered rather than acked: a vendor's endpoint-verification request, which
+ * the provider's optional `webhook.handshake` recognises. It runs only after `verify`, and its
+ * answer goes back with a 200 instead of reaching `parse` or the queue.
  */
 export function taskWebhookController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -85,6 +89,18 @@ export function taskWebhookController(): Hono<AppEnv> {
         { event: 'tracker_webhook_signature_rejected', source: sourceParam, workspaceId },
       )
       throw new UnauthorizedError('Invalid signature')
+    }
+
+    // A vendor checking that the URL is live (Slack's `url_verification`) reads its answer from the
+    // response body, so this one delivery is answered here, after verification, and never queued.
+    const handshake = provider.webhook.handshake?.(delivery) ?? null
+    if (handshake) {
+      logger.info(`Answered a ${sourceParam} webhook handshake for workspace ${workspaceId}`, {
+        event: 'tracker_webhook_handshake_answered',
+        source: sourceParam,
+        workspaceId,
+      })
+      return c.body(handshake.body, 200, { 'content-type': handshake.contentType })
     }
 
     // Verified but unrecognised ⇒ ack. Trackers send far more event kinds than we consume, and
