@@ -1,5 +1,13 @@
 # @cat-factory/observability-langfuse
 
+## 0.11.82
+
+### Patch Changes
+
+- Updated dependencies [69f364e]
+  - @cat-factory/kernel@0.366.0
+  - @cat-factory/observability-otel@0.24.1
+
 ## 0.11.81
 
 ### Patch Changes
