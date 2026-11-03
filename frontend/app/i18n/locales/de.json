@@ -551,6 +551,8 @@
         "maxRequirementIterations": "Anforderungs-Iterationen",
         "maxRequirementConcernAllowed": "Auto-Pass bei Bedenken auf oder unter",
         "companionMaxReworks": "Begleiter-Überarbeitungsrunden",
+        "postImplementationReviewEffort": "Prüfaufwand nach der Implementierung",
+        "postImplementationReviewEffortHelp": "Wie gründlich das Code-Review nach der Implementierung ist. Höhere Stufen melden mehr Befunde, auch weniger sichere, und dauern länger.",
         "autoMerge": "Auto-Merge"
       },
       "autoMergeOnHint": "Automatisch mergen, wenn innerhalb der Richtliniengrenzen.",
@@ -9029,5 +9031,16 @@
     "add": "Zur Warteschlange hinzufügen",
     "addAndStart": "Hinzufügen und starten",
     "addedToast": "„{title}“ zur Warteschlange hinzugefügt"
+  },
+  "reviewEffort": {
+    "label": "Prüfaufwand",
+    "help": "Wie gründlich das Review ist. Höhere Stufen melden mehr Befunde, auch weniger sichere, und dauern länger.",
+    "levels": {
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch",
+      "xhigh": "Sehr hoch",
+      "max": "Maximal"
+    }
   }
 }

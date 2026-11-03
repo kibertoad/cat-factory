@@ -3500,6 +3500,8 @@
         "maxRequirementIterations": "要件のイテレーション回数",
         "maxRequirementConcernAllowed": "この水準以下の懸念を自動承認",
         "companionMaxReworks": "コンパニオンの再作業回数",
+        "postImplementationReviewEffort": "実装後のレビューの労力",
+        "postImplementationReviewEffortHelp": "実装後のコードレビューをどれだけ念入りに行うか。レベルが高いほど、確度の低いものも含めて多くの指摘を報告し、時間がかかります。",
         "autoMerge": "自動マージ"
       },
       "newPreset": "新しいポリシー",
@@ -9029,5 +9031,16 @@
     "add": "キューに追加",
     "addAndStart": "追加して開始",
     "addedToast": "「{title}」をキューに追加しました"
+  },
+  "reviewEffort": {
+    "label": "レビューの労力",
+    "help": "レビューをどれだけ念入りに行うか。レベルが高いほど、確度の低いものも含めて多くの指摘を報告し、時間がかかります。",
+    "levels": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "xhigh": "非常に高",
+      "max": "最大"
+    }
   }
 }

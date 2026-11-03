@@ -3359,6 +3359,8 @@
         "maxRequirementIterations": "Iteracje wymagań",
         "maxRequirementConcernAllowed": "Automatyczne zaliczenie zastrzeżeń do",
         "companionMaxReworks": "Rundy przeróbek towarzysza",
+        "postImplementationReviewEffort": "Nakład przeglądu po implementacji",
+        "postImplementationReviewEffortHelp": "Jak dokładny jest przegląd kodu po implementacji. Wyższe poziomy zgłaszają więcej uwag, także mniej pewnych, i trwają dłużej.",
         "autoMerge": "Auto-scalanie"
       },
       "newPreset": "Nowa zasada",
@@ -9029,5 +9031,16 @@
     "add": "Dodaj do kolejki",
     "addAndStart": "Dodaj i uruchom",
     "addedToast": "Dodano „{title}” do kolejki"
+  },
+  "reviewEffort": {
+    "label": "Nakład przeglądu",
+    "help": "Jak dokładny jest przegląd. Wyższe poziomy zgłaszają więcej uwag, także mniej pewnych, i trwają dłużej.",
+    "levels": {
+      "low": "Niski",
+      "medium": "Średni",
+      "high": "Wysoki",
+      "xhigh": "Bardzo wysoki",
+      "max": "Maksymalny"
+    }
   }
 }

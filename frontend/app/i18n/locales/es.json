@@ -3359,6 +3359,8 @@
         "maxRequirementIterations": "Iteraciones de requisitos",
         "maxRequirementConcernAllowed": "Aprobación automática de inquietudes hasta",
         "companionMaxReworks": "Rondas de reelaboración del acompañante",
+        "postImplementationReviewEffort": "Esfuerzo de revisión tras la implementación",
+        "postImplementationReviewEffortHelp": "Qué tan exhaustiva es la revisión de código tras la implementación. Los niveles más altos informan de más hallazgos, incluidos los menos seguros, y tardan más.",
         "autoMerge": "Fusión automática"
       },
       "newPreset": "Nueva política",
@@ -9029,5 +9031,16 @@
     "add": "Añadir a la cola",
     "addAndStart": "Añadir e iniciar",
     "addedToast": "Se añadió «{title}» a la cola"
+  },
+  "reviewEffort": {
+    "label": "Esfuerzo de revisión",
+    "help": "Qué tan exhaustiva es la revisión. Los niveles más altos informan de más hallazgos, incluidos los menos seguros, y tardan más.",
+    "levels": {
+      "low": "Bajo",
+      "medium": "Medio",
+      "high": "Alto",
+      "xhigh": "Muy alto",
+      "max": "Máximo"
+    }
   }
 }

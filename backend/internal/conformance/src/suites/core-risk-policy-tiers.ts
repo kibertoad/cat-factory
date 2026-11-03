@@ -27,6 +27,7 @@ function accountPolicy(over: Partial<AccountRiskPolicy> & { id: string }): Accou
     maxRequirementConcernAllowed: 'low',
     maxTesterQualityIterations: 2,
     companionMaxReworks: 5,
+    postImplementationReviewEffort: 'low',
     releaseWatchWindowMinutes: 45,
     releaseMaxAttempts: 2,
     humanReviewGraceMinutes: 15,
@@ -74,6 +75,7 @@ export function defineCoreRiskPolicyTiersConformance(harness: ConformanceHarness
         maxRisk: 0.32,
         ciMaxAttempts: 7,
         companionMaxReworks: 5,
+        postImplementationReviewEffort: 'low',
         autoMergeEnabled: false,
         classRules: { docs: 'always' },
         minAutoAnswerConfidence: 0.75,
@@ -135,6 +137,7 @@ export function defineCoreRiskPolicyTiersConformance(harness: ConformanceHarness
       // The numbers came across, and the copy claims neither default.
       expect(cloned.body).toMatchObject({
         maxRisk: 0.42,
+        postImplementationReviewEffort: 'low',
         isDefault: false,
         isUnattendedDefault: false,
       })
