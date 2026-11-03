@@ -244,7 +244,7 @@ shown an image at all and which views the run was not sent, so the harness speak
 CORRECT that list when a picture did not land.
 
 The images a person attached to the task ride the same shape under `taskImages`, downloaded into
-`.cat-context/task-images/`, with the same correction-only rule ([`task-images.md`](../../docs/task-images.md)).
+`.cat-context/task-images/`, with the same correction-only rule ([`task-images.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/task-images.md)).
 
 `omitted` carries the views the backend's cap dropped. They are stated to the agent beside the
 transfers that failed, since from where it stands both are a view to capture with nothing to compare
