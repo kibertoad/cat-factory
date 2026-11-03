@@ -16,6 +16,7 @@ import type {
 } from '~/types/domain'
 import { useFragmentLibrary, useFragmentLibraryStore } from '~/stores/fragmentLibrary'
 import { showOverrideField } from '~/utils/uiMode'
+import { knownTab } from '~/utils/tabs'
 import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import GitHubDocUrlImport from '~/components/fragments/GitHubDocUrlImport.vue'
@@ -76,10 +77,11 @@ watch(
 const githubReady = computed(() => github.available === true && github.connected)
 
 type Tab = 'catalog' | 'authored' | 'documents' | 'sources'
-const tabs = computed<Tab[]>(() =>
-  props.showCatalog
-    ? ['catalog', 'authored', 'documents', 'sources']
-    : ['authored', 'documents', 'sources'],
+const tabs = computed(() =>
+  (props.showCatalog
+    ? (['catalog', 'authored', 'documents', 'sources'] as const)
+    : (['authored', 'documents', 'sources'] as const)
+  ).map((value) => ({ value, label: tabLabel(value) })),
 )
 const tab = ref<Tab>(props.showCatalog ? 'catalog' : 'authored')
 
@@ -601,22 +603,12 @@ async function unlinkSource(id: string) {
         </template>
       </p>
 
-      <div class="flex gap-2">
-        <UButton
-          v-for="t in tabs"
-          :key="t"
-          :color="tab === t ? 'primary' : 'neutral'"
-          :variant="tab === t ? 'solid' : 'ghost'"
-          size="sm"
-          @click="
-            () => {
-              tab = t
-            }
-          "
-        >
-          {{ tabLabel(t) }}
-        </UButton>
-      </div>
+      <UTabs
+        :model-value="tab"
+        :items="tabs"
+        :content="false"
+        @update:model-value="(v) => (tab = knownTab(tabs, v) ?? tab)"
+      />
 
       <!-- Resolved (merged) catalog — workspace scope only -->
       <div v-if="tab === 'catalog'" class="flex flex-col gap-2">

@@ -560,6 +560,12 @@ jobs:
       - name: Guard SPA safe-area overlays
         run: node scripts/check-frontend-safe-area.mjs
 
+      # Bans a hand-stated ARIA tab role (`role="tablist"`, `role="tab"`, `role="tabpanel"`) in an
+      # SPA template. Views inside one surface switch through `UTabs`, which gives the roles AND
+      # the arrow keys. Its fixtures run in the `node --test` step below. Pure node; no install.
+      - name: Guard SPA tab bars
+        run: node scripts/check-frontend-tabs.mjs
+
       # Bans a select item with `value: ''` in the SPA: Reka's SelectItem and ComboboxItem throw on
       # it, so the USelect or USelectMenu breaks when the item renders (#2393). The "no value" row
       # is `selectNoneItem` from `utils/selectNone.ts`. Its fixtures run in the `node --test` step

@@ -34,7 +34,7 @@ const board = [
 ]
 
 async function openTab(name: string) {
-  await userEvent.click(await screen.findByRole('button', { name }))
+  await userEvent.click(await screen.findByRole('tab', { name }))
 }
 
 const meta = {
@@ -94,7 +94,8 @@ export const AuthoredEmpty: Story = {
 export const Documents: Story = {
   play: async () => {
     await openTab('Documents')
-    await openTab('Confluence')
+    // The source row sets a value, so it is a picker of buttons, not a tab bar.
+    await userEvent.click(await screen.findByRole('button', { name: 'Confluence' }))
     await screen.findByText('Enter a page id or URL first.')
   },
 }

@@ -62,6 +62,10 @@ async function click(name: string | RegExp) {
   await userEvent.click(await screen.findByRole('button', { name }))
 }
 
+async function openTab(name: string) {
+  await userEvent.click(await screen.findByRole('tab', { name }))
+}
+
 const meta = {
   title: 'Settings/Components/GitHubPanel',
   component: GitHubPanel,
@@ -119,7 +123,7 @@ export const RepoExpanded: Story = {
 /** The pull requests tab: three open, one merged, each with its branches. */
 export const PullRequests: Story = {
   play: async () => {
-    await click('Pull requests')
+    await openTab('Pull requests')
     await screen.findByText(/Rotate refresh tokens on use/)
   },
 }
@@ -127,7 +131,7 @@ export const PullRequests: Story = {
 /** The issues tab: three open, one closed, with their labels. */
 export const Issues: Story = {
   play: async () => {
-    await click('Issues')
+    await openTab('Issues')
     await screen.findByText(/Sessions survive a password change/)
   },
 }
@@ -144,7 +148,7 @@ const gitlabConnection: GitHubConnection = {
 export const GitLabConnection: Story = {
   decorators: [opened(gitlabConnection)],
   play: async () => {
-    await click('Merge requests')
+    await openTab('Merge requests')
     await screen.findByText(/Rotate refresh tokens on use/)
   },
 }

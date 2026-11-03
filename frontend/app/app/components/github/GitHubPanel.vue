@@ -11,6 +11,7 @@ import BranchProtectionPreflight from './BranchProtectionPreflight.vue'
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
+import { knownTab } from '~/utils/tabs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import AppModal from '~/components/common/AppModal.vue'
@@ -138,10 +139,10 @@ async function resync(full = false) {
 // ---- browse ----------------------------------------------------------------
 type Tab = 'repos' | 'pulls' | 'issues'
 const tab = ref<Tab>('repos')
-const tabs = computed<{ id: Tab; label: string; icon: string }[]>(() => [
-  { id: 'repos', label: t('github.panel.tabs.repos'), icon: 'i-lucide-folder-git-2' },
-  { id: 'pulls', label: t(pullTerms.value.tab), icon: 'i-lucide-git-pull-request' },
-  { id: 'issues', label: t('github.panel.tabs.issues'), icon: 'i-lucide-circle-dot' },
+const tabs = computed<{ value: Tab; label: string; icon: string }[]>(() => [
+  { value: 'repos', label: t('github.panel.tabs.repos'), icon: 'i-lucide-folder-git-2' },
+  { value: 'pulls', label: t(pullTerms.value.tab), icon: 'i-lucide-git-pull-request' },
+  { value: 'issues', label: t('github.panel.tabs.issues'), icon: 'i-lucide-circle-dot' },
 ])
 
 // Manage which repos this board links (the installation is shared across the
@@ -344,24 +345,12 @@ async function merge(pr: GitHubPullRequest) {
             </div>
           </div>
 
-          <!-- tabs -->
-          <div class="flex gap-1">
-            <UButton
-              v-for="tabItem in tabs"
-              :key="tabItem.id"
-              size="sm"
-              :color="tab === tabItem.id ? 'primary' : 'neutral'"
-              :variant="tab === tabItem.id ? 'soft' : 'ghost'"
-              :icon="tabItem.icon"
-              @click="
-                () => {
-                  tab = tabItem.id
-                }
-              "
-            >
-              {{ tabItem.label }}
-            </UButton>
-          </div>
+          <UTabs
+            :model-value="tab"
+            :items="tabs"
+            :content="false"
+            @update:model-value="(v) => (tab = knownTab(tabs, v) ?? tab)"
+          />
 
           <div v-if="firstLoad" class="space-y-2">
             <USkeleton v-for="i in 3" :key="i" class="h-12 w-full" />
