@@ -1,5 +1,32 @@
 # @cat-factory/app
 
+## 0.321.8
+
+### Patch Changes
+
+- 67c2058: The account settings panels on the Team tab (model access policy, run credential policy, platform alerts, content storage) no longer save over an account config they do not have. A save replaces the whole account config, so a save after a failed load deleted every other account setting, and a save after the active account changed copied the previous account's settings over. The account settings store now records which account its view belongs to, clears the view when a load fails, sends one request for overlapping loads, and merges each panel's change through one `saveConfigPatch` that refuses when the view is not that account's. The model access policy and run credential policy panels hide their editor and show a notice while the settings are not loaded.
+- 09ccd89: Contracts exports `AGENT_CONFIG_VALUE_MAX_LENGTH`, the stored limit of one agent config value. The add-task form and the task inspector now draw agent config fields with one shared component, and a text field stops at that limit.
+- 86757f5: The pipeline builder's binary output picker no longer drops a step's formats, generation options and candidate comparison when another of its settings is edited. The draft store keeps every field of the selection and drops only empty values (`undefined`, `null`, a blank string or an empty list), and the save applies the same rule to a selection loaded for edit.
+- 09ccd89: The bootstrap form goes back to "From a reference architecture" when the architecture list loads after the form opened, unless you chose From scratch yourself.
+- 09ccd89: Detect from repo in the service test-infrastructure section now proposes a config and saves it only when you click Apply, instead of replacing the saved provisioning at once.
+- 09ccd89: The document interview window's header badge says Failed on a failed run, not "Awaiting answers".
+- 09ccd89: The environment wizard's exposed port field now says that detection does not read ports, so the 80 it starts at is a value to check.
+- 31f32a1: A gate parameter's declared default now reaches the gate. The new contracts helper `effectiveGateConfigFields` fills every parameter a step leaves unanswered (absent, a blank string or an empty multi-select) with the default the gate declared, and every reader goes through it: pipeline save and run admission validate its result, the engine freezes it onto the gate state, and the pipeline builder renders it. The builder still stores only what the author chose, so a default the deployment changes later reaches existing pipelines.
+  
+  A `required` gate parameter with no value and no default is now refused at pipeline save and at run admission (start, retry and restart), also when the step carries no gate configuration at all. The refusal is a 422 with `details.reason: 'gate_config_fields_invalid'` and a `problems` list; the reason is exported as `GATE_CONFIG_REFUSAL_REASONS` and the SPA shows translated copy for it. The builder also shows a hint for such a step before save.
+  
+  Boot now refuses a descriptor field whose declared default breaks its own rules (for example a number outside `min`/`max`) with `<surface>_field_default_invalid`, because every door fills defaults in and such a default would refuse every creation for a value the caller never sent.
+- 09ccd89: The guided review window keeps its "out of date" warning after a failed session refetch until the session itself loads again; a thread loading no longer clears it.
+- 09ccd89: The task inspector shows Stop only while the run can still execute, not on a done or failed run.
+- 09ccd89: Editing a saved Kubernetes environment connection no longer asks for the token again to save: a blank field keeps the saved token. Test connection still needs the token typed, and the field help says so.
+- 09ccd89: The board, account, default provider and role menus mark the current item with a check again.
+- e7e552f: The infrastructure attempts drawer for a run now shows its first load: the attempts, the error or the empty state. Before, it kept its placeholder rows until a later poll, and a finished run never updated. The drawer also keeps its rows when a background poll fires during that load, when a second drawer for the same run closes, and when its host switches it to another run.
+- 09ccd89: Opening the risk policy picker focuses the chosen policy, so the preview shows that policy instead of the workspace default.
+- 09ccd89: The task inspector's agent configuration shows a field for text and number options (for example the Ralph loop's validation command and iteration cap), not only a label.
+- Updated dependencies [09ccd89]
+- Updated dependencies [31f32a1]
+  - @cat-factory/contracts@0.376.0
+
 ## 0.321.7
 
 ### Patch Changes
