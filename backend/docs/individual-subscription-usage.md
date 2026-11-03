@@ -103,7 +103,7 @@ so the window is kept tight: the default TTL is **~12h**, and a healthy run **de
 activation the moment it finishes**, so in the common case the window is far shorter. A run
 that outlives its activation (a long human review, a park left overnight) does not fail: the
 next dispatch's **lease** is refused, and the engine parks that step on a **credential wait**
-instead (`CredentialWaitController`). The person resumes it from the run panel, which rides the
+instead (`CredentialWaitController`). The run's initiator resumes it from the run panel, which rides the
 cached password (or prompts for it), re-mints the activation and re-dispatches the same step.
 The lease is the one place the question is asked, so it holds for every way a run reaches a
 dispatch: a human answering a park, a review converging in the background, a timer. The
@@ -166,6 +166,8 @@ A dispatch whose lease is refused (the activation lapsed):
   CredentialWaitController.guard → the step parks (step.credentialWait, run `blocked`)
   POST /executions/:id/credential/resume (X-Personal-Password, ridden from the cache;
        none → 428 → the client prompts)
+    → refused unless the run is still parked (409) and the caller is its initiator (403),
+      both checked before anything is minted
     → activateForInteraction: gate (like start/retry) + re-mint the run's activation(s)
     → the same step re-dispatches
 

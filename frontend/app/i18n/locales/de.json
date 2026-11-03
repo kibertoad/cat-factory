@@ -6488,6 +6488,7 @@
         "reference_repo_unreadable": "Das Repository hinter der Referenzarchitektur dieses Laufs konnte gerade nicht gelesen werden, deshalb wurde der Lauf nicht gegen eine Vorlage gestartet, die er möglicherweise nicht klonen kann. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
         "oauth_state_invalid": "Dieser Autorisierungslink ist abgelaufen oder wurde bereits verwendet, daher kann er die Verbindung nicht abschließen.",
         "oauth_started_by_other_user": "Jemand anderes hat diese Verbindung gestartet, daher kann nur diese Person sie abschließen.",
+        "credential_wait_not_initiator": "Nur die Person, die diesen Lauf gestartet hat, kann die Anmeldedaten seines persönlichen Abonnements erneuern, denn der Lauf nutzt ihr Abonnement. Bitten Sie sie, den Lauf fortzusetzen.",
         "oauth_exchange_refused": "Der Autorisierungsserver des Werkzeugservers hat die Freigabe abgelehnt. Bitten Sie Ihren Deployment-Betreiber, die OAuth-Client-Einstellungen des Werkzeugservers zu prüfen.",
         "oauth_client_secret_unavailable": "Das OAuth-Client-Secret des Werkzeugservers ist auf diesem Board nicht verfügbar. Fügen Sie es im Infrastruktur-Fenster hinzu.",
         "tool_server_without_oauth": "Dieser Werkzeugserver verwendet kein OAuth mehr, daher gibt es keine Verbindung abzuschließen.",
@@ -7005,7 +7006,9 @@
   "credentialWait": {
     "title": "Ihre Anmeldedaten für das persönliche Abonnement sind abgelaufen",
     "body": "Die Anmeldedaten des persönlichen Abonnements für diesen Lauf sind abgelaufen, bevor der nächste Schritt starten konnte. Der Lauf ist daher pausiert. Geben Sie Ihr persönliches Passwort ein, um sie zu erneuern und mit diesem Schritt fortzufahren.",
-    "resume": "Passwort eingeben und fortfahren"
+    "resume": "Passwort eingeben und fortfahren",
+    "othersTitle": "Die Anmeldedaten des persönlichen Abonnements für diesen Lauf sind abgelaufen",
+    "othersRun": "Nur die Person, die diesen Lauf gestartet hat, kann sie mit ihrem persönlichen Passwort erneuern. Bitten Sie sie, den Lauf fortzusetzen."
   },
   "consensus": {
     "titlePrefix": "Konsens",

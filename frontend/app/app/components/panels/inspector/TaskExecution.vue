@@ -393,7 +393,12 @@ async function mergePr() {
         :execution-id="instance.id"
         class="mb-2"
       />
-      <CredentialWaitNotice v-if="credentialWaitParked" :execution-id="instance.id" class="mb-2" />
+      <CredentialWaitNotice
+        v-if="credentialWaitParked"
+        :execution-id="instance.id"
+        :initiated-by="instance.initiatedBy"
+        class="mb-2"
+      />
       <ul class="space-y-1">
         <li
           v-for="(s, i) in instance.steps"

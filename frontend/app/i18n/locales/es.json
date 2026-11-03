@@ -681,6 +681,7 @@
         "reference_repo_unreadable": "No se ha podido leer en este momento el repositorio de la arquitectura de referencia de esta ejecución, así que no se ha iniciado contra una plantilla que quizá no pueda clonar. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión.",
         "oauth_state_invalid": "Este enlace de autorización ha caducado o ya se usó, así que no puede completar la conexión.",
         "oauth_started_by_other_user": "Otra persona inició esta conexión, así que solo ella puede completarla.",
+        "credential_wait_not_initiator": "Solo la persona que inició esta ejecución puede renovar su credencial de suscripción personal, porque la ejecución usa su suscripción. Pídele que la continúe.",
         "oauth_exchange_refused": "El servidor de autorización del servidor de herramientas rechazó la concesión. Pide a quien opera tu despliegue que revise la configuración del cliente OAuth del servidor de herramientas.",
         "oauth_client_secret_unavailable": "El secreto del cliente OAuth del servidor de herramientas no está disponible en este tablero. Añádelo en la ventana de Infraestructura.",
         "tool_server_without_oauth": "Este servidor de herramientas ya no usa OAuth, así que no hay ninguna conexión que completar.",
@@ -5934,7 +5935,9 @@
   "credentialWait": {
     "title": "La credencial de tu suscripción personal ha caducado",
     "body": "La credencial de la suscripción personal de esta ejecución caducó antes de que pudiera empezar el siguiente paso, así que la ejecución está en pausa. Introduce tu contraseña personal para renovarla y continuar desde este paso.",
-    "resume": "Introducir contraseña y continuar"
+    "resume": "Introducir contraseña y continuar",
+    "othersTitle": "La credencial de suscripción personal de esta ejecución caducó",
+    "othersRun": "Solo la persona que inició esta ejecución puede renovarla con su contraseña personal. Pídele que la continúe."
   },
   "requirements": {
     "title": "Revisión de requisitos",

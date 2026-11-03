@@ -18,3 +18,28 @@ export const stepCredentialWaitSchema = v.object({
   raisedAt: v.number(),
 })
 export type StepCredentialWait = v.InferOutput<typeof stepCredentialWaitSchema>
+
+/**
+ * Whether a step is PARKED on a lapsed credential: the wait is recorded AND its approval is still
+ * pending. The engine, the HTTP refusals and the SPA all key on this one reading, so a step that
+ * kept `credentialWait` after its approval settled (a run stopped while parked keeps the step as
+ * it stood) is never offered a surface one side would refuse.
+ */
+export function isCredentialWaitParked(step: {
+  credentialWait?: StepCredentialWait | null
+  approval?: { status: string } | null
+}): boolean {
+  return !!step.credentialWait && step.approval?.status === 'pending'
+}
+
+/**
+ * Whether `actorUserId` may resume a run's credential wait. The step's lease reads the run
+ * INITIATOR's activation, so a resume by anyone else would mint a credential nothing leases and
+ * park the step again. A run with no recorded initiator (an auth-less deployment) admits anyone.
+ */
+export function mayResumeCredentialWait(
+  initiatedBy: string | null | undefined,
+  actorUserId: string | null | undefined,
+): boolean {
+  return !initiatedBy || initiatedBy === actorUserId
+}

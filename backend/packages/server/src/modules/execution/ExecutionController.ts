@@ -211,15 +211,19 @@ export function executionController(): Hono<AppEnv> {
   })
 
   // Resume a step parked because the run's personal-subscription credential lapsed. Once the park
-  // is confirmed, re-mints the run's activation from the request's personal password (a 428
-  // without one, which is what makes the client prompt), then re-dispatches the step.
+  // and the caller (the run's initiator) are confirmed, re-mints the run's activation from the
+  // request's personal password (a 428 without one, which is what makes the client prompt), then
+  // re-dispatches the step.
   buildHonoRoute(app, resumeCredentialWaitContract, async (c) => {
     const workspaceId = param(c, 'workspaceId')
     const { executionId } = c.req.valid('param')
     const instance = await c
       .get('container')
-      .executionService.resumeCredentialWait(workspaceId, executionId, () =>
-        activateForInteraction(c, workspaceId, executionId),
+      .executionService.resumeCredentialWait(
+        workspaceId,
+        executionId,
+        c.get('user')?.id ?? null,
+        () => activateForInteraction(c, workspaceId, executionId),
       )
     return c.json(instance, 200)
   })

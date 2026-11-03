@@ -681,6 +681,7 @@
         "reference_repo_unreadable": "Nie udało się teraz odczytać repozytorium stojącego za architekturą referencyjną tego uruchomienia, więc nie zostało ono uruchomione na szablonie, którego może nie umieć sklonować. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
         "oauth_state_invalid": "Ten link autoryzacyjny wygasł lub został już użyty, więc nie może dokończyć połączenia.",
         "oauth_started_by_other_user": "To połączenie rozpoczął ktoś inny, więc tylko ta osoba może je dokończyć.",
+        "credential_wait_not_initiator": "Tylko osoba, która rozpoczęła to uruchomienie, może odnowić jego poświadczenie osobistej subskrypcji, ponieważ uruchomienie korzysta z jej subskrypcji. Poproś ją o kontynuowanie.",
         "oauth_exchange_refused": "Serwer autoryzacji serwera narzędzi odrzucił zgodę. Poproś operatora wdrożenia o sprawdzenie ustawień klienta OAuth serwera narzędzi.",
         "oauth_client_secret_unavailable": "Sekret klienta OAuth serwera narzędzi nie jest dostępny na tej tablicy. Dodaj go w oknie Infrastruktura.",
         "tool_server_without_oauth": "Ten serwer narzędzi nie używa już OAuth, więc nie ma połączenia do dokończenia.",
@@ -5934,7 +5935,9 @@
   "credentialWait": {
     "title": "Dane uwierzytelniające Twojej osobistej subskrypcji wygasły",
     "body": "Dane uwierzytelniające osobistej subskrypcji tego uruchomienia wygasły, zanim mógł się rozpocząć kolejny krok, dlatego uruchomienie jest wstrzymane. Wpisz swoje osobiste hasło, aby je odnowić i kontynuować od tego kroku.",
-    "resume": "Wpisz hasło i kontynuuj"
+    "resume": "Wpisz hasło i kontynuuj",
+    "othersTitle": "Poświadczenie osobistej subskrypcji tego uruchomienia wygasło",
+    "othersRun": "Tylko osoba, która rozpoczęła to uruchomienie, może je odnowić swoim osobistym hasłem. Poproś ją o kontynuowanie."
   },
   "requirements": {
     "title": "Przegląd wymagań",

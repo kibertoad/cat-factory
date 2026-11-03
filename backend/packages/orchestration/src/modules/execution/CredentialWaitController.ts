@@ -5,9 +5,11 @@ import type {
   Logger,
   WorkRunner,
 } from '@cat-factory/kernel'
+import { isCredentialWaitParked, mayResumeCredentialWait } from '@cat-factory/contracts'
 import {
   ConflictError,
   CredentialRequiredError,
+  ForbiddenError,
   assertFound,
   getErrorReason,
   noopLogger,
@@ -48,8 +50,8 @@ function isLapseResult(result: AdvanceResult): boolean {
  */
 function parkedApprovalId(instance: ExecutionInstance): string | null {
   const step = instance.steps[instance.currentStep]
-  if (instance.status !== 'blocked' || !step?.credentialWait) return null
-  return step.approval?.status === 'pending' ? step.approval.id : null
+  if (instance.status !== 'blocked' || !step || !isCredentialWaitParked(step)) return null
+  return step.approval!.id
 }
 
 function notParked(): ConflictError {
@@ -147,13 +149,15 @@ export class CredentialWaitController {
 
   /**
    * Resume a step parked on a lapsed credential: re-mint the activation through `renew`, clear the
-   * park and wake the driver, which re-dispatches the SAME step. The park is checked before
-   * `renew` runs, so a run that is not parked (already resumed, stopped) never gets a fresh
-   * credential minted for it.
+   * park and wake the driver, which re-dispatches the SAME step. The park and the caller are
+   * checked before `renew` runs, so a run that is not parked (already resumed, stopped) never gets
+   * a fresh credential minted for it, and nobody but the initiator mints one the lease would not
+   * read.
    */
   async resume(
     workspaceId: string,
     executionId: string,
+    actorUserId: string | null,
     renew: () => Promise<void>,
   ): Promise<ExecutionInstance> {
     const current = assertFound(
@@ -162,6 +166,12 @@ export class CredentialWaitController {
       executionId,
     )
     if (!parkedApprovalId(current)) throw notParked()
+    if (!mayResumeCredentialWait(current.initiatedBy, actorUserId)) {
+      throw new ForbiddenError(
+        'Only the person who started this run can renew its personal subscription credential.',
+        { reason: 'credential_wait_not_initiator' },
+      )
+    }
     await renew()
     let approvalId = ''
     const instance = await this.deps.stateMachine.mutateInstance(

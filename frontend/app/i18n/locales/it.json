@@ -6488,6 +6488,7 @@
         "reference_repo_unreadable": "Non è stato possibile leggere in questo momento il repository dietro l'architettura di riferimento di questa esecuzione, quindi l'esecuzione non è stata avviata su un modello che potrebbe non riuscire a clonare. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
         "oauth_state_invalid": "Questo link di autorizzazione è scaduto o è già stato usato, quindi non può completare la connessione.",
         "oauth_started_by_other_user": "Questa connessione è stata avviata da un’altra persona, quindi solo lei può completarla.",
+        "credential_wait_not_initiator": "Solo la persona che ha avviato questa esecuzione può rinnovarne le credenziali dell’abbonamento personale, perché l’esecuzione usa il suo abbonamento. Chiedile di proseguirla.",
         "oauth_exchange_refused": "Il server di autorizzazione del server degli strumenti ha rifiutato la concessione. Chiedi a chi gestisce il deployment di controllare le impostazioni del client OAuth del server degli strumenti.",
         "oauth_client_secret_unavailable": "Il segreto del client OAuth del server degli strumenti non è disponibile su questa board. Aggiungilo dalla finestra Infrastruttura.",
         "tool_server_without_oauth": "Questo server degli strumenti non usa più OAuth, quindi non c’è nessuna connessione da completare.",
@@ -7005,7 +7006,9 @@
   "credentialWait": {
     "title": "Le credenziali del tuo abbonamento personale sono scadute",
     "body": "Le credenziali dell'abbonamento personale di questa esecuzione sono scadute prima che potesse iniziare il passaggio successivo, quindi l'esecuzione è in pausa. Inserisci la tua password personale per rinnovarle e riprendere da questo passaggio.",
-    "resume": "Inserisci la password e continua"
+    "resume": "Inserisci la password e continua",
+    "othersTitle": "Le credenziali dell’abbonamento personale di questa esecuzione sono scadute",
+    "othersRun": "Solo la persona che ha avviato questa esecuzione può rinnovarle con la propria password personale. Chiedile di proseguirla."
   },
   "consensus": {
     "titlePrefix": "Consenso",

@@ -608,6 +608,7 @@ async function copyOutput() {
           <CredentialWaitNotice
             v-if="dedicatedPark === 'credential' && instance?.status === 'blocked'"
             :execution-id="instance.id"
+            :initiated-by="instance.initiatedBy"
             compact
           />
 

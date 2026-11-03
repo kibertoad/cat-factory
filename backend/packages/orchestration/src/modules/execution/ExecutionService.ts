@@ -902,8 +902,8 @@ export class ExecutionService {
   }
 
   /** Resume a step parked on a lapsed personal credential; see {@link CredentialWaitController}. */
-  resumeCredentialWait(workspaceId: string, executionId: string, renew: () => Promise<void>) {
-    return this.credentialWait.resume(workspaceId, executionId, renew)
+  resumeCredentialWait(ws: string, id: string, actor: string | null, renew: () => Promise<void>) {
+    return this.credentialWait.resume(ws, id, actor, renew)
   }
 
   private async advanceOnce(

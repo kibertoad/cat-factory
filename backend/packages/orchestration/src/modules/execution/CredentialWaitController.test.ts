@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Clock, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
-import { ConflictError, CredentialRequiredError } from '@cat-factory/kernel'
+import { ConflictError, CredentialRequiredError, ForbiddenError } from '@cat-factory/kernel'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import {
   CredentialWaitController,
@@ -15,6 +15,7 @@ function run(over: Partial<ExecutionInstance> = {}): ExecutionInstance {
   return {
     id: 'exec_1',
     blockId: 'blk_1',
+    initiatedBy: 'usr_initiator',
     status: 'running',
     currentStep: 1,
     steps: [
@@ -134,7 +135,7 @@ describe('CredentialWaitController.resume', () => {
     })
 
     const renew = vi.fn(async () => {})
-    const resumed = await h.controller.resume('ws', 'exec_1', renew)
+    const resumed = await h.controller.resume('ws', 'exec_1', 'usr_initiator', renew)
 
     expect(renew).toHaveBeenCalledOnce()
     const step = resumed.steps[1]!
@@ -149,7 +150,9 @@ describe('CredentialWaitController.resume', () => {
   it('refuses a run that is not parked on a credential, before re-minting anything', async () => {
     const h = harness(run())
     const renew = vi.fn(async () => {})
-    await expect(h.controller.resume('ws', 'exec_1', renew)).rejects.toBeInstanceOf(ConflictError)
+    await expect(
+      h.controller.resume('ws', 'exec_1', 'usr_initiator', renew),
+    ).rejects.toBeInstanceOf(ConflictError)
     expect(renew).not.toHaveBeenCalled()
     expect(h.workRunner.signalDecision).not.toHaveBeenCalled()
   })
@@ -162,8 +165,37 @@ describe('CredentialWaitController.resume', () => {
     h.stored.instance.status = 'failed'
 
     const renew = vi.fn(async () => {})
-    await expect(h.controller.resume('ws', 'exec_1', renew)).rejects.toBeInstanceOf(ConflictError)
+    await expect(
+      h.controller.resume('ws', 'exec_1', 'usr_initiator', renew),
+    ).rejects.toBeInstanceOf(ConflictError)
     expect(renew).not.toHaveBeenCalled()
     expect(h.stateMachine.updateBlockProgress).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses anyone but the initiator, whose credential the lease reads, before re-minting', async () => {
+    const h = harness(run())
+    await h.controller.guard('ws', 'exec_1', async () => {
+      throw lapsed()
+    })
+
+    const renew = vi.fn(async () => {})
+    const refusal = h.controller.resume('ws', 'exec_1', 'usr_teammate', renew)
+    await expect(refusal).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(refusal).rejects.toMatchObject({
+      details: { reason: 'credential_wait_not_initiator' },
+    })
+    expect(renew).not.toHaveBeenCalled()
+    expect(h.stored.instance.steps[1]!.credentialWait).toEqual({ raisedAt: NOW })
+    expect(h.workRunner.signalDecision).not.toHaveBeenCalled()
+  })
+
+  it('admits any caller on a run with no recorded initiator', async () => {
+    const h = harness(run({ initiatedBy: null }))
+    await h.controller.guard('ws', 'exec_1', async () => {
+      throw lapsed()
+    })
+
+    const resumed = await h.controller.resume('ws', 'exec_1', null, async () => {})
+    expect(resumed.steps[1]!.credentialWait).toBeNull()
   })
 })

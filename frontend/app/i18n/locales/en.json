@@ -756,6 +756,7 @@
         "reference_repo_unreadable": "The repository behind this run's reference architecture could not be read just now, so the run was not started against a template it might be unable to clone. Nothing here is misconfigured and no change is needed: try again once the source-control connection recovers.",
         "oauth_state_invalid": "This authorization link has expired or was already used, so it cannot finish the connection.",
         "oauth_started_by_other_user": "Someone else started this connection, so only they can finish it.",
+        "credential_wait_not_initiator": "Only the person who started this run can renew its personal subscription credential, because the run uses their subscription. Ask them to continue it.",
         "oauth_exchange_refused": "The tool server's authorization server refused the grant. Ask your deployment operator to check the tool server's OAuth client settings.",
         "oauth_client_secret_unavailable": "The tool server's OAuth client secret is not available on this board. Add it in the Infrastructure window.",
         "tool_server_without_oauth": "This tool server no longer uses OAuth, so there is no connection to finish.",
@@ -6225,7 +6226,9 @@
   "credentialWait": {
     "title": "Your personal subscription credential lapsed",
     "body": "This run's personal subscription credential expired before the next step could start, so the run is paused. Enter your personal password to renew it and continue from this step.",
-    "resume": "Enter password and continue"
+    "resume": "Enter password and continue",
+    "othersTitle": "This run's personal subscription credential lapsed",
+    "othersRun": "Only the person who started this run can renew it with their personal password. Ask them to continue it."
   },
   "requirements": {
     "title": "Requirements review",

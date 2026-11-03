@@ -558,3 +558,16 @@ export const TOOL_SERVER_OAUTH_REASONS = [
 ] as const
 
 export type ToolServerOAuthReason = (typeof TOOL_SERVER_OAUTH_REASONS)[number]
+
+/**
+ * Machine-readable reasons resuming a run's credential wait is refused, beyond the
+ * `credential_wait_not_parked` conflict.
+ *
+ *  - `credential_wait_not_initiator` (403): the caller did not start the run. The step leases the
+ *    initiator's credential, so a password from anyone else cannot unblock it.
+ *
+ * The SPA keys an exhaustive `Record<CredentialWaitReason, …>` of message keys off this.
+ */
+export const CREDENTIAL_WAIT_REASONS = ['credential_wait_not_initiator'] as const
+
+export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]

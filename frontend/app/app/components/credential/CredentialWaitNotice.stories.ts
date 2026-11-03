@@ -8,7 +8,7 @@ const meta = {
   title: 'Pipeline/Components/CredentialWaitNotice',
   component: CredentialWaitNotice,
   parameters: { width: 'panel' },
-  args: { executionId: 'exec_login' },
+  args: { executionId: 'exec_login', initiatedBy: null },
 } satisfies Meta<typeof CredentialWaitNotice>
 export default meta
 
@@ -19,3 +19,6 @@ export const Default: Story = {}
 
 /** The compact form in the step detail rail, without the explanation. */
 export const Compact: Story = { args: { compact: true } }
+
+/** Seen by someone other than the run's initiator: no prompt, only who can resume it. */
+export const SomeoneElsesRun: Story = { args: { initiatedBy: 'usr_someone_else' } }

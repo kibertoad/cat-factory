@@ -681,6 +681,7 @@
         "reference_repo_unreadable": "Bu çalıştırmanın referans mimarisinin arkasındaki depo şu anda okunamadı, bu yüzden klonlayamayabileceği bir şablon üzerinde başlatılmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
         "oauth_state_invalid": "Bu yetkilendirme bağlantısının süresi dolmuş ya da bağlantı zaten kullanılmış, bu yüzden bağlantıyı tamamlayamaz.",
         "oauth_started_by_other_user": "Bu bağlantıyı başka biri başlattı, bu yüzden yalnızca o kişi tamamlayabilir.",
+        "credential_wait_not_initiator": "Çalıştırma o kişinin aboneliğini kullandığı için kişisel abonelik kimlik bilgisini yalnızca çalıştırmayı başlatan kişi yenileyebilir. Devam ettirmesini ondan isteyin.",
         "oauth_exchange_refused": "Araç sunucusunun yetkilendirme sunucusu izni reddetti. Dağıtım operatörünüzden araç sunucusunun OAuth istemci ayarlarını kontrol etmesini isteyin.",
         "oauth_client_secret_unavailable": "Araç sunucusunun OAuth istemci gizli anahtarı bu panoda kullanılamıyor. Altyapı penceresinden ekleyin.",
         "tool_server_without_oauth": "Bu araç sunucusu artık OAuth kullanmıyor, bu yüzden tamamlanacak bir bağlantı yok.",
@@ -5934,7 +5935,9 @@
   "credentialWait": {
     "title": "Kişisel aboneliğinizin kimlik bilgilerinin süresi doldu",
     "body": "Bu çalıştırmanın kişisel abonelik kimlik bilgilerinin süresi sonraki adım başlamadan doldu, bu yüzden çalıştırma duraklatıldı. Bilgileri yenilemek ve bu adımdan devam etmek için kişisel parolanızı girin.",
-    "resume": "Parolayı gir ve devam et"
+    "resume": "Parolayı gir ve devam et",
+    "othersTitle": "Bu çalıştırmanın kişisel abonelik kimlik bilgisinin süresi doldu",
+    "othersRun": "Bunu yalnızca çalıştırmayı başlatan kişi kendi kişisel parolasıyla yenileyebilir. Devam ettirmesini ondan isteyin."
   },
   "requirements": {
     "title": "Gereksinim incelemesi",

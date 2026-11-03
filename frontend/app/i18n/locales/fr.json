@@ -681,6 +681,7 @@
         "reference_repo_unreadable": "Le dépôt de l'architecture de référence de cette exécution n'a pas pu être lu pour l'instant, l'exécution n'a donc pas été lancée sur un modèle qu'elle pourrait ne pas savoir cloner. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
         "oauth_state_invalid": "Ce lien d’autorisation a expiré ou a déjà été utilisé, il ne peut donc pas finaliser la connexion.",
         "oauth_started_by_other_user": "Quelqu’un d’autre a lancé cette connexion, donc seule cette personne peut la finaliser.",
+        "credential_wait_not_initiator": "Seule la personne qui a lancé cette exécution peut renouveler ses identifiants d’abonnement personnel, car l’exécution utilise son abonnement. Demandez-lui de la poursuivre.",
         "oauth_exchange_refused": "Le serveur d’autorisation du serveur d’outils a refusé l’autorisation. Demandez à l’opérateur de votre déploiement de vérifier les paramètres du client OAuth du serveur d’outils.",
         "oauth_client_secret_unavailable": "Le secret du client OAuth du serveur d’outils n’est pas disponible sur ce tableau. Ajoutez-le dans la fenêtre Infrastructure.",
         "tool_server_without_oauth": "Ce serveur d’outils n’utilise plus OAuth, il n’y a donc aucune connexion à finaliser.",
@@ -5934,7 +5935,9 @@
   "credentialWait": {
     "title": "Les identifiants de votre abonnement personnel ont expiré",
     "body": "Les identifiants de l'abonnement personnel de cette exécution ont expiré avant le démarrage de l'étape suivante : l'exécution est donc en pause. Saisissez votre mot de passe personnel pour les renouveler et reprendre à cette étape.",
-    "resume": "Saisir le mot de passe et continuer"
+    "resume": "Saisir le mot de passe et continuer",
+    "othersTitle": "Les identifiants d’abonnement personnel de cette exécution ont expiré",
+    "othersRun": "Seule la personne qui a lancé cette exécution peut les renouveler avec son mot de passe personnel. Demandez-lui de la poursuivre."
   },
   "requirements": {
     "title": "Revue des exigences",

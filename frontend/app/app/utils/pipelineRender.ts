@@ -8,7 +8,7 @@ import type {
   ExecutionStatus,
   PipelineStep,
 } from '~/types/execution'
-import { isStepSkipReason } from '@cat-factory/contracts'
+import { isCredentialWaitParked, isStepSkipReason } from '@cat-factory/contracts'
 
 /**
  * Whether the engine is presently DRIVING this run, which is the one condition under which
@@ -208,7 +208,7 @@ export function dedicatedParkView(
   }
   // A step whose dispatch found the run's personal-subscription credential lapsed. Any step kind
   // can park here, so it is checked ahead of the kind-shaped parks below.
-  if (step.credentialWait && step.approval?.status === 'pending') return 'credential'
+  if (isCredentialWaitParked(step)) return 'credential'
   // The fork park sits BEFORE the coder's build dispatch; `answering` (a chat turn in
   // flight) still belongs to the fork window, which renders the pending reply.
   const fork = step.forkDecision?.status
