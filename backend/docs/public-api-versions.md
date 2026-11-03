@@ -585,4 +585,8 @@ for being neither `high` nor a follow-up on an answer the previous round gave. A
 holds new findings to that bar, so without the count a quiet second round reads like a clean one.
 Null on a first pass.
 
-Additive: one optional request field, and one required-nullable field on one response shape.
+`PublicReviewFinding` gains `followsUpOn`: on a requirements re-review, the title of the previous
+round's finding whose answer this one follows up on, which is why a finding below `high` was raised
+again. Null on every other finding, and always null on clarity and brainstorm.
+
+Additive: one optional request field, and two required-nullable response fields.

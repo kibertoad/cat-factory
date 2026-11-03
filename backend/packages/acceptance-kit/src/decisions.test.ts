@@ -59,6 +59,7 @@ function finding(itemId: string, status: PublicReviewFinding['status']): PublicR
     detail: 'is the first page 0 or 1',
     status,
     reply: null,
+    followsUpOn: null,
   }
 }
 

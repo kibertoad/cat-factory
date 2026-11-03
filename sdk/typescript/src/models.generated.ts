@@ -3593,6 +3593,8 @@ export const PUBLIC_RESOLVE_PR_REVIEW_ACTION_VALUES = ['finish', 'fix', 'post'] 
 export interface PublicReviewFinding {
   category: PublicReviewFindingCategory
   detail: string
+  /** Always present; `null` when the server has no value for it. */
+  followsUpOn: string | null
   itemId: string
   /** Always present; `null` when the server has no value for it. */
   reply: string | null

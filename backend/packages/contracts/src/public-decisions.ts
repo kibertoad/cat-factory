@@ -135,6 +135,11 @@ export const publicReviewFindingSchema = v.object({
   status: reviewItemStatusSchema,
   /** The recorded answer, or null while unanswered. */
   reply: v.nullable(v.string()),
+  /**
+   * On a requirements re-review, the title of the previous round's finding whose answer this one
+   * follows up on: why a finding below `high` was raised again. Null otherwise.
+   */
+  followsUpOn: v.nullable(v.string()),
 })
 export type PublicReviewFinding = v.InferOutput<typeof publicReviewFindingSchema>
 

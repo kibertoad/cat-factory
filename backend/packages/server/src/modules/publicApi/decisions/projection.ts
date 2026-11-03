@@ -131,6 +131,7 @@ function toFinding(item: RequirementReview['items'][number]) {
     detail: item.detail,
     status: item.status,
     reply: item.reply,
+    followsUpOn: item.followsUpOn ?? null,
   }
 }
 

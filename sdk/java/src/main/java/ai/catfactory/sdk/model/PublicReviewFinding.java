@@ -11,6 +11,7 @@ import org.jspecify.annotations.Nullable;
  * The {@code PublicReviewFinding} wire model.
  * @param category the {@code category} field.
  * @param detail the {@code detail} field.
+ * @param followsUpOn Always present; {@code null} when the server has no value for it.
  * @param itemId the {@code itemId} field.
  * @param reply Always present; {@code null} when the server has no value for it.
  * @param severity the {@code severity} field.
@@ -22,6 +23,9 @@ public record PublicReviewFinding(
     @JsonProperty("category") PublicReviewFindingCategory category,
 
     @JsonProperty("detail") String detail,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("followsUpOn") @Nullable String followsUpOn,
 
     @JsonProperty("itemId") String itemId,
 
@@ -49,6 +53,7 @@ public record PublicReviewFinding(
     public static final class Builder {
         private @Nullable PublicReviewFindingCategory category;
         private @Nullable String detail;
+        private @Nullable String followsUpOn;
         private @Nullable String itemId;
         private @Nullable String reply;
         private @Nullable PublicReviewFindingSeverity severity;
@@ -64,6 +69,12 @@ public record PublicReviewFinding(
         /** Set {@code detail}. */
         public Builder detail(@Nullable String detail) {
             this.detail = detail;
+            return this;
+        }
+
+        /** Set {@code followsUpOn}. */
+        public Builder followsUpOn(@Nullable String followsUpOn) {
+            this.followsUpOn = followsUpOn;
             return this;
         }
 
@@ -99,7 +110,7 @@ public record PublicReviewFinding(
 
         /** Build the {@link PublicReviewFinding}. */
         public PublicReviewFinding build() {
-            return new PublicReviewFinding(category, detail, itemId, reply, severity, status, title);
+            return new PublicReviewFinding(category, detail, followsUpOn, itemId, reply, severity, status, title);
         }
     }
 }

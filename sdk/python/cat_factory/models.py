@@ -14825,6 +14825,8 @@ class PublicReviewFinding:
     status: PublicReviewFindingStatus
     title: str
     #: Always present; ``None`` when the server has no value for it.
+    follows_up_on: str | None = None
+    #: Always present; ``None`` when the server has no value for it.
     reply: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
@@ -14835,7 +14837,7 @@ class PublicReviewFinding:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicReviewFinding":
         """Decode a `PublicReviewFinding` from its JSON object."""
-        known = {"category", "detail", "itemId", "severity", "status", "title", "reply"}
+        known = {"category", "detail", "itemId", "severity", "status", "title", "followsUpOn", "reply"}
         return cls(
             category=_enum(PublicReviewFindingCategory, data.get("category")),
             detail=data.get("detail"),
@@ -14843,6 +14845,7 @@ class PublicReviewFinding:
             severity=_enum(PublicReviewFindingSeverity, data.get("severity")),
             status=_enum(PublicReviewFindingStatus, data.get("status")),
             title=data.get("title"),
+            follows_up_on=data.get("followsUpOn"),
             reply=data.get("reply"),
             extra={k: v for k, v in data.items() if k not in known},
         )
@@ -14856,6 +14859,7 @@ class PublicReviewFinding:
         out["severity"] = _encode(self.severity)
         out["status"] = _encode(self.status)
         out["title"] = self.title
+        out["followsUpOn"] = self.follows_up_on
         out["reply"] = self.reply
         return out
 

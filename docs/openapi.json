@@ -7783,6 +7783,16 @@
           "detail": {
             "type": "string"
           },
+          "followsUpOn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "itemId": {
             "type": "string"
           },
@@ -7825,7 +7835,8 @@
           "title",
           "detail",
           "status",
-          "reply"
+          "reply",
+          "followsUpOn"
         ],
         "type": "object"
       },

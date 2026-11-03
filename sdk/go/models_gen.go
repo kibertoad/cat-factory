@@ -6218,7 +6218,9 @@ var PublicResolvePrReviewActionValues = []PublicResolvePrReviewAction{PublicReso
 type PublicReviewFinding struct {
 	Category PublicReviewFindingCategory `json:"category"`
 	Detail   string                      `json:"detail"`
-	ItemID   string                      `json:"itemId"`
+	// FollowsUpOn always present; nil when the server has no value for it.
+	FollowsUpOn *string `json:"followsUpOn"`
+	ItemID      string  `json:"itemId"`
 	// Reply always present; nil when the server has no value for it.
 	Reply    *string                     `json:"reply"`
 	Severity PublicReviewFindingSeverity `json:"severity"`
