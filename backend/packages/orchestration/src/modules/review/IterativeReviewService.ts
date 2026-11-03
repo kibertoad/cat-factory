@@ -182,6 +182,9 @@ export interface ReviewPassOptions {
 
 type ResolvedFloor = Omit<RequirementFindingFloorRecord, 'suppressed'>
 
+/** The floor that drops nothing: `low` keeps every severity and states nothing in the prompt. */
+const RAISE_EVERY_SEVERITY: ResolvedFloor = { severity: 'low', basis: 'fixed', score: null }
+
 /** Resolve a pass's floor against the estimate the block carries when the pass starts. */
 function resolveFloor(
   policy: RequirementFindingFloorPolicy | undefined,
@@ -411,10 +414,12 @@ export abstract class IterativeReviewService<
     const context = await this.gatherContext(workspaceId, block, {} as TContextInput)
     const doc = this.readDoc(review)
     if (doc) this.applyIncorporatedDoc(context, doc)
-    const floor = resolveFloor(opts.findingFloor, block)
     // The round this pass replaces is the one it may follow up on.
     const round = this.applyPriorRound ? priorRoundOf(review.items) : null
     if (round) this.applyPriorRound?.(context, round)
+    // A barred pass always records what it dropped, so with no policy it records the floor that
+    // keeps every severity rather than no record at all.
+    const floor = resolveFloor(opts.findingFloor, block) ?? (round ? RAISE_EVERY_SEVERITY : null)
     const reviewed = await this.runReviewer(workspaceId, block, context, floor, round)
     const { ref } = reviewed
     const raised = applyFindingFloor(reviewed.items, floor)

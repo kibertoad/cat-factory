@@ -184,6 +184,24 @@ describe('RequirementReviewService re-review follow-up bar', () => {
     expect(next.findingFloor).toMatchObject({ suppressed: 0, followUpSuppressed: 2 })
   })
 
+  it('records what the bar dropped on a re-review that names no floor policy', async () => {
+    const { svc, reviewId } = await answeredFirstRound()
+    generateTextMock.mockResolvedValue({
+      text: JSON.stringify({
+        items: [{ category: 'gap', severity: 'low', title: 'nit', detail: 'd', followsUp: null }],
+      }),
+    })
+    const next = await svc.reReview('ws', reviewId)
+    expect(next.items).toEqual([])
+    expect(next.findingFloor).toEqual({
+      severity: 'low',
+      basis: 'fixed',
+      score: null,
+      suppressed: 0,
+      followUpSuppressed: 1,
+    })
+  })
+
   it('holds a first pass to no such bar', async () => {
     const { svc } = makeService(blockWith(null))
     reviewerRaisesOneOfEach()
