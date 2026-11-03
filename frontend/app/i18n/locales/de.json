@@ -674,7 +674,8 @@
         "progressiveHint": "Bei größeren Aufgaben mehr fragen, gemessen am höchsten Wert aus Komplexität, Risiko und Auswirkung der Schätzung. Erfordert einen Task Estimator vor der Prüfung oder eine Schätzung aus einem früheren Lauf.",
         "mediumFrom": "Mittlere Befunde ab einer Schätzung von (%)",
         "lowFrom": "Alles ab einer Schätzung von (%)",
-        "bandsCrossed": "Die Schwelle für mittlere Befunde darf nicht über der Schwelle für alles liegen."
+        "bandsCrossed": "Die Schwelle für mittlere Befunde darf nicht über der Schwelle für alles liegen.",
+        "bandsOutOfRange": "Beide Schwellen müssen Zahlen von 0 bis 100 sein."
       }
     },
     "observabilityConnection": {

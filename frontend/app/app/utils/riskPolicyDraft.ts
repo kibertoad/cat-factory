@@ -1,7 +1,9 @@
+import * as v from 'valibot'
 import {
   DEFAULT_COMPANION_MAX_ATTEMPTS,
   DEFAULT_REQUIREMENT_FINDING_FLOOR,
   DEFAULT_REQUIREMENT_FLOOR_PROGRESSION,
+  requirementFloorProgressionSchema,
   type RequirementFloorProgression,
   type ReviewItemSeverity,
   type StepGating,
@@ -184,9 +186,12 @@ export function floorProgressionFromDraft(d: RiskPolicyDraft): RequirementFloorP
     : null
 }
 
-/** Whether the draft's bands are in order, which the backend refuses otherwise. */
+/** Whether the draft's bands pass the stored schema (in range and in order), which a save needs. */
 export function floorBandsValid(d: RiskPolicyDraft): boolean {
-  return !d.floorProgressive || d.floorMediumFrom <= d.floorLowFrom
+  return (
+    !d.floorProgressive ||
+    v.safeParse(requirementFloorProgressionSchema, floorProgressionFromDraft(d)).success
+  )
 }
 
 /** The `StepGating` payload for the fork-decision gate from a draft. */

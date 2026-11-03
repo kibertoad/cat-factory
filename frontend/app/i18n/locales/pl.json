@@ -3486,7 +3486,8 @@
         "progressiveHint": "Pytaj więcej przy większych zadaniach, według najwyższej z wartości złożoności, ryzyka i wpływu w szacunku. Wymaga kroku Task Estimator przed przeglądem albo szacunku z wcześniejszego przebiegu.",
         "mediumFrom": "Dodaj uwagi o średniej wadze od szacunku (%)",
         "lowFrom": "Zgłaszaj wszystko od szacunku (%)",
-        "bandsCrossed": "Próg dla uwag o średniej wadze nie może być wyższy niż próg dla wszystkiego."
+        "bandsCrossed": "Próg dla uwag o średniej wadze nie może być wyższy niż próg dla wszystkiego.",
+        "bandsOutOfRange": "Oba progi muszą być liczbami od 0 do 100."
       }
     },
     "observabilityConnection": {

@@ -20,7 +20,14 @@ const floorOptions = computed<{ value: ReviewItemSeverity; label: string }[]>(()
   FINDING_FLOORS.map((value) => ({ value, label: t(FINDING_FLOOR_LABEL_KEYS[value]) })),
 )
 
-const bandsCrossed = computed(() => progressive.value && mediumFrom.value > lowFrom.value)
+const inPercentRange = (n: unknown): boolean =>
+  typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 100
+const bandsOutOfRange = computed(
+  () => progressive.value && !(inPercentRange(mediumFrom.value) && inPercentRange(lowFrom.value)),
+)
+const bandsCrossed = computed(
+  () => progressive.value && !bandsOutOfRange.value && mediumFrom.value > lowFrom.value,
+)
 </script>
 
 <template>
@@ -80,7 +87,10 @@ const bandsCrossed = computed(() => progressive.value && mediumFrom.value > lowF
           :disabled="disabled"
         />
       </label>
-      <p v-if="bandsCrossed" class="text-2xs text-error sm:col-span-2" role="alert">
+      <p v-if="bandsOutOfRange" class="text-2xs text-error sm:col-span-2" role="alert">
+        {{ t('settings.riskPolicy.findingFloor.bandsOutOfRange') }}
+      </p>
+      <p v-else-if="bandsCrossed" class="text-2xs text-error sm:col-span-2" role="alert">
         {{ t('settings.riskPolicy.findingFloor.bandsCrossed') }}
       </p>
     </div>

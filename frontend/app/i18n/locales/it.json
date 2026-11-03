@@ -674,7 +674,8 @@
         "progressiveHint": "Chiedere di più sulle attività più grandi, in base al valore più alto tra complessità, rischio e impatto della stima. Richiede un Task Estimator prima della revisione o una stima di un’esecuzione precedente.",
         "mediumFrom": "Aggiungere i rilievi medi da una stima di (%)",
         "lowFrom": "Segnalare tutto da una stima di (%)",
-        "bandsCrossed": "La soglia dei rilievi medi non può superare la soglia di tutto."
+        "bandsCrossed": "La soglia dei rilievi medi non può superare la soglia di tutto.",
+        "bandsOutOfRange": "Entrambe le soglie devono essere numeri da 0 a 100."
       }
     },
     "observabilityConnection": {

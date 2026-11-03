@@ -3797,7 +3797,8 @@
         "progressiveHint": "Ask more on bigger tasks, read against the highest of the estimate's complexity, risk and impact. Needs a Task Estimator before the review, or an estimate from an earlier run.",
         "mediumFrom": "Add medium findings from an estimate of (%)",
         "lowFrom": "Raise everything from an estimate of (%)",
-        "bandsCrossed": "The medium threshold cannot be above the threshold for everything."
+        "bandsCrossed": "The medium threshold cannot be above the threshold for everything.",
+        "bandsOutOfRange": "Both thresholds must be numbers from 0 to 100."
       }
     },
     "observabilityConnection": {

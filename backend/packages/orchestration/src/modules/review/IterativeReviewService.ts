@@ -663,7 +663,7 @@ export abstract class IterativeReviewService<
     workspaceId: string,
     block: Block,
     context: TContext,
-    floor: Omit<RequirementFindingFloorRecord, 'suppressed'> | null,
+    floor: ResolvedFloor | null,
   ): Promise<{ ref: ModelRef; items: RequirementReviewItem[] }> {
     const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
     let text: string

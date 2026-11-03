@@ -3486,7 +3486,8 @@
         "progressiveHint": "Preguntar más en tareas mayores, según el valor más alto de complejidad, riesgo e impacto de la estimación. Requiere un Task Estimator antes de la revisión o una estimación de una ejecución anterior.",
         "mediumFrom": "Añadir hallazgos medios desde una estimación de (%)",
         "lowFrom": "Plantear todo desde una estimación de (%)",
-        "bandsCrossed": "El umbral de hallazgos medios no puede superar el umbral de todo."
+        "bandsCrossed": "El umbral de hallazgos medios no puede superar el umbral de todo.",
+        "bandsOutOfRange": "Ambos umbrales deben ser números entre 0 y 100."
       }
     },
     "observabilityConnection": {

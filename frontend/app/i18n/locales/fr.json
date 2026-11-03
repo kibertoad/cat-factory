@@ -3486,7 +3486,8 @@
         "progressiveHint": "Poser plus de questions sur les tâches plus grandes, selon la valeur la plus haute parmi la complexité, le risque et l’impact de l’estimation. Nécessite un Task Estimator avant la revue, ou une estimation d’une exécution précédente.",
         "mediumFrom": "Ajouter les constats moyens à partir d’une estimation de (%)",
         "lowFrom": "Tout soulever à partir d’une estimation de (%)",
-        "bandsCrossed": "Le seuil des constats moyens ne peut pas dépasser le seuil de tout."
+        "bandsCrossed": "Le seuil des constats moyens ne peut pas dépasser le seuil de tout.",
+        "bandsOutOfRange": "Les deux seuils doivent être des nombres compris entre 0 et 100."
       }
     },
     "observabilityConnection": {

@@ -123,6 +123,12 @@ describe('the risk-policy draft conversions', () => {
     expect(floorBandsValid({ ...draft, floorProgressive: true })).toBe(false)
   })
 
+  it('refuses a band outside 0..100, which the stored schema rejects', () => {
+    const draft = { ...toRiskPolicyDraft(policy()), floorProgressive: true, floorMediumFrom: 30 }
+    expect(floorBandsValid({ ...draft, floorLowFrom: 70 })).toBe(true)
+    expect(floorBandsValid({ ...draft, floorLowFrom: 150 })).toBe(false)
+  })
+
   it('keeps a blanked name from saving over the stored one', () => {
     const draft = { ...toRiskPolicyDraft(policy()), name: '   ' }
     expect(riskPolicyPatchFromDraft(draft, 'Balanced').name).toBe('Balanced')
