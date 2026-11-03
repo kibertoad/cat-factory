@@ -15,14 +15,22 @@ import enCatalog from '../i18n/locales/en.json'
  */
 const en = enCatalog as Record<string, unknown>
 
-/** True when the dotted path resolves to a leaf string in the base catalog. */
-export function hasI18nKey(path: string): boolean {
-  let node: unknown = en
+/**
+ * The leaf string a dotted path resolves to, or `undefined`. Reads the base `en` catalog unless
+ * the spec passes another one, for a check that must hold in every locale.
+ */
+export function resolveI18nKey(path: string, catalog: unknown = en): string | undefined {
+  let node: unknown = catalog
   for (const part of path.split('.')) {
-    if (typeof node !== 'object' || node === null || !(part in node)) return false
+    if (typeof node !== 'object' || node === null || !(part in node)) return undefined
     node = (node as Record<string, unknown>)[part]
   }
-  return typeof node === 'string'
+  return typeof node === 'string' ? node : undefined
+}
+
+/** True when the dotted path resolves to a leaf string in the catalog (the base `en` one by default). */
+export function hasI18nKey(path: string, catalog: unknown = en): boolean {
+  return resolveI18nKey(path, catalog) !== undefined
 }
 
 /**
@@ -30,6 +38,6 @@ export function hasI18nKey(path: string): boolean {
  * `expect(missingI18nKeys(...)).toEqual([])` over a per-key loop — a failure then names every
  * broken key at once instead of stopping at the first.
  */
-export function missingI18nKeys(keys: Iterable<string>): string[] {
-  return [...keys].filter((key) => !hasI18nKey(key))
+export function missingI18nKeys(keys: Iterable<string>, catalog: unknown = en): string[] {
+  return [...keys].filter((key) => !hasI18nKey(key, catalog))
 }

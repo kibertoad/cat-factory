@@ -346,7 +346,7 @@ Example (`wrangler.toml [vars]`):
 ```toml
 # GitHub: admit two named users plus every member of two orgs.
 AUTH_ALLOWED_LOGINS = "octocat,hubot"
-AUTH_ALLOWED_ORGS   = "acme-inc,acme-labs"
+AUTH_ALLOWED_ORGS = "acme-inc,acme-labs"
 
 # Google/password: let anyone with a company email self-signup.
 AUTH_ALLOWED_EMAIL_DOMAINS = "acme.com,acme-labs.com"

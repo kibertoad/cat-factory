@@ -32,7 +32,7 @@ function harness(opts: { scope?: PublicApiScope; actsAsUserId?: string | null } 
       authenticate: async (secret?: string) =>
         secret === 'good'
           ? {
-              workspaceId: 'ws_1',
+              workspaceIds: ['ws_1'],
               scope: opts.scope ?? 'write',
               keyId: 'pak_1',
               actsAsUserId: opts.actsAsUserId ?? null,

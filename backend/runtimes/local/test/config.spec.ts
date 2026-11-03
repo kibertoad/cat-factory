@@ -159,3 +159,21 @@ describe('[local] applyLocalDefaults web search', () => {
     expect(env.WEB_SEARCH_SEARXNG_URL).toBe('http://searxng:9000')
   })
 })
+
+describe('[local] applyLocalDefaults webhook URL policy', () => {
+  it('lets a webhook receiver on this machine be reached over http', () => {
+    const env = applyLocalDefaults({ ...SECRETS })
+    expect(env.NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS).toBe('true')
+    expect(env.NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS?.split(',')).toContain('localhost')
+  })
+
+  it('honours an explicit policy (explicit wins)', () => {
+    const env = applyLocalDefaults({
+      ...SECRETS,
+      NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS: 'false',
+      NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS: 'hooks.corp',
+    })
+    expect(env.NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS).toBe('false')
+    expect(env.NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS).toBe('hooks.corp')
+  })
+})

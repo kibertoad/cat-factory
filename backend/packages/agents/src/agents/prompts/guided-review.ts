@@ -115,14 +115,16 @@ export interface GuidedReviewThreadPromptInput {
   omittedTurns: number
 }
 
-function renderHeader(pr: GuidedReviewPrHeader): string {
+/** The PR header every PR-scoped inline prompt opens with. */
+export function renderPrHeader(pr: GuidedReviewPrHeader): string {
   return [
     `Pull request #${pr.prNumber} in ${pr.owner}/${pr.repo}, targeting \`${pr.baseRef}\`, reviewed at commit \`${pr.headSha}\`.`,
     `Title:\n${fenceVerbatim(pr.title)}`,
   ].join('\n')
 }
 
-function renderManifest(files: GuidedReviewChangedFileSummary[]): string {
+/** The changed-file list with per-file stats, or a line saying there is none. */
+export function renderChangedFileManifest(files: GuidedReviewChangedFileSummary[]): string {
   if (files.length === 0) return 'The PR changes no files.'
   const lines = files.map((f) => {
     const stats =
@@ -168,9 +170,9 @@ export function renderGuidedReviewOverviewPrompt(input: GuidedReviewOverviewProm
         input.omittedPatchPaths.map((p) => `- ${p}`).join('\n')
       : ''
   return [
-    renderHeader(input.pr),
+    renderPrHeader(input.pr),
     input.body ? `Description:\n${fenceVerbatim(input.body)}` : 'The PR has no description.',
-    renderManifest(input.files),
+    renderChangedFileManifest(input.files),
     patches.length > 0 ? `Patches:\n${patches.join('\n\n')}` : '',
     omitted,
     'Prepare the briefing now, as the JSON object described in your instructions.',
@@ -182,7 +184,7 @@ export function renderGuidedReviewOverviewPrompt(input: GuidedReviewOverviewProm
 /** An answer call's user prompt: the thread so far, ending in the question to answer. */
 export function renderGuidedReviewAnswerPrompt(input: GuidedReviewThreadPromptInput): string {
   return [
-    renderHeader(input.pr),
+    renderPrHeader(input.pr),
     renderOverviewDigest(input.overview),
     `The thread so far:\n${renderHistory(input.history, input.omittedTurns)}`,
     "Answer the reviewer's last message, as the JSON object described in your instructions.",
@@ -192,7 +194,7 @@ export function renderGuidedReviewAnswerPrompt(input: GuidedReviewThreadPromptIn
 /** A comment-drafting call's user prompt: the thread whose conclusions become comments. */
 export function renderGuidedReviewDraftsPrompt(input: GuidedReviewThreadPromptInput): string {
   return [
-    renderHeader(input.pr),
+    renderPrHeader(input.pr),
     renderOverviewDigest(input.overview),
     `The exploration thread:\n${renderHistory(input.history, input.omittedTurns)}`,
     'Draft the review comments this thread supports, as the JSON object described in your ' +

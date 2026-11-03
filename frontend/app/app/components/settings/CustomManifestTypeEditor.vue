@@ -7,6 +7,7 @@
 import { computed, reactive, ref } from 'vue'
 import type { CustomManifestType } from '@cat-factory/contracts'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const infra = useInfraConfigStore()
@@ -140,9 +141,12 @@ async function remove(type: CustomManifestType) {
         </div>
       </li>
     </ul>
-    <p v-else class="text-2xs text-dimmed">
-      {{ t('settings.infrastructure.customType.empty') }}
-    </p>
+    <EmptyState
+      v-else
+      compact
+      icon="i-lucide-boxes"
+      :title="t('settings.infrastructure.customType.empty')"
+    />
 
     <!-- Add / edit a workspace-defined type. -->
     <div class="space-y-2 border-t border-default pt-3">
@@ -192,7 +196,7 @@ async function remove(type: CustomManifestType) {
         <UButton v-if="editing" color="neutral" variant="ghost" size="sm" @click="startAdd">
           {{ t('common.cancel') }}
         </UButton>
-        <UButton color="primary" size="sm" :loading="busy" :disabled="!canSave" @click="save">
+        <UButton size="sm" :loading="busy" :disabled="!canSave" @click="save">
           {{ editing ? t('common.save') : t('settings.infrastructure.customType.add') }}
         </UButton>
       </div>

@@ -43,6 +43,13 @@ import {
   sourceMenuItems,
 } from '~/utils/sourcePicker'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  failureDetail,
+  withReasonCopy,
+  type ReasonCopy,
+} from '~/composables/pipelineErrorToast/describeFailure'
 import { appliesIntakePredicate } from '~/utils/intakePredicates'
 import { boardFromService as isBoardFromService, huntRequest } from './BugHuntModal.logic'
 
@@ -52,8 +59,8 @@ const tasks = useTasksStore()
 const hunt = useBugHuntStore()
 const board = useBoardStore()
 const github = useGitHubStore()
-const toast = useToast()
-const { present } = usePipelineErrorToast()
+const actionToast = useActionToast()
+const { present, presentReported } = usePipelineErrorToast()
 
 const open = computed({
   get: () => ui.bugHunt !== null,
@@ -168,7 +175,7 @@ const scopedRepo = computed(() => {
  * and it belongs beside the scope it invalidates.
  */
 const REPO_NOT_LINKED: TaskSourceReadReason = 'repo_not_linked'
-const huntNeedsRepo = computed(() => hunt.huntErrorReason === REPO_NOT_LINKED)
+const huntNeedsRepo = computed(() => hunt.huntError?.reason === REPO_NOT_LINKED)
 
 /**
  * The tracker CANNOT enumerate boards, so the user types the scope in themselves. Keyed on the
@@ -177,33 +184,29 @@ const huntNeedsRepo = computed(() => hunt.huntErrorReason === REPO_NOT_LINKED)
  */
 const BOARDS_UNSUPPORTED: TaskSourceReadReason = 'boards_unsupported'
 const boardIsFreeText = computed(
-  () => !hunt.boardsLoading && hunt.boardsErrorReason === BOARDS_UNSUPPORTED,
+  () => !hunt.boardsLoading && hunt.boardsError?.reason === BOARDS_UNSUPPORTED,
 )
 
 /**
  * The refusals this surface words ITSELF, keyed on the backend's reason.
  *
- * The backend does not localize prose, so a reason with no entry here renders the server's
- * untranslated English — the honest last resort for a cause this modal was not built to explain,
- * and the wrong answer for one it was. Both entries are reachable only from a client that
- * disagrees with the backend about which sources are repo-backed (a stale SPA build, a raced
+ * The backend does not localize prose, so a reason with no entry here gets the toast funnel's
+ * copy for its status class, with the server's English behind "Show details": fine for a cause
+ * this modal was not built to explain, and the wrong answer for one it was. Both entries are
+ * reachable only from a client that disagrees with the backend about which sources are repo-backed (a stale SPA build, a raced
  * `repoBacked` read), which is exactly when a user is least served by raw backend prose.
  * `repo_not_linked` is deliberately absent: it is not a message but a warning rendered beside the
  * scope it invalidates.
  */
-const REFUSAL_KEYS: Partial<Record<TaskSourceReadReason, string>> = {
+const REFUSAL_KEYS = {
   board_from_service: 'bugHunt.refusal.boardFromService',
   missing_board: 'bugHunt.refusal.missingBoard',
-}
-function refusalText(reason: string | null, fallback: string | null): string | null {
-  const key = reason ? REFUSAL_KEYS[reason as TaskSourceReadReason] : undefined
-  return key ? t(key) : fallback
-}
+} satisfies Partial<Record<TaskSourceReadReason, string>> & ReasonCopy
 
 /** A board read that failed for a reason the user has to fix — shown, never silently swallowed. */
 const boardsFailure = computed(() =>
   !hunt.boardsLoading && hunt.boardsError !== null && !boardIsFreeText.value
-    ? refusalText(hunt.boardsErrorReason, hunt.boardsError)
+    ? withReasonCopy(hunt.boardsError, REFUSAL_KEYS)
     : null,
 )
 
@@ -277,12 +280,12 @@ async function runHunt() {
   // Only a real failure is reported. A cancelled credential prompt leaves nothing to say, and
   // `repo_not_linked` is worded by the panel itself beside the scope it invalidates.
   const attempt = await hunt.hunt(source.value, input)
-  if (attempt === 'failed' && !huntNeedsRepo.value) {
-    toast.add({
-      title: t('bugHunt.huntFailed'),
-      description: refusalText(hunt.huntErrorReason, hunt.huntError) ?? undefined,
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
+  if (attempt === 'failed' && !huntNeedsRepo.value && hunt.huntError) {
+    // A recognised refusal reads in its own translated copy; anything else gets the funnel's copy
+    // for its status class. Either way the backend's prose is detail behind the disclosure.
+    const failure = withReasonCopy(hunt.huntError, REFUSAL_KEYS)
+    presentReported(failureDetail(failure, t), 'bugHunt.huntFailed', {
+      descriptionKey: failure.descriptionKey,
     })
   }
 }
@@ -294,10 +297,9 @@ async function adopt(candidate: BugHuntCandidate) {
     if (!blockId) return // the user cancelled the personal-credential prompt
     ui.closeBugHunt()
     ui.select(blockId)
-    toast.add({
-      title: t('bugHunt.adopted', { id: candidate.externalId }),
+    actionToast.success('bugHunt.adopted', {
+      params: { id: candidate.externalId },
       description: t('bugHunt.adoptedRunning'),
-      icon: 'i-lucide-bug-play',
     })
   } catch (e) {
     present(e, 'bugHunt.adoptFailed')
@@ -332,20 +334,19 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
 </script>
 
 <template>
+  <!-- workbench-width-ok: a ranked list of tracker bugs with scan controls (768px). Its shell
+       waits on #2359. -->
   <UModal v-model:open="open" :title="t('bugHunt.title')" :ui="{ content: 'max-w-3xl' }">
     <template #title>
       <IntegrationBackTitle :title="t('bugHunt.title')" @back="back" />
     </template>
     <template #body>
       <!-- No tracker offered (none connected/installed, or all disabled). -->
-      <div v-if="!tasks.anyOffered" class="space-y-3 text-center">
-        <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-dimmed" />
-        <p class="text-sm text-muted">{{ t('bugHunt.connectFirst') }}</p>
+      <EmptyState v-if="!tasks.anyOffered" icon="i-lucide-plug" :title="t('bugHunt.connectFirst')">
         <div class="flex flex-wrap justify-center gap-2">
           <UButton
             v-for="choice in addableSources"
             :key="choice.source"
-            color="primary"
             variant="soft"
             :icon="choice.icon"
             @click="addSource(choice.source)"
@@ -353,7 +354,7 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
             {{ ADD_LABEL[choice.action](choice.label) }}
           </UButton>
         </div>
-      </div>
+      </EmptyState>
 
       <!-- No service frame yet → nowhere for an adopted bug to land. -->
       <p v-else-if="!containerItems.length" class="text-center text-xs text-dimmed">
@@ -424,9 +425,12 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
             </p>
             <!-- A board read that failed for a fixable reason (unreachable site, expired
                  token): named, so the user isn't left with an empty picker and no cause. -->
-            <p v-else-if="boardsFailure" class="mt-1 text-xs text-app-warning-400">
-              {{ t('bugHunt.boardsFailed', { reason: boardsFailure }) }}
-            </p>
+            <FailureMessage
+              v-else-if="boardsFailure"
+              :failure="boardsFailure"
+              :title="t('bugHunt.boardsFailed')"
+              class="mt-1 text-xs text-app-warning-400"
+            />
           </UFormField>
 
           <UFormField
@@ -479,7 +483,6 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
 
         <div class="flex items-center gap-2">
           <UButton
-            color="primary"
             icon="i-lucide-radar"
             :loading="hunt.hunting"
             :disabled="!canHunt"
@@ -565,7 +568,6 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
                   {{ t('bugHunt.recommended') }}
                 </UBadge>
                 <UButton
-                  color="primary"
                   variant="soft"
                   icon="i-lucide-play"
                   size="xs"
@@ -579,9 +581,12 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
             </div>
           </div>
 
-          <p v-if="!hunt.candidates.length" class="text-center text-xs text-dimmed">
-            {{ t('bugHunt.noCandidates') }}
-          </p>
+          <EmptyState
+            v-if="!hunt.candidates.length"
+            compact
+            icon="i-lucide-bug-off"
+            :title="t('bugHunt.noCandidates')"
+          />
         </div>
       </div>
     </template>

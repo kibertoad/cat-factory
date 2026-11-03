@@ -59,6 +59,7 @@ export const useWorkspaceStore = defineStore(
     const {
       infraSetup,
       infraSetupDetails,
+      infraSetupOwners,
       hydrate: hydrateInfraSetup,
       patchInfraSetup,
     } = createInfraSetupState()
@@ -98,7 +99,7 @@ export const useWorkspaceStore = defineStore(
       accountSpend.value = snapshot.accountSpend ?? null
       userSpend.value = snapshot.userSpend ?? null
       budgetCaps.value = snapshot.budgetCaps ?? null
-      hydrateInfraSetup(snapshot.infraSetup)
+      hydrateInfraSetup(snapshot.infraSetup, snapshot.infraSetupOwners)
       access.value = snapshot.access ?? null
       // Keep the board list in step (e.g. a freshly created board, or a rename). The
       // snapshot's `workspace` carries no `viewerRole` (that's a `GET /workspaces` list
@@ -222,10 +223,12 @@ export const useWorkspaceStore = defineStore(
       return workspaceId.value
     }
 
-    /** Resume runs paused by the spend safeguard, then refresh the snapshot. */
+    /**
+     * Resume runs paused by the spend safeguard. The caller refreshes the snapshot after it, so a
+     * failed refresh is never reported as a failed resume: the resume has already happened.
+     */
     async function resumeSpend() {
       await api.resumeSpend(requireId())
-      await refresh()
     }
 
     return {
@@ -241,6 +244,7 @@ export const useWorkspaceStore = defineStore(
       budgetCaps,
       infraSetup,
       infraSetupDetails,
+      infraSetupOwners,
       patchInfraSetup,
       access,
       init,

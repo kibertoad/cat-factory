@@ -27,7 +27,7 @@ import { customTaskTypeSchema } from './task-types.js'
 import { gateConfigFormSchema } from './gate-config.js'
 import { registeredBinaryGeneratorSchema } from './binary-generators.js'
 import { infraEngineSchema } from './environments.js'
-import { infraSetupSchema } from './infra-setup.js'
+import { infraSetupOwnersSchema, infraSetupSchema } from './infra-setup.js'
 import { initiativeSchema } from './initiative.js'
 import { initiativePresetDescriptorSchema } from './initiative-preset.js'
 import { sharedStackSchema } from './shared-stacks.js'
@@ -420,6 +420,13 @@ export const workspaceSnapshotSchema = v.object({
    * wire (absent on an older backend), the SPA then simply shows no banner.
    */
   infraSetup: v.optional(infraSetupSchema),
+  /**
+   * Who can close each {@link infraSetup} gap (workspace admin, account admin or the deployment
+   * operator), so the SPA prompts the people who can act and names the owner to everyone else.
+   * Computed beside `infraSetup` in the shared `WorkspaceController`; optional on the wire, and
+   * the SPA treats its absence as "owner unknown" and keeps the prompt to workspace admins.
+   */
+  infraSetupOwners: v.optional(infraSetupOwnersSchema),
   /**
    * The account's repo-sourced Claude Skills catalog (lightweight `{ id, name, description }`),
    * shared across the account's workspaces. The pipeline builder's per-step skill picker binds a

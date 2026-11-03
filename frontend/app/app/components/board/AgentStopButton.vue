@@ -22,7 +22,7 @@ const props = withDefaults(
 const { t } = useI18n()
 const agentRuns = useAgentRunsStore()
 const access = useWorkspaceAccess()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 const stopping = ref(false)
@@ -44,12 +44,10 @@ async function stop() {
   stopping.value = true
   try {
     const kind = await agentRuns.stop(props.runId)
-    toast.add({
-      title: kind === 'bootstrap' ? t('board.stop.bootstrapStopped') : t('board.stop.runStopped'),
-      description: t('board.stop.stoppedDescription'),
-      icon: 'i-lucide-circle-stop',
-      color: 'warning',
-    })
+    actionToast.success(
+      kind === 'bootstrap' ? 'board.stop.bootstrapStopped' : 'board.stop.runStopped',
+      { description: t('board.stop.stoppedDescription') },
+    )
   } catch (e) {
     present(e, 'board.stop.stopFailed')
   } finally {

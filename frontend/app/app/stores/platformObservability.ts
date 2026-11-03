@@ -2,6 +2,10 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { PlatformObservability, PlatformObservabilityWindow } from '~/types/execution'
 import { useAccountsStore } from '~/stores/accounts'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 /**
  * Platform-operator observability: the deployment-level aggregate health of the active
@@ -17,7 +21,7 @@ export const usePlatformObservabilityStore = defineStore('platformObservability'
   const window = ref<PlatformObservabilityWindow>('24h')
   const view = ref<PlatformObservability | null>(null)
   const loading = ref(false)
-  const error = ref<string | null>(null)
+  const error = ref<DescribedFailure | null>(null)
 
   const accountId = computed(() => accounts.activeAccount?.id ?? null)
 
@@ -33,7 +37,7 @@ export const usePlatformObservabilityStore = defineStore('platformObservability'
     try {
       view.value = await api.getPlatformObservability(id, window.value)
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to load platform observability'
+      error.value = describeFailure(err)
     } finally {
       loading.value = false
     }

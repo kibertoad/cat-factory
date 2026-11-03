@@ -6,5 +6,7 @@
     "outDir": "dist"
   },
   "exclude": ["**/*.test.ts", "**/*.spec.ts", "test/**/*.ts"],
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  // `tsc -b` orders the solution build by these, so the verifier is emitted before this imports it.
+  "references": [{ "path": "../webhooks/tsconfig.build.json" }]
 }

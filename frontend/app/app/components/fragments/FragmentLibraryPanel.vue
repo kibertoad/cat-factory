@@ -18,6 +18,8 @@ const open = computed({
 </script>
 
 <template>
+  <!-- workbench-width-ok: a library of the merged fragment catalog (768px). Its shell waits on
+       #2359. -->
   <UModal v-model:open="open" :title="t('fragments.panel.title')" :ui="{ content: 'max-w-3xl' }">
     <template #body>
       <!-- The anchor for the tutorial tour about steering agents with standards, which points at

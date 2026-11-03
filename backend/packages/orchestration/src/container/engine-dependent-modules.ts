@@ -9,6 +9,7 @@
 import { InitiativeLoopService } from '../modules/initiative/InitiativeLoopService.js'
 import type { InitiativeService } from '../modules/initiative/InitiativeService.js'
 import { BLUEPRINT_AGENT_KIND } from '@cat-factory/kernel'
+import { createRunnerPoolSeeder } from '@cat-factory/integrations'
 import {
   createBootstrapModule,
   createGitHubModule,
@@ -72,7 +73,30 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
       })
     : undefined
   modules.build('github', () => createGitHubModule(dependencies, caches, externalMergeObserver))
-  modules.build('runners', () => createRunnersModule(dependencies))
+  const runners = modules.build('runners', () => createRunnersModule(dependencies))
+  // The deployment-declared runner-pool seeder, the account-keyed sibling of the environment-handler
+  // seeder. Built only where a pool can be registered AND the account tier is wired, and only when
+  // the deployment declared a seed at all, so an undeclared seed costs nothing. A seed declared on a
+  // deployment that cannot honour it is stated once at boot rather than ignored.
+  modules.build('runnerPoolSeeder', () => {
+    const { seedAccountRunnerPool, accountRunnerPoolRepository, logger } = dependencies
+    if (!seedAccountRunnerPool) return undefined
+    if (!runners || !accountRunnerPoolRepository) {
+      logger.warn(
+        'a runner pool seed is declared but the runner pool integration is not wired; ' +
+          'no account will be seeded',
+        { runnersWired: !!runners, accountPoolStoreWired: !!accountRunnerPoolRepository },
+      )
+      return undefined
+    }
+    return createRunnerPoolSeeder({
+      connectionService: runners.connectionService,
+      accountRepository: dependencies.accountRepository,
+      accountRunnerPoolRepository,
+      seedSource: seedAccountRunnerPool,
+      logger,
+    })
+  })
   // After a bootstrap succeeds, map the new repo into a blueprint + the board by running the
   // mapping agent against the service frame — a SINGLE-KIND run, not a pipeline: there is one
   // step, and the preset that used to wrap it sat in the task picker beside the build presets

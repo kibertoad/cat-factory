@@ -23,14 +23,15 @@ import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import { appInstallationManageUrl, newRepoUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 const bootstrap = useBootstrapStore()
 const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 const board = useBoardStore()
-const toast = useToast()
-const { present } = usePipelineErrorToast()
+const actionToast = useActionToast()
+const { present, presentReported } = usePipelineErrorToast()
 const { freeFramePosition, focusFrame } = useFramePlacement()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -53,7 +54,7 @@ watch(
 async function loadGitHubRepos() {
   try {
     await github.probe()
-    if (github.connected) await github.load()
+    await github.refresh()
   } catch {
     // GitHub integration off / unreachable → the repo picker just isn't offered.
   }
@@ -298,13 +299,20 @@ const archOptions = computed(() =>
   })),
 )
 
+// The mode the person picked themselves, or null. The list decides only when it is empty; once it
+// has entries, the form shows this choice, or the reference default when there is none.
+const pickedMode = ref<LaunchMode | null>(null)
+
 // Keep a sensible default selection + mode as the list loads/changes. With no
-// reference architectures available, only the from-scratch flow makes sense.
+// reference architectures available, only the from-scratch flow makes sense. The list is often
+// still empty when the form mounts (the first open of a session), so when it arrives the form
+// goes back to the person's own choice, or to the reference default when they made none.
 watch(
   () => bootstrap.architectures,
   (list) => {
     if (!selectedArchId.value && list.length) selectedArchId.value = list[0]!.id
     if (!list.length) mode.value = 'scratch'
+    else mode.value = pickedMode.value ?? 'reference'
   },
   { immediate: true },
 )
@@ -367,11 +375,8 @@ async function openCreateRepo() {
       private: isPrivate.value,
       description: description.value.trim() || undefined,
     })
-    toast.add({
-      title: t('bootstrap.toast.repoCreated'),
+    actionToast.success('bootstrap.toast.repoCreated', {
       description: `${repo.owner}/${repo.name}`,
-      icon: 'i-lucide-check',
-      color: 'success',
     })
   } catch (e) {
     present(e, 'bootstrap.toast.repoCreateFailed')
@@ -426,26 +431,20 @@ async function launch() {
     if (job.status === 'failed') {
       // The container couldn't even start (pre-flight failure, e.g. the target
       // repo isn't empty) — surfaced synchronously, before any board frame.
-      toast.add({
-        title: t('bootstrap.toast.failed'),
-        description: job.error ?? t('bootstrap.toast.failedFallback'),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
+      presentReported(job.error, 'bootstrap.toast.failed', {
+        descriptionKey: 'bootstrap.toast.failedFallback',
       })
     } else {
       // Running: the container is spinning up. A provisional service card now
       // shows on the board and tracks live progress; the run continues in the
       // background and becomes a real, droppable service when it finishes.
-      toast.add({
-        title: t('bootstrap.toast.started'),
+      actionToast.info('bootstrap.toast.started', {
         // A monorepo run does not run straight through: it surveys, then waits for the
         // reviewer. Saying "bootstrapping…" there would set the wrong expectation about who
         // the next move belongs to.
         description: job.monorepo
           ? t('bootstrap.toast.startedMonorepoDesc', { directory: job.monorepo.directory })
           : t('bootstrap.toast.startedDesc', { repo: job.repoName }),
-        icon: 'i-lucide-loader-circle',
-        color: 'info',
       })
       repoName.value = ''
       description.value = ''
@@ -613,7 +612,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 </script>
 
 <template>
-  <UModal v-model:open="modalOpen" :title="t('bootstrap.title')" :ui="{ content: 'max-w-2xl' }">
+  <AppModal size="form" v-model:open="modalOpen" :title="t('bootstrap.title')">
     <template #body>
       <div class="space-y-6">
         <!-- Three states, because each promises the user something different about the repo.
@@ -741,7 +740,11 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           </template>
 
           <UFormField :label="t('bootstrap.mode.label')" required>
-            <URadioGroup v-model="mode" :items="modeItems" />
+            <URadioGroup
+              v-model="mode"
+              :items="modeItems"
+              @update:model-value="(value) => (pickedMode = value as LaunchMode)"
+            />
           </UFormField>
 
           <template v-if="usingReference">
@@ -900,7 +903,6 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 
           <div class="flex justify-end">
             <UButton
-              color="primary"
               icon="i-lucide-rocket"
               :loading="launching"
               :disabled="!canLaunch"
@@ -1036,7 +1038,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 class="w-full"
               />
             </UFormField>
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <UFormField :label="t('bootstrap.arch.repoOwner')" required>
                 <UInput
                   v-model="archForm.repoOwner"
@@ -1082,12 +1084,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
               >
                 {{ t('common.cancel') }}
               </UButton>
-              <UButton
-                color="primary"
-                :loading="savingArch"
-                :disabled="!canSaveArch"
-                @click="saveArch"
-              >
+              <UButton :loading="savingArch" :disabled="!canSaveArch" @click="saveArch">
                 {{ archForm.id ? t('common.save') : t('bootstrap.arch.add') }}
               </UButton>
             </div>
@@ -1095,5 +1092,5 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
         </section>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

@@ -90,7 +90,6 @@ function start() {
     <div class="flex items-center gap-2">
       <UButton
         size="xs"
-        color="primary"
         variant="soft"
         icon="i-lucide-wand-sparkles"
         data-testid="compose-env-setup-start"

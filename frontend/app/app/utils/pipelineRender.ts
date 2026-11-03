@@ -341,14 +341,27 @@ function describeUnhandledSkipReason(reason: never): string {
 }
 
 /**
- * Tailwind classes for a subtask-item status icon. An in-progress item spins only
- * while the run is live: once the run has failed, a step left mid-flight (its item
- * state still `in_progress`) keeps its colour but stops spinning, matching the frozen
- * failure card. Completed items are emerald, everything else muted.
+ * Whether a subtask-item status icon spins (`<Spinner :spinning>`). An in-progress item spins only
+ * while the run is live: once the run has failed, a step left mid-flight (its item state still
+ * `in_progress`) keeps its colour but stops spinning, matching the frozen failure card.
+ */
+export function subtaskIconSpins(status: string, runFailed: boolean): boolean {
+  return status === 'in_progress' && !runFailed
+}
+
+/** The tone of a subtask-item status icon: in-progress is primary, completed is emerald, the rest
+ * muted. Pair it with {@link subtaskIconSpins}. */
+export function subtaskIconTone(status: string): string {
+  if (status === 'in_progress') return 'text-primary'
+  return status === 'completed' ? 'text-app-success-400' : 'text-dimmed'
+}
+
+/**
+ * Tone plus a hand-written spin, for `board/nodes/TaskPipelineMini.vue` alone. That file is held
+ * out of the feedback-states slice (#2252) while the task-card rework rewrites it; when it moves
+ * to `<Spinner :spinning="subtaskIconSpins(...)">`, delete this and its `PENDING` entry in
+ * `scripts/check-frontend-feedback.mjs`.
  */
 export function subtaskIconClass(status: string, runFailed: boolean): string[] {
-  return [
-    status === 'in_progress' ? (runFailed ? 'text-primary' : 'animate-spin text-primary') : '',
-    status === 'completed' ? 'text-app-success-400' : 'text-dimmed',
-  ]
+  return [subtaskIconTone(status), subtaskIconSpins(status, runFailed) ? 'animate-spin' : '']
 }

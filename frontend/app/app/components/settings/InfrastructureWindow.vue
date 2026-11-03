@@ -37,6 +37,7 @@ import SharedStacksPanel from '~/components/settings/SharedStacksPanel.vue'
 import ComposeEnvironmentSetupSection from '~/components/settings/ComposeEnvironmentSetupSection.vue'
 import PackageRegistriesPanel from '~/components/settings/PackageRegistriesPanel.vue'
 import CapabilityCredentialsPanel from '~/components/settings/CapabilityCredentialsPanel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -152,11 +153,7 @@ watch([tabs, () => store.loaded], () => {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('settings.providerConnection.windowTitle')"
-    :ui="{ content: 'max-w-xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('settings.providerConnection.windowTitle')">
     <template #body>
       <div class="space-y-4">
         <UTabs
@@ -218,5 +215,5 @@ watch([tabs, () => store.loaded], () => {
         </p>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

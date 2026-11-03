@@ -20,10 +20,12 @@ import type {
   ReviewItemStatus,
 } from '~/types/brainstorm'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const brainstorm = useBrainstormStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const access = useWorkspaceAccess()
@@ -86,6 +88,9 @@ const incorporating = computed(() => status.value === 'incorporating')
 const reReviewing = computed(() => status.value === 'reviewing')
 const working = computed(() => incorporating.value || reReviewing.value)
 const frozen = computed(() => incorporated.value || working.value)
+// The rail statuses that render an action block (or the incorporated footer). Below `lg` the
+// stats are hidden, so with none of these the bottom bar would be an empty bordered strip.
+const hasRailAction = computed(() => status.value === 'ready' || merged.value || incorporated.value)
 const canIncorporate = computed(() => !!session.value && brainstorm.canIncorporate(session.value))
 const canProceed = computed(() => !!session.value && brainstorm.canProceed(session.value))
 const iteration = computed(() => session.value?.iteration ?? 1)
@@ -194,10 +199,9 @@ async function incorporate(feedback?: string) {
   }
   redoComment.value = ''
   showRedo.value = false
-  toast.add({
-    title: t('brainstorm.toast.draftingTitle', { doc: docNoun.value }),
+  actionToast.info('brainstorm.toast.draftingTitle', {
+    params: { doc: docNoun.value },
     description: t('brainstorm.toast.draftingDescription'),
-    icon: 'i-lucide-wand-sparkles',
   })
   close()
 }
@@ -207,15 +211,16 @@ async function reReview() {
   try {
     const updated = await brainstorm.reReview(blockId.value, activeStage.value)
     const newCount = brainstorm.openCount(updated)
-    toast.add({
-      title:
-        updated.status === 'incorporated'
-          ? t('brainstorm.toast.reReviewSettled')
-          : updated.status === 'exceeded'
-            ? t('brainstorm.toast.reReviewExceeded')
-            : t('brainstorm.toast.reReviewNewOptions', { count: newCount }, newCount),
-      icon: 'i-lucide-sparkles',
-    })
+    if (updated.status === 'incorporated') {
+      actionToast.success('brainstorm.toast.reReviewSettled')
+    } else if (updated.status === 'exceeded') {
+      actionToast.warning('brainstorm.toast.reReviewExceeded')
+    } else {
+      actionToast.info('brainstorm.toast.reReviewNewOptions', {
+        params: { count: newCount },
+        plural: newCount,
+      })
+    }
   } catch (e) {
     present(e, 'brainstorm.toast.reReviewError')
   }
@@ -226,7 +231,7 @@ async function proceed() {
   acting.value = true
   try {
     await brainstorm.proceed(blockId.value, activeStage.value)
-    toast.add({ title: t('brainstorm.toast.proceeding'), icon: 'i-lucide-arrow-right' })
+    actionToast.info('brainstorm.toast.proceeding')
   } catch (e) {
     present(e, 'brainstorm.toast.proceedError')
   } finally {
@@ -240,12 +245,12 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
   try {
     await brainstorm.resolveExceeded(blockId.value, activeStage.value, choice)
     if (choice === 'stop-reset') {
-      toast.add({ title: t('brainstorm.toast.taskReset'), icon: 'i-lucide-undo' })
+      actionToast.info('brainstorm.toast.taskReset')
       close()
     } else if (choice === 'proceed') {
-      toast.add({ title: t('brainstorm.toast.proceeding'), icon: 'i-lucide-arrow-right' })
+      actionToast.info('brainstorm.toast.proceeding')
     } else {
-      toast.add({ title: t('brainstorm.toast.extraRoundGranted'), icon: 'i-lucide-rotate-cw' })
+      actionToast.info('brainstorm.toast.extraRoundGranted')
     }
   } catch (e) {
     present(e, 'brainstorm.toast.resolveError')
@@ -274,9 +279,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
       </UBadge>
     </template>
 
-    <div class="flex min-h-0 flex-1">
+    <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
       <!-- main column -->
-      <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
+      <div class="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-5">
         <p class="mb-4 text-sm text-muted">
           <i18n-t keypath="brainstorm.intro" tag="span" scope="global">
             <template #subject>{{ subjectNoun }}</template>
@@ -291,20 +296,24 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
         </p>
 
         <!-- empty state -->
-        <div
+        <EmptyState
           v-if="!session && !busy && !loading"
-          class="rounded-lg border border-dashed border-muted p-8 text-center text-sm text-dimmed"
-        >
-          {{ t('brainstorm.empty') }}
+          icon="i-lucide-lightbulb"
+          :title="t('brainstorm.empty')"
+        />
+
+        <!-- initial fetch on open -->
+        <div v-else-if="loading && !busy && !session" class="flex flex-col gap-3">
+          <USkeleton v-for="n in 3" :key="n" class="h-20 w-full rounded-lg" />
         </div>
 
-        <!-- working state (initial fetch on open, or an agent pass running) -->
+        <!-- an agent pass running -->
         <div
-          v-else-if="(busy || loading) && !session"
+          v-else-if="busy && !session"
           class="flex items-center justify-center gap-2 p-8 text-sm text-muted"
         >
-          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-          {{ loading && !busy ? t('brainstorm.loading') : t('brainstorm.generating') }}
+          <Spinner class="h-4 w-4" />
+          {{ t('brainstorm.generating') }}
         </div>
 
         <template v-else-if="session">
@@ -332,7 +341,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             v-else-if="working"
             class="mb-4 flex items-center gap-2 rounded-lg border border-app-warning-900/60 bg-app-warning-950/30 p-4 text-sm text-app-warning-200"
           >
-            <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
+            <Spinner class="h-5 w-5 shrink-0" />
             <span v-if="incorporating">
               {{ t('brainstorm.working.incorporating', { doc: docNoun }) }}
             </span>
@@ -408,7 +417,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     />
                     <div class="mt-2 flex flex-wrap items-center gap-2">
                       <UButton
-                        color="primary"
                         variant="soft"
                         size="xs"
                         icon="i-lucide-corner-down-left"
@@ -493,10 +501,17 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
         </template>
       </div>
 
-      <!-- right action rail -->
-      <aside class="hidden w-72 shrink-0 flex-col border-s border-default lg:flex">
+      <!-- action rail: a right-hand column on wide screens, a bottom action bar below `lg`.
+           The informational stats collapse away below `lg`, but the actions must stay
+           reachable on a phone. The bar is capped and scrolls on its own so an expanded redo
+           form cannot squeeze the main column away or clip its own buttons, and it hides
+           below `lg` while the session's status offers no action. -->
+      <aside
+        class="max-h-[50dvh] w-full shrink-0 flex-col overflow-y-auto border-t border-default lg:flex lg:max-h-none lg:w-72 lg:border-s lg:border-t-0"
+        :class="hasRailAction ? 'flex' : 'hidden'"
+      >
         <div class="flex flex-col gap-4 px-4 py-5">
-          <div v-if="session" class="space-y-2 text-xs text-muted">
+          <div v-if="session" class="hidden space-y-2 text-xs text-muted lg:block">
             <div class="flex items-center justify-between">
               <span>{{ t('brainstorm.rail.options') }}</span>
               <span class="text-toned">{{ session.items.length }}</span>
@@ -516,10 +531,12 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
 
           <!-- action: ready (choose → incorporate / proceed) -->
-          <div v-if="session && status === 'ready'" class="space-y-2 border-t border-default pt-4">
+          <div
+            v-if="session && status === 'ready'"
+            class="space-y-2 border-default lg:border-t lg:pt-4"
+          >
             <UButton
               v-if="canProceed"
-              color="primary"
               size="sm"
               block
               icon="i-lucide-arrow-right"
@@ -533,7 +550,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             </UButton>
             <UButton
               v-else
-              color="primary"
               size="sm"
               block
               icon="i-lucide-wand-sparkles"
@@ -556,9 +572,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
 
           <!-- action: merged (inspect → re-run / redo) -->
-          <div v-if="session && merged" class="space-y-2 border-t border-default pt-4">
+          <div v-if="session && merged" class="space-y-2 border-default lg:border-t lg:pt-4">
             <UButton
-              color="primary"
               size="sm"
               block
               icon="i-lucide-sparkles"
@@ -593,7 +608,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 :placeholder="t('brainstorm.redoPlaceholder')"
               />
               <UButton
-                color="primary"
                 variant="soft"
                 size="xs"
                 block
@@ -613,7 +627,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 
           <div
             v-if="session && incorporated"
-            class="border-t border-default pt-4 text-2xs leading-relaxed text-dimmed"
+            class="border-default text-2xs leading-relaxed text-dimmed lg:border-t lg:pt-4"
           >
             {{ t('brainstorm.incorporatedFooter') }}
           </div>

@@ -1,0 +1,1 @@
+ALTER TABLE "public_api_keys" ADD COLUMN "follows_memberships" integer DEFAULT 0 NOT NULL;

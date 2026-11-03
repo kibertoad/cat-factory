@@ -6,6 +6,7 @@
 // and Fixtures (the graded inputs each run is scored against). Loaded on demand when the
 // window opens; 503 (the deployment hasn't provisioned the Sandbox DB) shows a notice.
 import { computed, ref, watch } from 'vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 import type { TableColumn } from '@nuxt/ui'
 import type {
   SandboxExperimentStatus,
@@ -18,10 +19,11 @@ import type {
 } from '~/types/sandbox'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const ui = useUiStore()
 const store = useSandboxStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -82,13 +84,9 @@ async function promote(version: SandboxPromptVersion) {
   promoting.value = version.id
   try {
     await store.promotePrompt(version)
-    toast.add({
-      title: t('sandbox.prompts.promoted', { agent: version.agentKind }),
-      color: 'success',
-      icon: 'i-lucide-rocket',
-    })
-  } catch {
-    toast.add({ title: t('sandbox.prompts.promoteFailed'), color: 'error' })
+    actionToast.success('sandbox.prompts.promoted', { params: { agent: version.agentKind } })
+  } catch (error) {
+    present(error, 'sandbox.prompts.promoteFailed')
   } finally {
     promoting.value = null
   }
@@ -193,9 +191,9 @@ async function createAndRun() {
       },
     })
     name.value = ''
-    toast.add({ title: t('sandbox.toast.running'), icon: 'i-lucide-flask-conical', color: 'info' })
+    actionToast.info('sandbox.toast.running')
     await store.launch(created.id)
-    toast.add({ title: t('sandbox.toast.complete'), icon: 'i-lucide-check', color: 'success' })
+    actionToast.success('sandbox.toast.complete')
   } catch (e) {
     present(e, 'sandbox.toast.runFailed')
   }
@@ -255,7 +253,7 @@ async function saveVersion() {
   savingPrompt.value = true
   try {
     await store.saveVersion(editing.value.id, editText.value)
-    toast.add({ title: t('sandbox.toast.versionSaved'), icon: 'i-lucide-check', color: 'success' })
+    actionToast.success('sandbox.toast.versionSaved')
     editing.value = null
   } catch (e) {
     present(e, 'sandbox.toast.saveFailed')
@@ -275,6 +273,8 @@ async function archive(prompt: SandboxPromptVersion) {
 </script>
 
 <template>
+  <!-- workbench-width-ok: experiments, prompts and fixtures with a graded grid (1024px). Its
+       shell waits on #2359. -->
   <UModal
     v-model:open="open"
     :title="t('sandbox.title')"
@@ -282,8 +282,12 @@ async function archive(prompt: SandboxPromptVersion) {
     :ui="{ content: 'max-w-5xl' }"
   >
     <template #body>
-      <div v-if="store.loading" class="flex items-center justify-center py-12">
-        <UIcon name="i-lucide-loader-circle" class="h-6 w-6 animate-spin text-muted" />
+      <div v-if="store.loading" class="space-y-4">
+        <USkeleton class="h-8 w-full" />
+        <div class="grid gap-4 lg:grid-cols-2">
+          <USkeleton class="h-80 w-full rounded-lg" />
+          <USkeleton class="h-80 w-full rounded-lg" />
+        </div>
       </div>
 
       <div
@@ -302,7 +306,7 @@ async function archive(prompt: SandboxPromptVersion) {
         class="rounded-lg border border-app-error-800 bg-app-error-950/40 p-6 text-sm text-app-error-200"
       >
         <p class="font-medium text-app-error-100">{{ t('sandbox.error.title') }}</p>
-        <p class="mt-1 text-app-error-300">{{ store.error }}</p>
+        <FailureMessage :failure="store.error" class="mt-1 text-app-error-300" />
         <UButton class="mt-3" size="xs" color="neutral" variant="subtle" @click="store.load()">
           {{ t('common.retry') }}
         </UButton>
@@ -405,9 +409,12 @@ async function archive(prompt: SandboxPromptVersion) {
                   />
                   <span class="truncate">{{ m.label }}</span>
                 </label>
-                <p v-if="!store.selectableModels.length" class="text-xs text-dimmed">
-                  {{ t('sandbox.builder.noModels') }}
-                </p>
+                <EmptyState
+                  v-if="!store.selectableModels.length"
+                  compact
+                  icon="i-lucide-cpu"
+                  :title="t('sandbox.builder.noModels')"
+                />
               </div>
             </div>
 
@@ -429,9 +436,12 @@ async function archive(prompt: SandboxPromptVersion) {
                   />
                   <span class="truncate">{{ f.name }}</span>
                 </label>
-                <p v-if="!kindFixtures.length" class="text-xs text-dimmed">
-                  {{ t('sandbox.builder.noFixtures') }}
-                </p>
+                <EmptyState
+                  v-if="!kindFixtures.length"
+                  compact
+                  icon="i-lucide-clipboard-list"
+                  :title="t('sandbox.builder.noFixtures')"
+                />
               </div>
             </div>
 
@@ -457,7 +467,6 @@ async function archive(prompt: SandboxPromptVersion) {
                 </span>
               </span>
               <UButton
-                color="primary"
                 icon="i-lucide-play"
                 size="sm"
                 :loading="store.launching"
@@ -578,9 +587,12 @@ async function archive(prompt: SandboxPromptVersion) {
                 <span class="truncate text-toned">{{ x.name }}</span>
                 <UBadge variant="soft" size="xs">{{ EXPERIMENT_STATUS_LABEL[x.status] }}</UBadge>
               </UButton>
-              <p v-if="!store.experiments.length" class="text-xs text-dimmed">
-                {{ t('sandbox.results.empty') }}
-              </p>
+              <EmptyState
+                v-if="!store.experiments.length"
+                compact
+                icon="i-lucide-flask-conical"
+                :title="t('sandbox.results.empty')"
+              />
             </div>
           </div>
         </div>
@@ -630,9 +642,9 @@ async function archive(prompt: SandboxPromptVersion) {
                      Offered on a graded candidate and on an older workspace revision (rolling
                      back), but not on the one already live, where it would be a no-op. -->
                 <IconButton
+                  color="neutral"
                   v-if="canPromote(p)"
                   icon="i-lucide-rocket"
-                  color="primary"
                   variant="ghost"
                   size="xs"
                   :loading="promoting === p.id"
@@ -674,7 +686,6 @@ async function archive(prompt: SandboxPromptVersion) {
                 {{ t('common.cancel') }}
               </UButton>
               <UButton
-                color="primary"
                 icon="i-lucide-save"
                 size="sm"
                 :loading="savingPrompt"
@@ -720,9 +731,11 @@ async function archive(prompt: SandboxPromptVersion) {
               }}
             </p>
           </div>
-          <p v-if="!store.fixtures.length" class="text-xs text-dimmed">
-            {{ t('sandbox.fixtures.empty') }}
-          </p>
+          <EmptyState
+            v-if="!store.fixtures.length"
+            icon="i-lucide-clipboard-list"
+            :title="t('sandbox.fixtures.empty')"
+          />
         </div>
       </div>
     </template>

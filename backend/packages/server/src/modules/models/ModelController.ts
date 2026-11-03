@@ -1,8 +1,13 @@
-import { listModelsContract, listWorkspaceModelsContract } from '@cat-factory/contracts'
+import {
+  listConfiguredProvidersContract,
+  listModelsContract,
+  listWorkspaceModelsContract,
+} from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { resolveDirectProviders } from '../../agents/providerCapabilities.js'
 import { resolveWorkspaceModelCatalog } from './workspaceCatalog.js'
 
 /**
@@ -34,6 +39,21 @@ export function modelController(): Hono<AppEnv> {
       c.get('user')?.id,
     )
     return c.json(catalog, 200)
+  })
+
+  // The direct providers the caller's runs here can reach, through the SAME resolution the catalog
+  // above and the run-start guard use (enabled keys at every pool scope, gateways with no base URL
+  // dropped). The SPA reads this rather than deriving "configured" from key rows, which leave out
+  // the account's keys and any rule the SQL adds. Readable by viewers, like the catalog: it names
+  // providers and never a key.
+  buildHonoRoute(app, listConfiguredProvidersContract, async (c) => {
+    const container = c.get('container')
+    const providers = await resolveDirectProviders(
+      container,
+      param(c, 'workspaceId'),
+      c.get('user')?.id,
+    )
+    return c.json({ providers }, 200)
   })
 
   return app

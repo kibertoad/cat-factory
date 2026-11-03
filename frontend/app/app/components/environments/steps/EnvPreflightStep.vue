@@ -4,8 +4,10 @@
 // on a non-local facade) and lets the operator advance to save. `next` is always
 // allowed — preflights are advisory, not a hard gate.
 import { computed } from 'vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 import JourneyStepNav from '~/components/environments/steps/JourneyStepNav.vue'
 import { useEnvironmentWizardTarget } from '~/modular/journeys/environmentSetup.frame'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{
   input: { frameId: string | null }
@@ -39,7 +41,6 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
       <UButton
         size="xs"
         variant="soft"
-        color="primary"
         icon="i-lucide-list-checks"
         :loading="store.preflightRunning"
         data-testid="env-setup-preflight-run"
@@ -49,13 +50,13 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
       </UButton>
     </div>
 
-    <p
+    <EmptyState
       v-if="!store.recipe.prerequisites?.length"
-      class="text-xs text-dimmed"
+      compact
+      icon="i-lucide-list-checks"
+      :title="t('environmentWizard.preflight.none')"
       data-testid="env-setup-preflight-none"
-    >
-      {{ t('environmentWizard.preflight.none') }}
-    </p>
+    />
     <p
       v-else-if="preflightsUnavailable"
       class="text-xs text-app-warning-300/80"
@@ -63,13 +64,12 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
     >
       {{ t('environmentWizard.preflight.unavailable') }}
     </p>
-    <p
-      v-if="store.preflightError"
+    <FailureMessage
+      :failure="store.preflightError"
+      :title="t('environmentWizard.preflight.failed')"
       class="text-xs text-app-error-300/80"
       data-testid="env-setup-preflight-error"
-    >
-      {{ store.preflightError }}
-    </p>
+    />
 
     <ul
       v-if="store.preflightResults?.length"
@@ -101,7 +101,6 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
     <JourneyStepNav :go-back="goBack">
       <template #primary>
         <UButton
-          color="primary"
           trailing-icon="i-lucide-arrow-right"
           data-testid="env-setup-next"
           @click="exit('advance')"

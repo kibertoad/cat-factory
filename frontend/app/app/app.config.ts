@@ -12,24 +12,23 @@ export default defineAppConfig({
       error: 'rose',
       neutral: 'slate',
     },
-    // Give every overlay the same layered surface the agent-run-details reader uses: the deep
-    // `app-950` surface (below `bg-default`) so the `bg-default` panels/cards inside pop, with
-    // `border-default` chrome. All tokens are theme role tokens (`app-950` is the hand-defined
-    // flipping token for the deep shade), so overlays track dark/light. Applies to all
-    // UModal/USlideover instances so they stay consistent without per-instance `:ui` overrides.
-    modal: {
-      slots: {
-        content: 'bg-app-950 ring-default divide-default',
-        header: 'border-b border-default',
-        title: 'text-highlighted',
-      },
+    // The default button and badge are Nuxt UI's own, stated so they have one visible home and
+    // `scripts/check-frontend-variants.mjs` can refuse a literal equal to them (the variant policy
+    // in `frontend/app/README.md`). They must stay the PRIMARY tier: a theme's `style.defaults`
+    // replaces these for every control that does not state the prop, so the unstyled group is the
+    // one a theme restyles, and the quiet chrome states `color="neutral" variant="ghost"` itself.
+    button: {
+      defaultVariants: { color: 'primary', variant: 'solid', size: 'md' },
     },
-    slideover: {
-      slots: {
-        content: 'bg-app-950 ring-default divide-default',
-        header: 'border-b border-default',
-        title: 'text-highlighted',
-      },
+    badge: {
+      defaultVariants: { color: 'primary', variant: 'solid', size: 'md' },
+    },
+    // A skeleton is one step darker than Nuxt UI's `bg-elevated`, which is also the default
+    // skeleton fill. Many windows paint their body or inner cards `bg-elevated` or `app-950`
+    // (neutral-100 in light mode, the same colour), and a default skeleton there is invisible.
+    // `bg-accented` reads on those, on `bg-default`, and in dark mode.
+    skeleton: {
+      base: 'animate-pulse rounded-md bg-accented',
     },
     // The toaster's scroll region is the ONE `[data-slot='viewport']` the app's own
     // CSS may target: Nuxt UI reuses that attribute for the item list of every menu

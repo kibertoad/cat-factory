@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import type { WorkspacePermission } from './workspace-members.js'
 import { publicApiScopeSchema } from './public-api-keys.js'
 
 // ---------------------------------------------------------------------------
@@ -25,6 +26,14 @@ import { publicApiScopeSchema } from './public-api-keys.js'
  * gate raised and a 401 raised here would otherwise read the same.
  */
 export const MCP_AUTHORIZATION_REQUEST_INVALID = 'mcp_authorization_request_invalid'
+
+/**
+ * The workspace permission an approval needs on the board the human picks. An approval MINTS a
+ * public-API key on that board, so it takes what the key panel's own gate takes. Stated here
+ * because both sides apply it: the backend refuses the approval without it, and the consent screen
+ * offers only the boards where the person holds it.
+ */
+export const MCP_AUTHORIZATION_APPROVE_PERMISSION: WorkspacePermission = 'secrets.manage'
 
 /** The sealed authorization request the consent page carries, as minted by `GET /oauth/authorize`. */
 const sealedRequestSchema = v.pipe(v.string(), v.minLength(1))

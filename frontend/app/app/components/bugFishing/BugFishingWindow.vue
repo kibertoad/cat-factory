@@ -16,12 +16,14 @@
 // later. The pipeline override applies to the marks made after it is changed, and the window
 // says which pipeline it will use before anything is created.
 import { computed, ref } from 'vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 import { useResultView } from '~/composables/useResultView'
 import { useExecutionStore } from '~/stores/execution'
 import { useBoardStore } from '~/stores/board'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useUiStore } from '~/stores/ui'
 import { pipelineAllowedForTaskType } from '~/utils/pipeline'
+import { selectNoneItem, selectNoneModel } from '~/utils/selectNone'
 import { useBugFishingStore } from '~/stores/bugFishing'
 import { bugFishingSpawnIsClaimable } from '@cat-factory/contracts'
 import type { BugFishingFinding, BugFishingSeverity, BugFishingStepState } from '~/types/execution'
@@ -29,6 +31,8 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -183,6 +187,12 @@ function phaseFindingCount(pass: { id: string; territoryId?: string | null }): n
  */
 /** '' means "use the board's default", the same spelling the workspace settings field uses. */
 const pipelineOverride = ref('')
+const pipelineOverrideModel = selectNoneModel(
+  () => pipelineOverride.value,
+  (value) => {
+    pipelineOverride.value = value
+  },
+)
 const defaultPipelineId = computed(() => state.value?.defaultFixPipelineId ?? null)
 /** What a mark made right now would run on — the override if one is set, else the board default. */
 const effectivePipelineName = computed(() => {
@@ -193,11 +203,11 @@ const effectivePipelineName = computed(() => {
 /**
  * The pipelines a spawned fix task may run: the ones this board offers a `bug` task, since that is
  * exactly what a spawned fix IS. Narrowed by the same predicate the create form uses, so the two
- * screens cannot disagree about what a bug task may run. The leading row carries '' so "the
+ * screens cannot disagree about what a bug task may run. The leading row is a real item so "the
  * board's default" is a value someone can pick back to rather than only a starting state.
  */
 const pipelineOptions = computed(() => [
-  { value: '', label: t('bugFishing.fixPipeline.boardDefault') },
+  selectNoneItem(t('bugFishing.fixPipeline.boardDefault')),
   ...pipelines.pipelines
     .filter((p) => pipelineAllowedForTaskType(p, 'bug'))
     .map((p) => ({ label: p.name, value: p.id })),
@@ -304,11 +314,12 @@ const PHASE_ICON: Record<string, string> = {
                 :data-testid="`bug-fishing-phase-${phase.id}`"
                 @click="selectedPassKey = passKey(phase)"
               >
-                <UIcon
+                <Spinner
                   :name="PHASE_ICON[phase.status] ?? 'i-lucide-circle-dashed'"
+                  :spinning="phase.status === 'fishing'"
                   class="mt-0.5 h-3.5 w-3.5 shrink-0"
                   :class="{
-                    'animate-spin text-app-info-300': phase.status === 'fishing',
+                    'text-app-info-300': phase.status === 'fishing',
                     'text-app-success-400': phase.status === 'completed',
                     'text-app-warning-400': phase.status === 'failed',
                     'text-app-600': phase.status === 'pending',
@@ -379,7 +390,7 @@ const PHASE_ICON: Record<string, string> = {
           data-testid="bug-fishing-in-progress"
           class="mb-4 flex items-center gap-2 rounded-lg border border-app-info-500/25 bg-app-info-500/5 px-3 py-2 text-xs text-app-info-200"
         >
-          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
+          <Spinner class="h-4 w-4 shrink-0" />
           <span>
             {{
               t('bugFishing.stillFishing', {
@@ -437,7 +448,7 @@ const PHASE_ICON: Record<string, string> = {
         >
           <span class="text-2xs text-muted">{{ t('bugFishing.fixPipeline.label') }}</span>
           <USelectMenu
-            v-model="pipelineOverride"
+            v-model="pipelineOverrideModel.value"
             :items="pipelineOptions"
             value-key="value"
             size="xs"
@@ -455,24 +466,21 @@ const PHASE_ICON: Record<string, string> = {
           <UCheckbox v-model="showTriaged" size="xs" :label="t('bugFishing.showTriaged')" />
         </div>
 
-        <p v-if="bugFishing.error" class="mb-3 text-xs text-app-error-300">
-          {{ bugFishing.error }}
-        </p>
+        <FailureMessage :failure="bugFishing.error" class="mb-3 text-xs text-app-error-300" />
 
-        <!-- An expedition that caught nothing is a real answer, not an empty state. The copy
-             says which of the two it is, because "nothing found" and "nothing left to triage"
-             are different things to be told. -->
-        <div
+        <!-- An expedition that caught nothing is a real answer. The copy says which of the two it
+             is, because "nothing found" and "nothing left to triage" are different things to be
+             told. -->
+        <EmptyState
           v-if="visibleFindings.length === 0"
           data-testid="bug-fishing-empty"
-          class="rounded-lg border border-default bg-default/40 px-4 py-8 text-center text-xs text-muted"
-        >
-          {{
+          :icon="findings.length === 0 ? 'i-lucide-fish' : 'i-lucide-check-check'"
+          :title="
             findings.length === 0
               ? t('bugFishing.empty.nothingCaught')
               : t('bugFishing.empty.allTriaged')
-          }}
-        </div>
+          "
+        />
 
         <ul v-else class="space-y-2">
           <li
@@ -591,7 +599,7 @@ const PHASE_ICON: Record<string, string> = {
               data-testid="bug-fishing-finding-spawning"
               class="mt-2 flex flex-wrap items-center gap-2 text-2xs text-muted"
             >
-              <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+              <Spinner class="h-3.5 w-3.5" />
               <span>{{ t('bugFishing.finding.spawning') }}</span>
             </div>
 
@@ -612,7 +620,6 @@ const PHASE_ICON: Record<string, string> = {
             <div v-if="isOpen(finding) && canAct" class="mt-2 flex items-center gap-2">
               <UButton
                 size="xs"
-                color="primary"
                 icon="i-lucide-wrench"
                 :loading="bugFishing.spawning.has(finding.id)"
                 :disabled="finding.dismissed || bugFishing.spawning.has(finding.id)"
@@ -654,7 +661,6 @@ const PHASE_ICON: Record<string, string> = {
         }}
       </p>
       <UButton
-        color="primary"
         icon="i-lucide-check"
         :loading="bugFishing.resolving"
         :disabled="!canAct"

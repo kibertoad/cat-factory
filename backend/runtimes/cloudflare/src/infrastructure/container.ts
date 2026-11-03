@@ -69,6 +69,7 @@ import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
 import { envBag, requireDb, requireTelemetryDb } from './env'
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
+import { D1AccountRunnerPoolRepository } from './repositories/D1AccountRunnerPoolRepository'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
 import { workerHostResolver } from './hostResolver'
 import { workerRouteProbe } from './routeProbe'
@@ -540,6 +541,9 @@ export function selectRunnersDeps(
   const urlPolicy = resolveUrlSafetyPolicy(config.runners)
   return {
     runnerPoolConnectionRepository: new D1RunnerPoolConnectionRepository({ db }),
+    // The account tier a board without its own pool falls back to. Nothing seeds it on the Worker
+    // (declared pools are Node only); it is read so both facades resolve a row the same way.
+    accountRunnerPoolRepository: new D1AccountRunnerPoolRepository({ db }),
     runnerSecretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.runners.encryptionKey!,
       info: 'cat-factory:runners',

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { ApiError, apiErrorEnvelope, apiErrorStatus } from '~/composables/api/errors'
+import {
+  ApiError,
+  apiErrorEnvelope,
+  apiErrorStatus,
+  isAbsentFeatureRefusal,
+  isModuleOffRefusal,
+} from '~/composables/api/errors'
 
 // The contract client (`sendByApiContract`) reports a declared non-2xx as a plain
 // `{ statusCode, headers, body }` value — body under `.body`, NOT an Error. Before the
@@ -49,5 +55,37 @@ describe('apiErrorStatus', () => {
     expect(apiErrorStatus(new ApiError(503, {}))).toBe(503)
     expect(apiErrorStatus({ status: 500 })).toBe(500)
     expect(apiErrorStatus(new Error('x'))).toBeUndefined()
+  })
+})
+
+describe('isModuleOffRefusal / isAbsentFeatureRefusal', () => {
+  // The unreasoned envelope `requireCapability` sends for a module the deployment never wired.
+  const moduleOff = new ApiError(503, {
+    error: { code: 'unavailable', message: 'User secret storage is not configured' },
+  })
+  // A reasoned 503: the module is wired and its upstream is not answering.
+  const reasonedOutage = new ApiError(503, {
+    error: {
+      code: 'unavailable',
+      message: 'The service catalog did not answer',
+      details: { reason: 'service_catalog_unreachable' },
+    },
+  })
+  // A platform or proxy 503 (Worker overload, a load balancer mid-deploy): no envelope at all.
+  const bareOutage = new ApiError(503, '<html>Service Unavailable</html>')
+
+  it('reads only the unreasoned unavailable envelope as module off', () => {
+    expect(isModuleOffRefusal(moduleOff)).toBe(true)
+    expect(isModuleOffRefusal(reasonedOutage)).toBe(false)
+    expect(isModuleOffRefusal(bareOutage)).toBe(false)
+  })
+
+  it('adds a 401 to the refusals that mean nothing to show, and nothing else', () => {
+    expect(isAbsentFeatureRefusal(new ApiError(401, {}))).toBe(true)
+    expect(isAbsentFeatureRefusal(moduleOff)).toBe(true)
+    expect(isAbsentFeatureRefusal(reasonedOutage)).toBe(false)
+    expect(isAbsentFeatureRefusal(bareOutage)).toBe(false)
+    expect(isAbsentFeatureRefusal(new ApiError(500, {}))).toBe(false)
+    expect(isAbsentFeatureRefusal(new TypeError('Failed to fetch'))).toBe(false)
   })
 })

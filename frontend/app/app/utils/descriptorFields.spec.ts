@@ -6,6 +6,7 @@ import {
   setDescriptorCheckbox,
   setDescriptorValue,
   toggleDescriptorGroupValue,
+  withoutDescriptorFieldDefaults,
 } from './descriptorFields'
 
 const field = (over: Partial<DescriptorField> & Pick<DescriptorField, 'key'>): DescriptorField => ({
@@ -53,6 +54,33 @@ describe('setDescriptorCheckbox', () => {
     // A default-OFF checkbox never freezes a redundant `false`: absent already means unchecked.
     const offByDefault = field({ key: 'breaking', type: 'checkbox' })
     expect(setDescriptorCheckbox({ breaking: true }, offByDefault, false)).toEqual({})
+  })
+})
+
+describe('withoutDescriptorFieldDefaults', () => {
+  const fields: DescriptorField[] = [
+    { key: 'soak', label: 'Soak', type: 'number', default: '15' },
+    { key: 'notify', label: 'Notify', type: 'checkbox', default: 'true' },
+    { key: 'tags', label: 'Tags', type: 'checkbox-group', defaultValues: ['a', 'b'] },
+    { key: 'channel', label: 'Channel', type: 'text' },
+  ]
+
+  it('drops a value that only repeats its declared default', () => {
+    expect(
+      withoutDescriptorFieldDefaults(fields, {
+        soak: 15,
+        notify: true,
+        tags: ['b', 'a'],
+        channel: '#ops',
+      }),
+    ).toEqual({ channel: '#ops' })
+  })
+
+  it('keeps a changed value and the opt-out of a default-ON checkbox', () => {
+    expect(withoutDescriptorFieldDefaults(fields, { soak: 30, notify: false })).toEqual({
+      soak: 30,
+      notify: false,
+    })
   })
 })
 

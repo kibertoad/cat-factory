@@ -10,6 +10,7 @@ import {
   toMetadataBag,
   type WorkspaceMetadataFieldDefinition,
 } from './workspace-metadata'
+import { SELECT_NONE } from '~/utils/selectNone'
 
 const field = (
   key: string,
@@ -98,6 +99,25 @@ describe('resolveMetadataFields', () => {
     // Rendering it would build an editor whose every save is refused by the store.
     expect(fields.map((f) => f.key)).toEqual(['gameId'])
     expect(rejected).toEqual([bad])
+  })
+
+  it('drops a select field with an option value the editor cannot hold', () => {
+    const options = (value: string) => [
+      { value, label: 'None' },
+      { value: 'eu-west', label: 'Europe (west)' },
+    ]
+    const empty = field('region', { type: 'select', options: options('') })
+    const sentinel = field('tier', { type: 'select', options: options(SELECT_NONE) })
+    const { fields, rejected } = resolveMetadataFields([field('gameId'), empty, sentinel])
+
+    // An empty value makes Reka throw and breaks the tab; the sentinel would never be saved.
+    expect(fields.map((f) => f.key)).toEqual(['gameId'])
+    expect(rejected).toEqual([empty, sentinel])
+  })
+
+  it('ignores the options of a field that is not a select', () => {
+    const text = field('note', { options: [{ value: '', label: 'None' }] })
+    expect(resolveMetadataFields([text]).fields).toEqual([text])
   })
 })
 

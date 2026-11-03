@@ -10,6 +10,7 @@ import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import AdoptionReviewModal from '~/components/bootstrap/AdoptionReviewModal.vue'
 import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import Spinner from '~/components/common/Spinner.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
 import { useViewport } from '~/composables/useViewport'
@@ -224,9 +225,10 @@ const bootstrapPct = computed(() => {
 // The actual todo items the agent is working through, surfaced on the expanded
 // card so a zoomed-in user sees the task list, not just the "N/M" count.
 const bootstrapItems = computed(() => bootstrapSubtasks.value?.items ?? [])
-const ITEM_ICON: Record<string, string> = {
+// `in_progress` takes the spinner's own loading glyph.
+const ITEM_ICON: Record<string, string | undefined> = {
   completed: 'i-lucide-check-circle-2',
-  in_progress: 'i-lucide-loader-circle',
+  in_progress: undefined,
   pending: 'i-lucide-circle',
 }
 </script>
@@ -302,10 +304,7 @@ const ITEM_ICON: Record<string, string> = {
         data-testid="bootstrap-progress"
       >
         <div class="flex items-center gap-1.5 text-xs">
-          <UIcon
-            name="i-lucide-loader-circle"
-            class="h-4 w-4 shrink-0 animate-spin text-app-warning-400"
-          />
+          <Spinner class="h-4 w-4 shrink-0 text-app-warning-400" />
           <span class="text-app-warning-300">{{ t('board.frame.bootstrappingRepository') }}</span>
           <span v-if="bootstrapSubtasks" class="ms-auto text-app-warning-200/80">
             {{
@@ -336,13 +335,17 @@ const ITEM_ICON: Record<string, string> = {
                   : 'text-app-warning-200/80'
             "
           >
-            <UIcon
+            <Spinner
               :name="ITEM_ICON[item.status]"
+              :spinning="item.status === 'in_progress'"
               class="mt-px h-3 w-3 shrink-0"
-              :class="[
-                item.status === 'in_progress' ? 'animate-spin text-app-warning-400' : '',
-                item.status === 'completed' ? 'text-app-success-400' : 'text-app-warning-400/70',
-              ]"
+              :class="
+                item.status === 'in_progress'
+                  ? 'text-app-warning-400'
+                  : item.status === 'completed'
+                    ? 'text-app-success-400'
+                    : 'text-app-warning-400/70'
+              "
             />
             <span>{{ item.label }}</span>
           </li>

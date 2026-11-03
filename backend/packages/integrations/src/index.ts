@@ -332,6 +332,13 @@ export {
   type RunnerPoolConnectionServiceDependencies,
   type ResolvedRunnerBackend,
 } from './modules/runners/RunnerPoolConnectionService.js'
+// The generic seeder that registers a deployment's declared runner pool onto an account that has
+// none: the concrete implementation of the kernel `RunnerPoolSeeder` port.
+export {
+  createRunnerPoolSeeder,
+  type RunnerPoolSeed,
+  type RunnerPoolSeedSource,
+} from './modules/runners/RunnerPoolSeeder.js'
 export * as runnersLogic from './modules/runners/runners.logic.js'
 // The universal "agent runner backend" provider-registry seam: maps a backend kind
 // (`manifest` | `kubernetes` | future `nomad`/`eks`) → a RunnerTransport. The registry is
@@ -505,9 +512,15 @@ export {
 } from './modules/providers/ApiKeyService.js'
 export {
   PublicApiKeyService,
+  keyReaches,
+  managesMembershipKey,
+  reachCovers,
+  scopeInWorkspace,
   scopeSatisfies,
+  type KeyViewer,
   type PublicApiKeyServiceDependencies,
   type PublicApiKeyAuth,
+  type PublicApiKeyIdentity,
   type IssuedPublicApiKey,
 } from './modules/publicApi/PublicApiKeyService.js'
 export {
@@ -760,3 +773,9 @@ export {
   toBase64,
   toBase64Url,
 } from './modules/shared/base64.js'
+export {
+  DIRECTORY_WEBHOOK_CIPHER_INFO,
+  DirectoryWebhookService,
+  type DirectoryWebhookServiceDependencies,
+  type DirectoryWebhookSweepResult,
+} from './modules/directoryWebhook/DirectoryWebhookService.js'

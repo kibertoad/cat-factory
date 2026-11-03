@@ -208,6 +208,14 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     ENVIRONMENTS_ALLOW_URL_HOSTS:
       env.ENVIRONMENTS_ALLOW_URL_HOSTS?.trim() ||
       'localhost,127.0.0.1,host.docker.internal,.localhost,.local,.nip.io,.sslip.io',
+    // A directory or notification webhook receiver on the same laptop (a local
+    // sainte-beuve, a `localhost` test server) is reached over http too. Same widening,
+    // scoped to the webhook guard alone; hosted facades keep the strict default.
+    NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS:
+      env.NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS?.trim() || 'true',
+    NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS:
+      env.NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS?.trim() ||
+      'localhost,127.0.0.1,host.docker.internal,.localhost',
     // Local mode is single-tenant by definition, so a locally-run model on the
     // developer's own LAN (an LM Studio box, a homelab Ollama host) is the intended
     // reach: default the runner-host policy's LAN opt-in ON. Hosted facades keep the

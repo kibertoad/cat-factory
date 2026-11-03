@@ -9,9 +9,10 @@ function reload() {
 </script>
 
 <template>
+  <!-- safe-area-ok: a scrim with one card centred on it, so no content reaches an edge -->
   <div
     data-testid="async-view-error"
-    class="fixed inset-0 z-50 grid place-items-center bg-app-950/80 p-6 backdrop-blur-sm"
+    class="fixed inset-0 z-50 grid place-items-center bg-elevated/75 p-6 backdrop-blur-sm"
     role="alert"
   >
     <div class="max-w-sm rounded-2xl border border-muted bg-default p-5 shadow-2xl">
@@ -22,7 +23,7 @@ function reload() {
       <p class="mt-2 text-xs leading-relaxed text-muted">
         {{ t('errors.asyncView.body') }}
       </p>
-      <UButton class="mt-4" color="primary" variant="soft" size="xs" @click="reload">
+      <UButton class="mt-4" variant="soft" size="xs" @click="reload">
         {{ t('errors.asyncView.reload') }}
       </UButton>
     </div>

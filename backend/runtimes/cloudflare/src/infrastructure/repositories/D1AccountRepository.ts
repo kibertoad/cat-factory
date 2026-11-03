@@ -49,6 +49,11 @@ export class D1AccountRepository implements AccountRepository {
     return row ? rowToAccount(row) : null
   }
 
+  async listAll(): Promise<AccountRecord[]> {
+    const { results } = await this.db.prepare('SELECT * FROM accounts').all<AccountRow>()
+    return (results ?? []).map(rowToAccount)
+  }
+
   async listByIds(ids: string[]): Promise<AccountRecord[]> {
     if (ids.length === 0) return []
     const out: AccountRecord[] = []

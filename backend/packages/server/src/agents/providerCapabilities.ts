@@ -9,6 +9,7 @@ import type {
 import {
   ALL_SUBSCRIPTION_VENDORS,
   isAmbientNativeVendor,
+  type ApiKeyProvider,
   type AppCaches,
   type HarnessKind,
   type ModelFamilyPolicy,
@@ -136,20 +137,37 @@ async function resolveAccountModelPolicy(
   }
 }
 
+/**
+ * The direct providers a workspace's runs can reach for `userId`: an enabled key in the merged
+ * pool (workspace + owning account + the user's own), minus a provider whose base URL the
+ * deployment has not set. A key for such a provider would pass the catalog and the start guard
+ * but throw "No base URL configured" at dispatch.
+ *
+ * Its own export because the SPA's `GET /workspaces/:ws/configured-providers` must answer the
+ * same question the catalog and the start guard answer, not a second copy of it.
+ */
+export async function resolveDirectProviders(
+  services: Pick<CapabilityServices, 'apiKeys' | 'baseUrlFor'>,
+  workspaceId: string,
+  userId?: string | null,
+): Promise<ApiKeyProvider[]> {
+  const configured = services.apiKeys
+    ? await services.apiKeys.configuredProviders(workspaceId, { userId })
+    : []
+  const baseUrlFor = services.baseUrlFor
+  return baseUrlFor
+    ? configured.filter((p) => BASE_URL_OPTIONAL.has(p) || !!baseUrlFor(p))
+    : configured
+}
+
 export async function resolveWorkspaceCapabilities(
   services: CapabilityServices,
   workspaceId: string,
   userId?: string | null,
   modelPresetId?: string,
 ): Promise<ProviderCapabilities> {
-  const configured = services.apiKeys
-    ? await services.apiKeys.configuredProviders(workspaceId, { userId })
-    : []
-  const baseUrlFor = services.baseUrlFor
   const directProviders = new Set<string>(
-    // Drop a key whose provider needs a base URL the deployment hasn't configured: it
-    // would pass the catalog/start guard but throw "No base URL configured" at dispatch.
-    baseUrlFor ? configured.filter((p) => BASE_URL_OPTIONAL.has(p) || !!baseUrlFor(p)) : configured,
+    await resolveDirectProviders(services, workspaceId, userId),
   )
   const subscriptionVendors = new Set<SubscriptionVendor>()
   // BOTH credential stores answered for the whole vocabulary in ONE read each, rather than a

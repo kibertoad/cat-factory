@@ -12,10 +12,12 @@ const board = useBoardStore()
 // the sidebar/command entries with zero edits here.
 const { toolbarItems, invoke: invokeNav } = useNavContributions()
 const execution = useExecutionStore()
+const views = useWorkViewStore()
+const queue = useWorkspaceQueueStore()
 const workspace = useWorkspaceStore()
 const workspaceSettings = useWorkspaceSettingsStore()
 const services = useServicesStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const access = useWorkspaceAccess()
 const { t, n } = useI18n()
@@ -24,11 +26,7 @@ const { fitView, zoomIn, zoomOut, resetZoom } = useBoardFlow()
 async function mountService(serviceId: string, title: string) {
   try {
     await services.mount(serviceId)
-    toast.add({
-      title: t('board.toolbar.serviceAdded', { title }),
-      icon: 'i-lucide-box',
-      color: 'success',
-    })
+    actionToast.success('board.toolbar.serviceAdded', { params: { title } })
   } catch (e) {
     present(e, 'board.toolbar.serviceAddFailed')
   }
@@ -51,11 +49,7 @@ const mountableItems = computed(() =>
 async function restoreService(id: string, title: string) {
   try {
     await board.restoreService(id)
-    toast.add({
-      title: t('board.toast.restored', { name: title }),
-      icon: 'i-lucide-archive-restore',
-      color: 'neutral',
-    })
+    actionToast.success('board.toast.restored', { params: { name: title } })
   } catch (e) {
     present(e, 'board.toast.restoreFailed')
   }
@@ -112,19 +106,13 @@ const spendLabel = computed(() => {
   }
   return `${fmt(s.costSpent)} / ${fmt(s.costLimit)}`
 })
-const spendColor = computed(() => (spend.value?.exceeded ? 'error' : 'neutral'))
+/** The decisions this counts are in every service, so the queue opens on all of them. */
+function openQueue() {
+  queue.clearFilter()
+  views.show('queue')
+}
 
-const decisionItems = computed(() =>
-  execution.openDecisions.map((d) => {
-    const b = board.getBlock(d.blockId)
-    return {
-      label: b?.title ?? t('common.block'),
-      description: d.decision.question,
-      icon: 'i-lucide-circle-help',
-      onSelect: () => ui.openDecision(d.instanceId, d.decision.id),
-    }
-  }),
-)
+const spendColor = computed(() => (spend.value?.exceeded ? 'error' : 'neutral'))
 </script>
 
 <template>
@@ -199,21 +187,23 @@ const decisionItems = computed(() =>
 
     <USeparator orientation="vertical" class="mx-1 h-6" />
 
-    <!-- decisions queue -->
-    <UDropdownMenu v-if="execution.pendingDecisionCount" :items="decisionItems">
-      <UButton
-        color="warning"
-        variant="soft"
-        size="sm"
-        icon="i-lucide-circle-help"
-        data-testid="decision-badge"
+    <!-- The decision count. It opens the queue view, which lists every decision with its Answer
+         button beside the rest of what needs a person (issue #2258). -->
+    <UButton
+      v-if="execution.pendingDecisionCount"
+      color="warning"
+      variant="soft"
+      size="sm"
+      icon="i-lucide-circle-help"
+      :title="t('views.openQueue')"
+      data-testid="decision-badge"
+      @click="openQueue"
+    >
+      {{ execution.pendingDecisionCount
+      }}<span class="hidden sm:inline"
+        >&nbsp;{{ t('board.toolbar.decisionWord', execution.pendingDecisionCount) }}</span
       >
-        {{ execution.pendingDecisionCount
-        }}<span class="hidden sm:inline"
-          >&nbsp;{{ t('board.toolbar.decisionWord', execution.pendingDecisionCount) }}</span
-        >
-      </UButton>
-    </UDropdownMenu>
+    </UButton>
 
     <!-- how every frame's swimlanes are ordered + grouped (an override; advanced tier) -->
     <LaneViewControl />

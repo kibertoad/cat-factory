@@ -2,6 +2,7 @@ import type { Ref } from 'vue'
 import type { GitHubPatCheck } from '~/types/domain'
 import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import type { GitHubStoreContext } from '~/stores/github/context'
+import { apiErrorStatus } from '~/composables/api/errors'
 
 /**
  * The board-load probe: everything the store learns about the deployment's VCS setup in one round
@@ -37,7 +38,7 @@ export function createGitHubProbe(
   ctx: GitHubStoreContext,
   patCheck: Ref<GitHubPatCheck | null>,
 ): { probe: () => Promise<void>; ensureProbed: () => Promise<void> } {
-  const { api, workspace, available, connection, connectOptions } = ctx
+  const { api, workspace, available, unavailableCause, connection, connectOptions } = ctx
 
   async function runPatCheck(): Promise<void> {
     // Which board asked, captured BEFORE the await: a workspace switch mid-flight must not land
@@ -65,11 +66,14 @@ export function createGitHubProbe(
           .catch(() => []),
       ])
       available.value = true
+      unavailableCause.value = null
       connection.value = conn
       connectOptions.value = options
-    } catch {
-      // 503 (integration disabled) or any error → hide the UI entry points.
+    } catch (err) {
+      // 503 (integration disabled) or any error → hide the UI entry points. The cause is kept, so
+      // a surface that states the setup can tell "switched off" from "could not ask".
       available.value = false
+      unavailableCause.value = apiErrorStatus(err) === 503 ? 'disabled' : 'failed'
       connection.value = null
       connectOptions.value = []
     }

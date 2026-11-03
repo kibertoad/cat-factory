@@ -1,12 +1,12 @@
 <script setup lang="ts">
 // A reusable server-side GitHub repository picker: the same searchable combobox the
 // add-service modal uses, extracted so any window that needs to pick a repo the App
-// can access gets identical behaviour (type ≥ MIN_SEARCH_LEN chars → the backend
+// can access gets identical behaviour (type ≥ REPO_SEARCH_MIN_LEN chars → the backend
 // filters `owner/name`, nothing is prefetched). Exposes the selected repo's numeric
 // id via `v-model`, and emits the full `GitHubAvailableRepo` (owner/name/flags) via
 // `update:repo` for callers that need more than the id.
-import { refDebounced } from '@vueuse/core'
 import type { GitHubAvailableRepo } from '~/types/domain'
+import { REPO_SEARCH_MIN_LEN, useRepoSearch } from '~/composables/useRepoSearch'
 
 const props = defineProps<{
   /** Selected repo GitHub numeric id, via v-model. */
@@ -18,19 +18,22 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const github = useGitHubStore()
 
 // A wide App install (or a PAT) can expose hundreds of repos — too many to prefetch and
 // filter client-side — so the picker searches SERVER-SIDE once the user types at least
-// MIN_SEARCH_LEN characters (debounced). Below the gate the list stays empty.
-const MIN_SEARCH_LEN = 3
-const repoSearch = ref('')
-const repoSearchDebounced = refDebounced(repoSearch, 250)
-const repoQueryRaw = computed(() => repoSearchDebounced.value.trim())
-const belowMinChars = computed(() => repoQueryRaw.value.length < MIN_SEARCH_LEN)
+// REPO_SEARCH_MIN_LEN characters (debounced). Below the gate the list stays empty.
+// `useRepoSearch` keeps this picker's own result list, drops stale responses, and reports a
+// failed search.
+const {
+  search: repoSearch,
+  query: repoQueryRaw,
+  belowMinChars,
+  results: repoResults,
+  loading: repoLoading,
+} = useRepoSearch()
 
 // The picked repo, captured when selected — the loaded list is volatile (a later search
-// replaces it), so the selection can't be derived from `availableRepos` after the fact.
+// replaces it), so the selection can't be derived from the results after the fact.
 const selectedRepo = ref<GitHubAvailableRepo | undefined>(undefined)
 
 function toRepoItem(r: GitHubAvailableRepo) {
@@ -43,7 +46,7 @@ function toRepoItem(r: GitHubAvailableRepo) {
   return { label: `${r.owner}/${r.name}${priv}${personal}`, value: r.githubId }
 }
 
-const repoItems = computed(() => github.availableRepos.map(toRepoItem))
+const repoItems = computed(() => repoResults.value.map(toRepoItem))
 const queryMatches = computed(() => (belowMinChars.value ? [] : repoItems.value))
 
 // Items fed to the combobox: the matches plus the current selection kept present, so the
@@ -53,11 +56,6 @@ const repoMenuItems = computed(() => {
   if (props.modelValue === undefined) return matches
   if (matches.some((r) => r.value === props.modelValue)) return matches
   return selectedRepo.value ? [toRepoItem(selectedRepo.value), ...matches] : matches
-})
-
-// Fetch matches server-side as the debounced query changes; below the gate clear the list.
-watch(repoQueryRaw, (q) => {
-  void github.loadAvailableRepos(q.length >= MIN_SEARCH_LEN ? q : '')
 })
 
 const selectedId = computed({
@@ -74,7 +72,7 @@ watch(
       emit('update:repo', undefined)
       return
     }
-    const found = github.availableRepos.find((r) => r.githubId === id)
+    const found = repoResults.value.find((r) => r.githubId === id)
     if (found) {
       selectedRepo.value = found
       emit('update:repo', found)
@@ -96,7 +94,7 @@ function clear() {
     :items="repoMenuItems"
     :ignore-filter="true"
     value-key="value"
-    :loading="github.loadingAvailable"
+    :loading="repoLoading"
     icon="i-lucide-search"
     :placeholder="t('github.addService.searchPlaceholder')"
     class="w-full"
@@ -113,9 +111,11 @@ function clear() {
     </template>
     <template #empty>
       <span v-if="belowMinChars">
-        {{ t('github.addService.searchMinChars', { min: MIN_SEARCH_LEN }, MIN_SEARCH_LEN) }}
+        {{
+          t('github.addService.searchMinChars', { min: REPO_SEARCH_MIN_LEN }, REPO_SEARCH_MIN_LEN)
+        }}
       </span>
-      <span v-else-if="!github.loadingAvailable">
+      <span v-else-if="!repoLoading">
         {{ t('github.addService.noMatches', { query: repoQueryRaw }) }}
       </span>
     </template>

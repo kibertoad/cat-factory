@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
 import { ASSISTANT_PROMPT_MAX, assistantTurnInputSchema } from '@cat-factory/contracts'
 import type { AssistantCapability } from '~/types/domain'
-import { answerFor, assistantSurface, revealTarget, submitGate } from './AssistantModal.logic'
+import {
+  answerFor,
+  assistantSurface,
+  revealsInFocus,
+  revealTarget,
+  submitGate,
+} from './AssistantModal.logic'
 
 /** A capability that answered. The two halves are independent, so each case states both. */
 function answered(
@@ -204,5 +210,20 @@ describe('submitGate', () => {
       submitGate({ read: 'ready', capability: WIRED, prompt: over, running: false }).state,
     ).toBe('too_long')
     expect(accepted(over)).toBe(false)
+  })
+})
+
+describe('revealsInFocus', () => {
+  it('opens a task or an initiative in the focus view', () => {
+    expect(revealsInFocus('task')).toBe(true)
+    expect(revealsInFocus('initiative')).toBe(true)
+  })
+
+  it('leaves an added service frame on the board, where it has no run to show', () => {
+    expect(revealsInFocus('frame')).toBe(false)
+  })
+
+  it('selects only a block the snapshot does not carry yet', () => {
+    expect(revealsInFocus(undefined)).toBe(false)
   })
 })

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { createUserScopedLoad } from '~/stores/userScopedLoad'
 import type {
   ConnectionTestResult,
   StoreUserSecretInput,
@@ -17,22 +18,17 @@ export const useUserSecretsStore = defineStore('userSecrets', () => {
   const api = useApi()
   const secrets = ref<UserSecretStatus[]>([])
   const descriptors = ref<UserSecretDescriptor[]>([])
-  const loading = ref(false)
-
-  async function load() {
-    loading.value = true
-    try {
-      const { secrets: list, descriptors: descs } = await api.listUserSecrets()
+  const { loading, loadFailed, load } = createUserScopedLoad({
+    fetch: () => api.listUserSecrets(),
+    apply: ({ secrets: list, descriptors: descs }) => {
       secrets.value = list
       descriptors.value = descs
-    } catch {
-      // Auth disabled / not signed in / feature off → nothing to surface.
+    },
+    reset: () => {
       secrets.value = []
       descriptors.value = []
-    } finally {
-      loading.value = false
-    }
-  }
+    },
+  })
 
   function statusFor(kind: UserSecretKind): UserSecretStatus | undefined {
     return secrets.value.find((s) => s.kind === kind)
@@ -60,5 +56,16 @@ export const useUserSecretsStore = defineStore('userSecrets', () => {
     return await api.testUserSecret(kind, input)
   }
 
-  return { secrets, descriptors, loading, load, statusFor, descriptorFor, store, remove, test }
+  return {
+    secrets,
+    descriptors,
+    loading,
+    loadFailed,
+    load,
+    statusFor,
+    descriptorFor,
+    store,
+    remove,
+    test,
+  }
 })

@@ -11,6 +11,8 @@ import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 import { BLUEPRINT_AGENT_KIND } from '@cat-factory/contracts'
 import { VCS_PROVIDER_ICONS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import { useRunGate } from '~/composables/useRunGate'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -23,10 +25,15 @@ const recurring = useRecurringPipelinesStore()
 const requirements = useRequirementsStore()
 const access = useWorkspaceAccess()
 const { t } = useI18n()
+const { present } = usePipelineErrorToast()
 
 onMounted(() => {
   fragments.ensureLoaded()
-  github.ensureLoaded()
+  // The repo list behind the inspector's repo link and the service config's detect-from-repo
+  // lookup. Both read the store, so this one call serves them.
+  github.ensureLoaded().catch((error: unknown) => {
+    present(error, 'github.connect.errors.loadProjection')
+  })
 })
 
 const block = computed<Block | undefined>(() =>
@@ -84,27 +91,8 @@ const statusLabel = computed(() =>
   isContainer.value ? t(FRAME_LABEL_KEYS[effectiveStatus.value]) : statusMeta.value!.label,
 )
 
-const runnable = computed(() => (block.value ? board.isRunnable(block.value.id) : false))
-
-// A task runs only once every dependency has merged. When the Run trigger is locked
-// it must say WHY — name the unfinished dependencies rather than showing a bare lock.
-const unmetDepTitles = computed(() =>
-  block.value && isTask.value ? board.unmetDeps(block.value.id).map((b) => b.title) : [],
-)
-const runBlockedReason = computed(() => {
-  // A read-only viewer can inspect a task but never start/re-run it — surface WHY on the
-  // locked trigger, exactly like an unmet-dependency lock (the backend rejects it anyway).
-  if (!access.canExecuteRuns.value) return t('access.noRunExecute')
-  return unmetDepTitles.value.length
-    ? t(
-        'panels.inspector.runBlocked',
-        { count: unmetDepTitles.value.length, names: unmetDepTitles.value.join(', ') },
-        unmetDepTitles.value.length,
-      )
-    : null
-})
-// The Run trigger is enabled only when the task is runnable AND the caller may execute runs.
-const canRun = computed(() => runnable.value && access.canExecuteRuns.value)
+// The Run trigger's lock and the reason it names, shared with the focus view's picker.
+const { canRun, blockedReason: runBlockedReason } = useRunGate(() => block.value?.id)
 
 // The delete control names what it removes, so selecting a task and deleting it
 // reads as "Delete task" rather than ambiguously removing the whole service. An
@@ -278,9 +266,8 @@ const isServiceFrame = computed(
 )
 
 // ---- failed agent run (bootstrap or execution) ------------------------------
-// A block whose current run failed surfaces the shared failure banner + retry,
-// keyed by block id — covering a failed "bootstrap repo" frame and (for tasks) a
-// failed pipeline execution alike.
+// A block whose current run failed shows the failure block, keyed by block id. The header shows
+// it for a failed "bootstrap repo" frame only: a block with runs shows it in TaskExecution.
 const failedRun = computed(() => {
   const run = block.value ? agentRuns.byBlock[block.value.id] : undefined
   return run && run.status === 'failed' ? run : null
@@ -339,6 +326,7 @@ const showOriginalDescription = ref(false)
        NOT `data-block-id`: that attribute is the board's card selector, which the canvas drivers
        measure geometry through (`utils/blockRects.ts`), and a panel answering to it would offer
        the arrows a rect that is not on the canvas at all. -->
+  <!-- safe-area-ok: a bottom sheet below lg; its scroller pads the bottom and side insets -->
   <div
     v-if="block && statusMeta && typeMeta"
     data-testid="inspector-panel"
@@ -352,7 +340,7 @@ const showOriginalDescription = ref(false)
          On compact viewports the panel is a bottom sheet capped to the visible
          height (dvh excludes mobile browser chrome). -->
     <div
-      class="max-h-[80dvh] space-y-4 overflow-y-auto overscroll-contain px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:max-h-[calc(100vh-7rem)]"
+      class="max-h-[80dvh] space-y-4 overflow-y-auto overscroll-contain pt-4 pr-[max(1rem,env(safe-area-inset-right))] pb-[calc(1rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] lg:max-h-[calc(100vh-7rem)]"
     >
       <!-- header -->
       <div class="flex items-start justify-between gap-2">
@@ -489,8 +477,9 @@ const showOriginalDescription = ref(false)
         </template>
       </div>
 
-      <!-- failed run (bootstrap or execution): shared failure banner + retry -->
-      <AgentFailureCard v-if="failedRun" :run="failedRun" />
+      <!-- A failed bootstrap on a service frame: the failure block. A task or an initiative shows
+           its failure block once, in its Execution section (TaskExecution), not here as well. -->
+      <AgentFailureCard v-if="failedRun && !hasRuns" :run="failedRun" />
 
       <!-- running bootstrap: show the steps, let the user inspect it, let them stop it -->
       <div
@@ -499,7 +488,7 @@ const showOriginalDescription = ref(false)
       >
         <div class="flex items-center justify-between gap-2">
           <span class="flex items-center gap-1.5 text-xs text-app-warning-300">
-            <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+            <Spinner class="h-3.5 w-3.5" />
             {{ t('panels.inspector.bootstrapping') }}
           </span>
           <div class="flex items-center gap-1.5">
@@ -678,7 +667,7 @@ const showOriginalDescription = ref(false)
         </UButton>
         <UButton
           color="error"
-          variant="ghost"
+          variant="soft"
           size="sm"
           icon="i-lucide-trash-2"
           :class="isServiceFrame ? '' : 'ms-auto'"

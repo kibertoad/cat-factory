@@ -19,6 +19,10 @@ import type {
   InfraEngine,
   InfraHandlerConfig,
 } from '@cat-factory/contracts'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 // The discriminated config branches the two handler forms produce, so the save handlers stay
 // typed end-to-end (no `as never`): a wrong shape fails the typecheck here, not server-side.
@@ -36,7 +40,7 @@ const { t } = useI18n()
 const infra = useInfraConfigStore()
 const auth = useAuthStore()
 const ui = useUiStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
@@ -129,7 +133,7 @@ const busy = ref(false)
 // Connection-probe state for the kube engine forms (workspace + per-user override kept
 // separate so a probe result lands on the form it came from). The probe reaches the apiserver
 // with the supplied config + token via the per-type handler test endpoint — nothing persisted.
-type TestResult = { ok: boolean; message?: string } | null
+type TestResult = { ok: boolean; message?: string; failure?: DescribedFailure } | null
 const kubeTesting = ref(false)
 const kubeTestResult = ref<TestResult>(null)
 const kubeOverrideTesting = ref(false)
@@ -144,7 +148,7 @@ async function testKube(payload: { config: KubeHandlerConfig; secrets: Record<st
       secrets: payload.secrets,
     })
   } catch (e) {
-    kubeTestResult.value = { ok: false, message: e instanceof Error ? e.message : String(e) }
+    kubeTestResult.value = { ok: false, failure: describeFailure(e) }
   } finally {
     kubeTesting.value = false
   }
@@ -164,7 +168,7 @@ async function testSavedKube() {
   try {
     kubeSavedTestResult.value = await infra.testHandler({ config, secrets: {} })
   } catch (e) {
-    kubeSavedTestResult.value = { ok: false, message: e instanceof Error ? e.message : String(e) }
+    kubeSavedTestResult.value = { ok: false, failure: describeFailure(e) }
   } finally {
     kubeSavedTesting.value = false
   }
@@ -204,10 +208,7 @@ async function testKubeOverride(payload: {
       secrets: payload.secrets,
     })
   } catch (e) {
-    kubeOverrideTestResult.value = {
-      ok: false,
-      message: e instanceof Error ? e.message : String(e),
-    }
+    kubeOverrideTestResult.value = { ok: false, failure: describeFailure(e) }
   } finally {
     kubeOverrideTesting.value = false
   }
@@ -403,20 +404,16 @@ async function removeCustom() {
 }
 
 function toastSaved() {
-  toast.add({
-    title: t('settings.infrastructure.handler.saved'),
-    icon: 'i-lucide-check',
-    color: 'success',
-  })
+  actionToast.success('settings.infrastructure.handler.saved')
 }
 function toastRemoved() {
-  toast.add({ title: t('settings.infrastructure.handler.removed'), icon: 'i-lucide-check' })
+  actionToast.success('settings.infrastructure.handler.removed')
 }
 </script>
 
 <template>
   <!-- Only render the configurator once the handler bundle has actually resolved (available
-       === true). While it's still being probed (null) show a loading line instead of flashing
+       === true). While it's still being probed (null) show skeleton sections instead of flashing
        the full form, and render nothing when the integration is off (false). -->
   <div v-if="infra.available === true" class="space-y-5">
     <p class="text-xs text-muted">{{ t('settings.infrastructure.handler.intro') }}</p>
@@ -527,7 +524,7 @@ function toastRemoved() {
               class="h-3.5 w-3.5"
             />
             {{ t('settings.infrastructure.handler.personalOverride') }}
-            <UBadge v-if="kubeUserHandler" color="primary" variant="subtle" size="sm">
+            <UBadge v-if="kubeUserHandler" variant="subtle" size="sm">
               {{ t('settings.infrastructure.handler.overrideActive') }}
             </UBadge>
           </SectionLabel>
@@ -540,7 +537,7 @@ function toastRemoved() {
             <UButton
               icon="i-lucide-trash-2"
               color="error"
-              variant="ghost"
+              variant="soft"
               size="xs"
               :disabled="busy"
               @click="removeKubeOverride"
@@ -629,7 +626,8 @@ function toastRemoved() {
       </div>
     </section>
   </div>
-  <p v-else-if="infra.available === null" class="text-xs text-dimmed">
-    {{ t('settings.infrastructure.handler.loading') }}
-  </p>
+  <div v-else-if="infra.available === null" class="space-y-5">
+    <USkeleton class="h-4 w-2/3" />
+    <USkeleton v-for="n in 3" :key="n" class="h-24 w-full rounded-lg" />
+  </div>
 </template>

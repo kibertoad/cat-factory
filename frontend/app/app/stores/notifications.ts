@@ -7,7 +7,7 @@ import type {
   NotificationSettings,
   NotificationSettingsStatus,
 } from '~/types/notifications'
-import { ApiError } from '~/composables/api/errors'
+import { isModuleOffRefusal } from '~/composables/api/errors'
 import type { ReviewEffort } from '~/types/merge'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -175,10 +175,11 @@ export const useNotificationsStore = defineStore('notifications', () => {
       settingsStatus.value = 'ready'
     } catch (error) {
       settings.value = null
-      // A 503 is the opt-in shape (no routing store wired), not a failure to report: the panel
-      // renders the shipped defaults read-only. Anything else is a real error, which the panel
-      // states as such AND the caller still sees, so the server's own message reaches the toast.
-      if (isUnavailable(error)) {
+      // The module-off 503 (no routing store wired) is the opt-in shape, not a failure to
+      // report: the panel renders the shipped defaults read-only. Anything else, an outage 503
+      // included, is a real error, which the panel states as such AND the caller still sees, so
+      // the server's own message reaches the toast and a later visit retries.
+      if (isModuleOffRefusal(error)) {
         settingsStatus.value = 'unavailable'
         return
       }
@@ -214,12 +215,3 @@ export const useNotificationsStore = defineStore('notifications', () => {
     updateSettings,
   }
 })
-
-/**
- * Whether a failed load is the SETTLED "you can't have this" — the facade wired no routing store
- * (503), rather than a transient fault. Only that resolves to `unavailable`; everything else
- * becomes `failed` and propagates, so a later visit retries and the caller can report it.
- */
-function isUnavailable(error: unknown): boolean {
-  return error instanceof ApiError && error.statusCode === 503
-}

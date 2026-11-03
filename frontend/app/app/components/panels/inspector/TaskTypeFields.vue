@@ -92,7 +92,6 @@ function revert() {
     <div v-if="dirty" class="mt-2 flex items-center gap-2">
       <UButton
         size="xs"
-        color="primary"
         variant="soft"
         :loading="saving"
         :disabled="problems.length > 0"

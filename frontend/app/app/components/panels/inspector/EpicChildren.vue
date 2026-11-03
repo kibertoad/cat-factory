@@ -4,6 +4,7 @@ import type { Block } from '~/types/domain'
 import { STATUS_META } from '~/utils/catalog'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // The epic inspector body: the full tree of member tasks (which may live under different
 // services/modules), grouped service → module → task. Each task row selects it. Membership
@@ -58,9 +59,12 @@ const groups = computed(() => {
       }}</span>
     </template>
 
-    <div v-if="members.length === 0" class="text-2xs text-dimmed">
-      {{ t('inspector.epicChildren.empty') }}
-    </div>
+    <EmptyState
+      v-if="members.length === 0"
+      compact
+      icon="i-lucide-list-tree"
+      :title="t('inspector.epicChildren.empty')"
+    />
 
     <div v-else class="space-y-2">
       <div v-for="(group, gi) in groups" :key="gi" class="rounded-md border border-muted/60 p-2">

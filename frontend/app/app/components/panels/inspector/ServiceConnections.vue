@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { Block, ServiceConnection } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // Service-frame (`type: 'service'`) connections: the other services this one USES
 // (consumer→provider edges, stored on this frame — the consumer end). Each row picks a
@@ -136,9 +137,12 @@ const usedBy = computed(() =>
         />
       </div>
     </div>
-    <div v-else class="text-2xs text-dimmed">
-      {{ t('inspector.serviceConnections.empty') }}
-    </div>
+    <EmptyState
+      v-else
+      compact
+      icon="i-lucide-plug"
+      :title="t('inspector.serviceConnections.empty')"
+    />
 
     <div v-if="usedBy.length" class="space-y-1" data-testid="service-connections-used-by">
       <span class="text-2xs text-muted">{{ t('inspector.serviceConnections.usedBy') }}</span>

@@ -22,6 +22,12 @@ const props = withDefaults(
      */
     noneLabel?: string
     /**
+     * What the preview pane says about the "none" row. Defaults to the full form's meaning ("no
+     * default; you choose when you run it"); a surface whose "none" row means the workspace default
+     * names what that default resolves to instead.
+     */
+    noneHint?: string
+    /**
      * Default-trigger text while nothing is selected. Defaults to {@link noneLabel}, which reads
      * correctly when the "none" row IS the empty state; a surface without that row supplies its
      * own prompt ("Pick a pipeline").
@@ -30,7 +36,7 @@ const props = withDefaults(
     /** Extra classes for the default trigger button (e.g. full-width in the modal). */
     triggerClass?: string
   }>(),
-  { noneLabel: undefined, placeholder: undefined, triggerClass: '' },
+  { noneLabel: undefined, noneHint: undefined, placeholder: undefined, triggerClass: '' },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [string] }>()
@@ -59,7 +65,7 @@ const previewPipeline = computed<Pipeline | null>(() => {
  */
 const emptyHint = computed(() =>
   props.noneLabel !== undefined && (hoverId.value ?? props.modelValue) === ''
-    ? t('pipeline.picker.noneHint')
+    ? (props.noneHint ?? t('pipeline.picker.noneHint'))
     : t('pipeline.picker.hoverHint'),
 )
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { MAX_PUBLIC_API_KEYS_PER_ACCOUNT } from '../publicApi/PublicApiKeyService.js'
 import {
   McpOAuthProtocolError,
   McpOAuthRedirectableError,
@@ -197,9 +198,9 @@ describe('McpAuthorizationServer: refusals', () => {
     const fixture = build()
     // Fill the board to the per-workspace key cap through the real service, so what refuses is the
     // rule the platform actually enforces rather than a stub agreeing with this test.
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < MAX_PUBLIC_API_KEYS_PER_ACCOUNT; i++) {
       await fixture.publicApiKeys.issue(
-        { accountId: 'acc_1', workspaceId: 'ws_1', createdByUserId: null },
+        { accountId: 'acc_1', workspaceIds: ['ws_1'], createdByUserId: null },
         `filler-${i}`,
         'read',
       )

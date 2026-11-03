@@ -24,6 +24,7 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import type { AppSlots } from '~/modular/slots'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { pipelineAllowedForTaskType } from '~/utils/pipeline'
+import { selectNoneItem, selectNoneModel } from '~/utils/selectNone'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t, te } = useI18n()
@@ -32,7 +33,7 @@ const store = useWorkspaceSettingsStore()
 const workspace = useWorkspaceStore()
 const access = useWorkspaceAccess()
 const pipelines = usePipelinesStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const slots = useReactiveSlots<AppSlots>()
 // Whether the deployment registers any reusable operation at all, hidden or not, so the
@@ -192,11 +193,11 @@ const REVIEW_FRICTION_MODES = computed<{ value: ReviewFrictionMode; label: strin
  *
  * Narrowed by the same predicate the create form uses for a `bug` task, because a spawned fix IS
  * one — a board that could pin a document-authoring preset here would spawn tasks that author a
- * document instead of fixing the defect they were spawned for. The clearing row carries the empty
- * string rather than being absent, so "no board default" is a value someone can choose back to.
+ * document instead of fixing the defect they were spawned for. The clearing row is present rather
+ * than absent, so "no board default" is a value someone can choose back to.
  */
 const fixPipelineOptions = computed<{ value: string; label: string }[]>(() => [
-  { value: '', label: t('settings.workspaceSettings.bugFishing.builtInDefault') },
+  selectNoneItem(t('settings.workspaceSettings.bugFishing.builtInDefault')),
   ...pipelines.pipelines
     .filter((p) => pipelineAllowedForTaskType(p, 'bug'))
     .map((p) => ({ value: p.id, label: p.name })),
@@ -233,6 +234,12 @@ const draft = reactive({
   reviewFrictionBlockStuckEnabled: false,
   reviewFrictionBlockStuckMinutes: 1440 as number,
 })
+const fixPipelineModel = selectNoneModel(
+  () => draft.bugFishingFixPipelineId,
+  (value) => {
+    draft.bugFishingFixPipelineId = value
+  },
+)
 
 function hydrate() {
   const s = store.settings
@@ -283,11 +290,7 @@ async function save() {
   // Mirror the backend's enforce-mode validation client-side so the user gets an immediate,
   // localized message instead of the raw 422 (enforce needs at least one hard trigger).
   if (draft.reviewFrictionMode === 'enforce' && blockCount == null && blockStuckMinutes == null) {
-    toast.add({
-      title: t('settings.workspaceSettings.reviewFriction.needsTrigger'),
-      icon: 'i-lucide-triangle-alert',
-      color: 'warning',
-    })
+    actionToast.error('settings.workspaceSettings.reviewFriction.needsTrigger')
     return
   }
   saving.value = true
@@ -322,11 +325,7 @@ async function save() {
       reviewFrictionBlockCount: blockCount,
       reviewFrictionBlockStuckMinutes: blockStuckMinutes,
     })
-    toast.add({
-      title: t('settings.workspaceSettings.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.workspaceSettings.toast.saved')
   } catch (e) {
     present(e, 'settings.workspaceSettings.toast.saveFailed')
   } finally {
@@ -336,6 +335,7 @@ async function save() {
 </script>
 
 <template>
+  <!-- workbench-width-ok: tabbed workspace settings (768px). Its shell waits on #2359. -->
   <UModal
     v-model:open="open"
     :title="t('settings.workspaceSettings.title')"
@@ -418,7 +418,10 @@ async function save() {
                 />
               </label>
 
-              <div v-else-if="draft.taskLimitMode === 'per_type'" class="grid grid-cols-2 gap-3">
+              <div
+                v-else-if="draft.taskLimitMode === 'per_type'"
+                class="grid grid-cols-1 gap-3 sm:grid-cols-2"
+              >
                 <label v-for="taskType in TASK_TYPES" :key="taskType" class="block">
                   <SectionLabel as="span" class="mb-1 block">
                     {{ maxTaskTypeLabel(taskType) }}
@@ -680,7 +683,7 @@ async function save() {
                 {{ t('settings.workspaceSettings.bugFishing.body') }}
               </p>
               <USelectMenu
-                v-model="draft.bugFishingFixPipelineId"
+                v-model="fixPipelineModel.value"
                 :items="fixPipelineOptions"
                 value-key="value"
                 size="sm"
@@ -706,13 +709,7 @@ async function save() {
             </section>
 
             <div class="flex justify-end">
-              <UButton
-                color="primary"
-                icon="i-lucide-save"
-                size="sm"
-                :loading="saving"
-                @click="save"
-              >
+              <UButton icon="i-lucide-save" size="sm" :loading="saving" @click="save">
                 {{ t('common.save') }}
               </UButton>
             </div>

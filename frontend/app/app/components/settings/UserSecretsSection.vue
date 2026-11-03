@@ -11,11 +11,17 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useUserSecretsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
@@ -35,6 +41,8 @@ const status = computed(() => store.statusFor(kind.value))
 const values = ref<Record<string, string>>({})
 const labelDraft = ref('')
 const testResult = ref<ConnectionTestResult | null>(null)
+// The test CALL itself failed (no verdict at all), classified like a failure toast.
+const testFailure = ref<DescribedFailure | null>(null)
 const testing = ref(false)
 const busy = ref(false)
 
@@ -42,6 +50,7 @@ function resetDraft() {
   values.value = {}
   labelDraft.value = ''
   testResult.value = null
+  testFailure.value = null
   // Prefill non-secret metadata from the stored status (secret stays blank — write-only).
   const meta = status.value?.metadata
   if (meta) for (const [k, v] of Object.entries(meta)) values.value[k] = v
@@ -82,10 +91,11 @@ async function test() {
   if (!payload) return
   testing.value = true
   testResult.value = null
+  testFailure.value = null
   try {
     testResult.value = await store.test(kind.value, payload)
   } catch (e) {
-    testResult.value = { ok: false, message: e instanceof Error ? e.message : String(e) }
+    testFailure.value = describeFailure(e)
   } finally {
     testing.value = false
   }
@@ -104,13 +114,12 @@ async function save() {
     // so this is the one point at which an over-broad token is visible at all
     // (backend/docs/security-model.md). Best-effort: the save already succeeded, so a probe
     // failure must not read as one.
+    testFailure.value = null
     testResult.value = await store.test(kind.value, payload).catch(() => null)
-    toast.add({
-      title: t('settings.userSecrets.toast.saved', {
+    actionToast.success('settings.userSecrets.toast.saved', {
+      params: {
         label: descriptor.value?.label ?? t('settings.userSecrets.secretFallback'),
-      }),
-      icon: 'i-lucide-check',
-      color: 'success',
+      },
     })
   } catch (e) {
     present(e, 'settings.userSecrets.toast.saveFailed')
@@ -134,7 +143,7 @@ async function remove() {
   try {
     await store.remove(kind.value)
     resetDraft()
-    toast.add({ title: t('settings.userSecrets.toast.removed'), icon: 'i-lucide-check' })
+    actionToast.success('settings.userSecrets.toast.removed')
   } catch (e) {
     present(e, 'settings.userSecrets.toast.removeFailed')
   } finally {
@@ -144,11 +153,7 @@ async function remove() {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('settings.userSecrets.title')"
-    :ui="{ content: 'max-w-xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('settings.userSecrets.title')">
     <template #title>
       <IntegrationBackTitle :title="t('settings.userSecrets.title')" @back="back" />
     </template>
@@ -226,7 +231,12 @@ async function remove() {
             >
               {{ t('settings.userSecrets.testConnection') }}
             </UButton>
-            <span v-if="testResult && testResult.ok" class="text-xs text-app-success-400">
+            <FailureMessage
+              v-if="testFailure"
+              :failure="testFailure"
+              class="text-xs text-app-error-400"
+            />
+            <span v-else-if="testResult && testResult.ok" class="text-xs text-app-success-400">
               {{ testResult.message ?? t('settings.userSecrets.tokenValid') }}
             </span>
             <span v-else-if="testResult" class="text-xs text-app-error-400">
@@ -242,18 +252,12 @@ async function remove() {
           />
 
           <div class="flex justify-end">
-            <UButton
-              color="primary"
-              size="sm"
-              :loading="busy"
-              :disabled="!buildPayload()"
-              @click="save()"
-            >
+            <UButton size="sm" :loading="busy" :disabled="!buildPayload()" @click="save()">
               {{ status ? t('common.save') : t('settings.userSecrets.addToken') }}
             </UButton>
           </div>
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

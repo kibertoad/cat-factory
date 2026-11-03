@@ -5,6 +5,11 @@ import type {
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
+import {
+  accountWorkspaceMembershipsSource,
+  appendDirectoryChanges,
+  workspaceMembershipSource,
+} from './directoryFeed'
 
 interface WorkspaceMemberRow {
   workspace_id: string
@@ -85,34 +90,55 @@ export class D1WorkspaceMemberRepository implements WorkspaceMemberRepository {
   }
 
   async upsert(member: WorkspaceMemberRecord): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT INTO workspace_members (workspace_id, user_id, role, created_at, added_by_user_id)
-           VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = excluded.role`,
-      )
-      .bind(member.workspaceId, member.userId, member.role, member.createdAt, member.addedByUserId)
-      .run()
+    await this.db.batch([
+      this.db
+        .prepare(
+          `INSERT INTO workspace_members (workspace_id, user_id, role, created_at, added_by_user_id)
+             VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = excluded.role`,
+        )
+        .bind(
+          member.workspaceId,
+          member.userId,
+          member.role,
+          member.createdAt,
+          member.addedByUserId,
+        ),
+      appendDirectoryChanges(
+        this.db,
+        workspaceMembershipSource(member.workspaceId, member.userId),
+        Date.now(),
+      ),
+    ])
   }
 
   async remove(workspaceId: string, userId: string): Promise<void> {
-    await this.db
-      .prepare('DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?')
-      .bind(workspaceId, userId)
-      .run()
+    await this.db.batch([
+      appendDirectoryChanges(this.db, workspaceMembershipSource(workspaceId, userId), Date.now()),
+      this.db
+        .prepare('DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?')
+        .bind(workspaceId, userId),
+    ])
   }
 
   async removeByAccountMembership(accountId: string, userId: string): Promise<number> {
-    // One DELETE joined on the owning account — drop every membership this user holds in
-    // boards of `accountId`. D1 has no `DELETE ... USING`, so scope by subquery.
-    const result = await this.db
-      .prepare(
-        `DELETE FROM workspace_members
-           WHERE user_id = ?
-             AND workspace_id IN (SELECT id FROM workspaces WHERE account_id = ?)`,
-      )
-      .bind(userId, accountId)
-      .run()
-    return result.meta.changes ?? 0
+    // One DELETE joined on the owning account drops every membership this user holds in
+    // boards of `accountId`. D1 has no `DELETE ... USING`, so scope by subquery. The feed rows
+    // are appended first, while the memberships they name still exist to be selected.
+    const [, deleted] = await this.db.batch([
+      appendDirectoryChanges(
+        this.db,
+        accountWorkspaceMembershipsSource(accountId, userId),
+        Date.now(),
+      ),
+      this.db
+        .prepare(
+          `DELETE FROM workspace_members
+             WHERE user_id = ?
+               AND workspace_id IN (SELECT id FROM workspaces WHERE account_id = ?)`,
+        )
+        .bind(userId, accountId),
+    ])
+    return deleted?.meta.changes ?? 0
   }
 }

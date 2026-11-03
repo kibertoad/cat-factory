@@ -16,7 +16,7 @@ import type { WorkspacePermission, WorkspaceRole } from '~/types/domain'
  * SPA never hides an affordance the backend would have permitted.
  *
  * This is deliberately distinct from the ACCOUNT-scoped admin checks
- * (`accounts.activeAccount?.roles?.includes('admin')`), which stay account-scoped: this
+ * (`accounts.isActiveAccountAdmin`), which stay account-scoped: this
  * composable answers "what can you do inside THIS board", the account check answers "what
  * can you do to the tenant".
  */

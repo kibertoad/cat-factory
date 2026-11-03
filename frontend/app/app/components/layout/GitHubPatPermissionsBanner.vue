@@ -3,11 +3,9 @@ import { computed, ref } from 'vue'
 import {
   GITHUB_PAT_FINE_GRAINED_PERMISSIONS,
   githubPatCheckNeedsAttention,
-  githubPatCheckSource,
   missingGitHubPatCapabilities,
 } from '@cat-factory/contracts'
-import type { GitHubPatCapability, GitHubPatKind } from '~/types/domain'
-import { githubPatRemintUrl } from '~/utils/vcs'
+import type { GitHubPatCapability } from '~/types/domain'
 
 // The token a run would authenticate with cannot do what the pipeline needs.
 //
@@ -67,14 +65,8 @@ function capabilityLabel(capability: GitHubPatCapability): string {
   return t(CAPABILITY_KEYS[capability])
 }
 
-/**
- * The kind carried over to the re-mint link. A rejected token was never classified, so it falls
- * back to `unknown` — which lands on the classic form, the only one GitHub lets us pre-fill.
- */
-const kind = computed<GitHubPatKind>(() => report.value?.kind ?? 'unknown')
-const remintUrl = computed(() =>
-  githubPatRemintUrl(kind.value, report.value?.webUrl ?? github.connection?.webUrl),
-)
+// The re-mint page and whose token it is: the map the setup checklist opens through too.
+const { patRemintUrl: remintUrl, patSource, patKind: kind } = useSetupRemedies()
 
 /**
  * Who has to act. A deployment token is replaced by whoever runs the deployment (local mode:
@@ -89,7 +81,7 @@ const remintUrl = computed(() =>
  * personal settings: the exact misrouting the wire field exists to prevent.
  */
 const sourceKey = computed(() =>
-  check.value && githubPatCheckSource(check.value) === 'deployment'
+  patSource.value === 'deployment'
     ? 'layout.githubPatPermissionsBanner.sourceDeployment'
     : 'layout.githubPatPermissionsBanner.sourceInitiator',
 )
@@ -174,7 +166,6 @@ const fineGrainedPermissions = GITHUB_PAT_FINE_GRAINED_PERMISSIONS.join(', ')
                 target="_blank"
                 rel="noopener noreferrer"
                 color="error"
-                variant="solid"
                 icon="i-lucide-external-link"
                 trailing
               >

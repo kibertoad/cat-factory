@@ -6,6 +6,7 @@ import type {
   StackRecipe,
 } from '@cat-factory/contracts'
 import type { useBoardStore } from '~/stores/board'
+import type { DescribedFailure } from '~/composables/pipelineErrorToast/describeFailure'
 import type { useExecutionStore } from '~/stores/execution'
 import type { useGitHubStore } from '~/stores/github'
 import type { useInfraConfigStore } from '~/stores/infraConfig'
@@ -35,14 +36,14 @@ export interface WizardContext {
   composeService: Ref<string>
   preflightRunning: Ref<boolean>
   preflightResults: Ref<PreflightResult[] | null>
-  preflightError: Ref<string | null>
+  preflightError: Ref<DescribedFailure | null>
   handlerLabel: Ref<string>
   exposedPort: Ref<number>
   saving: Ref<boolean>
-  saveError: Ref<string | null>
+  saveError: Ref<DescribedFailure | null>
   saved: Ref<boolean>
   trialing: Ref<boolean>
-  trialError: Ref<string | null>
+  trialError: Ref<DescribedFailure | null>
   trialStarted: Ref<boolean>
   // ---- derived the actions read ----
   repoContext: ComputedRef<{ githubId: number; directory?: string | null } | undefined>

@@ -289,7 +289,6 @@ function onSave() {
 
     <div class="flex justify-end">
       <UButton
-        color="primary"
         size="sm"
         :loading="busy"
         :disabled="!canSave"

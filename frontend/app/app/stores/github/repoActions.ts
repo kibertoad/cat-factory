@@ -16,7 +16,7 @@ import { pullKey, type GitHubStoreContext } from './context'
  */
 export function createGitHubRepoActions(ctx: GitHubStoreContext) {
   const { api, workspace, connected, repos, availableRepos, loadingAvailable, savingRepos } = ctx
-  const { branches, repoFiles, upsertPull, getPull, load } = ctx
+  const { branches, repoFiles, upsertPull, getPull, load, markWritten } = ctx
 
   /**
    * Load the repos the installation can access, with this workspace's link state.
@@ -55,6 +55,7 @@ export function createGitHubRepoActions(ctx: GitHubStoreContext) {
     savingRepos.value = true
     try {
       repos.value = await api.setGitHubLinkedRepos(workspace.requireId(), repoGithubIds)
+      markWritten()
       // Reflect the new link state in the picker and refresh PRs/issues.
       const linked = new Set(repoGithubIds)
       availableRepos.value = availableRepos.value.map((r) => ({
@@ -117,6 +118,7 @@ export function createGitHubRepoActions(ctx: GitHubStoreContext) {
   async function openPullRequest(repoGithubId: number, input: OpenPullRequestInput) {
     const pr = await api.openGitHubPullRequest(workspace.requireId(), repoGithubId, input)
     upsertPull(pr)
+    markWritten()
     return pr
   }
 
@@ -128,7 +130,10 @@ export function createGitHubRepoActions(ctx: GitHubStoreContext) {
     await api.mergeGitHubPullRequest(workspace.requireId(), repoGithubId, number, input)
     // Optimistically reflect the merge until the next sync confirms it.
     const existing = getPull(pullKey(repoGithubId, number))
-    if (existing) upsertPull({ ...existing, state: 'closed', merged: true })
+    if (existing) {
+      upsertPull({ ...existing, state: 'closed', merged: true })
+      markWritten()
+    }
   }
 
   function comment(repoGithubId: number, number: number, body: string) {

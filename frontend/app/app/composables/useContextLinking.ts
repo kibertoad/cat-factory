@@ -1,5 +1,10 @@
 import type { DocumentSourceKind, TaskSourceKind } from '~/types/domain'
 import { apiErrorEnvelope, apiErrorStatus } from './api/errors'
+import { useActionToast } from '~/composables/useActionToast'
+import {
+  describeFailure as describeFetchFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 // Shared model + orchestration for attaching external context (imported docs and
 // tracker issues) to a board block. A "pending" item is something the user has
@@ -30,8 +35,8 @@ export interface PendingContext {
   /** True when the item must be imported before it can be linked. */
   needsImport: boolean
   /**
-   * Why this item could not be FETCHED, when an attempt has already failed (the server's own
-   * message). Set by {@link useContextLinking.resolvePending} and by the add-task form's body
+   * Why this item could not be FETCHED, when an attempt has already failed, classified like a
+   * failure toast (the server's own message is its detail). Set by {@link useContextLinking.resolvePending} and by the add-task form's body
    * pre-fetch; cleared the moment a later attempt succeeds.
    *
    * It exists because the fetch moved ahead of the create: a failure now costs the user the
@@ -39,7 +44,7 @@ export interface PendingContext {
    * at, not only in the toast that named it. A tracker issue has no pre-flight of its own, so this
    * is the whole of its warning.
    */
-  unreadable?: string
+  unreadable?: DescribedFailure
 }
 
 /**
@@ -65,6 +70,11 @@ export interface LinkFailure {
    * so the diagnostic report shows the real GitHub status, not just the mapped one.
    */
   details?: Record<string, unknown>
+  /**
+   * The same failure classified like a failure toast. The toast line and the item's `unreadable`
+   * mark both show its translated copy, so the two never disagree about one fetch.
+   */
+  failure: DescribedFailure
 }
 
 /** Stable key for a pending item, used for dedupe + selection toggles. */
@@ -121,7 +131,7 @@ export function useContextLinking() {
   const documents = useDocumentsStore()
   const tasks = useTasksStore()
   const workspace = useWorkspaceStore()
-  const toast = useToast()
+  const actionToast = useActionToast()
   const { t } = useI18n()
   const { copyAction } = useCopyToClipboard()
 
@@ -162,7 +172,7 @@ export function useContextLinking() {
         // Kept in the list, still unresolved: the host aborts on any failure, and dropping the
         // item here would silently discard an attachment the user asked for while they fix it.
         // Marked, so the form the user is still looking at names WHICH attachment refused.
-        resolved.push({ ...item, unreadable: failure.message })
+        resolved.push({ ...item, unreadable: failure.failure })
       }
     }
     return { resolved, failures }
@@ -234,58 +244,41 @@ export function useContextLinking() {
         envelope?.details && typeof envelope.details === 'object'
           ? (envelope.details as Record<string, unknown>)
           : undefined,
+      failure: describeFetchFailure(e),
     }
   }
 
   /**
    * Surface link failures as a single actionable toast: the specific per-item
    * reasons as the body, and a "Copy details" action that puts the full diagnostic
-   * report ({@link buildLinkFailureReport}) on the clipboard. Sticky (`duration: 0`)
-   * so the cause stays readable long enough to act on. No-op when nothing failed.
+   * report ({@link buildLinkFailureReport}) on the clipboard. A warning, so it stays until
+   * closed and the cause stays readable long enough to act on. No-op when nothing failed.
    *
-   * `opts.title` names what WAS created, which differs per host ("Task added, but …" vs
-   * "Initiative created, but …"). It is a resolver over the count rather than a message key, so
-   * each caller keeps a literal key at its own translation call site — passing the key through
-   * would make it a variable, which defeats both the typed-message-key check and the extractor's
-   * static scan — and the plural choice has to be made against the same count.
+   * `opts.titleKey` names what WAS created, which differs per host ("Task added, but …" vs
+   * "Initiative created, but …"). It is a plural key, resolved against the failure count;
+   * `toastTitleKeys.spec.ts` checks the literal each caller passes, which typed keys cannot see.
    */
-  /**
-   * A failure's line in the toast: TRANSLATED copy where the backend named a reason we have a
-   * key for, else the server's own prose.
-   *
-   * The backend does not localize (it emits `details.reason`), so a refusal a user routinely
-   * hits — attaching a document another task already holds — would otherwise reach them as
-   * English prose in every locale. The full diagnostic dump keeps the raw message regardless,
-   * so nothing is lost for support.
-   */
-  function describeFailure(failure: LinkFailure): string {
-    const reason = failure.details?.reason
-    if (reason === 'document_already_linked') {
-      return t('errors.conflict.description.document_already_linked')
-    }
-    return failure.message
-  }
-
   function presentLinkFailures(
     failures: LinkFailure[],
     blockId?: string,
-    opts: { title?: (count: number) => string } = {},
+    opts: { titleKey?: string } = {},
   ): void {
     if (failures.length === 0) return
-    const description = failures.map((f) => `${f.item.title}: ${describeFailure(f)}`).join('\n')
+    // TRANSLATED copy per item, from the same classification the item's mark shows. The backend
+    // does not localize (it emits `details.reason`), so its prose would reach every locale in
+    // English; the copied diagnostic report keeps the raw message, so nothing is lost for support.
+    const description = failures
+      .map((f) => `${f.item.title}: ${t(f.failure.descriptionKey)}`)
+      .join('\n')
     const report = buildLinkFailureReport(failures, {
       workspaceId: workspace.workspaceId,
       blockId,
       when: new Date().toISOString(),
     })
-    toast.add({
-      title:
-        opts.title?.(failures.length) ??
-        t('board.addTask.linkFailed', { count: failures.length }, failures.length),
+    actionToast.warning(opts.titleKey ?? 'board.addTask.linkFailed', {
+      params: { count: failures.length },
+      plural: failures.length,
       description,
-      icon: 'i-lucide-triangle-alert',
-      color: 'warning',
-      duration: 0,
       actions: [copyAction(report)],
     })
   }

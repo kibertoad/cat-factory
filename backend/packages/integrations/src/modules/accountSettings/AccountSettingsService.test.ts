@@ -6,7 +6,7 @@ import type {
   Clock,
   SecretCipher,
 } from '@cat-factory/kernel'
-import type { SlackOAuthSecret } from '@cat-factory/contracts'
+import type { ContentStorageCapability, SlackOAuthSecret } from '@cat-factory/contracts'
 import { parseStoredAccountSettingsConfig } from '@cat-factory/contracts'
 import { AccountSettingsService } from './AccountSettingsService.js'
 
@@ -122,5 +122,39 @@ describe('AccountSettingsService cache (accountSettings slice)', () => {
     // No cache ⇒ each resolve decrypts fresh — the same behaviour as the Worker's pass-through
     // isolate-safe profile.
     expect(getSpy).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('AccountSettingsService.canSelectContentStorage', () => {
+  const service = (capability?: ContentStorageCapability) =>
+    new AccountSettingsService({
+      accountSettingsRepository: fakeRepo(),
+      secretCipher: cipher,
+      clock,
+      ...(capability ? { contentStorageCapability: capability } : {}),
+    })
+
+  it('is false when the facade supplies no capability (storage disabled)', () => {
+    expect(service().canSelectContentStorage()).toBe(false)
+  })
+
+  it('is true when a built-in backend beyond `off` is offered', () => {
+    expect(
+      service({
+        supportedBackends: ['off', 's3'],
+        defaultBackend: 'off',
+        customStores: [],
+      }).canSelectContentStorage(),
+    ).toBe(true)
+  })
+
+  it('is true when only a deployment-registered store is offered', () => {
+    expect(
+      service({
+        supportedBackends: ['off'],
+        defaultBackend: 'off',
+        customStores: [{ id: 'acme', name: 'Acme blobs' }],
+      }).canSelectContentStorage(),
+    ).toBe(true)
   })
 })

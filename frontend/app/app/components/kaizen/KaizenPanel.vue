@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
-import { onKeyStroke } from '@vueuse/core'
 import type { TableColumn } from '@nuxt/ui'
 import type { KaizenGrading } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
+import EmptyState from '~/components/common/EmptyState.vue'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 // The Kaizen screen: a full-panel overlay listing the workspace's grading history and
 // its verified-combo library. Opened via `ui.openKaizen()` from the sidebar. Read-only —
@@ -11,23 +12,30 @@ import { agentKindMeta } from '~/utils/catalog'
 const ui = useUiStore()
 const kaizen = useKaizenStore()
 const { t, d } = useI18n()
+const { present } = usePipelineErrorToast()
 
 const open = computed(() => ui.kaizenScreenOpen)
 
 watch(
   open,
   (isOpen) => {
-    if (isOpen) void kaizen.loadOverview()
+    if (isOpen) loadOverview()
   },
   { immediate: true },
 )
 
+// The store rethrows every failure except the reason-less 503 that means this deployment does
+// not wire Kaizen. A failed load also marks the lists as absent (`overviewFailed`), so the screen
+// says so after the toast is closed rather than claiming there are no gradings.
+function loadOverview() {
+  kaizen
+    .loadOverview()
+    .catch((e: unknown) => present(e, 'kaizen.loadFailed', undefined, { dedupe: true }))
+}
+
 function close() {
   ui.closeKaizen()
 }
-onKeyStroke('Escape', () => {
-  if (open.value) close()
-})
 
 function meta(kind: string) {
   return agentKindMeta(kind)
@@ -64,11 +72,11 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
 <template>
   <Teleport to="body">
     <Transition name="kz-fade">
-      <div
+      <TakeoverShell
         v-if="open"
-        class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
-        role="dialog"
-        aria-modal="true"
+        :label="t('kaizen.title')"
+        class="flex-col bg-app-950/96 backdrop-blur-sm"
+        @close="close"
       >
         <header class="flex items-center gap-3 border-b border-default px-6 py-4">
           <div
@@ -91,7 +99,7 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
               color="neutral"
               variant="ghost"
               :loading="kaizen.loadingOverview"
-              @click="kaizen.loadOverview()"
+              @click="loadOverview"
             >
               {{ t('kaizen.refresh') }}
             </UButton>
@@ -121,7 +129,18 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
             <p class="mb-3 text-2xs text-dimmed">
               {{ t('kaizen.verifiedCombos.hint') }}
             </p>
-            <ul class="space-y-2">
+            <div v-if="kaizen.loadingOverview && kaizen.verified.length === 0" class="space-y-2">
+              <USkeleton v-for="n in 3" :key="n" class="h-14 w-full rounded-lg" />
+            </div>
+            <EmptyState
+              v-else-if="kaizen.verified.length === 0"
+              compact
+              :icon="kaizen.overviewFailed ? 'i-lucide-triangle-alert' : 'i-lucide-badge-check'"
+              :title="
+                kaizen.overviewFailed ? t('kaizen.loadFailed') : t('kaizen.verifiedCombos.empty')
+              "
+            />
+            <ul v-else class="space-y-2">
               <li
                 v-for="c in kaizen.verified"
                 :key="c.comboKey"
@@ -154,9 +173,6 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
                   }}
                 </div>
               </li>
-              <li v-if="kaizen.verified.length === 0" class="text-xs text-app-600">
-                {{ t('kaizen.verifiedCombos.empty') }}
-              </li>
             </ul>
           </section>
 
@@ -169,8 +185,9 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
             <UTable
               :data="kaizen.history"
               :columns="historyColumns"
+              :loading="kaizen.loadingOverview"
               :ui="{
-                root: 'overflow-hidden rounded-lg border border-default',
+                root: 'overflow-x-auto rounded-lg border border-default',
                 base: 'text-xs',
                 th: 'px-3 py-2',
                 td: 'px-3 py-2 text-xs whitespace-normal',
@@ -218,13 +235,26 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
                   </span>
                 </div>
               </template>
+              <!-- UTable draws its loading row only through this slot; without it an empty first
+                   load falls through to #empty and claims there is no history. -->
+              <template #loading>
+                <div class="space-y-2">
+                  <USkeleton v-for="n in 3" :key="n" class="h-8 w-full" />
+                </div>
+              </template>
               <template #empty>
-                <span class="text-app-600">{{ t('kaizen.history.empty') }}</span>
+                <EmptyState
+                  compact
+                  :icon="kaizen.overviewFailed ? 'i-lucide-triangle-alert' : 'i-lucide-history'"
+                  :title="
+                    kaizen.overviewFailed ? t('kaizen.loadFailed') : t('kaizen.history.empty')
+                  "
+                />
               </template>
             </UTable>
           </section>
         </div>
-      </div>
+      </TakeoverShell>
     </Transition>
   </Teleport>
 </template>

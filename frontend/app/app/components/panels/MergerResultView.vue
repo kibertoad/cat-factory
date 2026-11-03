@@ -12,6 +12,7 @@ import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -275,13 +276,11 @@ const reasonText = computed(() => {
           :text="step.output"
           class="text-sm leading-relaxed text-toned"
         />
-        <div
+        <EmptyState
           v-else
-          class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
-        >
-          <UIcon name="i-lucide-git-pull-request" class="h-8 w-8 opacity-40" />
-          <p class="text-sm">{{ t('panels.mergerResult.noResult') }}</p>
-        </div>
+          icon="i-lucide-git-pull-request"
+          :title="t('panels.mergerResult.noResult')"
+        />
       </div>
 
       <!-- Sidebar: shared run metadata. -->

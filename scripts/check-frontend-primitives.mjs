@@ -51,7 +51,15 @@
 // Exit 0 = clean; exit 1 = an offender was found.
 
 import { readFileSync } from 'node:fs'
-import { isCliEntry, readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
+import {
+  isCliEntry,
+  isWaived,
+  MAX_TAG_LINES,
+  openingTag,
+  readCodeLines,
+  spaSourceFiles,
+  templateHalf,
+} from './lib/frontend-scan.mjs'
 
 /** The banned elements, each with the component that replaces it (shown in the failure). */
 export const REPLACEMENTS = {
@@ -68,9 +76,6 @@ export const REPLACEMENTS = {
 }
 
 const RAW_OK = 'raw-control-ok:'
-// How far an opening tag is followed for its attributes. The longest in the tree is well under
-// this; the cap is only so a file with an unbalanced `<` cannot make the scan quadratic.
-const MAX_TAG_LINES = 40
 // A line that opens with a comment marker is prose about the rule, not an application of it.
 const COMMENT_LINE = /^\s*(?:\/\/|\/?\*|<!--)/
 
@@ -85,7 +90,7 @@ const COMMENT_LINE = /^\s*(?:\/\/|\/?\*|<!--)/
  */
 export function findRawControls(line, prevLine = '', tagOf = () => line) {
   if (COMMENT_LINE.test(line)) return []
-  if (line.includes(RAW_OK) || prevLine.includes(RAW_OK)) return []
+  if (isWaived(line, prevLine, RAW_OK)) return []
   const found = []
   for (const element of Object.keys(REPLACEMENTS)) {
     const re = new RegExp(`<${element}(?![a-zA-Z0-9-])`, 'g')
@@ -115,14 +120,14 @@ const RENDER_ELEMENT = new RegExp(`(?<![\\w$.])h\\(\\s*['"\`](${ELEMENTS})['"\`]
 /** Every banned control a component or `:is` binding is told to render on a template line. */
 export function findDynamicControls(line, prevLine = '') {
   if (COMMENT_LINE.test(line)) return []
-  if (line.includes(RAW_OK) || prevLine.includes(RAW_OK)) return []
+  if (isWaived(line, prevLine, RAW_OK)) return []
   const found = [...line.matchAll(AS_ELEMENT), ...line.matchAll(IS_ELEMENT)].map((m) => m[1])
   return [...new Set(found)]
 }
 
 /** Every banned control a render function creates, on one line from `codeLines` (a `.ts` file). */
 export function findRenderedControls({ raw, code, prev }) {
-  if (raw.includes(RAW_OK) || prev.includes(RAW_OK)) return []
+  if (isWaived(raw, prev, RAW_OK)) return []
   return [...new Set([...code.matchAll(RENDER_ELEMENT)].map((m) => m[1]))]
 }
 
@@ -135,7 +140,7 @@ export function findTitleOnlyIconButton(
   bodyOf = () => '',
 ) {
   if (COMMENT_LINE.test(line)) return []
-  if (line.includes(RAW_OK) || prevLine.includes(RAW_OK)) return []
+  if (isWaived(line, prevLine, RAW_OK)) return []
   const match = /<UButton(?![a-zA-Z0-9-])/.exec(line)
   if (!match) return []
   const tag = tagOf(match.index)
@@ -160,61 +165,11 @@ export function buttonBody(lines, index, from = 0) {
 /** `title=` on a primitive that already owns its tooltip. */
 export function findRedundantTitle(line, prevLine = '', tagOf = () => line) {
   if (COMMENT_LINE.test(line)) return []
-  if (line.includes(RAW_OK) || prevLine.includes(RAW_OK)) return []
+  if (isWaived(line, prevLine, RAW_OK)) return []
   const match = /<(?:IconButton|CopyButton)(?![a-zA-Z0-9-])/.exec(line)
   if (!match) return []
   // Same reason as the anchor above: an IconButton with a `title` is never one line long.
   return /\s:?title[=\s>]/.test(tagOf(match.index)) ? ['title'] : []
-}
-
-/**
- * The opening tag that starts at `from` on `lines[index]`, up to its first `>`.
- *
- * The two ATTRIBUTE rules above read attributes, and the formatter breaks any tag carrying more
- * than a couple of them across lines. Reading one line saw only the tags short enough to fit on
- * one, which is not the shape this repo writes: every `<a href>` and every `IconButton` in the
- * SPA is wrapped, so both rules matched nothing at all.
- *
- * A `>` inside a QUOTED attribute value does not end the tag, because that `>` is how this tree
- * writes a condition: `v-if="total > 1"`, `v-if="s.depth >= 2"`, `v-if="x.length > 0"`. Ending
- * there truncated the tag before its `href` or `title` and the two attribute rules matched
- * nothing at exactly the sites they exist for. The quote state carries ACROSS lines: the
- * formatter breaks a long binding expression mid-value.
- */
-export function openingTag(lines, index, from = 0) {
-  let text = ''
-  let quote = null
-  for (let i = index; i < lines.length && i - index < MAX_TAG_LINES; i++) {
-    const slice = i === index ? lines[i].slice(from) : lines[i]
-    for (let c = 0; c < slice.length; c++) {
-      const char = slice[c]
-      if (quote) {
-        if (char === quote) quote = null
-      } else if (char === '"' || char === "'") {
-        quote = char
-      } else if (char === '>') {
-        return text + slice.slice(0, c + 1)
-      }
-    }
-    text += `${slice}\n`
-  }
-  return text
-}
-
-/**
- * The template half of a `.vue` file, with the script and style blocks and the HTML comments
- * blanked out so offsets (and therefore line numbers) are preserved.
- *
- * Blanking rather than slicing is what makes `<template #slot>` safe: a `.vue` file nests template
- * tags for named slots, so matching the outer pair non-greedily stops at the first inner close and
- * silently skips everything after it.
- */
-export function templateHalf(source) {
-  const blank = (s) => s.replace(/[^\n]/g, ' ')
-  return source
-    .replace(/<script[\s\S]*?<\/script>/g, blank)
-    .replace(/<style[\s\S]*?<\/style>/g, blank)
-    .replace(/<!--[\s\S]*?-->/g, blank)
 }
 
 function main() {

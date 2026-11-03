@@ -485,6 +485,7 @@ export {
   type TasksModule,
   type AssistantModule,
   type GuidedReviewModule,
+  type PrAssessmentModule,
   type EnvironmentsModule,
   type RunnersModule,
   type ProvisioningLogsModule,

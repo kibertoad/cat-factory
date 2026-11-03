@@ -7,6 +7,7 @@ import type {
   PipelineRepository,
   RiskPolicy,
   RiskPolicyRepository,
+  RunnerPoolSeeder,
   Workspace,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
@@ -85,6 +86,43 @@ describe('WorkspaceService.create — environment-handler seeding', () => {
     const snapshot = await service.create(INPUT, null, null)
 
     expect(getEnvironmentHandlerSeeder).toHaveBeenCalled()
+    expect(snapshot.workspace.id).toBe('ws-new')
+  })
+})
+
+describe('WorkspaceService.create: runner-pool seeding', () => {
+  // Late-bound like the handler seeder, but keyed by the board's ACCOUNT: that is the scope a pool
+  // is inherited at. On a deployment where a pool is the only executor, this is what lets a
+  // brand-new board run an agent with no Infrastructure step.
+  const seeder = () =>
+    ({
+      ensureForAccount: vi.fn((_accountId: string | null) => Promise.resolve()),
+      ensureForAllAccounts: vi.fn(() => Promise.resolve()),
+    }) satisfies RunnerPoolSeeder
+
+  it('seeds the account of the new board via the late-bound accessor', async () => {
+    const s = seeder()
+    const { service } = makeService({ getRunnerPoolSeeder: () => s })
+
+    await service.create(INPUT, null, 'acc-1')
+
+    expect(s.ensureForAccount).toHaveBeenCalledWith('acc-1')
+  })
+
+  it('hands a legacy board (no account) to the seeder as null', async () => {
+    const s = seeder()
+    const { service } = makeService({ getRunnerPoolSeeder: () => s })
+
+    await service.create(INPUT, null, null)
+
+    expect(s.ensureForAccount).toHaveBeenCalledWith(null)
+  })
+
+  it('still creates the workspace when the accessor resolves to no seeder', async () => {
+    const { service } = makeService({ getRunnerPoolSeeder: () => undefined })
+
+    const snapshot = await service.create(INPUT, null, null)
+
     expect(snapshot.workspace.id).toBe('ws-new')
   })
 })

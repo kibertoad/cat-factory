@@ -1,16 +1,22 @@
 <script setup lang="ts">
-import { onKeyStroke } from '@vueuse/core'
+import { onBeforeUnmount, onMounted } from 'vue'
+import { useEventListener } from '@vueuse/core'
+import { sharedOverlayStack, type OverlayStackTicket } from '@modular-vue/core'
 import type { Block } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import PipelineProgress from '~/components/pipeline/PipelineProgress.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
+import { useRunGate } from '~/composables/useRunGate'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
+const agentRuns = useAgentRunsStore()
 const ui = useUiStore()
 const models = useModelsStore()
 const workspace = useWorkspaceStore()
@@ -23,6 +29,11 @@ const block = computed<Block | undefined>(() =>
   ui.focusBlockId ? board.getBlock(ui.focusBlockId) : undefined,
 )
 const instance = computed(() => execution.getInstance(block.value?.executionId))
+// The block's failed run, read off the same per-block index the inspector and the cards read.
+const failedRun = computed(() => {
+  const run = block.value ? agentRuns.byBlock[block.value.id] : undefined
+  return run && run.status === 'failed' ? run : null
+})
 const statusMeta = computed(() => (block.value ? STATUS_META[block.value.status] : null))
 const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
 
@@ -30,11 +41,11 @@ const deps = computed(() =>
   (block.value?.dependsOn ?? []).map((id) => board.getBlock(id)).filter((b): b is Block => !!b),
 )
 
-// Hide UI-testing pipelines when this block's frame has no UI to exercise, `'recurring'`-only
+// Hide UI-testing pipelines when this task's frame has no UI to exercise, `'recurring'`-only
 // pipelines (a manual run of one is refused server-side), and every pipeline whose purpose doesn't
-// match this block's task type or LEVEL (per the `purpose` classifier) — see the backend gate. The
-// level is what keeps the planning presets on initiative blocks and off everything else, in both
-// directions, so this menu never offers a run the engine answers with a 409.
+// match this task (per the `purpose` classifier), so this menu never offers a run the engine
+// answers with a 409. Only a task reaches the picker, so the level passed here is always `task`,
+// which is what keeps the planning presets out of it.
 const runOptions = computed(() => {
   const frame = block.value ? board.serviceOf(block.value) : undefined
   return pipelines.pipelines.filter((p) =>
@@ -53,6 +64,9 @@ const runOptions = computed(() => {
 // START a run on click: a modifier reachable only by opening the list would be one the user has
 // to arm and re-open the menu to use.
 const runStart = useRunStart(() => block.value?.id)
+// The same lock and reason as the inspector's Run menu: a viewer without run permission, or a task
+// whose dependencies have not merged, sees a locked trigger that says why, not a refusal toast.
+const { canRun, blockedReason: runBlockedReason } = useRunGate(() => block.value?.id)
 
 /** Start the picked pipeline immediately — the Run menu chooses an ACTION, it stores no default. */
 function runPipeline(id: string) {
@@ -67,6 +81,7 @@ function runPipeline(id: string) {
  * composable as those two surfaces, so which pipeline it starts can't drift across the three.
  */
 const isInitiative = computed(() => block.value?.level === 'initiative')
+const isTask = computed(() => block.value?.level === 'task')
 const {
   planningPipeline,
   running: planningRunning,
@@ -78,9 +93,28 @@ function close() {
   ui.focus(null)
 }
 
-onKeyStroke('Escape', () => {
-  if (ui.focusBlockId) close()
+// The focus view is one more layer on the shared overlay stack: it holds a ticket while mounted and
+// takes Escape only when that ticket is the top one. A takeover, window, Nuxt UI menu or modal
+// opened from here is pushed after it, so it is the top overlay and keeps its own Escape. The
+// listener is in the CAPTURE phase and registered at setup, so it runs before the listener of any
+// overlay opened later and reads the stack as it was when the key was pressed, before that
+// overlay's close can release its ticket.
+let ticket: OverlayStackTicket | null = null
+onMounted(() => {
+  ticket = sharedOverlayStack.push()
 })
+onBeforeUnmount(() => {
+  ticket?.release()
+  ticket = null
+})
+useEventListener(
+  window,
+  'keydown',
+  (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && ticket?.isTop() && ui.focusBlockId) close()
+  },
+  { capture: true },
+)
 
 function openDecisionFor(decisionId: string) {
   if (instance.value) ui.openDecision(instance.value.id, decisionId)
@@ -103,7 +137,7 @@ function openApprovalFor(approvalId: string) {
     :data-focus-block="block.id"
   >
     <!-- header / breadcrumb -->
-    <header class="flex items-center gap-3 border-b border-default px-6 py-4">
+    <header class="flex flex-wrap items-center gap-3 border-b border-default px-6 py-4">
       <UButton
         icon="i-lucide-arrow-left"
         :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
@@ -121,7 +155,7 @@ function openApprovalFor(approvalId: string) {
       >
         <UIcon :name="typeMeta.icon" class="h-5 w-5" :style="{ color: typeMeta.accent }" />
       </div>
-      <div>
+      <div class="min-w-0">
         <h1 class="text-lg font-semibold text-highlighted">{{ block.title }}</h1>
         <div class="text-xs text-dimmed">
           {{ t('focus.typeSubtitle', { type: typeMeta.label }) }}
@@ -130,11 +164,10 @@ function openApprovalFor(approvalId: string) {
       <UBadge :color="statusMeta.chip" variant="subtle" class="ms-2">
         {{ statusMeta.label }}
       </UBadge>
-      <div class="ms-auto flex items-center gap-2">
+      <div class="ms-auto flex flex-wrap items-center justify-end gap-2">
         <!-- An initiative has one legal pipeline, so it gets the button, not the picker. -->
         <UButton
           v-if="isInitiative"
-          color="primary"
           variant="soft"
           size="sm"
           icon="i-lucide-play"
@@ -145,48 +178,59 @@ function openApprovalFor(approvalId: string) {
         >
           {{ t('initiative.inspector.runPlanning') }}
         </UButton>
-        <!-- A sandboxed role cannot ask its way out, so the badge REPLACES the toggle rather
-             than sitting beside it as a switch that does nothing. -->
-        <UBadge
-          v-if="!isInitiative && runStart.forced.value"
-          color="warning"
-          variant="subtle"
-          size="sm"
-          icon="i-lucide-shield"
-          :title="t('focus.dryRunForcedHint')"
-          data-testid="focus-dry-run-forced"
-        >
-          {{ t('focus.dryRun') }}
-        </UBadge>
-        <USwitch
-          v-else-if="!isInitiative && runStart.canRequest.value"
-          :model-value="runStart.requested.value"
-          size="sm"
-          :label="t('focus.dryRun')"
-          :title="t('focus.dryRunHint')"
-          data-testid="focus-dry-run"
-          @update:model-value="runStart.setRequested($event)"
-        />
-        <!-- The rich picker rather than a list of names: the run starts the moment a row is
-             clicked, so the preview is the only chance to see which agents it will run. -->
-        <PipelinePicker
-          v-else
-          model-value=""
-          :options="runOptions"
-          @update:model-value="runPipeline"
-        >
-          <template #trigger>
-            <UButton
-              color="primary"
-              variant="soft"
-              size="sm"
-              icon="i-lucide-play"
-              trailing-icon="i-lucide-chevron-down"
-            >
-              {{ instance ? t('focus.rerunPipeline') : t('focus.runPipeline') }}
-            </UButton>
-          </template>
-        </PipelinePicker>
+        <!-- Only a task picks its pipeline, the same rule as the inspector's Run menu. The run
+             mode sits beside the picker and never replaces it. -->
+        <template v-if="isTask">
+          <!-- A sandboxed role cannot ask its way out, so the badge REPLACES the toggle rather
+               than sitting beside it as a switch that does nothing. -->
+          <UBadge
+            v-if="runStart.forced.value"
+            color="warning"
+            variant="subtle"
+            size="sm"
+            icon="i-lucide-shield"
+            :title="t('focus.dryRunForcedHint')"
+            data-testid="focus-dry-run-forced"
+          >
+            {{ t('focus.dryRun') }}
+          </UBadge>
+          <USwitch
+            v-else-if="runStart.canRequest.value"
+            :model-value="runStart.requested.value"
+            size="sm"
+            :label="t('focus.dryRun')"
+            :title="t('focus.dryRunHint')"
+            data-testid="focus-dry-run"
+            @update:model-value="runStart.setRequested($event)"
+          />
+          <!-- The rich picker rather than a list of names: the run starts the moment a row is
+               clicked, so the preview is the only chance to see which agents it will run. -->
+          <PipelinePicker model-value="" :options="runOptions" @update:model-value="runPipeline">
+            <template #trigger>
+              <UButton
+                variant="soft"
+                :color="canRun ? 'primary' : 'neutral'"
+                size="sm"
+                :icon="
+                  !canRun
+                    ? 'i-lucide-lock'
+                    : runStart.dryRun.value
+                      ? 'i-lucide-shield'
+                      : 'i-lucide-play'
+                "
+                trailing-icon="i-lucide-chevron-down"
+                :disabled="!canRun"
+                :title="
+                  runBlockedReason ??
+                  (runStart.dryRun.value ? t('panels.inspector.dryRunHint') : undefined)
+                "
+                data-testid="focus-run-pipeline"
+              >
+                {{ instance ? t('focus.rerunPipeline') : t('focus.runPipeline') }}
+              </UButton>
+            </template>
+          </PipelinePicker>
+        </template>
         <IconButton
           icon="i-lucide-x"
           color="neutral"
@@ -195,12 +239,24 @@ function openApprovalFor(approvalId: string) {
           @click="close"
         />
       </div>
+      <!-- Named in text as well as on the trigger's title: a disabled button fires no hover, so
+           the title alone would hide the reason from pointer and touch users. -->
+      <p
+        v-if="isTask && runBlockedReason"
+        class="flex basis-full items-start justify-end gap-1.5 text-2xs text-app-warning-300/90"
+        data-testid="focus-run-blocked-reason"
+      >
+        <UIcon name="i-lucide-lock" class="mt-px h-3 w-3 shrink-0" />
+        <span>{{ runBlockedReason }}</span>
+      </p>
     </header>
 
-    <div class="grid flex-1 grid-cols-[1fr_300px] gap-6 overflow-hidden p-6">
+    <div
+      class="grid flex-1 grid-cols-1 gap-6 overflow-y-auto p-6 lg:grid-cols-[1fr_300px] lg:overflow-hidden"
+    >
       <!-- main: pipeline flow -->
       <section
-        class="flex flex-col overflow-auto rounded-2xl border border-default bg-default/60 p-6"
+        class="flex flex-col rounded-2xl border border-default bg-default/60 p-6 lg:overflow-auto"
       >
         <div class="mb-4 flex items-center gap-2">
           <UIcon name="i-lucide-workflow" class="h-4 w-4 text-dimmed" />
@@ -214,18 +270,23 @@ function openApprovalFor(approvalId: string) {
           :instance="instance"
           @open-decision="openDecisionFor"
           @open-approval="openApprovalFor"
-        />
-
-        <div
-          v-else
-          class="flex flex-1 items-center justify-center rounded-xl border border-dashed border-muted text-sm text-dimmed"
         >
-          {{ t('focus.emptyPipelineHint') }}
-        </div>
+          <!-- A failed run: the same failure block the inspector shows, with its action. -->
+          <template v-if="failedRun" #after-summary>
+            <AgentFailureCard :run="failedRun" />
+          </template>
+        </PipelineProgress>
+
+        <EmptyState
+          v-else
+          class="flex-1"
+          icon="i-lucide-workflow"
+          :title="t('focus.emptyPipelineHint')"
+        />
       </section>
 
       <!-- side: details -->
-      <aside class="space-y-4 overflow-auto rounded-2xl border border-default bg-default/60 p-5">
+      <aside class="space-y-4 rounded-2xl border border-default bg-default/60 p-5 lg:overflow-auto">
         <div>
           <SectionLabel class="mb-1">
             {{ t('focus.description') }}

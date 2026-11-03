@@ -81,7 +81,6 @@ function remove(id: string) {
       <UBadge
         v-for="f in selected"
         :key="f.id"
-        color="primary"
         variant="subtle"
         size="sm"
         class="cursor-pointer"
@@ -100,7 +99,6 @@ function remove(id: string) {
         {{ t('settings.serviceFragmentDefaults.footer.question') }}
       </span>
       <UButton
-        color="primary"
         variant="link"
         class="p-0 text-2xs font-medium text-primary hover:underline"
         @click="ui.openFragmentLibrary()"
@@ -108,7 +106,6 @@ function remove(id: string) {
         {{ t('settings.serviceFragmentDefaults.footer.manageBoard') }}
       </UButton>
       <UButton
-        color="primary"
         variant="link"
         class="p-0 text-2xs font-medium text-primary hover:underline"
         @click="ui.openAccountSettings('fragments')"

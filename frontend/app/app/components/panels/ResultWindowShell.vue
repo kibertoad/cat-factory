@@ -40,6 +40,7 @@ import {
   RESULT_WINDOW_WIDTH_CLASS,
   type ResultWindowWidth,
 } from '~/components/panels/ResultWindowShell.logic'
+import { WINDOWED_OVERLAY_CLASS } from '~/utils/safeArea'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 
 /** A pipeline step reference — passed by step-result windows to surface the shared
@@ -255,13 +256,17 @@ const chipClass = computed(() =>
 )
 
 const backdropClass = computed(() => [
-  'fixed inset-0 z-50 flex max-h-[100dvh] justify-center bg-app-950/70 backdrop-blur-sm',
-  props.variant === 'centered' ? 'items-center p-4' : 'items-stretch',
+  WINDOWED_OVERLAY_CLASS,
+  'z-50 justify-center bg-elevated/75 backdrop-blur-sm',
+  props.variant === 'centered' ? 'items-center' : 'items-stretch',
 ])
+// The centered cap is the smaller of 90dvh and the backdrop's padded box: with a large inset (a
+// Dynamic Island in standalone mode) the gutter alone can exceed 10% of the height, and a window
+// sized to 90dvh would then push its top edge back under the status bar.
 const panelClass = computed(() => [
   'flex w-full flex-col overflow-hidden rounded-2xl border border-default bg-default shadow-2xl',
   RESULT_WINDOW_WIDTH_CLASS[props.width],
-  props.variant === 'centered' ? 'max-h-[90dvh]' : 'm-4',
+  props.variant === 'centered' && 'max-h-[min(90dvh,100%)]',
 ])
 </script>
 

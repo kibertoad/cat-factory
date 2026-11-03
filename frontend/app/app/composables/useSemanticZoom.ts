@@ -3,6 +3,15 @@ import type { LodLevel } from '~/types/domain'
 /** The LOD scale, shallow → deep. Index order lets callers ask "is at least". */
 const LOD_ORDER: LodLevel[] = ['far', 'mid', 'close', 'steps', 'subtasks']
 
+/** The zoom each level starts at; the level holds until the next one's. */
+export const LOD_MIN_ZOOM: Record<LodLevel, number> = {
+  far: 0,
+  mid: 0.6,
+  close: 1.2,
+  steps: 1.8,
+  subtasks: 2.4,
+}
+
 /** Map a raw zoom factor to a level-of-detail bucket. Shared by the main board
  * and the drill-down focus view so both honour the same thresholds.
  *
@@ -11,11 +20,7 @@ const LOD_ORDER: LodLevel[] = ['far', 'mid', 'close', 'steps', 'subtasks']
  * expands each step's live todo breakdown — the spatial analogue of opening a
  * task in the inspector. */
 export function zoomToLod(zoom: number): LodLevel {
-  if (zoom < 0.6) return 'far'
-  if (zoom < 1.2) return 'mid'
-  if (zoom < 1.8) return 'close'
-  if (zoom < 2.4) return 'steps'
-  return 'subtasks'
+  return LOD_ORDER.findLast((level) => zoom >= LOD_MIN_ZOOM[level]) ?? 'far'
 }
 
 /** True when `lod` is at least as deep as `min` on the LOD scale. */

@@ -133,7 +133,6 @@ function revert() {
     </p>
     <UButton
       v-if="guidedTarget"
-      color="primary"
       variant="soft"
       size="sm"
       icon="i-lucide-scan-search"
@@ -151,7 +150,6 @@ function revert() {
       <div v-if="dirty" class="mt-2 flex items-center gap-2">
         <UButton
           size="xs"
-          color="primary"
           variant="soft"
           :loading="saving"
           data-testid="inspector-review-skills-save"

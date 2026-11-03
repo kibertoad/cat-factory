@@ -7,9 +7,9 @@ const { t } = useI18n()
 // repo-operating agent step (clone, push, open PR, CI gate, merge) will fail. The server
 // also logs this, but a dev terminal is easy to miss — so surface it in the UI with the
 // (scopes-preselected) creation URL as a one-click link straight to GitHub.
-const auth = useAuthStore()
+const { patSetupUrl } = useSetupRemedies()
 
-const setupUrl = computed(() => auth.localMode?.githubPatSetupUrl ?? '')
+const setupUrl = computed(() => patSetupUrl.value ?? '')
 const dismissed = ref(false)
 const show = computed(() => !!setupUrl.value && !dismissed.value)
 </script>
@@ -53,7 +53,6 @@ const show = computed(() => !!setupUrl.value && !dismissed.value)
                 target="_blank"
                 rel="noopener noreferrer"
                 color="warning"
-                variant="solid"
                 icon="i-lucide-external-link"
                 trailing
               >

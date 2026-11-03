@@ -3,6 +3,8 @@ import type { DocumentSourceKind } from '~/types/domain'
 import DocumentSyncState from '~/components/documents/DocumentSyncState.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 // Import pages from a connected document source and pick one to expand into
 // board structure. A source selector lets the user choose which connected source
@@ -11,7 +13,7 @@ import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 const open = computed({
@@ -58,10 +60,7 @@ async function doImport() {
   try {
     const doc = await documents.importDocument(source.value, value)
     ref_.value = ''
-    toast.add({
-      title: t('documents.import.imported', { title: doc.title }),
-      icon: 'i-lucide-file-down',
-    })
+    actionToast.success('documents.import.imported', { params: { title: doc.title } })
   } catch (e) {
     present(e, 'documents.import.importFailed')
   } finally {
@@ -75,7 +74,7 @@ function preview(externalId: string) {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('documents.import.title')">
+  <AppModal size="form" v-model:open="open" :title="t('documents.import.title')">
     <template #title>
       <IntegrationBackTitle :title="t('documents.import.title')" @back="back" />
     </template>
@@ -87,7 +86,6 @@ function preview(externalId: string) {
           <UButton
             v-for="s in documents.sources"
             :key="s.source"
-            color="primary"
             variant="soft"
             :icon="s.icon"
             @click="ui.openDocumentConnect(s.source)"
@@ -115,7 +113,6 @@ function preview(externalId: string) {
             />
           </UFormField>
           <UButton
-            color="primary"
             icon="i-lucide-file-down"
             :loading="importing"
             :disabled="!ref_.trim()"
@@ -149,7 +146,6 @@ function preview(externalId: string) {
                 <DocumentSyncState :doc="doc" class="mt-1" />
               </div>
               <UButton
-                color="primary"
                 variant="soft"
                 size="xs"
                 icon="i-lucide-wand-sparkles"
@@ -160,10 +156,13 @@ function preview(externalId: string) {
             </div>
           </div>
         </div>
-        <p v-else class="text-center text-xs text-dimmed">
-          {{ t('documents.import.noneImported') }}
-        </p>
+        <EmptyState
+          v-else
+          compact
+          icon="i-lucide-file-down"
+          :title="t('documents.import.noneImported')"
+        />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

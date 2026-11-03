@@ -2,6 +2,7 @@ import { agentKindCapabilityViews } from '@cat-factory/agents'
 import { Hono } from 'hono'
 import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv } from '../../http/env.js'
+import { encodeAgentKindLayer } from '../../persistence/agentKindsWire.js'
 
 /**
  * The mothership-mode AGENT-KIND CAPABILITY API: `GET /internal/agent-kinds`.
@@ -41,6 +42,9 @@ import type { AppEnv } from '../../http/env.js'
  * Reads `container.agentKindRegistry` — this process's OWN registry, never the resolved source, so
  * a satellite can never answer for a satellite and a mothership-of-a-mothership cannot loop.
  *
+ * A bundled skill rides BY REFERENCE (`agentKindsWire.ts`), each distinct body once, so a playbook
+ * assigned to several kinds does not serialise once per kind.
+ *
  * Mounted on BOTH facades via the shared controller registration. It never 503s: a deployment that
  * assigns no capabilities has an empty layer, which is a real and correct answer (the stock
  * product's). What must not read as empty is a failure to REACH it, and that is the client's half.
@@ -52,7 +56,10 @@ export function agentKindsController(): Hono<AppEnv> {
     if (!(await verifyMachineRequest(c))) {
       return c.json({ error: { code: 'forbidden', message: 'invalid machine token' } }, 403)
     }
-    return c.json({ kinds: agentKindCapabilityViews(c.get('container').agentKindRegistry) }, 200)
+    return c.json(
+      encodeAgentKindLayer(agentKindCapabilityViews(c.get('container').agentKindRegistry)),
+      200,
+    )
   })
 
   return app

@@ -54,6 +54,53 @@ test.describe('in-app tutorial', () => {
     await expect(page.getByTestId('tutorial-overlay')).toBeHidden({ timeout: LIVE_TIMEOUT })
   })
 
+  test('a tour started on the queue view moves the person to the canvas it walks', async ({
+    page,
+    request,
+  }) => {
+    const snapshot = await createSeededWorkspace(request)
+    await pinWorkspace(page, snapshot.workspace.id, { tutorial: 'unanswered' })
+    // A person who has never chosen a view lands on the queue, which covers the canvas.
+    await page.context().clearCookies({ name: 'workView' })
+    await openBoard(page)
+    await expect(page.getByTestId('queue-view')).toBeVisible()
+
+    const prompt = page.getByTestId('tutorial-prompt')
+    await expect(prompt).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await prompt.getByTestId('tutorial-start-board-basics').click()
+
+    // Every tour anchors to the canvas, so starting one switches to it and records that choice.
+    await expect(page.getByTestId('queue-view')).toHaveCount(0)
+    await expect(page.getByTestId('work-view-board')).toHaveAttribute('aria-current', 'page')
+    const tooltip = page.getByTestId('tutorial-tooltip')
+    await tooltip.getByTestId('tutorial-next').click()
+    const highlight = page.getByTestId('tutorial-highlight')
+    await expect(highlight).toBeVisible({ timeout: LIVE_TIMEOUT })
+
+    // The step after the canvas names the two views, ringing the switcher it switched with.
+    await tooltip.getByTestId('tutorial-next').click()
+    const switcher = await page.getByTestId('work-view-switcher').boundingBox()
+    await expect
+      .poll(async () => {
+        const ring = await highlight.boundingBox()
+        return (
+          !!ring &&
+          !!switcher &&
+          ring.x <= switcher.x &&
+          ring.y <= switcher.y &&
+          ring.x + ring.width >= switcher.x + switcher.width &&
+          ring.y + ring.height >= switcher.y + switcher.height
+        )
+      })
+      .toBe(true)
+
+    // A click on Queue mid-tour does not take the canvas away from the tour: the next step's
+    // anchor, the canvas toolbar, is still there.
+    await page.getByTestId('work-view-queue').click()
+    await expect(page.getByTestId('queue-view')).toHaveCount(0)
+    await expect(page.getByTestId('board-fit-view')).toBeVisible()
+  })
+
   test('remembers "no thanks" across a reload', async ({ page, request }) => {
     const snapshot = await createSeededWorkspace(request)
     await pinWorkspace(page, snapshot.workspace.id, { tutorial: 'unanswered' })

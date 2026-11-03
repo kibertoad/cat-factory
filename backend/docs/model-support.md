@@ -185,11 +185,11 @@ Several shapes of entry fall out of this:
   `contextTokens` on the `ModelRef` surfaces this in the picker. `glm-5.3` joined this shape
   once Z.ai published the weights and Workers AI picked the model up; it shipped
   subscription-only, which is the usual path into this list.
-- **No Cloudflare floor**: `gemini`, `gemini-flash`, `gemini-3.8-flash`, `kimi-k3`,
+- **No Cloudflare floor**: `gemini-4-argon`, `gemini`, `gemini-3.8-flash`, `kimi-k3`,
   `qwen3.8-max`, `qwen3.8-max-0902`, `qwen3.8-max-prime`, `qwen3.8-flash`, `glm-5.3-prime`,
-  `glm-5.3-flashx`, `grok`, `grok-4.7`, `muse-spark`, `muse-spark-contributor`.
+  `glm-5.3-flashx`, `grok`, `grok-4.7`, `muse-wonder`, `muse-spark`, `muse-spark-contributor`.
   Nothing serves these on the binding, so each stays unavailable until a key is pooled: the
-  Gemini, Muse Spark and speed-tier (`-prime`, `-flashx`) entries through OpenRouter alone;
+  Gemini, Muse and speed-tier (`-prime`, `-flashx`) entries through OpenRouter alone;
   `grok` and `grok-4.7` direct (xAI) or through OpenRouter; `kimi-k3`, `qwen3.8-max-0902` and
   `qwen3.8-flash` direct (Moonshot / DashScope) or through OpenRouter; and `qwen3.8-max` on
   DashScope alone, because OpenRouter withdrew the undated Qwen alias in favour of the dated

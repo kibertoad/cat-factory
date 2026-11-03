@@ -120,7 +120,6 @@ const canLeaveReview = computed(
       <UButton
         size="xs"
         variant="soft"
-        color="primary"
         icon="i-lucide-wand-sparkles"
         :loading="store.detecting"
         :disabled="!store.hasRepo"
@@ -200,7 +199,6 @@ const canLeaveReview = computed(
           <UButton
             size="xs"
             variant="soft"
-            color="primary"
             icon="i-lucide-git-merge"
             data-testid="env-setup-apply-analysis"
             @click="store.applyAnalystDraft()"
@@ -231,7 +229,7 @@ const canLeaveReview = computed(
       </div>
 
       <!-- exposed compose service + port -->
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <UFormField :label="t('environmentWizard.review.service')" required>
           <USelect
             v-if="composeServiceOptions.length"
@@ -250,7 +248,10 @@ const canLeaveReview = computed(
             data-testid="env-setup-service-input"
           />
         </UFormField>
-        <UFormField :label="t('environmentWizard.review.port')">
+        <UFormField
+          :label="t('environmentWizard.review.port')"
+          :help="t('environmentWizard.review.portHelp')"
+        >
           <UInput
             v-model.number="store.exposedPort"
             type="number"
@@ -360,7 +361,7 @@ const canLeaveReview = computed(
             {{ rawError }}
           </p>
           <div class="flex justify-end">
-            <UButton size="xs" color="primary" data-testid="env-setup-raw-apply" @click="applyRaw">
+            <UButton size="xs" data-testid="env-setup-raw-apply" @click="applyRaw">
               {{ t('environmentWizard.review.rawApply') }}
             </UButton>
           </div>
@@ -371,7 +372,6 @@ const canLeaveReview = computed(
     <JourneyStepNav :go-back="goBack">
       <template #primary>
         <UButton
-          color="primary"
           trailing-icon="i-lucide-arrow-right"
           :disabled="!canLeaveReview"
           data-testid="env-setup-next"

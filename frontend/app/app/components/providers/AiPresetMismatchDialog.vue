@@ -8,6 +8,7 @@
 // fixed (or all its models become available).
 import { computed } from 'vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -36,11 +37,7 @@ function go(action: () => void) {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('providers.presetMismatch.title')"
-    :ui="{ content: 'max-w-xl' }"
-  >
+  <AppModal size="prompt" v-model:open="open" :title="t('providers.presetMismatch.title')">
     <template #body>
       <div class="space-y-5">
         <i18n-t
@@ -97,11 +94,11 @@ function go(action: () => void) {
           >
             {{ t('providers.presetMismatch.configureVendors') }}
           </UButton>
-          <UButton color="primary" size="sm" icon="i-lucide-cpu" @click="go(ui.openModelConfig)">
+          <UButton size="sm" icon="i-lucide-cpu" @click="go(ui.openModelConfig)">
             {{ t('providers.presetMismatch.editPresets') }}
           </UButton>
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

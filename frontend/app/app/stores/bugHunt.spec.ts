@@ -73,7 +73,7 @@ describe('bug hunt store — board listing failures', () => {
     await store.loadBoards('jira')
 
     expect(store.boards).toEqual([])
-    expect(store.boardsErrorReason).toBe('boards_unsupported')
+    expect(store.boardsError?.reason).toBe('boards_unsupported')
     expect(store.boardsError).toBeTruthy()
   })
 
@@ -84,7 +84,7 @@ describe('bug hunt store — board listing failures', () => {
     await store.loadBoards('jira')
 
     // The modal keys its free-text fallback on the reason, so a null one keeps this an error.
-    expect(store.boardsErrorReason).toBeNull()
+    expect(store.boardsError?.reason).toBeNull()
     expect(store.boardsError).toBeTruthy()
   })
 
@@ -99,7 +99,6 @@ describe('bug hunt store — board listing failures', () => {
     await store.loadBoards('linear')
 
     expect(store.boardsError).toBeNull()
-    expect(store.boardsErrorReason).toBeNull()
     expect(store.boards.map((b) => b.id)).toEqual(['t1'])
   })
 
@@ -116,7 +115,6 @@ describe('bug hunt store — board listing failures', () => {
     expect(store.boardsSource).toBe('github')
     expect(store.boards).toEqual([])
     expect(store.boardsError).toBeNull()
-    expect(store.boardsErrorReason).toBeNull()
   })
 
   it('a source switch mid-flight never lands the older tracker failure on the newer one', async () => {
@@ -137,7 +135,6 @@ describe('bug hunt store — board listing failures', () => {
 
     // The slower tracker's refusal must not flip the newer tracker's picker to free text.
     expect(store.boardsSource).toBe('linear')
-    expect(store.boardsErrorReason).toBeNull()
     expect(store.boardsError).toBeNull()
   })
 
@@ -184,7 +181,7 @@ describe('bug hunt store — scan failures', () => {
 
     expect(await store.hunt('github', SCAN)).toBe('failed')
 
-    expect(store.huntErrorReason).toBe('repo_not_linked')
+    expect(store.huntError?.reason).toBe('repo_not_linked')
     expect(store.huntError).toBeTruthy()
     expect(store.result).toBeNull()
   })
@@ -195,7 +192,7 @@ describe('bug hunt store — scan failures', () => {
 
     expect(await store.hunt('jira', { containerId: 'blk_auth', board: 'PROJ' })).toBe('failed')
 
-    expect(store.huntErrorReason).toBeNull()
+    expect(store.huntError?.reason).toBeNull()
     expect(store.huntError).toBeTruthy()
   })
 
@@ -208,7 +205,6 @@ describe('bug hunt store — scan failures', () => {
     expect(await store.hunt('github', SCAN)).toBe('ran')
 
     expect(store.huntError).toBeNull()
-    expect(store.huntErrorReason).toBeNull()
     expect(store.result?.board).toBe('acme/web')
   })
 
@@ -219,7 +215,6 @@ describe('bug hunt store — scan failures', () => {
 
     store.reset()
 
-    expect(store.huntErrorReason).toBeNull()
     expect(store.huntError).toBeNull()
   })
 })
@@ -245,6 +240,5 @@ describe('bug hunt store: a dismissed credential prompt', () => {
     expect(await store.hunt('github', SCAN)).toBe('cancelled')
     expect(store.result).toBeNull()
     expect(store.huntError).toBeNull()
-    expect(store.huntErrorReason).toBeNull()
   })
 })

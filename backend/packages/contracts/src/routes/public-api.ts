@@ -13,6 +13,7 @@ import {
   listPublicJobsQuerySchema,
   listPublicServiceTasksQuerySchema,
   publicJobAcceptedSchema,
+  publicDeploymentSchema,
   publicIdentitySchema,
   publicJobListSchema,
   publicJobSchema,
@@ -374,6 +375,21 @@ export const dismissPublicNotificationContract = withMinScope(
     pathResolver: ({ id }) => `/api/v1/notifications/${id}/dismiss`,
     requestBodySchema: ContractNoBody,
     responsesByStatusCode: { 200: notificationSchema, ...errorResponses },
+  }),
+)
+
+// ---- deployment facts (`read` scope, no workspace) -------------------------
+
+/**
+ * Where this deployment serves its web app. Account-level like the directory surface, so a key
+ * reaching several workspaces needs no `x-cat-factory-workspace` header to ask.
+ */
+export const getPublicDeploymentContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/deployment',
+    responsesByStatusCode: { 200: publicDeploymentSchema, ...errorResponses },
   }),
 )
 

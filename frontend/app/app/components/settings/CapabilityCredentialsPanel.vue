@@ -20,7 +20,7 @@ import ToolServerChecklist from '~/components/settings/ToolServerChecklist.vue'
 
 const { t, d } = useI18n()
 const store = useCapabilityCredentialsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
 // Which declaring capability wants a key. An exhaustive Record over the wire union, so a new
@@ -85,11 +85,7 @@ async function saveKey(key: string) {
   try {
     await store.save(key, value)
     drafts[key] = ''
-    toast.add({
-      title: t('settings.capabilityCredentials.toast.saved', { key }),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.capabilityCredentials.toast.saved', { params: { key } })
   } catch (e) {
     present(e, 'settings.capabilityCredentials.toast.saveFailed')
   } finally {

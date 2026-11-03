@@ -48,9 +48,12 @@ production, inject the same variables through your orchestrator.
 cp .env.example .env     # then edit DATABASE_URL etc.
 ```
 
-`DATABASE_URL` is the only required variable. The rest (auth, model-provider keys,
-spend budget, execution tuning) are documented inline in `.env.example`. As with the
-Worker, the auth gate **fails closed**: set the OAuth/session secrets for real auth, or
+Two variables are required: `DATABASE_URL`, and `ENCRYPTION_KEY` (base64, at least 32 bytes
+decoded, e.g. `openssl rand -base64 32`), which the always-on document and task integrations seal
+credentials under. Boot fails with a config error when either is missing. Keep the key stable
+across restarts: a new value orphans everything sealed under the old one. The rest (auth,
+model-provider keys, spend budget, execution tuning) are documented inline in `.env.example`. As
+with the Worker, the auth gate **fails closed**: set the OAuth/session secrets for real auth, or
 `AUTH_DEV_OPEN=true` (non-production only) to run open while developing.
 
 ## Recovering a wedged database (`db:reset`)

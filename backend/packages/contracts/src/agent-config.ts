@@ -76,9 +76,12 @@ export type AgentConfigCatalog = v.InferOutput<typeof agentConfigCatalogSchema>
 // Values are NOT validated against the descriptor catalog here (the contracts layer
 // can't see the runtime-registered descriptors) — `resolveAgentConfigValue` falls
 // back to the descriptor default for any unknown/invalid value at read time.
+/** The longest value a block may store for one descriptor. A field offering free text caps at it. */
+export const AGENT_CONFIG_VALUE_MAX_LENGTH = 400
+
 export const agentConfigValuesSchema = v.record(
   v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
-  v.pipe(v.string(), v.maxLength(400)),
+  v.pipe(v.string(), v.maxLength(AGENT_CONFIG_VALUE_MAX_LENGTH)),
 )
 export type AgentConfigValues = v.InferOutput<typeof agentConfigValuesSchema>
 

@@ -25,6 +25,7 @@ import {
   interviewStepReached,
 } from '~/utils/interviewGate'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const docInterview = useDocInterviewStore()
@@ -91,6 +92,15 @@ const phase = computed(() =>
 /** The interview converged: the synthesized authoring brief is what the window shows. */
 const converged = computed(() => phase.value === 'converged')
 
+/** The header badge: done, failed, or still waiting on the interview. */
+const statusBadge = computed(() =>
+  converged.value
+    ? { color: 'success' as const, label: t('docInterview.status.done') }
+    : phase.value === 'failed'
+      ? { color: 'error' as const, label: t('docInterview.status.failed') }
+      : { color: 'primary' as const, label: t('docInterview.status.awaiting') },
+)
+
 /** Why Submit is unavailable, or undefined when it is. RBAC first: it outranks a draft gap. */
 const continueBlockedReason = computed(() => {
   if (!access.canExecuteRuns.value) return t('access.noRunExecute')
@@ -116,20 +126,24 @@ const onProceed = () =>
     @close="close"
   >
     <template v-if="session" #header-extras>
-      <UBadge :color="converged ? 'success' : 'primary'" variant="subtle" size="sm">
-        {{ t(converged ? 'docInterview.status.done' : 'docInterview.status.awaiting') }}
+      <UBadge
+        :color="statusBadge.color"
+        variant="subtle"
+        size="sm"
+        data-testid="doc-interview-status"
+      >
+        {{ statusBadge.label }}
       </UBadge>
     </template>
 
     <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
       <!-- No session yet -->
-      <div
+      <EmptyState
         v-if="!session"
-        class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
-      >
-        <UIcon name="i-lucide-messages-square" class="h-8 w-8 opacity-40" />
-        <p class="text-sm">{{ t('docInterview.empty') }}</p>
-      </div>
+        class="h-full"
+        icon="i-lucide-messages-square"
+        :title="t('docInterview.empty')"
+      />
 
       <template v-else>
         <p class="mb-4 text-sm leading-relaxed text-toned">
@@ -255,7 +269,6 @@ const onProceed = () =>
           {{ t('docInterview.proceed') }}
         </UButton>
         <UButton
-          color="primary"
           size="sm"
           :loading="resuming"
           :disabled="!!continueBlockedReason"

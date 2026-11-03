@@ -16,7 +16,7 @@ import { CatFactoryResources } from './operations.generated.ts'
  * await client.tasks.start(task.taskId, {})
  * ```
  *
- * Every call is scoped to the key's workspace, and each resource client mirrors one tag of the
+ * A workspace-scoped call acts on the key's only workspace, or on `workspaceId` for a key reaching several, and each resource client mirrors one tag of the
  * published OpenAPI surface: `jobs`, `services`, `tasks`, `pipelines`, `notifications`,
  * `webhook`, `usage`, `decisions`, `debug`.
  *

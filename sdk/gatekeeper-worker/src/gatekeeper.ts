@@ -25,7 +25,7 @@ import {
 } from './policy/compile.js'
 import type { GatekeeperState } from './state.js'
 import { cardEffectOf, readDelivery, SUBSCRIBED_CARD_TYPES } from './webhook/delivery.js'
-import { verifyDelivery, type VerificationResult } from './webhook/signature.js'
+import { verifyDelivery, type VerificationResult } from '@cat-factory/webhooks'
 
 /** Identifies this integration in the deployment's logs, beside the SDK's own version. */
 const USER_AGENT = 'cat-factory-gatekeeper'

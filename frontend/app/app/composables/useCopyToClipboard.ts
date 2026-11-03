@@ -7,6 +7,7 @@
 // silent no-op the user couldn't tell apart from success. Routing every copy through this seam
 // makes the outcome always visible.
 import { useClipboard } from '@vueuse/core'
+import { useActionToast } from '~/composables/useActionToast'
 
 export function useCopyToClipboard() {
   // Resolved through the Nuxt app's global i18n instance rather than `useI18n()`, which requires an
@@ -16,7 +17,7 @@ export function useCopyToClipboard() {
   // component. `useI18n()` there throws `MUST_BE_CALL_SETUP_TOP`, and a throw in a store body takes
   // the whole app to Nuxt's error page. Same reason, and the same fix, as `usePipelineErrorToast`.
   const { t } = useNuxtApp().$i18n as ReturnType<typeof useI18n>
-  const toast = useToast()
+  const actionToast = useActionToast()
   const { copy: writeClipboard, isSupported } = useClipboard()
 
   async function copy(text: string) {
@@ -25,9 +26,9 @@ export function useCopyToClipboard() {
     try {
       if (!isSupported.value) throw new Error('clipboard unsupported')
       await writeClipboard(text)
-      toast.add({ title: t('common.copied'), color: 'success', icon: 'i-lucide-check' })
+      actionToast.success('common.copied')
     } catch {
-      toast.add({ title: t('common.copyFailed'), color: 'error', icon: 'i-lucide-x' })
+      actionToast.error('common.copyFailed')
     }
   }
 

@@ -1,6 +1,7 @@
 import type {
   AgentContextSnapshotRepository,
   AuditEventRepository,
+  DirectoryRepository,
   AgentSearchQueryRepository,
   AgentToolCallRepository,
   ResolveBinaryArtifactStore,
@@ -101,6 +102,8 @@ export interface RetentionRepos {
   // lot. Wired unconditionally, exactly as on the Worker: this is the one table here that would
   // otherwise grow for years unbounded.
   auditEventRepository: Pick<AuditEventRepository, 'deleteOlderThan'>
+  // The directory change feed, which keeps each account's newest row whatever its age.
+  directoryRepository: Pick<DirectoryRepository, 'pruneChanges'>
   // The durable cost-attribution rollup. This pass only WRITES it: `spend_days` has no
   // prune, here or on the Worker, and no `deleteOlderThan` on its port to call. A TCO table
   // that expires is just a slower ledger.
@@ -126,6 +129,7 @@ export interface RetentionResult {
   gateOutcomes: number
   runDays: number
   auditEvents: number
+  directoryChanges: number
   /** Daily buckets (re)written by this pass's rollup: a WRITE, not rows reclaimed. */
   runDaysRolledUp: number
   /** Durable cost-attribution buckets (re)written by this pass: a WRITE, never a prune. */
@@ -255,6 +259,12 @@ export async function sweepRetention(
     // in years: the others reclaim on most ticks, this one usually reclaims nothing.
     auditEvents: await pass.prune('audit_events', retention.auditEventsMs, now, (c) =>
       repos.auditEventRepository.deleteOlderThan(c),
+    ),
+    directoryChanges: await pass.prune(
+      'directory_changes',
+      retention.directoryChangesMs,
+      now,
+      (c) => repos.directoryRepository.pruneChanges(c),
     ),
     failedTables: pass.failed,
   }

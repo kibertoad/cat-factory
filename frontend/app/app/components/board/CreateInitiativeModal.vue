@@ -26,6 +26,7 @@ import { GENERIC_PRESET_ID } from '~/stores/initiative'
 import DescriptorFields from '~/components/common/DescriptorFields.vue'
 import ContextAttachmentFields from '~/components/context/ContextAttachmentFields.vue'
 import type { PendingContext } from '~/composables/useContextLinking'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -146,9 +147,7 @@ async function create() {
     const { resolved, failures } = await resolvePending(pendingContext.value)
     pendingContext.value = resolved
     if (failures.length) {
-      presentLinkFailures(failures, undefined, {
-        title: (count) => t('initiative.create.contextFailed', { count }, count),
-      })
+      presentLinkFailures(failures, undefined, { titleKey: 'initiative.create.contextFailed' })
       return
     }
     const { block } = await initiatives.create(frameId, {
@@ -163,7 +162,7 @@ async function create() {
     // doc another task already holds), surfaced with its specific cause rather than a bare count.
     // The initiative is already created, so a failed link never costs the user the form.
     presentLinkFailures(await linkPending(block.id, pendingContext.value), block.id, {
-      title: (count) => t('initiative.create.linkFailed', { count }, count),
+      titleKey: 'initiative.create.linkFailed',
     })
     ui.closeCreateInitiative()
     // Select the fresh block so the inspector offers "Run planning" right away.
@@ -177,7 +176,7 @@ async function create() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('initiative.create.title')">
+  <AppModal size="form" v-model:open="open" :title="t('initiative.create.title')">
     <template #body>
       <div class="space-y-4" data-testid="create-initiative-modal">
         <p v-if="frame" class="text-xs text-muted">
@@ -285,7 +284,6 @@ async function create() {
         </UButton>
         <UButton
           data-testid="create-initiative-submit"
-          color="primary"
           :loading="submitting || initiatives.creating"
           :disabled="!canSubmit"
           @click="create"
@@ -294,5 +292,5 @@ async function create() {
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

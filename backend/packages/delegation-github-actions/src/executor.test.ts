@@ -14,8 +14,9 @@ import type { GitHubActionsWorkflowScope } from './workflow.js'
 
 // The three problems this helper exists for, each asserted as the failure it prevents:
 //
-//   1. `workflow_dispatch` answers 204 with no run id, so a replayed dispatch would queue a SECOND
-//      workflow: two workflows on one branch, two pull requests for one task.
+//   1. A replayed dispatch holds only the brief (the run id the first attempt was answered with
+//      died with it, and a 204 server answers none), so it would queue a SECOND workflow: two
+//      workflows on one branch, two pull requests for one task.
 //   2. Actions' conclusion vocabulary is not the platform's, and three of its values are the only
 //      ones a fresh attempt could survive.
 //   3. The workflow declares no outputs, so what it produced has to be found in the repository:
@@ -28,7 +29,9 @@ interface Call {
 }
 
 /** A fetch double: routes by URL, records every call. */
-function fakeFetch(routes: Record<string, () => { status?: number; body?: unknown }>): {
+function fakeFetch(
+  routes: Record<string, () => { status?: number; body?: unknown; raw?: string }>,
+): {
   fetchImpl: DelegatedFetch
   calls: Call[]
 } {
@@ -40,13 +43,17 @@ function fakeFetch(routes: Record<string, () => { status?: number; body?: unknow
       ...(init?.body ? { body: JSON.parse(init.body) as unknown } : {}),
     })
     const route = Object.keys(routes).find((key) => url.includes(key))
-    const answer = route ? routes[route]!() : { status: 404, body: { message: 'no route' } }
+    const answer: { status?: number; body?: unknown; raw?: string } = route
+      ? routes[route]!()
+      : { status: 404, body: { message: 'no route' } }
     const status = answer.status ?? 200
     return {
       ok: status >= 200 && status < 300,
       status,
       headers: { get: () => null },
-      text: async () => JSON.stringify(answer.body ?? {}),
+      // A route with no body answers an EMPTY one, as a real `204` does.
+      text: async () =>
+        answer.raw ?? (answer.body === undefined ? '' : JSON.stringify(answer.body)),
       json: async () => answer.body ?? {},
     }
   }
@@ -128,7 +135,108 @@ const RUN = {
 }
 
 describe('start: idempotency', () => {
-  it('dispatches once and correlates the run it queued', async () => {
+  it('takes the run id from the dispatch answer, with no scan after it', async () => {
+    let listed = 0
+    const { fetchImpl, calls } = fakeFetch({
+      '/dispatches': () => ({
+        body: {
+          workflow_run_id: 4242,
+          run_url: 'https://api.github.com/repos/acme/widgets/actions/runs/4242',
+          html_url: 'https://github.com/acme/widgets/actions/runs/4242',
+        },
+      }),
+      '/runs?': () => {
+        listed++
+        return { body: { workflow_runs: [] } }
+      },
+      '/actions/runs/4242': () => ({ body: { ...RUN, status: 'queued', conclusion: null } }),
+    })
+    const executor = githubActionsDelegatedExecutor(DESCRIPTION, deps(fetchImpl))
+    const start = await executor.start(brief(), CREDS)
+    expect(start).toEqual({
+      externalId: '4242',
+      url: 'https://github.com/acme/widgets/actions/runs/4242',
+    })
+    expect(calls.filter((c) => c.url.includes('/dispatches'))).toHaveLength(1)
+    // The one scan is the idempotency look BEFORE the dispatch, which a replay still needs.
+    expect(listed).toBe(1)
+  })
+
+  it('states on the record when the answered run does not carry the marker', async () => {
+    // The answer settles the id with no name match, so a workflow whose `run-name:` drops the
+    // marker would work on every fresh dispatch and only fail on a replay, which then cannot
+    // find its run and queues a second one.
+    const recording = createRecordingLogger()
+    const { fetchImpl } = fakeFetch({
+      '/dispatches': () => ({ body: { workflow_run_id: 4242 } }),
+      '/runs?': () => ({ body: { workflow_runs: [] } }),
+      '/actions/runs/4242': () => ({
+        body: { ...RUN, display_title: 'Implement', status: 'queued', conclusion: null },
+      }),
+    })
+    const executor = githubActionsDelegatedExecutor(DESCRIPTION, {
+      ...deps(fetchImpl),
+      logger: recording,
+    })
+    const start = await executor.start(brief(), CREDS)
+    expect(start.externalId).toBe('4242')
+    expect(start.note).toContain(correlationRunName('ex_1-acme:impl'))
+    expect(recording.lines).toContainEqual(
+      expect.objectContaining({ level: 'warn', fields: expect.objectContaining({ runId: 4242 }) }),
+    )
+  })
+
+  it('keeps the answered run when the marker read-back fails', async () => {
+    // The dispatch queued the run, so a failed check must not fail the start.
+    const recording = createRecordingLogger()
+    const { fetchImpl } = fakeFetch({
+      '/dispatches': () => ({ body: { workflow_run_id: 4242 } }),
+      '/runs?': () => ({ body: { workflow_runs: [] } }),
+      '/actions/runs/4242': () => ({ status: 502, body: { message: 'bad gateway' } }),
+    })
+    const executor = githubActionsDelegatedExecutor(DESCRIPTION, {
+      ...deps(fetchImpl),
+      logger: recording,
+    })
+    const start = await executor.start(brief(), CREDS)
+    expect(start.externalId).toBe('4242')
+    expect(start.note).toBeUndefined()
+    expect(recording.lines).toContainEqual(
+      expect.objectContaining({ level: 'warn', fields: expect.objectContaining({ runId: 4242 }) }),
+    )
+  })
+
+  it('falls back to the scan when a 2xx answer is not JSON', async () => {
+    let listed = 0
+    const { fetchImpl } = fakeFetch({
+      '/dispatches': () => ({ raw: '<html>accepted</html>' }),
+      '/runs?': () => ({
+        body: { workflow_runs: listed++ === 0 ? [] : [{ ...RUN, status: 'queued' }] },
+      }),
+    })
+    const executor = githubActionsDelegatedExecutor(DESCRIPTION, deps(fetchImpl))
+    const start = await executor.start(brief(), CREDS)
+    expect(start.externalId).toBe('4242')
+    expect(listed).toBe(2)
+  })
+
+  it('falls back to the scan when the answer carries no usable run id', async () => {
+    for (const body of [{}, { workflow_run_id: '4242' }, { workflow_run_id: 1.5 }]) {
+      let listed = 0
+      const { fetchImpl } = fakeFetch({
+        '/dispatches': () => ({ body }),
+        '/runs?': () => ({
+          body: { workflow_runs: listed++ === 0 ? [] : [{ ...RUN, status: 'queued' }] },
+        }),
+      })
+      const executor = githubActionsDelegatedExecutor(DESCRIPTION, deps(fetchImpl))
+      const start = await executor.start(brief(), CREDS)
+      expect(start.externalId).toBe('4242')
+      expect(listed).toBe(2)
+    }
+  })
+
+  it('dispatches once and correlates the run it queued on a server that answers 204', async () => {
     let listed = 0
     const { fetchImpl, calls } = fakeFetch({
       '/dispatches': () => ({ status: 204 }),
@@ -472,6 +580,55 @@ describe('a workflow resolved per dispatch', () => {
     )
     expect(update).toMatchObject({ state: 'running' })
     expect(calls.some((c) => c.url.includes('/repos/acme/payments/actions/runs/4242'))).toBe(true)
+  })
+
+  it('hands the resolver the base branch, from the brief and from the handle alike', async () => {
+    // A caller shim is dispatched on the branch that holds it, which is the work repository's own
+    // base. Without it on the scope every deployment restated the default-branch name per repo.
+    const refs: string[] = []
+    const onBase = {
+      ...DESCRIPTION,
+      workflow: (scope: GitHubActionsWorkflowScope) => {
+        refs.push(scope.baseBranch)
+        return {
+          owner: scope.repo.owner,
+          repo: scope.repo.name,
+          workflowFile: 'w.yml',
+          ref: scope.baseBranch,
+        }
+      },
+    }
+    const { fetchImpl, calls } = fakeFetch({
+      '/dispatches': () => ({ status: 204 }),
+      '/runs?': () => ({ body: { workflow_runs: [] } }),
+      '/actions/runs/4242': () => ({ body: { ...RUN, status: 'in_progress', conclusion: null } }),
+    })
+    const executor = githubActionsDelegatedExecutor(onBase, deps(fetchImpl))
+    await executor.start(
+      { ...brief(), branches: { base: 'master', work: 'cat-factory/blk_1' } },
+      CREDS,
+    )
+    await executor.poll(
+      handle({
+        repo: { owner: 'acme', name: 'widgets' },
+        branches: { base: 'master', work: 'cat-factory/blk_1' },
+      }),
+      CREDS,
+    )
+    expect(refs).toEqual(['master', 'master'])
+    expect(calls.find((c) => c.url.includes('/dispatches'))?.body).toMatchObject({ ref: 'master' })
+  })
+
+  it('REFUSES a handle that names no base branch rather than assuming one', async () => {
+    const { fetchImpl, calls } = fakeFetch({ '/actions/runs/4242': () => ({ body: RUN }) })
+    await expect(
+      githubActionsDelegatedExecutor(perRepo, deps(fetchImpl)).poll(
+        handle({ repo: { owner: 'acme', name: 'widgets' }, branches: undefined }),
+        CREDS,
+      ),
+    ).rejects.toThrow(/no base branch/)
+    // Refused before anything is addressed: no request reaches any repository.
+    expect(calls).toHaveLength(0)
   })
 
   it('REFUSES a handle that names no work repository rather than guessing one', async () => {

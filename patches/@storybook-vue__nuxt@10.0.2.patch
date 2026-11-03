@@ -1,0 +1,50 @@
+diff --git a/dist/preview.cjs b/dist/preview.cjs
+index fa1eb6a..305f5bf 100644
+--- a/dist/preview.cjs
++++ b/dist/preview.cjs
+@@ -13,13 +13,18 @@ function _interopDefaultCompat (e) { return e && typeof e === 'object' && 'defau
+ 
+ const plugins__default = /*#__PURE__*/_interopDefaultCompat(plugins);
+ 
++// PATCH: under `@storybook/addon-vitest` the story's canvas has an EMPTY id, so every story threw
++// "StoryContext is not provided" (upstream: nuxt-modules/storybook#1140). The id only names the
++// story's Nuxt app, so an empty one falls back to a constant name, which each story overwrites the
++// way the canvas id does in Storybook itself. A missing canvas still throws.
+ const pluginsTyped = plugins__default;
+ vue3Vite.setup(async (_vueApp, storyContext) => {
+   const vueApp = _vueApp;
+-  const key = storyContext?.canvasElement.id;
+-  if (!key) {
++  const canvas = storyContext?.canvasElement;
++  if (!canvas) {
+     throw new Error("StoryContext is not provided");
+   }
++  const key = canvas.id || "portable";
+   const storyNuxtAppId = `nuxt-app-${key}`;
+   const storyNuxtCtx = nuxt.getNuxtAppCtx(storyNuxtAppId);
+   window.__NUXT__ = virtual_nuxtRuntimeConfig.createNuxtPayload();
+diff --git a/dist/preview.mjs b/dist/preview.mjs
+index 625dd98..0725db7 100644
+--- a/dist/preview.mjs
++++ b/dist/preview.mjs
+@@ -7,13 +7,18 @@ export { applyDecorators, argTypesEnhancers, mount, parameters, render, renderTo
+ import '#build/css';
+ import plugins from '#build/plugins';
+ 
++// PATCH: under `@storybook/addon-vitest` the story's canvas has an EMPTY id, so every story threw
++// "StoryContext is not provided" (upstream: nuxt-modules/storybook#1140). The id only names the
++// story's Nuxt app, so an empty one falls back to a constant name, which each story overwrites the
++// way the canvas id does in Storybook itself. A missing canvas still throws.
+ const pluginsTyped = plugins;
+ setup(async (_vueApp, storyContext) => {
+   const vueApp = _vueApp;
+-  const key = storyContext?.canvasElement.id;
+-  if (!key) {
++  const canvas = storyContext?.canvasElement;
++  if (!canvas) {
+     throw new Error("StoryContext is not provided");
+   }
++  const key = canvas.id || "portable";
+   const storyNuxtAppId = `nuxt-app-${key}`;
+   const storyNuxtCtx = getNuxtAppCtx(storyNuxtAppId);
+   window.__NUXT__ = createNuxtPayload();

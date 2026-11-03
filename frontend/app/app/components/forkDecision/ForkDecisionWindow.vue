@@ -7,6 +7,7 @@
 // chosen, the Coder re-runs with the chosen approach folded in. Chat replies are computed by an
 // inline grounded LLM in the durable driver and arrive live on the execution stream.
 import { computed, ref, watch } from 'vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
 import { DEFAULT_FORK_MAX_CHAT_TURNS } from '@cat-factory/contracts'
 import { useResultView } from '~/composables/useResultView'
 import { useExecutionStore } from '~/stores/execution'
@@ -15,6 +16,8 @@ import { useForkDecisionStore } from '~/stores/forkDecision'
 import type { ForkChatMessage, ForkDecisionStepState, ForkOption } from '~/types/execution'
 import { FORK_DECISION_META } from '~/utils/catalog'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -170,7 +173,7 @@ const { requestClose } = useUnsavedGuard({
         v-if="status === 'proposing'"
         class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-muted"
       >
-        <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+        <Spinner class="h-8 w-8 opacity-60" />
         <p class="text-sm">{{ t('forkDecision.proposing.title') }}</p>
         <p class="max-w-sm text-2xs text-dimmed">
           {{ t('forkDecision.proposing.hint') }}
@@ -211,12 +214,10 @@ const { requestClose } = useUnsavedGuard({
 
       <!-- Awaiting the human's choice (or answering a chat turn). -->
       <div v-else-if="interactive" class="space-y-3">
-        <p
-          v-if="forkDecision.error"
+        <FailureMessage
+          :failure="forkDecision.error"
           class="rounded-md bg-app-error-500/10 px-3 py-2 text-xs text-app-error-300"
-        >
-          {{ forkDecision.error }}
-        </p>
+        />
 
         <p v-if="state?.seamSummary" class="rounded-md bg-elevated/50 px-3 py-2 text-xs text-toned">
           <span class="text-dimmed">{{ t('forkDecision.seam') }}</span>
@@ -238,7 +239,7 @@ const { requestClose } = useUnsavedGuard({
           <template #label="{ item }">
             <span class="flex items-center gap-2">
               <span class="min-w-0 flex-1 text-sm font-medium text-app-100">{{ item.label }}</span>
-              <UBadge v-if="item.fork?.recommended" color="primary" variant="subtle" size="sm">
+              <UBadge v-if="item.fork?.recommended" variant="subtle" size="sm">
                 {{ t('forkDecision.recommended') }}
               </UBadge>
             </span>
@@ -322,7 +323,7 @@ const { requestClose } = useUnsavedGuard({
               <p
                 class="flex items-center gap-1.5 rounded-lg bg-elevated/70 px-3 py-1.5 text-xs text-muted"
               >
-                <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+                <Spinner class="h-3.5 w-3.5" />
                 {{ t('forkDecision.chat.thinking') }}
               </p>
             </div>
@@ -364,13 +365,12 @@ const { requestClose } = useUnsavedGuard({
       </div>
 
       <!-- Skipped / no state: nothing to decide. -->
-      <div
+      <EmptyState
         v-else
-        class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-muted"
-      >
-        <UIcon :name="FORK_DECISION_META.icon" class="h-8 w-8 opacity-40" />
-        <p class="text-sm">{{ t('forkDecision.empty.title') }}</p>
-      </div>
+        class="h-full"
+        :icon="FORK_DECISION_META.icon"
+        :title="t('forkDecision.empty.title')"
+      />
     </div>
 
     <footer
@@ -382,7 +382,6 @@ const { requestClose } = useUnsavedGuard({
       </UButton>
       <UButton
         data-testid="fork-option-choose"
-        color="primary"
         size="sm"
         icon="i-lucide-check"
         :loading="forkDecision.choosing"

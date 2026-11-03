@@ -17,10 +17,11 @@ import {
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 const slack = useSlackStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirm } = useConfirm()
@@ -134,7 +135,7 @@ async function connectWithToken() {
   try {
     await slack.connectWithToken(tokenInput.value.trim())
     tokenInput.value = ''
-    toast.add({ title: t('slack.toast.connected'), icon: 'i-lucide-check', color: 'success' })
+    actionToast.success('slack.toast.connected')
   } catch (e) {
     present(e, 'slack.error.connect')
   }
@@ -163,7 +164,7 @@ async function saveRouting() {
       routes: { ...routes },
       mentionsEnabled: mentionsEnabled.value,
     })
-    toast.add({ title: t('slack.toast.routingSaved'), icon: 'i-lucide-check', color: 'success' })
+    actionToast.success('slack.toast.routingSaved')
   } catch (e) {
     present(e, 'slack.error.saveRouting')
   } finally {
@@ -182,11 +183,8 @@ async function saveMapping() {
   // dropped on save (UX-23) — block instead so the user doesn't lose the entry. A
   // fully-empty row is just an unused slot and is ignored.
   if (hasHalfFilledRow(mapping.value)) {
-    toast.add({
-      title: t('slack.members.incompleteTitle'),
+    actionToast.error('slack.members.incompleteTitle', {
       description: t('slack.members.incompleteBody'),
-      icon: 'i-lucide-triangle-alert',
-      color: 'warning',
     })
     return
   }
@@ -195,7 +193,7 @@ async function saveMapping() {
     const entries = toMemberEntries(mapping.value)
     await slack.updateMemberMapping(entries)
     mapping.value = slack.memberMapping.map((e) => toMemberRow(e, nextUid()))
-    toast.add({ title: t('slack.toast.mapSaved'), icon: 'i-lucide-check', color: 'success' })
+    actionToast.success('slack.toast.mapSaved')
   } catch (e) {
     present(e, 'slack.error.saveMap')
   } finally {
@@ -205,7 +203,7 @@ async function saveMapping() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('slack.panel.title')" :ui="{ content: 'max-w-2xl' }">
+  <AppModal size="form" v-model:open="open" :title="t('slack.panel.title')">
     <template #title>
       <IntegrationBackTitle :title="t('slack.panel.title')" @back="back" />
     </template>
@@ -219,7 +217,6 @@ async function saveMapping() {
         <div v-if="!slack.connected" class="space-y-3 rounded-lg border border-muted p-3">
           <UButton
             v-if="slack.oauthEnabled"
-            color="primary"
             icon="i-lucide-slack"
             :loading="connectingOAuth"
             @click="connectViaOAuth"
@@ -233,7 +230,6 @@ async function saveMapping() {
             <div class="flex gap-2">
               <SecretInput v-model="tokenInput" size="sm" class="flex-1" placeholder="xoxb-…" />
               <UButton
-                color="primary"
                 variant="soft"
                 size="sm"
                 :loading="slack.connecting"
@@ -259,7 +255,7 @@ async function saveMapping() {
             </span>
             <UButton
               color="error"
-              variant="ghost"
+              variant="soft"
               size="xs"
               icon="i-lucide-unplug"
               @click="disconnect"
@@ -302,7 +298,6 @@ async function saveMapping() {
 
             <div class="flex justify-end">
               <UButton
-                color="primary"
                 variant="soft"
                 size="xs"
                 icon="i-lucide-save"
@@ -365,7 +360,6 @@ async function saveMapping() {
                 {{ t('slack.members.add') }}
               </UButton>
               <UButton
-                color="primary"
                 variant="soft"
                 size="xs"
                 icon="i-lucide-save"
@@ -379,5 +373,5 @@ async function saveMapping() {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

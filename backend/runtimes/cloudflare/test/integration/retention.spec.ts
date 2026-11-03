@@ -12,6 +12,7 @@ import { D1GateOutcomeRepository } from '../../src/infrastructure/repositories/D
 import { D1MachineNodeRepository } from '../../src/infrastructure/repositories/D1MachineNodeRepository'
 import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
 import { D1AuditEventRepository } from '../../src/infrastructure/repositories/D1AuditEventRepository'
+import { D1DirectoryRepository } from '../../src/infrastructure/repositories/D1DirectoryRepository'
 import { D1PlatformMetricsRepository } from '../../src/infrastructure/repositories/D1PlatformMetricsRepository'
 import { D1SpendRollupRepository } from '../../src/infrastructure/repositories/D1SpendRollupRepository'
 import { D1RateLimitRepository } from '../../src/infrastructure/repositories/D1RateLimitRepository'
@@ -38,6 +39,7 @@ const POLICY = {
   gateOutcomesMs: 90 * DAY,
   runDaysMs: 400 * DAY,
   auditEventsMs: 730 * DAY,
+  directoryChangesMs: 30 * DAY,
 }
 
 function deps() {
@@ -68,6 +70,7 @@ function deps() {
     platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
     // The account audit log lives in its OWN database (AUDIT_DB), not the main one.
     auditEventRepository: new D1AuditEventRepository({ db: env.AUDIT_DB }),
+    directoryRepository: new D1DirectoryRepository({ db: env.DB }),
     // The durable cost-attribution rollup: written by this sweep, never pruned by it.
     spendRollupRepository: new D1SpendRollupRepository({ db }),
     clock,
@@ -276,6 +279,7 @@ describe('storage retention sweep', () => {
         gateOutcomesMs: 0,
         runDaysMs: 0,
         auditEventsMs: 0,
+        directoryChangesMs: 0,
       },
     })
 
@@ -301,6 +305,7 @@ describe('storage retention sweep', () => {
       gateOutcomes: 0,
       runDays: 0,
       auditEvents: 0,
+      directoryChanges: 0,
       // The rollups are WRITES with every window disabled around them, so they still run: a
       // disabled RETENTION window means "never delete", not "stop materialising". The
       // durable spend rollup has no window to disable in the first place.

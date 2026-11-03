@@ -6,6 +6,7 @@ package ai.catfactory.sdk.model;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -13,6 +14,7 @@ import org.jspecify.annotations.Nullable;
  * @param externalIdentity May be absent entirely. Length 1..200.
  * @param label Length 1..120.
  * @param scope May be absent entirely.
+ * @param workspaceIds May be absent entirely.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record CreateHeadlessPublicApiKey(
@@ -23,7 +25,10 @@ public record CreateHeadlessPublicApiKey(
     @JsonProperty("label") String label,
 
     /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("scope") @Nullable CreateHeadlessPublicApiKeyScope scope
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("scope") @Nullable CreateHeadlessPublicApiKeyScope scope,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("workspaceIds") @Nullable List<String> workspaceIds
 ) {
 
     /** A new builder for {@link CreateHeadlessPublicApiKey}. */
@@ -41,6 +46,7 @@ public record CreateHeadlessPublicApiKey(
         private @Nullable String externalIdentity;
         private @Nullable String label;
         private @Nullable CreateHeadlessPublicApiKeyScope scope;
+        private @Nullable List<String> workspaceIds;
 
         /** Set {@code externalIdentity}. */
         public Builder externalIdentity(@Nullable String externalIdentity) {
@@ -60,9 +66,15 @@ public record CreateHeadlessPublicApiKey(
             return this;
         }
 
+        /** Set {@code workspaceIds}. */
+        public Builder workspaceIds(@Nullable List<String> workspaceIds) {
+            this.workspaceIds = workspaceIds;
+            return this;
+        }
+
         /** Build the {@link CreateHeadlessPublicApiKey}. */
         public CreateHeadlessPublicApiKey build() {
-            return new CreateHeadlessPublicApiKey(externalIdentity, label, scope);
+            return new CreateHeadlessPublicApiKey(externalIdentity, label, scope, workspaceIds);
         }
     }
 }

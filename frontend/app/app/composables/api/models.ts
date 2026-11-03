@@ -6,6 +6,7 @@ import {
   getOpenRouterCatalogContract,
   getServiceFragmentDefaultsContract,
   listAccountApiKeysContract,
+  listConfiguredProvidersContract,
   listLocalModelEndpointsContract,
   listModelsContract,
   listPersonalSubscriptionsContract,
@@ -58,6 +59,9 @@ export function modelsApi({ send, ws }: ApiContext) {
     // caller's) configured API keys and subscription tokens (`available` flag).
     getWorkspaceModels: (workspaceId: string) =>
       send(listWorkspaceModelsContract, { pathParams: { workspaceId } }),
+    // The direct providers this caller's runs here can reach (server-resolved, every key scope).
+    listConfiguredProviders: (workspaceId: string) =>
+      send(listConfiguredProvidersContract, { pathParams: { workspaceId } }),
 
     // ---- direct-provider API keys (the DB-backed pool) --------------------
     // Onboarded via UI, stored encrypted, pooled + rotated. Scoped to a workspace,

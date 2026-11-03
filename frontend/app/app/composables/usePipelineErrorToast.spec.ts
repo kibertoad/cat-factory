@@ -5,7 +5,12 @@ import {
   describeGenericFailure,
 } from '~/composables/usePipelineErrorToast'
 import { ApiError } from '~/composables/api/errors'
-import { BOOTSTRAP_REFERENCE_REASONS, UNAVAILABLE_REASONS } from '@cat-factory/contracts'
+import type { SetupActor } from '~/utils/setupAudience'
+import {
+  BOOTSTRAP_REFERENCE_REASONS,
+  TOOL_SERVER_OAUTH_REASONS,
+  UNAVAILABLE_REASONS,
+} from '@cat-factory/contracts'
 import en from '../../i18n/locales/en.json'
 
 /**
@@ -50,7 +55,8 @@ function hasKey(path: string): boolean {
 let add: ReturnType<typeof vi.fn>
 let update: ReturnType<typeof vi.fn>
 let t: ReturnType<typeof vi.fn>
-let ui: Record<string, ReturnType<typeof vi.fn>>
+let remedies: Record<string, ReturnType<typeof vi.fn>>
+let actor: SetupActor
 
 beforeEach(() => {
   // `add` returns the created toast (Nuxt UI hands back the generated id synchronously), which
@@ -59,25 +65,42 @@ beforeEach(() => {
   update = vi.fn()
   // `t` echoes the key so the toast's title/description IS the resolved key — assert on it.
   t = vi.fn((key: string) => key)
-  // The ui-store deep-links a jump action may navigate to (each echoed as a spy).
-  ui = {
-    openAiProviderSetup: vi.fn(),
-    openGitHub: vi.fn(),
-    openInfrastructure: vi.fn(),
-    openModelConfig: vi.fn(),
-    openProviderConnection: vi.fn(),
-  }
   vi.stubGlobal('useToast', () => ({ add, update }))
-  vi.stubGlobal('useUiStore', () => ui)
+  // Every jump action is a setup gap, gated on who is asking (the rule itself is covered in
+  // `pipelineErrorToast/bespokeConflicts.spec.ts`). The caller is a board admin unless a test
+  // says otherwise, and a fix opens through the setup remedies.
+  remedies = {
+    openInfraArea: vi.fn(),
+    openModelSetup: vi.fn(),
+    openModelConfig: vi.fn(),
+    openSourceControl: vi.fn(),
+    openServiceEnvironment: vi.fn(),
+  }
+  actor = {
+    fullSurface: true,
+    canManageIntegrations: true,
+    canExecuteRuns: true,
+    canWriteBoard: true,
+    isAccountAdmin: true,
+    accountsEnabled: true,
+  }
+  vi.stubGlobal('useSetupActor', () => ({ actor: { value: actor } }))
+  vi.stubGlobal('useWorkspaceStore', () => ({ infraSetupOwners: null }))
+  vi.stubGlobal('useSetupRemedies', () => remedies)
   // Stubbed on the Nuxt app's GLOBAL i18n instance, which is what this composable resolves
   // (never `useI18n()`): it is called from store setup, where no component instance exists.
   // See `frontend/app/README.md` — "A store must be instantiable outside a component setup".
   vi.stubGlobal('useNuxtApp', () => ({ $i18n: { t, te: (key: string) => hasKey(key) } }))
 })
 
-function conflict(reason?: string, details: Record<string, unknown> = {}, message?: string) {
+function conflict(
+  reason?: string,
+  details: Record<string, unknown> = {},
+  message?: string,
+  requestId?: string,
+) {
   return new ApiError(409, {
-    error: { code: 'conflict', message, details: { reason, ...details } },
+    error: { code: 'conflict', message, requestId, details: { reason, ...details } },
   })
 }
 
@@ -148,7 +171,28 @@ describe('usePipelineErrorToast', () => {
     expect(arg.duration).toBe(0)
     expect(arg.actions[0].label).toBe('errors.conflict.action.connectGitHub')
     arg.actions[0].onClick()
-    expect(ui.openGitHub).toHaveBeenCalledOnce()
+    expect(remedies.openSourceControl).toHaveBeenCalledOnce()
+  })
+
+  it('opens the runner pool through the setup remedies for a board admin', () => {
+    usePipelineErrorToast().present(conflict('agent_backend_unconfigured'))
+    const arg = add.mock.calls[0]![0]
+    expect(arg.actions[0].label).toBe('errors.conflict.action.configureRunnerPool')
+    arg.actions[0].onClick()
+    expect(remedies.openInfraArea).toHaveBeenCalledWith('agentExecutor')
+  })
+
+  it('gives a member no runner-pool button, names the board admin, and keeps the copy', () => {
+    actor = { ...actor, canManageIntegrations: false }
+    usePipelineErrorToast().present(conflict('agent_backend_unconfigured', {}, undefined, 'req-7'))
+    const arg = add.mock.calls[0]![0]
+    expect(arg.description).toBe(
+      'errors.conflict.description.agent_backend_unconfigured layout.infraSetupNotice.owner.workspace_admin',
+    )
+    expect(arg.actions.map((a: { label: string }) => a.label)).toEqual(['common.copyDetails'])
+    arg.actions[0].onClick()
+    expect(copied.at(-1)).toContain('layout.infraSetupNotice.owner.workspace_admin')
+    expect(t).toHaveBeenCalledWith('errors.generic.requestId', { id: 'req-7' })
   })
 
   it('keeps a conflict on screen and copyable even with no UI remedy to jump to', () => {
@@ -172,7 +216,7 @@ describe('usePipelineErrorToast', () => {
       models: 'gpt-x, claude-y',
     })
     arg.actions[0].onClick()
-    expect(ui.openAiProviderSetup).toHaveBeenCalledOnce()
+    expect(remedies.openModelSetup).toHaveBeenCalledOnce()
   })
 
   it('uses the fallback title key + a TRANSLATED description for a non-conflict error', () => {
@@ -207,6 +251,21 @@ describe('usePipelineErrorToast', () => {
       description: 'Task sources not configured',
       actions: [expect.objectContaining({ label: 'common.copyDetails' })],
     })
+  })
+
+  it('gives a deduped failure a stable id so a repeat replaces the toast on screen', () => {
+    const failure = new ApiError(500, { error: { code: 'internal', message: 'Internal' } })
+    const { present } = usePipelineErrorToast()
+    present(failure, 'kaizen.loadFailed', undefined, { dedupe: true })
+    present(failure, 'kaizen.loadFailed', undefined, { dedupe: true })
+    present(conflict('some_unknown_reason'), 'kaizen.loadFailed', undefined, { dedupe: true })
+    const ids = add.mock.calls.map((call) => call[0].id)
+    expect(ids).toEqual(Array(3).fill('pipeline-error:kaizen.loadFailed'))
+  })
+
+  it('leaves the id to Nuxt UI when the call site does not dedupe', () => {
+    usePipelineErrorToast().present(new Error('boom'), 'errors.action.startFailed')
+    expect(add.mock.calls[0]![0].id).toBeUndefined()
   })
 
   it('does NOT auto-dismiss, and can be copied whole in one click', () => {
@@ -272,6 +331,30 @@ describe('usePipelineErrorToast', () => {
   })
 })
 
+describe('presentReported', () => {
+  it('keeps a failure reported as data behind the disclosure, under translated copy', () => {
+    // A job row's `error` is backend prose: it must be copyable detail, never the headline, and it
+    // must not be read as a network fault the way `present` reads a bare string.
+    usePipelineErrorToast().presentReported('stack exited with code 1', 'x.startFailed')
+    const arg = add.mock.calls[0]![0]
+    expect(arg.title).toBe('x.startFailed')
+    expect(arg.description).toBe('errors.reported.description')
+    expect(arg.duration).toBe(0)
+    arg.actions[0].onClick()
+    expect(update).toHaveBeenCalledWith('toast-1', {
+      description: 'stack exited with code 1',
+      actions: [expect.objectContaining({ label: 'common.copyDetails' })],
+    })
+  })
+
+  it('takes a site description key, and offers no disclosure when nothing was reported', () => {
+    usePipelineErrorToast().presentReported(null, 'x.failed', { descriptionKey: 'x.fallback' })
+    const arg = add.mock.calls[0]![0]
+    expect(arg.description).toBe('x.fallback')
+    expect(arg.actions).toEqual([expect.objectContaining({ label: 'common.copyDetails' })])
+  })
+})
+
 describe('describeGenericFailure', () => {
   it('maps each known status class to its own description key', () => {
     for (const code of [
@@ -313,7 +396,11 @@ describe('describeGenericFailure', () => {
     // catalog, and that a reason wins over the status class it is attached to. Both refusals here
     // reach a person who can act on them, and the generic 503 wording ("this deployment has not
     // configured the capability") would send them to configure something that is already wired.
-    for (const reason of [...UNAVAILABLE_REASONS, ...BOOTSTRAP_REFERENCE_REASONS]) {
+    for (const reason of [
+      ...UNAVAILABLE_REASONS,
+      ...BOOTSTRAP_REFERENCE_REASONS,
+      ...TOOL_SERVER_OAUTH_REASONS,
+    ]) {
       const failure = describeGenericFailure(
         new ApiError(503, { error: { code: 'unavailable', details: { reason } } }),
       )

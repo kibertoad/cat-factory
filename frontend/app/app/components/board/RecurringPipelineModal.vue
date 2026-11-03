@@ -13,6 +13,7 @@ import { apiErrorReason } from '~/composables/api/errors'
 import { pipelineAllowedForSchedule } from '~/utils/pipeline'
 import { appliesIntakePredicate } from '~/utils/intakePredicates'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -20,7 +21,7 @@ const pipelines = usePipelinesStore()
 const recurring = useRecurringPipelinesStore()
 const tracker = useTrackerStore()
 const tasks = useTasksStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const access = useWorkspaceAccess()
 const { t, te } = useI18n()
@@ -394,12 +395,7 @@ async function add() {
   } catch (e) {
     const refusal = intakeRefusalCopy(e)
     if (refusal) {
-      toast.add({
-        title: t('board.recurring.addFailedTitle'),
-        description: refusal,
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      actionToast.error('board.recurring.addFailedTitle', { description: refusal })
     } else present(e, 'board.recurring.addFailedTitle')
   } finally {
     saving.value = false
@@ -408,7 +404,7 @@ async function add() {
 </script>
 
 <template>
-  <UModal v-model:open="modalOpen" :title="t('board.recurring.title')">
+  <AppModal size="form" v-model:open="modalOpen" :title="t('board.recurring.title')">
     <template #body>
       <div class="space-y-4">
         <p v-if="frame" class="text-xs text-muted">
@@ -689,16 +685,10 @@ async function add() {
         <UButton color="neutral" variant="ghost" @click="requestClose()">{{
           t('common.cancel')
         }}</UButton>
-        <UButton
-          color="primary"
-          icon="i-lucide-repeat"
-          :loading="saving"
-          :disabled="!canAdd"
-          @click="add"
-        >
+        <UButton icon="i-lucide-repeat" :loading="saving" :disabled="!canAdd" @click="add">
           {{ t('board.recurring.submit') }}
         </UButton>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

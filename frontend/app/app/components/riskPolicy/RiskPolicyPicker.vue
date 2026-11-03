@@ -104,6 +104,23 @@ function onPanelFocusOut(event: FocusEvent) {
   activeId.value = undefined
 }
 
+const panel = ref<HTMLElement | null>(null)
+
+/**
+ * Opening moves focus into the list, and a focused row drives the preview. Left to the popover,
+ * focus lands on the first row (the workspace default), so the pane would describe the default
+ * rather than the chosen policy. Focus the chosen row instead; the popover's own focus is kept
+ * only when that row is not in the list.
+ */
+function focusSelected(event: Event) {
+  const row = panel.value?.querySelector<HTMLElement>(
+    `[data-option-id="${CSS.escape(props.modelValue)}"]`,
+  )
+  if (!row) return
+  event.preventDefault()
+  row.focus()
+}
+
 function choose(id: string) {
   if (refused.value.has(id)) return
   emit('update:modelValue', id)
@@ -112,7 +129,7 @@ function choose(id: string) {
 </script>
 
 <template>
-  <UPopover v-model:open="open" :content="{ align: 'start' }">
+  <UPopover v-model:open="open" :content="{ align: 'start', onOpenAutoFocus: focusSelected }">
     <!-- A consumer that supplies its own `#trigger` must carry `risk-policy-picker-trigger` on it:
          the popover trigger is `as-child`, so the slotted element REPLACES the default button below
          and takes its test hook with it (the inspector's icon button is the one such consumer). -->
@@ -133,6 +150,7 @@ function choose(id: string) {
     <template #content>
       <div
         class="flex max-h-[24rem] w-[min(40rem,94vw)]"
+        ref="panel"
         data-testid="risk-policy-picker-panel"
         @mouseleave="activeId = undefined"
         @focusout="onPanelFocusOut"
@@ -150,6 +168,7 @@ function choose(id: string) {
               ]"
               :aria-disabled="refused.has('')"
               :title="refusalText('')"
+              data-option-id=""
               data-testid="risk-policy-option-none"
               @mouseenter="activeId = ''"
               @focus="activeId = ''"
@@ -178,6 +197,7 @@ function choose(id: string) {
               ]"
               :aria-disabled="refused.has(p.id)"
               :title="refusalText(p.id)"
+              :data-option-id="p.id"
               :data-testid="`risk-policy-option-${p.id}`"
               @mouseenter="activeId = p.id"
               @focus="activeId = p.id"

@@ -976,6 +976,7 @@ interface NodeContainerFinalizeBundle {
   cloudflareModelsEnabled: NodeModelDepsResult['cloudflareModelsEnabled']
   deployDeps: NodeTransportDeployResult['deployDeps']
   runnerPoolConnectionRepository: CoreDependencies['runnerPoolConnectionRepository']
+  accountRunnerPoolRepository: CoreDependencies['accountRunnerPoolRepository']
   agentContextObservability: NodeRunServicesResult['agentContextObservability']
   searchQueryObservability: NodeRunServicesResult['searchQueryObservability']
   /**
@@ -1088,6 +1089,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     cloudflareModelsEnabled,
     deployDeps,
     runnerPoolConnectionRepository,
+    accountRunnerPoolRepository,
     agentContextObservability,
     searchQueryObservability,
     resolveTestSecretRefs,
@@ -1214,6 +1216,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     cloudflareModelsEnabled,
     deployDeps,
     runnerPoolConnectionRepository,
+    accountRunnerPoolRepository,
     agentContextObservability,
     searchQueryObservability,
     resolveTestSecretRefs,

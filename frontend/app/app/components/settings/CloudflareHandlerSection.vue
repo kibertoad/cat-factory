@@ -12,19 +12,24 @@
 // preview is built by CI and lives in the cloud, so "this machine only" has no meaning for it.
 import { computed, ref, watch } from 'vue'
 import type { InfraHandlerConfig } from '@cat-factory/contracts'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 type CloudflareHandlerConfig = Extract<InfraHandlerConfig, { engine: 'cloudflare' }>
 type CloudflareConfig = CloudflareHandlerConfig['cloudflare']
 
 const { t } = useI18n()
 const infra = useInfraConfigStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
 const busy = ref(false)
 const testing = ref(false)
-const testResult = ref<{ ok: boolean; message?: string } | null>(null)
+const testResult = ref<{ ok: boolean; message?: string; failure?: DescribedFailure } | null>(null)
 const editing = ref(false)
 
 const handler = computed(() => infra.handlerFor('cloudflare') ?? null)
@@ -101,11 +106,7 @@ async function save() {
     })
     token.value = ''
     editing.value = false
-    toast.add({
-      title: t('settings.infrastructure.handler.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.infrastructure.handler.saved')
   } catch (e) {
     present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
@@ -122,7 +123,7 @@ async function test() {
       secrets: secretsForSave(),
     })
   } catch (e) {
-    testResult.value = { ok: false, message: e instanceof Error ? e.message : String(e) }
+    testResult.value = { ok: false, failure: describeFailure(e) }
   } finally {
     testing.value = false
   }
@@ -133,7 +134,7 @@ async function remove() {
   busy.value = true
   try {
     await infra.unregisterHandler('cloudflare')
-    toast.add({ title: t('settings.infrastructure.handler.removed'), icon: 'i-lucide-check' })
+    actionToast.success('settings.infrastructure.handler.removed')
   } catch (e) {
     present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
@@ -301,8 +302,13 @@ async function remove() {
         </UButton>
       </div>
 
+      <FailureMessage
+        v-if="testResult?.failure"
+        :failure="testResult.failure"
+        class="text-2xs text-app-error-300"
+      />
       <p
-        v-if="testResult"
+        v-else-if="testResult"
         class="text-2xs"
         :class="testResult.ok ? 'text-app-success-300' : 'text-app-error-300'"
       >

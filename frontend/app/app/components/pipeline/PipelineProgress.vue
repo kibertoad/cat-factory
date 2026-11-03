@@ -4,7 +4,8 @@ import type { PipelineStep } from '~/types/execution'
 import { stepHasOutput } from '@cat-factory/contracts'
 import { agentKindMeta, FOLLOW_UP_COMPANION_META, FORK_DECISION_META } from '~/utils/catalog'
 import {
-  subtaskIconClass,
+  subtaskIconSpins,
+  subtaskIconTone,
   gateCompanionFor,
   COMPANION_STATE_META,
   isCompanionKind,
@@ -22,6 +23,7 @@ import { useNowTick, stepDurationLabel } from '~/composables/useStepTimer'
 import type { BadgeColor } from '~/utils/badge'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 const props = defineProps<{ instance: ExecutionInstance }>()
 const emit = defineEmits<{
@@ -305,6 +307,9 @@ const ITEM_ICON: Record<string, string> = {
       </div>
     </div>
 
+    <!-- What the host shows between the summary and the steps (the focus view's failure block). -->
+    <slot name="after-summary" />
+
     <!-- agent chain as a vertical timeline -->
     <ol class="flex flex-col">
       <li v-for="(s, i) in steps" :key="i" class="relative flex gap-4 pb-5 last:pb-0">
@@ -321,10 +326,10 @@ const ITEM_ICON: Record<string, string> = {
           :class="liveWorking(s) ? 'step-active' : ''"
           :style="{ borderColor: stepVisual(s).color }"
         >
-          <UIcon
+          <Spinner
             :name="stepVisual(s).icon"
+            :spinning="liveWorking(s)"
             class="h-4 w-4"
-            :class="liveWorking(s) ? 'animate-spin' : ''"
             :style="{ color: stepVisual(s).color }"
           />
         </span>
@@ -460,7 +465,7 @@ const ITEM_ICON: Record<string, string> = {
             v-if="s.container?.status === 'starting' && !runFailed"
             class="mt-2 flex items-center gap-1.5 text-2xs text-app-info-300"
           >
-            <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 shrink-0 animate-spin" />
+            <Spinner class="h-3.5 w-3.5 shrink-0" />
             <span>{{ t('pipeline.progress.spinningUpContainer') }}</span>
           </div>
 
@@ -524,10 +529,11 @@ const ITEM_ICON: Record<string, string> = {
                       : 'text-muted'
                 "
               >
-                <UIcon
+                <Spinner
                   :name="ITEM_ICON[item.status]"
+                  :spinning="subtaskIconSpins(item.status, runFailed)"
                   class="mt-px h-3 w-3 shrink-0"
-                  :class="subtaskIconClass(item.status, runFailed)"
+                  :class="subtaskIconTone(item.status)"
                 />
                 <span>{{ item.label }}</span>
               </li>
@@ -584,13 +590,11 @@ const ITEM_ICON: Record<string, string> = {
               class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border"
               :class="COMPANION_STATE_META[companionByStep[i]!.state].dot"
             >
-              <UIcon
+              <Spinner
                 :name="agentKindMeta(companionByStep[i]!.kind).icon"
+                :spinning="companionByStep[i]!.state === 'running' && !runFailed"
                 class="h-3 w-3"
-                :class="[
-                  COMPANION_STATE_META[companionByStep[i]!.state].text,
-                  companionByStep[i]!.state === 'running' && !runFailed ? 'animate-spin' : '',
-                ]"
+                :class="COMPANION_STATE_META[companionByStep[i]!.state].text"
               />
             </span>
             <span class="min-w-0 flex-1 truncate text-xs text-toned">
@@ -657,12 +661,10 @@ const ITEM_ICON: Record<string, string> = {
             <span
               class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-app-secondary-500/40 bg-app-secondary-500/15"
             >
-              <UIcon
-                :name="
-                  forkPhase(s) === 'proposing' ? 'i-lucide-loader-circle' : FORK_DECISION_META.icon
-                "
+              <Spinner
+                :name="forkPhase(s) === 'proposing' ? undefined : FORK_DECISION_META.icon"
+                :spinning="forkPhase(s) === 'proposing'"
                 class="h-3 w-3 text-app-secondary-300"
-                :class="forkPhase(s) === 'proposing' ? 'animate-spin' : ''"
               />
             </span>
             <span class="min-w-0 flex-1 truncate text-xs text-toned">
@@ -727,7 +729,7 @@ const ITEM_ICON: Record<string, string> = {
             v-if="reviewStageLabel(s.agentKind)"
             class="mt-3 inline-flex items-center gap-1 text-2xs text-primary"
           >
-            <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
+            <Spinner class="h-3 w-3" />
             {{ reviewStageLabel(s.agentKind) }}
           </div>
 

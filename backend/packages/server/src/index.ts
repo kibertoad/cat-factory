@@ -56,6 +56,10 @@ export {
 } from './modules/webSearch/upstreams.js'
 export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
 export { sweepPlatformHealth } from './runtime/platformHealth.js'
+export {
+  DIRECTORY_WEBHOOK_SWEEP_INTERVAL_MS,
+  sweepDirectoryWebhooks,
+} from './runtime/directoryWebhooks.js'
 export { SPEND_ALERT_INTERVAL_MS, sweepSpendAlerts } from './runtime/spendAlerts.js'
 export { sweepInfraReachability } from './runtime/infraReachability.js'
 export { sweepKeyDriftAndRaise } from './runtime/keyDrift.js'

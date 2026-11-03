@@ -1,7 +1,9 @@
 <script setup lang="ts">
-// The keyboard-shortcuts cheatsheet, opened with "?" (or from the command bar). A plain
-// UModal listing every global shortcut with its keys rendered as UKbd chips. Driven by the
+// The keyboard-shortcuts cheatsheet, opened with "?" (or from the command bar). A prompt-sized
+// AppModal listing every global shortcut with its keys rendered as UKbd chips. Driven by the
 // ui store so "?" anywhere toggles it.
+import AppModal from '~/components/common/AppModal.vue'
+
 const { t } = useI18n()
 const ui = useUiStore()
 
@@ -29,7 +31,7 @@ const shortcuts = computed(() => [
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('layout.shortcuts.title')" :ui="{ content: 'max-w-md' }">
+  <AppModal size="prompt" v-model:open="open" :title="t('layout.shortcuts.title')">
     <template #body>
       <dl class="space-y-2" data-testid="shortcuts-help">
         <div
@@ -44,5 +46,5 @@ const shortcuts = computed(() => [
         </div>
       </dl>
     </template>
-  </UModal>
+  </AppModal>
 </template>

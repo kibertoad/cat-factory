@@ -19,11 +19,17 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import AppModal from '~/components/common/AppModal.vue'
+import FailureMessage from '~/components/common/FailureMessage.vue'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useLocalModelsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
@@ -128,6 +134,8 @@ const testError = ref<string | null>(null)
 // The backend's own wording, kept as DETAIL beside a translated refusal rather than being
 // shown as the description (it names env vars an operator, not this user, acts on).
 const testErrorDetail = ref<string | null>(null)
+// The test CALL itself failed (no probe answer at all), classified like a failure toast.
+const testFailure = ref<DescribedFailure | null>(null)
 const tested = ref(false)
 const testing = ref(false)
 const busy = ref(false)
@@ -154,6 +162,7 @@ function seedDraft(p: LocalRunner) {
   apiKey.value = ''
   testError.value = null
   testErrorDetail.value = null
+  testFailure.value = null
   tested.value = false
 }
 
@@ -182,6 +191,7 @@ async function test() {
   testing.value = true
   testError.value = null
   testErrorDetail.value = null
+  testFailure.value = null
   try {
     const result = await store.test({
       provider: provider.value,
@@ -204,7 +214,7 @@ async function test() {
       testErrorDetail.value = result.errorReason ? (result.error ?? null) : null
     }
   } catch (e) {
-    testError.value = e instanceof Error ? e.message : String(e)
+    testFailure.value = describeFailure(e)
   } finally {
     testing.value = false
   }
@@ -230,12 +240,10 @@ async function save() {
       models: selected.value.map((id) => ({ id, ...modalityOf(imageInput.value[id]) })),
     })
     apiKey.value = ''
-    toast.add({
-      title: t('settings.localModelEndpoints.toast.saved', {
+    actionToast.success('settings.localModelEndpoints.toast.saved', {
+      params: {
         name: LOCAL_RUNNER_LABELS[provider.value],
-      }),
-      icon: 'i-lucide-check',
-      color: 'success',
+      },
     })
   } catch (e) {
     present(e, 'settings.localModelEndpoints.toast.saveFailed')
@@ -261,7 +269,7 @@ async function remove(p: LocalRunner) {
     // The row is gone from the store, so re-seeding the draft it was showing yields the
     // fresh-runner defaults: the same reset, without a second copy of what a reset means.
     if (provider.value === p) seedDraft(p)
-    toast.add({ title: t('settings.localModelEndpoints.toast.removed'), icon: 'i-lucide-check' })
+    actionToast.success('settings.localModelEndpoints.toast.removed')
   } catch (e) {
     present(e, 'settings.localModelEndpoints.toast.removeFailed')
   } finally {
@@ -271,11 +279,7 @@ async function remove(p: LocalRunner) {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('settings.localModelEndpoints.title')"
-    :ui="{ content: 'max-w-2xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('settings.localModelEndpoints.title')">
     <template #title>
       <IntegrationBackTitle :title="t('settings.localModelEndpoints.title')" @back="back" />
     </template>
@@ -415,7 +419,12 @@ async function remove(p: LocalRunner) {
             >
               {{ t('settings.localModelEndpoints.testConnection') }}
             </UButton>
-            <span v-if="testError" class="text-xs text-app-error-400">
+            <FailureMessage
+              v-if="testFailure"
+              :failure="testFailure"
+              class="text-xs text-app-error-400"
+            />
+            <span v-else-if="testError" class="text-xs text-app-error-400">
               {{ testError }}
               <span v-if="testErrorDetail" class="block text-2xs text-app-error-300/70">{{
                 testErrorDetail
@@ -472,7 +481,6 @@ async function remove(p: LocalRunner) {
 
           <div class="flex justify-end">
             <UButton
-              color="primary"
               variant="soft"
               size="sm"
               icon="i-lucide-save"
@@ -486,5 +494,5 @@ async function remove(p: LocalRunner) {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

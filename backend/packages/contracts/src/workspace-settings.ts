@@ -239,6 +239,13 @@ export const workspaceSettingsSchema = v.object({
    */
   delegateAgentsToRunnerPool: v.boolean(),
   /**
+   * Whether a board with no runner pool of its own dispatches to its ACCOUNT's pool. On by default;
+   * `false` is the explicit "none" marker, so a board that must run nowhere stays that way even
+   * when its account declares a pool. Removing a board's own pool sets it to `false` unless the
+   * admin asks to fall back, so a deletion never silently re-routes work to the account's pool.
+   */
+  inheritAccountRunnerPool: v.boolean(),
+  /**
    * Whether/how the PRE-DISPATCH INPUT GATE applies to this workspace's runs: the deterministic
    * structural check of a task's authored input, run before the first agent step is dispatched
    * so a task nobody could act on parks having spent nothing.
@@ -360,6 +367,7 @@ export const updateWorkspaceSettingsSchema = v.object({
   ),
   kaizenEnabled: v.optional(v.boolean()),
   delegateAgentsToRunnerPool: v.optional(v.boolean()),
+  inheritAccountRunnerPool: v.optional(v.boolean()),
   inputGateMode: v.optional(inputGateModeSchema),
   reviewFrictionMode: v.optional(reviewFrictionModeSchema),
   reviewFrictionWarnCount: v.optional(

@@ -3,6 +3,7 @@ import { createRecordingLogger } from '@cat-factory/kernel'
 import {
   areaStatus,
   infraSetupAreaApplies,
+  infraSetupOwners,
   type InfraSetupSources,
   snapshotInfraSetup,
 } from '../src/modules/workspaces/infraSetup.js'
@@ -223,5 +224,28 @@ describe('snapshotInfraSetup', () => {
       WS,
     )
     expect(seen).toEqual([WS, WS, WS])
+  })
+})
+
+describe('infraSetupOwners', () => {
+  const storage = (selectable: boolean): InfraSetupSources['accountSettings'] => ({
+    service: { canSelectContentStorage: () => selectable },
+  })
+
+  it('gives the per-workspace connection areas to a workspace admin', () => {
+    const owners = infraSetupOwners({})
+    expect(owners.agentExecutor).toBe('workspace_admin')
+    expect(owners.ephemeralEnvironments).toBe('workspace_admin')
+  })
+
+  it('gives content storage to an account admin when the account can select a backend', () => {
+    expect(infraSetupOwners({ accountSettings: storage(true) }).binaryStorage).toBe('account_admin')
+  })
+
+  it('gives content storage to the operator when there is nothing for an admin to select', () => {
+    // No account settings at all (no ENCRYPTION_KEY), or settings whose capability offers only
+    // `off`: either way the admin's picker is empty, so naming them would send people nowhere.
+    expect(infraSetupOwners({}).binaryStorage).toBe('operator')
+    expect(infraSetupOwners({ accountSettings: storage(false) }).binaryStorage).toBe('operator')
   })
 })

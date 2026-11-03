@@ -1,4 +1,4 @@
-import { descriptorFieldSections } from '@cat-factory/contracts'
+import { descriptorFieldDefaults, descriptorFieldSections } from '@cat-factory/contracts'
 import type { DescriptorField, DescriptorFieldValue, DescriptorFieldValues } from '~/types/domain'
 
 // Form-side helpers over the shared descriptor-field vocabulary (`contracts/src/form-fields.ts`),
@@ -55,6 +55,38 @@ export function setDescriptorCheckbox(
 ): DescriptorFieldValues {
   if (!checked && field.default === 'true') return { ...values, [field.key]: false }
   return setDescriptorValue(values, field.key, checked)
+}
+
+/**
+ * The bag with every value that merely REPEATS its field's declared default removed, for a form
+ * that RENDERS the effective values (the step's own answers with the defaults filled in) but must
+ * persist only what the author chose. Rendering the defaults keeps the form honest about what the
+ * backend will apply; storing them would pin today's default into the entity, so a default the
+ * deployment changes later would never reach it.
+ *
+ * A value equal to the default reads as "follow the default", so picking the default back is the
+ * same as never touching the field. An explicit `false` on a default-ON checkbox differs from its
+ * default and is kept: it is the opt-out.
+ */
+export function withoutDescriptorFieldDefaults(
+  fields: readonly DescriptorField[],
+  values: DescriptorFieldValues,
+): DescriptorFieldValues {
+  const defaults = descriptorFieldDefaults(fields)
+  const kept: DescriptorFieldValues = {}
+  for (const [key, value] of Object.entries(values)) {
+    const fallback = defaults[key]
+    if (fallback !== undefined && sameDescriptorValue(value, fallback)) continue
+    kept[key] = value
+  }
+  return kept
+}
+
+function sameDescriptorValue(a: DescriptorFieldValue, b: DescriptorFieldValue): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((entry) => b.includes(entry))
+  }
+  return a === b
 }
 
 /** One `checkbox-group` field's current value, as the `string[]` the renderer and wire expect. */

@@ -3,6 +3,10 @@ import { ref } from 'vue'
 import type { ForkDecisionStepState } from '~/types/execution'
 import { useApi } from '~/composables/useApi'
 import { useWorkspaceStore } from '~/stores/workspace'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 import { useExecutionStore } from '~/stores/execution'
 
 /**
@@ -23,7 +27,7 @@ export const useForkDecisionStore = defineStore('forkDecision', () => {
   /** True while a chat send is in flight (drives the chat send spinner / disabled state). */
   const chatting = ref(false)
   /** The last error message from an action, surfaced inline; cleared on the next action. */
-  const error = ref<string | null>(null)
+  const error = ref<DescribedFailure | null>(null)
 
   /**
    * Apply an authoritative fork-decision state to the run's Coder step. A pipeline may
@@ -65,7 +69,7 @@ export const useForkDecisionStore = defineStore('forkDecision', () => {
         },
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to load'
+      error.value = describeFailure(e)
     }
   }
 
@@ -86,7 +90,7 @@ export const useForkDecisionStore = defineStore('forkDecision', () => {
         (state, instance) => assign(instance, state as ForkDecisionStepState),
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to choose'
+      error.value = describeFailure(e)
       throw e
     } finally {
       choosing.value = false
@@ -115,7 +119,7 @@ export const useForkDecisionStore = defineStore('forkDecision', () => {
         (state, instance) => assign(instance, state as ForkDecisionStepState),
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to send message'
+      error.value = describeFailure(e)
       throw e
     } finally {
       chatting.value = false

@@ -28,6 +28,7 @@ import {
 } from '~/utils/binaryCandidates'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StoredAssetView from '~/components/binaryOutput/StoredAssetView.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -399,21 +400,20 @@ const { requestClose } = useUnsavedGuard({
          Retry), or the step genuinely compared nothing. Collapsing any of the first three into the
          last would put "nothing to compare" in front of a person whose candidates exist and were
          simply not fetched. -->
-    <div
+    <EmptyState
       v-else-if="absence === 'no_run'"
-      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-muted"
+      class="min-h-0 flex-1 px-5"
+      icon="i-lucide-unlink"
+      :title="t('binaryCandidates.noRun.title')"
+      :description="t('binaryCandidates.noRun.hint')"
       data-testid="binary-candidates-no-run"
-    >
-      <UIcon name="i-lucide-unlink" class="h-8 w-8 opacity-40" />
-      <p class="text-sm">{{ t('binaryCandidates.noRun.title') }}</p>
-      <p class="max-w-md text-2xs text-dimmed">{{ t('binaryCandidates.noRun.hint') }}</p>
-    </div>
+    />
     <div
       v-else-if="absence === 'loading'"
-      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-muted"
+      class="grid min-h-0 flex-1 grid-cols-1 content-start gap-3 px-5 py-4 sm:grid-cols-2 lg:grid-cols-3"
       data-testid="binary-candidates-loading"
     >
-      <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+      <USkeleton v-for="n in 3" :key="n" class="h-48 w-full rounded-lg" />
     </div>
     <div
       v-else-if="absence === 'load_failed'"
@@ -434,13 +434,12 @@ const { requestClose } = useUnsavedGuard({
         {{ t('common.retry') }}
       </UButton>
     </div>
-    <div
+    <EmptyState
       v-else
-      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-muted"
+      class="min-h-0 flex-1 px-5"
+      icon="i-lucide-images"
+      :title="t('binaryCandidates.empty.title')"
       data-testid="binary-candidates-empty"
-    >
-      <UIcon name="i-lucide-images" class="h-8 w-8 opacity-40" />
-      <p class="text-sm">{{ t('binaryCandidates.empty.title') }}</p>
-    </div>
+    />
   </ResultWindowShell>
 </template>

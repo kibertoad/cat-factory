@@ -3,6 +3,10 @@ import { ref } from 'vue'
 import type { BugFishingStepState } from '~/types/execution'
 import { useApi } from '~/composables/useApi'
 import { useWorkspaceStore } from '~/stores/workspace'
+import {
+  describeFailure,
+  type DescribedFailure,
+} from '~/composables/pipelineErrorToast/describeFailure'
 import { useExecutionStore } from '~/stores/execution'
 
 /**
@@ -28,7 +32,7 @@ export const useBugFishingStore = defineStore('bugFishing', () => {
   /** True while the finish call is in flight (drives the Finish button's spinner). */
   const resolving = ref(false)
   /** The last error message from an action, surfaced inline; cleared on the next action. */
-  const error = ref<string | null>(null)
+  const error = ref<DescribedFailure | null>(null)
 
   /**
    * Apply an authoritative expedition state to the run's `bug-fisher` step. A pipeline could
@@ -66,7 +70,7 @@ export const useBugFishingStore = defineStore('bugFishing', () => {
         },
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to load'
+      error.value = describeFailure(e)
     }
   }
 
@@ -92,7 +96,7 @@ export const useBugFishingStore = defineStore('bugFishing', () => {
         (state, instance) => assign(instance, state as BugFishingStepState),
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to create the fix task'
+      error.value = describeFailure(e)
       throw e
     } finally {
       const next = new Set(spawning.value)
@@ -112,7 +116,7 @@ export const useBugFishingStore = defineStore('bugFishing', () => {
         (state, instance) => assign(instance, state as BugFishingStepState),
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to dismiss the finding'
+      error.value = describeFailure(e)
       throw e
     } finally {
       const next = new Set(spawning.value)
@@ -132,7 +136,7 @@ export const useBugFishingStore = defineStore('bugFishing', () => {
         (state, instance) => assign(instance, state as BugFishingStepState),
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to finish the expedition'
+      error.value = describeFailure(e)
       throw e
     } finally {
       resolving.value = false

@@ -199,6 +199,22 @@ expectMutuallyAssignable<
   sdk.GuidedReviewPostResult,
   v.InferOutput<typeof contracts.guidedReviewPostResultSchema>
 >()
+expectMutuallyAssignable<
+  sdk.AssessPublicPullRequest,
+  v.InferOutput<typeof contracts.assessPublicPullRequestSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrAssessment,
+  v.InferOutput<typeof contracts.publicPrAssessmentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrAssessmentPolicy,
+  v.InferOutput<typeof contracts.publicPrAssessmentPolicySchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrAssessmentVerdict,
+  v.InferOutput<typeof contracts.publicPrAssessmentVerdictSchema>
+>()
 expectMutuallyAssignable<sdk.PublicPipeline, v.InferOutput<typeof contracts.publicPipelineSchema>>()
 expectMutuallyAssignable<
   sdk.PublicPipelineList,
@@ -246,6 +262,10 @@ expectMutuallyAssignable<
 >()
 expectMutuallyAssignable<sdk.PublicSpend, v.InferOutput<typeof contracts.publicSpendSchema>>()
 expectMutuallyAssignable<sdk.PublicIdentity, v.InferOutput<typeof contracts.publicIdentitySchema>>()
+expectMutuallyAssignable<
+  sdk.PublicDeployment,
+  v.InferOutput<typeof contracts.publicDeploymentSchema>
+>()
 expectMutuallyAssignable<
   sdk.PublicUnanswerableWait,
   v.InferOutput<typeof contracts.publicUnanswerableWaitSchema>
@@ -559,6 +579,84 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicVisualConfirmPairSchema>
 >()
 
+expectMutuallyAssignable<
+  sdk.DirectoryWorkspace,
+  v.InferOutput<typeof contracts.directoryWorkspaceSchema>
+>()
+expectMutuallyAssignable<sdk.DirectoryUser, v.InferOutput<typeof contracts.directoryUserSchema>>()
+expectMutuallyAssignable<
+  sdk.DirectoryUserAccount,
+  v.InferOutput<typeof contracts.directoryUserAccountSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryAccountMembership,
+  v.InferOutput<typeof contracts.directoryAccountMembershipSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryWorkspaceMembership,
+  v.InferOutput<typeof contracts.directoryWorkspaceMembershipSchema>
+>()
+expectMutuallyAssignable<sdk.DirectoryRepo, v.InferOutput<typeof contracts.directoryRepoSchema>>()
+expectMutuallyAssignable<
+  sdk.DirectoryChange,
+  v.InferOutput<typeof contracts.directoryChangeSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryChangePage,
+  v.InferOutput<typeof contracts.directoryChangePageSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryWorkspacePage,
+  v.InferOutput<typeof contracts.directoryWorkspacePageSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryUserPage,
+  v.InferOutput<typeof contracts.directoryUserPageSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryAccountMembershipPage,
+  v.InferOutput<typeof contracts.directoryAccountMembershipPageSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryWorkspaceMembershipPage,
+  v.InferOutput<typeof contracts.directoryWorkspaceMembershipPageSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryRepoPage,
+  v.InferOutput<typeof contracts.directoryRepoPageSchema>
+>()
+
+expectMutuallyAssignable<
+  sdk.DirectoryWebhook,
+  v.InferOutput<typeof contracts.directoryWebhookSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryWebhookList,
+  v.InferOutput<typeof contracts.directoryWebhookListSchema>
+>()
+expectMutuallyAssignable<sdk.DirectoryReach, v.InferOutput<typeof contracts.directoryReachSchema>>()
+expectMutuallyAssignable<
+  sdk.PutDirectoryWebhook,
+  v.InferOutput<typeof contracts.putDirectoryWebhookSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryWebhookDelivery,
+  v.InferOutput<typeof contracts.directoryWebhookDeliverySchema>
+>()
+
+expectMutuallyAssignable<
+  sdk.NotificationWebhookDelivery,
+  v.InferOutput<typeof contracts.notificationWebhookDeliverySchema>
+>()
+expectMutuallyAssignable<
+  sdk.RunWebhookDelivery,
+  v.InferOutput<typeof contracts.runWebhookDeliverySchema>
+>()
+expectMutuallyAssignable<
+  sdk.PlatformAlertWebhookDelivery,
+  v.InferOutput<typeof contracts.platformAlertWebhookDeliverySchema>
+>()
+
 // What the platform TRIED about a frame whose provision failed. Inlined under
 // `PrReportEnvironments` rather than hoisted, so the coverage guard cannot see it, and the
 // generated names are path-derived (`PrReportEnvironmentsEntryRemediationDeployFix`) where the
@@ -580,6 +678,27 @@ expectMutuallyAssignable<
 /** Every DTO asserted above. Compared against the spec so the list cannot fall behind. */
 const ASSERTED_COMPONENTS = [
   'ErrorResponse',
+  'NotificationWebhookDelivery',
+  'RunWebhookDelivery',
+  'PlatformAlertWebhookDelivery',
+  'DirectoryWebhook',
+  'DirectoryWebhookList',
+  'DirectoryReach',
+  'PutDirectoryWebhook',
+  'DirectoryWebhookDelivery',
+  'DirectoryWorkspace',
+  'DirectoryUser',
+  'DirectoryUserAccount',
+  'DirectoryAccountMembership',
+  'DirectoryWorkspaceMembership',
+  'DirectoryRepo',
+  'DirectoryChange',
+  'DirectoryChangePage',
+  'DirectoryWorkspacePage',
+  'DirectoryUserPage',
+  'DirectoryAccountMembershipPage',
+  'DirectoryWorkspaceMembershipPage',
+  'DirectoryRepoPage',
   'PublicJob',
   'PublicJobAccepted',
   'CreatePublicJob',
@@ -621,6 +740,10 @@ const ASSERTED_COMPONENTS = [
   'EditGuidedReviewDraft',
   'PostGuidedReviewDrafts',
   'GuidedReviewPostResult',
+  'AssessPublicPullRequest',
+  'PublicPrAssessment',
+  'PublicPrAssessmentPolicy',
+  'PublicPrAssessmentVerdict',
   'PublicPipeline',
   'PublicPipelineList',
   'PublicPromptFragment',
@@ -638,6 +761,7 @@ const ASSERTED_COMPONENTS = [
   'PublicSpendTotals',
   'PublicSpend',
   'PublicIdentity',
+  'PublicDeployment',
   'PublicUnanswerableWait',
   'PublicReviewFinding',
   'PublicRequirementsDecision',

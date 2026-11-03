@@ -346,7 +346,6 @@ async function copyPlan() {
               {{ t('common.cancel') }}
             </UButton>
             <UButton
-              color="primary"
               size="xs"
               data-testid="initiative-plan-comment-add"
               :disabled="!draftBody.trim()"

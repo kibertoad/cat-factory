@@ -1,4 +1,4 @@
-import { apiErrorEnvelope } from '~/composables/api/errors'
+import { describeFailure, reportedFailure } from '~/composables/pipelineErrorToast/describeFailure'
 import { useWorkspaceStore } from '~/stores/workspace'
 import type { WizardContext } from './context'
 import { pruneRecipe } from './context'
@@ -39,8 +39,7 @@ export function createSaveActions(ctx: WizardContext) {
     } catch (err) {
       // A 503 is handled inside `preflights.run` (degraded note); anything else is a real failure
       // that must be shown rather than swallowed into an unhandled rejection.
-      preflightError.value =
-        apiErrorEnvelope(err)?.message ?? (err instanceof Error ? err.message : String(err))
+      preflightError.value = describeFailure(err)
     } finally {
       preflightRunning.value = false
     }
@@ -55,14 +54,14 @@ export function createSaveActions(ctx: WizardContext) {
     const id = frameId.value
     const service = composeService.value.trim()
     if (!id || !service) {
-      saveError.value = 'A frame and an exposed compose service are required.'
+      saveError.value = reportedFailure(null, 'environmentWizard.save.errors.missingService')
       return
     }
     // `exposedPort` is a `v-model.number` field, which yields '' (not a number) when cleared. Guard
     // here so an empty/out-of-range port can't reach the handler manifest.
     const port = Number(exposedPort.value)
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      saveError.value = 'Enter a valid exposed port (1-65535).'
+      saveError.value = reportedFailure(null, 'environmentWizard.save.errors.invalidPort')
       return
     }
     saving.value = true
@@ -108,8 +107,7 @@ export function createSaveActions(ctx: WizardContext) {
       })
       saved.value = true
     } catch (err) {
-      saveError.value =
-        apiErrorEnvelope(err)?.message ?? (err instanceof Error ? err.message : String(err))
+      saveError.value = describeFailure(err)
     } finally {
       saving.value = false
     }
@@ -127,8 +125,7 @@ export function createSaveActions(ctx: WizardContext) {
       await api.provisionEnvironment(ws.requireId(), { blockId: id })
       trialStarted.value = true
     } catch (err) {
-      trialError.value =
-        apiErrorEnvelope(err)?.message ?? (err instanceof Error ? err.message : String(err))
+      trialError.value = describeFailure(err)
     } finally {
       trialing.value = false
     }

@@ -1,4 +1,5 @@
 import type { Context } from 'hono'
+import { appBaseUrlFor } from '../../http/appBaseUrl.js'
 import type { AppEnv } from '../../http/env.js'
 
 /**
@@ -20,30 +21,16 @@ import type { AppEnv } from '../../http/env.js'
 const MCP_AUTHORIZE_PATH = '/mcp-authorize'
 
 /**
- * Where to send the browser for consent, with the sealed request on it.
- *
- * The base is the deployment's configured app URL when it has one, and the REQUEST's own origin
- * otherwise. That fallback is right rather than lazy: a deployment serving the SPA and the API from
- * one origin (which is every default install) needs no configuration for this to work, and one
- * serving the SPA elsewhere has already had to set `APP_BASE_URL` for its invite and
- * password-reset links to arrive anywhere. Unlike the consuming side's redirect URL, no third party
- * holds this string on file, so nothing breaks if it differs between two deployments of the same
- * app: the host never sees it, the browser simply follows it.
+ * Where to send the browser for consent, with the sealed request on it, under the app's base URL
+ * (`appBaseUrlFor`). No third party holds this string on file, so nothing breaks if it differs
+ * between two deployments of the same app: the host never sees it, the browser simply follows it.
  *
  * The sealed request rides the query string, where a browser history keeps it. It carries no
  * credential and no code (the code is minted only after a human approves), and it is useless to
  * anyone who cannot both open a session here and hold `secrets.manage` on a board.
- *
- * The path is APPENDED to the configured base rather than resolved against it, which is the same
- * join `notificationDeepLink` makes and for the same reason: `new URL('/mcp-authorize', base)`
- * resolves an ABSOLUTE path, so it keeps the base's origin and discards any path component of it. A
- * deployment serving the SPA under a prefix (`APP_BASE_URL=https://example.test/cat-factory`) would
- * have every host sent to a 404 one segment above the app, with nothing on this side failing.
  */
 export function consentUrlFor<E extends AppEnv>(c: Context<E>, sealedRequest: string): string {
-  const configured = c.get('container').appBaseUrl?.trim()
-  const base = configured || new URL(c.req.url).origin
-  const url = new URL(`${base.replace(/\/+$/, '')}${MCP_AUTHORIZE_PATH}`)
+  const url = new URL(`${appBaseUrlFor(c)}${MCP_AUTHORIZE_PATH}`)
   url.searchParams.set('request', sealedRequest)
   return url.toString()
 }

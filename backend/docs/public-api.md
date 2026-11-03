@@ -64,16 +64,44 @@ full token is shown **exactly once**, on creation. Store it immediately, it cann
 Over REST (session-authed, workspace-scoped; this is the one management surface that is _not_ under
 `/api/v1`):
 
-| Method / path                                | Permission                    | Result                                    |
-| -------------------------------------------- | ----------------------------- | ----------------------------------------- |
-| `GET /workspaces/:ws/public-api-keys`        | workspace member (read)       | `{ keys: [...] }` (metadata, no secret)   |
-| `POST /workspaces/:ws/public-api-keys`       | `secrets.manage` (admin tier) | `201 { key, secret }` (secret shown once) |
-| `DELETE /workspaces/:ws/public-api-keys/:id` | `secrets.manage` (admin tier) | `204`; revoked keys never authenticate    |
+| Method / path                                | Permission                                                                                         | Result                                    |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `GET /workspaces/:ws/public-api-keys`        | `secrets.manage` (admin tier); with `runs.execute`, only your own key that follows your workspaces | `{ keys: [...] }` (metadata, no secret)   |
+| `POST /workspaces/:ws/public-api-keys`       | `secrets.manage`; `runs.execute` for a key that follows your workspaces                            | `201 { key, secret }` (secret shown once) |
+| `DELETE /workspaces/:ws/public-api-keys/:id` | `secrets.manage`; a key that follows a person's workspaces is revoked by them or an account admin  | `204`; revoked keys never authenticate    |
 
 Create body: `{ "label": "CI pipeline", "scope": "read" }`. `label` is 1–120 chars; `scope` is
-optional and **defaults to `write`**. A workspace holds at most **50** keys (409 past that; revoke
-one first). Key metadata carries `createdByUserId`, `createdByKeyId`, `actsAsUserId`, `createdAt`,
-`lastUsedAt` (updated at most once a minute) and `revokedAt`.
+optional and **defaults to `write`**. An account holds at most **200** live keys (409 past that;
+revoke one first). Key metadata carries `workspaceIds`, `createdByUserId`, `createdByKeyId`,
+`actsAsUserId`, `createdAt`, `lastUsedAt` (updated at most once a minute) and `revokedAt`.
+
+The create body also takes `workspaceIds`, the key's **reach**: omitted, the key reaches only the
+workspace it is minted from; `null` reaches every workspace in the account, including ones created
+later; a list (1 to 50 ids) reaches exactly those. Anything other than the minting workspace alone
+requires an **account admin** (`403 account_admin_required` otherwise), because `secrets.manage` on
+one board says nothing about the others. The list route shows every live key that reaches the
+board, account-wide ones included; revoking one that reaches past the board needs an account admin
+too.
+
+#### Keys that follow your workspaces
+
+A personal token (below) can instead take `followsMemberships: true`: its reach is every workspace
+its person can act in, decided on each call rather than stored. Joining a workspace grants it on
+the next call and leaving takes it away, with nothing to re-mint, which is the key for someone who
+works across several workspaces. It takes `actsAsSelf: true` and no `workspaceIds` (`422
+follows_memberships_requires_person` or `follows_memberships_with_workspaces` otherwise).
+
+- **Scope per workspace.** In each workspace the key acts with the lower of its own `scope` and
+  what its person's role there allows: `read` for a viewer, `decide` for a member, `admin` for an
+  admin. So it can never do more over `/api/v1` than its person can do in the app, which is why
+  minting it needs only `runs.execute` and no account admin. On account-level routes (the
+  directory) it acts with `read`.
+- **What it reports.** `GET /api/v1/me` and `GET /api/v1/directory/reach` answer its reach as of
+  the call, with `followsMemberships: true`; a workspace it no longer reaches answers `404
+  workspace_not_found`, like one it never did, and a key whose person can act in none of the
+  account stops authenticating (`401`). A listed key carries `workspaceIds: []`.
+- **Who manages it.** Its person, from any board's panel, and an account admin. A board admin who
+  is neither does not see it there: removing the person from the board is what takes it away.
 
 The create body also takes `actsAsSelf` (optional, default `false`), which picks between the two
 IDENTITIES a key can have. This is a different question from `scope`: scope is what the key may DO,
@@ -108,24 +136,46 @@ A key can only ever be bound to the person minting it — the field is a boolean
 the id from the session — so there is no way to mint a key onto someone else's subscription. A mint
 with no signed-in user is refused, and headless provisioning (`POST /api/v1/keys`) never binds.
 
+An integration that needs a person's own key (to run on their subscription for them) cannot mint
+it, so it sends them to mint it: `<appUrl>/?newApiKey=1&label=<label>&scope=<scope>&runsAsSelf=1&reach=memberships`
+opens the API tokens window with the create form filled in, where `appUrl` comes from
+`GET /api/v1/deployment`. Every parameter but `newApiKey` is optional; a `scope` outside the ladder
+is ignored, `runsAsSelf=1` picks the personal identity when someone is signed in to bind it to,
+`reach=memberships` (with `runsAsSelf=1`) picks [following their workspaces](#keys-that-follow-your-workspaces),
+and `ws=<id>` pins the board. Nothing is minted until the person clicks create, and signing in first
+keeps the link. Its sibling, `?addRepo=<owner>/<name>&provider=<host>`, opens the add-service window
+on a repository the same way.
+
+To send a person to a task's run, link `<appUrl>/?ws=<workspaceId>&block=<taskId>&run=<runId>`, where
+`taskId` is the task's public id (its board block) and `runId` the run's. The app opens that board,
+selects the task and centres the camera on its card, zoomed in to where the board shows a task's
+pipeline steps, then opens the task's focus view, which follows its run step by step. Add
+`view=<name>` to open something else on the same run: `run` (the focus view, also what no `view`
+gets), `outcome` (what the run changed), `observability` (its model activity and context) or
+`test-evidence` (the Tester's captured evidence). An unknown `view` still lands on the task.
+
 An operator with no browser can do the same over `/api/v1` itself: see
 [Key provisioning](#key-provisioning-apiv1keys). The two surfaces share one store, so a key minted
 either way is listed and revoked by both.
 
-A key is bound to **one account + workspace**: every `/api/v1` call it makes acts within that
-workspace, and resources in any other workspace are a `404` indistinguishable from ones that never
-existed.
+A key belongs to **one account** and reaches the workspaces its `workspaceIds` names (or all of
+them). Each workspace-scoped `/api/v1` call acts within one workspace, named by the
+`x-cat-factory-workspace` request header. A key reaching exactly one workspace may omit the header
+(every key minted before keys could span workspaces is one). Resources in any other workspace are a
+`404` indistinguishable from ones that never existed, and so is a workspace outside the key's
+reach.
 
 ### 2. Pick the right scope
 
 Scopes are an ordered, **inclusive** ladder; each rung can do everything below it:
 
-| Scope    | Adds                                                                                                                                                                                                                                                                                                                                          |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage` and its [spend breakdowns](#spend-by-repository-ticket-or-run), a run's [evidence](#run-evidence-report--outcome--artifacts) and its [merge record](#merge-evidence-apiv1merge-records), the whole [`/debug` surface](./debug-api.md). |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification, tag the [reviewer effort](#merge-evidence-apiv1merge-records) a merged pull request needed.                                                                                                                       |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                                                                                                                                         |
-| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge** and carries the optional reviewer-effort tag), manage the [outbound webhook](#outbound-webhooks-push), and [provision keys](#key-provisioning-apiv1keys).                                                                 |
+| Scope      | Adds                                                                                                                                                                                                                                                                                                                                          |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`     | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage` and its [spend breakdowns](#spend-by-repository-ticket-or-run), a run's [evidence](#run-evidence-report--outcome--artifacts) and its [merge record](#merge-evidence-apiv1merge-records), the whole [`/debug` surface](./debug-api.md). |
+| `webhooks` | Register and remove push endpoints: the [outbound webhooks](#outbound-webhooks-push) and, for a key reaching every workspace, the directory webhooks. Nothing on the board changes.                                                                                                                                                           |
+| `write`    | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification, tag the [reviewer effort](#merge-evidence-apiv1merge-records) a merged pull request needed.                                                                                                                       |
+| `decide`   | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                                                                                                                                         |
+| `admin`    | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge** and carries the optional reviewer-effort tag), and [provision keys](#key-provisioning-apiv1keys).                                                                                                                         |
 
 Two things to know before minting `decide` or `admin`:
 
@@ -183,6 +233,8 @@ with as `NUXT_PUBLIC_API_BASE`), not the frontend's. The token format is
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Missing / malformed / unknown / revoked key  | `401` `{ "error": { "code": "unauthorized", "message": "Invalid or missing API key" } }`                                                   |
 | Key scope below the route's minimum          | `403` `{ "error": { "code": "insufficient_scope", "message": "This action requires a '<need>'-scope key; this key is scoped '<have>'" } }` |
+| Key reaches several workspaces, none named   | `422` `{ "error": { "code": "validation", "details": { "reason": "workspace_required" }, … } }`                                            |
+| Named workspace absent or outside the reach  | `404` `{ "error": { "code": "not_found", "details": { "reason": "workspace_not_found" }, … } }`                                            |
 | Public API not configured on this deployment | `503` `{ "error": { "code": "unavailable", … } }`                                                                                          |
 
 ## Conventions
@@ -2204,6 +2256,9 @@ destructive operation is not a check at all. Two things to hold on to when you r
 ladder is **inclusive** (`read` ⊂ `write` ⊂ `decide` ⊂ `admin`), so compare against the rung an
 action needs rather than for equality; and `workspaceId` is the ONE workspace every call under this
 key acts within, which is what a multi-tenant integration should log alongside its own tenant id.
+A key reaching several workspaces names that workspace in the `x-cat-factory-workspace` header here
+too; for the key's whole reach without one, read
+[`GET /api/v1/directory/reach`](#directory-apiv1directory).
 `externalIdentity` is who whoever provisioned this key said it acts for, or `null`
 ([key provisioning](#key-provisioning-apiv1keys)).
 
@@ -2764,6 +2819,42 @@ Design record: [`backend/docs/adr/0066-guided-pr-review.md`](../../backend/docs/
   is refused with `session_stale` once the PR has commits past `reviewedHeadSha`. The summary
   posts only alongside a draft the call claimed, so an identical retry publishes nothing.
 
+### PR assessment (`/api/v1/pr-assessments`)
+
+`POST /api/v1/pr-assessments`, at `write` scope (it spends model budget). SDK:
+`client.prAssessments.assess(body)`.
+
+Scores one pull request in a linked repository on the `merger`'s three axes (complexity, risk,
+impact, each 0..1, plus a rationale), classifies it by its changed paths, and says whether a risk
+policy would let it land with no person. It is the question an integrator could otherwise answer
+only by running a pipeline to its `merger` step.
+
+| Body field     | Behaviour                                                                                       |
+| -------------- | ----------------------------------------------------------------------------------------------- |
+| `owner`/`repo` | Resolved to a repository linked to the workspace, as for guided review.                         |
+| `prNumber`     | Read with the workspace's VCS credential, or the bound person's initiator token.                |
+| `provider`     | Optional; the linked repository's own provider wins.                                            |
+| `riskPolicyId` | From `GET /risk-policies`. Omitted: the workspace's unattended default, which API runs resolve. |
+
+- **A verdict, never the ceilings.** The policy's ceilings stay off this surface, as on
+  `GET /risk-policies`. cat-factory judges the scores itself with the decision the merge step
+  makes, and answers `verdict.outcome` (`within_policy` or `requires_review`), `verdict.reason`
+  (`within_thresholds`, `exceeded_thresholds`, `auto_merge_disabled`, `no_rationale`,
+  `class_auto_merge`, `class_requires_review`, `role_requires_review`, `submission_not_allowed`,
+  `dry_run`) and `verdict.exceededAxes`.
+- **The bound person's role.** A key bound to a person is judged under that person's workspace
+  role, as a task the key creates is admitted, so `classRulesByRole`, `dryRunRoles` and
+  `submissionClassesByRole` apply. A key bound to nobody has no role and none of them apply.
+- **Synchronous and stateless.** One inline model call inside the request; nothing is persisted
+  and no run starts. `headSha` names the commit assessed; a push between the reads is refused
+  rather than mixed into one answer.
+- **Refusals**: `422 risk_policy_not_found`, `503 risk_policy_default_missing` (no `riskPolicyId`
+  and no unattended default), `404 repo_not_linked`, `404 pr_not_found`,
+  `503 pr_head_moved` (retry), `429 budget_exhausted`, `503 model_unavailable`,
+  `503 generation_failed`, `503 generation_timeout` (the model did not answer within 120s),
+  `503 unreadable_reply`, and `503 risk_policies_unwired` /
+  `503 vcs_not_configured` on a deployment that wired neither.
+
 ### Service specification
 
 `GET /api/v1/services/:serviceId/spec`, at `read` scope.
@@ -2940,20 +3031,79 @@ The omission is `422`: a service with no linked repository cannot be reached dow
 a run resolved a repository to push to before it could exist. A repository that becomes unreadable
 answers `503 spec_read_failed` here, as everywhere else on this surface.
 
+### Directory (`/api/v1/directory/*`)
+
+An account's workspaces, users, account memberships, workspace memberships and linked
+repositories, for an integration that keeps its own copy in sync. All `read` scope, and
+account-scoped: no `x-cat-factory-workspace` header is read.
+
+| Method / path                                 | Behaviour                                                     |
+| --------------------------------------------- | ------------------------------------------------------------- |
+| `GET /api/v1/directory/workspaces`            | Snapshot page of the workspaces the key reaches.              |
+| `GET /api/v1/directory/users`                 | Snapshot page of users holding a membership in the account.   |
+| `GET /api/v1/directory/account-memberships`   | Snapshot page of account memberships with their roles.        |
+| `GET /api/v1/directory/workspace-memberships` | Snapshot page of workspace memberships with their roles.      |
+| `GET /api/v1/directory/repos`                 | Snapshot page of linked repositories, once per linking board. |
+| `GET /api/v1/directory/changes?after=<seq>`   | Changes after the cursor, in order, with each entity's state. |
+
+The snapshots are keyset-paged (`cursor`, `limit` up to 100) and every page of one walk reports the
+same `asOfSeq`: the feed position captured before the first page. After the last page, replay the
+change feed from `asOfSeq`, which picks up anything that changed while paging.
+
+The feed returns `{ changes, nextAfter, headSeq }`. Each change names an entity (`entityType`,
+`workspaceId`, `entityId`) and carries its **current** state in `entity`, or `null` once the
+entity no longer exists or is out of the key's reach, which is how a deletion arrives. Applying
+changes in order converges on the source even when one is read long after it happened. Store
+`nextAfter` and pass it back as `after`; `nextAfter === headSeq` means caught up. Changes the key
+cannot see are skipped, so `seq` values arrive with gaps.
+
+Changes are kept for `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30). A cursor older than that, or
+ahead of the feed, is refused with `409` and `details.reason: cursor_expired`: take a fresh
+snapshot and follow the feed from its `asOfSeq`.
+
+A key limited to some workspaces sees workspace, workspace-membership and repository entities of
+those workspaces only, and is refused users and account memberships (`403`,
+`details.reason: account_scope_required`). Its feed also carries the `workspace` change, with
+`entity: null`, of every deleted workspace in the account: deleting a board drops the key's grant on
+it, so this is how the key learns the board is gone. Treat it as the removal of that workspace and
+of every membership and repository under it, since those rows are not served. Mint an account-wide key for a full directory mirror.
+
+`GET /api/v1/directory/reach` answers `{ accountId, workspaceIds }` for the calling key, with
+`workspaceIds: null` for an account-wide key. It is account-scoped like the rest of the directory,
+so no header is needed: use it rather than `GET /api/v1/me`, which names ONE workspace and so
+refuses a key reaching several that sends no `x-cat-factory-workspace` header. A mirror reads it to
+filter a push to what the key can read back.
+
+**Directory webhooks** push the same pages instead of waiting for a poll. Register an endpoint with
+`PUT /api/v1/directory/webhooks/:webhookId` (`{ url, secret?, enabled? }`, `https` only, at most 10
+per account), list them with `GET /api/v1/directory/webhooks`, remove one with `DELETE`. All three
+need a `webhooks` key (or above) reaching every workspace. A new endpoint starts at the feed head. Every couple
+of minutes each endpoint is sent a signed `directory.changed` body (`deliveryId`, `accountId`,
+`changes`, `nextAfter`, `headSeq`), or `directory.resync_required` when it fell behind the feed's
+retention. Signing is the notification webhooks' scheme ([Verify signatures](#verify-signatures)).
+Pushes are at-least-once: dedupe on `deliveryId`, and keep polling the feed now and then, because a
+push the receiver never acknowledged is retried but one it lost after acknowledging is not.
+Directory webhooks are managed and delivered by the deployment itself, never by a mothership-mode
+node, which answers 503 for these three routes.
+Design: [ADR 0067](./adr/0067-directory-sync.md).
+
 ### Key provisioning (`/api/v1/keys`)
 
 The external counterpart of the key panel, so a deployment whose operator is headless can mint the
 per-tenant or per-environment credentials it hands out.
 
-| Method / path                | Scope   | Behaviour                                                              |
-| ---------------------------- | ------- | ---------------------------------------------------------------------- |
-| `GET /api/v1/keys`           | `admin` | The workspace's live keys (metadata; a secret is never readable back). |
-| `POST /api/v1/keys`          | `admin` | Mint a key, returning its raw secret **exactly once**.                 |
-| `DELETE /api/v1/keys/:keyId` | `admin` | Revoke a key **and every key it minted**. Idempotent (always `204`).   |
+| Method / path                | Scope   | Behaviour                                                            |
+| ---------------------------- | ------- | -------------------------------------------------------------------- |
+| `GET /api/v1/keys`           | `admin` | The live keys reaching the request's workspace (metadata only).      |
+| `POST /api/v1/keys`          | `admin` | Mint a key, returning its raw secret **exactly once**.               |
+| `DELETE /api/v1/keys/:keyId` | `admin` | Revoke a key **and every key it minted**. Idempotent (always `204`). |
 
 Create body: `{ "label": "tenant-42 reader", "scope": "read" }`; omitting `scope` mints `write`, the
-same safe middle rung the app defaults to. Everything else comes from the calling key: the mint
-lands in **its** workspace, and this surface has no vocabulary for another one.
+same safe middle rung the app defaults to. The account comes from the calling key. `workspaceIds`
+is optional and defaults to the workspace the request acts on. A minted key never reaches further
+than the key minting it: a list must be a subset of the caller's workspaces, and `null` (every
+workspace) needs an unrestricted caller. Revoking a key that reaches past the caller is refused the
+same way. Both answer `403` with `details.reason: workspace_reach_exceeded`.
 
 #### Mapping a run back to a person (`externalIdentity`)
 
@@ -3025,7 +3175,7 @@ keys, `read` scope. Fully documented in [`debug-api.md`](./debug-api.md).
 ### Outbound webhook management
 
 `GET|PUT|DELETE /api/v1/notification-webhook` and the
-`GET /api/v1/notification-webhooks` collection beside it, `admin` scope: register the endpoints this
+`GET /api/v1/notification-webhooks` collection beside it, `webhooks` scope: register the endpoints this
 workspace pushes to, read what is registered, or unregister. Documented with the delivery contract
 they configure, in [Outbound webhooks](#outbound-webhooks-push) below.
 
@@ -3063,15 +3213,15 @@ curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: appl
   "$BASE/api/v1/notification-webhook"
 ```
 
-| Route                                             | Scope   | Notes                                                                  |
-| ------------------------------------------------- | ------- | ---------------------------------------------------------------------- |
-| `GET /api/v1/notification-webhook`                | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set.         |
-| `PUT /api/v1/notification-webhook`                | `admin` | Register, edit or rotate. Returns the stored config.                   |
-| `DELETE /api/v1/notification-webhook`             | `admin` | Unregister. Idempotent, `204`.                                         |
-| `GET /api/v1/notification-webhooks`               | `admin` | `{ "webhooks": [ … ] }`, every endpoint, ordered by id. Not paginated. |
-| `GET /api/v1/notification-webhooks/:webhookId`    | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when that id has none.    |
-| `PUT /api/v1/notification-webhooks/:webhookId`    | `admin` | Register, edit or rotate ONE named endpoint.                           |
-| `DELETE /api/v1/notification-webhooks/:webhookId` | `admin` | Unregister one. Idempotent, `204`; siblings untouched.                 |
+| Route                                             | Scope      | Notes                                                                  |
+| ------------------------------------------------- | ---------- | ---------------------------------------------------------------------- |
+| `GET /api/v1/notification-webhook`                | `webhooks` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set.         |
+| `PUT /api/v1/notification-webhook`                | `webhooks` | Register, edit or rotate. Returns the stored config.                   |
+| `DELETE /api/v1/notification-webhook`             | `webhooks` | Unregister. Idempotent, `204`.                                         |
+| `GET /api/v1/notification-webhooks`               | `webhooks` | `{ "webhooks": [ … ] }`, every endpoint, ordered by id. Not paginated. |
+| `GET /api/v1/notification-webhooks/:webhookId`    | `webhooks` | `{ "webhook": … }`, or `{ "webhook": null }` when that id has none.    |
+| `PUT /api/v1/notification-webhooks/:webhookId`    | `webhooks` | Register, edit or rotate ONE named endpoint.                           |
+| `DELETE /api/v1/notification-webhooks/:webhookId` | `webhooks` | Unregister one. Idempotent, `204`; siblings untouched.                 |
 
 `GET` returns the config with `hasSecret: true|false`; the secret itself is **write-only**, sealed
 at rest, never readable back. An `admin` key can rotate the signing secret but never learn the
@@ -3167,6 +3317,10 @@ Registering an 11th endpoint is refused with `409` and
 existing endpoint is admitted regardless, since those are the actions that resolve it.
 
 ### Delivery contract
+
+Every body below is also published in the spec's OpenAPI 3.1 `webhooks` section
+(`NotificationWebhookDelivery`, `RunWebhookDelivery`, `PlatformAlertWebhookDelivery`), so each
+official client carries it as a generated type.
 
 Every delivery is a `POST` with `content-type: application/json` and `user-agent: cat-factory`. The
 three families share the endpoint and are told apart by shape: `notification`, `run` and `alert`

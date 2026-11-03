@@ -18,17 +18,20 @@ import {
 import type { WorkspaceMetadataFieldDefinition } from '~/modular/workspace-metadata'
 import type { AppSlots } from '~/modular/slots'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import { selectNoneItem, selectNoneModel } from '~/utils/selectNone'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const slots = useReactiveSlots<AppSlots>()
 const store = useWorkspaceSettingsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 /**
- * The fields to render. A malformed key is dropped (the store would refuse every save) and
- * NAMED in the console rather than swallowed — the deployment author is the only person who
- * can fix it, and a silently missing field looks exactly like one nobody declared.
+ * The fields to render. A malformed key, or a select option value the editor cannot hold, is
+ * dropped (the store would refuse every save, or the select would throw) and NAMED in the
+ * console rather than swallowed: the deployment author is the only person who can fix it, and a
+ * silently missing field looks exactly like one nobody declared.
  */
 const fields = computed<WorkspaceMetadataFieldDefinition[]>(() => {
   const { fields: valid, rejected } = resolveMetadataFields(
@@ -36,7 +39,7 @@ const fields = computed<WorkspaceMetadataFieldDefinition[]>(() => {
   )
   if (import.meta.dev && rejected.length > 0) {
     console.warn(
-      '[cat-factory] workspace metadata fields dropped (invalid or duplicate key):',
+      '[cat-factory] workspace metadata fields dropped (invalid or duplicate key, or a select option value of "" or __none__):',
       rejected.map((f) => f.key),
     )
   }
@@ -67,11 +70,7 @@ async function save() {
     await store.update({
       metadata: metadataPatchFrom(fields.value, draft, store.settings.metadata),
     })
-    toast.add({
-      title: t('settings.workspaceSettings.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.workspaceSettings.toast.saved')
   } catch (e) {
     present(e, 'settings.workspaceSettings.toast.saveFailed')
   } finally {
@@ -79,10 +78,20 @@ async function save() {
   }
 }
 
+/** A `select` field's model on the draft, with the "not set" row mapped to the empty value. */
+function selectModel(key: string) {
+  return selectNoneModel(
+    () => draft[key],
+    (value) => {
+      draft[key] = value
+    },
+  )
+}
+
 /** A `select` field's items, with an explicit "not set" choice so a value can be cleared. */
 function selectItems(field: WorkspaceMetadataFieldDefinition) {
   return [
-    { label: t('settings.workspaceSettings.metadata.unset'), value: '' },
+    selectNoneItem(t('settings.workspaceSettings.metadata.unset')),
     ...(field.options ?? []).map((o) => ({ label: o.label, value: o.value })),
   ]
 }
@@ -99,9 +108,12 @@ function selectItems(field: WorkspaceMetadataFieldDefinition) {
       </p>
     </section>
 
-    <p v-if="fields.length === 0" class="text-2xs text-dimmed">
-      {{ t('settings.workspaceSettings.metadata.empty') }}
-    </p>
+    <EmptyState
+      v-if="fields.length === 0"
+      compact
+      icon="i-lucide-tags"
+      :title="t('settings.workspaceSettings.metadata.empty')"
+    />
 
     <template v-else>
       <div class="space-y-4">
@@ -112,7 +124,7 @@ function selectItems(field: WorkspaceMetadataFieldDefinition) {
           </SectionLabel>
           <USelect
             v-if="field.type === 'select'"
-            v-model="draft[field.key]"
+            v-model="selectModel(field.key).value"
             :items="selectItems(field)"
             size="sm"
             :data-testid="`workspace-metadata-${field.key}`"
@@ -133,7 +145,6 @@ function selectItems(field: WorkspaceMetadataFieldDefinition) {
 
       <div class="flex justify-end">
         <UButton
-          color="primary"
           size="sm"
           icon="i-lucide-save"
           :loading="saving"

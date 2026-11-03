@@ -95,6 +95,14 @@ export default defineConfig(async () => {
     ],
     test: {
       setupFiles: ['./test/setup/silenceLogs.ts', './test/apply-migrations.ts'],
+      // Vitest 5 turns `fsModuleCache` on by default, and a fresh worker then asks for every
+      // cached module of its files' import graphs in ONE `fetchWarmModules` round-trip. The
+      // Workers pool inlines each cached module's code into that single reply before sending
+      // it to workerd over its WebSocket, so this suite's graph (~80MB of transformed source)
+      // exceeds workerd's message limit and the worker dies with `1009 Message is too large`
+      // on whichever file reuses a warm graph. Off, every module is fetched on its own, which
+      // is how Vitest 4 ran this suite. Revisit when the pool chunks or skips that reply.
+      fsModuleCache: false,
       // These run inside real workerd against a real local D1, and the heaviest
       // engine specs drive a run to a standstill TWICE (park on a decision / the
       // spend gate, resolve it, then drive again) — each round is real store I/O.

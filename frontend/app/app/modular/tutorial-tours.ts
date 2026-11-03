@@ -195,6 +195,16 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
         bodyKey: 'tutorial.tours.boardBasics.steps.canvas.body',
       },
       {
+        // A new person lands on the QUEUE view, and every tour moves them to the canvas, so the
+        // orientation tour is where they learn the queue exists. The switcher renders in the rail
+        // and the expanded sidebar, in every tier and role, so the step needs no `when`.
+        id: 'views',
+        target: 'work-view-switcher',
+        placement: 'right',
+        titleKey: 'tutorial.tours.boardBasics.steps.views.title',
+        bodyKey: 'tutorial.tours.boardBasics.steps.views.body',
+      },
+      {
         id: 'sidebar',
         target: 'sidebar',
         placement: 'right',
@@ -539,7 +549,12 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
         // therefore describes retrying rather than instructing it. (A retry also spends model
         // budget, so handing the decision back is right on both counts.)
         id: 'retry',
-        target: 'agent-failure-retry',
+        // The wrapper around the block's one action (Retry, the setting that fixes the cause, or
+        // a new run), not one of the buttons. Every failure block renders it, and a tour target
+        // resolves to its FIRST visible match, so this step lands on the same block as the banner
+        // step above. Anchoring on the buttons themselves, with fallbacks, would let this step
+        // find Retry on a second card when the first card's action is a setting.
+        target: 'agent-failure-action',
         placement: 'right',
         titleKey: 'tutorial.tours.diagnoseFailure.steps.retry.title',
         bodyKey: 'tutorial.tours.diagnoseFailure.steps.retry.body',
@@ -550,12 +565,10 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
         bodyKey: 'tutorial.tours.diagnoseFailure.steps.finish.body',
       },
     ],
-    // Deliberately NOT anchored on `agent-failure-history` or
-    // `agent-failure-configure-environment`, both of which the finish card mentions in prose
-    // instead. Each renders only in a narrower state than this tour's own requirement (a trail
-    // of PRIOR attempts; a failure whose kind is `environment`), so a step on either would need
-    // its own `when` and therefore its own gate, added for one step apiece — and left without
-    // one it would count as an unexpected skip and tell a user who saw exactly the right
+    // Deliberately NOT anchored on `agent-failure-history`, which the finish card mentions in
+    // prose instead. It renders only in a narrower state than this tour's own requirement (a
+    // trail of PRIOR attempts), so a step on it would need its own `when` and its own gate, and
+    // left without one it would count as an unexpected skip and tell a user who saw the right
     // walkthrough that they missed part of it.
   },
   {

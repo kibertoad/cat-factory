@@ -20,6 +20,12 @@ export const useMergeTrackRecordsStore = defineStore('mergeTrackRecords', () => 
   const loading = ref(false)
   /** Whether a load has completed at least once, so the UI can tell "empty" from "not yet". */
   const loaded = ref(false)
+  /**
+   * The newest load failed. Before any load has landed the zero-filled {@link byClass} is then
+   * ABSENT evidence, not zero, so the UI must not read it as "no history yet". The error itself
+   * goes to the caller, which reports it.
+   */
+  const loadFailed = ref(false)
 
   /**
    * Every class keyed for lookup, filled in with zeros for a class the workspace has no records
@@ -42,6 +48,10 @@ export const useMergeTrackRecordsStore = defineStore('mergeTrackRecords', () => 
     try {
       rollups.value = await api.listMergeClassRollups(ws.requireId())
       loaded.value = true
+      loadFailed.value = false
+    } catch (e) {
+      loadFailed.value = true
+      throw e
     } finally {
       loading.value = false
     }
@@ -57,5 +67,5 @@ export const useMergeTrackRecordsStore = defineStore('mergeTrackRecords', () => 
     if (loaded.value) await load()
   }
 
-  return { rollups, byClass, hasData, loading, loaded, load, tag }
+  return { rollups, byClass, hasData, loading, loaded, loadFailed, load, tag }
 })

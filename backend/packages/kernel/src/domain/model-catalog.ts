@@ -46,6 +46,26 @@ export const MODEL_CATALOG: SelectableModel[] = [
       acceptsImages: true,
     },
   },
+  {
+    id: 'muse-wonder',
+    family: 'llama',
+    label: 'Muse Wonder',
+    description:
+      "Meta's first frontier model (2026-10-12), above Muse Spark on reasoning and coding: a 1M " +
+      'window that reads images, video, audio and PDFs. Via OpenRouter, billed at Meta rates.',
+    // Same Meta bucket as Muse Spark below, for the residency policy's reason. OpenRouter is the
+    // only verified route; Meta's own API id is not yet published where this catalog can check it.
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'meta/muse-wonder',
+        contextTokens: 1_048_576,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
   // Meta's Muse Spark 1.3, in its two commercial tiers. They are the SAME model on the same
   // route and differ only in what Meta may do with the traffic, which is why they are two
   // entries rather than one: the choice is a per-block one an operator makes with the price
@@ -1137,12 +1157,33 @@ export const MODEL_CATALOG: SelectableModel[] = [
   // `openrouter` flavour on deepseek/gpt-5.5/claude-opus); any model not curated here is
   // reachable via the dynamic per-workspace OpenRouter catalog (`openRouterSelectableModels`).
   {
+    id: 'gemini-4-argon',
+    family: 'gemini',
+    label: 'Gemini 4 Argon',
+    description:
+      "Google's new flagship (2026-10-13) and the first Gemini 4: a 1M-token window that reads " +
+      'images, audio, video and PDFs. Via OpenRouter, billed at Google rates, which double on ' +
+      '2026-12-01 when the launch price ends.',
+    // OpenRouter only: Workers AI does not serve it and no Bedrock id exists, so no other arm is
+    // declared against a route nobody has verified.
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'google/gemini-4-argon',
+        contextTokens: 1_048_576,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
+  {
     id: 'gemini',
     family: 'gemini',
     label: 'Gemini 3.1 Pro',
     description:
-      "Google's flagship Gemini Pro via OpenRouter — 1M-token context, billed at Google rates. " +
-      'Still the newest Pro: 3.5 Pro has slipped repeatedly and the 3.x Pro line stops here.',
+      "Google's last 3.x Pro via OpenRouter — 1M-token context, billed at Google rates. " +
+      'Gemini 4 Argon succeeds it as the flagship; 3.1 Pro stays for blocks pinned to it.',
     openrouter: {
       ref: {
         // The `-preview` suffix is NOT staleness: 3.1 Pro is GA and Google kept the suffix
@@ -1166,50 +1207,13 @@ export const MODEL_CATALOG: SelectableModel[] = [
     family: 'gemini',
     label: 'Gemini 3.8 Flash',
     description:
-      "Google's newest Flash: a step over 3.7 Flash on software engineering, agentic work " +
-      'and multi-step reasoning, at the same 1M window and the same list price. Via ' +
-      'OpenRouter, billed at Google rates.',
-    openrouter: {
-      ref: {
-        provider: 'openrouter',
-        model: 'google/gemini-3.8-flash',
-        contextTokens: 1_048_576,
-        acceptsImages: true,
-      },
-      keyEnv: 'OPENROUTER_API_KEY',
-      providerLabel: 'OpenRouter',
-    },
-  },
-  {
-    id: 'gemini-3.7-flash',
-    family: 'gemini',
-    label: 'Gemini 3.7 Flash',
-    description:
-      "Google's newest workhorse: 1M-token context, 64K output, and a large coding and " +
-      'agentic step over 3.6 Flash at the same list price. Via OpenRouter, billed at ' +
+      "Google's newest Flash: strong on software engineering, agentic work and multi-step " +
+      'reasoning, with a 1M window at a fraction of Pro pricing. Via OpenRouter, billed at ' +
       'Google rates.',
     openrouter: {
       ref: {
         provider: 'openrouter',
-        model: 'google/gemini-3.7-flash',
-        contextTokens: 1_048_576,
-        acceptsImages: true,
-      },
-      keyEnv: 'OPENROUTER_API_KEY',
-      providerLabel: 'OpenRouter',
-    },
-  },
-  {
-    id: 'gemini-flash',
-    family: 'gemini',
-    label: 'Gemini 3.6 Flash',
-    description:
-      "Google's newest model and its positioned workhorse — 1M-token context at a fraction of " +
-      'Pro pricing. Via OpenRouter, billed at Google rates.',
-    openrouter: {
-      ref: {
-        provider: 'openrouter',
-        model: 'google/gemini-3.6-flash',
+        model: 'google/gemini-3.8-flash',
         contextTokens: 1_048_576,
         acceptsImages: true,
       },

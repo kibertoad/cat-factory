@@ -19,6 +19,7 @@ import { useGitHubStore } from '~/stores/github'
 import { useInfraConfigStore } from '~/stores/infraConfig'
 import { usePreflightsStore } from '~/stores/preflights'
 import { useServicesStore } from '~/stores/services'
+import type { DescribedFailure } from '~/composables/pipelineErrorToast/describeFailure'
 import type { WizardContext } from '~/stores/environmentWizard/context'
 import { createFlowActions } from '~/stores/environmentWizard/flow'
 import { createRecipeActions } from '~/stores/environmentWizard/recipe'
@@ -89,18 +90,18 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
   const preflightResults = ref<PreflightResult[] | null>(null)
   // A real (non-503) preflight failure, surfaced so a genuine error isn't indistinguishable from
   // "nothing happened" (a 503 latches `preflights.available` to the degraded note instead).
-  const preflightError = ref<string | null>(null)
+  const preflightError = ref<DescribedFailure | null>(null)
 
   // ---- Save (handler + frame recipe) --------------------------------------
   const handlerLabel = ref('Docker Compose')
   const exposedPort = ref(80)
   const saving = ref(false)
-  const saveError = ref<string | null>(null)
+  const saveError = ref<DescribedFailure | null>(null)
   const saved = ref(false)
 
   // ---- Trial provision (optional, local-only) -----------------------------
   const trialing = ref(false)
-  const trialError = ref<string | null>(null)
+  const trialError = ref<DescribedFailure | null>(null)
   const trialStarted = ref(false)
 
   // ---- Derived ------------------------------------------------------------

@@ -60,6 +60,7 @@ import {
 } from './container-executor-deps.js'
 import {
   DrizzleGitHubInstallationRepository,
+  DrizzleAccountRunnerPoolRepository,
   DrizzleRunnerPoolConnectionRepository,
 } from './repositories/containerExecution.js'
 import {
@@ -286,6 +287,11 @@ function selectNodeRunRepositories(
       'runnerPoolConnectionRepository',
       (d) => new DrizzleRunnerPoolConnectionRepository(d),
     ),
+    // The account tier the same resolver falls back to (and the seeder writes).
+    accountRunnerPoolRepository: sourced(
+      'accountRunnerPoolRepository',
+      (d) => new DrizzleAccountRunnerPoolRepository(d),
+    ),
     githubInstallationRepository:
       options.githubInstallationRepository ??
       sourced('githubInstallationRepository', (d) => new DrizzleGitHubInstallationRepository(d)),
@@ -317,6 +323,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
 
   const {
     runnerPoolConnectionRepository,
+    accountRunnerPoolRepository,
     githubInstallationRepository,
     repoProjectionRepository,
     entityProjectionRepositories,
@@ -376,6 +383,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     idGenerator,
     clock,
     runnerPoolConnectionRepository,
+    accountRunnerPoolRepository,
     runnerBackendRegistry,
     appRegistry,
     resolveRepoTarget,
@@ -513,6 +521,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
   return {
     ...runServices,
     runnerPoolConnectionRepository,
+    accountRunnerPoolRepository,
     githubInstallationRepository,
     repoProjectionRepository,
     entityProjectionRepositories,

@@ -9,17 +9,18 @@ import AccountPlatformAlertSettings from '~/components/layout/AccountPlatformAle
 import AccountRunCredentialSettings from '~/components/layout/AccountRunCredentialSettings.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // Team settings for an org account: the member roster (with combinable admin /
 // developer / product roles), pending email invitations, and the per-account
 // transactional-email sender. Admin-only mutations are enforced by the backend; this
-// surface degrades to a read-only view when the caller isn't an admin (actions 4xx).
+// surface hides them when the caller isn't an admin, so it reads as a read-only view.
 const props = defineProps<{ accountId: string }>()
 
 const accounts = useAccountsStore()
 const uiMode = useUiModeStore()
 const auth = useAuthStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t, te } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -53,7 +54,7 @@ function invitationStatusLabel(status: InvitationStatus): string {
 }
 
 /** Whether the signed-in caller is an admin of this account (drives edit affordances). */
-const isAdmin = computed(() => accounts.activeAccount?.roles?.includes('admin') ?? false)
+const isAdmin = computed(() => accounts.isActiveAccountAdmin)
 /**
  * Members / roles / invitations are org-scoped — the backend rejects membership on a
  * personal account. For a personal account we show a "create an organization" CTA in
@@ -77,7 +78,7 @@ async function revokeSessions(userId: string, label: string) {
   if (!(await confirmAction('revoke', label))) return
   try {
     await accounts.revokeMemberSessions(props.accountId, userId)
-    toast.add({ title: t('layout.accountTeam.members.sessionsRevoked'), icon: 'i-lucide-check' })
+    actionToast.success('layout.accountTeam.members.sessionsRevoked')
   } catch (e) {
     present(e, 'layout.accountTeam.errors.revokeSessions')
   }
@@ -114,7 +115,7 @@ async function createOrganization() {
   try {
     await accounts.createOrg(name)
     newOrgName.value = ''
-    toast.add({ title: t('layout.accountTeam.org.created'), icon: 'i-lucide-check' })
+    actionToast.success('layout.accountTeam.org.created')
   } catch (e) {
     present(e, 'layout.accountTeam.errors.createOrg')
   } finally {
@@ -136,12 +137,10 @@ async function sendInvite() {
       inviteRoles.value.length ? inviteRoles.value : ['developer'],
     )
     inviteEmail.value = ''
-    toast.add({
-      title: t('layout.accountTeam.invite.created'),
+    actionToast.success('layout.accountTeam.invite.created', {
       description: acceptUrl
         ? t('layout.accountTeam.invite.createdEmailed')
         : t('layout.accountTeam.invite.createdShareLink'),
-      icon: 'i-lucide-mail-check',
     })
   } catch (e) {
     present(e, 'layout.accountTeam.errors.sendInvite')
@@ -175,7 +174,7 @@ async function connectEmail() {
       fromAddress: emailFrom.value.trim(),
     })
     emailApiKey.value = ''
-    toast.add({ title: t('layout.accountTeam.email.connected'), icon: 'i-lucide-check' })
+    actionToast.success('layout.accountTeam.email.connected')
   } catch (e) {
     present(e, 'layout.accountTeam.errors.connectEmail')
   } finally {
@@ -214,7 +213,7 @@ async function disconnectEmail() {
           :placeholder="t('layout.accountTeam.org.namePlaceholder')"
           class="flex-1"
         />
-        <UButton type="submit" color="primary" :loading="busy" icon="i-lucide-plus">
+        <UButton type="submit" :loading="busy" icon="i-lucide-plus">
           {{ t('layout.accountTeam.org.create') }}
         </UButton>
       </UForm>
@@ -261,18 +260,27 @@ async function disconnectEmail() {
             @click="revokeSessions(m.userId, m.name || m.email || m.userId)"
           />
         </li>
-        <li v-if="accounts.members.length === 0" class="text-dimmed">
-          {{ t('layout.accountTeam.members.empty') }}
+        <li v-if="accounts.members.length === 0">
+          <EmptyState
+            compact
+            icon="i-lucide-users"
+            :title="t('layout.accountTeam.members.empty')"
+          />
         </li>
       </ul>
     </section>
 
-    <!-- invitations -->
-    <section v-if="isOrg">
+    <!-- invitations: a non-admin cannot invite, so they get the list alone, and no section when
+         there is nothing to list -->
+    <section v-if="isOrg && (isAdmin || accounts.invitations.length)">
       <h3 class="mb-2 font-semibold text-highlighted">
-        {{ t('layout.accountTeam.invite.title') }}
+        {{
+          isAdmin ? t('layout.accountTeam.invite.title') : t('layout.accountTeam.invite.listTitle')
+        }}
       </h3>
-      <UForm class="flex gap-2" @submit="sendInvite">
+      <!-- Inviting, revoking and the email sender below are account-admin writes
+           (`InvitationService`, `AccountController`): hidden for anyone else. -->
+      <UForm v-if="isAdmin" class="flex gap-2" @submit="sendInvite">
         <UInput
           v-model="inviteEmail"
           type="email"
@@ -280,7 +288,7 @@ async function disconnectEmail() {
           class="flex-1"
         />
         <USelect v-model="inviteRoles" multiple :items="ROLE_ITEMS" class="w-44" />
-        <UButton type="submit" color="primary" :loading="busy" icon="i-lucide-send">
+        <UButton type="submit" :loading="busy" icon="i-lucide-send">
           {{ t('layout.accountTeam.invite.submit') }}
         </UButton>
       </UForm>
@@ -298,7 +306,7 @@ async function disconnectEmail() {
               {{ invitationStatusLabel(inv.status) }}
             </span>
             <UButton
-              v-if="inv.status === 'pending'"
+              v-if="isAdmin && inv.status === 'pending'"
               size="xs"
               color="error"
               variant="ghost"
@@ -328,11 +336,18 @@ async function disconnectEmail() {
             </template>
             <template #from>{{ accounts.emailConnection.fromAddress }}</template>
           </i18n-t>
-          <UButton size="xs" color="error" variant="ghost" :loading="busy" @click="disconnectEmail">
+          <UButton
+            v-if="isAdmin"
+            size="xs"
+            color="error"
+            variant="soft"
+            :loading="busy"
+            @click="disconnectEmail"
+          >
             {{ t('layout.accountTeam.email.disconnect') }}
           </UButton>
         </div>
-        <UForm v-else class="space-y-2" @submit="connectEmail">
+        <UForm v-else-if="isAdmin" class="space-y-2" @submit="connectEmail">
           <USelect v-model="emailProvider" :items="EMAIL_PROVIDER_ITEMS" class="w-full" />
           <UInput
             v-model="emailFrom"
@@ -345,10 +360,11 @@ async function disconnectEmail() {
             :placeholder="t('layout.accountTeam.email.apiKeyPlaceholder')"
             class="w-full"
           />
-          <UButton type="submit" color="primary" :loading="busy">
+          <UButton type="submit" :loading="busy">
             {{ t('layout.accountTeam.email.connect') }}
           </UButton>
         </UForm>
+        <p v-else class="text-dimmed">{{ t('layout.accountTeam.email.notConnected') }}</p>
       </template>
     </section>
 

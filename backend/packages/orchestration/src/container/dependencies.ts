@@ -19,6 +19,7 @@ import type {
   EnvironmentBackendRegistry,
   RegisterHandlerInput,
   RunnerBackendRegistry,
+  RunnerPoolSeedSource,
   UserSecretKindRegistry,
   VcsPatConnectionService,
 } from '@cat-factory/integrations'
@@ -134,6 +135,7 @@ import type {
   RiskPolicySuppressionRepository,
   RunInitiatorScope,
   RunLifecycleSink,
+  AccountRunnerPoolRepository,
   RunnerPoolConnectionRepository,
   RunnerPoolProvider,
   SandboxExperimentRepository,
@@ -182,6 +184,7 @@ import type {
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
+import type { DirectoryRepository, DirectoryWebhookRepository } from '@cat-factory/kernel'
 import type { SpendPricing } from '@cat-factory/spend'
 import type { TesterQualityReviewer } from '../modules/execution/TesterQualityReviewService.js'
 import type { AgentContextObservabilityService } from '../modules/observability/AgentContextObservabilityService.js'
@@ -211,6 +214,22 @@ export interface CoreDependencies extends ContentLibraryDependencies {
   membershipRepository: MembershipRepository
   /** Canonical user identity (`users` + `user_identities`); keyed off by everything. */
   userRepository: UserRepository
+  /**
+   * The directory read side and change feed (backend/docs/adr/0067-directory-sync.md). Required: the
+   * feed rows are written by the repositories above on every facade, and a facade that wired no
+   * reader would publish an API that 503s over data it is recording anyway.
+   */
+  directoryRepository: DirectoryRepository
+  /**
+   * Directory webhook endpoints and the cipher sealing their signing secrets. Present only when the
+   * facade has an `ENCRYPTION_KEY` to seal with; absent, the management routes 503 and nothing is
+   * pushed (the change feed still serves every change to a poller).
+   */
+  directoryWebhooks?: {
+    repository: DirectoryWebhookRepository
+    secretCipher: SecretCipher
+    urlSafetyPolicy?: UrlSafetyPolicy
+  }
   /** Hashes/verifies email-password credentials (WebCrypto PBKDF2). */
   passwordHasher: PasswordHasher
   /** Account invitations (email-based org onboarding). Optional: opt-in feature. */
@@ -933,6 +952,21 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * `kubernetes` kinds (`defaultRunnerBackendRegistry()`).
    */
   runnerBackendRegistry?: RunnerBackendRegistry
+  /**
+   * The ACCOUNT tier of the runner pool: one row per account that every board of it falls back to
+   * when it has no pool of its own. Wired with {@link runnerPoolConnectionRepository} (the service
+   * reads both through one resolver); absent ⇒ the previous per-workspace-only behaviour.
+   */
+  accountRunnerPoolRepository?: AccountRunnerPoolRepository
+  /**
+   * A deployment's DECLARED runner pools: `(account) => { config, secrets } | undefined`, the
+   * runner-pool sibling of {@link seedEnvironmentHandlers}. When supplied (and the runners module
+   * and {@link accountRunnerPoolRepository} are wired), `createCore` builds a `RunnerPoolSeeder`:
+   * the runtime boot-backfills every account that has no pool and `WorkspaceService.create` seeds
+   * the account of a new board. Personal and org accounts both inherit; a legacy board with no
+   * account gets nothing. An account that already has a pool keeps it. Absent ⇒ no seeding.
+   */
+  seedAccountRunnerPool?: RunnerPoolSeedSource
   /**
    * The app-owned registry of per-user secret KINDS (a GitHub PAT built-in today). Carried on
    * the dependency bag so each facade reads the SAME instance off `overrides` and threads it

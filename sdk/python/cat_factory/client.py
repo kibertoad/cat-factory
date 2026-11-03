@@ -39,7 +39,8 @@ class CatFactoryClient:
         task = client.tasks.create(services[0].service_id, CreatePublicTask(title="Add a health check"))
         client.tasks.start(task.task_id, StartPublicTask())
 
-    Every call is scoped to the key's workspace, and each resource attribute mirrors one tag of
+    A workspace-scoped call acts on the key's only workspace, or on ``workspace_id`` for a key
+    reaching several, and each resource attribute mirrors one tag of
     the published OpenAPI surface. The client is stateless beyond its configuration, so one
     instance is safe to share across threads.
 
@@ -74,6 +75,7 @@ class CatFactoryClient:
         headers: Mapping[str, str] | None = None,
         user_agent: str | None = None,
         opener: urllib.request.OpenerDirector | None = None,
+        workspace_id: str | None = None,
     ) -> None:
         """Build a client.
 
@@ -83,6 +85,8 @@ class CatFactoryClient:
         :param max_retries: retries for a RETRIABLE failure. A non-idempotent request is never
             retried automatically, so raising this does not make ``jobs.create`` replayable.
         :param headers: headers sent on every request.
+        :param workspace_id: the workspace every workspace-scoped call acts on, sent as
+            ``x-cat-factory-workspace``. Needed only for a key that reaches more than one workspace.
         :param user_agent: prefixed to ``User-Agent`` so a deployment's logs can attribute calls
             to your integration.
         :param opener: a custom ``urllib`` opener — a proxy handler, a client certificate, or a
@@ -95,7 +99,10 @@ class CatFactoryClient:
             api_key=api_key,
             timeout=timeout,
             max_retries=max_retries,
-            headers=headers,
+            headers={
+                **dict(headers or {}),
+                **({"x-cat-factory-workspace": workspace_id} if workspace_id else {}),
+            },
             user_agent=user_agent,
             opener=opener,
         )

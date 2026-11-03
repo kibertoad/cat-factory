@@ -14,12 +14,14 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
 const judgeStore = useJudgeStore()
 const { t, n } = useI18n()
 const access = useWorkspaceAccess()
+const { present } = usePipelineErrorToast()
 
 // Synchronous window: it reads its state straight off the execution step, so there is nothing
 // to fetch on open. `ResultWindowShell` owns Escape (and focus trap + scroll lock + stacking).
@@ -120,8 +122,16 @@ const canAct = computed(() => awaiting.value && access.canExecuteRuns.value && !
 async function act(choice: 'proceed' | 'bounce' | 'stop') {
   const id = instanceId.value
   if (!id) return
-  await judgeStore.resolve(id, choice, feedback.value.trim() || undefined)
-  feedback.value = ''
+  try {
+    await judgeStore.resolve(id, choice, feedback.value.trim() || undefined)
+    feedback.value = ''
+  } catch (e) {
+    // Through the funnel rather than inline: a refusal can coincide with the verdict leaving
+    // `awaiting_decision` (another member resolved it, the run was stopped), which hides the
+    // decision section, and a conflict's `details.reason` gets its mapped copy here. The typed
+    // feedback stays for the next try.
+    present(e, 'judge.resolveFailed')
+  }
 }
 </script>
 
@@ -149,13 +159,7 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
     </template>
 
     <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
-      <div
-        v-if="!judge"
-        class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
-      >
-        <UIcon :name="meta.icon" class="h-8 w-8 opacity-40" />
-        <p class="text-sm">{{ t('judge.empty') }}</p>
-      </div>
+      <EmptyState v-if="!judge" :icon="meta.icon" :title="t('judge.empty')" />
 
       <template v-else>
         <!-- The score against the task's threshold — the whole verdict in one line. -->
@@ -262,9 +266,6 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
             class="w-full"
             :ui="{ base: 'resize-y' }"
           />
-          <p v-if="judgeStore.error" class="mt-2 text-xs text-app-error-300">
-            {{ judgeStore.error }}
-          </p>
           <div class="mt-2 flex flex-wrap justify-end gap-2">
             <UButton
               size="sm"
@@ -280,6 +281,7 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
               {{ t('judge.stop') }}
             </UButton>
             <UButton
+              variant="soft"
               size="sm"
               color="warning"
               icon="i-lucide-undo-2"
@@ -293,7 +295,6 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
             </UButton>
             <UButton
               size="sm"
-              color="primary"
               icon="i-lucide-circle-check"
               :loading="busy"
               :disabled="!canAct"

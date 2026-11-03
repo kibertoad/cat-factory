@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { ReportActivityRow, ReportSpendRow } from '~/types/execution'
 import {
   activitySegments,
-  columnPct,
   isUnattributed,
   maxOf,
   segmentPct,
@@ -39,15 +38,6 @@ describe('ReportsPanel logic', () => {
   it('returns a zero max for an empty list and draws nothing from it', () => {
     expect(maxOf([], spendMagnitude)).toBe(0)
     expect(segmentPct(5, 0)).toBe(0)
-    expect(columnPct(5, 0)).toBe(0)
-  })
-
-  it('floors a non-zero column so a small bucket stays visible', () => {
-    // Without the floor a single cheap call rounds to an empty column and reads as a
-    // quiet period, which is the opposite of what happened.
-    expect(columnPct(0.001, 1000)).toBe(2)
-    expect(columnPct(0, 1000)).toBe(0)
-    expect(columnPct(500, 1000)).toBe(50)
   })
 
   it('treats the empty key as the unattributed bucket', () => {

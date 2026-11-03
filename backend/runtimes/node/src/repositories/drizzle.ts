@@ -71,6 +71,8 @@ import type {
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
+import type { DirectoryRepository } from '@cat-factory/kernel'
+import { DrizzleDirectoryRepository } from './directoryRepository.js'
 
 import type { DrizzleDb } from '../db/client.js'
 
@@ -177,6 +179,7 @@ export interface CoreRepositories {
   accountRepository: AccountRepository
   membershipRepository: MembershipRepository
   userRepository: UserRepository
+  directoryRepository: DirectoryRepository
   invitationRepository: AccountInvitationRepository
   passwordResetTokenRepository: PasswordResetTokenRepository
   machineNodeRepository: MachineNodeRepository
@@ -246,6 +249,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     accountRepository: new DrizzleAccountRepository(db),
     membershipRepository: new DrizzleMembershipRepository(db),
     userRepository: new DrizzleUserRepository(db),
+    directoryRepository: new DrizzleDirectoryRepository(db),
     invitationRepository: new DrizzleAccountInvitationRepository(db),
     passwordResetTokenRepository: new DrizzlePasswordResetTokenRepository(db),
     machineNodeRepository: new DrizzleMachineNodeRepository(db),

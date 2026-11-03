@@ -25,7 +25,10 @@ export function createExecutionReconcile(instances: ShallowRef<ExecutionInstance
     return e.rev ?? 0
   }
 
-  /** A finished run — nothing further will execute or emit. Matches `runLive`/`runFailed`. */
+  /**
+   * A finished run: nothing further will execute or emit. The one definition of the terminal
+   * statuses; the store exposes it so a surface (the inspector's Stop) asks the same question.
+   */
   function isTerminal(status: ExecutionInstance['status']): boolean {
     return status === 'done' || status === 'failed'
   }

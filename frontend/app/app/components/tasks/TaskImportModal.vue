@@ -18,11 +18,13 @@ import { type AddSourceLabels, addChoicesOf, buildSourceChoices } from '~/utils/
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const tasks = useTasksStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 const open = computed({
@@ -106,10 +108,9 @@ async function doSpawnEpic() {
     ref_.value = ''
     ui.closeTaskImport()
     ui.select(epic.id)
-    toast.add({
-      title: t('tasks.import.epicSpawned', { title: epic.title }),
+    actionToast.success('tasks.import.epicSpawned', {
+      params: { title: epic.title },
       description: t('tasks.import.epicChildren', { count: spawned.length }, spawned.length),
-      icon: 'i-lucide-layers',
     })
   } catch (e) {
     present(e, 'tasks.import.epicFailed')
@@ -120,20 +121,21 @@ async function doSpawnEpic() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="title">
+  <AppModal size="form" v-model:open="open" :title="title">
     <template #title>
       <IntegrationBackTitle :title="title" @back="back" />
     </template>
     <template #body>
       <!-- Empty state: no source offered (none connected/installed, or all disabled) -->
-      <div v-if="!tasks.anyOffered" class="space-y-3 text-center">
-        <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-dimmed" />
-        <p class="text-sm text-muted">{{ t('tasks.import.connectFirst') }}</p>
+      <EmptyState
+        v-if="!tasks.anyOffered"
+        icon="i-lucide-plug"
+        :title="t('tasks.import.connectFirst')"
+      >
         <div class="flex justify-center gap-2">
           <UButton
             v-for="choice in addableSources"
             :key="choice.source"
-            color="primary"
             variant="soft"
             :icon="choice.icon"
             @click="ui.openTaskConnect(choice.source)"
@@ -141,7 +143,7 @@ async function doSpawnEpic() {
             {{ ADD_LABEL[choice.action](choice.label) }}
           </UButton>
         </div>
-      </div>
+      </EmptyState>
 
       <!-- No service frame yet → nowhere to create a task. -->
       <p v-else-if="!containerItems.length" class="text-center text-xs text-dimmed">
@@ -197,7 +199,6 @@ async function doSpawnEpic() {
               />
             </UFormField>
             <UButton
-              color="primary"
               variant="soft"
               icon="i-lucide-layers"
               :loading="importing"
@@ -215,5 +216,5 @@ async function doSpawnEpic() {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

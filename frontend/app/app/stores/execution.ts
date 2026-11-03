@@ -176,6 +176,7 @@ export const useExecutionStore = defineStore('execution', () => {
     echoAfter,
     byId,
     getInstance,
+    isTerminal,
     ...wholeRunReads,
     getByBlock,
     ...pendingGates,

@@ -38,6 +38,16 @@ import {
 import { and, count, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
+  accountSource,
+  accountWorkspaceMembershipsSource,
+  appendDirectoryChanges,
+  lockDirectoryFeed,
+  workspaceMembershipSource,
+  workspaceMoveSource,
+  workspaceSource,
+  workspaceTreeSource,
+} from '../directoryFeed.js'
+import {
   agentRuns,
   blocks,
   services,
@@ -157,11 +167,23 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
   }
 
   async setAccessMode(id: string, mode: WorkspaceAccessMode): Promise<void> {
-    await this.db.update(workspaces).set({ access_mode: mode }).where(eq(workspaces.id, id))
+    await this.db.transaction(async (tx) => {
+      await lockDirectoryFeed(tx, workspaceSource(id))
+      await tx.update(workspaces).set({ access_mode: mode }).where(eq(workspaces.id, id))
+      await appendDirectoryChanges(tx, workspaceSource(id), Date.now())
+    })
   }
 
   async linkAccount(id: string, accountId: string): Promise<void> {
-    await this.db.update(workspaces).set({ account_id: accountId }).where(eq(workspaces.id, id))
+    // The board, its members and its repos leave the old account (if it had one) and appear in
+    // the new one, so both feeds record the whole tree: before the move and after it.
+    await this.db.transaction(async (tx) => {
+      const at = Date.now()
+      await lockDirectoryFeed(tx, workspaceMoveSource(id, accountId))
+      await appendDirectoryChanges(tx, workspaceTreeSource(id), at)
+      await tx.update(workspaces).set({ account_id: accountId }).where(eq(workspaces.id, id))
+      await appendDirectoryChanges(tx, workspaceTreeSource(id), at)
+    })
   }
 
   async create(
@@ -169,26 +191,41 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
     ownerUserId: string | null,
     accountId: string | null,
   ): Promise<void> {
-    await this.db.insert(workspaces).values({
-      id: workspace.id,
-      name: workspace.name,
-      description: workspace.description,
-      created_at: workspace.createdAt,
-      owner_user_id: ownerUserId,
-      account_id: accountId,
+    await this.db.transaction(async (tx) => {
+      await lockDirectoryFeed(tx, accountSource(accountId))
+      await tx.insert(workspaces).values({
+        id: workspace.id,
+        name: workspace.name,
+        description: workspace.description,
+        created_at: workspace.createdAt,
+        owner_user_id: ownerUserId,
+        account_id: accountId,
+      })
+      await appendDirectoryChanges(tx, workspaceSource(workspace.id), Date.now())
     })
   }
 
   async rename(id: string, name: string): Promise<void> {
-    await this.db.update(workspaces).set({ name }).where(eq(workspaces.id, id))
+    await this.db.transaction(async (tx) => {
+      await lockDirectoryFeed(tx, workspaceSource(id))
+      await tx.update(workspaces).set({ name }).where(eq(workspaces.id, id))
+      await appendDirectoryChanges(tx, workspaceSource(id), Date.now())
+    })
   }
 
   async setDescription(id: string, description: string | null): Promise<void> {
-    await this.db.update(workspaces).set({ description }).where(eq(workspaces.id, id))
+    await this.db.transaction(async (tx) => {
+      await lockDirectoryFeed(tx, workspaceSource(id))
+      await tx.update(workspaces).set({ description }).where(eq(workspaces.id, id))
+      await appendDirectoryChanges(tx, workspaceSource(id), Date.now())
+    })
   }
 
   async delete(id: string, rehome: ServiceRehome[] = []): Promise<void> {
     await this.db.transaction(async (tx) => {
+      // The directory feed records the board and every member and repo row the cascade below
+      // removes, while they still exist to be selected. `directory_changes` itself is kept.
+      await appendDirectoryChanges(tx, workspaceTreeSource(id), Date.now())
       // Re-home shared services FIRST: move each service's blocks + run history to a surviving
       // mounting board by re-stamping their `workspace_id`. Blocks are keyed by `service_id`, so
       // after the move the service's frame no longer lives in THIS workspace — the reclaim below
@@ -310,47 +347,66 @@ export class DrizzleWorkspaceMemberRepository implements WorkspaceMemberReposito
   }
 
   async upsert(member: WorkspaceMemberRecord): Promise<void> {
-    await this.db
-      .insert(workspaceMembers)
-      .values({
-        workspace_id: member.workspaceId,
-        user_id: member.userId,
-        role: member.role,
-        created_at: member.createdAt,
-        added_by_user_id: member.addedByUserId,
-      })
-      .onConflictDoUpdate({
-        target: [workspaceMembers.workspace_id, workspaceMembers.user_id],
-        set: { role: member.role },
-      })
+    await this.db.transaction(async (tx) => {
+      await lockDirectoryFeed(tx, workspaceMembershipSource(member.workspaceId, member.userId))
+      await tx
+        .insert(workspaceMembers)
+        .values({
+          workspace_id: member.workspaceId,
+          user_id: member.userId,
+          role: member.role,
+          created_at: member.createdAt,
+          added_by_user_id: member.addedByUserId,
+        })
+        .onConflictDoUpdate({
+          target: [workspaceMembers.workspace_id, workspaceMembers.user_id],
+          set: { role: member.role },
+        })
+      await appendDirectoryChanges(
+        tx,
+        workspaceMembershipSource(member.workspaceId, member.userId),
+        Date.now(),
+      )
+    })
   }
 
   async remove(workspaceId: string, userId: string): Promise<void> {
-    await this.db
-      .delete(workspaceMembers)
-      .where(
-        and(eq(workspaceMembers.workspace_id, workspaceId), eq(workspaceMembers.user_id, userId)),
-      )
+    await this.db.transaction(async (tx) => {
+      await appendDirectoryChanges(tx, workspaceMembershipSource(workspaceId, userId), Date.now())
+      await tx
+        .delete(workspaceMembers)
+        .where(
+          and(eq(workspaceMembers.workspace_id, workspaceId), eq(workspaceMembers.user_id, userId)),
+        )
+    })
   }
 
   async removeByAccountMembership(accountId: string, userId: string): Promise<number> {
     // One DELETE scoped to the owning account's boards (Postgres has no cross-table DELETE
-    // without USING, so filter workspace_id by the account's workspaces subquery).
-    const result = await this.db
-      .delete(workspaceMembers)
-      .where(
-        and(
-          eq(workspaceMembers.user_id, userId),
-          inArray(
-            workspaceMembers.workspace_id,
-            this.db
-              .select({ id: workspaces.id })
-              .from(workspaces)
-              .where(eq(workspaces.account_id, accountId)),
-          ),
-        ),
+    // without USING, so filter workspace_id by the account's workspaces subquery). The feed rows
+    // are appended first, while the memberships they name still exist to be selected.
+    return await this.db.transaction(async (tx) => {
+      await appendDirectoryChanges(
+        tx,
+        accountWorkspaceMembershipsSource(accountId, userId),
+        Date.now(),
       )
-    return result.rowCount ?? 0
+      const result = await tx
+        .delete(workspaceMembers)
+        .where(
+          and(
+            eq(workspaceMembers.user_id, userId),
+            inArray(
+              workspaceMembers.workspace_id,
+              tx
+                .select({ id: workspaces.id })
+                .from(workspaces)
+                .where(eq(workspaces.account_id, accountId)),
+            ),
+          ),
+        )
+      return result.rowCount ?? 0
+    })
   }
 }
 

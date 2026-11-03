@@ -12,6 +12,7 @@ import type { OpenRouterModelMeta } from '~/types/openrouter'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import AppModal from '~/components/common/AppModal.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -19,8 +20,8 @@ const workspace = useWorkspaceStore()
 const store = useOpenRouterStore()
 const apiKeys = useApiKeysStore()
 const models = useModelsStore()
-const toast = useToast()
-const { present } = usePipelineErrorToast()
+const actionToast = useActionToast()
+const { present, presentReported } = usePipelineErrorToast()
 
 const open = computed({
   get: () => ui.openRouterOpen,
@@ -54,15 +55,17 @@ const RECOMMENDED_SLUGS = [
   'z-ai/glm-5.2',
 ]
 
-// Whether the workspace/user has an OpenRouter key connected at any reachable scope.
-const keyConnected = computed(() => apiKeys.configuredProviders.has('openrouter'))
+// Where the OpenRouter key stands: connected at any reachable scope, only present turned off (so
+// the panel offers it back rather than a form to paste a duplicate), or absent.
+const keyState = computed(() => apiKeys.keyState('openrouter'))
+const keyConnected = computed(() => keyState.value === 'connected')
 
 // The enabled slugs the user has ticked (seeded from the persisted catalog on open).
 const selected = ref<Set<string>>(new Set())
 const filter = ref('')
 const busy = ref(false)
 
-// Inline key-entry form state (shown until an OpenRouter key is connected).
+// Inline key-entry form state (shown while there is no OpenRouter key at all).
 const keyScope = ref<'workspace' | 'user'>('workspace')
 const keyLabel = ref('')
 const keyValue = ref('')
@@ -155,21 +158,14 @@ async function connectKey() {
         if (scope === 'workspace') await apiKeys.removeWorkspaceKey(created.id).catch(() => {})
         else await apiKeys.removeUserKey(created.id).catch(() => {})
       }
-      toast.add({
-        title: t('settings.openRouterCatalog.toast.connectFailed'),
-        description: store.refreshError ?? t('settings.openRouterCatalog.toast.rejected'),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      // `!reachable` covers an outage or a network fault as well as a refused key, and the probe
+      // does not say which, so the description stays the generic "it reported a failure" line.
+      presentReported(store.refreshError, 'settings.openRouterCatalog.toast.connectFailed')
       return
     }
     keyValue.value = ''
     keyLabel.value = ''
-    toast.add({
-      title: t('settings.openRouterCatalog.toast.connected'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.openRouterCatalog.toast.connected')
   } catch (e) {
     present(e, 'settings.openRouterCatalog.toast.connectFailed')
   } finally {
@@ -181,12 +177,7 @@ async function refresh() {
   if (!workspace.workspaceId) return
   const result = await store.refresh(workspace.workspaceId)
   if (!result.reachable) {
-    toast.add({
-      title: t('settings.openRouterCatalog.toast.unreachable'),
-      description: store.refreshError ?? t('settings.openRouterCatalog.toast.connectFirst'),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    presentReported(store.refreshError, 'settings.openRouterCatalog.toast.unreachable')
   }
 }
 
@@ -202,11 +193,7 @@ async function save() {
     await store.save(workspace.workspaceId, models2)
     // Reflect newly-enabled models in the picker immediately.
     await models.refresh(workspace.workspaceId)
-    toast.add({
-      title: t('settings.openRouterCatalog.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.openRouterCatalog.toast.saved')
   } catch (e) {
     present(e, 'settings.openRouterCatalog.toast.saveFailed')
   } finally {
@@ -221,7 +208,7 @@ function manageKeys() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="OpenRouter" :ui="{ content: 'max-w-2xl' }">
+  <AppModal size="form" v-model:open="open" title="OpenRouter">
     <template #title>
       <IntegrationBackTitle title="OpenRouter" @back="back" />
     </template>
@@ -235,9 +222,9 @@ function manageKeys() {
           </i18n-t>
         </p>
 
-        <!-- Step 1: connect a key (inline) — hidden once a key is connected -->
+        <!-- Step 1: connect a key (inline), shown only while there is no key at all -->
         <div
-          v-if="!keyConnected"
+          v-if="keyState === 'none'"
           class="space-y-3 rounded-lg border border-muted bg-default/60 p-4"
         >
           <SectionLabel as="h4">
@@ -303,6 +290,21 @@ function manageKeys() {
           </div>
         </div>
 
+        <!-- A key exists but is turned off: send the user to re-enable it -->
+        <div
+          v-else-if="keyState === 'disabled'"
+          class="flex items-center justify-between gap-3 rounded-lg border border-muted bg-default/60 px-3 py-2 text-sm"
+          data-testid="openrouter-key-disabled"
+        >
+          <span class="flex items-center gap-2 text-toned">
+            <UIcon name="i-lucide-circle-pause" class="h-4 w-4 shrink-0 text-app-warning-400" />
+            {{ t('settings.openRouterCatalog.keyDisabled') }}
+          </span>
+          <UButton color="neutral" variant="ghost" size="xs" @click="manageKeys()">
+            {{ t('settings.openRouterCatalog.manageKeys') }}
+          </UButton>
+        </div>
+
         <!-- Key connected status -->
         <div
           v-else
@@ -332,7 +334,6 @@ function manageKeys() {
             </UButton>
             <UButton
               v-if="recommendedAvailable.length"
-              color="primary"
               variant="soft"
               size="sm"
               icon="i-lucide-sparkles"
@@ -397,19 +398,12 @@ function manageKeys() {
             <span class="text-xs text-dimmed">{{
               t('settings.openRouterCatalog.enabledCount', { count: selectedCount }, selectedCount)
             }}</span>
-            <UButton
-              color="primary"
-              variant="soft"
-              size="sm"
-              icon="i-lucide-save"
-              :loading="busy"
-              @click="save()"
-            >
+            <UButton variant="soft" size="sm" icon="i-lucide-save" :loading="busy" @click="save()">
               {{ t('common.save') }}
             </UButton>
           </div>
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

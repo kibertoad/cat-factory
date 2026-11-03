@@ -176,7 +176,7 @@ export class KeyBroker {
     try {
       created = await this.#deps.provisioning.keys.create({
         label: keyLabel(actor, scope),
-        scope: scope as 'read' | 'write' | 'decide',
+        scope: scope as Exclude<PublicApiScope, 'admin'>,
         externalIdentity: actor.id,
       })
     } catch (error) {

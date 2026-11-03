@@ -44,8 +44,10 @@ export interface DelegationBrief {
   /**
    * The cat-factory job id for this dispatch, and the ONE stable handle an executor has for
    * recovering its own external id (see {@link DelegatedExecutor}). Many external systems return
-   * nothing identifying at start (`workflow_dispatch` answers 204 with no run id), so the platform
-   * does not paper over it: it supplies the key, and the executor correlates.
+   * nothing identifying at start (a GitHub Enterprise server older than the run-id answer replies
+   * to `workflow_dispatch` with 204), and even one that does loses that answer when the attempt
+   * dies before it is persisted. The platform does not paper over it: it supplies the key, and the
+   * executor correlates.
    */
   correlationKey: string
   workspaceId: string
@@ -207,12 +209,12 @@ export type DelegationUpdate =
       /**
        * The external system's OWN id, when this poll is the first thing that could learn it.
        *
-       * A system that answers its dispatch with no id (`workflow_dispatch` replies 204) is
-       * expected to return {@link DelegationBrief.correlationKey} from `start` and recover the
-       * real id afterwards, and this is where the recovered one lands. Without it nothing carries
-       * it back: the record keeps the correlation key, so every later poll re-runs the bounded
-       * scan that found the run, and on a busy repository the run eventually scrolls off that page
-       * and a live external run reads as one that never appeared.
+       * A system that answers its dispatch with no id (`workflow_dispatch` on a server that
+       * replies 204) is expected to return {@link DelegationBrief.correlationKey} from `start` and
+       * recover the real id afterwards, and this is where the recovered one lands. Without it
+       * nothing carries it back: the record keeps the correlation key, so every later poll re-runs
+       * the bounded scan that found the run, and on a busy repository the run eventually scrolls
+       * off that page and a live external run reads as one that never appeared.
        *
        * Folded onto the record, never back off it: an executor that already has its id reports
        * nothing here and the persisted one stands.

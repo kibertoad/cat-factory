@@ -57,7 +57,16 @@ export function runnerPoolController(): Hono<AppEnv> {
 
   buildHonoRoute(app, unregisterRunnerPoolContract, async (c) => {
     const runners = requireRunners(c)
-    await runners.connectionService.unregister(param(c, 'workspaceId'))
+    const workspaceId = param(c, 'workspaceId')
+    await runners.connectionService.unregister(workspaceId)
+    // The explicit "none" marker: without it the board would fall straight through to its account's
+    // pool. Written through the settings service so the shared settings cache is invalidated. With
+    // no settings module the account tier is not wired either (it reads the same marker).
+    if (!c.req.valid('query').fallBackToAccount) {
+      await c
+        .get('container')
+        .settings?.service.update(workspaceId, { inheritAccountRunnerPool: false })
+    }
     return c.body(null, 204)
   })
 

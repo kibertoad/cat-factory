@@ -3,6 +3,7 @@ import type {
   AgentSearchQueryRepository,
   AgentToolCallRepository,
   AuditEventRepository,
+  DirectoryRepository,
   Clock,
   CommitProjectionRepository,
   LlmCallMetricRepository,
@@ -72,6 +73,8 @@ interface RetentionPolicy {
   runDaysMs: number
   /** The account audit log (`audit_events`), in its own AUDIT_DB. The longest window here. */
   auditEventsMs: number
+  /** The directory change feed (`directory_changes`); each account's newest row is always kept. */
+  directoryChangesMs: number
 }
 
 export interface RetentionDeps {
@@ -119,6 +122,8 @@ export interface RetentionDeps {
    * prune on the one table that is otherwise unbounded for years.
    */
   auditEventRepository: AuditEventRepository
+  /** The directory change feed, pruned to `directoryChangesMs`. Required for the reason above. */
+  directoryRepository: Pick<DirectoryRepository, 'pruneChanges'>
   /**
    * The durable cost-attribution rollup. This pass only WRITES it: `spend_days` has no prune,
    * here or on Node, and no `deleteOlderThan` on its port to call. A TCO table that expires is
@@ -150,6 +155,7 @@ export interface RetentionResult {
   gateOutcomes: number
   runDays: number
   auditEvents: number
+  directoryChanges: number
   /** Daily buckets (re)written by this pass's rollup: a WRITE, not rows reclaimed. */
   runDaysRolledUp: number
   /** Durable cost-attribution buckets (re)written by this pass: a WRITE, never a prune. */
@@ -191,6 +197,7 @@ export async function sweepRetention({
   gateOutcomeRepository,
   platformMetricsRepository,
   auditEventRepository,
+  directoryRepository,
   spendRollupRepository,
   clock,
   policy,
@@ -295,6 +302,9 @@ export async function sweepRetention({
     // measured in years: the others reclaim on most ticks, this one usually reclaims nothing.
     auditEvents: await pass.prune('audit_events', policy.auditEventsMs, now, (c) =>
       auditEventRepository.deleteOlderThan(c),
+    ),
+    directoryChanges: await pass.prune('directory_changes', policy.directoryChangesMs, now, (c) =>
+      directoryRepository.pruneChanges(c),
     ),
     failedTables: pass.failed,
   }

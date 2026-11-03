@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useThemeStore } from '~/stores/theme'
 import { decodeThemeLink, type ThemeLinkDecodeResult } from '~/utils/theme/link'
+import AppModal from '~/components/common/AppModal.vue'
 
 // Import a theme built in the Nuxt UI theme editor (https://ui.nuxt.com/theme): the user pastes
 // the editor's share link (or the raw document JSON), names it, and the theme is stored in this
@@ -60,7 +61,8 @@ async function submit() {
 </script>
 
 <template>
-  <UModal
+  <AppModal
+    size="prompt"
     v-model:open="open"
     :title="t('appearance.import.title')"
     :description="t('appearance.import.description')"
@@ -111,5 +113,5 @@ async function submit() {
         </div>
       </UForm>
     </template>
-  </UModal>
+  </AppModal>
 </template>

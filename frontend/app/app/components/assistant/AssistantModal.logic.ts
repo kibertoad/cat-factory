@@ -1,8 +1,10 @@
+import { BLOCK_LEVEL_RUNS_PIPELINES } from '@cat-factory/contracts'
 import type {
   AssistantActionResult,
   AssistantAnswer,
   AssistantCapability,
   AssistantOutcome,
+  BlockLevel,
 } from '~/types/domain'
 import { ASSISTANT_PROMPT_MAX } from '~/types/domain'
 import type { LoadState } from '~/types/load-state'
@@ -28,6 +30,16 @@ export function revealTarget(result: AssistantActionResult): string {
     case 'create-task-from-issue':
       return result.task.blockId
   }
+}
+
+/**
+ * Whether the revealed block also opens in the focus view. Only a block that runs pipelines has a
+ * run to show there, the same rule as the inspector's Focus button: an added service is a frame,
+ * so it is selected and left on the board. An unknown block (not in the snapshot yet) is selected
+ * only.
+ */
+export function revealsInFocus(level: BlockLevel | undefined): boolean {
+  return level !== undefined && BLOCK_LEVEL_RUNS_PIPELINES[level]
 }
 
 /**

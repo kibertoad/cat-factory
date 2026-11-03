@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { showOverrideField } from '~/utils/uiMode'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import AppModal from '~/components/common/AppModal.vue'
+import { connectionRowState, type ConnectionRowState } from '~/utils/connectionRowState'
 
 // The Integrations hub: a single modal that lists the OPTIONAL external systems the WORKSPACE
 // can enable or link in — the ones that feed a run its context (source control, documents,
@@ -61,7 +64,8 @@ watch(
       query.value = ''
       void releaseHealth.ensureLoaded().catch(() => {})
       void publicApiKeys.ensureLoaded().catch(() => {})
-      void userSecrets.load().catch(() => {})
+      // Records a failed load in the store's `loadFailed` and never throws.
+      void userSecrets.load()
     }
   },
   // Lazy v-if mount: the hub mounts with `integrationsOpen` already true → load immediately.
@@ -86,6 +90,8 @@ interface IntegrationItem {
   connected?: boolean
   attention?: boolean
   attentionLabel?: string
+  /** A per-user row's load state (`connectionRowState`): checking and failed get their own copy. */
+  state?: ConnectionRowState
   recommended?: boolean
   onClick: () => void
 }
@@ -321,6 +327,7 @@ const groups = computed<IntegrationGroup[]>(() => {
           description: t('layout.integrationsHub.items.githubPat.description'),
           status: pat ? t('layout.integrationsHub.status.connected') : undefined,
           connected: pat,
+          state: connectionRowState(pat, userSecrets),
           onClick: () => go(ui.openUserSecrets),
         },
       ],
@@ -369,11 +376,7 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('layout.integrationsHub.title')"
-    :ui="{ content: 'max-w-xl' }"
-  >
+  <AppModal size="form" v-model:open="open" :title="t('layout.integrationsHub.title')">
     <template #body>
       <!-- Named for the same reason `model-providers-hub` is: the tutorial tour that explains
            what a connection adds to a run points at this list. -->
@@ -400,7 +403,6 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
               v-for="item in recommendedActions"
               :key="`rec:${item.key}`"
               size="xs"
-              color="primary"
               variant="soft"
               :icon="item.icon"
               @click="item.onClick()"
@@ -418,9 +420,12 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
           class="w-full"
         />
 
-        <p v-if="!filteredGroups.length" class="px-1 py-6 text-center text-sm text-dimmed">
-          {{ t('layout.integrationsHub.noMatches', { query }) }}
-        </p>
+        <EmptyState
+          v-if="!filteredGroups.length"
+          compact
+          icon="i-lucide-search-x"
+          :title="t('layout.integrationsHub.noMatches', { query })"
+        />
 
         <section v-for="group in filteredGroups" :key="group.title">
           <SectionLabel as="h3" class="mb-2 px-1">
@@ -445,12 +450,23 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
                   <UBadge v-else-if="item.attention" color="warning" variant="subtle" size="sm">
                     {{ item.attentionLabel || t('layout.integrationsHub.status.needsAttention') }}
                   </UBadge>
+                  <span v-else-if="item.state === 'checking'" class="text-2xs text-dimmed">
+                    {{ t('common.checking') }}
+                  </span>
+                  <UBadge
+                    v-else-if="item.state === 'failed'"
+                    color="error"
+                    variant="subtle"
+                    size="sm"
+                    :data-testid="`integrations-failed-${item.key}`"
+                  >
+                    {{ t('common.loadFailed') }}
+                  </UBadge>
                   <span v-else class="text-2xs text-dimmed">{{
                     t('layout.integrationsHub.status.notConnected')
                   }}</span>
                   <UBadge
                     v-if="!anyConnected && item.recommended && !item.connected"
-                    color="primary"
                     variant="subtle"
                     size="sm"
                   >
@@ -487,5 +503,5 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
         </section>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

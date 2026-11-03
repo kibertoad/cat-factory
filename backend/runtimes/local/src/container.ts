@@ -3,6 +3,7 @@ import {
   DrizzleEnvironmentUserHandlerRepository,
   DrizzleGitHubInstallationRepository,
   DrizzleLocalSettingsRepository,
+  DrizzleAccountRunnerPoolRepository,
   DrizzleRunnerPoolConnectionRepository,
   LayeredEventPropagator,
   ProvisioningLogRecorder,
@@ -53,6 +54,7 @@ import {
 } from '@cat-factory/integrations'
 import type {
   HarnessKind,
+  AccountRunnerPoolRepository,
   RunnerPoolConnectionRepository,
   RunnerTransport,
 } from '@cat-factory/kernel'
@@ -926,6 +928,15 @@ function resolveLocalRunnerTransports(params: {
         }
       ).runnerPoolConnectionRepository
     : new DrizzleRunnerPoolConnectionRepository(options.db!)
+  // The account tier the pool resolver falls back to, resolved the same way (remote in mothership
+  // mode). Local mode never SEEDS it (that is Node-only); it only reads a row that exists.
+  const accountRunnerPoolRepository: AccountRunnerPoolRepository = mothership
+    ? (
+        mothership.repos as unknown as {
+          accountRunnerPoolRepository: AccountRunnerPoolRepository
+        }
+      ).accountRunnerPoolRepository
+    : new DrizzleAccountRunnerPoolRepository(options.db!)
   // Build the app-owned backend registries once and share them with BOTH the pool resolver
   // here AND `buildNodeContainer` below (via `backendRegistries`), so the runner backend a
   // workspace's `kind` resolves to is the same instance everywhere. Defaults to the built-ins.
@@ -944,7 +955,13 @@ function resolveLocalRunnerTransports(params: {
     repos.workspaceRepository,
     clock,
     backendRegistries.runnerBackendRegistry,
-    options.runnerPoolProvider,
+    {
+      injectedPoolProvider: options.runnerPoolProvider,
+      accountRunnerPool: {
+        repository: accountRunnerPoolRepository,
+        workspaceSettingsRepository: repos.workspaceSettingsRepository,
+      },
+    },
   )
 
   // Per-branch provisioning-log tagging: the per-run local container logs under the

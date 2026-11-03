@@ -92,7 +92,7 @@ describe('buildNodeResolveTransport native runner-adapter seam', () => {
       workspaceRepo,
       clock,
       registry,
-      provider,
+      { injectedPoolProvider: provider },
     )
     expect(resolve).not.toBeNull()
     const transport = await resolve!('ws-1')

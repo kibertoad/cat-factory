@@ -28,7 +28,7 @@ describe('McpAuthorizationServer: the grant', () => {
     expect(issued.scope).toBe('read')
 
     const auth = await fixture.publicApiKeys.authenticate(issued.accessToken)
-    expect(auth).toMatchObject({ workspaceId: 'ws_1', accountId: 'acc_1', scope: 'read' })
+    expect(auth).toMatchObject({ workspaceIds: ['ws_1'], accountId: 'acc_1', scope: 'read' })
     // Attribution: the run this host starts names the HOST, not the person who approved it months
     // earlier, while the key row still records who did.
     expect(auth?.externalIdentity).toBe('mcp-client:Test Host')

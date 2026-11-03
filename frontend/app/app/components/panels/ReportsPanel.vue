@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onKeyStroke } from '@vueuse/core'
 import { lastCompleteRollupDay } from '@cat-factory/contracts'
 import type {
   ReportActivityDimension,
@@ -12,15 +11,17 @@ import type {
 import { formatMs, formatTokens } from '~/utils/observability'
 import {
   activitySegments,
-  columnPct,
   isUnattributed,
   maxOf,
   segmentPct,
   trendMagnitude,
 } from './ReportsPanel.logic'
 import ReportsSpendBreakdown from '~/components/panels/ReportsSpendBreakdown.vue'
+import TrendColumn from '~/components/panels/TrendColumn.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
+import TakeoverShell from '~/components/common/TakeoverShell.vue'
 
 // Reports: cross-cutting usage analytics for the active account — where the spend and the
 // work actually go. Spend per model and agent kind, spend + run activity per workspace /
@@ -177,9 +178,6 @@ function refresh() {
 function close() {
   ui.closeReports()
 }
-onKeyStroke('Escape', () => {
-  if (open.value) close()
-})
 
 // Load (and refresh) whenever the panel opens.
 watch(
@@ -194,12 +192,12 @@ watch(
 <template>
   <Teleport to="body">
     <Transition name="reports-fade">
-      <div
+      <TakeoverShell
         v-if="open"
-        class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
-        role="dialog"
-        aria-modal="true"
+        :label="t('reports.title')"
+        class="flex-col bg-app-950/96 backdrop-blur-sm"
         data-testid="reports-panel"
+        @close="close"
       >
         <header class="flex flex-wrap items-center gap-3 border-b border-default px-6 py-4">
           <div
@@ -243,10 +241,11 @@ watch(
               color="neutral"
               variant="ghost"
               icon="i-lucide-refresh-cw"
+              :loading="loading"
               :label="t('reports.refresh')"
               :ui="{
                 base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
-                leadingIcon: loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4',
+                leadingIcon: 'h-4 w-4',
               }"
               @click="refresh"
             />
@@ -281,8 +280,9 @@ watch(
             </UButton>
           </div>
 
-          <div v-else-if="loading && !view" class="py-16 text-center text-sm text-muted">
-            {{ t('reports.loading') }}
+          <div v-else-if="loading && !view" class="mx-auto flex max-w-5xl flex-col gap-6">
+            <USkeleton class="h-20 w-full rounded-lg" />
+            <USkeleton v-for="n in 2" :key="n" class="h-36 w-full rounded-lg" />
           </div>
 
           <div v-else-if="view" class="mx-auto flex max-w-5xl flex-col gap-6">
@@ -372,25 +372,25 @@ watch(
                 {{ t('reports.trend.title') }}
               </SectionLabel>
               <div class="rounded-lg border border-default bg-default/40 p-4">
-                <div v-if="!hasSpend" class="py-6 text-center text-xs text-dimmed">
-                  {{ t('reports.trend.empty') }}
-                </div>
-                <div v-else class="flex h-28 items-end gap-0.5" data-testid="reports-trend">
-                  <div
+                <EmptyState
+                  v-if="!hasSpend"
+                  compact
+                  icon="i-lucide-chart-column"
+                  :title="t('reports.trend.empty')"
+                />
+                <div v-else class="flex h-28 gap-0.5" data-testid="reports-trend">
+                  <TrendColumn
                     v-for="point in view.trend.points"
                     :key="point.start"
-                    class="flex flex-1 flex-col justify-end gap-[2px]"
+                    :segments="[
+                      { value: point.subscriptionCost, class: 'bg-app-warning-600' },
+                      { value: point.meteredCost, class: 'bg-app-secondary-500' },
+                    ]"
+                    :max="maxTrend"
+                    :floor-pct="2"
+                    separated
                     :title="trendTooltip(point)"
-                  >
-                    <div
-                      class="w-full rounded-t-sm bg-app-warning-600"
-                      :style="{ height: `${columnPct(point.subscriptionCost, maxTrend)}%` }"
-                    />
-                    <div
-                      class="w-full rounded-sm bg-app-secondary-500"
-                      :style="{ height: `${columnPct(point.meteredCost, maxTrend)}%` }"
-                    />
-                  </div>
+                  />
                 </div>
                 <div class="mt-2 flex items-center gap-4 text-2xs text-dimmed">
                   <span class="flex items-center gap-1" :title="t('reports.legend.meteredHint')">
@@ -503,12 +503,12 @@ watch(
                     {{ t('reports.activity.heading') }}
                   </h3>
                   <div class="rounded-lg border border-default bg-default/40 p-4">
-                    <div
+                    <EmptyState
                       v-if="!activityByDimension.length"
-                      class="py-4 text-center text-xs text-dimmed"
-                    >
-                      {{ t('reports.activity.empty') }}
-                    </div>
+                      compact
+                      icon="i-lucide-activity"
+                      :title="t('reports.activity.empty')"
+                    />
                     <template v-else>
                       <ul class="flex flex-col gap-3" data-testid="reports-activity">
                         <li
@@ -567,7 +567,7 @@ watch(
             </section>
           </div>
         </div>
-      </div>
+      </TakeoverShell>
     </Transition>
   </Teleport>
 </template>

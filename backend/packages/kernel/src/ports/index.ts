@@ -739,8 +739,11 @@ export type {
   RunnerPoolConnectionTestRequest,
 } from './runner-pool-provider.js'
 export type {
+  AccountRunnerPoolRecord,
+  AccountRunnerPoolRepository,
   RunnerPoolConnectionRecord,
   RunnerPoolConnectionRepository,
+  RunnerPoolSeeder,
 } from './runner-pool-repositories.js'
 export type {
   SubscriptionVendor,
@@ -785,6 +788,15 @@ export type {
   AuditRecorder,
 } from './audit.js'
 export { noopAuditRecorder } from './audit.js'
+export type {
+  DirectoryChangeRecord,
+  DirectoryFeedReader,
+  DirectoryRepoKey,
+  DirectoryRepository,
+  DirectoryWebhookRecord,
+  DirectoryWebhookRepository,
+  WorkspaceMembershipKey,
+} from './directory-changes.js'
 export type {
   UserSecretRecord,
   UserSecretRepository,
