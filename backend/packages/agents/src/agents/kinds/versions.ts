@@ -63,7 +63,9 @@ export const PROMPT_VERSIONS = {
   // the Writer additionally grades each suggestion with a `confidence` the unattended auto-answer
   // floor compares against. The rework prompt is unchanged and keeps v4: it folds settled answers
   // into a document and never sees either judgement.
-  'requirement-review': { id: 'requirement-review', version: 6, text: REVIEW_SYSTEM_PROMPT },
+  // v7 on the reviewer alone: its user prompt names the risk policy's severity floor, so a review
+  // set to `high` stops asking `medium` and `low` questions instead of having them filtered after.
+  'requirement-review': { id: 'requirement-review', version: 7, text: REVIEW_SYSTEM_PROMPT },
   'requirement-rework': { id: 'requirement-rework', version: 4, text: REWORK_SYSTEM_PROMPT },
   'requirement-writer': { id: 'requirement-writer', version: 5, text: WRITER_SYSTEM_PROMPT },
   // v2 across the clarity + brainstorm prompts: same `NO_ASSUMED_PRODUCT` addition and the same

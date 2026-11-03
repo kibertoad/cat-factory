@@ -13,7 +13,11 @@ import type {
   SharedStack,
   SharedStackRepository,
 } from '@cat-factory/kernel'
-import { decodeInitiativeRow } from '@cat-factory/contracts'
+import {
+  decodeInitiativeRow,
+  parseRequirementFindingFloor,
+  parseRequirementFloorProgression,
+} from '@cat-factory/contracts'
 import { and, asc, eq, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import { initiatives, riskPolicies, sharedStacks } from '../../db/schema.js'
@@ -162,6 +166,10 @@ function rowToRiskPolicy(row: RiskPolicyRow): RiskPolicy {
     // as a licence this row cannot be shown to have granted.
     autonomy: row.autonomy === 'unattended' ? 'unattended' : 'attended',
     minAutoAnswerConfidence: row.min_auto_answer_confidence,
+    requirementFindingFloor: parseRequirementFindingFloor(row.requirement_finding_floor),
+    requirementFloorProgression: parseRequirementFloorProgression(
+      row.requirement_floor_progression,
+    ),
     isDefault: row.is_default === 1,
     isUnattendedDefault: row.is_unattended_default === 1,
     ...(row.version != null ? { version: row.version } : {}),
@@ -243,6 +251,10 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
       version: preset.version ?? null,
       autonomy: preset.autonomy,
       min_auto_answer_confidence: preset.minAutoAnswerConfidence,
+      requirement_finding_floor: preset.requirementFindingFloor,
+      requirement_floor_progression: preset.requirementFloorProgression
+        ? JSON.stringify(preset.requirementFloorProgression)
+        : null,
       is_default: preset.isDefault ? 1 : 0,
       is_unattended_default: preset.isUnattendedDefault ? 1 : 0,
       created_at: preset.createdAt,
@@ -300,6 +312,8 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
             judge_min_score: values.judge_min_score,
             judge_max_bounces: values.judge_max_bounces,
             min_auto_answer_confidence: values.min_auto_answer_confidence,
+            requirement_finding_floor: values.requirement_finding_floor,
+            requirement_floor_progression: values.requirement_floor_progression,
             class_rules: values.class_rules,
             class_rules_by_role: values.class_rules_by_role,
             dry_run_roles: values.dry_run_roles,

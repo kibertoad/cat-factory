@@ -1,3 +1,7 @@
+import {
+  parseRequirementFindingFloor,
+  parseRequirementFloorProgression,
+} from '@cat-factory/contracts'
 import type {
   AccountRiskPolicy,
   AccountRiskPolicyRepository,
@@ -58,6 +62,10 @@ function rowToPolicy(row: AccountRiskPolicyRow): AccountRiskPolicy {
       : {},
     autonomy: row.autonomy === 'unattended' ? 'unattended' : 'attended',
     minAutoAnswerConfidence: row.min_auto_answer_confidence,
+    requirementFindingFloor: parseRequirementFindingFloor(row.requirement_finding_floor),
+    requirementFloorProgression: parseRequirementFloorProgression(
+      row.requirement_floor_progression,
+    ),
     ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
   }
@@ -144,6 +152,10 @@ export class DrizzleAccountRiskPolicyRepository implements AccountRiskPolicyRepo
       version: policy.version ?? null,
       autonomy: policy.autonomy,
       min_auto_answer_confidence: policy.minAutoAnswerConfidence,
+      requirement_finding_floor: policy.requirementFindingFloor,
+      requirement_floor_progression: policy.requirementFloorProgression
+        ? JSON.stringify(policy.requirementFloorProgression)
+        : null,
       created_at: policy.createdAt,
     }
     await this.db
@@ -178,6 +190,8 @@ export class DrizzleAccountRiskPolicyRepository implements AccountRiskPolicyRepo
           version: values.version,
           autonomy: values.autonomy,
           min_auto_answer_confidence: values.min_auto_answer_confidence,
+          requirement_finding_floor: values.requirement_finding_floor,
+          requirement_floor_progression: values.requirement_floor_progression,
         },
       })
   }

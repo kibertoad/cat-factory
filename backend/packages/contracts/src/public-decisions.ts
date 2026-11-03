@@ -32,10 +32,10 @@ import {
   prReviewStatusSchema,
 } from './prReview.js'
 import { publicRunStatusSchema } from './public-api.js'
+import { reviewItemSeveritySchema } from './requirement-finding-floor.js'
 import {
   requirementReviewStatusSchema,
   reviewItemCategorySchema,
-  reviewItemSeveritySchema,
   reviewItemStatusSchema,
 } from './requirements.js'
 

@@ -9,6 +9,10 @@ import type {
   SubmissionClassesByRole,
   WorkspaceRole,
 } from '@cat-factory/contracts'
+import {
+  parseRequirementFindingFloor,
+  parseRequirementFloorProgression,
+} from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface RiskPolicyRow {
@@ -36,6 +40,8 @@ interface RiskPolicyRow {
   version: number | null
   autonomy: string | null
   min_auto_answer_confidence: number
+  requirement_finding_floor: string | null
+  requirement_floor_progression: string | null
   is_default: number
   is_unattended_default: number
   created_at: number
@@ -80,6 +86,10 @@ function rowToPreset(row: RiskPolicyRow): RiskPolicy {
     // posture that stops for a person — never a licence this row cannot be shown to have granted.
     autonomy: row.autonomy === 'unattended' ? 'unattended' : 'attended',
     minAutoAnswerConfidence: row.min_auto_answer_confidence,
+    requirementFindingFloor: parseRequirementFindingFloor(row.requirement_finding_floor),
+    requirementFloorProgression: parseRequirementFloorProgression(
+      row.requirement_floor_progression,
+    ),
     isDefault: row.is_default === 1,
     isUnattendedDefault: row.is_unattended_default === 1,
     ...(row.version != null ? { version: row.version } : {}),
@@ -183,9 +193,10 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
             judge_min_score, judge_max_bounces,
             auto_merge_enabled, fork_decision, class_rules, class_rules_by_role, dry_run_roles,
             submission_classes_by_role, version, autonomy, min_auto_answer_confidence,
+            requirement_finding_floor, requirement_floor_progression,
             is_default, is_unattended_default,
             created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
@@ -210,6 +221,8 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
            version = excluded.version,
            autonomy = excluded.autonomy,
            min_auto_answer_confidence = excluded.min_auto_answer_confidence,
+           requirement_finding_floor = excluded.requirement_finding_floor,
+           requirement_floor_progression = excluded.requirement_floor_progression,
            is_default = excluded.is_default,
            is_unattended_default = excluded.is_unattended_default`,
       )
@@ -239,6 +252,10 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
         preset.version ?? null,
         preset.autonomy,
         preset.minAutoAnswerConfidence,
+        preset.requirementFindingFloor,
+        preset.requirementFloorProgression
+          ? JSON.stringify(preset.requirementFloorProgression)
+          : null,
         preset.isDefault ? 1 : 0,
         preset.isUnattendedDefault ? 1 : 0,
         preset.createdAt,

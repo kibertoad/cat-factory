@@ -168,7 +168,24 @@ export function productIsIdentified(ctx: RequirementsContext): boolean {
   return productIsIdentifiedFrom(ctx.service)
 }
 
-export function buildReviewPrompt(ctx: RequirementsContext): string {
+/**
+ * The line telling the reviewer how far down the severity scale to go. Null and `low` state
+ * nothing: both leave the reviewer raising every severity.
+ */
+function findingFloorDirective(floor: ReviewItemSeverity | null): string[] {
+  if (!floor || floor === 'low') return []
+  const raised = floor === 'high' ? '`high` findings only' : '`high` and `medium` findings only'
+  return [
+    `This review raises ${raised}. Leave out anything you would grade below \`${floor}\` ` +
+      'entirely; do not raise its severity to keep it.',
+    '',
+  ]
+}
+
+export function buildReviewPrompt(
+  ctx: RequirementsContext,
+  floor: ReviewItemSeverity | null = null,
+): string {
   return [
     'Here are the collected requirements to review:',
     '',
@@ -182,6 +199,7 @@ export function buildReviewPrompt(ctx: RequirementsContext): string {
             'which service / product is this for?) instead of assuming an answer.',
           '',
         ]),
+    ...findingFloorDirective(floor),
     'Produce a JSON object of this exact shape:',
     '{',
     '  "items": [',

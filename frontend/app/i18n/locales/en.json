@@ -3785,6 +3785,19 @@
       "confirmHide": {
         "title": "Hide this policy?",
         "body": "\"{name}\" will not be offered on this board, and tasks that picked it fall back to the board default. You can restore it later."
+      },
+      "findingFloor": {
+        "label": "Requirements review raises",
+        "fallbackLabel": "Raises, when the task has no estimate",
+        "hint": "Findings below this severity are left out of the review. Only a raised finding can stop the run.",
+        "high": "High findings only",
+        "medium": "High and medium findings",
+        "low": "Everything, including minor ones",
+        "progressiveLabel": "Follow the task estimate",
+        "progressiveHint": "Ask more on bigger tasks, read against the highest of the estimate's complexity, risk and impact. Needs a Task Estimator before the review, or an estimate from an earlier run.",
+        "mediumFrom": "Add medium findings from an estimate of (%)",
+        "lowFrom": "Raise everything from an estimate of (%)",
+        "bandsCrossed": "The medium threshold cannot be above the threshold for everything."
       }
     },
     "observabilityConnection": {
@@ -6362,6 +6375,19 @@
       "high": "High confidence",
       "medium": "Medium confidence",
       "low": "Low confidence"
+    },
+    "findingFloor": {
+      "raised": {
+        "high": "This pass raised high findings only.",
+        "medium": "This pass raised high and medium findings.",
+        "low": "This pass raised findings of every severity."
+      },
+      "basis": {
+        "fixed": "Set by the risk policy.",
+        "estimate": "Set by the task estimate ({score}%).",
+        "no_estimate": "The policy follows the task estimate, but this task has none, so its fallback applied."
+      },
+      "suppressed": "Findings left out below that level: {count}."
     }
   },
   "clarity": {

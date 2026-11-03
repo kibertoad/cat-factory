@@ -33,6 +33,8 @@ export function riskPolicy(
     ciMaxAttempts: 10,
     maxRequirementIterations: 6,
     maxRequirementConcernAllowed: 'none',
+    requirementFindingFloor: 'medium',
+    requirementFloorProgression: null,
     maxTesterQualityIterations: 3,
     companionMaxReworks: DEFAULT_COMPANION_MAX_ATTEMPTS,
     releaseWatchWindowMinutes: 30,

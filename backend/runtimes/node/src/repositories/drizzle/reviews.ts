@@ -6,6 +6,7 @@
 
 import {
   parseRefinedRequirementsWritebackRecord,
+  parseRequirementFindingFloorRecord,
   type RefinedRequirementsWritebackRecord,
 } from '@cat-factory/contracts'
 import { parseJsonArray } from './_shared.js'
@@ -57,6 +58,7 @@ function rowToRequirementReview(row: RequirementReviewRow): RequirementReview {
     recommendations: parseJsonArray<RequirementRecommendation>(row.recommendations ?? '[]'),
     rev: row.rev ?? 0,
     issueWriteback: parseRefinedRequirementsWritebackRecord(row.issue_writeback),
+    findingFloor: parseRequirementFindingFloorRecord(row.finding_floor),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -87,6 +89,7 @@ function requirementReviewValues(workspaceId: string, review: RequirementReview)
     iteration: review.iteration ?? 1,
     max_iterations: review.maxIterations ?? 1,
     recommendations: JSON.stringify(review.recommendations ?? []),
+    finding_floor: review.findingFloor ? JSON.stringify(review.findingFloor) : null,
     rev: 0,
     created_at: review.createdAt,
     updated_at: review.updatedAt,
@@ -140,6 +143,7 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
           iteration: values.iteration,
           max_iterations: values.max_iterations,
           recommendations: values.recommendations,
+          finding_floor: values.finding_floor,
           rev: sql`${requirementReviews.rev} + 1`,
           updated_at: values.updated_at,
         },
@@ -163,6 +167,7 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
         iteration: values.iteration,
         max_iterations: values.max_iterations,
         recommendations: values.recommendations,
+        finding_floor: values.finding_floor,
         rev: sql`${requirementReviews.rev} + 1`,
         updated_at: values.updated_at,
       })
@@ -211,6 +216,7 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
           iteration: values.iteration,
           max_iterations: values.max_iterations,
           recommendations: values.recommendations,
+          finding_floor: values.finding_floor,
           rev: 0,
           issue_writeback: null,
           created_at: values.created_at,

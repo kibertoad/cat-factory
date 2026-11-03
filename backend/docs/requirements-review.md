@@ -9,6 +9,29 @@ document, then a re-review converges (`incorporated`), continues (`ready`), or h
 the merge preset's `maxRequirementConcernAllowed` tolerance auto-pass, and its
 `maxRequirementIterations` is the cap above. Pass-through when the reviewer model isn't wired.
 
+## The severity floor decides what is RAISED; the concern tolerance decides what STOPS
+
+Two policy fields act on severity, at different points, and neither replaces the other.
+`requirementFindingFloor` (default `medium`) is the lowest severity a pass raises at all;
+`maxRequirementConcernAllowed` then decides whether the findings that were raised park the run.
+Operator-facing account: the website's
+[requirements guide](https://www.catfactory.ai/guide/requirements.html).
+
+- **Both halves enforce it.** The reviewer's user prompt names the floor so it spends no effort
+  below it, and `IterativeReviewService` drops whatever still comes back under it. Only the
+  requirements kind is handed a floor (`review-kinds.ts`); clarity and brainstorm raise everything.
+- **Progressive mode reads the block's estimate at the start of each pass**
+  (`requirementFloorProgression`, resolved by `resolveRequirementFindingFloor` in contracts against
+  the highest of complexity / risk / impact). The seeded pipelines run `requirements-review` before
+  any `task-estimator`, so a first run usually has no estimate: the fixed floor applies and the pass
+  records `basis: 'no_estimate'`, which the window states rather than letting the fallback read as a
+  decision. Running an estimator inside the step was rejected: it costs a call per run, and the brief
+  it would score is the vague one this review exists to fix.
+- **Every pass records what it raised against** (`RequirementReview.findingFloor`: severity, basis,
+  score, and how many findings it dropped), so a quiet review held to `high` never reads like a clean
+  one. The dropped count covers only what the model returned despite the prompt; what it never
+  wrote cannot be counted, which is why the floor itself is shown too.
+
 ## Scope: the product / business layer ONLY
 
 The technical layer belongs to the later `architect` and `researcher` steps, which have the repo
@@ -146,7 +169,7 @@ its JSON output contract.
   [`the e2e README`](../internal/e2e/README.md#inline-llm-calls-the-e2einlinemodels-seam).
 - Prompt overrides and the role/directives split:
   [`agent-prompt-overrides.md`](./agent-prompt-overrides.md).
-- The preset the two knobs above live on: `RiskPolicySeed` in kernel's `domain/catalog.ts`. The
+- The preset the knobs above live on: `RiskPolicySeed` in kernel's `domain/catalog.ts`. The
   merge policy it belongs to (auto-merge ceilings, `classRules`, who may land what): AGENTS.md,
   "Merge lifecycle".
 - The precheck-first sibling: `hasNotesToIncorporate` short-circuits `runIncorporationCycle` so

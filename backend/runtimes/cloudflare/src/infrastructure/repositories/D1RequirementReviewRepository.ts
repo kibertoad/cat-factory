@@ -1,6 +1,7 @@
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import {
   parseRefinedRequirementsWritebackRecord,
+  parseRequirementFindingFloorRecord,
   type RefinedRequirementsWritebackRecord,
   type RequirementRecommendation,
   type RequirementReview,
@@ -20,6 +21,7 @@ interface RequirementReviewRow {
   recommendations: string | null
   rev: number | null
   issue_writeback: string | null
+  finding_floor: string | null
   created_at: number
   updated_at: number
 }
@@ -32,6 +34,10 @@ function parseJsonArray<T>(raw: string | null | undefined): T[] {
   } catch {
     return []
   }
+}
+
+function findingFloorColumn(review: RequirementReview): string | null {
+  return review.findingFloor ? JSON.stringify(review.findingFloor) : null
 }
 
 function rowToReview(row: RequirementReviewRow): RequirementReview {
@@ -47,6 +53,7 @@ function rowToReview(row: RequirementReviewRow): RequirementReview {
     recommendations: parseJsonArray<RequirementRecommendation>(row.recommendations),
     rev: row.rev ?? 0,
     issueWriteback: parseRefinedRequirementsWritebackRecord(row.issue_writeback),
+    findingFloor: parseRequirementFindingFloorRecord(row.finding_floor),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -100,8 +107,8 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
       .prepare(
         `INSERT INTO requirement_reviews
            (workspace_id, id, block_id, status, items, model, incorporated_requirements,
-            iteration, max_iterations, recommendations, rev, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+            iteration, max_iterations, recommendations, finding_floor, rev, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            block_id = excluded.block_id,
            status = excluded.status,
@@ -111,6 +118,7 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
            iteration = excluded.iteration,
            max_iterations = excluded.max_iterations,
            recommendations = excluded.recommendations,
+           finding_floor = excluded.finding_floor,
            rev = requirement_reviews.rev + 1,
            updated_at = excluded.updated_at
          RETURNING rev`,
@@ -126,6 +134,7 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
         review.iteration ?? 1,
         review.maxIterations ?? 1,
         JSON.stringify(review.recommendations ?? []),
+        findingFloorColumn(review),
         review.createdAt,
         review.updatedAt,
       )
@@ -148,6 +157,7 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
            iteration = ?,
            max_iterations = ?,
            recommendations = ?,
+           finding_floor = ?,
            updated_at = ?,
            rev = rev + 1
          WHERE workspace_id = ? AND id = ? AND rev = ?
@@ -162,6 +172,7 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
         review.iteration ?? 1,
         review.maxIterations ?? 1,
         JSON.stringify(review.recommendations ?? []),
+        findingFloorColumn(review),
         review.updatedAt,
         workspaceId,
         review.id,
@@ -183,8 +194,8 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
       .prepare(
         `INSERT INTO requirement_reviews
            (workspace_id, id, block_id, status, items, model, incorporated_requirements,
-            iteration, max_iterations, recommendations, rev, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+            iteration, max_iterations, recommendations, finding_floor, rev, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
          ON CONFLICT (workspace_id, block_id) DO UPDATE SET
            id = excluded.id,
            status = excluded.status,
@@ -194,6 +205,7 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
            iteration = excluded.iteration,
            max_iterations = excluded.max_iterations,
            recommendations = excluded.recommendations,
+           finding_floor = excluded.finding_floor,
            rev = 0,
            issue_writeback = NULL,
            created_at = excluded.created_at,
@@ -211,6 +223,7 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
         review.iteration ?? 1,
         review.maxIterations ?? 1,
         JSON.stringify(review.recommendations ?? []),
+        findingFloorColumn(review),
         review.createdAt,
         review.updatedAt,
       )
