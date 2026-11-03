@@ -1,5 +1,6 @@
 import type {
   AgentRunContext,
+  BinaryArtifactBlockIndex,
   BinaryArtifactStore,
   DesignImage,
   DocumentRepository,
@@ -38,6 +39,8 @@ import { taskImageSet } from './run-task-images.js'
 export interface RunImageDeps {
   documents?: DocumentRepository
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /** The metadata alone: what a kind that only READS attached images lists them through. */
+  binaryArtifactIndex?: BinaryArtifactBlockIndex
   agentKindRegistry: AgentKindRegistry
   logger?: Logger
 }
@@ -55,6 +58,10 @@ type RunImages = Pick<AgentRunContext, 'referenceScreenshots' | 'designImages' |
  * - The capture set is gated on the kind's declared `ui` image, the same fact the executor routes
  *   the job by, so a deployment's own browser-driven kind is served by the same rule.
  * - The design set is gated on the `design-images` trait, for the same reason.
+ * - The attached images are gated on the `task-images` trait. A kind that wants ONLY them needs
+ *   the rows and none of the bytes, so it lists them off {@link RunImageDeps.binaryArtifactIndex}
+ *   and never resolves the account's store: the reviewing kinds dispatch on most runs, and most
+ *   tasks attach nothing.
  *
  * The two halves answer an EMPTY set differently, deliberately. A capture that asked and found
  * nothing still tells a tester so ("you were asked, and there is nothing to compare against"); a
@@ -73,6 +80,12 @@ export async function resolveRunImages(
   const resolveStore = deps.resolveBinaryArtifactStore
   if (!resolveStore || (!captures && !builds && !readsTask)) return {}
   try {
+    if (!captures && !builds && deps.binaryArtifactIndex) {
+      const taskImages = taskImageSet(
+        await deps.binaryArtifactIndex.listByBlock(workspaceId, blockId),
+      )
+      return taskImages ? { taskImages } : {}
+    }
     const store: BinaryArtifactStore | null = await resolveStore(workspaceId)
     if (!store) return {}
     // ONE block listing serves every half: the uploads the reference set merges and the images

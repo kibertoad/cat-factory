@@ -4581,6 +4581,7 @@
       "add": "Aggiungi immagini",
       "count": "{count} di {max}",
       "truncated": "Un'attività contiene al massimo {max} immagini, quindi sono state aggiunte solo le prime.",
+      "rejected": "Non aggiunti, perché sono accettate solo immagini PNG, JPEG, WebP e GIF: {names}",
       "remove": "Rimuovi {name}",
       "unnamed": "Immagine allegata",
       "attached": "Immagini allegate",

@@ -24,7 +24,12 @@ import {
   providerWebSearchTools,
   webResearchGuidanceFor,
 } from './web-search.js'
-import { type LoadedDesignImage, imageParts, prepareInlineImages } from './design-images.js'
+import {
+  type LoadedDesignImage,
+  imageParts,
+  inlineImageStore,
+  prepareInlineImages,
+} from './design-images.js'
 
 export interface AiAgentExecutorDependencies {
   /**
@@ -191,8 +196,10 @@ export class AiAgentExecutor implements AgentExecutor {
     const common = {
       ref,
       textOnly: this.runsInline?.(ref) ?? false,
-      resolveStore: this.resolveBinaryArtifactStore,
+      // ONE resolution shared by both sets, and none at all when neither needs bytes.
+      store: inlineImageStore(this.resolveBinaryArtifactStore, context.workspaceId),
       workspaceId: context.workspaceId,
+      logger: this.log,
     }
     const design = await prepareInlineImages({ ...common, set: context.designImages })
     const task = await prepareInlineImages({ ...common, set: context.taskImages })

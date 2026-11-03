@@ -1,33 +1,54 @@
 import type {
+  BinaryArtifactStore,
   DesignImageDelivery,
   DesignImageSet,
+  Logger,
   ModelRef,
   ResolveBinaryArtifactStore,
 } from '@cat-factory/kernel'
-import { resolveDesignImageDelivery } from '@cat-factory/kernel'
+import { describeError, noopLogger, resolveDesignImageDelivery } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // The INLINE half of image delivery (a task's design pictures and the images attached to it):
 // turning a set the engine resolved into the image content parts an inline model call carries.
 //
-// The container half needs nothing like this — the harness downloads the bytes into the checkout
-// and the CLI reads them — which is why the bytes are fetched HERE, at the one call site that has
+// The container half needs nothing like this (the harness downloads the bytes into the checkout
+// and the CLI reads them), which is why the bytes are fetched HERE, at the one call site that has
 // to put them in a request. Loading them any earlier would mean megabytes of PNG on an
 // `AgentRunContext` that is snapshotted, and on a job body that is persisted with its dispatch.
 // ---------------------------------------------------------------------------
 
 /** One picture, loaded and ready to become an image content part. */
 export interface LoadedDesignImage {
+  /** The row the bytes came from: the identity the fold keys on, since a view name may repeat. */
+  artifactId: string
   view: string
   mediaType: string
   data: Uint8Array
 }
 
-/** What {@link loadDesignImages} produced: what it has, and the views it could not fetch. */
+/** What {@link loadDesignImages} produced: what it has, and the pictures it could not fetch. */
 export interface LoadedDesignImages {
   images: LoadedDesignImage[]
-  /** Views whose bytes did not come back. Empty when everything loaded. */
-  missing: string[]
+  /** Pictures whose bytes did not come back. Empty when everything loaded. */
+  missing: { artifactId: string; view: string }[]
+}
+
+/**
+ * The account store one inline call reads its pictures through, resolved at most once however
+ * many sets the call carries. A thunk rather than a store so a call whose sets turn out to need no
+ * bytes (a text-only model, nothing attached) never reads the account's storage settings.
+ */
+export type InlineImageStore = () => Promise<BinaryArtifactStore | null>
+
+/** Memoise one workspace's store resolution for the life of one inline call. */
+export function inlineImageStore(
+  resolve: ResolveBinaryArtifactStore | undefined,
+  workspaceId: string | undefined,
+): InlineImageStore | undefined {
+  if (!resolve || !workspaceId) return undefined
+  let pending: Promise<BinaryArtifactStore | null> | undefined
+  return () => (pending ??= resolve(workspaceId))
 }
 
 /**
@@ -37,26 +58,45 @@ export interface LoadedDesignImages {
  * path of one model call against a shared blob backend, so a fan-out would buy milliseconds and
  * spend them on a burst nobody asked for.
  *
- * A picture whose bytes are gone is DROPPED and named, never substituted: the store can hold a row
- * whose blob the backend has lost, and an image part with no bytes is a failed request rather than
- * a degraded one.
+ * A picture whose bytes are gone, or whose read threw, is DROPPED and named, never substituted:
+ * the store can hold a row whose blob the backend has lost, and an image part with no bytes is a
+ * failed request rather than a degraded one.
  */
 export async function loadDesignImages(
-  resolveStore: ResolveBinaryArtifactStore,
+  store: BinaryArtifactStore | null,
   workspaceId: string,
   set: DesignImageSet,
+  logger: Logger = noopLogger,
 ): Promise<LoadedDesignImages> {
-  const store = await resolveStore(workspaceId)
-  if (!store) return { images: [], missing: set.files.map((file) => file.view) }
+  const missingOf = (file: DesignImageSet['files'][number]) => ({
+    artifactId: file.artifactId,
+    view: file.view,
+  })
+  if (!store) return { images: [], missing: set.files.map(missingOf) }
   const images: LoadedDesignImage[] = []
-  const missing: string[] = []
+  const missing: LoadedDesignImages['missing'] = []
   for (const file of set.files) {
-    const blob = await store.getBlob(workspaceId, file.artifactId)
+    let blob: Uint8Array | null
+    try {
+      blob = await store.getBlob(workspaceId, file.artifactId)
+    } catch (error) {
+      logger.warn('Inline image read failed; the picture is withheld', {
+        workspaceId,
+        artifactId: file.artifactId,
+        ...describeError(error),
+      })
+      blob = null
+    }
     if (!blob?.byteLength) {
-      missing.push(file.view)
+      missing.push(missingOf(file))
       continue
     }
-    images.push({ view: file.view, mediaType: file.contentType, data: blob })
+    images.push({
+      artifactId: file.artifactId,
+      view: file.view,
+      mediaType: file.contentType,
+      data: blob,
+    })
   }
   return { images, missing }
 }
@@ -87,15 +127,17 @@ export function foldLoadedImages(
   if (!loaded.images.length) {
     return { set, delivery: { attached: false, reason: 'transfer_failed' } }
   }
-  const shown = new Set(loaded.images.map((image) => image.view))
+  const shown = new Set(loaded.images.map((image) => image.artifactId))
   return {
     set: {
-      files: set.files.filter((file) => shown.has(file.view)),
-      omitted: [...set.omitted, ...loaded.missing],
+      files: set.files.filter((file) => shown.has(file.artifactId)),
+      omitted: [...set.omitted, ...loaded.missing.map((file) => file.view)],
     },
     delivery: attached,
   }
 }
+
+const TRANSFER_FAILED: DesignImageDelivery = { attached: false, reason: 'transfer_failed' }
 
 /**
  * Settle what one inline model call can do with an image set, and load the bytes when it can carry
@@ -109,8 +151,9 @@ export async function prepareInlineImages(args: {
   set: DesignImageSet | undefined
   ref: Pick<ModelRef, 'acceptsImages'>
   textOnly: boolean
-  resolveStore: ResolveBinaryArtifactStore | undefined
+  store: InlineImageStore | undefined
   workspaceId: string | undefined
+  logger?: Logger
 }): Promise<{ outcome?: InlineImageOutcome; images: LoadedDesignImage[] }> {
   const { set } = args
   if (!set?.files.length) return { images: [] }
@@ -118,15 +161,22 @@ export async function prepareInlineImages(args: {
     ? { attached: false, reason: 'inline_harness_text_only' }
     : resolveDesignImageDelivery({ channel: 'message' }, args.ref)
   if (!delivery.attached) return { outcome: { set, delivery }, images: [] }
-  if (!args.resolveStore || !args.workspaceId) {
-    // A set exists and this caller has no way to read its bytes: reported as the transfer failure
-    // it is, never as an attachment of nothing.
-    return {
-      outcome: { set, delivery: { attached: false, reason: 'transfer_failed' } },
-      images: [],
-    }
+  // A set exists and this caller cannot read its bytes: reported as the transfer failure it is,
+  // never as an attachment of nothing, and never as a failure of the call that carries it.
+  const transferFailed = { outcome: { set, delivery: TRANSFER_FAILED }, images: [] }
+  if (!args.store || !args.workspaceId) return transferFailed
+  const logger = args.logger ?? noopLogger
+  let store: BinaryArtifactStore | null
+  try {
+    store = await args.store()
+  } catch (error) {
+    logger.warn('Inline image store unavailable; the pictures are withheld', {
+      workspaceId: args.workspaceId,
+      ...describeError(error),
+    })
+    return transferFailed
   }
-  const loaded = await loadDesignImages(args.resolveStore, args.workspaceId, set)
+  const loaded = await loadDesignImages(store, args.workspaceId, set, logger)
   return { outcome: foldLoadedImages(set, loaded, delivery), images: loaded.images }
 }
 

@@ -128,6 +128,7 @@ import type {
   SpendRollupRepository,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
+  BinaryArtifactBlockIndex,
   ResolveRepoFilesForCoords,
   ResolveRunRepoContext,
   AccountRiskPolicyRepository,
@@ -1156,6 +1157,12 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * null — storage not configured) → the gate passes through (auto-advances).
    */
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
+   * The artifact METADATA, read without resolving the account's store: a dispatch whose kind only
+   * reads a task's attached images lists them here, so the common no-image task costs one indexed
+   * read and no settings read. Absent ⇒ that read goes through {@link resolveBinaryArtifactStore}.
+   */
+  binaryArtifactIndex?: BinaryArtifactBlockIndex
   /** Performs the real GitHub merge so a task's `done` means "PR merged". */
   pullRequestMerger?: PullRequestMerger
   /**

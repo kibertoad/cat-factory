@@ -49,6 +49,7 @@ export type RunContextAdmissionDeps = Pick<
   | 'spendService'
   | 'workspaceSettingsService'
   | 'resolveBinaryArtifactStore'
+  | 'binaryArtifactIndex'
   | 'resolveProviderCapabilities'
   | 'inlineHarnessRef'
   | 'resolveWorkspaceModelDefault'
@@ -99,6 +100,7 @@ export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
     foundationalServiceResolver: deps.foundationalServiceResolver,
     binaryGeneratorSource: deps.binaryGeneratorSource,
     resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore,
+    binaryArtifactIndex: deps.binaryArtifactIndex,
     logger: deps.logger,
   })
   // The run-admission preflights (the shared start/retry/restart `assert*` gate family).

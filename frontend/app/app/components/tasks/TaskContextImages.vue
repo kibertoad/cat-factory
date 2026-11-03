@@ -20,7 +20,8 @@ const ws = useWorkspaceStore()
 const access = useWorkspaceAccess()
 const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
-const blobs = useArtifactBlobs()
+// Read through the task, which resolves the workspace its images live at.
+const blobs = useArtifactBlobs((id) => api.fetchTaskImageBlob(ws.requireId(), props.block.id, id))
 
 const records = ref<TaskImageRecord[]>([])
 const loadError = ref<DescribedFailure | null>(null)
@@ -28,8 +29,8 @@ const busy = ref(false)
 
 async function load() {
   try {
-    const { artifacts } = await api.listBlockArtifacts(ws.requireId(), props.block.id)
-    records.value = artifacts.filter((artifact) => artifact.kind === 'context')
+    const { artifacts } = await api.listTaskImages(ws.requireId(), props.block.id)
+    records.value = artifacts
     loadError.value = null
     for (const record of records.value) void blobs.resolve(record.id)
   } catch (e) {
@@ -67,7 +68,7 @@ async function add(files: File[]) {
 async function remove(id: string) {
   busy.value = true
   try {
-    await api.deleteArtifact(ws.requireId(), id)
+    await api.deleteTaskImage(ws.requireId(), props.block.id, id)
     records.value = records.value.filter((record) => record.id !== id)
   } catch (e) {
     present(e, 'tasks.images.removeFailed')

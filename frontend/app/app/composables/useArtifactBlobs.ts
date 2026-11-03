@@ -18,9 +18,18 @@ import { useWorkspaceStore } from '~/stores/workspace'
  */
 export type ArtifactBlobStatus = LoadState
 
-export function useArtifactBlobs() {
+/** Fetches one artifact's bytes as an object URL plus the media type they were served as. */
+export type ArtifactBlobFetcher = (id: string) => Promise<{ url: string; contentType: string }>
+
+/**
+ * `fetchBlob` replaces the default workspace blob route, for artifacts read through a narrower one
+ * (a task's attached images are served through their task, which resolves where they live).
+ */
+export function useArtifactBlobs(fetchBlob?: ArtifactBlobFetcher) {
   const ws = useWorkspaceStore()
   const api = useApi()
+  const fetchOne: ArtifactBlobFetcher =
+    fetchBlob ?? ((id) => api.fetchArtifactBlob(ws.requireId(), id))
 
   /** artifactId → object URL (reactive so templates re-render when a blob resolves). */
   const urls = reactive<Record<string, string>>({})
@@ -69,8 +78,7 @@ export function useArtifactBlobs() {
     if (pending) return pending
 
     status[id] = 'loading'
-    const p = api
-      .fetchArtifactBlob(ws.requireId(), id)
+    const p = fetchOne(id)
       .then(({ url, contentType }) => {
         // The owner unmounted while this was in flight: revoke the freshly-minted URL
         // instead of stranding it in the cleared cache.

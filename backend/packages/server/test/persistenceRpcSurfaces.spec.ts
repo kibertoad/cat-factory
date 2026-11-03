@@ -1010,10 +1010,31 @@ describe('binary-artifact metadata surface (visual-confirmation gate, workspace-
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 
+  // A cross-home move writes into one workspace and out of another, so BOTH must be in scope.
+  it('forwards binaryArtifactMetadataStore.moveBlocks when both workspaces are in scope', async () => {
+    await expect(
+      remoteRegistry().binaryArtifactMetadataStore!.moveBlocks!(['ws_in', 'ws_in'], ['blk_in']),
+    ).resolves.toBe(1)
+  })
+
+  for (const pair of [
+    ['ws_in', 'ws_out'],
+    ['ws_out', 'ws_in'],
+  ]) {
+    it(`rejects binaryArtifactMetadataStore.moveBlocks from ${pair[0]} to ${pair[1]} (404)`, async () => {
+      await expect(
+        remoteRegistry().binaryArtifactMetadataStore!.moveBlocks!(pair, ['blk_in']),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
   it('still refuses the sweeper-only retention reads (listOlderThan off the allow-list)', async () => {
     // `listOlderThan`/`deleteOlderThan` are the retention sweep — mothership-internal, never remote.
     await expect(
       remoteRegistry().binaryArtifactMetadataStore!.listOlderThan!('ws_in', 0),
+    ).rejects.toThrow(/not callable/)
+    await expect(
+      remoteRegistry().binaryArtifactMetadataStore!.listBlockAnchorsOlderThan!('ws_in', 0),
     ).rejects.toThrow(/not callable/)
   })
 })

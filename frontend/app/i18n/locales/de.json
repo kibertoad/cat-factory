@@ -4581,6 +4581,7 @@
       "add": "Bilder hinzufügen",
       "count": "{count} von {max}",
       "truncated": "Eine Aufgabe enthält höchstens {max} Bilder, daher wurden nur die ersten hinzugefügt.",
+      "rejected": "Nicht hinzugefügt, da nur PNG-, JPEG-, WebP- und GIF-Bilder akzeptiert werden: {names}",
       "remove": "{name} entfernen",
       "unnamed": "Angehängtes Bild",
       "attached": "Bilder angehängt",

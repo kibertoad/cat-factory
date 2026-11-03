@@ -29,6 +29,7 @@ import type {
   PipelineStep,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
+  BinaryArtifactBlockIndex,
   DeclaredToolServers,
   ResolvedSkill,
   SkillVersionPin,
@@ -314,6 +315,8 @@ export interface AgentContextBuilderDeps {
    * views: the documented fallback, not a degradation.
    */
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /** Optional: lists a task's attached images without resolving the store (see `run-images.ts`). */
+  binaryArtifactIndex?: BinaryArtifactBlockIndex
   /**
    * Optional: the run logger, used to report a capability that was declared but skipped (an
    * unregistered bundled-skill id, an optional catalog skill that could not resolve). Absent ⇒

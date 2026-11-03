@@ -54,7 +54,7 @@ describe('reviewRequestWithTaskImages', () => {
       'Review this.',
     )
     expect('messages' in request).toBe(true)
-    const content = 'messages' in request ? request.messages[0]!.content : []
+    const content = 'messages' in request ? (request.messages?.[0]?.content ?? []) : []
     expect(content.filter((part) => part.type === 'image')).toHaveLength(1)
     expect(JSON.stringify(content)).toContain('Images attached to this task')
   })
@@ -68,6 +68,34 @@ describe('reviewRequestWithTaskImages', () => {
       'Review this.',
     )
     expect('prompt' in request && request.prompt).toContain('could NOT put in front of you')
+  })
+
+  it('states the images as withheld when the listing worked and the byte read threw', async () => {
+    // The listing named the images, so the reviewer is told they exist and were not delivered,
+    // rather than the review failing with an error that blames the model.
+    const logger = createRecordingLogger()
+    let resolves = 0
+    const request = await reviewRequestWithTaskImages(
+      {
+        resolveBinaryArtifactStore: async () => {
+          resolves += 1
+          return {
+            listByBlock: async () => [attached()],
+            getBlob: async () => {
+              throw new Error('R2 503')
+            },
+          } as never
+        },
+        logger,
+      },
+      'ws',
+      block,
+      IMAGE_MODEL,
+      'Review this.',
+    )
+    expect('prompt' in request && request.prompt).toContain('could NOT put in front of you')
+    expect(resolves).toBe(1)
+    expect(logger.lines.filter((line) => line.level === 'warn')).toHaveLength(1)
   })
 
   it('reviews on unchanged when the store cannot be read, and logs it', async () => {

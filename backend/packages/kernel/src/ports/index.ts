@@ -340,6 +340,7 @@ export type {
   BuiltinBinaryArtifactStorageKind,
   BinaryArtifactStore,
   BinaryArtifactMetadataStore,
+  BinaryArtifactBlockIndex,
   BinaryBlobBackend,
   DocumentArtifactRef,
   ResolveBinaryArtifactStore,
@@ -348,6 +349,7 @@ export type {
 export {
   BUILTIN_BINARY_ARTIFACT_STORAGE_KINDS,
   RETAINED_BINARY_ARTIFACT_KINDS,
+  BLOCK_ANCHORED_BINARY_ARTIFACT_KINDS,
   createBinaryArtifactStore,
   dedupeDocumentRefs,
 } from './binary-artifacts.js'

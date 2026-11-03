@@ -1,6 +1,7 @@
 import type {
   AgentContextSnapshotRepository,
   AuditEventRepository,
+  BlockRepository,
   DirectoryRepository,
   AgentSearchQueryRepository,
   AgentToolCallRepository,
@@ -319,8 +320,12 @@ export function startRetentionSweeper(
  */
 export function startArtifactRetentionSweeper(
   resolveStore: ResolveBinaryArtifactStore,
-  workspaceRepository: Pick<WorkspaceRepository, 'listVisible'>,
-  settingsRepository: Pick<WorkspaceSettingsRepository, 'get'>,
+  repos: {
+    workspaceRepository: Pick<WorkspaceRepository, 'listVisible'>
+    workspaceSettingsRepository: Pick<WorkspaceSettingsRepository, 'get'>
+    /** Resolves the blocks the sweep's orphan half checks the aged task images against. */
+    blockRepository: Pick<BlockRepository, 'findByIds'>
+  },
   clock: Clock,
   log: Logger,
   /** Records each pass's outcome under this sweep's name (see {@link startSweeper}). */
@@ -336,13 +341,14 @@ export function startArtifactRetentionSweeper(
       const removed = await sweepBinaryArtifactRetention({
         resolveStore,
         listWorkspaceIds: () =>
-          workspaceRepository.listVisible(null).then((ws) => ws.map((w) => w.id)),
+          repos.workspaceRepository.listVisible(null).then((ws) => ws.map((w) => w.id)),
         retentionDaysFor: (workspaceId) =>
-          settingsRepository
+          repos.workspaceSettingsRepository
             .get(workspaceId)
             .then(
               (s) => s?.artifactRetentionDays ?? DEFAULT_WORKSPACE_SETTINGS.artifactRetentionDays,
             ),
+        findBlocks: (blockIds) => repos.blockRepository.findByIds(blockIds),
         now: clock.now(),
       })
       if (removed > 0)

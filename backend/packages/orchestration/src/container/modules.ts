@@ -1377,6 +1377,7 @@ export function createRecurringModule(
     clock: deps.clock,
     serviceRepository: deps.serviceRepository,
     workspaceMountRepository: deps.workspaceMountRepository,
+    resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore,
     // Validates a `bug-intake` pipeline's schedule carries an `issueIntake` config whose source
     // is a connected task source. Absent (no task sources wired) → the presence check still runs.
     taskConnectionService,

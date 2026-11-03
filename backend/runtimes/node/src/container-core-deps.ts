@@ -403,6 +403,8 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // Resolves the per-account binary-artifact store (screenshots) for the visual-confirmation
     // gate; resolving to null (no storage configured) ⇒ the gate passes through.
     resolveBinaryArtifactStore,
+    // The same store's metadata half, so a reviewer dispatch lists a task's images unresolved.
+    binaryArtifactIndex: repos.binaryArtifactMetadataStore,
     workspaceRepository: repos.workspaceRepository,
     workspaceMemberRepository: repos.workspaceMemberRepository,
     accountRepository: repos.accountRepository,

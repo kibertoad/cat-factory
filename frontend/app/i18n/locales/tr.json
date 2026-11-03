@@ -5125,6 +5125,7 @@
       "add": "Görsel ekle",
       "count": "{count} / {max}",
       "truncated": "Bir görev en fazla {max} görsel içerebilir, bu yüzden yalnızca ilkleri eklendi.",
+      "rejected": "Yalnızca PNG, JPEG, WebP ve GIF görselleri kabul edildiği için eklenmedi: {names}",
       "remove": "{name} öğesini kaldır",
       "unnamed": "Eklenen görsel",
       "attached": "Görseller eklendi",

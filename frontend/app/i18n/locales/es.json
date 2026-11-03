@@ -5125,6 +5125,7 @@
       "add": "Añadir imágenes",
       "count": "{count} de {max}",
       "truncated": "Una tarea admite como máximo {max} imágenes, así que solo se añadieron las primeras.",
+      "rejected": "No se añadieron, porque solo se aceptan imágenes PNG, JPEG, WebP y GIF: {names}",
       "remove": "Quitar {name}",
       "unnamed": "Imagen adjunta",
       "attached": "Imágenes adjuntadas",

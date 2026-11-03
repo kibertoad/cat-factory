@@ -178,6 +178,38 @@ describe('resolveRunImages', () => {
     ).toBeDefined()
   })
 
+  it('lists the attached images off the metadata for a kind that only reads them', async () => {
+    // A reviewer dispatches on most runs and most tasks attach nothing, so it must not pay for
+    // resolving the account's store (a settings read, and a warn wherever it cannot be resolved).
+    const index = { listByBlock: async () => [upload('sketch', { kind: 'context' as const })] }
+    const resolved = await resolveRunImages(
+      {
+        agentKindRegistry: registry,
+        binaryArtifactIndex: index,
+        resolveBinaryArtifactStore: async () => {
+          throw new Error('the store must not be resolved for a reviewer')
+        },
+      },
+      'reviewer',
+      'ws',
+      'blk',
+    )
+    expect(resolved.taskImages?.files.map((file) => file.view)).toEqual(['sketch'])
+    const none = await resolveRunImages(
+      {
+        agentKindRegistry: registry,
+        binaryArtifactIndex: { listByBlock: async () => [] },
+        resolveBinaryArtifactStore: async () => {
+          throw new Error('the store must not be resolved for a reviewer')
+        },
+      },
+      'reviewer',
+      'ws',
+      'blk',
+    )
+    expect(none).toEqual({})
+  })
+
   it('caps the attached images and names what it dropped', async () => {
     const records = Array.from({ length: MAX_TASK_IMAGES + 2 }, (_, i) =>
       upload(`image ${i}`, { id: `art_${i}`, kind: 'context' }),

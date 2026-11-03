@@ -17,6 +17,7 @@ import {
 import { requireCapability } from '../../http/guards.js'
 import { reclaimArtifactOverflow, reserveArtifactSlot } from './artifactSetCap.js'
 import { requestLogger } from '../../http/requestLogging.js'
+import { mountTaskImageRoutes, resolveTaskImageHome } from './taskImageRoutes.js'
 
 /**
  * Resolve the binary-artifact store for the request's workspace (its account's configured
@@ -34,10 +35,11 @@ async function requireStore<E extends AppEnv>(c: Context<E>): Promise<BinaryArti
 const ALLOWED_KINDS: BinaryArtifactKind[] = ['screenshot', 'reference', 'context']
 
 /**
- * The kinds a person uploads against a task, and so the only ones this endpoint deletes. A run's
- * captures and a step's generated assets are evidence and deliverables, never a person's to undo.
+ * The kinds this endpoint deletes: a reference design a person uploaded. A run's captures and a
+ * step's generated assets are evidence and deliverables, never a person's to undo, and an attached
+ * task image is removed through its task (`taskImageRoutes.ts`), which resolves where it lives.
  */
-const DELETABLE_KINDS: ReadonlySet<BinaryArtifactKind> = new Set(['reference', 'context'])
+const DELETABLE_KINDS: ReadonlySet<BinaryArtifactKind> = new Set(['reference'])
 
 /**
  * Standing row-count bound on one board block's uploaded artifacts, the sibling of the harness
@@ -116,7 +118,6 @@ export function artifactController(): Hono<AppEnv> {
         c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413),
     }),
     async (c) => {
-      const store = await requireStore(c)
       // Refuse a grossly oversized body up-front (from Content-Length) so it is never buffered
       // into memory; the exact per-file ceiling is still enforced after parsing below.
       if (exceedsRequestSizeLimit(c.req.header('content-length'))) {
@@ -162,16 +163,19 @@ export function artifactController(): Hono<AppEnv> {
       // run, so `executionId` is always null here — a run-scoped capture goes through the
       // token-authed harness ingest route instead, where the execution is derived from the verified
       // session token (never the request body). We deliberately ignore any client-supplied
-      // `executionId` rather than trust it. `blockId` is non-authoritative but harmless: every read
-      // filters by the path's (authenticated) `workspaceId`, so a row tagged with a foreign/bogus
-      // block is simply never surfaced by the gate.
-      const workspaceId = param(c, 'workspaceId')
-      // An attached task image means nothing without its task: it would join no set any reader asks for.
+      // `executionId` rather than trust it. For a reference design `blockId` is non-authoritative but
+      // harmless: every read filters by the path's (authenticated) `workspaceId`, and a reference is
+      // swept by age, so a row tagged with a foreign/bogus block is never surfaced and never kept.
+      // An attached task image is RETAINED until its block goes, so its block is resolved instead.
       if (kind === 'context' && !blockId) {
         throw new ValidationError('An attached task image needs a blockId', {
           reason: 'task_image_block_required',
         })
       }
+      const { workspaceId, store } =
+        kind === 'context' && blockId
+          ? await resolveTaskImageHome(c, blockId)
+          : { workspaceId: param(c, 'workspaceId'), store: await requireStore(c) }
       const imageCap =
         kind === 'context' && blockId ? taskImageCap(store, workspaceId, blockId) : null
       const priorImages = imageCap ? await reserveArtifactSlot(imageCap) : 0
@@ -254,6 +258,8 @@ export function artifactController(): Hono<AppEnv> {
     const artifacts = await store.listByBlock(param(c, 'workspaceId'), param(c, 'blockId'))
     return c.json({ artifacts }, 200)
   })
+
+  mountTaskImageRoutes(app)
 
   return app
 }

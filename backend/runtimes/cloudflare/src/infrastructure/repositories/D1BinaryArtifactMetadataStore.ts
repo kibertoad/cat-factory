@@ -4,7 +4,11 @@ import type {
   DocumentArtifactRef,
   DocumentOrigin,
 } from '@cat-factory/kernel'
-import { RETAINED_BINARY_ARTIFACT_KINDS, dedupeDocumentRefs } from '@cat-factory/kernel'
+import {
+  BLOCK_ANCHORED_BINARY_ARTIFACT_KINDS,
+  RETAINED_BINARY_ARTIFACT_KINDS,
+  dedupeDocumentRefs,
+} from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
 
@@ -170,6 +174,39 @@ export class D1BinaryArtifactMetadataStore implements BinaryArtifactMetadataStor
       rows.push(...(results ?? []))
     }
     return sortArtifactRows(rows).map(rowToRecord)
+  }
+
+  async moveBlocks(
+    workspaceIds: readonly [from: string, to: string],
+    blockIds: readonly string[],
+  ): Promise<number> {
+    const [from, to] = workspaceIds
+    let moved = 0
+    for (const chunk of chunkForIn([...new Set(blockIds)])) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { meta } = await this.db
+        .prepare(
+          `UPDATE binary_artifacts SET workspace_id = ?
+           WHERE workspace_id = ? AND block_id IN (${placeholders})`,
+        )
+        .bind(to, from, ...chunk)
+        .run()
+      moved += meta.changes ?? 0
+    }
+    return moved
+  }
+
+  async listBlockAnchorsOlderThan(workspaceId: string, olderThan: number): Promise<string[]> {
+    const kinds = BLOCK_ANCHORED_BINARY_ARTIFACT_KINDS.map(() => '?').join(', ')
+    const { results } = await this.db
+      .prepare(
+        `SELECT DISTINCT block_id FROM binary_artifacts
+         WHERE workspace_id = ? AND created_at < ? AND block_id IS NOT NULL
+           AND kind IN (${kinds})`,
+      )
+      .bind(workspaceId, olderThan, ...BLOCK_ANCHORED_BINARY_ARTIFACT_KINDS)
+      .all<{ block_id: string }>()
+    return (results ?? []).map((row) => row.block_id)
   }
 
   async listByDocument(

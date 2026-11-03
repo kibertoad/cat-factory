@@ -44,6 +44,12 @@ class FakeMetadataStore implements BinaryArtifactMetadataStore {
   countByBlock(): Promise<number> {
     return Promise.resolve(0)
   }
+  moveBlocks(): Promise<number> {
+    return Promise.resolve(0)
+  }
+  listBlockAnchorsOlderThan(): Promise<string[]> {
+    return Promise.resolve([])
+  }
   listByDocument(
     workspaceId: string,
     document: DocumentArtifactRef,

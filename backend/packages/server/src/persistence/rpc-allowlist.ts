@@ -1265,8 +1265,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // rule); the record-based `insert(record)` binds on the record's `workspaceId` FIELD (the
   // `workspaceField` rule). Every read already filters by the (authenticated) workspaceId, so a
   // row's non-authoritative `executionId`/`blockId` need no separate scope check. The retention
-  // sweep (`listOlderThan`/`deleteOlderThan`) stays mothership-internal (the mothership owns
-  // durable-state retention), like the other global sweeper methods.
+  // sweep (`listOlderThan`/`deleteOlderThan`/`listBlockAnchorsOlderThan`) stays
+  // mothership-internal (the mothership owns durable-state retention), like the other global
+  // sweeper methods.
   binaryArtifactMetadataStore: {
     insert: { scope: { kind: 'workspaceField', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
@@ -1276,6 +1277,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // The block-delete reclaim's read: a task's attached images are retained until their block
     // goes, so a delete must reach the mothership's rows or they would outlive the task.
     listByBlocks: { scope: { kind: 'workspace', arg: 0 } },
+    // A cross-home reparent carries a task's attached images with it. The source and destination
+    // workspaces travel as one list, so the `workspaceList` rule binds BOTH: a node can only move
+    // rows between two boards it may already write.
+    moveBlocks: { scope: { kind: 'workspaceList', arg: 0 } },
     countByBlock: { scope: { kind: 'workspace', arg: 0 } },
     // The document reclaim's two halves: an import running on a node retains a design source's
     // rendered frames and replaces the previous revision's, so both have to reach the mothership's

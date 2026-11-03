@@ -5316,6 +5316,7 @@
       "add": "Add images",
       "count": "{count} of {max}",
       "truncated": "A task holds at most {max} images, so only the first ones were added.",
+      "rejected": "Not added, as only PNG, JPEG, WebP and GIF images are accepted: {names}",
       "remove": "Remove {name}",
       "unnamed": "Attached image",
       "attached": "Images attached",

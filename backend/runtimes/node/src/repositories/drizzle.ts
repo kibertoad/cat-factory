@@ -113,10 +113,10 @@ import {
   DrizzleAgentContextSnapshotRepository,
   DrizzleAgentSearchQueryRepository,
   DrizzleAgentToolCallRepository,
-  DrizzleBinaryArtifactMetadataStore,
   DrizzleLlmCallMetricRepository,
   DrizzleProvisioningLogRepository,
 } from './drizzle/telemetry.js'
+import { DrizzleBinaryArtifactMetadataStore } from './drizzle/binaryArtifacts.js'
 import { DrizzleTokenUsageRepository } from './drizzle/tokenUsage.js'
 
 import {

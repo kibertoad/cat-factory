@@ -48,6 +48,8 @@ const EMPTY_BINARY_ARTIFACT_STORE: BinaryArtifactStore = {
   listByBlock: () => Promise.resolve([]),
   countByBlock: () => Promise.resolve(0),
   pruneByBlocks: () => Promise.resolve(0),
+  moveBlocks: () => Promise.resolve(0),
+  listBlockAnchorsOlderThan: () => Promise.resolve([]),
   listByDocument: () => Promise.resolve([]),
   listByDocuments: () => Promise.resolve([]),
   pruneByDocument: () => Promise.resolve(0),
@@ -156,6 +158,31 @@ export function memoryBinaryArtifactStore(): BinaryArtifactStore & {
             blockIds.includes(record.blockId),
         ),
       ),
+    moveBlocks: ([from, to], blockIds) => {
+      let moved = 0
+      for (const held of rows.values()) {
+        const { record } = held
+        if (record.workspaceId !== from || !record.blockId || !blockIds.includes(record.blockId))
+          continue
+        held.record = { ...record, workspaceId: to }
+        moved += 1
+      }
+      return Promise.resolve(moved)
+    },
+    listBlockAnchorsOlderThan: (workspaceId, olderThan) =>
+      Promise.resolve([
+        ...new Set(
+          [...rows.values()]
+            .map((held) => held.record)
+            .filter(
+              (record) =>
+                record.workspaceId === workspaceId &&
+                record.kind === 'context' &&
+                record.createdAt < olderThan,
+            )
+            .flatMap((record) => (record.blockId ? [record.blockId] : [])),
+        ),
+      ]),
     pruneByDocument: (workspaceId, document) =>
       Promise.resolve(
         reclaim(

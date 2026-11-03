@@ -718,6 +718,8 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // Resolves the per-account binary-artifact store (screenshots) for the
     // visual-confirmation gate; resolving to null ⇒ the gate passes through.
     resolveBinaryArtifactStore,
+    // The same store's metadata half, so a reviewer dispatch lists a task's images unresolved.
+    binaryArtifactIndex: new D1BinaryArtifactMetadataStore({ db }),
     ...selectWorkerCorePersistence({ db, clock }),
     ...buildDirectoryWebhooksForWorker(env, config, db),
     ...selectWorkerObservabilityDeps({

@@ -4,6 +4,7 @@
 // the inspector (which writes through at once) render one affordance over two different stores.
 import { INLINE_IMAGE_MEDIA_TYPES, MAX_TASK_IMAGES } from '@cat-factory/contracts'
 import IconButton from '~/components/common/IconButton.vue'
+import { partitionImagePick } from './TaskImageField.logic'
 
 export interface TaskImageFieldItem {
   key: string
@@ -24,15 +25,17 @@ const { t } = useI18n()
 
 const accept = INLINE_IMAGE_MEDIA_TYPES.join(',')
 const remaining = computed(() => Math.max(0, MAX_TASK_IMAGES - props.images.length))
-/** Set when a pick held more images than there was room for, so the drop is said, not silent. */
+/** What the last pick dropped, so the drop is said, not silent (see `partitionImagePick`). */
 const truncated = ref(false)
+const rejected = ref<string[]>([])
 const picked = ref<File[] | null>(null)
 
 watch(picked, (files) => {
   if (!files?.length) return
-  const images = files.filter((file) => INLINE_IMAGE_MEDIA_TYPES.includes(file.type))
-  truncated.value = images.length > remaining.value
-  const kept = images.slice(0, remaining.value)
+  const pick = partitionImagePick(files, remaining.value)
+  rejected.value = pick.rejected
+  truncated.value = pick.truncated
+  const kept = pick.kept
   // Cleared so the next pick is a fresh one; `reset` clears the native input's half of that.
   picked.value = null
   if (kept.length) emit('add', kept)
@@ -99,6 +102,9 @@ watch(picked, (files) => {
         {{ t('tasks.images.count', { count: images.length, max: MAX_TASK_IMAGES }) }}
       </span>
     </div>
+    <p v-if="rejected.length" class="text-2xs text-warning" data-testid="task-image-rejected">
+      {{ t('tasks.images.rejected', { names: rejected.join(', ') }) }}
+    </p>
     <p v-if="truncated" class="text-2xs text-warning">
       {{ t('tasks.images.truncated', { max: MAX_TASK_IMAGES }) }}
     </p>

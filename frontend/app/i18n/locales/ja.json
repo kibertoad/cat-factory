@@ -5125,6 +5125,7 @@
       "add": "画像を追加",
       "count": "{count} / {max}",
       "truncated": "1つのタスクに添付できる画像は最大 {max} 件のため、最初の画像だけを追加しました。",
+      "rejected": "PNG、JPEG、WebP、GIF 形式の画像のみ使用できるため、次のファイルは追加されませんでした: {names}",
       "remove": "{name} を削除",
       "unnamed": "添付画像",
       "attached": "画像を添付しました",

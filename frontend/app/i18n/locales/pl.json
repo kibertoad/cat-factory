@@ -5125,6 +5125,7 @@
       "add": "Dodaj obrazy",
       "count": "{count} z {max}",
       "truncated": "Zadanie może mieć najwyżej {max} obrazów, więc dodano tylko pierwsze.",
+      "rejected": "Nie dodano, ponieważ akceptowane są tylko obrazy PNG, JPEG, WebP i GIF: {names}",
       "remove": "Usuń {name}",
       "unnamed": "Załączony obraz",
       "attached": "Załączono obrazy",

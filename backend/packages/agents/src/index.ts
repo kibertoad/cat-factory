@@ -257,8 +257,10 @@ export {
 } from './agents/prompts/task-images.js'
 export {
   type InlineImageOutcome,
+  type InlineImageStore,
   type LoadedDesignImage,
   imageParts,
+  inlineImageStore,
   prepareInlineImages,
 } from './agents/runtime/design-images.js'
 export { toolServersSection } from './agents/prompts/capabilities.js'

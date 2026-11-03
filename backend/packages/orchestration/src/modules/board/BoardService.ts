@@ -474,6 +474,8 @@ export class BoardService {
       executionRepository,
       serviceRepository,
       workspaceMountRepository,
+      resolveBinaryArtifactStore,
+      logger: this.log,
       riskPolicySelection: this.riskPolicySelection,
       requireWorkspace: (id) => this.requireWorkspace(id),
       resolveBlock: (id, blockId) => this.resolveBlock(id, blockId),
@@ -630,6 +632,17 @@ export class BoardService {
       }
     }
     return assertFound<{ homeWorkspaceId: string; block: Block }>(null, 'Block', id)
+  }
+
+  /**
+   * The block plus the workspace that homes it, for a caller that keys its own rows on the block
+   * (a task's attached images live where its runs do). 404s exactly as a board mutation would.
+   */
+  resolveBlockHome(
+    workspaceId: string,
+    id: string,
+  ): Promise<{ homeWorkspaceId: string; block: Block }> {
+    return this.resolveBlock(workspaceId, id)
   }
 
   /**

@@ -5125,6 +5125,7 @@
       "add": "Ajouter des images",
       "count": "{count} sur {max}",
       "truncated": "Une tâche contient au plus {max} images : seules les premières ont été ajoutées.",
+      "rejected": "Non ajoutés, car seules les images PNG, JPEG, WebP et GIF sont acceptées : {names}",
       "remove": "Retirer {name}",
       "unnamed": "Image jointe",
       "attached": "Images jointes",

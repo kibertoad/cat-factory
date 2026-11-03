@@ -43,6 +43,7 @@ import type {
   PullRequestMerger,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
+  BinaryArtifactBlockIndex,
   ResolveRunRepoContext,
   RiskPolicyCacheValue,
   WorkspaceRiskPolicyReader,
@@ -446,6 +447,8 @@ export interface ExecutionServiceDependencies {
    * is nowhere to read screenshots from.
    */
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /** Optional: the artifact metadata alone, see `CoreDependencies.binaryArtifactIndex`. */
+  binaryArtifactIndex?: BinaryArtifactBlockIndex
   /**
    * Optional: tears down ephemeral environments. Wired alongside
    * {@link environmentProvisioning}; the `human-test` gate uses it to destroy an env on

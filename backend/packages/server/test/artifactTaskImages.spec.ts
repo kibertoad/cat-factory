@@ -1,5 +1,5 @@
 import type { BinaryArtifactMetadataStore, BinaryArtifactRecord } from '@cat-factory/kernel'
-import { createBinaryArtifactStore } from '@cat-factory/kernel'
+import { NotFoundError, createBinaryArtifactStore } from '@cat-factory/kernel'
 import { MAX_TASK_IMAGES } from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
@@ -9,7 +9,16 @@ import { artifactController } from '../src/modules/artifacts/ArtifactController.
 
 // The images a person attaches to a task go through the workspace artifact endpoint as
 // `kind: context`. What is pinned here is what the SPA relies on: the per-task ceiling refuses with
-// a reason it can word, an attached image needs its task, and only a person's own uploads delete.
+// a reason it can word, an attached image needs a real TASK, it lives at the task's HOME workspace
+// whichever board attached it, and only a person's own uploads delete.
+
+/** `blk_shared` homes in `ws_home` and is seen from `ws_1` through a mount; `frm_1` is a frame. */
+const BLOCKS: Record<string, { home: string; level: string }> = {
+  blk_1: { home: 'ws_1', level: 'task' },
+  blk_2: { home: 'ws_1', level: 'task' },
+  blk_shared: { home: 'ws_home', level: 'task' },
+  frm_1: { home: 'ws_1', level: 'frame' },
+}
 
 function memoryMetadata(): BinaryArtifactMetadataStore {
   const rows = new Map<string, BinaryArtifactRecord>()
@@ -38,7 +47,17 @@ function makeApp() {
     idGenerator: { next: (p: string) => `${p}_${(seq += 1)}` },
     clock: { now: () => seq },
   })
-  const container = { resolveBinaryArtifactStore: async () => store } as unknown as ServerContainer
+  const boardService = {
+    resolveBlockHome: async (_ws: string, id: string) => {
+      const found = BLOCKS[id]
+      if (!found) throw new NotFoundError('Block', id)
+      return { homeWorkspaceId: found.home, block: { id, level: found.level } }
+    },
+  }
+  const container = {
+    resolveBinaryArtifactStore: async () => store,
+    boardService,
+  } as unknown as ServerContainer
   const app = new Hono<AppEnv>()
   app.use('*', async (c, next) => {
     c.set('container', container)
@@ -86,7 +105,43 @@ describe('task images through the artifact endpoint', () => {
     })
   })
 
-  it('deletes a person upload, and answers 404 for a run capture', async () => {
+  it('refuses an image on a block that is not a task, or that this board cannot see', async () => {
+    const { app } = makeApp()
+    const frame = await upload(app, { kind: 'context', blockId: 'frm_1' })
+    expect(frame.status).toBe(422)
+    expect(await frame.json()).toMatchObject({
+      error: { details: { reason: 'task_image_block_not_task' } },
+    })
+    expect((await upload(app, { kind: 'context', blockId: 'blk_invented' })).status).toBe(404)
+  })
+
+  it('stores, lists and serves an image at the task HOME when attached from a mounting board', async () => {
+    const { app, store } = makeApp()
+    const created = (await (
+      await upload(app, { kind: 'context', blockId: 'blk_shared' })
+    ).json()) as { artifact: { id: string; workspaceId: string } }
+    expect(created.artifact.workspaceId).toBe('ws_home')
+    expect(await store.getMetadata('ws_1', created.artifact.id)).toBeNull()
+
+    const listed = await app.fetch(new Request('http://x/workspaces/ws_1/blocks/blk_shared/images'))
+    expect(((await listed.json()) as { artifacts: { id: string }[] }).artifacts).toEqual([
+      expect.objectContaining({ id: created.artifact.id }),
+    ])
+    const blob = await app.fetch(
+      new Request(`http://x/workspaces/ws_1/blocks/blk_shared/images/${created.artifact.id}/blob`),
+    )
+    expect(blob.status).toBe(200)
+
+    const removed = await app.fetch(
+      new Request(`http://x/workspaces/ws_1/blocks/blk_shared/images/${created.artifact.id}`, {
+        method: 'DELETE',
+      }),
+    )
+    expect(removed.status).toBe(204)
+    expect(await store.getMetadata('ws_home', created.artifact.id)).toBeNull()
+  })
+
+  it('removes an image only through its own task, and answers 404 for a run capture', async () => {
     const { app, store } = makeApp()
     const created = (await (await upload(app, { kind: 'context', blockId: 'blk_1' })).json()) as {
       artifact: { id: string }
@@ -102,12 +157,17 @@ describe('task images through the artifact endpoint', () => {
       },
       blob: new Uint8Array([1]),
     })
-    const del = (id: string) =>
-      app.fetch(new Request(`http://x/workspaces/ws_1/artifacts/${id}`, { method: 'DELETE' }))
+    const del = (blockId: string, id: string) =>
+      app.fetch(
+        new Request(`http://x/workspaces/ws_1/blocks/${blockId}/images/${id}`, {
+          method: 'DELETE',
+        }),
+      )
 
-    expect((await del(created.artifact.id)).status).toBe(204)
-    expect(await store.getMetadata('ws_1', created.artifact.id)).toBeNull()
-    expect((await del(capture.id)).status).toBe(404)
+    expect((await del('blk_2', created.artifact.id)).status).toBe(404)
+    expect((await del('blk_1', capture.id)).status).toBe(404)
     expect(await store.getMetadata('ws_1', capture.id)).not.toBeNull()
+    expect((await del('blk_1', created.artifact.id)).status).toBe(204)
+    expect(await store.getMetadata('ws_1', created.artifact.id)).toBeNull()
   })
 })
