@@ -3359,6 +3359,8 @@
         "maxRequirementIterations": "Itérations d'exigences",
         "maxRequirementConcernAllowed": "Validation auto. des préoccupations jusqu'à",
         "companionMaxReworks": "Cycles de retravail du compagnon",
+        "postImplementationReviewEffort": "Effort de revue après l'implémentation",
+        "postImplementationReviewEffortHelp": "Le degré de minutie de la revue de code après l'implémentation. Les niveaux plus élevés signalent davantage de constats, y compris les moins certains, et prennent plus de temps.",
         "autoMerge": "Fusion automatique"
       },
       "newPreset": "Nouvelle politique",
@@ -9027,5 +9029,16 @@
     "add": "Ajouter à la file",
     "addAndStart": "Ajouter et démarrer",
     "addedToast": "« {title} » a été ajoutée à la file"
+  },
+  "reviewEffort": {
+    "label": "Effort de revue",
+    "help": "Le degré de minutie de la revue. Les niveaux plus élevés signalent davantage de constats, y compris les moins certains, et prennent plus de temps.",
+    "levels": {
+      "low": "Faible",
+      "medium": "Moyen",
+      "high": "Élevé",
+      "xhigh": "Très élevé",
+      "max": "Maximal"
+    }
   }
 }

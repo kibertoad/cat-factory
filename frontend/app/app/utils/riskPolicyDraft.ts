@@ -1,4 +1,9 @@
-import { DEFAULT_COMPANION_MAX_ATTEMPTS, type StepGating } from '@cat-factory/contracts'
+import {
+  DEFAULT_COMPANION_MAX_ATTEMPTS,
+  DEFAULT_REVIEW_EFFORT_LEVEL,
+  type ReviewEffortLevel,
+  type StepGating,
+} from '@cat-factory/contracts'
 import type {
   ClassRulesByRole,
   DryRunRoles,
@@ -31,6 +36,8 @@ export interface RiskPolicyDraft {
    * the bar straight to that park, which is a posture rather than a disabled loop.
    */
   companionMaxReworks: number
+  /** How thorough the post-implementation `reviewer` companion is. Stored as typed. */
+  postImplementationReviewEffort: ReviewEffortLevel
   autoMergeEnabled: boolean
   /**
    * Whether a run under this policy answers the parks its own automatic loops raise when they give
@@ -94,6 +101,7 @@ export function toRiskPolicyDraft(p: RiskPolicy): RiskPolicyDraft {
     maxRequirementIterations: p.maxRequirementIterations,
     maxRequirementConcernAllowed: p.maxRequirementConcernAllowed,
     companionMaxReworks: p.companionMaxReworks,
+    postImplementationReviewEffort: p.postImplementationReviewEffort,
     autoMergeEnabled: p.autoMergeEnabled,
     unattended: p.autonomy === 'unattended',
     minAutoAnswerConfidence: Math.round(p.minAutoAnswerConfidence * 100),
@@ -123,6 +131,7 @@ export function blankRiskPolicyDraft(): RiskPolicyDraft {
     // the platform has stopped shipping. The percentages above are literals because they are the
     // EDITING scale (0..100) rather than the stored value; this one is stored as typed.
     companionMaxReworks: DEFAULT_COMPANION_MAX_ATTEMPTS,
+    postImplementationReviewEffort: DEFAULT_REVIEW_EFFORT_LEVEL,
     autoMergeEnabled: true,
     // A new policy parks on its own caps, matching every built-in but the unattended default: a
     // licence to answer them is a posture somebody grants, never one a blank form assumes.
@@ -174,6 +183,7 @@ export function riskPolicyPatchFromDraft(
     maxRequirementIterations: d.maxRequirementIterations,
     maxRequirementConcernAllowed: d.maxRequirementConcernAllowed,
     companionMaxReworks: d.companionMaxReworks,
+    postImplementationReviewEffort: d.postImplementationReviewEffort,
     autoMergeEnabled: d.autoMergeEnabled,
     autonomy: d.unattended ? 'unattended' : 'attended',
     minAutoAnswerConfidence: d.minAutoAnswerConfidence / 100,

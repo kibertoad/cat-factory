@@ -10,6 +10,7 @@ import {
   blankRiskPolicyDraft,
   forkGatingFromDraft,
 } from '~/utils/riskPolicyDraft'
+import { reviewEffortOptions } from '~/utils/reviewEffortLevel'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{ busy: boolean }>()
@@ -23,6 +24,8 @@ const draft = reactive(blankRiskPolicyDraft())
 const concernOptions = computed<{ value: RequirementConcernLevel; label: string }[]>(() =>
   CONCERN_LEVELS.map((value) => ({ value, label: t(CONCERN_LABEL_KEYS[value]) })),
 )
+
+const effortOptions = computed(() => reviewEffortOptions(t))
 
 const canSubmit = computed(() => draft.name.trim().length > 0 && !props.busy)
 
@@ -45,6 +48,7 @@ function submit() {
     maxRequirementIterations: draft.maxRequirementIterations,
     maxRequirementConcernAllowed: draft.maxRequirementConcernAllowed,
     companionMaxReworks: draft.companionMaxReworks,
+    postImplementationReviewEffort: draft.postImplementationReviewEffort,
     autoMergeEnabled: draft.autoMergeEnabled,
     autonomy: draft.unattended ? 'unattended' : 'attended',
     minAutoAnswerConfidence: draft.minAutoAnswerConfidence / 100,
@@ -151,6 +155,20 @@ function submit() {
           :min="0"
           :max="10"
           size="sm"
+        />
+      </label>
+      <label class="block">
+        <SectionLabel as="span" class="mb-1 block">
+          {{ t('settings.riskPolicy.field.postImplementationReviewEffort') }}
+        </SectionLabel>
+        <USelect
+          class="w-32"
+          v-model="draft.postImplementationReviewEffort"
+          :items="effortOptions"
+          value-key="value"
+          size="sm"
+          :title="t('settings.riskPolicy.field.postImplementationReviewEffortHelp')"
+          data-testid="risk-policy-create-review-effort"
         />
       </label>
       <label class="block">

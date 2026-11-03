@@ -3,6 +3,8 @@ import {
   DEFAULT_JUDGE_MAX_BOUNCES,
   DEFAULT_JUDGE_MIN_SCORE,
   DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE,
+  DEFAULT_REVIEW_EFFORT_LEVEL,
+  type ReviewEffortLevel,
 } from '@cat-factory/contracts'
 import type {
   BlockType,
@@ -110,6 +112,9 @@ export const DEFAULT_RISK_POLICY = {
   // `DEFAULT_COMPANION_MAX_ATTEMPTS` for why this budget is sized above the judgement-only ones:
   // a round here re-runs the producer, so the round not taken is an artifact not improved.
   companionMaxReworks: DEFAULT_COMPANION_MAX_ATTEMPTS,
+  // How thorough the post-implementation `reviewer` companion is. `high` is the level it ran at
+  // before a policy could state one, so the column default and every seed carry it.
+  postImplementationReviewEffort: DEFAULT_REVIEW_EFFORT_LEVEL,
   // Post-release-health gate: how long (minutes) the gate watches the deployed
   // release's monitors/SLOs before declaring it healthy, and how many on-call
   // investigations may be dispatched while watching (the on-call agent investigates
@@ -224,6 +229,8 @@ export interface RiskPolicySeed {
   maxTesterQualityIterations: number
   /** How many automatic rework rounds a companion may drive before it parks for a person. */
   companionMaxReworks: number
+  /** How much effort the post-implementation `reviewer` companion spends. */
+  postImplementationReviewEffort: ReviewEffortLevel
   releaseWatchWindowMinutes: number
   releaseMaxAttempts: number
   humanReviewGraceMinutes: number
@@ -288,6 +295,7 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     maxRequirementConcernAllowed: DEFAULT_RISK_POLICY.maxRequirementConcernAllowed,
     maxTesterQualityIterations: DEFAULT_RISK_POLICY.maxTesterQualityIterations,
     companionMaxReworks: DEFAULT_RISK_POLICY.companionMaxReworks,
+    postImplementationReviewEffort: DEFAULT_RISK_POLICY.postImplementationReviewEffort,
     releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
     releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
     humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
@@ -351,6 +359,7 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     // last wrote. Cutting the rounds here would not save a conversation nobody is having, it would
     // ship a worse artifact unattended.
     companionMaxReworks: DEFAULT_RISK_POLICY.companionMaxReworks,
+    postImplementationReviewEffort: DEFAULT_RISK_POLICY.postImplementationReviewEffort,
     releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
     releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
     humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
@@ -401,6 +410,7 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     // rework round buys a better spec or architecture BEFORE the pull request that human reviews
     // exists. Routing every merge to a person is not a reason to hand them worse work.
     companionMaxReworks: DEFAULT_RISK_POLICY.companionMaxReworks,
+    postImplementationReviewEffort: DEFAULT_RISK_POLICY.postImplementationReviewEffort,
     releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
     releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
     humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
@@ -458,6 +468,7 @@ export function riskPolicyFromSeed(seed: RiskPolicySeed, createdAt: number): Ris
     maxRequirementConcernAllowed: seed.maxRequirementConcernAllowed,
     maxTesterQualityIterations: seed.maxTesterQualityIterations,
     companionMaxReworks: seed.companionMaxReworks,
+    postImplementationReviewEffort: seed.postImplementationReviewEffort,
     releaseWatchWindowMinutes: seed.releaseWatchWindowMinutes,
     releaseMaxAttempts: seed.releaseMaxAttempts,
     humanReviewGraceMinutes: seed.humanReviewGraceMinutes,

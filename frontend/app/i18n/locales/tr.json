@@ -3500,6 +3500,8 @@
         "maxRequirementIterations": "Gereksinim yinelemeleri",
         "maxRequirementConcernAllowed": "Şu düzeyde veya altında otomatik geç",
         "companionMaxReworks": "Yardımcı yeniden çalışma turları",
+        "postImplementationReviewEffort": "Uygulama sonrası inceleme düzeyi",
+        "postImplementationReviewEffortHelp": "Uygulamadan sonraki kod incelemesinin ne kadar titiz olduğu. Daha yüksek düzeyler, daha az kesin olanlar da dahil olmak üzere daha fazla bulgu bildirir ve daha uzun sürer.",
         "autoMerge": "Otomatik birleştirme"
       },
       "newPreset": "Yeni ilke",
@@ -9027,5 +9029,16 @@
     "add": "Kuyruğa ekle",
     "addAndStart": "Ekle ve başlat",
     "addedToast": "“{title}” kuyruğa eklendi"
+  },
+  "reviewEffort": {
+    "label": "İnceleme düzeyi",
+    "help": "İncelemenin ne kadar titiz olduğu. Daha yüksek düzeyler, daha az kesin olanlar da dahil olmak üzere daha fazla bulgu bildirir ve daha uzun sürer.",
+    "levels": {
+      "low": "Düşük",
+      "medium": "Orta",
+      "high": "Yüksek",
+      "xhigh": "Çok yüksek",
+      "max": "Maksimum"
+    }
   }
 }

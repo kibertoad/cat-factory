@@ -3500,6 +3500,8 @@
         "maxRequirementIterations": "איטרציות דרישות",
         "maxRequirementConcernAllowed": "מעבר אוטומטי בחששות ברף או מתחתיו",
         "companionMaxReworks": "סבבי עיבוד מחדש של המלווה",
+        "postImplementationReviewEffort": "מאמץ הסקירה לאחר המימוש",
+        "postImplementationReviewEffortHelp": "עד כמה יסודית סקירת הקוד לאחר המימוש. רמות גבוהות יותר מדווחות על יותר ממצאים, כולל ממצאים פחות ודאיים, ונמשכות זמן רב יותר.",
         "autoMerge": "מיזוג אוטומטי"
       },
       "newPreset": "מדיניות חדשה",
@@ -9027,5 +9029,16 @@
     "add": "הוספה לתור",
     "addAndStart": "הוספה והתחלה",
     "addedToast": "“{title}” נוספה לתור"
+  },
+  "reviewEffort": {
+    "label": "מאמץ הסקירה",
+    "help": "עד כמה יסודית הסקירה. רמות גבוהות יותר מדווחות על יותר ממצאים, כולל ממצאים פחות ודאיים, ונמשכות זמן רב יותר.",
+    "levels": {
+      "low": "נמוך",
+      "medium": "בינוני",
+      "high": "גבוה",
+      "xhigh": "גבוה מאוד",
+      "max": "מרבי"
+    }
   }
 }

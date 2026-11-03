@@ -1,3 +1,4 @@
+import type { ReviewEffortLevel } from '@cat-factory/contracts'
 import type {
   ExecutionInstance,
   ClassRulesByRole,
@@ -54,6 +55,12 @@ export interface ResolvedRunRiskPolicy {
    * longer has.
    */
   companionMaxReworks: number
+  /**
+   * How much effort the post-implementation `reviewer` companion spends. Every resolved policy
+   * carries one: a stored row's column defaults to `high`, and the built-in fallback inherits
+   * `DEFAULT_RISK_POLICY.postImplementationReviewEffort`, which is also `high`.
+   */
+  postImplementationReviewEffort: ReviewEffortLevel
   releaseWatchWindowMinutes: number
   releaseMaxAttempts: number
   humanReviewGraceMinutes: number

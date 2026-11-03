@@ -3665,6 +3665,8 @@
         "maxRequirementIterations": "Requirement iterations",
         "maxRequirementConcernAllowed": "Auto-pass concerns at or below",
         "companionMaxReworks": "Companion rework rounds",
+        "postImplementationReviewEffort": "Post-implementation review effort",
+        "postImplementationReviewEffortHelp": "How thorough the code review after implementation is. Higher levels report more findings, including less certain ones, and take longer.",
         "autoMerge": "Auto-merge"
       },
       "autoMergeOnHint": "Merge automatically when within the policy limits.",
@@ -9361,5 +9363,16 @@
     "add": "Add to queue",
     "addAndStart": "Add and start",
     "addedToast": "Added “{title}” to the queue"
+  },
+  "reviewEffort": {
+    "label": "Review effort",
+    "help": "How thorough the review is. Higher levels report more findings, including less certain ones, and take longer.",
+    "levels": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Extra high",
+      "max": "Max"
+    }
   }
 }

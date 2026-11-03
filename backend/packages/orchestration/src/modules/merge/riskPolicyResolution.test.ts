@@ -24,6 +24,7 @@ function policy(over: Partial<RiskPolicy> = {}): RiskPolicy {
     maxRequirementConcernAllowed: 'none',
     maxTesterQualityIterations: 3,
     companionMaxReworks: 3,
+    postImplementationReviewEffort: 'high',
     releaseWatchWindowMinutes: 30,
     releaseMaxAttempts: 1,
     humanReviewGraceMinutes: 10,

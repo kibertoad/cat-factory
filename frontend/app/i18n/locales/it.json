@@ -551,6 +551,8 @@
         "maxRequirementIterations": "Iterazioni sui requisiti",
         "maxRequirementConcernAllowed": "Auto-pass per criticita pari o inferiori a",
         "companionMaxReworks": "Cicli di rielaborazione del companion",
+        "postImplementationReviewEffort": "Impegno della revisione dopo l'implementazione",
+        "postImplementationReviewEffortHelp": "Quanto è approfondita la revisione del codice dopo l'implementazione. I livelli più alti segnalano più rilievi, compresi quelli meno certi, e richiedono più tempo.",
         "autoMerge": "Auto-merge"
       },
       "autoMergeOnHint": "Mergia automaticamente quando rientra nei limiti del criterio.",
@@ -9027,5 +9029,16 @@
     "add": "Aggiungi alla coda",
     "addAndStart": "Aggiungi e avvia",
     "addedToast": "«{title}» aggiunta alla coda"
+  },
+  "reviewEffort": {
+    "label": "Impegno della revisione",
+    "help": "Quanto è approfondita la revisione. I livelli più alti segnalano più rilievi, compresi quelli meno certi, e richiedono più tempo.",
+    "levels": {
+      "low": "Basso",
+      "medium": "Medio",
+      "high": "Alto",
+      "xhigh": "Molto alto",
+      "max": "Massimo"
+    }
   }
 }
