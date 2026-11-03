@@ -28,6 +28,7 @@ import {
   writeRefinedRequirementsContract,
 } from '@cat-factory/contracts'
 import type {
+  IncorporateRequirementsInput,
   RequestRecommendationItem,
   UpdateBrainstormItemStatusInput,
   UpdateClarityItemStatusInput,
@@ -80,14 +81,22 @@ export function reviewsApi({ send, ws }: ApiContext) {
       }),
 
     // Incorporate the answers ASYNCHRONOUSLY (every finding must be answered or dismissed).
-    // The durable driver folds them and re-reviews in the background. Optional `feedback` is
-    // the "do it differently" lever when redoing a merge. Returns the `incorporating` review
-    // at once; a notification calls the user back only if the re-review needs input.
-    incorporateRequirements: (workspaceId: string, blockId: string, feedback?: string) =>
+    // The durable driver folds them and, unless `after: 'proceed'`, re-reviews in the background.
+    // Optional `feedback` is the "do it differently" lever when redoing a merge. Returns the
+    // `incorporating` review at once; a notification calls the user back only if a re-review
+    // needs input.
+    incorporateRequirements: (
+      workspaceId: string,
+      blockId: string,
+      input: IncorporateRequirementsInput = {},
+    ) =>
       send(incorporateRequirementsContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { blockId },
-        body: feedback ? { feedback } : {},
+        body: {
+          ...(input.feedback ? { feedback: input.feedback } : {}),
+          ...(input.after ? { after: input.after } : {}),
+        },
       }),
 
     // Re-review the incorporated document (one more reviewer pass). On convergence the

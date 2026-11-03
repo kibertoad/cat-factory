@@ -37,6 +37,7 @@ import {
   type ReviewCommon,
   type ReviewRepository,
 } from '../review/IterativeReviewService.js'
+import type { PriorRound } from '../review/follow-up-bar.logic.js'
 import {
   type GroundingFragment,
   type GroundingWebResult,
@@ -165,6 +166,10 @@ export class RequirementReviewService extends IterativeReviewService<
 
   protected applyIncorporatedDoc(ctx: RequirementsContext, doc: string): void {
     ctx.incorporatedDoc = doc
+  }
+
+  protected override applyPriorRound(ctx: RequirementsContext, round: PriorRound): void {
+    ctx.priorRound = round
   }
 
   protected applyFeedback(ctx: RequirementsContext, feedback: string): void {

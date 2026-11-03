@@ -18,6 +18,7 @@ import type {
 } from '@cat-factory/kernel'
 import { assertFound, ConflictError, ValidationError } from '@cat-factory/kernel'
 import {
+  type IncorporateAfter,
   DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE,
   reviewSettledForUnattended,
 } from '@cat-factory/contracts'
@@ -289,6 +290,10 @@ export class ReviewGateController {
     const pending = step.pendingIncorporation
     if (pending) {
       step.pendingIncorporation = null
+      if (pending.after === 'proceed') {
+        await this.incorporateAndSettle(kind, workspaceId, block.id, pending.feedback)
+        return this.completeSettledStep(kind, workspaceId, instance, step, block, isFinalStep)
+      }
       const cycled = await this.runIncorporationCycle(
         kind,
         workspaceId,
@@ -628,6 +633,26 @@ export class ReviewGateController {
   }
 
   /**
+   * Fold the human's settled answers in and settle the review on the result, with no re-review: the
+   * "incorporate and proceed" choice. The caller advances the run. Nothing to fold in settles the
+   * review as it stands, exactly as {@link runIncorporationCycle} does.
+   */
+  private async incorporateAndSettle<TReview extends ReviewCommon>(
+    kind: ReviewKind<TReview>,
+    workspaceId: string,
+    blockId: string,
+    feedback?: string,
+  ): Promise<TReview> {
+    const review = await this.currentReview(kind, workspaceId, blockId)
+    if (hasNotesToIncorporate(review.items, feedback)) {
+      await kind.incorporate(workspaceId, blockId, review.id, feedback)
+    }
+    const settled = await kind.markIncorporated(workspaceId, review.id)
+    await kind.emit(workspaceId, settled)
+    return settled
+  }
+
+  /**
    * Run the auto-recommendation automation for a block's review when the kind supports it
    * (requirements only). Best-effort: the recommendations are a convenience, so a Writer
    * failure must never wedge the parked run — it just leaves those findings blank for the
@@ -719,12 +744,16 @@ export class ReviewGateController {
    * No parked run (an off-path inspector review with no active pipeline) → there is no driver
    * to offload to, so the fold + re-review run inline here. That path never had the
    * pipeline-gate freeze this method exists to remove.
+   *
+   * `after: 'proceed'` folds the answers in and settles on the result instead of re-reviewing it,
+   * advancing the run (see {@link incorporateAndSettle}).
    */
   async incorporate<TReview extends ReviewCommon>(
     kind: ReviewKind<TReview>,
     workspaceId: string,
     blockId: string,
     feedback?: string,
+    after: IncorporateAfter = 'rereview',
   ): Promise<TReview> {
     const review = await this.currentReview(kind, workspaceId, blockId)
     const open = review.items.filter((i) => i.status === 'open')
@@ -738,7 +767,9 @@ export class ReviewGateController {
     if (!parked) {
       // Off-path: no pipeline parked on this review. Do the work inline (it cannot be
       // offloaded to a driver that isn't running) and return the re-reviewed result.
-      return this.runIncorporationCycle(kind, workspaceId, blockId, feedback)
+      return after === 'proceed'
+        ? this.incorporateAndSettle(kind, workspaceId, blockId, feedback)
+        : this.runIncorporationCycle(kind, workspaceId, blockId, feedback)
     }
 
     // Record the intent + re-arm the run under OPTIMISTIC CONCURRENCY (race-audit 2.2
@@ -762,7 +793,10 @@ export class ReviewGateController {
         if (!step?.approval) {
           throw new ConflictError('The review is no longer awaiting incorporation')
         }
-        step.pendingIncorporation = feedback ? { feedback } : {}
+        step.pendingIncorporation = {
+          ...(feedback ? { feedback } : {}),
+          ...(after === 'proceed' ? { after } : {}),
+        }
         if (inst.status === 'blocked') inst.status = 'running'
         approvalId = step.approval.id
       },

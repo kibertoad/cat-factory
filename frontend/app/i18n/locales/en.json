@@ -6328,7 +6328,8 @@
     },
     "actions": {
       "proceedNothing": "Proceed (nothing to incorporate)",
-      "incorporateAnswers": "Incorporate answers",
+      "incorporateAndReReview": "Incorporate and re-review",
+      "incorporateAndProceed": "Incorporate and proceed",
       "requestRecommendations": "Request {count} recommendation | Request {count} recommendation | Request {count} recommendations",
       "reReview": "Looks good — re-review",
       "reReviewing": "Re-reviewing…",
@@ -6337,7 +6338,7 @@
     },
     "help": {
       "canProceed": "Every finding is dismissed — proceed to the next phase without reworking.",
-      "canIncorporate": "Folds your answers into one standard-format document, then re-reviews it automatically.",
+      "canIncorporate": "Both fold your answers into one standard-format document. Re-review has the reviewer check that document again; proceed moves straight on to the next phase.",
       "answerAll": "Answer or dismiss every finding to continue.",
       "merged": "Re-review runs the reviewer against this document. If you're unhappy with how it was merged, redo it with a comment instead."
     },
@@ -6349,6 +6350,8 @@
       "recommendationsReady": "{count} recommendation ready | {count} recommendation ready | {count} recommendations ready",
       "incorporating": "Incorporating your answers in the background",
       "incorporatingDescription": "You're back on the board — we'll notify you only if more input is needed.",
+      "incorporatingThenProceeding": "Incorporating your answers",
+      "incorporatingThenProceedingDescription": "The run moves on to the next phase as soon as they are folded in.",
       "reviewerSatisfied": "Reviewer is satisfied — continuing the pipeline",
       "iterationLimitReached": "Iteration limit reached — choose how to proceed",
       "newFindings": "no new findings to react to | {count} new finding to react to | {count} new findings to react to",
@@ -6390,8 +6393,10 @@
         "estimate": "Set by the task estimate ({score}%).",
         "no_estimate": "The policy follows the task estimate, but this task has none, so its fallback applied."
       },
-      "suppressed": "Findings left out below that level: {count}."
-    }
+      "suppressed": "Findings left out below that level: {count}.",
+      "followUpSuppressed": "Left out of this re-review for being neither high severity nor a follow-up on your answers: {count}."
+    },
+    "followsUpOn": "Follows up on your answer to: {title}"
   },
   "clarity": {
     "title": "Bug-report triage",

@@ -81,6 +81,7 @@ function toRequirementsDecision(review: RequirementReview): PublicDecision {
           basis: review.findingFloor.basis,
           score: review.findingFloor.score,
           suppressed: review.findingFloor.suppressed,
+          followUpSuppressed: review.findingFloor.followUpSuppressed ?? null,
         }
       : null,
   }
@@ -130,6 +131,7 @@ function toFinding(item: RequirementReview['items'][number]) {
     detail: item.detail,
     status: item.status,
     reply: item.reply,
+    followsUpOn: item.followsUpOn ?? null,
   }
 }
 

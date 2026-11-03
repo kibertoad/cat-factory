@@ -164,7 +164,7 @@ type Story = StoryObj<typeof meta>
 
 /**
  * Five findings in two groups, the ones a person decides first, each with what still wants a
- * reaction above what is settled, and Incorporate answers in the rail.
+ * reaction above what is settled, and the two incorporate actions in the rail.
  */
 export const Default: Story = story(review())
 
@@ -180,6 +180,41 @@ export const Loading: Story = opened(apiPending(getRequirementReviewContract, re
  */
 export const Merged: Story = story(
   review({ status: 'merged', items: answered, incorporatedRequirements: incorporated }),
+)
+
+/**
+ * A second round held to the re-review bar: one `high` finding, one follow-up on an answer the
+ * first round gave, and a note counting what the bar left out.
+ */
+export const ReReviewRound: Story = story(
+  review({
+    iteration: 2,
+    incorporatedRequirements: incorporated,
+    findingFloor: {
+      severity: 'medium',
+      basis: 'fixed',
+      score: null,
+      suppressed: 0,
+      followUpSuppressed: 3,
+    },
+    items: [
+      item({
+        id: 'rq_lock_unlock',
+        title: 'Who can unlock a locked account before the 15 minutes pass?',
+        detail:
+          'The lockout you confirmed needs a way out for a user who is locked out by mistake.',
+        followsUpOn: lockout.title,
+      }),
+      item({
+        id: 'rq_breached',
+        severity: 'high',
+        category: 'gap',
+        title: 'Which list of breached passwords is checked?',
+        detail: 'The document requires the check but names no source for the list.',
+        followsUpOn: null,
+      }),
+    ],
+  }),
 )
 
 /** The re-review raised new findings on its third and last round: the cap prompt. */

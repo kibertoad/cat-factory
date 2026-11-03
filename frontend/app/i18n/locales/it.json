@@ -5321,7 +5321,8 @@
     },
     "actions": {
       "proceedNothing": "Procedi (nulla da incorporare)",
-      "incorporateAnswers": "Incorpora le risposte",
+      "incorporateAndReReview": "Incorpora e rivedi",
+      "incorporateAndProceed": "Incorpora e procedi",
       "requestRecommendations": "Richiedi {count} raccomandazione | Richiedi {count} raccomandazione | Richiedi {count} raccomandazioni",
       "reReview": "Va bene — rivedi di nuovo",
       "reReviewing": "Nuova revisione in corso…",
@@ -5330,7 +5331,7 @@
     },
     "help": {
       "canProceed": "Ogni rilievo e ignorato — procedi alla fase successiva senza rielaborare.",
-      "canIncorporate": "Unisce le tue risposte in un unico documento in formato standard, poi lo rivede automaticamente.",
+      "canIncorporate": "Entrambe uniscono le tue risposte in un unico documento in formato standard. Rivedi fa controllare di nuovo quel documento al revisore; procedi passa subito alla fase successiva.",
       "answerAll": "Rispondi o ignora ogni rilievo per continuare.",
       "merged": "La nuova revisione esegue il revisore su questo documento. Se non sei soddisfatto di come e stato unito, rifallo con un commento."
     },
@@ -5342,6 +5343,8 @@
       "recommendationsReady": "{count} raccomandazione pronta | {count} raccomandazione pronta | {count} raccomandazioni pronte",
       "incorporating": "Incorporazione delle tue risposte in background",
       "incorporatingDescription": "Sei di nuovo sulla lavagna — ti avviseremo solo se occorrono altre indicazioni.",
+      "incorporatingThenProceeding": "Incorporazione delle tue risposte",
+      "incorporatingThenProceedingDescription": "L'esecuzione passa alla fase successiva non appena sono incorporate.",
       "reviewerSatisfied": "Il revisore e soddisfatto — la pipeline prosegue",
       "iterationLimitReached": "Limite di iterazioni raggiunto — scegli come procedere",
       "newFindings": "nessun nuovo rilievo a cui reagire | {count} nuovo rilievo a cui reagire | {count} nuovi rilievi a cui reagire",
@@ -5383,8 +5386,10 @@
         "estimate": "Impostato dalla stima dell’attività ({score}%).",
         "no_estimate": "La policy segue la stima dell’attività, ma questa attività non ne ha una, quindi si è applicato il valore di riserva."
       },
-      "suppressed": "Rilievi esclusi sotto quel livello: {count}."
-    }
+      "suppressed": "Rilievi esclusi sotto quel livello: {count}.",
+      "followUpSuppressed": "Esclusi da questa revisione perché né di gravità alta né un seguito alle tue risposte: {count}."
+    },
+    "followsUpOn": "Segue la tua risposta su: {title}"
   },
   "bootstrap": {
     "title": "Avvia un repository",

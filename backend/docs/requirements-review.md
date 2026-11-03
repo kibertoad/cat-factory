@@ -5,7 +5,8 @@ The FIRST step of the default pipelines, handled inline in the engine
 The reviewer raises severity-tagged findings, the run parks, and the dedicated window drives an
 iterative loop: answer/dismiss, then an incorporation companion folds the answers into ONE
 document, then a re-review converges (`incorporated`), continues (`ready`), or hits the cap
-(`exceeded`, where the human picks extra-round / proceed / stop-reset). Findings at or below
+(`exceeded`, where the human picks extra-round / proceed / stop-reset). The human can also
+incorporate and proceed, skipping that re-review. Findings at or below
 the merge preset's `maxRequirementConcernAllowed` tolerance auto-pass, and its
 `maxRequirementIterations` is the cap above. Pass-through when the reviewer model isn't wired.
 
@@ -32,6 +33,32 @@ Operator-facing account: the website's
   one. The review window shows it, and the `/api/v1` requirements decision carries it as
   `findingFloor`. The dropped count covers only what the model returned despite the prompt; what it never
   wrote cannot be counted, which is why the floor itself is shown too.
+
+## A re-review raises only what the last round opened
+
+Shown only the incorporated document, a re-review reviews it as if fresh, and a round where every
+finding was dismissed or kept its recommended default comes back with a new batch of questions about
+text nobody changed. Two things hold it to a bar (`review/follow-up-bar.logic.ts`):
+
+- **The prompt states the previous round.** Every answer with text, under a ref (`A1`, `A2`, ...),
+  and every dismissed title, with the rule: raise a finding only if it is `high`, or if it follows
+  from one of those answers, citing it in `followsUp`.
+- **The platform checks the citation.** A ref the prompt never handed out resolves to nothing, so an
+  invented citation cannot carry a finding past the bar; what is neither `high` nor a resolved
+  follow-up is dropped and counted as `findingFloor.followUpSuppressed` (null on a first pass). A
+  kept follow-up stores the answered finding's title as `followsUpOn`, which the window shows.
+
+The bar applies after the severity floor, so it can only narrow what the floor let through. Only the
+requirements kind opts in (`applyPriorRound`); clarity and brainstorm re-review as before. Redo
+feedback is not a citable answer: it rewrites the fold rather than adding a decision to follow up on.
+
+## Incorporate and proceed
+
+`incorporate` takes `after: 'rereview' | 'proceed'`. `proceed` rides the same async path (it is
+recorded on `pendingIncorporation`), folds the answers in, and settles the review through
+`markIncorporated` with no reviewer pass, so the run advances on the folded document. It is the
+choice for a person who trusts their answers and does not want another round; it spends one LLM
+call instead of two.
 
 ## Scope: the product / business layer ONLY
 

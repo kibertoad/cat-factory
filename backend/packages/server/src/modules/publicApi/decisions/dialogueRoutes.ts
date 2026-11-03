@@ -68,6 +68,7 @@ export function registerClarityDecisionRoutes(app: Hono<AppEnv>): void {
         workspaceId,
         scoped.blockId,
         c.req.valid('json').feedback,
+        c.req.valid('json').after,
       )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })
@@ -165,6 +166,7 @@ export function registerBrainstormDecisionRoutes(app: Hono<AppEnv>): void {
         scoped.blockId,
         stage,
         c.req.valid('json').feedback,
+        c.req.valid('json').after,
       )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })

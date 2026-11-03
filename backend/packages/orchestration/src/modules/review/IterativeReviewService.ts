@@ -50,6 +50,12 @@ import {
   disposeReview,
   extractJson,
 } from '../requirements/requirements.logic.js'
+import {
+  type PriorRound,
+  applyFollowUpBar,
+  followUpRefs,
+  priorRoundOf,
+} from './follow-up-bar.logic.js'
 
 // ---------------------------------------------------------------------------
 // The iterative-review engine, shared by the requirements-review and
@@ -176,6 +182,9 @@ export interface ReviewPassOptions {
 
 type ResolvedFloor = Omit<RequirementFindingFloorRecord, 'suppressed'>
 
+/** The floor that drops nothing: `low` keeps every severity and states nothing in the prompt. */
+const RAISE_EVERY_SEVERITY: ResolvedFloor = { severity: 'low', basis: 'fixed', score: null }
+
 /** Resolve a pass's floor against the estimate the block carries when the pass starts. */
 function resolveFloor(
   policy: RequirementFindingFloorPolicy | undefined,
@@ -278,6 +287,11 @@ export abstract class IterativeReviewService<
   protected abstract buildReworkPrompt(ctx: TContext, items: RequirementReviewItem[]): string
   /** Apply a prior incorporated document to the context (a re-review / redo base). */
   protected abstract applyIncorporatedDoc(ctx: TContext, doc: string): void
+  /**
+   * Hand a re-review the round it follows. A kind that implements this holds its re-reviews to the
+   * follow-up bar (`follow-up-bar.logic.ts`); one that does not re-reviews with no such bar.
+   */
+  protected applyPriorRound?(ctx: TContext, round: PriorRound): void
   /** Apply the human's freeform "do it differently" feedback to the context. */
   protected abstract applyFeedback(ctx: TContext, feedback: string): void
   /** Read the kind-specific document field off a review. */
@@ -400,11 +414,20 @@ export abstract class IterativeReviewService<
     const context = await this.gatherContext(workspaceId, block, {} as TContextInput)
     const doc = this.readDoc(review)
     if (doc) this.applyIncorporatedDoc(context, doc)
-    const floor = resolveFloor(opts.findingFloor, block)
-    const reviewed = await this.runReviewer(workspaceId, block, context, floor)
+    // The round this pass replaces is the one it may follow up on.
+    const round = this.applyPriorRound ? priorRoundOf(review.items) : null
+    if (round) this.applyPriorRound?.(context, round)
+    // A barred pass always records what it dropped, so with no policy it records the floor that
+    // keeps every severity rather than no record at all.
+    const floor = resolveFloor(opts.findingFloor, block) ?? (round ? RAISE_EVERY_SEVERITY : null)
+    const reviewed = await this.runReviewer(workspaceId, block, context, floor, round)
     const { ref } = reviewed
     const raised = applyFindingFloor(reviewed.items, floor)
-    const items = raised.items
+    const barred = applyFollowUpBar(raised.items, round)
+    const items = barred.items
+    const findingFloor = raised.record
+      ? { ...raised.record, followUpSuppressed: barred.suppressed }
+      : null
     // The reviewer call is slow, so the snapshot loaded above is stale by the time it returns
     // (a human can grant an extra round, or answer an item that this pass is about to replace).
     // Re-derive the counters from the FRESH review under CAS rather than writing the pre-call
@@ -420,7 +443,7 @@ export abstract class IterativeReviewService<
         model: `${ref.provider}:${ref.model}`,
         iteration,
         maxIterations,
-        findingFloor: raised.record,
+        findingFloor,
       })
     })
     // Re-derived from what was actually PERSISTED, not smuggled out of the mutation on a closure
@@ -664,6 +687,7 @@ export abstract class IterativeReviewService<
     block: Block,
     context: TContext,
     floor: ResolvedFloor | null,
+    round: PriorRound | null = null,
   ): Promise<{ ref: ModelRef; items: RequirementReviewItem[] }> {
     const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
     let text: string
@@ -692,6 +716,7 @@ export abstract class IterativeReviewService<
       extractJson(text),
       () => this.deps.idGenerator.next(this.itemIdPrefix),
       now,
+      round ? followUpRefs(round) : undefined,
     )
     return { ref, items }
   }

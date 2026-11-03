@@ -131,15 +131,37 @@ export function defineReviewStoreConcurrencyConformance(harness: ConformanceHarn
       const stored = (await repo.getByBlock(workspace.id, 'blk_review_cas'))!
       expect(stored.findingFloor).toEqual(first)
 
-      // A re-review pass records its own floor through the rev-guarded write.
+      // A re-review pass records its own floor, and what the follow-up bar dropped, through the
+      // rev-guarded write; its findings carry the answer each one follows up on.
       const next = {
         severity: 'medium' as const,
         basis: 'no_estimate' as const,
         score: null,
         suppressed: 0,
+        followUpSuppressed: 2,
       }
-      expect(await repo.compareAndSwap(workspace.id, { ...stored, findingFloor: next })).toBe(true)
-      expect((await repo.get(workspace.id, 'rrv_cas'))?.findingFloor).toEqual(next)
+      const followUp = {
+        id: 'rri_follow_up',
+        category: 'gap' as const,
+        severity: 'medium' as const,
+        title: 'Which formats does an export offer?',
+        detail: 'The answer allows exports but names no format.',
+        status: 'open' as const,
+        reply: null,
+        followsUpOn: 'Who can export?',
+        createdAt: 1,
+        updatedAt: 1,
+      }
+      expect(
+        await repo.compareAndSwap(workspace.id, {
+          ...stored,
+          findingFloor: next,
+          items: [followUp],
+        }),
+      ).toBe(true)
+      const reReviewed = await repo.get(workspace.id, 'rrv_cas')
+      expect(reReviewed?.findingFloor).toEqual(next)
+      expect(reReviewed?.items[0]?.followsUpOn).toBe('Who can export?')
 
       await repo.upsert(workspace.id, { ...stored, findingFloor: null, updatedAt: 3 })
       expect((await repo.get(workspace.id, 'rrv_cas'))?.findingFloor).toBeNull()
