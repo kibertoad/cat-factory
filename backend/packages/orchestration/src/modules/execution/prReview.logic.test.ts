@@ -457,7 +457,7 @@ describe('renderChallengeInvestigatorFeedback', () => {
 })
 
 describe('applyChallengeVerdict', () => {
-  it('retracts a finding: records the justification + auto-deselects it, staying parked', () => {
+  it('retracts a finding: records the justification + auto-deselects it', () => {
     const a = finding({ id: 'prf_a' })
     const b = finding({ id: 'prf_b' })
     const next = applyChallengeVerdict(parkedState([a, b]), 'prf_a', 'why?', {
@@ -471,7 +471,20 @@ describe('applyChallengeVerdict', () => {
       justification: 'Already handled upstream.',
     })
     expect(next.selectedFindingIds).toEqual(['prf_b'])
+    // The review's status belongs to the challenge queue, which other investigations may still
+    // hold open: a verdict on one finding never moves it.
     expect(next.status).toBe('awaiting_selection')
+  })
+
+  it('leaves the review status alone while other challenges are still running', () => {
+    const a = finding({ id: 'prf_a' })
+    const next = applyChallengeVerdict(
+      { ...parkedState([a]), status: 'challenging' },
+      'prf_a',
+      null,
+      { verdict: 'upheld', justification: 'Holds.' },
+    )
+    expect(next.status).toBe('challenging')
   })
 
   it('amends a finding when a revised field actually changes it, keeping it selected', () => {
@@ -522,7 +535,7 @@ describe('applyChallengeVerdict', () => {
 })
 
 describe('failChallenge', () => {
-  it('marks the finding `failed` with the reason, keeps its body, and re-parks selectable', () => {
+  it('marks the finding `failed` with the reason, keeps its body, and keeps it selectable', () => {
     const a = finding({ id: 'prf_a', title: 'keep', detail: 'keep detail' })
     const b = finding({ id: 'prf_b' })
     const next = failChallenge(
@@ -539,16 +552,14 @@ describe('failChallenge', () => {
       question: 'is this real?',
       justification: 'The investigator container crashed.',
     })
-    // Not retracted, so it stays selected + actionable; the review re-parks.
+    // Not retracted, so it stays selected + actionable. The status is the queue's to move.
     expect(next.selectedFindingIds).toEqual(['prf_a', 'prf_b'])
-    expect(next.status).toBe('awaiting_selection')
-    expect(next.resolution).toBeNull()
+    expect(next.status).toBe('challenging')
   })
 
-  it('is total for an unknown finding — just re-parks', () => {
+  it('is total for an unknown finding', () => {
     const a = finding({ id: 'prf_a' })
     const next = failChallenge({ ...parkedState([a]), status: 'challenging' }, 'prf_x', null, null)
-    expect(next.status).toBe('awaiting_selection')
     expect(next.findings?.[0]?.challenge).toBeUndefined()
   })
 })

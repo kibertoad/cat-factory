@@ -3500,6 +3500,8 @@
         "maxRequirementIterations": "Gereksinim yinelemeleri",
         "maxRequirementConcernAllowed": "Şu düzeyde veya altında otomatik geç",
         "companionMaxReworks": "Yardımcı yeniden çalışma turları",
+        "postImplementationReviewEffort": "Uygulama sonrası inceleme düzeyi",
+        "postImplementationReviewEffortHelp": "Uygulamadan sonraki kod incelemesinin ne kadar titiz olduğu. Daha yüksek düzeyler, daha az kesin olanlar da dahil olmak üzere daha fazla bulgu bildirir ve daha uzun sürer.",
         "autoMerge": "Otomatik birleştirme"
       },
       "newPreset": "Yeni ilke",
@@ -7954,7 +7956,9 @@
       "submit": "İncele",
       "placeholder": "İsteğe bağlı: Bu bulguda tam olarak yanlış veya ikna edici olmayan nedir?",
       "hint": "Araştırmacının daha derine inmesi, bulguyu gerekçelendirmesi ve doğru ve ilgili olduğunu doğrulaması için boş bırakın.",
-      "investigatingBanner": "İtiraz Araştırmacısı bir bulguyu kaynak koda göre yeniden inceliyor…",
+      "queuedBadge": "Sırada",
+      "queueBanner": "İnceleniyor: {running} · Sırada: {queued}. Bu sırada bulguları seçmeye ve itiraz etmeye devam edebilirsiniz.",
+      "resolveAfterInvestigations": "“İncelemeyi bitir”, “Yorum olarak gönder” ve “Seçilenleri düzelt”, her itirazın sonucu çıktığında kullanılabilir olur.",
       "investigatingBadge": "İnceleniyor",
       "strengthenedBadge": "Güçlendirildi",
       "upheldBadge": "Onaylandı",
@@ -9054,5 +9058,16 @@
     "add": "Kuyruğa ekle",
     "addAndStart": "Ekle ve başlat",
     "addedToast": "“{title}” kuyruğa eklendi"
+  },
+  "reviewEffort": {
+    "label": "İnceleme düzeyi",
+    "help": "İncelemenin ne kadar titiz olduğu. Daha yüksek düzeyler, daha az kesin olanlar da dahil olmak üzere daha fazla bulgu bildirir ve daha uzun sürer.",
+    "levels": {
+      "low": "Düşük",
+      "medium": "Orta",
+      "high": "Yüksek",
+      "xhigh": "Çok yüksek",
+      "max": "Maksimum"
+    }
   }
 }

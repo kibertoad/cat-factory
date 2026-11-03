@@ -3359,6 +3359,8 @@
         "maxRequirementIterations": "Itérations d'exigences",
         "maxRequirementConcernAllowed": "Validation auto. des préoccupations jusqu'à",
         "companionMaxReworks": "Cycles de retravail du compagnon",
+        "postImplementationReviewEffort": "Effort de revue après l'implémentation",
+        "postImplementationReviewEffortHelp": "Le degré de minutie de la revue de code après l'implémentation. Les niveaux plus élevés signalent davantage de constats, y compris les moins certains, et prennent plus de temps.",
         "autoMerge": "Fusion automatique"
       },
       "newPreset": "Nouvelle politique",
@@ -7954,7 +7956,9 @@
       "submit": "Enquêter",
       "placeholder": "Facultatif : qu'y a-t-il précisément d'incorrect ou de peu convaincant dans ce constat ?",
       "hint": "Laissez vide pour que l'enquêteur approfondisse, justifie le constat et vérifie qu'il est exact et pertinent.",
-      "investigatingBanner": "L'enquêteur de contestation réexamine un constat par rapport au code source…",
+      "queuedBadge": "En file d’attente",
+      "queueBanner": "Enquêtes en cours : {running} · En file d’attente : {queued}. Vous pouvez continuer à sélectionner et contester des constats en attendant.",
+      "resolveAfterInvestigations": "« Terminer la revue », « Publier en commentaires » et « Corriger la sélection » seront disponibles dès que chaque contestation aura son verdict.",
       "investigatingBadge": "Enquête en cours",
       "strengthenedBadge": "Renforcé",
       "upheldBadge": "Confirmé",
@@ -9054,5 +9058,16 @@
     "add": "Ajouter à la file",
     "addAndStart": "Ajouter et démarrer",
     "addedToast": "« {title} » a été ajoutée à la file"
+  },
+  "reviewEffort": {
+    "label": "Effort de revue",
+    "help": "Le degré de minutie de la revue. Les niveaux plus élevés signalent davantage de constats, y compris les moins certains, et prennent plus de temps.",
+    "levels": {
+      "low": "Faible",
+      "medium": "Moyen",
+      "high": "Élevé",
+      "xhigh": "Très élevé",
+      "max": "Maximal"
+    }
   }
 }

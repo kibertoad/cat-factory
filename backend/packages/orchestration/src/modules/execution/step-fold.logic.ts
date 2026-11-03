@@ -263,6 +263,27 @@ export function dispatchEpochFor(
 }
 
 /**
+ * CLAIM the next dispatch epoch for `dispatchedKind` before anything is dispatched: read
+ * {@link dispatchEpochFor} and count the dispatch on `step` in the same move, so a second claim made
+ * before this one's job is accepted gets the NEXT epoch rather than the same one. For a caller that
+ * starts several jobs of one kind side by side and persists each claim before its executor call;
+ * the ordinary one-job-per-step path counts on acceptance instead (`recordDispatchAttribution`).
+ */
+export function claimDispatchEpoch(
+  instance: { steps: readonly PipelineStep[] },
+  step: PipelineStep,
+  dispatchedKind: string,
+): number {
+  const epoch = dispatchEpochFor(instance, dispatchedKind)
+  const dispatches = step.dispatches ?? []
+  const existing = dispatches.find((d) => d.agentKind === dispatchedKind)
+  step.dispatches = existing
+    ? dispatches.map((d) => (d === existing ? { ...d, count: d.count + 1 } : d))
+    : [...dispatches, { agentKind: dispatchedKind, count: 1 }]
+  return epoch
+}
+
+/**
  * The `dispatchEpoch` slice of an agent context: {@link dispatchEpochFor}'s count, and nothing at
  * all for the run's FIRST job of a kind. Absent and 0 mean the same thing to the container executor
  * (the job id keeps its unsuffixed shape), and a spread-ready partial keeps that equivalence here,

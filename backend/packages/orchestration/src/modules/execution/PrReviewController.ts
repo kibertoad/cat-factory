@@ -7,21 +7,16 @@ import type {
   IdGenerator,
   PipelineStep,
   PrReviewAgentOutput,
-  PrReviewChallengeOutput,
   PrReviewStepState,
   ResolvePrReviewInput,
   WorkRunner,
 } from '@cat-factory/kernel'
 import { ConflictError } from '@cat-factory/kernel'
+import { isChallengeInFlight } from '@cat-factory/contracts'
 import { PR_REVIEWER_KIND } from '@cat-factory/agents'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { AdvanceResult } from './advance.js'
-import {
-  applyChallengeVerdict,
-  coercePrReview,
-  dismissFinding,
-  failChallenge,
-} from './prReview.logic.js'
+import { coercePrReview, dismissFinding } from './prReview.logic.js'
 import { planResumeSlices, sliceReviewsAfterAggregation } from './prReviewSlices.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
@@ -378,12 +373,15 @@ export class PrReviewController {
   }
 
   /**
-   * Challenge a parked finding: mark it `investigating`, re-arm the `pr-reviewer` step (recording
-   * `step.pendingChallenge`) so the durable driver dispatches the read-only Challenge Investigator
-   * against it, and wake the parked driver — mirroring the `fix`/`post` re-arm. The investigator's
-   * uphold/retract verdict is applied by the `pr-review-challenge` completion interceptor
-   * ({@link recordChallengeResult}), which re-parks the review at `awaiting_selection`. An unknown
-   * finding is rejected. An empty `question` uses the generic "dig deeper + validate" prompt.
+   * Challenge a finding: QUEUE it for a read-only Challenge Investigator (`queued` until a slot is
+   * free; see {@link PrReviewChallengeQueue}). An empty `question` uses the generic "dig deeper +
+   * validate" prompt.
+   *
+   * Accepted while the review is parked AND while other challenges are still running, which is what
+   * lets a human challenge several findings in a row. Only the first one re-arms the step and wakes
+   * the parked driver (the `fix`/`post` re-arm); later ones join the queue the running driver is
+   * already polling. Refused for an unknown finding, a retracted one, and one whose challenge is
+   * already in flight.
    */
   async challengeFinding(
     workspaceId: string,
@@ -398,7 +396,7 @@ export class PrReviewController {
       workspaceId,
       executionId,
       (inst) => {
-        const { step } = this.findParkedReview(inst)
+        const { step, parked } = this.findChallengeableReview(inst)
         const review = step.prReview!
         const target = review.findings?.find((f) => f.id === findingId)
         if (!target) {
@@ -409,25 +407,29 @@ export class PrReviewController {
         if (target.challenge?.status === 'retracted') {
           throw new ConflictError('A retracted finding can no longer be challenged.')
         }
-        approvalId = step.approval!.id
+        if (isChallengeInFlight(target.challenge)) {
+          throw new ConflictError('That finding is already being challenged.')
+        }
         const findings = review.findings.map((f) =>
           f.id === findingId
-            ? {
-                ...f,
-                challenge: { status: 'investigating' as const, question, justification: null },
-              }
+            ? { ...f, challenge: { status: 'queued' as const, question, justification: null } }
             : f,
         )
+        step.challengeJobs = [...(step.challengeJobs ?? []), { findingId, question }]
         step.prReview = { ...review, status: 'challenging', resolution: null, findings }
-        step.pendingChallenge = { findingId, question }
-        this.deps.stepGraph.resetStepForRerun(step)
-        this.deps.stepGraph.startStep(step)
-        if (inst.status === 'blocked') inst.status = 'running'
+        if (parked) {
+          approvalId = step.approval!.id
+          this.deps.stepGraph.resetStepForRerun(step)
+          this.deps.stepGraph.startStep(step)
+          if (inst.status === 'blocked') inst.status = 'running'
+        }
         state = step.prReview
       },
     )
-    await this.deps.stateMachine.clearWaitingNotification(workspaceId, instance)
-    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
+    if (approvalId) {
+      await this.deps.stateMachine.clearWaitingNotification(workspaceId, instance)
+      await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
+    }
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     if (approvalId) {
       await this.deps.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'approved')
@@ -436,63 +438,33 @@ export class PrReviewController {
   }
 
   /**
-   * Apply a completed Challenge Investigator's verdict to the challenged finding, then RE-PARK the
-   * review at `awaiting_selection`. Run as the `pr-review-challenge` completion interceptor's body
-   * (short-circuiting the normal completion). `upheld` strengthens the finding's body from any
-   * `revised*` field + records the justification (`amended`); `retracted` records the justification
-   * and auto-deselects the finding. Idempotent: a replay after the marker cleared (status no longer
-   * `challenging`) returns `null`, letting the normal `pr-review` interceptor re-park.
+   * The run's `pr-reviewer` step a challenge can be added to: the parked review (`parked: true`,
+   * the human is curating) or one whose challenge queue is already running. Throws
+   * {@link ConflictError} otherwise (still reviewing, resolved, or mid fix/post).
    */
-  async recordChallengeResult(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    output: PrReviewChallengeOutput | undefined,
-  ): Promise<AdvanceResult | null> {
-    const pending = step.pendingChallenge
-    if (!step.prReview || step.prReview.status !== 'challenging' || !pending) return null
-    step.pendingChallenge = null
-    step.prReview = applyChallengeVerdict(
-      step.prReview,
-      pending.findingId,
-      pending.question ?? null,
-      output,
+  private findChallengeableReview(instance: ExecutionInstance): {
+    step: PipelineStep
+    parked: boolean
+  } {
+    const running = instance.steps.find(
+      (s) => s.agentKind === PR_REVIEW_STEP_KIND && s.prReview?.status === 'challenging',
     )
-    return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
-  }
-
-  /**
-   * Settle a CHALLENGE whose read-only investigator job FAILED (a genuine crash / non-transient
-   * error, after any container-eviction retry budget is spent), RE-PARKING the review instead of
-   * failing the whole run. Run from the driver's failed-job path (the analogue of the human-test /
-   * visual-confirmation `onHelperComplete` failure branch): mark the challenged finding `failed`
-   * (carrying the reason), leave its body untouched, and re-park at `awaiting_selection` so the
-   * human can re-challenge or act on it — a non-critical second opinion crashing on ONE finding
-   * must never nuke the human's in-flight curation. Idempotent: a step no longer `challenging`
-   * (verdict already applied) returns null and falls through to the normal spine.
-   */
-  async recordChallengeFailure(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    reason: string | null,
-  ): Promise<AdvanceResult | null> {
-    const pending = step.pendingChallenge
-    if (!step.prReview || step.prReview.status !== 'challenging' || !pending) return null
-    step.pendingChallenge = null
-    step.prReview = failChallenge(
-      step.prReview,
-      pending.findingId,
-      pending.question ?? null,
-      reason,
-    )
-    return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
+    if (running) {
+      // Only a run the driver is still working (or a spend pause it resumes from) will ever start
+      // the entry. A run that failed or was stopped mid-queue keeps its review `challenging`, and
+      // accepting there would answer `queued` for a challenge nothing picks up.
+      if (instance.status !== 'running' && instance.status !== 'paused') {
+        throw new ConflictError('The run is no longer running its challenge investigations')
+      }
+      return { step: running, parked: false }
+    }
+    return { step: this.findParkedReview(instance).step, parked: true }
   }
 
   /**
    * The run's parked `pr-reviewer` step (the human is curating findings) — the single lookup the
    * `resolve` / `dismiss` / `challenge` actions share. Throws {@link ConflictError} when the run is
-   * no longer awaiting a selection (already resolved, or a challenge is mid-flight).
+   * no longer awaiting a selection (already resolved, or challenges are still running).
    */
   private findParkedReview(instance: ExecutionInstance): { step: PipelineStep; stepIndex: number } {
     const stepIndex = instance.steps.findIndex(

@@ -2188,14 +2188,14 @@ model-authored: treat it as data, never as markup.
 
 Then curate, with one call per decision you make:
 
-| You want to                   | Call                                                                                                                                                           |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Drop a finding entirely       | `POST …/pr-review/findings/:findingId/dismiss`; the run stays parked                                                                                           |
-| Push back on one              | `POST …/pr-review/findings/:findingId/challenge` with an optional `question`; poll for the `challenge` verdict (`upheld` / `amended` / `retracted` / `failed`) |
-| Post the keepers inline       | `POST …/pr-review/resolve` with `{"action":"post","findingIds":[…]}`                                                                                           |
-| Hand them to a fixer instead  | `…/resolve` with `{"action":"fix","findingIds":[…]}`; commits onto the PR's own branch, opens no new PR                                                        |
-| Record the selection and stop | `…/resolve` with `{"action":"finish"}`; no side effect on the PR                                                                                               |
-| Nudge a wedged review         | `POST …/pr-review/resume`, valid only while `reviewing`, and bounded (see below)                                                                               |
+| You want to                   | Call                                                                                                                                                                                            |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Drop a finding entirely       | `POST …/pr-review/findings/:findingId/dismiss`; the run stays parked                                                                                                                            |
+| Push back on one              | `POST …/pr-review/findings/:findingId/challenge` with an optional `question`; poll for the `challenge` verdict (`queued` / `investigating`, then `upheld` / `amended` / `retracted` / `failed`) |
+| Post the keepers inline       | `POST …/pr-review/resolve` with `{"action":"post","findingIds":[…]}`                                                                                                                            |
+| Hand them to a fixer instead  | `…/resolve` with `{"action":"fix","findingIds":[…]}`; commits onto the PR's own branch, opens no new PR                                                                                         |
+| Record the selection and stop | `…/resolve` with `{"action":"finish"}`; no side effect on the PR                                                                                                                                |
+| Nudge a wedged review         | `POST …/pr-review/resume`, valid only while `reviewing`, and bounded (see below)                                                                                                                |
 
 Dismissing is not required before posting: `post` acts on the `findingIds` you name and nothing
 else, so dismissing is for pruning what you render, and the selection is for what lands. A

@@ -551,6 +551,8 @@
         "maxRequirementIterations": "Iterazioni sui requisiti",
         "maxRequirementConcernAllowed": "Auto-pass per criticita pari o inferiori a",
         "companionMaxReworks": "Cicli di rielaborazione del companion",
+        "postImplementationReviewEffort": "Impegno della revisione dopo l'implementazione",
+        "postImplementationReviewEffortHelp": "Quanto è approfondita la revisione del codice dopo l'implementazione. I livelli più alti segnalano più rilievi, compresi quelli meno certi, e richiedono più tempo.",
         "autoMerge": "Auto-merge"
       },
       "autoMergeOnHint": "Mergia automaticamente quando rientra nei limiti del criterio.",
@@ -7954,7 +7956,9 @@
       "submit": "Indaga",
       "placeholder": "Facoltativo: cosa c'è di preciso di sbagliato o poco convincente in questo rilievo?",
       "hint": "Lascia vuoto per far approfondire l'investigatore, giustificare il rilievo e verificarne accuratezza e pertinenza.",
-      "investigatingBanner": "L'investigatore delle contestazioni sta riesaminando un rilievo rispetto al codice sorgente…",
+      "queuedBadge": "In coda",
+      "queueBanner": "In esame: {running} · In coda: {queued}. Nel frattempo puoi continuare a selezionare e contestare i rilievi.",
+      "resolveAfterInvestigations": "“Concludi revisione”, “Pubblica come commenti” e “Correggi selezionati” saranno disponibili quando ogni contestazione avrà il suo verdetto.",
       "investigatingBadge": "In esame",
       "strengthenedBadge": "Rafforzato",
       "upheldBadge": "Confermato",
@@ -9054,5 +9058,16 @@
     "add": "Aggiungi alla coda",
     "addAndStart": "Aggiungi e avvia",
     "addedToast": "«{title}» aggiunta alla coda"
+  },
+  "reviewEffort": {
+    "label": "Impegno della revisione",
+    "help": "Quanto è approfondita la revisione. I livelli più alti segnalano più rilievi, compresi quelli meno certi, e richiedono più tempo.",
+    "levels": {
+      "low": "Basso",
+      "medium": "Medio",
+      "high": "Alto",
+      "xhigh": "Molto alto",
+      "max": "Massimo"
+    }
   }
 }

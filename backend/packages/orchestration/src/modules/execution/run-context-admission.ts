@@ -13,6 +13,7 @@
 import { AgentContextBuilder } from './AgentContextBuilder.js'
 import { RunAdmission } from './RunAdmission.js'
 import type { ExecutionServiceDependencies } from './ExecutionService.js'
+import type { ResolvePostImplementationReviewEffort } from './builder-review-effort.js'
 
 /**
  * The subset of {@link ExecutionServiceDependencies} the pair reads. Every field is the SAME
@@ -64,11 +65,20 @@ export type RunContextAdmissionDeps = Pick<
   | 'binaryGeneratorSource'
 >
 
-export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
+export function buildRunContextAndAdmission(
+  deps: RunContextAdmissionDeps,
+  /**
+   * The one policy fact a dispatch's prompt reads, bound by the engine over the same cached
+   * resolution every gate window uses. Passed separately because it is not a dependency the engine
+   * was handed: it is built from one (`RunMergePolicy`).
+   */
+  resolvePostImplementationReviewEffort: ResolvePostImplementationReviewEffort,
+): {
   contextBuilder: AgentContextBuilder
   admission: RunAdmission
 } {
   const contextBuilder = new AgentContextBuilder({
+    resolvePostImplementationReviewEffort,
     workspaceRepository: deps.workspaceRepository,
     blockRepository: deps.blockRepository,
     accountRepository: deps.accountRepository,

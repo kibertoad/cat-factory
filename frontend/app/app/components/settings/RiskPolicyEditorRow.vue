@@ -24,6 +24,7 @@ import {
 import { RISK_POLICY_AXES, RISK_POLICY_CEILING_FIELD } from '~/utils/riskPolicy'
 import MergeClassRulesEditor from '~/components/settings/MergeClassRulesEditor.vue'
 import MergeRolePolicyEditor from '~/components/settings/MergeRolePolicyEditor.vue'
+import { reviewEffortOptions } from '~/utils/reviewEffortLevel'
 import RequirementFindingFloorEditor from '~/components/settings/RequirementFindingFloorEditor.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
@@ -67,6 +68,7 @@ watch(
 const concernOptions = computed<{ value: RequirementConcernLevel; label: string }[]>(() =>
   CONCERN_LEVELS.map((value) => ({ value, label: t(CONCERN_LABEL_KEYS[value]) })),
 )
+const effortOptions = computed(() => reviewEffortOptions(t))
 
 const onMissingOptions = computed<{ value: 'run' | 'skip'; label: string }[]>(() => [
   { value: 'run', label: t('settings.riskPolicy.forkDecision.onMissing.run') },
@@ -199,6 +201,18 @@ const deleteBlocked = computed(
           :min="0"
           :max="10"
           size="sm"
+        />
+      </label>
+      <label class="block">
+        <SectionLabel as="span" class="mb-1 block">
+          {{ t('settings.riskPolicy.field.postImplementationReviewEffort') }}
+        </SectionLabel>
+        <USelect
+          v-model="draft.postImplementationReviewEffort"
+          :items="effortOptions"
+          value-key="value"
+          size="sm"
+          :title="t('settings.riskPolicy.field.postImplementationReviewEffortHelp')"
         />
       </label>
       <label class="block">

@@ -551,6 +551,8 @@
         "maxRequirementIterations": "Anforderungs-Iterationen",
         "maxRequirementConcernAllowed": "Auto-Pass bei Bedenken auf oder unter",
         "companionMaxReworks": "Begleiter-Überarbeitungsrunden",
+        "postImplementationReviewEffort": "Prüfaufwand nach der Implementierung",
+        "postImplementationReviewEffortHelp": "Wie gründlich das Code-Review nach der Implementierung ist. Höhere Stufen melden mehr Befunde, auch weniger sichere, und dauern länger.",
         "autoMerge": "Auto-Merge"
       },
       "autoMergeOnHint": "Automatisch mergen, wenn innerhalb der Richtliniengrenzen.",
@@ -7954,7 +7956,9 @@
       "submit": "Untersuchen",
       "placeholder": "Optional: Was genau ist an diesem Befund falsch oder nicht überzeugend?",
       "hint": "Leer lassen, damit der Prüfer tiefer gräbt, den Befund begründet und prüft, ob er zutreffend und relevant ist.",
-      "investigatingBanner": "Der Challenge-Investigator prüft einen Befund erneut anhand des Quellcodes…",
+      "queuedBadge": "In Warteschlange",
+      "queueBanner": "In Prüfung: {running} · In Warteschlange: {queued}. Du kannst währenddessen weiter Befunde auswählen und anfechten.",
+      "resolveAfterInvestigations": "„Review abschließen“, „Als Kommentare posten“ und „Ausgewählte beheben“ sind verfügbar, sobald jede Anfechtung ein Ergebnis hat.",
       "investigatingBadge": "Wird untersucht",
       "strengthenedBadge": "Bestärkt",
       "upheldBadge": "Bestätigt",
@@ -9054,5 +9058,16 @@
     "add": "Zur Warteschlange hinzufügen",
     "addAndStart": "Hinzufügen und starten",
     "addedToast": "„{title}“ zur Warteschlange hinzugefügt"
+  },
+  "reviewEffort": {
+    "label": "Prüfaufwand",
+    "help": "Wie gründlich das Review ist. Höhere Stufen melden mehr Befunde, auch weniger sichere, und dauern länger.",
+    "levels": {
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch",
+      "xhigh": "Sehr hoch",
+      "max": "Maximal"
+    }
   }
 }

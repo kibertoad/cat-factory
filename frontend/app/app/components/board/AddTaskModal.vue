@@ -26,6 +26,8 @@ import {
   BUG_FISHING_DEFAULT_PASS_BUDGET,
   BUG_FISHING_MAX_PASS_BUDGET,
   BUG_FISHING_PHASES,
+  DEFAULT_REVIEW_EFFORT_LEVEL,
+  type ReviewEffortLevel,
 } from '@cat-factory/contracts'
 import { resolveComponentRegistry } from '@modular-vue/core'
 import { useReactiveSlots } from '@modular-vue/runtime'
@@ -36,6 +38,7 @@ import AgentConfigField from '~/components/common/AgentConfigField.vue'
 import DescriptorFields from '~/components/common/DescriptorFields.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
 import ReviewSkillQueue from '~/components/skills/ReviewSkillQueue.vue'
+import ReviewEffortSelect from '~/components/skills/ReviewEffortSelect.vue'
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
 import { isReviewDebtConflict, reviewFrictionContext } from '~/utils/reviewFriction'
@@ -182,6 +185,7 @@ const reviewFocus = ref('')
 // Specialist review playbooks queued onto the review, in the order the reviewer applies them.
 // Offered from the account catalog's `review` group only (see ReviewSkillQueue).
 const reviewSkillIds = ref<string[]>([])
+const reviewEffort = ref<ReviewEffortLevel>(DEFAULT_REVIEW_EFFORT_LEVEL)
 
 // Best-practice prompt fragments the user pins on the task up front (folded into its agents
 // on top of the service-level standards, exactly like the inspector's picker). Chosen from the
@@ -404,7 +408,8 @@ function buildTypeFields(): TaskTypeFields | undefined {
     const f: TaskTypeFields = { ...parseReviewPrRef(reviewPrRef.value) }
     if (reviewFocus.value.trim()) f.reviewFocus = reviewFocus.value.trim()
     if (reviewSkillIds.value.length) f.reviewSkillIds = [...reviewSkillIds.value]
-    return Object.keys(f).length ? f : undefined
+    f.reviewEffort = reviewEffort.value
+    return f
   }
   return buildCustomTypeFields()
 }
@@ -663,6 +668,7 @@ onModalOpen(open, () => {
   reviewPrRef.value = ''
   reviewFocus.value = ''
   reviewSkillIds.value = []
+  reviewEffort.value = DEFAULT_REVIEW_EFFORT_LEVEL
   // Empty rather than default-seeded: `taskType` was just reset to a BUILT-IN above, which
   // declares no descriptor fields. Picking a custom type from here runs the `taskType` watcher,
   // and that is the one place the new type's declared defaults are seeded.
@@ -1327,6 +1333,7 @@ function createRefusalMessage(error: unknown): string | null {
                  role. Always shown (not advanced-only): queueing a security or performance pass is
                  a per-review judgement a reviewer makes, not a platform setting. -->
             <ReviewSkillQueue v-model="reviewSkillIds" />
+            <ReviewEffortSelect v-model="reviewEffort" />
           </div>
 
           <!-- A CUSTOM (deployment-registered) task type: a bespoke create-form section when its

@@ -3359,6 +3359,8 @@
         "maxRequirementIterations": "Iteraciones de requisitos",
         "maxRequirementConcernAllowed": "Aprobación automática de inquietudes hasta",
         "companionMaxReworks": "Rondas de reelaboración del acompañante",
+        "postImplementationReviewEffort": "Esfuerzo de revisión tras la implementación",
+        "postImplementationReviewEffortHelp": "Qué tan exhaustiva es la revisión de código tras la implementación. Los niveles más altos informan de más hallazgos, incluidos los menos seguros, y tardan más.",
         "autoMerge": "Fusión automática"
       },
       "newPreset": "Nueva política",
@@ -7954,7 +7956,9 @@
       "submit": "Investigar",
       "placeholder": "Opcional: ¿qué es exactamente lo incorrecto o poco convincente de este hallazgo?",
       "hint": "Déjalo en blanco para que el investigador profundice, justifique el hallazgo y compruebe que es preciso y relevante.",
-      "investigatingBanner": "El Investigador de Objeciones está reexaminando un hallazgo frente al código fuente…",
+      "queuedBadge": "En cola",
+      "queueBanner": "Investigando: {running} · En cola: {queued}. Mientras tanto, puedes seguir seleccionando y objetando hallazgos.",
+      "resolveAfterInvestigations": "«Finalizar revisión», «Publicar como comentarios» y «Corregir seleccionados» estarán disponibles cuando cada objeción tenga su veredicto.",
       "investigatingBadge": "Investigando",
       "strengthenedBadge": "Reforzado",
       "upheldBadge": "Confirmado",
@@ -9054,5 +9058,16 @@
     "add": "Añadir a la cola",
     "addAndStart": "Añadir e iniciar",
     "addedToast": "Se añadió «{title}» a la cola"
+  },
+  "reviewEffort": {
+    "label": "Esfuerzo de revisión",
+    "help": "Qué tan exhaustiva es la revisión. Los niveles más altos informan de más hallazgos, incluidos los menos seguros, y tardan más.",
+    "levels": {
+      "low": "Bajo",
+      "medium": "Medio",
+      "high": "Alto",
+      "xhigh": "Muy alto",
+      "max": "Máximo"
+    }
   }
 }

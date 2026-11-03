@@ -13,7 +13,6 @@ import type {
   PipelineStep,
   BugFishingAgentOutput,
   PrReviewAgentOutput,
-  PrReviewChallengeOutput,
   RequirementReview,
   ResolverContext,
   RunInitiatorScope,
@@ -27,7 +26,6 @@ import {
   INITIATIVE_PLANNER_AGENT_KIND,
 } from '@cat-factory/kernel'
 import {
-  CHALLENGE_INVESTIGATOR_KIND,
   FORK_PROPOSER_KIND,
   PR_REVIEWER_KIND,
   renderBugFishingPhaseBrief,
@@ -460,7 +458,7 @@ export function buildStepHandlerRegistry(d: DispatcherRegistryDeps): StepHandler
     // with `fix` / `post`, or CHALLENGED a finding, `PrReviewController` re-armed this
     // `pr-reviewer` step and woke the driver. Claim it by the re-armed status so it re-dispatches
     // as the Fixer (`fixing`), posts the selected findings as inline PR comments (`posting`), or
-    // dispatches the Challenge Investigator against the challenged finding (`challenging`) — never
+    // drives the challenge queue's investigators (`challenging`), and never runs
     // the generic pr-reviewer clone the fallthrough would run. A `reviewing`/`awaiting_selection`/
     // resolved step falls through (this handler doesn't claim it). See {@link handlePrReviewResolution}.
     {
@@ -642,25 +640,6 @@ export function buildStepCompletionInterceptors(
         step.binaryCandidates?.status !== 'no_choice',
       intercept: ({ workspaceId, instance, step, result }) =>
         d.binaryCandidateController.recordCandidates(workspaceId, instance, step, result.output),
-    },
-    // A Challenge Investigator helper (dispatched off a parked `pr-reviewer` step when the human
-    // challenged a finding) just finished. Its structured `result.custom` is the uphold/retract
-    // verdict; apply it to the challenged finding and RE-PARK the review — never the normal
-    // completion, nor the `pr-review` interceptor below (which would mis-parse the verdict as
-    // findings). Keyed on the `pr-reviewer` step carrying `prReview.status === 'challenging'`, so
-    // it wins over `pr-review` (higher order) only during a challenge; a replay after the marker
-    // cleared returns null and falls through to `pr-review`'s idempotent re-park.
-    {
-      kind: 'pr-review-challenge',
-      order: 104,
-      canIntercept: ({ step }) =>
-        step.agentKind === PR_REVIEW_STEP_KIND && step.prReview?.status === 'challenging',
-      intercept: ({ workspaceId, instance, step, result }) => {
-        const output = d.agentKindRegistry
-          .structuredOutput(CHALLENGE_INVESTIGATOR_KIND)
-          ?.safeParse(result.custom) as PrReviewChallengeOutput | undefined
-        return d.prReviewController.recordChallengeResult(workspaceId, instance, step, output)
-      },
     },
     // The read-only `pr-reviewer` deep-review job just finished on a review task's step. Its
     // structured `result.custom` is the sliced, prioritized findings; record them onto the

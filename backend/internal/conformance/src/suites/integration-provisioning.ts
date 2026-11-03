@@ -68,6 +68,9 @@ function expectSeededCatalog(policies: RiskPolicy[]): string {
   // hard-coded ceiling no policy states), and the post-release-health watch.
   expect(balanced.maxTesterQualityIterations).toBe(3)
   expect(balanced.companionMaxReworks).toBe(seedFor('mp_balanced').companionMaxReworks)
+  expect(balanced.postImplementationReviewEffort).toBe(
+    seedFor('mp_balanced').postImplementationReviewEffort,
+  )
   expect(balanced.releaseWatchWindowMinutes).toBe(30)
   expect(balanced.releaseMaxAttempts).toBe(1)
   return balanced.id
@@ -99,6 +102,7 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
         maxRequirementConcernAllowed: 'medium',
         maxTesterQualityIterations: 4,
         companionMaxReworks: 1,
+        postImplementationReviewEffort: 'low',
         releaseWatchWindowMinutes: 45,
         releaseMaxAttempts: 2,
       })
@@ -109,6 +113,7 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       expect(lenient.body.maxRequirementConcernAllowed).toBe('medium')
       expect(lenient.body.maxTesterQualityIterations).toBe(4)
       expect(lenient.body.companionMaxReworks).toBe(1)
+      expect(lenient.body.postImplementationReviewEffort).toBe('low')
       expect(lenient.body.releaseWatchWindowMinutes).toBe(45)
       expect(lenient.body.releaseMaxAttempts).toBe(2)
 
@@ -126,6 +131,8 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       })
       expect(strict.status).toBe(201)
       expect(strict.body.isDefault).toBe(true)
+      // A policy that states no review effort is stored at the shipped default, on both runtimes.
+      expect(strict.body.postImplementationReviewEffort).toBe('high')
 
       const afterPromote = await call<RiskPolicy[]>('GET', base)
       // The seeded built-ins + Lenient + Strict.
@@ -146,6 +153,13 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       })
       expect(renamed.status).toBe(200)
       expect(renamed.body.name).toBe('Lenient v2')
+      // A patch that leaves the effort out keeps the stored value; one that names it replaces it.
+      expect(renamed.body.postImplementationReviewEffort).toBe('low')
+      const effort = await call<RiskPolicy>('PATCH', `${base}/${lenient.body.id}`, {
+        postImplementationReviewEffort: 'max',
+      })
+      expect(effort.status).toBe(200)
+      expect(effort.body.postImplementationReviewEffort).toBe('max')
       const del = await call('DELETE', `${base}/${lenient.body.id}`)
       expect(del.status).toBe(204)
       const final = await call<RiskPolicy[]>('GET', base)

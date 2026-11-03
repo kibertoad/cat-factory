@@ -62,6 +62,7 @@ export class AccountRiskPolicyService {
       requirementFloorProgression: input.requirementFloorProgression,
       maxTesterQualityIterations: input.maxTesterQualityIterations,
       companionMaxReworks: input.companionMaxReworks,
+      postImplementationReviewEffort: input.postImplementationReviewEffort,
       releaseWatchWindowMinutes: input.releaseWatchWindowMinutes,
       releaseMaxAttempts: input.releaseMaxAttempts,
       humanReviewGraceMinutes: input.humanReviewGraceMinutes,

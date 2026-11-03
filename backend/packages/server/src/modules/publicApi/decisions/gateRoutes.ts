@@ -102,8 +102,10 @@ export function registerPrReviewDecisionRoutes(app: Hono<AppEnv>): void {
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })
 
-  // Challenge one finding: dispatch the read-only investigator to re-examine it. The review
-  // returns to `awaiting_selection` carrying the verdict, so the caller polls for the outcome.
+  // Challenge one finding: queue it for a read-only investigator to re-examine. Accepted while the
+  // review is parked and while earlier challenges still run; the finding reads `queued` until a slot
+  // frees, and the review returns to `awaiting_selection` once every verdict is in, so the caller
+  // polls for the outcome.
   buildHonoRoute(app, challengePublicRunPrReviewFindingContract, async (c) => {
     const { runId, findingId } = c.req.valid('param')
     const gated = await gateDecisionAction(c, runId)

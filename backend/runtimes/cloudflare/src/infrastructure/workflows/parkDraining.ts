@@ -278,6 +278,25 @@ export async function drainParks(
       result = waited
       continue
     }
+    // A PR review's challenge queue has investigators running: poll them on the JOB cadence
+    // through the same `pollAgentJob` entry point, sleep-first like the environment wait (the
+    // advance that parked here has just dispatched). A settled verdict answers `continue`, which
+    // ends this drain and re-advances the step to fill the freed slot. Mirrors `drive.ts`.
+    if (result.kind === 'awaiting_investigations') {
+      const waited = await drivePollLoop(
+        {
+          ...deps.job,
+          awaiting: 'awaiting_investigations',
+          label: 'Challenge investigations',
+          pollFirst: false,
+        },
+        site,
+        result,
+      )
+      if (waited === null) return null
+      result = waited
+      continue
+    }
     // A polling gate step (`ci` / `conflicts` / post-release-health) is gating the PR on its
     // precheck. Re-run the precheck between durable sleeps until the gate yields something
     // terminal (see {@link driveGatePollLoop}). One loop drives every gate kind, since which gate

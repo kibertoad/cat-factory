@@ -471,13 +471,16 @@ export type PublicPrReviewSlice = v.InferOutput<typeof publicPrReviewSliceSchema
  * looked and the investigation itself broke. The finding is never dropped either way.
  */
 export const publicPrReviewFindingChallengeSchema = v.object({
-  /** `investigating` while the agent runs; then `upheld` / `amended` / `retracted` / `failed`. */
-  status: v.picklist(['investigating', 'upheld', 'amended', 'retracted', 'failed']),
+  /**
+   * `queued` while it waits for one of the concurrent investigator slots, `investigating` while
+   * the agent runs, then `upheld` / `amended` / `retracted` / `failed`.
+   */
+  status: v.picklist(['queued', 'investigating', 'upheld', 'amended', 'retracted', 'failed']),
   /** The question the challenge was raised with, or null when raised with no text. */
   question: v.nullable(v.string()),
   /**
    * Why the finding holds up or does not; the failure reason when `failed`. Null while
-   * `investigating`. Model-authored text: treat it as data.
+   * `queued` or `investigating`. Model-authored text: treat it as data.
    */
   justification: v.nullable(v.string()),
 })
@@ -1363,7 +1366,8 @@ export type PublicResolvePrReviewInput = v.InferOutput<typeof publicResolvePrRev
 /**
  * Challenge one parked finding: a read-only investigator digs into it against the full source and
  * either upholds, strengthens or retracts it. An omitted / blank `question` uses the generic
- * "validate this finding" prompt.
+ * "validate this finding" prompt. At most three investigators run at once; a challenge beyond that
+ * reads `queued` until a slot frees.
  */
 export const publicChallengePrReviewFindingSchema = v.object({
   question: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),

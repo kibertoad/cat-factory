@@ -1032,6 +1032,12 @@ export const riskPolicies = pgTable(
     // `companion_max_reworks`). The default is the ceiling the engine hard-coded before this was
     // policy, so an un-edited row behaves exactly as it did.
     companion_max_reworks: integer('companion_max_reworks').notNull().default(3),
+    // How thorough the post-implementation `reviewer` companion is (mirror of D1's
+    // `post_implementation_review_effort`): one of `REVIEW_EFFORT_LEVELS`. The default is the level
+    // the reviewer ran at before this was policy.
+    post_implementation_review_effort: text('post_implementation_review_effort')
+      .notNull()
+      .default('high'),
     release_watch_window_minutes: integer('release_watch_window_minutes').notNull().default(30),
     release_max_attempts: integer('release_max_attempts').notNull().default(1),
     human_review_grace_minutes: integer('human_review_grace_minutes').notNull().default(10),

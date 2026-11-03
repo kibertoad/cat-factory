@@ -1,6 +1,7 @@
 import type {
   AgentExecutor,
   AgentJobHandle,
+  AgentJobUpdate,
   AgentRunContext,
   AgentRunResult,
   Block,
@@ -277,6 +278,52 @@ export class AgentDispatchController {
 
     const result = await this.runAgent(context, options)
     return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, result)
+  }
+
+  /**
+   * Start, or run, a HELPER job off a step WITHOUT making it the step's job: the step's `jobId`,
+   * attribution and container record stay exactly as they were. Used where one step runs several
+   * helper jobs side by side (the PR-review challenge queue), each tracked by its caller.
+   *
+   * It builds the context the ordinary dispatch would (the step's own registered pre-ops included,
+   * so a helper off a `pr-reviewer` step still gets the PR diff), with the caller's claimed
+   * `dispatchEpoch` in place of the counter's: the caller reserves the epoch and persists it BEFORE
+   * calling here, so a replay re-addresses the same harness job instead of starting another.
+   * `recordsDispatch: false` keeps the helper's context reads from overwriting what the step
+   * recorded about its own dispatch.
+   *
+   * Answers `job` with the accepted handle on an async executor, or `result` when the executor
+   * runs the kind inline (the result is settled in this call).
+   */
+  async startSideJob(
+    ctx: StepHandlerContext,
+    dispatchKind: string,
+    dispatchEpoch: number,
+    augmentContext: (context: AgentRunContext) => void,
+  ): Promise<{ job: AgentJobHandle } | { result: AgentRunResult }> {
+    const { workspaceId, instance, step, block, isFinalStep, options } = ctx
+    const context = await this.deps.contextBuilder.buildContext(
+      workspaceId,
+      instance,
+      step,
+      isFinalStep,
+      block,
+      { agentKind: dispatchKind, recordsDispatch: false },
+    )
+    context.dispatchEpoch = dispatchEpoch > 0 ? dispatchEpoch : undefined
+    augmentContext(context)
+    await this.deps.repoOps.runRegisteredPreOps(workspaceId, instance, block, step, context)
+    const executor = this.deps.agentExecutor
+    if (isAsyncAgentExecutor(executor) && executor.runsAsync(context)) {
+      return { job: await executor.startJob(context) }
+    }
+    return { result: await this.runAgent(context, options) }
+  }
+
+  /** Poll a job {@link startSideJob} started, by the handle its caller rebuilt. */
+  async pollSideJob(handle: AgentJobHandle): Promise<AgentJobUpdate | null> {
+    const executor = this.deps.agentExecutor
+    return isAsyncAgentExecutor(executor) ? executor.pollJob(handle) : null
   }
 
   /**

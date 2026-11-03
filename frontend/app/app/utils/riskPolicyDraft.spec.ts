@@ -29,6 +29,7 @@ const policy = (over: Partial<RiskPolicy> = {}): RiskPolicy =>
     requirementFloorProgression: null,
     maxTesterQualityIterations: 3,
     companionMaxReworks: 3,
+    postImplementationReviewEffort: 'high',
     releaseWatchWindowMinutes: 30,
     releaseMaxAttempts: 1,
     humanReviewGraceMinutes: 10,
@@ -85,7 +86,12 @@ describe('the risk-policy draft conversions', () => {
   })
 
   it('round-trips a stored policy unchanged when nothing is edited', () => {
-    const stored = policy({ companionMaxReworks: 7, maxRisk: 0.45, autonomy: 'unattended' })
+    const stored = policy({
+      companionMaxReworks: 7,
+      postImplementationReviewEffort: 'low',
+      maxRisk: 0.45,
+      autonomy: 'unattended',
+    })
     const patch = riskPolicyPatchFromDraft(toRiskPolicyDraft(stored), 'fallback')
 
     // The percentages went up by a hundred for editing and came back down; the counts and the
@@ -93,6 +99,7 @@ describe('the risk-policy draft conversions', () => {
     expect(patch.maxRisk).toBe(0.45)
     expect(patch.minAutoAnswerConfidence).toBe(0.8)
     expect(patch.companionMaxReworks).toBe(7)
+    expect(patch.postImplementationReviewEffort).toBe('low')
     expect(patch.autonomy).toBe('unattended')
   })
 
@@ -139,6 +146,9 @@ describe('the risk-policy draft conversions', () => {
     // blank form with it instead of leaving it pre-filling a number nothing else states.
     expect(blankRiskPolicyDraft().companionMaxReworks).toBe(
       v.getDefault(createRiskPolicySchema.entries.companionMaxReworks),
+    )
+    expect(blankRiskPolicyDraft().postImplementationReviewEffort).toBe(
+      v.getDefault(createRiskPolicySchema.entries.postImplementationReviewEffort),
     )
   })
 

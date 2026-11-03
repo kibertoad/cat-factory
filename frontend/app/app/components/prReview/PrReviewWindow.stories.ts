@@ -174,8 +174,9 @@ export const ReviewingSlices: Story = opened(
 )
 
 /**
- * A person challenged the log finding and the investigator is at work on it; earlier challenges
- * retracted the naming nit and upheld the race.
+ * A person challenged the log finding and the investigator is at work on it, then challenged the
+ * 401 finding too, which waits in the queue; earlier challenges retracted the naming nit and upheld
+ * the race. Selection stays live, and the resolutions wait for the queue.
  */
 export const Challenging: Story = opened(
   review({
@@ -186,7 +187,7 @@ export const Challenging: Story = opened(
         ...leakedFamily,
         challenge: { status: 'investigating', question: 'Is this log line on in production?' },
       },
-      status401,
+      { ...status401, challenge: { status: 'queued', question: null } },
       { ...naming, challenge: { status: 'retracted', justification: '`usedAt` is a time.' } },
     ],
   }),

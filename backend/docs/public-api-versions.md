@@ -567,3 +567,9 @@ so without the field a caller cannot tell a filtered review from one that found 
 
 Additive: one required-nullable field on one shape, null on a review recorded before the floor
 existed.
+
+## 1.92.0
+
+`PublicPrReviewDecision.findings[].challenge.status` gains `queued`: a challenged finding whose investigator has not started yet. At most three investigators run at once per review, and the rest wait in a queue, so a challenge can now sit in a state that is neither `investigating` nor settled.
+
+Additive. The clients tolerate unknown enum values by design, so a consumer built against 1.91.0 keeps parsing. One that treats every non-settled status as `investigating` reads a queued challenge as already running, which is wrong only about timing: both settle the same way.

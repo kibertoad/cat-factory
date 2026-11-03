@@ -3359,6 +3359,8 @@
         "maxRequirementIterations": "Iteracje wymagań",
         "maxRequirementConcernAllowed": "Automatyczne zaliczenie zastrzeżeń do",
         "companionMaxReworks": "Rundy przeróbek towarzysza",
+        "postImplementationReviewEffort": "Nakład przeglądu po implementacji",
+        "postImplementationReviewEffortHelp": "Jak dokładny jest przegląd kodu po implementacji. Wyższe poziomy zgłaszają więcej uwag, także mniej pewnych, i trwają dłużej.",
         "autoMerge": "Auto-scalanie"
       },
       "newPreset": "Nowa zasada",
@@ -7954,7 +7956,9 @@
       "submit": "Zbadaj",
       "placeholder": "Opcjonalnie: co dokładnie jest błędne lub nieprzekonujące w tym ustaleniu?",
       "hint": "Pozostaw puste, aby badacz zgłębił temat, uzasadnił ustalenie i sprawdził, czy jest trafne i istotne.",
-      "investigatingBanner": "Badacz zastrzeżeń ponownie analizuje ustalenie w oparciu o kod źródłowy…",
+      "queuedBadge": "W kolejce",
+      "queueBanner": "Badane: {running} · W kolejce: {queued}. W tym czasie możesz dalej wybierać ustalenia i zgłaszać do nich zastrzeżenia.",
+      "resolveAfterInvestigations": "„Zakończ przegląd”, „Opublikuj jako komentarze” i „Napraw wybrane” będą dostępne, gdy każde zastrzeżenie otrzyma werdykt.",
       "investigatingBadge": "Badanie",
       "strengthenedBadge": "Wzmocnione",
       "upheldBadge": "Podtrzymane",
@@ -9054,5 +9058,16 @@
     "add": "Dodaj do kolejki",
     "addAndStart": "Dodaj i uruchom",
     "addedToast": "Dodano „{title}” do kolejki"
+  },
+  "reviewEffort": {
+    "label": "Nakład przeglądu",
+    "help": "Jak dokładny jest przegląd. Wyższe poziomy zgłaszają więcej uwag, także mniej pewnych, i trwają dłużej.",
+    "levels": {
+      "low": "Niski",
+      "medium": "Średni",
+      "high": "Wysoki",
+      "xhigh": "Bardzo wysoki",
+      "max": "Maksymalny"
+    }
   }
 }

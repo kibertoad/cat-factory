@@ -142,9 +142,10 @@ export const usePrReviewStore = defineStore('prReview', () => {
   }
 
   /**
-   * Challenge a finding: dispatch the Challenge Investigator with an OPTIONAL specific concern
-   * (blank ⇒ the generic "dig deeper + validate" prompt). The review moves to `challenging` while
-   * the investigator digs in; its verdict (strengthen / retract the finding) arrives via the stream.
+   * Challenge a finding: queue it for the Challenge Investigator with an OPTIONAL specific concern
+   * (blank ⇒ the generic "dig deeper + validate" prompt). Accepted while the review is parked and
+   * while other challenges still run; at most three investigators run at once and the rest wait as
+   * `queued`. Each verdict (strengthen / retract the finding) arrives via the stream.
    */
   async function challenge(
     executionId: string,

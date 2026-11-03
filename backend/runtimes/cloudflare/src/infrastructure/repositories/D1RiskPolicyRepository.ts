@@ -5,6 +5,7 @@ import type {
   RiskPolicy,
   RunDefaultScope,
   RequirementConcernLevel,
+  ReviewEffortLevel,
   StepGating,
   SubmissionClassesByRole,
   WorkspaceRole,
@@ -26,6 +27,7 @@ interface RiskPolicyRow {
   max_requirement_concern_allowed: string
   max_tester_quality_iterations: number
   companion_max_reworks: number
+  post_implementation_review_effort: string
   release_watch_window_minutes: number
   release_max_attempts: number
   human_review_grace_minutes: number
@@ -59,6 +61,7 @@ function rowToPreset(row: RiskPolicyRow): RiskPolicy {
     maxRequirementConcernAllowed: row.max_requirement_concern_allowed as RequirementConcernLevel,
     maxTesterQualityIterations: row.max_tester_quality_iterations,
     companionMaxReworks: row.companion_max_reworks,
+    postImplementationReviewEffort: row.post_implementation_review_effort as ReviewEffortLevel,
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
@@ -188,7 +191,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
         `INSERT INTO merge_threshold_presets
            (workspace_id, id, name, max_complexity, max_risk, max_impact, ci_max_attempts,
             max_requirement_iterations, max_requirement_concern_allowed,
-            max_tester_quality_iterations, companion_max_reworks,
+            max_tester_quality_iterations, companion_max_reworks, post_implementation_review_effort,
             release_watch_window_minutes, release_max_attempts, human_review_grace_minutes,
             judge_min_score, judge_max_bounces,
             auto_merge_enabled, fork_decision, class_rules, class_rules_by_role, dry_run_roles,
@@ -196,7 +199,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
             requirement_finding_floor, requirement_floor_progression,
             is_default, is_unattended_default,
             created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
@@ -207,6 +210,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
            max_requirement_concern_allowed = excluded.max_requirement_concern_allowed,
            max_tester_quality_iterations = excluded.max_tester_quality_iterations,
            companion_max_reworks = excluded.companion_max_reworks,
+           post_implementation_review_effort = excluded.post_implementation_review_effort,
            release_watch_window_minutes = excluded.release_watch_window_minutes,
            release_max_attempts = excluded.release_max_attempts,
            human_review_grace_minutes = excluded.human_review_grace_minutes,
@@ -238,6 +242,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
         preset.maxRequirementConcernAllowed,
         preset.maxTesterQualityIterations,
         preset.companionMaxReworks,
+        preset.postImplementationReviewEffort,
         preset.releaseWatchWindowMinutes,
         preset.releaseMaxAttempts,
         preset.humanReviewGraceMinutes,

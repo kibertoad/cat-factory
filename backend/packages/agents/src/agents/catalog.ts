@@ -7,6 +7,8 @@ import {
 } from './prompts/acceptance.js'
 import { isStandardsContextFile } from './runtime/fragments.js'
 import { taskImagesSection } from './prompts/task-images.js'
+import { reviewEffortSection } from './prompts/review-effort.js'
+import { PR_REVIEWER_KIND } from './kinds/pr-reviewer.js'
 import { companionCheckoutSection, companionSystemPrompt } from './prompts/companion.js'
 import { companionTargets } from './kinds/companions.js'
 import { READ_ONLY_GUARDRAIL, isReadOnlyAgentKind } from './kinds/read-only.js'
@@ -422,6 +424,8 @@ export function userPromptFor(
     // Invariant across a rework loop like the context fold, and applied here rather than in any
     // one template so every kind, built-in or registered, states the task's attached images.
     (text: string) => text + taskImagesSection(context),
+    // Invariant across a rework loop too: the level is the task's pick or the run's policy.
+    (text: string) => withReviewEffort(text, context),
     (text: string) => withRevision(text, context),
     (text: string) => withPriorReview(text, context),
     (text: string) => withGradingBar(text, context),
@@ -454,6 +458,16 @@ function withCompanionCheckout(
 ): string {
   const section = companionCheckoutSection(context, registry, opts.dispatch)
   return section ? `${prompt}\n${section}` : prompt
+}
+
+/**
+ * State a code review's effort level (see `AgentRunContext.reviewEffort`). Only the two reviewing
+ * kinds carry one, so every other prompt is unchanged.
+ */
+function withReviewEffort(prompt: string, context: AgentRunContext): string {
+  if (!context.reviewEffort) return prompt
+  const audience = context.agentKind === PR_REVIEWER_KIND ? 'pr-reviewer' : 'companion'
+  return `${prompt}\n${reviewEffortSection(context.reviewEffort, audience)}`
 }
 
 /** Append the caller's note about how this run differs from the one the prompt assumes. */

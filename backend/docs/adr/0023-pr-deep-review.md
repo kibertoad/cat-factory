@@ -155,32 +155,42 @@ so a human curates the findings themselves, not just which to act on:
   entirely, pruning it from `findings` + `selectedFindingIds` + `postedFindingIds`. It is pure
   curation: the run stays parked at `awaiting_selection` (no re-arm, no signal), a synchronous
   mutation of `step.prReview`.
-- **Challenge** (`POST …/findings/:findingId/challenge`, optional `{ question }`) dispatches a new
+- **Challenge** (`POST …/findings/:findingId/challenge`, optional `{ question }`) queues a new
   read-only **`challenge-investigator`** agent kind (`container-explore`, base full clone: the
-  `pr-reviewer` template) against the ONE finding. It rides the SAME re-arm the `fix`/`post`
-  resolutions use (`resetStepForRerun` + `startStep` + `signalDecision`), recording
-  `step.pendingChallenge = { findingId, question }` and moving the review to a new `challenging`
-  status; the driver's `pr-review-resolution` handler dispatches the investigator with the finding +
-  the human's concern (or a generic "dig deeper + validate" prompt when blank) folded in as a
+  `pr-reviewer` template) against the ONE finding. The first challenge on a parked review rides the
+  SAME re-arm the `fix`/`post` resolutions use (`resetStepForRerun` + `startStep` +
+  `signalDecision`) and moves the review to a `challenging` status; a challenge made while the
+  review is already `challenging` only joins the queue. Each one pushes an entry onto
+  `step.challengeJobs` and marks its finding `queued`. The driver's `pr-review-resolution` handler
+  hands `challenging` to `PrReviewChallengeQueue`, which starts at most
+  `MAX_CONCURRENT_CHALLENGE_INVESTIGATIONS` (3) investigators at once, in FIFO order, with the finding
+  and the human's concern (or a generic "dig deeper + validate" prompt when blank) folded in as a
   prior output. The investigator returns `prReviewChallengeOutputSchema` (a lenient uphold/retract
-  verdict + optional `revised*` fields), which a dedicated `pr-review-challenge` completion
-  interceptor (ordered BEFORE `pr-review` so it wins during a challenge) applies to the finding via
-  `applyChallengeVerdict`: a kept finding records `amended` ONLY when a `revised*` field actually
-  changed its body, else `upheld` (held as written, so the window never falsely shows
-  "Strengthened"); `retracted` records a `retracted` challenge with its justification AND
-  auto-deselects the finding (it can never be fixed/posted/finished: `resolve`'s selectable set
-  excludes retracted findings, and a retracted finding can't be re-challenged either). The review
-  then re-parks at `awaiting_selection`. If the investigator's job FAILS (a genuine crash, after any
-  container-eviction retry budget), the driver's failed-job path settles the challenge `failed` via
-  `PrReviewController.recordChallengeFailure` (the analogue of the human-test / visual-confirmation
-  helper-failure branch); the finding is left untouched and the review re-parks, so a non-critical
-  second opinion crashing on ONE finding never fails the human's in-flight curation. A finding carries
-  its challenge lifecycle on `PrReviewFinding.challenge` (`investigating` → `upheld` | `amended` |
-  `retracted` | `failed`), rendered in the window (a spinner while investigating, a badge + the
-  investigator's justification once settled). All of this rides `step.prReview` /
-  `step.pendingChallenge`: still NO side table, so it stays runtime-symmetric, asserted by the
-  conformance suite (dismiss, challenge-retract, challenge-uphold-strengthen, challenge-uphold-as-is,
-  and challenge-investigator-failure).
+  verdict + optional `revised*` fields), applied to the finding via `applyChallengeVerdict`: a kept
+  finding records `amended` ONLY when a `revised*` field actually changed its body, else `upheld`
+  (held as written, so the window never falsely shows "Strengthened"); `retracted` records a
+  `retracted` challenge with its justification AND auto-deselects the finding (it can never be
+  fixed/posted/finished: `resolve`'s selectable set excludes retracted findings, and a retracted
+  finding can't be re-challenged either). A job that FAILS settles its challenge `failed` with the
+  finding left untouched, so a non-critical second opinion crashing on ONE finding never fails the
+  human's in-flight curation. When the queue drains, the review re-parks at `awaiting_selection`.
+  A finding carries its challenge lifecycle on `PrReviewFinding.challenge` (`queued` →
+  `investigating` → `upheld` | `amended` | `retracted` | `failed`), rendered in the window (a
+  clock while queued, a spinner while investigating, a badge + the investigator's justification
+  once settled). Selection stays editable throughout, so the human keeps curating while the
+  investigators run; `resolve` and `dismiss` wait for the queue to drain. All of this rides
+  `step.prReview` / `step.challengeJobs`: still NO side table, so it stays runtime-symmetric,
+  asserted by the conformance suite (dismiss, challenge-retract, challenge-uphold-strengthen,
+  challenge-uphold-as-is, a second challenge queued behind the first, and
+  challenge-investigator-failure).
+- **Why the investigators are side jobs.** A step owns exactly one harness job (`step.jobId`), so
+  three concurrent investigators cannot ride it. Each queue entry claims its OWN dispatch epoch
+  (`claimDispatchEpoch`) before the job starts, so its harness job id is unique and a replayed
+  advance re-addresses the same job rather than starting a second one. The entries are polled under
+  a dedicated `awaiting_investigations` park, handled by both durable drivers (Node `drive.ts`,
+  Cloudflare `parkDraining.ts`) on the job-poll cadence; every settled verdict answers `continue`,
+  so the next advance refills the freed slot. An inline executor (the conformance fakes) settles
+  each investigation in the same advance. A delegated executor is not supported for side jobs.
 - **Separately-configurable model.** Because the investigator dispatches under its OWN agent kind
   (`challenge-investigator`, via the `handleAgentStep` dispatch-kind override), model routing keys
   off it, so a workspace can point it at a different (stronger) model than the reviewer through a
@@ -210,6 +220,19 @@ On top of that, **`POST /executions/:id/pr-review/resume`** (`PrReviewController
 The window offers `Resume` throughout the `reviewing` phase, including the neutral PLANNING sub-state, and deliberately does NOT gate it on a staleness heuristic: `lastActivityAt` freezes on a long silent turn, so the platform cannot tell a wedged review from a quiet-but-working one, and hiding the control until it thinks it can would put it out of reach in exactly the case that motivated it.
 
 **Still unaddressed.** The frozen heartbeat itself. A synthetic keep-alive beat would defeat the inactivity watchdog, which is the only thing that kills a genuinely hung agent; real activity needs `--include-partial-messages` plus a rework of the call aggregator's `message.id` folding, which is its own change. Until then the captured reports are the tell: every slice `completed` with `findings` still empty means aggregating, not stuck, and the resume is now the escape hatch either way. See [ADR 0026](./0026-pr-review-observability-and-pool-isolation.md) and [ADR 0027](./0027-pr-review-observability-followup.md) for the observability history this sits on.
+
+## Review effort (follow-up)
+
+A review runs at one of five effort levels (`REVIEW_EFFORT_LEVELS` in `@cat-factory/contracts`: `low`, `medium`, `high`, `xhigh`, `max`), modelled on the levels of Claude Code's `/code-review`. The wording in our prompts is ours; what we copy is what the level visibly moves there:
+
+- **The confidence floor.** Up to `high` a review reports only findings it has confirmed against the code. At `xhigh` and `max` it may also report plausible findings it could not confirm, each marked `Possible:` so the human can tell them apart.
+- **The findings cap**: 5, 10, 20 and 35 for the bounded levels, none at `max`.
+- **A verification pass** from `high` up: each candidate finding is re-checked by a separate verifier before it is reported.
+- **The fan-out**: the pr-reviewer's per-slice turn ceiling and how many slice reviewers it keeps in flight, never past `MAX_PARALLEL_SLICE_SUBAGENTS`.
+
+The level never changes how severity or the overall rating is graded; the section says so, so a cheap review does not read as a lenient one. `reviewEffortSection` (`@cat-factory/agents`) renders it in two forms: the pr-reviewer form with the slice instructions, and a companion form for the post-implementation `reviewer`, which has no slices and never raises an unconfirmed point as a `blocker`.
+
+Where the level comes from depends on which review it is. A `review` task carries its own pick on `taskTypeFields.reviewEffort`, chosen when the task is created. The post-implementation `reviewer` reads `postImplementationReviewEffort` from the run's resolved risk policy ([ADR 0055](./0055-account-scoped-risk-policies.md)). Both default to `high`, which means the default review now runs a verification pass. The builder (`reviewEffortSlice`) sets `AgentRunContext.reviewEffort` for those two kinds only; every other kind's prompt is unchanged.
 
 ## Consequences
 
