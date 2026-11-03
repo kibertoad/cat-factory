@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { computed } from 'vue'
+import { computed, type ComputedRef } from 'vue'
+import { ApiError } from '~/composables/api/errors'
+import type { DescribedFailure } from '~/composables/pipelineErrorToast/describeFailure'
 import { useProvisioningLogsStore } from '~/stores/provisioningLogs'
 import { useWorkspaceStore } from '~/stores/workspace'
 import type { ProvisioningLogEntry } from '~/types/provisioningLogs'
 
-/** Minimal attempt-row factory — only the fields the store passes through. */
+/** Minimal attempt-row factory: only the fields the store passes through. */
 function entry(over: Partial<ProvisioningLogEntry> = {}): ProvisioningLogEntry {
   return {
     id: 'p1',
@@ -23,7 +25,7 @@ function entry(over: Partial<ProvisioningLogEntry> = {}): ProvisioningLogEntry {
   } as ProvisioningLogEntry
 }
 
-describe('provisioningLogs store — loadForExecution', () => {
+describe('provisioningLogs store: loadForExecution', () => {
   beforeEach(() => {
     useWorkspaceStore().workspaceId = 'ws1'
   })
@@ -51,7 +53,15 @@ describe('provisioningLogs store — loadForExecution', () => {
     // The drawer reads `byExecution[id]` through a computed. A plain read after the load would see
     // the values even if the store wrote them to the raw object, so these specs read through a
     // computed, which only re-evaluates when the writes go through the reactive proxy.
-    function trackRun(store: ReturnType<typeof useProvisioningLogsStore>) {
+    // The view is typed so a change to the store's state shape fails typecheck here, not at runtime.
+    interface RunView {
+      loading: boolean
+      ids: string[]
+      error: DescribedFailure | null
+    }
+    function trackRun(
+      store: ReturnType<typeof useProvisioningLogsStore>,
+    ): ComputedRef<RunView | null> {
       return computed(() => {
         const s = store.byExecution.exec1
         return s ? { loading: s.loading, ids: s.entries.map((e) => e.id), error: s.error } : null
@@ -71,16 +81,21 @@ describe('provisioningLogs store — loadForExecution', () => {
       expect(run.value).toBeNull()
 
       const load = store.loadForExecution('exec1')
-      expect(run.value).toEqual({ loading: true, ids: [], error: null })
+      expect(run.value).toEqual({ loading: true, ids: [], error: null } satisfies RunView)
 
       resolveFetch({ entries: [entry({ id: 'a' }), entry({ id: 'b' })] })
       await load
-      expect(run.value).toEqual({ loading: false, ids: ['a', 'b'], error: null })
+      expect(run.value).toEqual({ loading: false, ids: ['a', 'b'], error: null } satisfies RunView)
     })
 
     it('shows the error when the read fails', async () => {
       vi.stubGlobal('useApi', () => ({
-        listProvisioningLogs: () => Promise.reject(new Error('503')),
+        listProvisioningLogs: () =>
+          Promise.reject(
+            new ApiError(503, {
+              error: { code: 'unavailable', message: 'logs offline', requestId: 'req-1' },
+            }),
+          ),
       }))
       const store = useProvisioningLogsStore()
       const run = trackRun(store)
@@ -88,11 +103,14 @@ describe('provisioningLogs store — loadForExecution', () => {
       const load = store.loadForExecution('exec1')
       expect(run.value?.loading).toBe(true)
       await load
-      expect(run.value).toEqual({
-        loading: false,
-        ids: [],
-        error: expect.objectContaining({ message: '503' }),
-      })
+      const error: DescribedFailure = {
+        descriptionKey: 'errors.generic.description.unavailable',
+        message: 'logs offline',
+        issues: [],
+        requestId: 'req-1',
+        reason: null,
+      }
+      expect(run.value).toEqual({ loading: false, ids: [], error } satisfies RunView)
     })
 
     it('shows an empty run as loaded with no entries', async () => {
@@ -105,7 +123,7 @@ describe('provisioningLogs store — loadForExecution', () => {
       const load = store.loadForExecution('exec1')
       expect(run.value?.loading).toBe(true)
       await load
-      expect(run.value).toEqual({ loading: false, ids: [], error: null })
+      expect(run.value).toEqual({ loading: false, ids: [], error: null } satisfies RunView)
     })
   })
 
@@ -117,7 +135,7 @@ describe('provisioningLogs store — loadForExecution', () => {
     const store = useProvisioningLogsStore()
     await store.loadForExecution('exec1', { silent: true })
 
-    // Never went truthy — a background poll must not show a "refreshing" spinner.
+    // Never went truthy: a background poll must not show a "refreshing" spinner.
     expect(store.byExecution.exec1!.loading).toBe(false)
     // But it still updates the timeline (the tear-down row now shows).
     expect(store.byExecution.exec1!.entries[0]!.operation).toBe('release')
@@ -133,7 +151,7 @@ describe('provisioningLogs store — loadForExecution', () => {
     await store.loadForExecution('exec1')
     expect(store.byExecution.exec1!.entries).toHaveLength(1)
 
-    // A background poll then blips — the drawer must keep showing what it had.
+    // A background poll then blips. The drawer must keep showing what it had.
     vi.stubGlobal('useApi', () => ({
       listProvisioningLogs: () => Promise.reject(new Error('network')),
     }))
@@ -143,22 +161,26 @@ describe('provisioningLogs store — loadForExecution', () => {
     expect(store.byExecution.exec1!.error).toBeNull()
   })
 
-  it('a visible load failure clears entries and reports the error', async () => {
+  it('a visible load that never reached the server reports a network failure', async () => {
     vi.stubGlobal('useApi', () => ({
-      listProvisioningLogs: () => Promise.reject(new Error('503')),
+      listProvisioningLogs: () => Promise.reject(new TypeError('Failed to fetch')),
     }))
 
     const store = useProvisioningLogsStore()
     await store.loadForExecution('exec1')
 
-    expect(store.byExecution.exec1!.loading).toBe(false)
-    expect(store.byExecution.exec1!.entries).toHaveLength(0)
-    expect(store.byExecution.exec1!.error?.message).toBe('503')
+    expect(store.byExecution.exec1!.error).toEqual({
+      descriptionKey: 'errors.generic.description.network',
+      message: 'Failed to fetch',
+      issues: [],
+      requestId: null,
+      reason: null,
+    } satisfies DescribedFailure)
   })
 
   it('a slower stale load never clobbers a newer one (monotonic guard)', async () => {
     // Two loads race: the FIRST-issued resolves LAST with a stale timeline. Without the guard its
-    // `s.entries = entries` would overwrite the fresher second result — a card/row would vanish.
+    // `s.entries = entries` would overwrite the fresher second result, and a card/row would vanish.
     const deferred: Array<(r: { entries: ProvisioningLogEntry[] }) => void> = []
     vi.stubGlobal('useApi', () => ({
       listProvisioningLogs: () =>
@@ -174,7 +196,7 @@ describe('provisioningLogs store — loadForExecution', () => {
     deferred[0]!({ entries: [entry({ id: 'stale', operation: 'dispatch' })] })
     await Promise.all([first, second])
 
-    // The fresher result survives — the stale late-resolver was discarded.
+    // The fresher result survives: the stale late-resolver was discarded.
     expect(store.byExecution.exec1!.entries).toHaveLength(1)
     expect(store.byExecution.exec1!.entries[0]!.id).toBe('fresh')
   })
