@@ -29,7 +29,8 @@ Operator-facing account: the website's
   it would score is the vague one this review exists to fix.
 - **Every pass records what it raised against** (`RequirementReview.findingFloor`: severity, basis,
   score, and how many findings it dropped), so a quiet review held to `high` never reads like a clean
-  one. The dropped count covers only what the model returned despite the prompt; what it never
+  one. The review window shows it, and the `/api/v1` requirements decision carries it as
+  `findingFloor`. The dropped count covers only what the model returned despite the prompt; what it never
   wrote cannot be counted, which is why the floor itself is shown too.
 
 ## Scope: the product / business layer ONLY

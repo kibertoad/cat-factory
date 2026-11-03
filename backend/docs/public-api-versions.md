@@ -556,3 +556,14 @@ its reach is not a list.
 
 Additive: a new boolean on three shapes. A listed key's `workspaceIds` may now be an empty list,
 which it never was before, and only ever for a key with `followsMemberships: true`.
+
+## 1.91.0
+
+`PublicRequirementsDecision` gains `findingFloor` (`PublicRequirementsFindingFloor`): the lowest
+severity the latest reviewer pass raised, where that floor came from (`fixed`, `estimate` or
+`no_estimate`), the estimate score it was read against, and how many findings the pass dropped
+below it. A risk policy now sets that floor, and the default holds a review to `high` and `medium`,
+so without the field a caller cannot tell a filtered review from one that found little.
+
+Additive: one required-nullable field on one shape, null on a review recorded before the floor
+existed.
