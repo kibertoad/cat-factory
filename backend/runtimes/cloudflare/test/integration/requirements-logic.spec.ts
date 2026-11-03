@@ -46,7 +46,7 @@ describe('requirements review logic', () => {
   })
 
   it('asks for a JSON item array in the review prompt', () => {
-    const prompt = buildReviewPrompt(ctx)
+    const prompt = buildReviewPrompt(ctx, null)
     expect(prompt).toContain('"items"')
     expect(prompt).toContain('gap|clarification|assumption|risk|question')
   })

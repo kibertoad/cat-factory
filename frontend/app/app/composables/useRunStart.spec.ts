@@ -24,6 +24,8 @@ const preset = (over: Partial<RiskPolicyLibraryEntry> = {}): RiskPolicyLibraryEn
     ciMaxAttempts: 10,
     maxRequirementIterations: 6,
     maxRequirementConcernAllowed: 'none',
+    requirementFindingFloor: 'medium',
+    requirementFloorProgression: null,
     maxTesterQualityIterations: 3,
     companionMaxReworks: 3,
     postImplementationReviewEffort: 'high',

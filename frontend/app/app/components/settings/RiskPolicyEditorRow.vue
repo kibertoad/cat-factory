@@ -17,6 +17,7 @@ import {
   CONCERN_LEVELS,
   FORK_FLOOR_FIELD,
   FORK_FLOOR_LABEL_KEYS,
+  floorBandsValid,
   riskPolicyPatchFromDraft,
   toRiskPolicyDraft,
 } from '~/utils/riskPolicyDraft'
@@ -24,6 +25,7 @@ import { RISK_POLICY_AXES, RISK_POLICY_CEILING_FIELD } from '~/utils/riskPolicy'
 import MergeClassRulesEditor from '~/components/settings/MergeClassRulesEditor.vue'
 import MergeRolePolicyEditor from '~/components/settings/MergeRolePolicyEditor.vue'
 import { reviewEffortOptions } from '~/utils/reviewEffortLevel'
+import RequirementFindingFloorEditor from '~/components/settings/RequirementFindingFloorEditor.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 
@@ -226,6 +228,17 @@ const deleteBlocked = computed(
       </label>
     </div>
 
+    <!-- How verbose the requirements review is: which severities the reviewer raises at all. -->
+    <div class="mt-3 rounded-md border border-default bg-default/40 p-3">
+      <RequirementFindingFloorEditor
+        v-model:floor="draft.requirementFindingFloor"
+        v-model:progressive="draft.floorProgressive"
+        v-model:medium-from="draft.floorMediumFrom"
+        v-model:low-from="draft.floorLowFrom"
+        :disabled="busy === policy.id"
+      />
+    </div>
+
     <!-- Per-change-class auto-merge rules, each shown beside that class's accumulated track
          record — the number that justifies widening the rule. -->
     <div class="mt-3 rounded-md border border-default bg-default/40 p-3">
@@ -335,6 +348,7 @@ const deleteBlocked = computed(
         size="xs"
         icon="i-lucide-save"
         :loading="busy === policy.id"
+        :disabled="!floorBandsValid(draft)"
         data-testid="risk-policy-save"
         @click="emit('save', riskPolicyPatchFromDraft(draft, policy.name))"
       >

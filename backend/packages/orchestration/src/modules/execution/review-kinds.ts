@@ -10,7 +10,11 @@ import type {
 } from '@cat-factory/kernel'
 import { assertFound, ConflictError } from '@cat-factory/kernel'
 import { bugInvestigation } from '@cat-factory/agents'
-import type { ReviewKind } from './ReviewGateController.js'
+import {
+  DEFAULT_REQUIREMENT_FINDING_FLOOR,
+  type RequirementFindingFloorPolicy,
+} from '@cat-factory/contracts'
+import type { ReviewKind, ReviewPreset } from './ReviewGateController.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import type { ClarityReviewService } from '../clarity/ClarityReviewService.js'
 import type { BrainstormService } from '../brainstorm/BrainstormService.js'
@@ -43,6 +47,14 @@ export interface RefinedRequirementsWriteback {
   onReviewSettled(workspaceId: string, blockId: string): Promise<void>
 }
 
+/** The floor half of a preset, with the shipped default standing in for an unstated one. */
+function findingFloorPolicy(preset: ReviewPreset): RequirementFindingFloorPolicy {
+  return {
+    requirementFindingFloor: preset.requirementFindingFloor ?? DEFAULT_REQUIREMENT_FINDING_FLOOR,
+    requirementFloorProgression: preset.requirementFloorProgression ?? null,
+  }
+}
+
 /**
  * The requirements subject for the review gate: closures over the requirements reviewer
  * service. The service-not-configured guard preserves the exact 409 the inline reviewer
@@ -64,9 +76,13 @@ export function buildRequirementsKind(deps: ReviewKindDeps): ReviewKind<Requirem
       require().review(ws, block.id, {
         maxIterations: preset.maxRequirementIterations,
         concernThreshold: preset.maxRequirementConcernAllowed,
+        findingFloor: findingFloorPolicy(preset),
       }),
     reReview: (ws, reviewId, preset) =>
-      require().reReview(ws, reviewId, { concernThreshold: preset.maxRequirementConcernAllowed }),
+      require().reReview(ws, reviewId, {
+        concernThreshold: preset.maxRequirementConcernAllowed,
+        findingFloor: findingFloorPolicy(preset),
+      }),
     ...(deps.refinedRequirementsWriteback
       ? {
           onSettled: (ws: string, blockId: string) =>

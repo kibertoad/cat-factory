@@ -33,9 +33,12 @@ import {
 } from './prReview.js'
 import { publicRunStatusSchema } from './public-api.js'
 import {
+  requirementFloorBasisSchema,
+  reviewItemSeveritySchema,
+} from './requirement-finding-floor.js'
+import {
   requirementReviewStatusSchema,
   reviewItemCategorySchema,
-  reviewItemSeveritySchema,
   reviewItemStatusSchema,
 } from './requirements.js'
 
@@ -152,6 +155,29 @@ export const publicBlockingFindingSchema = v.object({
 export type PublicBlockingFinding = v.InferOutput<typeof publicBlockingFindingSchema>
 
 /**
+ * The severity floor a requirements review's latest pass raised against, as exposed externally.
+ * Without it a review held to `high` that parks with two findings reads exactly like one that found
+ * only two problems.
+ */
+export const publicRequirementsFindingFloorSchema = v.object({
+  /** The lowest severity the pass raised; anything the reviewer graded below it was left out. */
+  severity: reviewItemSeveritySchema,
+  /**
+   * Where the floor came from: `fixed` (the policy's floor), `estimate` (the policy follows the
+   * task estimate and read one) or `no_estimate` (it follows the estimate, the task had none, and
+   * the policy's fixed floor applied).
+   */
+  basis: requirementFloorBasisSchema,
+  /** The 0..1 estimate score (highest axis) the floor was read against; null unless `estimate`. */
+  score: v.nullable(v.number()),
+  /** Findings the reviewer returned below the floor anyway, which the pass dropped. */
+  suppressed: v.number(),
+})
+export type PublicRequirementsFindingFloor = v.InferOutput<
+  typeof publicRequirementsFindingFloorSchema
+>
+
+/**
  * A parked requirements review as exposed externally. The loop a caller drives: answer or dismiss
  * every `open` finding, then `incorporate` (which folds the answers into one standard-format
  * document and re-reviews it in the background). The review converges (`incorporated` — the run
@@ -175,6 +201,8 @@ export const publicRequirementsDecisionSchema = v.object({
    * caller can read exactly what its answers turned into before proceeding.
    */
   incorporatedRequirements: v.nullable(v.string()),
+  /** The floor the latest reviewer pass raised against; null on a review recorded without one. */
+  findingFloor: v.nullable(publicRequirementsFindingFloorSchema),
 })
 export type PublicRequirementsDecision = v.InferOutput<typeof publicRequirementsDecisionSchema>
 

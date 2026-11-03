@@ -4,6 +4,8 @@ import type {
   ClassRulesByRole,
   MergeClassRules,
   RequirementConcernLevel,
+  RequirementFloorProgression,
+  ReviewItemSeverity,
   RunAutonomy,
   StepGating,
   SubmissionClassesByRole,
@@ -78,6 +80,9 @@ export interface ResolvedRunRiskPolicy {
    * read as `attended` everywhere, which is the historical behaviour.
    */
   autonomy?: RunAutonomy
+  /** The requirements reviewer's severity floor and its estimate bands; optional as `autonomy` is. */
+  requirementFindingFloor?: ReviewItemSeverity
+  requirementFloorProgression?: RequirementFloorProgression | null
   forkDecision?: StepGating | null
   /**
    * Per-change-class auto-merge rules. Absent on the built-in fallback ⇒ every class uses the

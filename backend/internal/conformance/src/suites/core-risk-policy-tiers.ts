@@ -41,6 +41,8 @@ function accountPolicy(over: Partial<AccountRiskPolicy> & { id: string }): Accou
     submissionClassesByRole: {},
     autonomy: 'attended',
     minAutoAnswerConfidence: 0.75,
+    requirementFindingFloor: 'high',
+    requirementFloorProgression: { mediumFrom: 0.25, lowFrom: 0.65 },
     createdAt: 1_700_000_000_000,
     ...over,
   }
@@ -79,6 +81,8 @@ export function defineCoreRiskPolicyTiersConformance(harness: ConformanceHarness
         autoMergeEnabled: false,
         classRules: { docs: 'always' },
         minAutoAnswerConfidence: 0.75,
+        requirementFindingFloor: 'high',
+        requirementFloorProgression: { mediumFrom: 0.25, lowFrom: 0.65 },
         isDefault: false,
         isUnattendedDefault: false,
       })

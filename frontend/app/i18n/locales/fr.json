@@ -3476,6 +3476,20 @@
       "confirmHide": {
         "title": "Masquer cette politique ?",
         "body": "« {name} » ne sera plus proposée sur ce tableau et les tâches qui l'avaient choisie repasseront à la politique par défaut du tableau. Vous pourrez la rétablir plus tard."
+      },
+      "findingFloor": {
+        "label": "La revue des exigences soulève",
+        "fallbackLabel": "Soulève, quand la tâche n’a pas d’estimation",
+        "hint": "Les constats sous cette gravité sont écartés de la revue. Seul un constat soulevé peut arrêter l’exécution.",
+        "high": "Constats élevés uniquement",
+        "medium": "Constats élevés et moyens",
+        "low": "Tout, y compris les mineurs",
+        "progressiveLabel": "Suivre l’estimation de la tâche",
+        "progressiveHint": "Poser plus de questions sur les tâches plus grandes, selon la valeur la plus haute parmi la complexité, le risque et l’impact de l’estimation. Nécessite un Task Estimator avant la revue, ou une estimation d’une exécution précédente.",
+        "mediumFrom": "Ajouter les constats moyens à partir d’une estimation de (%)",
+        "lowFrom": "Tout soulever à partir d’une estimation de (%)",
+        "bandsCrossed": "Le seuil des constats moyens ne peut pas dépasser le seuil de tout.",
+        "bandsOutOfRange": "Les deux seuils doivent être des nombres compris entre 0 et 100."
       }
     },
     "observabilityConnection": {
@@ -6069,6 +6083,19 @@
       "high": "Confiance élevée",
       "medium": "Confiance moyenne",
       "low": "Confiance faible"
+    },
+    "findingFloor": {
+      "raised": {
+        "high": "Ce passage n’a soulevé que des constats élevés.",
+        "medium": "Ce passage a soulevé des constats élevés et moyens.",
+        "low": "Ce passage a soulevé des constats de toutes gravités."
+      },
+      "basis": {
+        "fixed": "Fixé par la politique de risque.",
+        "estimate": "Fixé par l’estimation de la tâche ({score} %).",
+        "no_estimate": "La politique suit l’estimation de la tâche, mais cette tâche n’en a pas, donc sa valeur de repli s’est appliquée."
+      },
+      "suppressed": "Constats écartés sous ce niveau : {count}."
     }
   },
   "clarity": {

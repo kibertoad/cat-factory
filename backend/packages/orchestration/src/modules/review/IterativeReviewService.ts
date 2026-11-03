@@ -1,4 +1,10 @@
 import { generateText } from 'ai'
+import {
+  clearsRequirementFindingFloor,
+  type RequirementFindingFloorPolicy,
+  type RequirementFindingFloorRecord,
+  resolveRequirementFindingFloor,
+} from '@cat-factory/contracts'
 import type {
   ResolveBlockRunContext,
   Block,
@@ -15,6 +21,7 @@ import type {
   RequirementReviewItem,
   RequirementReviewStatus,
   ResolveBinaryArtifactStore,
+  ReviewItemSeverity,
   ReviewItemStatus,
 } from '@cat-factory/kernel'
 import {
@@ -70,6 +77,8 @@ export interface ReviewCommon {
   maxIterations: number
   /** Optimistic-concurrency token; see the contracts' `rev`. A fresh review starts at 0. */
   rev: number
+  /** The severity floor the latest pass raised against; absent on a kind that is given none. */
+  findingFloor?: RequirementFindingFloorRecord | null
   createdAt: number
   updatedAt: number
 }
@@ -157,6 +166,38 @@ export interface IterativeReviewDeps {
   ) => Promise<string | undefined>
 }
 
+/** The per-pass knobs a review kind's gate hands the reviewer. */
+export interface ReviewPassOptions {
+  maxIterations?: number
+  concernThreshold?: RequirementConcernLevel
+  /** The lowest severity to raise. Absent ⇒ the pass raises whatever the reviewer returns. */
+  findingFloor?: RequirementFindingFloorPolicy
+}
+
+type ResolvedFloor = Omit<RequirementFindingFloorRecord, 'suppressed'>
+
+/** Resolve a pass's floor against the estimate the block carries when the pass starts. */
+function resolveFloor(
+  policy: RequirementFindingFloorPolicy | undefined,
+  block: Block,
+): ResolvedFloor | null {
+  return policy ? resolveRequirementFindingFloor(policy, block.estimate) : null
+}
+
+/**
+ * Drop what the reviewer returned below the floor, and count it. The prompt already names the
+ * floor, so this only catches a model that ignored it; the count makes a quiet review readable as
+ * a filtered one rather than a clean one.
+ */
+function applyFindingFloor(
+  items: RequirementReviewItem[],
+  floor: ResolvedFloor | null,
+): { items: RequirementReviewItem[]; record: RequirementFindingFloorRecord | null } {
+  if (!floor) return { items, record: null }
+  const kept = items.filter((item) => clearsRequirementFindingFloor(item.severity, floor.severity))
+  return { items: kept, record: { ...floor, suppressed: items.length - kept.length } }
+}
+
 /** Output budget for the rework generation (a full standard-format document). */
 const REWORK_MAX_OUTPUT_TOKENS = 16_000
 
@@ -232,7 +273,8 @@ export abstract class IterativeReviewService<
     block: Block,
     input: TContextInput,
   ): Promise<TContext>
-  protected abstract buildReviewPrompt(ctx: TContext): string
+  /** `floor` is the lowest severity this pass raises, or null when the kind was given none. */
+  protected abstract buildReviewPrompt(ctx: TContext, floor: ReviewItemSeverity | null): string
   protected abstract buildReworkPrompt(ctx: TContext, items: RequirementReviewItem[]): string
   /** Apply a prior incorporated document to the context (a re-review / redo base). */
   protected abstract applyIncorporatedDoc(ctx: TContext, doc: string): void
@@ -266,13 +308,7 @@ export abstract class IterativeReviewService<
   async review(
     workspaceId: string,
     blockId: string,
-    opts: {
-      maxIterations?: number
-      concernThreshold?: RequirementConcernLevel
-    } & TContextInput = {} as {
-      maxIterations?: number
-      concernThreshold?: RequirementConcernLevel
-    } & TContextInput,
+    opts: ReviewPassOptions & TContextInput = {} as ReviewPassOptions & TContextInput,
   ): Promise<TReview> {
     const block = assertFound(
       await this.deps.blockRepository.get(workspaceId, blockId),
@@ -282,11 +318,16 @@ export abstract class IterativeReviewService<
     const maxIterations = opts.maxIterations ?? DEFAULT_MAX_REQUIREMENT_ITERATIONS
     const concernThreshold = opts.concernThreshold ?? 'none'
     const context = await this.gatherContext(workspaceId, block, opts)
-    const { ref, items } = await this.runReviewer(workspaceId, block, context)
-    return this.persistInitialReview(workspaceId, block, items, `${ref.provider}:${ref.model}`, {
-      maxIterations,
-      concernThreshold,
-    })
+    const floor = resolveFloor(opts.findingFloor, block)
+    const { ref, items } = await this.runReviewer(workspaceId, block, context, floor)
+    const raised = applyFindingFloor(items, floor)
+    return this.persistInitialReview(
+      workspaceId,
+      block,
+      raised.items,
+      `${ref.provider}:${ref.model}`,
+      { maxIterations, concernThreshold, findingFloor: raised.record },
+    )
   }
 
   /**
@@ -302,7 +343,11 @@ export abstract class IterativeReviewService<
     block: Block,
     items: RequirementReviewItem[],
     model: string | null,
-    opts: { maxIterations: number; concernThreshold: RequirementConcernLevel },
+    opts: {
+      maxIterations: number
+      concernThreshold: RequirementConcernLevel
+      findingFloor?: RequirementFindingFloorRecord | null
+    },
   ): Promise<TReview> {
     const now = this.deps.clock.now()
     const disposition = disposeReview(items, {
@@ -320,6 +365,7 @@ export abstract class IterativeReviewService<
       maxIterations: opts.maxIterations,
       // A fresh review; the store re-stamps this on insert.
       rev: 0,
+      findingFloor: opts.findingFloor ?? null,
       createdAt: now,
       updatedAt: now,
     })
@@ -342,7 +388,7 @@ export abstract class IterativeReviewService<
   async reReview(
     workspaceId: string,
     reviewId: string,
-    opts: { concernThreshold?: RequirementConcernLevel } = {},
+    opts: Omit<ReviewPassOptions, 'maxIterations'> = {},
   ): Promise<TReview> {
     const review = await this.load(workspaceId, reviewId)
     const block = assertFound(
@@ -354,7 +400,11 @@ export abstract class IterativeReviewService<
     const context = await this.gatherContext(workspaceId, block, {} as TContextInput)
     const doc = this.readDoc(review)
     if (doc) this.applyIncorporatedDoc(context, doc)
-    const { ref, items } = await this.runReviewer(workspaceId, block, context)
+    const floor = resolveFloor(opts.findingFloor, block)
+    const reviewed = await this.runReviewer(workspaceId, block, context, floor)
+    const { ref } = reviewed
+    const raised = applyFindingFloor(reviewed.items, floor)
+    const items = raised.items
     // The reviewer call is slow, so the snapshot loaded above is stale by the time it returns
     // (a human can grant an extra round, or answer an item that this pass is about to replace).
     // Re-derive the counters from the FRESH review under CAS rather than writing the pre-call
@@ -370,6 +420,7 @@ export abstract class IterativeReviewService<
         model: `${ref.provider}:${ref.model}`,
         iteration,
         maxIterations,
+        findingFloor: raised.record,
       })
     })
     // Re-derived from what was actually PERSISTED, not smuggled out of the mutation on a closure
@@ -612,6 +663,7 @@ export abstract class IterativeReviewService<
     workspaceId: string,
     block: Block,
     context: TContext,
+    floor: ResolvedFloor | null,
   ): Promise<{ ref: ModelRef; items: RequirementReviewItem[] }> {
     const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
     let text: string
@@ -625,7 +677,7 @@ export abstract class IterativeReviewService<
           workspaceId,
           block,
           ref,
-          this.buildReviewPrompt(context),
+          this.buildReviewPrompt(context, floor?.severity ?? null),
         )),
         temperature: 0.2,
         maxOutputTokens: 5000,

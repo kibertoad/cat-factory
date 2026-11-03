@@ -10,6 +10,7 @@
 import { parseOutputOutline } from '~/utils/agentOutput'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
 import RefinedRequirementsIssueUpdate from '~/components/requirements/RefinedRequirementsIssueUpdate.vue'
+import RequirementsFindingFloorNote from '~/components/requirements/RequirementsFindingFloorNote.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import {
   orderFindings,
@@ -733,6 +734,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                  product/business layer, and the architect/researcher steps settle the rest.
                  Without this a reader reads the missing technical questions as an oversight. -->
         <p class="mb-4 text-xs text-dimmed">{{ t('requirements.scopeNote') }}</p>
+        <RequirementsFindingFloorNote :floor="review?.findingFloor" />
 
         <!-- empty state — the reviewer runs automatically as the first pipeline
                  gate step, so there's nothing to do here until then -->

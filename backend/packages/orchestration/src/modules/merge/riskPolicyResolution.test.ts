@@ -22,6 +22,8 @@ function policy(over: Partial<RiskPolicy> = {}): RiskPolicy {
     ciMaxAttempts: 3,
     maxRequirementIterations: 4,
     maxRequirementConcernAllowed: 'none',
+    requirementFindingFloor: 'medium',
+    requirementFloorProgression: null,
     maxTesterQualityIterations: 3,
     companionMaxReworks: 3,
     postImplementationReviewEffort: 'high',

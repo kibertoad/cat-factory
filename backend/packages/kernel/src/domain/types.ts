@@ -599,6 +599,8 @@ export type {
   PrReportObservability,
   RiskPolicy,
   RequirementConcernLevel,
+  RequirementFloorProgression,
+  RequirementFindingFloorRecord,
   CreateRiskPolicyInput,
   UpdateRiskPolicyInput,
   CloneRiskPolicyInput,

@@ -1,5 +1,5 @@
 import type { SandboxFixture } from '@cat-factory/contracts'
-import { blockTypeSchema } from '@cat-factory/contracts'
+import { blockTypeSchema, DEFAULT_REQUIREMENT_FINDING_FLOOR } from '@cat-factory/contracts'
 import type {
   AgentRunContext,
   BlockType,
@@ -91,7 +91,10 @@ function inputBuilders(registry: AgentKindRegistry): Record<string, InputBuilder
   // hand-written three times, so a kind that later grows a suffix has one place to change.
   return {
     'requirements-review': (cell) =>
-      appendNotice(buildReviewPrompt(requirementsContext(cell)), cell),
+      appendNotice(
+        buildReviewPrompt(requirementsContext(cell), DEFAULT_REQUIREMENT_FINDING_FLOOR),
+        cell,
+      ),
     'clarity-review': (cell) => appendNotice(buildClarityPrompt(clarityContext(cell)), cell),
     'requirements-writer': (cell) =>
       appendNotice(

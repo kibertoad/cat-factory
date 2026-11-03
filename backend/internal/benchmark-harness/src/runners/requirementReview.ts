@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { DEFAULT_REQUIREMENT_FINDING_FLOOR } from '@cat-factory/contracts'
 import { requirementsLogic } from '@cat-factory/orchestration'
 import { generateText } from 'ai'
 import type { RequirementReviewFixture } from '../fixtures'
@@ -6,7 +7,8 @@ import type { RunnerInput, RunnerOutput } from './types'
 
 // Requirement-review candidate: the exact stateless reviewer logic from core
 // (REVIEW_SYSTEM_PROMPT is the default prompt; buildReviewPrompt + coerceReviewItems
-// are reused verbatim), run through a single generateText call.
+// are reused verbatim), run through a single generateText call. The prompt carries the floor
+// the default risk policy sends, so the candidate graded is the prompt production runs.
 
 export async function runRequirementReview(
   input: RunnerInput<RequirementReviewFixture>,
@@ -16,7 +18,7 @@ export async function runRequirementReview(
   const { text, usage } = await generateText({
     model,
     system: prompt.system,
-    prompt: requirementsLogic.buildReviewPrompt(fixture.context),
+    prompt: requirementsLogic.buildReviewPrompt(fixture.context, DEFAULT_REQUIREMENT_FINDING_FLOOR),
     temperature: prompt.temperature ?? 0.2,
     maxOutputTokens: prompt.maxOutputTokens ?? 5000,
     abortSignal: deps.signal,

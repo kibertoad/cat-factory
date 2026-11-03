@@ -12,6 +12,10 @@ import type {
   SubmissionClassesByRole,
   WorkspaceRole,
 } from '@cat-factory/contracts'
+import {
+  parseRequirementFindingFloor,
+  parseRequirementFloorProgression,
+} from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
 /**
@@ -47,6 +51,8 @@ interface AccountRiskPolicyRow {
   version: number | null
   autonomy: string | null
   min_auto_answer_confidence: number
+  requirement_finding_floor: string | null
+  requirement_floor_progression: string | null
   created_at: number
 }
 
@@ -88,6 +94,10 @@ function rowToPolicy(row: AccountRiskPolicyRow): AccountRiskPolicy {
       : {},
     autonomy: row.autonomy === 'unattended' ? 'unattended' : 'attended',
     minAutoAnswerConfidence: row.min_auto_answer_confidence,
+    requirementFindingFloor: parseRequirementFindingFloor(row.requirement_finding_floor),
+    requirementFloorProgression: parseRequirementFloorProgression(
+      row.requirement_floor_progression,
+    ),
     ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
   }
@@ -156,8 +166,9 @@ export class D1AccountRiskPolicyRepository implements AccountRiskPolicyRepositor
             judge_min_score, judge_max_bounces,
             auto_merge_enabled, fork_decision, class_rules, class_rules_by_role, dry_run_roles,
             submission_classes_by_role, version, autonomy, min_auto_answer_confidence,
+            requirement_finding_floor, requirement_floor_progression,
             created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (account_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
@@ -182,7 +193,9 @@ export class D1AccountRiskPolicyRepository implements AccountRiskPolicyRepositor
            submission_classes_by_role = excluded.submission_classes_by_role,
            version = excluded.version,
            autonomy = excluded.autonomy,
-           min_auto_answer_confidence = excluded.min_auto_answer_confidence`,
+           min_auto_answer_confidence = excluded.min_auto_answer_confidence,
+           requirement_finding_floor = excluded.requirement_finding_floor,
+           requirement_floor_progression = excluded.requirement_floor_progression`,
       )
       .bind(
         accountId,
@@ -211,6 +224,10 @@ export class D1AccountRiskPolicyRepository implements AccountRiskPolicyRepositor
         policy.version ?? null,
         policy.autonomy,
         policy.minAutoAnswerConfidence,
+        policy.requirementFindingFloor,
+        policy.requirementFloorProgression
+          ? JSON.stringify(policy.requirementFloorProgression)
+          : null,
         policy.createdAt,
       )
       .run()
