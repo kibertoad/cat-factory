@@ -65,7 +65,9 @@ export const PROMPT_VERSIONS = {
   // into a document and never sees either judgement.
   // v7 on the reviewer alone: its user prompt names the risk policy's severity floor, so a review
   // set to `high` stops asking `medium` and `low` questions instead of having them filtered after.
-  'requirement-review': { id: 'requirement-review', version: 7, text: REVIEW_SYSTEM_PROMPT },
+  // v8 on the reviewer alone: a re-review's user prompt lists what the previous round answered and
+  // dismissed, and holds new findings to `high` or a cited follow-up on one of those answers.
+  'requirement-review': { id: 'requirement-review', version: 8, text: REVIEW_SYSTEM_PROMPT },
   'requirement-rework': { id: 'requirement-rework', version: 4, text: REWORK_SYSTEM_PROMPT },
   'requirement-writer': { id: 'requirement-writer', version: 5, text: WRITER_SYSTEM_PROMPT },
   // v2 across the clarity + brainstorm prompts: same `NO_ASSUMED_PRODUCT` addition and the same

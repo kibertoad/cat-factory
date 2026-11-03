@@ -72,6 +72,12 @@ export const requirementReviewItemSchema = v.object({
    * auto-answer, safest).
    */
   autoAnswerable: v.optional(v.boolean()),
+  /**
+   * On a re-review, the title of the previous round's finding whose answer this one follows up
+   * on. It is how a finding below `high` earns a place in a later round, so the window shows it.
+   * Absent on a first pass and on a `high` finding the reviewer did not tie to an answer.
+   */
+  followsUpOn: v.optional(v.nullable(v.string())),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
@@ -481,8 +487,16 @@ export type UpdateReviewItemStatusInput = v.InferOutput<typeof updateReviewItemS
  * `feedback` comment is the human's "do it differently" lever when redoing a merge they
  * were unhappy with — it is folded into the rework prompt alongside the prior document.
  */
+/**
+ * What follows an incorporation. `rereview` (the default) runs one more reviewer pass over the
+ * folded document; `proceed` settles the review on it and advances the run, with no further pass.
+ */
+export const incorporateAfterSchema = v.picklist(['rereview', 'proceed'])
+export type IncorporateAfter = v.InferOutput<typeof incorporateAfterSchema>
+
 export const incorporateRequirementsSchema = v.object({
   feedback: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
+  after: v.optional(incorporateAfterSchema),
 })
 export type IncorporateRequirementsInput = v.InferOutput<typeof incorporateRequirementsSchema>
 

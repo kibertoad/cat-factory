@@ -11,6 +11,7 @@ import { freshnessHeaderLines } from '@cat-factory/kernel'
 import type { RecommendationSource } from '@cat-factory/contracts'
 import { REQUIREMENT_CONCERN_RANK } from '@cat-factory/contracts'
 import { productIsIdentifiedFrom, renderProductContextLines } from '../review/product-context.js'
+import { type PriorRound, renderPriorRoundLines } from '../review/follow-up-bar.logic.js'
 
 // Pure logic for the requirements-review agent: assembling the "collected
 // requirements" text from a block + its linked context, building the review and
@@ -81,6 +82,11 @@ export interface RequirementsContext {
    * unhappy with — folded into the next rework so it corrects course. Absent otherwise.
    */
   reworkFeedback?: string
+  /**
+   * What the previous round settled, on a re-review. Its presence is what holds the pass to the
+   * follow-up bar (`review/follow-up-bar.logic.ts`). Absent on a first pass.
+   */
+  priorRound?: PriorRound
 }
 
 /**
@@ -205,6 +211,7 @@ export function buildReviewPrompt(
           '',
         ]),
     ...findingFloorDirective(floor),
+    ...(ctx.priorRound ? renderPriorRoundLines(ctx.priorRound) : []),
     'Produce a JSON object of this exact shape:',
     '{',
     '  "items": [',
@@ -213,7 +220,9 @@ export function buildReviewPrompt(
     '      "severity": "low|medium|high",',
     '      "title": "short headline of the concern",',
     '      "detail": "the full question / gap / challenge, phrased for a product owner",',
-    '      "autoAnswerable": true | false',
+    ...(ctx.priorRound
+      ? ['      "autoAnswerable": true | false,', '      "followsUp": "A1" | null']
+      : ['      "autoAnswerable": true | false']),
     '    }',
     '  ]',
     '}',
@@ -272,6 +281,7 @@ export function coerceReviewItems(
   raw: unknown,
   newId: () => string,
   now: number,
+  followUpRefs?: ReadonlyMap<string, string>,
 ): RequirementReviewItem[] {
   const list = Array.isArray((raw as { items?: unknown })?.items)
     ? ((raw as { items: unknown[] }).items as unknown[])
@@ -297,6 +307,11 @@ export function coerceReviewItems(
       // literal `true` enables the auto-recommendation; anything else (false / missing / a
       // non-boolean from a sloppy model) is the safe default of "needs a human".
       autoAnswerable: obj.autoAnswerable === true,
+      // A re-review's citation resolves to the answered finding it names; a ref the prompt never
+      // handed out resolves to nothing, so an invented citation cannot carry a finding past the bar.
+      ...(followUpRefs
+        ? { followsUpOn: followUpRefs.get(asString(obj.followsUp).toUpperCase()) ?? null }
+        : {}),
       createdAt: now,
       updatedAt: now,
     })

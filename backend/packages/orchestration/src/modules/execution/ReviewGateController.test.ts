@@ -373,6 +373,31 @@ describe('ReviewGateController.evaluate', () => {
     expect(result).toEqual({ kind: 'continue' })
   })
 
+  it('re-entry: incorporate-and-proceed folds the answers, settles, and advances with no re-review', async () => {
+    k.set(review({ status: 'ready', items: [{ status: 'answered' } as never] }))
+    const s = step({ pendingIncorporation: { feedback: 'do X', after: 'proceed' } })
+    const inst = instance([s, step({ agentKind: 'architect' })])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(s.pendingIncorporation).toBeNull()
+    expect(k.kind.incorporate).toHaveBeenCalledWith('ws', 'blk_1', 'rrv_1', 'do X')
+    expect(k.kind.markIncorporated).toHaveBeenCalled()
+    expect(k.kind.markReReviewing).not.toHaveBeenCalled()
+    expect(k.kind.reReview).not.toHaveBeenCalled()
+    expect(k.kind.onSettled).toHaveBeenCalledWith('ws', 'blk_1')
+    expect(result).toEqual({ kind: 'continue' })
+    expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
+  })
+
+  it('re-entry: incorporate-and-proceed with nothing to fold settles without the fold call', async () => {
+    k.set(review({ status: 'ready', items: [] }))
+    const s = step({ pendingIncorporation: { after: 'proceed' } })
+    const inst = instance([s, step({ agentKind: 'architect' })])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(k.kind.incorporate).not.toHaveBeenCalled()
+    expect(k.kind.markIncorporated).toHaveBeenCalled()
+    expect(result).toEqual({ kind: 'continue' })
+  })
+
   it('re-entry: a pending recommendation runs the Writer then re-parks (never advances)', async () => {
     k.set(review({ status: 'ready' }))
     const s = step({
@@ -446,6 +471,26 @@ describe('ReviewGateController public surface', () => {
     expect(out.status).toBe('incorporating')
     // It does NOT run the fold inline — that happens in the driver re-entry.
     expect(k.kind.incorporate).not.toHaveBeenCalled()
+  })
+
+  it('incorporate-and-proceed records the choice on the parked step for the driver', async () => {
+    k.set(review({ status: 'ready', items: [{ status: 'answered' } as never] }))
+    const parkedStep = step({
+      state: 'waiting_decision',
+      approval: { id: 'appr_9', status: 'pending', proposal: '' },
+    })
+    deps.executionRepository.get = vi.fn(async () => instance([parkedStep], { status: 'blocked' }))
+    await ctrl.incorporate(k.kind, 'ws', 'blk_1', undefined, 'proceed')
+    expect(parkedStep.pendingIncorporation).toEqual({ after: 'proceed' })
+  })
+
+  it('incorporate-and-proceed off-path folds and settles inline, never re-reviewing', async () => {
+    k.set(review({ status: 'ready', items: [{ status: 'answered' } as never] }))
+    deps.executionRepository.get = vi.fn(async () => null)
+    const out = await ctrl.incorporate(k.kind, 'ws', 'blk_1', 'feedback', 'proceed')
+    expect(k.kind.incorporate).toHaveBeenCalledWith('ws', 'blk_1', 'rrv_1', 'feedback')
+    expect(k.kind.reReview).not.toHaveBeenCalled()
+    expect(out.status).toBe('incorporated')
   })
 
   it('reReview requires a merged document first', async () => {

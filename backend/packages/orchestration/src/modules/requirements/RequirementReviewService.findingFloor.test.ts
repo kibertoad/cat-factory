@@ -133,3 +133,63 @@ describe('RequirementReviewService finding floor', () => {
     expect(next.findingFloor).toMatchObject({ severity: 'high', basis: 'fixed', suppressed: 2 })
   })
 })
+
+describe('RequirementReviewService re-review follow-up bar', () => {
+  const FIXED_LOW = { requirementFindingFloor: 'low' as const, requirementFloorProgression: null }
+
+  beforeEach(() => {
+    generateTextMock.mockReset()
+    idCounter = 0
+  })
+
+  /** A first pass, then the human answers the first finding and dismisses the rest. */
+  async function answeredFirstRound() {
+    const { svc, store } = makeService(blockWith(null))
+    reviewerRaisesOneOfEach()
+    const first = await svc.review('ws', 'blk_1', { findingFloor: FIXED_LOW })
+    const [answered, ...rest] = first.items
+    await svc.replyToItem('ws', first.id, answered!.id, 'Admins only.')
+    for (const item of rest) await svc.setItemStatus('ws', first.id, item.id, 'dismissed')
+    return { svc, store, reviewId: first.id }
+  }
+
+  it('shows the reviewer what the last round settled and asks for a cited follow-up', async () => {
+    const { svc, reviewId } = await answeredFirstRound()
+    generateTextMock.mockResolvedValue({ text: JSON.stringify({ items: [] }) })
+    await svc.reReview('ws', reviewId, { findingFloor: FIXED_LOW })
+    const prompt = reviewerPrompt()
+    expect(prompt).toContain('[A1] high finding')
+    expect(prompt).toContain('Answer: Admins only.')
+    expect(prompt).toContain('- medium finding')
+    expect(prompt).toContain('\\"followsUp\\"')
+  })
+
+  it('keeps high findings and cited follow-ups, drops the rest, and counts the drop', async () => {
+    const { svc, reviewId } = await answeredFirstRound()
+    generateTextMock.mockResolvedValue({
+      text: JSON.stringify({
+        items: [
+          { category: 'gap', severity: 'high', title: 'blocker', detail: 'd', followsUp: null },
+          { category: 'gap', severity: 'medium', title: 'follow-up', detail: 'd', followsUp: 'A1' },
+          { category: 'gap', severity: 'medium', title: 'fresh nit', detail: 'd', followsUp: null },
+          { category: 'gap', severity: 'low', title: 'invented', detail: 'd', followsUp: 'A9' },
+        ],
+      }),
+    })
+    const next = await svc.reReview('ws', reviewId, { findingFloor: FIXED_LOW })
+    expect(next.items.map((i) => [i.title, i.followsUpOn])).toEqual([
+      ['blocker', null],
+      ['follow-up', 'high finding'],
+    ])
+    expect(next.findingFloor).toMatchObject({ suppressed: 0, followUpSuppressed: 2 })
+  })
+
+  it('holds a first pass to no such bar', async () => {
+    const { svc } = makeService(blockWith(null))
+    reviewerRaisesOneOfEach()
+    const first = await svc.review('ws', 'blk_1', { findingFloor: FIXED_LOW })
+    expect(first.items).toHaveLength(3)
+    expect(first.items.every((i) => !('followsUpOn' in i))).toBe(true)
+    expect(first.findingFloor?.followUpSuppressed).toBeUndefined()
+  })
+})

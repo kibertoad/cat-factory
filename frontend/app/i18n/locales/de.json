@@ -5321,7 +5321,8 @@
     },
     "actions": {
       "proceedNothing": "Fortfahren (nichts einzuarbeiten)",
-      "incorporateAnswers": "Antworten einarbeiten",
+      "incorporateAndReReview": "Einarbeiten und erneut prüfen",
+      "incorporateAndProceed": "Einarbeiten und fortfahren",
       "requestRecommendations": "{count} Empfehlung anfordern | {count} Empfehlung anfordern | {count} Empfehlungen anfordern",
       "reReview": "Sieht gut aus — erneut prüfen",
       "reReviewing": "Wird erneut geprüft…",
@@ -5330,7 +5331,7 @@
     },
     "help": {
       "canProceed": "Jeder Befund ist verworfen — fahren Sie ohne Überarbeitung zur nächsten Phase fort.",
-      "canIncorporate": "Fügt Ihre Antworten in ein Dokument im Standardformat zusammen und prüft es dann automatisch erneut.",
+      "canIncorporate": "Beide fügen Ihre Antworten in ein Dokument im Standardformat zusammen. Erneut prüfen lässt den Reviewer dieses Dokument noch einmal prüfen; Fortfahren geht direkt zur nächsten Phase über.",
       "answerAll": "Beantworten oder verwerfen Sie jeden Befund, um fortzufahren.",
       "merged": "Die erneute Prüfung führt den Prüfer gegen dieses Dokument aus. Wenn Sie mit der Zusammenführung unzufrieden sind, wiederholen Sie sie stattdessen mit einem Kommentar."
     },
@@ -5342,6 +5343,8 @@
       "recommendationsReady": "{count} Empfehlung bereit | {count} Empfehlung bereit | {count} Empfehlungen bereit",
       "incorporating": "Ihre Antworten werden im Hintergrund eingearbeitet",
       "incorporatingDescription": "Sie sind zurück auf dem Board — wir benachrichtigen Sie nur, wenn weitere Eingaben benötigt werden.",
+      "incorporatingThenProceeding": "Ihre Antworten werden eingearbeitet",
+      "incorporatingThenProceedingDescription": "Der Lauf geht zur nächsten Phase über, sobald sie eingearbeitet sind.",
       "reviewerSatisfied": "Prüfer ist zufrieden — Pipeline wird fortgesetzt",
       "iterationLimitReached": "Iterationslimit erreicht — wählen Sie, wie Sie fortfahren",
       "newFindings": "keine neuen Befunde, auf die zu reagieren ist | {count} neuer Befund, auf den zu reagieren ist | {count} neue Befunde, auf die zu reagieren ist",
@@ -5383,8 +5386,10 @@
         "estimate": "Festgelegt durch die Aufgabenschätzung ({score} %).",
         "no_estimate": "Die Richtlinie folgt der Aufgabenschätzung, aber diese Aufgabe hat keine, daher galt der Ersatzwert."
       },
-      "suppressed": "Unterhalb dieser Stufe ausgelassene Befunde: {count}."
-    }
+      "suppressed": "Unterhalb dieser Stufe ausgelassene Befunde: {count}.",
+      "followUpSuppressed": "In dieser erneuten Prüfung ausgelassen, weil weder schwerwiegend noch eine Folgefrage zu Ihren Antworten: {count}."
+    },
+    "followsUpOn": "Knüpft an Ihre Antwort an zu: {title}"
   },
   "bootstrap": {
     "title": "Repository bootstrappen",

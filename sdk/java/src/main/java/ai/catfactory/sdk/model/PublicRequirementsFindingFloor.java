@@ -10,6 +10,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code PublicRequirementsFindingFloor} wire model.
  * @param basis the {@code basis} field.
+ * @param followUpSuppressed Always present; {@code null} when the server has no value for it.
  * @param score Always present; {@code null} when the server has no value for it.
  * @param severity the {@code severity} field.
  * @param suppressed the {@code suppressed} field.
@@ -17,6 +18,9 @@ import org.jspecify.annotations.Nullable;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicRequirementsFindingFloor(
     @JsonProperty("basis") PublicRequirementsFindingFloorBasis basis,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("followUpSuppressed") @Nullable Double followUpSuppressed,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("score") @Nullable Double score,
@@ -39,6 +43,7 @@ public record PublicRequirementsFindingFloor(
      */
     public static final class Builder {
         private @Nullable PublicRequirementsFindingFloorBasis basis;
+        private @Nullable Double followUpSuppressed;
         private @Nullable Double score;
         private @Nullable PublicReviewFindingSeverity severity;
         private @Nullable Double suppressed;
@@ -46,6 +51,12 @@ public record PublicRequirementsFindingFloor(
         /** Set {@code basis}. */
         public Builder basis(@Nullable PublicRequirementsFindingFloorBasis basis) {
             this.basis = basis;
+            return this;
+        }
+
+        /** Set {@code followUpSuppressed}. */
+        public Builder followUpSuppressed(@Nullable Double followUpSuppressed) {
+            this.followUpSuppressed = followUpSuppressed;
             return this;
         }
 
@@ -69,7 +80,7 @@ public record PublicRequirementsFindingFloor(
 
         /** Build the {@link PublicRequirementsFindingFloor}. */
         public PublicRequirementsFindingFloor build() {
-            return new PublicRequirementsFindingFloor(basis, score, severity, suppressed);
+            return new PublicRequirementsFindingFloor(basis, followUpSuppressed, score, severity, suppressed);
         }
     }
 }

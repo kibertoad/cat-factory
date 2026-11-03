@@ -81,6 +81,7 @@ function toRequirementsDecision(review: RequirementReview): PublicDecision {
           basis: review.findingFloor.basis,
           score: review.findingFloor.score,
           suppressed: review.findingFloor.suppressed,
+          followUpSuppressed: review.findingFloor.followUpSuppressed ?? null,
         }
       : null,
   }

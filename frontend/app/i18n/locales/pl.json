@@ -6033,7 +6033,8 @@
     },
     "actions": {
       "proceedNothing": "Kontynuuj (nic do włączenia)",
-      "incorporateAnswers": "Włącz odpowiedzi",
+      "incorporateAndReReview": "Włącz i przejrzyj ponownie",
+      "incorporateAndProceed": "Włącz i kontynuuj",
       "requestRecommendations": "Poproś o {count} rekomendację | Poproś o {count} rekomendacje | Poproś o {count} rekomendacji",
       "reReview": "Wygląda dobrze — przejrzyj ponownie",
       "reReviewing": "Ponowne przeglądanie…",
@@ -6042,7 +6043,7 @@
     },
     "help": {
       "canProceed": "Wszystkie uwagi są odrzucone — przejdź do następnej fazy bez przerabiania.",
-      "canIncorporate": "Łączy Twoje odpowiedzi w jeden dokument o standardowym formacie, a następnie automatycznie go ponownie przegląda.",
+      "canIncorporate": "Obie opcje łączą Twoje odpowiedzi w jeden dokument o standardowym formacie. Ponowny przegląd każe recenzentowi sprawdzić ten dokument jeszcze raz; kontynuacja przechodzi od razu do następnej fazy.",
       "answerAll": "Odpowiedz na każdą uwagę lub ją odrzuć, aby kontynuować.",
       "merged": "Ponowny przegląd uruchamia recenzenta na tym dokumencie. Jeśli nie odpowiada Ci sposób połączenia, powtórz je z komentarzem."
     },
@@ -6054,6 +6055,8 @@
       "recommendationsReady": "{count} rekomendacja gotowa | {count} rekomendacje gotowe | {count} rekomendacji gotowych",
       "incorporating": "Włączanie Twoich odpowiedzi w tle",
       "incorporatingDescription": "Wróciłeś do tablicy — powiadomimy Cię tylko, jeśli będą potrzebne dodatkowe informacje.",
+      "incorporatingThenProceeding": "Włączanie Twoich odpowiedzi",
+      "incorporatingThenProceedingDescription": "Przebieg przejdzie do następnej fazy, gdy tylko zostaną włączone.",
       "reviewerSatisfied": "Recenzent jest zadowolony — kontynuowanie potoku",
       "iterationLimitReached": "Osiągnięto limit iteracji — wybierz, jak kontynuować",
       "newFindings": "brak nowych uwag do rozpatrzenia | {count} nowa uwaga do rozpatrzenia | {count} nowych uwag do rozpatrzenia",
@@ -6095,8 +6098,10 @@
         "estimate": "Ustawione przez szacunek zadania ({score}%).",
         "no_estimate": "Polityka działa według szacunku zadania, ale to zadanie go nie ma, więc zastosowano wartość zastępczą."
       },
-      "suppressed": "Uwagi pominięte poniżej tego poziomu: {count}."
-    }
+      "suppressed": "Uwagi pominięte poniżej tego poziomu: {count}.",
+      "followUpSuppressed": "Pominięte w tym ponownym przeglądzie, bo nie mają wysokiej wagi ani nie nawiązują do Twoich odpowiedzi: {count}."
+    },
+    "followsUpOn": "Nawiązuje do Twojej odpowiedzi na: {title}"
   },
   "clarity": {
     "title": "Klasyfikacja zgłoszenia błędu",

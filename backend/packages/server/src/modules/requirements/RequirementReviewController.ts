@@ -111,6 +111,7 @@ export function requirementReviewController(): Hono<AppEnv> {
         param(c, 'workspaceId'),
         c.req.valid('param').blockId,
         c.req.valid('json').feedback,
+        c.req.valid('json').after,
       )
     return c.json(review, 200)
   })

@@ -71,6 +71,7 @@ export function registerRequirementsDecisionRoutes(app: Hono<AppEnv>): void {
         workspaceId,
         scoped.blockId,
         c.req.valid('json').feedback,
+        c.req.valid('json').after,
       )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })

@@ -6033,7 +6033,8 @@
     },
     "actions": {
       "proceedNothing": "進行(取り込むものなし)",
-      "incorporateAnswers": "回答を取り込む",
+      "incorporateAndReReview": "取り込んで再レビュー",
+      "incorporateAndProceed": "取り込んで次へ進む",
       "requestRecommendations": "{count} 件の推奨をリクエスト | {count} 件の推奨をリクエスト | {count} 件の推奨をリクエスト",
       "reReview": "問題なし、再レビュー",
       "reReviewing": "再レビュー中…",
@@ -6042,7 +6043,7 @@
     },
     "help": {
       "canProceed": "すべての指摘が却下されました。手直しせず次のフェーズに進みます。",
-      "canIncorporate": "回答を1つの標準フォーマットのドキュメントにまとめ、自動で再レビューします。",
+      "canIncorporate": "どちらも回答を1つの標準フォーマットのドキュメントにまとめます。再レビューはそのドキュメントをレビュアーにもう一度確認させ、次へ進むはそのまま次のフェーズに移ります。",
       "answerAll": "続行するには、すべての指摘に回答するか却下してください。",
       "merged": "再レビューはこのドキュメントに対してレビュアーを実行します。まとめ方が気に入らない場合は、代わりにコメントを付けてやり直してください。"
     },
@@ -6054,6 +6055,8 @@
       "recommendationsReady": "{count}件の推奨が準備できました | {count}件の推奨が準備できました | {count}件の推奨が準備できました",
       "incorporating": "回答をバックグラウンドで取り込み中",
       "incorporatingDescription": "ボードに戻りました。追加の入力が必要な場合のみ通知します。",
+      "incorporatingThenProceeding": "回答を取り込み中",
+      "incorporatingThenProceedingDescription": "取り込みが終わり次第、実行は次のフェーズに進みます。",
       "reviewerSatisfied": "レビュアーが承認しました。パイプラインを続行します",
       "iterationLimitReached": "反復回数の上限に達しました。進め方を選択してください",
       "newFindings": "対応すべき新しい指摘はありません | 対応すべき新しい指摘が{count}件あります | 対応すべき新しい指摘が{count}件あります",
@@ -6095,8 +6098,10 @@
         "estimate": "タスクの見積もり ({score}%) で設定されました。",
         "no_estimate": "ポリシーはタスクの見積もりに従いますが、このタスクには見積もりがないため、代替値が適用されました。"
       },
-      "suppressed": "そのレベル未満で除外された指摘: {count}。"
-    }
+      "suppressed": "そのレベル未満で除外された指摘: {count}。",
+      "followUpSuppressed": "重大度が高くなく、回答へのフォローアップでもないため、この再レビューから除外された指摘: {count}。"
+    },
+    "followsUpOn": "次の回答へのフォローアップ: {title}"
   },
   "clarity": {
     "title": "バグ報告のトリアージ",
