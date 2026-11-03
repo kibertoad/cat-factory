@@ -14,6 +14,7 @@ import org.jspecify.annotations.Nullable;
  * a value the server legitimately added would break a caller on a release it was never told about.
  */
 public enum PublicPrReviewDecisionFindingChallengeStatus {
+    QUEUED("queued"),
     INVESTIGATING("investigating"),
     UPHELD("upheld"),
     AMENDED("amended"),

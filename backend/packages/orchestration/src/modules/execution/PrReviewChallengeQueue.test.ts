@@ -8,7 +8,10 @@ import type {
   PrReviewFinding,
 } from '@cat-factory/kernel'
 import { MAX_CONCURRENT_CHALLENGE_INVESTIGATIONS } from '@cat-factory/contracts'
-import { PrReviewChallengeQueue, type PrReviewChallengeQueueDeps } from './PrReviewChallengeQueue.js'
+import {
+  PrReviewChallengeQueue,
+  type PrReviewChallengeQueueDeps,
+} from './PrReviewChallengeQueue.js'
 import type { StepHandlerContext } from './step-handler-registry.js'
 
 function finding(id: string): PrReviewFinding {

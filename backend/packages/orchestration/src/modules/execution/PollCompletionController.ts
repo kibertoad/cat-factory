@@ -20,7 +20,6 @@ import type { RunStateMachine } from './RunStateMachine.js'
 import type { TesterController } from './TesterController.js'
 import type { HumanTestController } from './HumanTestController.js'
 import type { VisualConfirmationController } from './VisualConfirmationController.js'
-import type { PrReviewController } from './PrReviewController.js'
 import { type BugFishingController, BUG_FISHING_STEP_KIND } from './BugFishingController.js'
 import {
   applyValidationReport,

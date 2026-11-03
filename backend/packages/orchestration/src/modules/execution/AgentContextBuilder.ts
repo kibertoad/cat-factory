@@ -90,7 +90,10 @@ import { buildReworkContext } from './companion-review-context.js'
 import { type FoundationalServiceResolver } from './run-foundational-services.js'
 import { CatalogRunContext } from './run-catalog-context.js'
 import { resolveRunImages } from './run-images.js'
-import { reviewEffortSlice, type ResolvePostImplementationReviewEffort } from './builder-review-effort.js'
+import {
+  reviewEffortSlice,
+  type ResolvePostImplementationReviewEffort,
+} from './builder-review-effort.js'
 import { buildBlockPayload } from './builder-block-payload.js'
 import { getFragment, withDesignContextFragment } from '@cat-factory/prompt-fragments'
 import {

@@ -167,7 +167,9 @@ export const prReviewChallengeJobSchema = v.object({
 export type PrReviewChallengeJob = v.InferOutput<typeof prReviewChallengeJobSchema>
 
 /** Whether a finding's challenge is still waiting on, or running, an investigator. */
-export function isChallengeInFlight(challenge: PrReviewFindingChallenge | null | undefined): boolean {
+export function isChallengeInFlight(
+  challenge: PrReviewFindingChallenge | null | undefined,
+): boolean {
   return challenge?.status === 'queued' || challenge?.status === 'investigating'
 }
 

@@ -21,7 +21,10 @@ import {
   renderPrReviewFixerFeedback,
 } from './prReview.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
-import { PrReviewChallengeQueue, type PrReviewChallengeQueueDeps } from './PrReviewChallengeQueue.js'
+import {
+  PrReviewChallengeQueue,
+  type PrReviewChallengeQueueDeps,
+} from './PrReviewChallengeQueue.js'
 import type { StepHandlerContext } from './step-handler-registry.js'
 
 /**

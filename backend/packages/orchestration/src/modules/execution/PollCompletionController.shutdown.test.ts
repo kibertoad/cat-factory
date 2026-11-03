@@ -106,5 +106,4 @@ describe('PollCompletionController: a harness shutdown', () => {
     expect(result).toEqual({ kind: 'continue' })
     expect(s.evictionRecoveries).toBe(1)
   })
-
 })

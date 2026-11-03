@@ -58,6 +58,7 @@ const step = computed(() => {
 })
 const state = computed<PrReviewStepState | null>(() => step.value?.prReview ?? null)
 const status = computed(() => state.value?.status ?? null)
+const findings = computed<PrReviewFinding[]>(() => state.value?.findings ?? [])
 const awaiting = computed(() => status.value === 'awaiting_selection')
 // One or more challenged findings are queued for, or being re-examined by, the Challenge
 // Investigator (up to three at once). The human keeps curating meanwhile: selection and further
@@ -116,8 +117,6 @@ function chunkStatusLabel(status: StepSubtaskItem['status']): string {
 // A resolution is executing (the Fixer is committing, or comments are being posted) — show a
 // working state between the human's choice and the run advancing/the stream echoing `done`.
 const working = computed(() => status.value === 'fixing' || status.value === 'posting')
-const findings = computed<PrReviewFinding[]>(() => state.value?.findings ?? [])
-
 // The outcome of the last `post` attempt (null until one runs). A partial/failed post re-parks
 // the review at `awaiting_selection` carrying this, so the human sees what posted / what failed
 // and can retry ONLY the posting rather than re-running the whole review.

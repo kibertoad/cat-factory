@@ -123,6 +123,12 @@ function describeCeiling(ms: number): string {
  * pg-boss runner re-enqueues an advance when the decision is resolved. All run state
  * lives in the store, so a re-run after a crash simply reads the current state.
  */
+/** What a timeout on each sleep-first, job-cadence park names in the run's failure. */
+const JOB_CADENCE_WAIT_LABELS = {
+  awaiting_environment: 'Environment readiness',
+  awaiting_investigations: 'Challenge investigations',
+} as const
+
 export async function driveExecution(
   exec: ExecutionService,
   workspaceId: string,
@@ -282,36 +288,22 @@ export async function driveExecution(
         result = next
         continue
       }
-      // A `deployer` step is waiting for the environment it provisioned to become ready.
-      // Re-read the provider between sleeps on the JOB cadence (this is infra coming up, not a
-      // human-scale gate), through the same `pollAgentJob` entry point the deployer's other park
-      // uses. SLEEP-FIRST, like a gate: the advance that parked the step read the provider moments
-      // ago, so an immediate re-read would only duplicate that answer. The wait's own ceiling
-      // settles it long before this budget does; the budget backstops a provider that answers
-      // `provisioning` forever.
-      if (result.kind === 'awaiting_environment') {
+      // Two parks poll `pollAgentJob` on the JOB cadence, SLEEP-FIRST, because the advance that
+      // parked them has just read or dispatched what they wait on, so an immediate re-read would
+      // only duplicate that answer:
+      // - a `deployer` step waiting for the environment it provisioned to become ready (infra
+      //   coming up, not a human-scale gate). The wait's own ceiling settles it long before this
+      //   budget does; the budget backstops a provider that answers `provisioning` forever.
+      // - a PR review's challenge queue with investigators running (container jobs). A settled
+      //   verdict answers `continue`, which ends this drain and re-advances the step to fill the
+      //   freed slot under a fresh budget.
+      if (result.kind === 'awaiting_environment' || result.kind === 'awaiting_investigations') {
         const next = await pollUntil(
-          'awaiting_environment',
+          result.kind,
           () => exec.pollAgentJob(workspaceId, executionId),
           cfg.jobPollIntervalMs,
           cfg.jobMaxPolls,
-          'Environment readiness',
-        )
-        if (!next) return {}
-        result = next
-        continue
-      }
-      // A PR review's challenge queue has investigators running. Poll them on the JOB cadence
-      // (they are container jobs), SLEEP-FIRST like the environment wait: the advance that parked
-      // here has just dispatched. A settled verdict answers `continue`, which ends this drain and
-      // re-advances the step to fill the freed slot under a fresh budget.
-      if (result.kind === 'awaiting_investigations') {
-        const next = await pollUntil(
-          'awaiting_investigations',
-          () => exec.pollAgentJob(workspaceId, executionId),
-          cfg.jobPollIntervalMs,
-          cfg.jobMaxPolls,
-          'Challenge investigations',
+          JOB_CADENCE_WAIT_LABELS[result.kind],
         )
         if (!next) return {}
         result = next

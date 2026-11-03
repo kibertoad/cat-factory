@@ -16,10 +16,7 @@ import { isChallengeInFlight } from '@cat-factory/contracts'
 import { PR_REVIEWER_KIND } from '@cat-factory/agents'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { AdvanceResult } from './advance.js'
-import {
-  coercePrReview,
-  dismissFinding,
-} from './prReview.logic.js'
+import { coercePrReview, dismissFinding } from './prReview.logic.js'
 import { planResumeSlices, sliceReviewsAfterAggregation } from './prReviewSlices.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
