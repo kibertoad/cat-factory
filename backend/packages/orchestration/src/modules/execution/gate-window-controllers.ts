@@ -471,7 +471,7 @@ export function buildCredentialWaitController(
   return new CredentialWaitController({
     stateMachine: runtime.stateMachine,
     stepGraph: runtime.stepGraph,
-    idGenerator: dependencies.idGenerator,
+    executionRepository: dependencies.executionRepository,
     clock: dependencies.clock,
     workRunner: dependencies.workRunner,
     logger: dependencies.logger,

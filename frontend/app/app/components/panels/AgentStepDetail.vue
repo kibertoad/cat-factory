@@ -606,7 +606,7 @@ async function copyOutput() {
           />
           <!-- the run's personal-subscription credential lapsed before this step dispatched -->
           <CredentialWaitNotice
-            v-if="dedicatedPark === 'credential' && instance"
+            v-if="dedicatedPark === 'credential' && instance?.status === 'blocked'"
             :execution-id="instance.id"
             compact
           />

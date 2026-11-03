@@ -1,7 +1,14 @@
-import type { Clock, ExecutionInstance, IdGenerator, Logger, WorkRunner } from '@cat-factory/kernel'
+import type {
+  Clock,
+  ExecutionInstance,
+  ExecutionRepository,
+  Logger,
+  WorkRunner,
+} from '@cat-factory/kernel'
 import {
   ConflictError,
   CredentialRequiredError,
+  assertFound,
   getErrorReason,
   noopLogger,
 } from '@cat-factory/kernel'
@@ -34,10 +41,28 @@ function isLapseResult(result: AdvanceResult): boolean {
   )
 }
 
+/**
+ * The approval id of a LIVE credential park, or null. Only a `blocked` run counts: a run stopped
+ * while parked keeps the step exactly as it stood, and resuming it would re-mint a credential for
+ * a run nobody is driving.
+ */
+function parkedApprovalId(instance: ExecutionInstance): string | null {
+  const step = instance.steps[instance.currentStep]
+  if (instance.status !== 'blocked' || !step?.credentialWait) return null
+  return step.approval?.status === 'pending' ? step.approval.id : null
+}
+
+function notParked(): ConflictError {
+  return new ConflictError(
+    'This run is not waiting on a personal subscription credential.',
+    'credential_wait_not_parked',
+  )
+}
+
 export interface CredentialWaitControllerDeps {
   stateMachine: RunStateMachine
   stepGraph: StepGraph
-  idGenerator: IdGenerator
+  executionRepository: ExecutionRepository
   clock: Clock
   workRunner: WorkRunner
   logger?: Logger
@@ -50,8 +75,8 @@ export interface CredentialWaitControllerDeps {
  * activation with a fixed lifetime. Whatever advanced the run to that dispatch (a human answering
  * a review, a background re-review converging, a timer) is irrelevant here: the lease is refused,
  * and the step parks on the generic approval with `credentialWait` set, instead of failing the run.
- * The person answers it with {@link resume}, whose HTTP route re-mints the activation from their
- * personal password first.
+ * The person answers it with {@link resume}, which re-mints the activation from their personal
+ * password before re-dispatching.
  *
  * {@link guard} is the ONE place the refusal is recognised. The engine routes every call that can
  * dispatch (advance and the three poll entry points) through it, so no dispatch site and no
@@ -96,23 +121,20 @@ export class CredentialWaitController {
     const instance = await this.deps.stateMachine.mutateInstance(
       workspaceId,
       executionId,
-      async (inst) => {
+      (inst) => {
         decisionId = null
         const step = inst.steps[inst.currentStep]
         if (!step || (inst.status !== 'running' && inst.status !== 'paused')) return
-        decisionId = this.deps.idGenerator.next('appr')
         step.credentialWait = { raisedAt: this.deps.clock.now() }
-        step.approval = {
-          id: decisionId,
-          status: 'pending',
-          proposal: "The run's personal subscription credential lapsed.",
-        }
-        this.deps.stepGraph.pauseStepForInput(step)
+        decisionId = this.deps.stateMachine.openDecisionPark(
+          step,
+          "The run's personal subscription credential lapsed.",
+        )
         inst.status = 'blocked'
-        await this.deps.stateMachine.updateBlockProgress(workspaceId, inst, 'blocked')
       },
     )
     if (!decisionId) return null
+    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
     this.log.info('run parked: personal subscription credential lapsed', {
       workspaceId,
       runId: executionId,
@@ -124,31 +146,39 @@ export class CredentialWaitController {
   }
 
   /**
-   * Resume a step parked on a lapsed credential: clear the park and wake the driver, which
-   * re-dispatches the SAME step. The caller has already re-minted the activation; resuming without
-   * one simply parks the step again at its next lease.
+   * Resume a step parked on a lapsed credential: re-mint the activation through `renew`, clear the
+   * park and wake the driver, which re-dispatches the SAME step. The park is checked before
+   * `renew` runs, so a run that is not parked (already resumed, stopped) never gets a fresh
+   * credential minted for it.
    */
-  async resume(workspaceId: string, executionId: string): Promise<ExecutionInstance> {
+  async resume(
+    workspaceId: string,
+    executionId: string,
+    renew: () => Promise<void>,
+  ): Promise<ExecutionInstance> {
+    const current = assertFound(
+      await this.deps.executionRepository.get(workspaceId, executionId),
+      'Execution',
+      executionId,
+    )
+    if (!parkedApprovalId(current)) throw notParked()
+    await renew()
     let approvalId = ''
     const instance = await this.deps.stateMachine.mutateInstance(
       workspaceId,
       executionId,
-      async (inst) => {
-        const step = inst.steps[inst.currentStep]
-        if (!step?.credentialWait || step.approval?.status !== 'pending') {
-          throw new ConflictError(
-            'This run is not waiting on a personal subscription credential.',
-            'credential_wait_not_parked',
-          )
-        }
-        approvalId = step.approval.id
+      (inst) => {
+        const parked = parkedApprovalId(inst)
+        if (!parked) throw notParked()
+        approvalId = parked
+        const step = inst.steps[inst.currentStep]!
         step.credentialWait = null
         step.approval = null
         this.deps.stepGraph.startStep(step)
-        if (inst.status === 'blocked') inst.status = 'running'
-        await this.deps.stateMachine.updateBlockProgress(workspaceId, inst, 'in_progress')
+        inst.status = 'running'
       },
     )
+    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     await this.deps.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'approved')
     return instance

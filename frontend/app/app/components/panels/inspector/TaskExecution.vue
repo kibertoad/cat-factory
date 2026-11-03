@@ -92,11 +92,14 @@ const runLive = computed(() => !!instance.value && !execution.isTerminal(instanc
  */
 const inputGateNotice = computed(() => inputGateNoticeFor(instance.value))
 
-/** Whether the run's current step is parked because its personal credential lapsed. */
+/**
+ * Whether the run's current step is parked because its personal credential lapsed. Only a
+ * `blocked` run is still parked: one stopped while parked keeps the step as it stood.
+ */
 const credentialWaitParked = computed(() => {
   const run = instance.value
   const step = run?.steps[run.currentStep]
-  return !!step && dedicatedParkView(step, run) === 'credential'
+  return run?.status === 'blocked' && !!step && dedicatedParkView(step, run) === 'credential'
 })
 
 // Failures from prior attempts, preserved across retries — shown regardless of the run's

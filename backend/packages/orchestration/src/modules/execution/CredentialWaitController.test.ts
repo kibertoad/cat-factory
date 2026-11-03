@@ -27,6 +27,8 @@ function run(over: Partial<ExecutionInstance> = {}): ExecutionInstance {
 
 function harness(initial: ExecutionInstance) {
   const stored = { instance: initial }
+  const clock: Clock = { now: () => NOW }
+  const stepGraph = new StepGraph(clock, defaultAgentKindRegistry())
   const stateMachine = {
     mutateInstance: vi.fn(
       async (_ws: string, _id: string, mutate: (i: ExecutionInstance) => void | Promise<void>) => {
@@ -37,13 +39,17 @@ function harness(initial: ExecutionInstance) {
     updateBlockProgress: vi.fn(async () => {}),
     emitInstance: vi.fn(async () => {}),
     ensureWaitingNotification: vi.fn(async () => {}),
+    openDecisionPark: vi.fn((step: PipelineStep, proposal = '') => {
+      step.approval = { id: 'appr_1', status: 'pending', proposal }
+      stepGraph.pauseStepForInput(step)
+      return 'appr_1'
+    }),
   }
   const workRunner = { signalDecision: vi.fn(async () => {}) }
-  const clock: Clock = { now: () => NOW }
   const deps = {
     stateMachine,
-    stepGraph: new StepGraph(clock, defaultAgentKindRegistry()),
-    idGenerator: { next: (prefix: string) => `${prefix}_1` },
+    stepGraph,
+    executionRepository: { get: vi.fn(async () => stored.instance) },
     clock,
     workRunner,
   } as unknown as CredentialWaitControllerDeps
@@ -127,8 +133,10 @@ describe('CredentialWaitController.resume', () => {
       throw lapsed()
     })
 
-    const resumed = await h.controller.resume('ws', 'exec_1')
+    const renew = vi.fn(async () => {})
+    const resumed = await h.controller.resume('ws', 'exec_1', renew)
 
+    expect(renew).toHaveBeenCalledOnce()
     const step = resumed.steps[1]!
     expect(step.credentialWait).toBeNull()
     expect(step.approval).toBeNull()
@@ -138,9 +146,24 @@ describe('CredentialWaitController.resume', () => {
     expect(h.workRunner.signalDecision).toHaveBeenCalledWith('ws', 'exec_1', 'appr_1', 'approved')
   })
 
-  it('refuses a run that is not parked on a credential', async () => {
+  it('refuses a run that is not parked on a credential, before re-minting anything', async () => {
     const h = harness(run())
-    await expect(h.controller.resume('ws', 'exec_1')).rejects.toBeInstanceOf(ConflictError)
+    const renew = vi.fn(async () => {})
+    await expect(h.controller.resume('ws', 'exec_1', renew)).rejects.toBeInstanceOf(ConflictError)
+    expect(renew).not.toHaveBeenCalled()
     expect(h.workRunner.signalDecision).not.toHaveBeenCalled()
+  })
+
+  it('refuses a run stopped while parked, which keeps the parked step as it stood', async () => {
+    const h = harness(run())
+    await h.controller.guard('ws', 'exec_1', async () => {
+      throw lapsed()
+    })
+    h.stored.instance.status = 'failed'
+
+    const renew = vi.fn(async () => {})
+    await expect(h.controller.resume('ws', 'exec_1', renew)).rejects.toBeInstanceOf(ConflictError)
+    expect(renew).not.toHaveBeenCalled()
+    expect(h.stateMachine.updateBlockProgress).toHaveBeenCalledTimes(1)
   })
 })
