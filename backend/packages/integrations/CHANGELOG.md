@@ -1,5 +1,13 @@
 # @cat-factory/integrations
 
+## 0.178.3
+
+### Patch Changes
+
+- Updated dependencies [dbbcfd9]
+  - @cat-factory/contracts@0.377.0
+  - @cat-factory/kernel@0.364.0
+
 ## 0.178.2
 
 ### Patch Changes
