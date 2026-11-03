@@ -458,7 +458,7 @@ export function buildStepHandlerRegistry(d: DispatcherRegistryDeps): StepHandler
     // with `fix` / `post`, or CHALLENGED a finding, `PrReviewController` re-armed this
     // `pr-reviewer` step and woke the driver. Claim it by the re-armed status so it re-dispatches
     // as the Fixer (`fixing`), posts the selected findings as inline PR comments (`posting`), or
-    // drives the challenge queue's investigators (`challenging`) — never
+    // drives the challenge queue's investigators (`challenging`), and never runs
     // the generic pr-reviewer clone the fallthrough would run. A `reviewing`/`awaiting_selection`/
     // resolved step falls through (this handler doesn't claim it). See {@link handlePrReviewResolution}.
     {

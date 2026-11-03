@@ -163,6 +163,8 @@ export const prReviewChallengeJobSchema = v.object({
   model: v.optional(v.string()),
   subscriptionTokenId: v.optional(v.string()),
   initiatedByUserId: v.optional(v.string()),
+  /** How many times an evicted investigator for this entry was put back in the queue. */
+  evictionRecoveries: v.optional(v.number()),
 })
 export type PrReviewChallengeJob = v.InferOutput<typeof prReviewChallengeJobSchema>
 

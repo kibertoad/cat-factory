@@ -33,7 +33,7 @@ export type ResolvePostImplementationReviewEffort = (
  * one reviews.
  */
 export async function reviewEffortSlice(
-  resolvePolicyEffort: ResolvePostImplementationReviewEffort | undefined,
+  deps: { resolvePostImplementationReviewEffort?: ResolvePostImplementationReviewEffort },
   workspaceId: string,
   agentKind: string,
   block: Block,
@@ -43,8 +43,9 @@ export async function reviewEffortSlice(
     return { reviewEffort: block.taskTypeFields?.reviewEffort ?? DEFAULT_REVIEW_EFFORT_LEVEL }
   }
   if (agentKind === POST_IMPLEMENTATION_REVIEWER_KIND) {
-    const level = resolvePolicyEffort
-      ? await resolvePolicyEffort(workspaceId, block, instance)
+    const resolve = deps.resolvePostImplementationReviewEffort
+    const level = resolve
+      ? await resolve(workspaceId, block, instance)
       : DEFAULT_REVIEW_EFFORT_LEVEL
     return { reviewEffort: level }
   }

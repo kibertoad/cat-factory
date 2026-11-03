@@ -9,7 +9,7 @@ const block = (fields?: Block['taskTypeFields']) =>
 describe('reviewEffortSlice', () => {
   it("gives the pr-reviewer the review task's own pick", async () => {
     const slice = await reviewEffortSlice(
-      undefined,
+      {},
       'ws',
       'pr-reviewer',
       block({ reviewEffort: 'low' }),
@@ -19,7 +19,7 @@ describe('reviewEffortSlice', () => {
   })
 
   it('defaults a review task with no pick to high', async () => {
-    expect(await reviewEffortSlice(undefined, 'ws', 'pr-reviewer', block(), run)).toEqual({
+    expect(await reviewEffortSlice({}, 'ws', 'pr-reviewer', block(), run)).toEqual({
       reviewEffort: 'high',
     })
   })
@@ -27,9 +27,11 @@ describe('reviewEffortSlice', () => {
   it("gives the post-implementation reviewer the run's risk policy level", async () => {
     const asked: string[] = []
     const slice = await reviewEffortSlice(
-      async (ws) => {
-        asked.push(ws)
-        return 'max'
+      {
+        resolvePostImplementationReviewEffort: async (ws) => {
+          asked.push(ws)
+          return 'max'
+        },
       },
       'ws',
       'reviewer',
@@ -44,9 +46,11 @@ describe('reviewEffortSlice', () => {
   it('reads nothing and sets nothing for a kind that does not review code', async () => {
     let read = false
     const slice = await reviewEffortSlice(
-      async () => {
-        read = true
-        return 'max'
+      {
+        resolvePostImplementationReviewEffort: async () => {
+          read = true
+          return 'max'
+        },
       },
       'ws',
       'challenge-investigator',

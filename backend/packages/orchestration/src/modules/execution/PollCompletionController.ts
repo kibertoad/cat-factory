@@ -256,8 +256,8 @@ export class PollCompletionController {
     // again, so this fails the run outright rather than spending an eviction budget on it. It is
     // asked HERE, below every branch that settles a job WITHOUT failing the run, because those
     // branches are about whose job died rather than about how: a killed bug-fishing angle is
-    // still a non-critical part of a larger investigation, and failing the human's in-flight curation over it
-    // would trade one wrong recovery for a worse one. It cannot be reached by the eviction
+    // still a non-critical part of a larger investigation, and failing the whole expedition over
+    // it would trade one wrong recovery for a worse one. It cannot be reached by the eviction
     // recovery above either way (`harnessShutdown` is never set beside `evicted`), so nothing
     // above it spends a retry on this failure.
     const shutdown = containerShutdownFailure(update)

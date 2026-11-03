@@ -510,13 +510,7 @@ export class AgentContextBuilder {
       this.resolveConsensusConfig(workspaceId, step, block),
       this.catalogContext().sliceFor(workspaceId, agentKind, step, instance),
       resolveRunImages(this.deps, agentKind, workspaceId, block.id),
-      reviewEffortSlice(
-        this.deps.resolvePostImplementationReviewEffort,
-        workspaceId,
-        agentKind,
-        block,
-        instance,
-      ),
+      reviewEffortSlice(this.deps, workspaceId, agentKind, block, instance),
     ])
     const agentConfig = block.agentConfig
     const customTaskType = this.customTaskTypeFor(block)

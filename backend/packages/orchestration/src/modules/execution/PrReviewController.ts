@@ -449,7 +449,15 @@ export class PrReviewController {
     const running = instance.steps.find(
       (s) => s.agentKind === PR_REVIEW_STEP_KIND && s.prReview?.status === 'challenging',
     )
-    if (running) return { step: running, parked: false }
+    if (running) {
+      // Only a run the driver is still working (or a spend pause it resumes from) will ever start
+      // the entry. A run that failed or was stopped mid-queue keeps its review `challenging`, and
+      // accepting there would answer `queued` for a challenge nothing picks up.
+      if (instance.status !== 'running' && instance.status !== 'paused') {
+        throw new ConflictError('The run is no longer running its challenge investigations')
+      }
+      return { step: running, parked: false }
+    }
     return { step: this.findParkedReview(instance).step, parked: true }
   }
 

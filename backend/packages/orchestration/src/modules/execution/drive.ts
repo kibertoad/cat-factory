@@ -108,6 +108,12 @@ function describeCeiling(ms: number): string {
   return `${ms}ms`
 }
 
+/** What a timeout on each sleep-first, job-cadence park names in the run's failure. */
+const JOB_CADENCE_WAIT_LABELS = {
+  awaiting_environment: 'Environment readiness',
+  awaiting_investigations: 'Challenge investigations',
+} as const
+
 /**
  * Drive one run to a standstill. The runtime-neutral driver loop: it contains NO
  * business logic — every decision lives in {@link ExecutionService} — and uses plain
@@ -123,12 +129,6 @@ function describeCeiling(ms: number): string {
  * pg-boss runner re-enqueues an advance when the decision is resolved. All run state
  * lives in the store, so a re-run after a crash simply reads the current state.
  */
-/** What a timeout on each sleep-first, job-cadence park names in the run's failure. */
-const JOB_CADENCE_WAIT_LABELS = {
-  awaiting_environment: 'Environment readiness',
-  awaiting_investigations: 'Challenge investigations',
-} as const
-
 export async function driveExecution(
   exec: ExecutionService,
   workspaceId: string,

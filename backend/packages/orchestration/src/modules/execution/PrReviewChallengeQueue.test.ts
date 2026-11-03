@@ -42,7 +42,10 @@ function challengingStep(count: number): PipelineStep {
   } as unknown as PipelineStep
 }
 
-function harness(step: PipelineStep, opts: { inline?: boolean; throwFor?: string } = {}) {
+function harness(
+  step: PipelineStep,
+  opts: { inline?: boolean; throwFor?: string; delegated?: boolean } = {},
+) {
   const instance = {
     id: 'exe_1',
     blockId: 'blk_1',
@@ -55,12 +58,17 @@ function harness(step: PipelineStep, opts: { inline?: boolean; throwFor?: string
   const deps: PrReviewChallengeQueueDeps = {
     runStateMachine: {
       persistAndEmit: async () => {},
+      casPersist: async () => {},
       parkStepOnDecision: async () => {
         parked++
         return { kind: 'awaiting_decision', decisionId: 'appr_1' }
       },
     } as never,
-    agentKindRegistry: { structuredOutput: () => ({ safeParse: (v: unknown) => v }) } as never,
+    agentKindRegistry: {
+      structuredOutput: () => ({ safeParse: (v: unknown) => v }),
+      agentStep: () =>
+        opts.delegated ? { surface: 'delegated', executor: 'acme:executor' } : undefined,
+    } as never,
     spend: {} as never,
     clock: { now: () => 1_000_000 } as never,
     startSideJob: async (_ctx, _kind, epoch, augment) => {
@@ -85,8 +93,8 @@ function harness(step: PipelineStep, opts: { inline?: boolean; throwFor?: string
     ctx: ctx as StepHandlerContext,
     finish: (findingId: string, result: AgentRunResult) =>
       updates.set(`job-${findingId}`, { state: 'done', result }),
-    fail: (findingId: string, error: string) =>
-      updates.set(`job-${findingId}`, { state: 'failed', error }),
+    fail: (findingId: string, error: string, evicted?: 'crash' | 'transient') =>
+      updates.set(`job-${findingId}`, { state: 'failed', error, ...(evicted ? { evicted } : {}) }),
     parked: () => parked,
   }
 }
@@ -156,6 +164,24 @@ describe('PrReviewChallengeQueue', () => {
     expect(statusOf(step, 'prf_1')).toBe('investigating')
   })
 
+  it('puts an evicted investigator back in the queue once, then settles a second crash as failed', async () => {
+    const step = challengingStep(1)
+    const h = harness(step)
+    await h.queue.drive(h.ctx)
+    h.fail('prf_0', 'container lost', 'crash')
+    expect(await h.queue.poll('ws_1', h.instance, step)).toEqual({ kind: 'continue' })
+    expect(statusOf(step, 'prf_0')).toBe('queued')
+    expect(step.challengeJobs).toEqual([
+      { findingId: 'prf_0', question: null, evictionRecoveries: 1 },
+    ])
+    // The retry restarts under a fresh epoch, so it never re-addresses the evicted job's id.
+    await h.queue.drive(h.ctx)
+    expect(h.started.map((s) => s.epoch)).toEqual([0, 1])
+    expect(await h.queue.poll('ws_1', h.instance, step)).toEqual({ kind: 'continue' })
+    expect(statusOf(step, 'prf_0')).toBe('failed')
+    expect(step.challengeJobs).toEqual([])
+  })
+
   it('settles a dispatch that throws as a failed challenge rather than failing the run', async () => {
     const step = challengingStep(2)
     const h = harness(step, { throwFor: 'prf_0' })
@@ -166,6 +192,15 @@ describe('PrReviewChallengeQueue', () => {
       justification: 'no capacity',
     })
     expect(statusOf(step, 'prf_1')).toBe('investigating')
+  })
+
+  it('refuses a delegated investigator by settling the challenge as failed, starting nothing', async () => {
+    const step = challengingStep(1)
+    const h = harness(step, { delegated: true })
+    await h.queue.drive(h.ctx)
+    expect(h.started).toEqual([])
+    expect(step.prReview!.findings![0]!.challenge).toMatchObject({ status: 'failed' })
+    expect(step.prReview!.findings![0]!.challenge!.justification).toContain('delegated executor')
   })
 
   it('re-parks the review for the human once the queue drains', async () => {

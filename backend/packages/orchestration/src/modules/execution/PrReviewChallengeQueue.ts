@@ -4,20 +4,26 @@ import type {
   AgentRunContext,
   AgentRunResult,
   Clock,
+  ContainerEvictionKind,
   ExecutionInstance,
   Logger,
   PipelineStep,
 } from '@cat-factory/kernel'
-import { describeError, getErrorMessage, noopLogger } from '@cat-factory/kernel'
+import { ConflictError, describeError, getErrorMessage, noopLogger } from '@cat-factory/kernel'
 import {
   MAX_CONCURRENT_CHALLENGE_INVESTIGATIONS,
   type PrReviewChallengeJob,
   type PrReviewChallengeOutput,
 } from '@cat-factory/contracts'
-import { CHALLENGE_INVESTIGATOR_KIND, type AgentKindRegistry } from '@cat-factory/agents'
+import {
+  CHALLENGE_INVESTIGATOR_KIND,
+  runsDelegated,
+  type AgentKindRegistry,
+} from '@cat-factory/agents'
 import type { SpendService } from '@cat-factory/spend'
 import type { AdvanceResult } from './advance.js'
 import { meterJobUsage } from './job-facts.js'
+import { MAX_EVICTION_RECOVERIES, MAX_TRANSIENT_EVICTION_RECOVERIES } from './job.logic.js'
 import {
   applyChallengeVerdict,
   failChallenge,
@@ -105,12 +111,24 @@ export class PrReviewChallengeQueue {
     step: PipelineStep,
   ): Promise<AdvanceResult> {
     let settled = false
-    for (const job of running(step)) {
-      if (!job.jobId) continue
-      const update = await this.deps.pollSideJob(handleFor(job, workspaceId, instance))
+    // The jobs are independent, so their status reads run together; only the settling below has
+    // to be sequential, since each one rewrites `step.prReview`.
+    const started = running(step).filter((job) => job.jobId)
+    const updates = await Promise.all(
+      started.map((job) => this.deps.pollSideJob(handleFor(job, workspaceId, instance))),
+    )
+    for (const [i, job] of started.entries()) {
+      const update = updates[i]
       if (!update || update.state === 'running') continue
       if (update.state === 'failed') {
-        this.settleFailure(step, job, update.error)
+        // A failed job has spent its tokens all the same, as on the step-level failed poll.
+        await meterJobUsage(this.deps.spend, workspaceId, instance, step, {
+          ...update,
+          ...(job.model ? { model: job.model } : {}),
+        })
+        if (!requeueEvicted(step, job, update.evicted)) {
+          this.settleFailure(step, job, update.error)
+        }
       } else {
         await this.settleResult(workspaceId, instance, step, job, update.result)
       }
@@ -165,6 +183,17 @@ export class PrReviewChallengeQueue {
       return
     }
     try {
+      // A delegated executor is observed through a claim on the STEP (one per step), which a side
+      // job beside the step's own cannot hold, so a deployment that registers the investigator as
+      // delegated gets this challenge settled as failed with the reason, rather than the kind
+      // quietly running in the platform's own harness instead.
+      if (runsDelegated(CHALLENGE_INVESTIGATOR_KIND, this.deps.agentKindRegistry)) {
+        throw new ConflictError(
+          `The \`${CHALLENGE_INVESTIGATOR_KIND}\` kind is registered on a delegated executor, ` +
+            'which challenge investigations do not support: they run beside the review step, and ' +
+            'a delegated dispatch is tracked on the step itself.',
+        )
+      }
       const started = await this.deps.startSideJob(
         ctx,
         CHALLENGE_INVESTIGATOR_KIND,
@@ -232,13 +261,23 @@ export class PrReviewChallengeQueue {
     removeJob(step, job)
   }
 
-  /** The queue drained: hand the review back to the human. */
-  private finish(
+  /**
+   * The queue drained: hand the review back to the human.
+   *
+   * The status flip is written under CAS BEFORE the park. A human may add a challenge while the
+   * review is `challenging`, and `parkStepOnDecision` writes blind, so without the CAS a challenge
+   * landing between this advance's read and the park was overwritten: the request answered
+   * `queued` and the finding then stayed `queued` with no queue entry behind it. With it, the lost
+   * race throws `RunContendedError` and the driver re-drives on the state that holds the new entry,
+   * and a challenge arriving after the flip is refused until the park lands.
+   */
+  private async finish(
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
   ): Promise<AdvanceResult> {
     step.prReview = { ...step.prReview!, status: 'awaiting_selection', resolution: null }
+    await this.deps.runStateMachine.casPersist(workspaceId, instance)
     return this.deps.runStateMachine.parkStepOnDecision(workspaceId, instance, step)
   }
 
@@ -277,6 +316,43 @@ function queued(step: PipelineStep): PrReviewChallengeJob[] {
 
 function removeJob(step: PipelineStep, job: PrReviewChallengeJob): void {
   step.challengeJobs = (step.challengeJobs ?? []).filter((j) => j !== job)
+}
+
+/**
+ * Put an investigator whose container was EVICTED back at the head of the queue, within the same
+ * budgets a step's own job gets (`MAX_EVICTION_RECOVERIES` for a crash, the larger
+ * `MAX_TRANSIENT_EVICTION_RECOVERIES` for infra churn). An eviction says nothing about the
+ * finding, so settling it as `failed` would hand the human a broken second opinion for a container
+ * blip. The re-queued entry claims a FRESH epoch when it restarts, because the evicted job's id may
+ * still be held by a pooled runner. Returns false once the budget is spent (or for a non-eviction
+ * failure), leaving the caller to settle the challenge as failed.
+ */
+function requeueEvicted(
+  step: PipelineStep,
+  job: PrReviewChallengeJob,
+  evicted: ContainerEvictionKind | undefined,
+): boolean {
+  if (!evicted) return false
+  const budget =
+    evicted === 'transient' ? MAX_TRANSIENT_EVICTION_RECOVERIES : MAX_EVICTION_RECOVERIES
+  const recoveries = job.evictionRecoveries ?? 0
+  if (recoveries >= budget) return false
+  const requeued: PrReviewChallengeJob = {
+    findingId: job.findingId,
+    question: job.question ?? null,
+    evictionRecoveries: recoveries + 1,
+  }
+  step.challengeJobs = [requeued, ...(step.challengeJobs ?? []).filter((j) => j !== job)]
+  const review = step.prReview!
+  step.prReview = {
+    ...review,
+    findings: (review.findings ?? []).map((f) =>
+      f.id === job.findingId && f.challenge
+        ? { ...f, challenge: { ...f.challenge, status: 'queued' as const } }
+        : f,
+    ),
+  }
+  return true
 }
 
 /** The poll handle of a running entry: the step-level `pollHandleFor`, for a side job. */
