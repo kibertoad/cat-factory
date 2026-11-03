@@ -72,7 +72,7 @@ import {
   makeGateContext,
   makeJudgeContext,
 } from './extension-contexts.js'
-import { PrReviewController } from './PrReviewController.js'
+import { PrReviewController, PR_REVIEW_STEP_KIND } from './PrReviewController.js'
 import { BugFishingController } from './BugFishingController.js'
 import type { PrVerificationReportController } from './PrVerificationReportController.js'
 import { PrReviewResolutionController } from './PrReviewResolutionController.js'
@@ -338,6 +338,15 @@ export class RunDispatcher {
         this.recordStepResult(ws, instance, step, isFinalStep, result),
       handleAgentStep: (ctx, dispatchKind, augment) =>
         this.handleAgentStep(ctx, dispatchKind, augment),
+      challengeQueue: {
+        agentKindRegistry: deps.agentKindRegistry,
+        spend: deps.spend,
+        clock: deps.clock,
+        logger: deps.logger,
+        startSideJob: (ctx, kind, epoch, augment) =>
+          this.agentDispatch.startSideJob(ctx, kind, epoch, augment),
+        pollSideJob: (handle) => this.agentDispatch.pollSideJob(handle),
+      },
     })
     this.pollRunning = new PollRunningController({
       blockRepository: deps.blockRepository,
@@ -376,7 +385,6 @@ export class RunDispatcher {
       testerController: deps.testerController,
       humanTestController: deps.humanTestController,
       visualConfirmationController: deps.visualConfirmationController,
-      prReviewController: deps.prReviewController,
       bugFishingController: deps.bugFishingController,
       recordBackendDiagnostics: (instance, backend) =>
         this.recordBackendDiagnostics(instance, backend),
@@ -561,6 +569,11 @@ export class RunDispatcher {
     // otherwise read the absent job as "already recorded" and advance past a step still waiting.
     if (step.deployWait && isDeployStep(step.agentKind) && this.environmentProvisioning) {
       return this.environments.deployer.pollDeployerEnvironment(workspaceId, instance, step)
+    }
+    // A PR review's CHALLENGE QUEUE runs its investigators beside the step, never as its job, so
+    // it is routed before the `jobId` guard below would read "no job" as "already recorded".
+    if (step.agentKind === PR_REVIEW_STEP_KIND && step.prReview?.status === 'challenging') {
+      return this.prReviewResolution.pollChallenges(workspaceId, instance, step)
     }
     // No job in flight: a prior poll already recorded it (and advanced). Let the
     // driver loop and advance whatever step is now current.

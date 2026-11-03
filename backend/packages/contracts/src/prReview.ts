@@ -109,17 +109,20 @@ export function parsePrReviewSliceReview(input: unknown): PrReviewSliceReview | 
  * - `retracted` — the finding does NOT hold up; it is auto-deselected and rendered struck-through
  *   beside its retraction justification.
  *
- * While the investigator runs the finding carries `investigating`. If its container job FAILS
- * (crash / non-transient error) the challenge settles as `failed` — the finding is left exactly as
- * it was (never dropped) and the review re-parks so the human can re-challenge or proceed, rather
- * than the whole parked review failing over a non-critical second opinion.
+ * A challenge first waits its turn as `queued`: at most {@link MAX_CONCURRENT_CHALLENGE_INVESTIGATIONS}
+ * investigators run at once, and the rest start in the order they were asked for as earlier ones
+ * settle. While its investigator runs the finding carries `investigating`. If its container job
+ * FAILS (crash / non-transient error) the challenge settles as `failed`: the finding is left exactly
+ * as it was (never dropped) so the human can re-challenge or proceed, rather than the whole review
+ * failing over a non-critical second opinion.
  */
 export const prReviewFindingChallengeSchema = v.object({
   /**
-   * Lifecycle: `investigating` (agent in flight) → `upheld` (holds as-is) | `amended` (upheld +
-   * strengthened) | `retracted` (dropped) | `failed` (the investigation couldn't complete).
+   * Lifecycle: `queued` (waiting for a free investigator slot) → `investigating` (agent in
+   * flight) → `upheld` (holds as-is) | `amended` (upheld + strengthened) | `retracted`
+   * (dropped) | `failed` (the investigation couldn't complete).
    */
-  status: v.picklist(['investigating', 'upheld', 'amended', 'retracted', 'failed']),
+  status: v.picklist(['queued', 'investigating', 'upheld', 'amended', 'retracted', 'failed']),
   /**
    * The human's specific challenge / question / concern, or null when they challenged with no
    * text (the generic "dig deeper, justify the grounding, validate accuracy + relevance" prompt).
@@ -132,6 +135,41 @@ export const prReviewFindingChallengeSchema = v.object({
   justification: v.optional(v.nullable(v.string())),
 })
 export type PrReviewFindingChallenge = v.InferOutput<typeof prReviewFindingChallengeSchema>
+
+/**
+ * The most Challenge Investigators one review runs at once. Each is a container job reading the
+ * full source, so a human challenging ten findings in a row must not start ten; the rest wait as
+ * `queued` and start in the order they were asked for.
+ */
+export const MAX_CONCURRENT_CHALLENGE_INVESTIGATIONS = 3
+
+/**
+ * One entry of a `pr-reviewer` step's challenge queue (`PipelineStep.challengeJobs`).
+ *
+ * `epoch` is set when the entry is CLAIMED for dispatch, and the claim is persisted before the
+ * executor is called: the harness job id is derived from it, so a durable replay that finds an
+ * epoch but no `jobId` re-addresses the same job (dispatch is idempotent per id) rather than
+ * starting a second investigator. No epoch ⇒ still queued.
+ */
+export const prReviewChallengeJobSchema = v.object({
+  findingId: v.string(),
+  /** The human's specific concern, or null for the generic "dig deeper and validate" prompt. */
+  question: v.optional(v.nullable(v.string())),
+  /** The dispatch epoch claimed for this investigator's job; absent while queued. */
+  epoch: v.optional(v.number()),
+  /** The started job's id; absent until the executor accepted it. */
+  jobId: v.optional(v.string()),
+  /** Dispatch attribution the poll re-supplies (see the step-level fields of the same names). */
+  model: v.optional(v.string()),
+  subscriptionTokenId: v.optional(v.string()),
+  initiatedByUserId: v.optional(v.string()),
+})
+export type PrReviewChallengeJob = v.InferOutput<typeof prReviewChallengeJobSchema>
+
+/** Whether a finding's challenge is still waiting on, or running, an investigator. */
+export function isChallengeInFlight(challenge: PrReviewFindingChallenge | null | undefined): boolean {
+  return challenge?.status === 'queued' || challenge?.status === 'investigating'
+}
 
 /**
  * One prioritized review finding, id-stamped by the engine and anchored to a slice. Carries
@@ -169,9 +207,10 @@ export type PrReviewFinding = v.InferOutput<typeof prReviewFindingSchema>
  * The PR-review lifecycle on a `pr-reviewer` step:
  * - `reviewing`: the read-only reviewer container job is in flight (the agent dispatch).
  * - `awaiting_selection`: parked; the human curates which findings matter through the window.
- * - `challenging`: a human challenged a finding, so the read-only Challenge Investigator container
- *   job is in flight digging into it; the review returns to `awaiting_selection` once its verdict
- *   (strengthen the finding, or retract it) is applied.
+ * - `challenging`: one or more challenged findings are queued for, or being dug into by, the
+ *   read-only Challenge Investigator (up to {@link MAX_CONCURRENT_CHALLENGE_INVESTIGATIONS} at
+ *   once). The human can keep curating the selection and challenge further findings meanwhile; the
+ *   review returns to `awaiting_selection` once every queued challenge has its verdict.
  * - `fixing` / `posting`: a resolution is executing — the Fixer is committing fixes onto the
  *   PR branch (`fixing`), or the selected findings are being posted as inline comments (`posting`).
  * - `done`: the review is resolved (the human finished; PR 3: fixed / posted).

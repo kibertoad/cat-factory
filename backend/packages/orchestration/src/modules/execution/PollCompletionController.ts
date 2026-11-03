@@ -13,7 +13,6 @@ import {
   MAX_BRANCH_CONTENTION_RECOVERIES,
   MAX_DELEGATED_RETRIES,
 } from './job.logic.js'
-import { PR_REVIEWER_KIND } from '@cat-factory/agents'
 import type { SpendService } from '@cat-factory/spend'
 import { HUMAN_TEST_AGENT_KIND, isTesterKind, VISUAL_CONFIRM_AGENT_KIND } from './ci.logic.js'
 import type { AdvanceResult } from './advance.js'
@@ -49,7 +48,6 @@ export interface PollCompletionControllerDeps {
   testerController: TesterController
   humanTestController: HumanTestController
   visualConfirmationController: VisualConfirmationController
-  prReviewController: PrReviewController
   bugFishingController: BugFishingController
   recordBackendDiagnostics: (instance: ExecutionInstance, backend: string | undefined) => void
   recoverContainerEviction: (
@@ -81,7 +79,6 @@ export class PollCompletionController {
   private readonly testerController: TesterController
   private readonly humanTestController: HumanTestController
   private readonly visualConfirmationController: VisualConfirmationController
-  private readonly prReviewController: PrReviewController
   private readonly bugFishingController: BugFishingController
   private readonly recordBackendDiagnostics: PollCompletionControllerDeps['recordBackendDiagnostics']
   private readonly recoverContainerEviction: PollCompletionControllerDeps['recoverContainerEviction']
@@ -95,7 +92,6 @@ export class PollCompletionController {
     this.testerController = deps.testerController
     this.humanTestController = deps.humanTestController
     this.visualConfirmationController = deps.visualConfirmationController
-    this.prReviewController = deps.prReviewController
     this.bugFishingController = deps.bugFishingController
     this.recordBackendDiagnostics = deps.recordBackendDiagnostics
     this.recoverContainerEviction = deps.recoverContainerEviction
@@ -168,7 +164,7 @@ export class PollCompletionController {
 
   /**
    * Resolve a `failed` agent poll: record backend diagnostics, attempt transient container-eviction
-   * recovery, settle a read-only Challenge Investigator failure by re-parking the review, else mark
+   * recovery, settle a failed bug-fishing angle, else mark
    * the container errored and report `job_failed` with the harness's classified cause.
    */
   async handleFailedPoll(
@@ -227,26 +223,12 @@ export class PollCompletionController {
     // external run is spent.
     const redispatched = await this.recoverDelegatedFailure(workspaceId, instance, step, update)
     if (redispatched) return redispatched
-    // A read-only Challenge Investigator (dispatched off a parked `pr-reviewer` step when the
-    // human challenged ONE finding) failed for real: settle the challenge as `failed` and RE-PARK
-    // the review — a non-critical second opinion crashing must not fail the human's in-flight
-    // curation. Mirrors the human-test / visual-confirmation helper-failure branches above.
-    if (step.agentKind === PR_REVIEWER_KIND && step.prReview?.status === 'challenging') {
-      const settled = await this.prReviewController.recordChallengeFailure(
-        workspaceId,
-        instance,
-        step,
-        update.error,
-      )
-      if (settled) return settled
-    }
     // A BUG-FISHING pass failed for real: settle THAT ANGLE as failed, carrying the reason, and
     // carry on with the next one. The angles share nothing but the checkout, so one crashing must
     // not cost the expedition the passes that already landed nor the ones still to come — and the
     // failure is named on the phase, because a phase that silently reported nothing is
-    // indistinguishable from a phase that honestly found nothing. Sits beside the Challenge
-    // Investigator branch above for the same reason: both are failures of ONE non-critical part
-    // of a larger read-only investigation, not a verdict on the run.
+    // indistinguishable from a phase that honestly found nothing. It is a failure of ONE
+    // non-critical part of a larger read-only investigation, not a verdict on the run.
     if (step.agentKind === BUG_FISHING_STEP_KIND && step.bugFishing?.status === 'fishing') {
       const block = await this.blockRepository.get(workspaceId, instance.blockId)
       const settled = await this.bugFishingController.recordPhaseFailure(
@@ -274,8 +256,8 @@ export class PollCompletionController {
     // A harness that exited cleanly mid-job was stopped by something a fresh container meets
     // again, so this fails the run outright rather than spending an eviction budget on it. It is
     // asked HERE, below every branch that settles a job WITHOUT failing the run, because those
-    // branches are about whose job died rather than about how: a killed Challenge Investigator is
-    // still a non-critical second opinion, and failing the human's in-flight curation over it
+    // branches are about whose job died rather than about how: a killed bug-fishing angle is
+    // still a non-critical part of a larger investigation, and failing the human's in-flight curation over it
     // would trade one wrong recovery for a worse one. It cannot be reached by the eviction
     // recovery above either way (`harnessShutdown` is never set beside `evicted`), so nothing
     // above it spends a retry on this failure.

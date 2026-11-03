@@ -44,7 +44,6 @@ function controller(over: Partial<PollCompletionControllerDeps> = {}) {
     blockRepository: { get: async () => ({ id: 'blk-1' }) as Block },
     clock: { now: () => 1_000 },
     runStateMachine: { casPersist: async () => undefined },
-    prReviewController: {},
     recordBackendDiagnostics: () => {},
     // Mirrors the real recovery's own first line (`if (!evicted) return null`), which is what
     // makes "it was consulted" and "it spent a budget" two different facts here.
@@ -108,34 +107,4 @@ describe('PollCompletionController: a harness shutdown', () => {
     expect(s.evictionRecoveries).toBe(1)
   })
 
-  it('lets a parked review settle its own killed investigator instead of failing the run', async () => {
-    // A Challenge Investigator is a read-only SECOND OPINION dispatched off a parked `pr-reviewer`
-    // step while a human curates findings. Whatever killed it, the human's curation is still live
-    // and losing the whole run mid-review is a worse outcome than the one this failure kind
-    // exists to prevent — so the shutdown verdict is asked BELOW this branch, not above it.
-    let settledWith: string | undefined
-    const { controller: c, calls } = controller({
-      prReviewController: {
-        recordChallengeFailure: async (
-          _workspaceId: string,
-          _instance: ExecutionInstance,
-          _step: PipelineStep,
-          error?: string,
-        ) => {
-          settledWith = error
-          return { kind: 'awaiting_decision' as const, decisionId: 'appr_1' }
-        },
-      },
-    } as unknown as Partial<PollCompletionControllerDeps>)
-    const challenging = {
-      agentKind: 'pr-reviewer',
-      jobId: 'job-1',
-      prReview: { status: 'challenging' },
-    } as unknown as PipelineStep
-    const result = await c.handleFailedPoll('ws-1', instance(), challenging, SHUTDOWN)
-    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
-    expect(settledWith).toContain('shut down')
-    // The run is not failed, so nothing marks the step's container errored either.
-    expect(calls.containerErrored).toBe(0)
-  })
 })

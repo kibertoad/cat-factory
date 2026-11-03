@@ -382,7 +382,11 @@ export class ExecutionService {
     // The prompt-composition builder + the run-admission preflight family it backs, built as one
     // pair by the sibling factory (see run-context-admission.ts) — admission is constructed ON the
     // context builder, so they are one seam.
-    const runContext = buildRunContextAndAdmission(dependencies)
+    const runContext = buildRunContextAndAdmission(
+      dependencies,
+      async (ws, block, run) =>
+        (await this.mergePolicy.resolve(ws, block, run)).postImplementationReviewEffort,
+    )
     this.contextBuilder = runContext.contextBuilder
     this.admission = runContext.admission
     this.postMergeBoard = this.buildPostMergeBoard(dependencies)

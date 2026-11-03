@@ -301,6 +301,22 @@ export async function driveExecution(
         result = next
         continue
       }
+      // A PR review's challenge queue has investigators running. Poll them on the JOB cadence
+      // (they are container jobs), SLEEP-FIRST like the environment wait: the advance that parked
+      // here has just dispatched. A settled verdict answers `continue`, which ends this drain and
+      // re-advances the step to fill the freed slot under a fresh budget.
+      if (result.kind === 'awaiting_investigations') {
+        const next = await pollUntil(
+          'awaiting_investigations',
+          () => exec.pollAgentJob(workspaceId, executionId),
+          cfg.jobPollIntervalMs,
+          cfg.jobMaxPolls,
+          'Challenge investigations',
+        )
+        if (!next) return {}
+        result = next
+        continue
+      }
       // A polling gate step (`ci` / `conflicts`): re-run its precheck between sleeps;
       // which gate is resolved inside `pollGate` from the current step, so one branch
       // drives both.

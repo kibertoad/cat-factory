@@ -532,7 +532,7 @@ export function applyChallengeVerdict(
     verdict === 'retracted'
       ? (state.selectedFindingIds ?? []).filter((id) => id !== findingId)
       : (state.selectedFindingIds ?? [])
-  return { ...state, findings, selectedFindingIds, status: 'awaiting_selection', resolution: null }
+  return { ...state, findings, selectedFindingIds }
 }
 
 /**
@@ -554,5 +554,5 @@ export function failChallenge(
       ? { ...f, challenge: { status: 'failed' as const, question, justification: reason } }
       : f,
   )
-  return { ...state, findings, status: 'awaiting_selection', resolution: null }
+  return { ...state, findings }
 }

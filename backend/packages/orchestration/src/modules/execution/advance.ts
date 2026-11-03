@@ -53,6 +53,16 @@ export type AdvanceResult =
    */
   | { kind: 'awaiting_environment'; stepIndex: number }
   /**
+   * A `pr-reviewer` step's CHALLENGE QUEUE has investigators running (see `PrReviewChallengeQueue`).
+   * The durable driver sleeps, then polls {@link ExecutionService.pollAgentJob}, which routes the
+   * step to the queue's poll. That poll answers `continue` the moment one verdict settles (so the
+   * handler fills the freed slot) and holds this park otherwise.
+   *
+   * A distinct kind rather than `awaiting_job` because no single job is in flight: up to three are,
+   * none of them the step's own, and a failure report naming "the job" would name none of them.
+   */
+  | { kind: 'awaiting_investigations'; stepIndex: number }
+  /**
    * A step finished in a terminal failure; the driver records it via the single
    * `failRun` funnel and stops. `error` is the human-readable message. An inline
    * gate that already knows the precise classification sets `failureKind` (e.g. an

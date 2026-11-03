@@ -11,7 +11,7 @@ import { ralphStepStateSchema } from './ralph.js'
 import { validationReportSchema } from './validation-checks.js'
 import { reproductionReportSchema } from './reproduction.js'
 import { bugFishingStepStateSchema } from './bugFishing.js'
-import { prReviewStepStateSchema } from './prReview.js'
+import { prReviewChallengeJobSchema, prReviewStepStateSchema } from './prReview.js'
 import { runInputGateSchema } from './input-gate.js'
 import { stepSkipReasonSchema } from './step-conditions.js'
 import { fragmentAdherenceSchema } from './fragment-adherence.js'
@@ -762,15 +762,15 @@ export const pipelineStepSchema = v.object({
    */
   pendingPrReviewPost: v.optional(v.nullable(v.boolean())),
   /**
-   * The transient driver marker for a PR-review "challenge": set when a human challenges a
-   * finding, naming the finding + their optional specific concern, so the durable driver — on
-   * re-entry, off the HTTP request — dispatches the read-only Challenge Investigator against that
-   * finding exactly once. Consumed when the investigator's verdict is applied (the finding is
-   * strengthened or retracted) and the review re-parks. Absent when no challenge is in flight.
+   * The PR-review CHALLENGE QUEUE: one entry per challenged finding still waiting on, or being dug
+   * into by, a read-only Challenge Investigator, in the order the human asked. The durable driver
+   * starts entries while fewer than `MAX_CONCURRENT_CHALLENGE_INVESTIGATIONS` are running, polls the
+   * running ones, and removes each as its verdict is applied. Empty when no challenge is in flight.
+   *
+   * Each running investigator is its OWN container job beside the step's, so it carries what the
+   * step-level fields carry for the step's job: what the poll site cannot re-derive.
    */
-  pendingChallenge: v.optional(
-    v.nullable(v.object({ findingId: v.string(), question: v.optional(v.nullable(v.string())) })),
-  ),
+  challengeJobs: v.optional(v.array(prReviewChallengeJobSchema)),
   /**
    * Transient rework feedback carried on a PRODUCER step while it is being re-run by
    * a downstream reviewer (the analogue of an approval's `changes_requested`

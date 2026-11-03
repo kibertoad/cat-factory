@@ -43,6 +43,7 @@ import type {
   AgentEffortReport,
   DispatchToolServers,
   InitiativePresetPhaseTemplate,
+  ReviewEffortLevel,
 } from '@cat-factory/contracts'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
@@ -896,6 +897,16 @@ export interface AgentRunContext {
     /** How many automatic rework rounds remain AFTER this one; 0 ⇒ this is the last. */
     roundsRemaining: number
   }
+  /**
+   * How much effort a CODE REVIEW dispatch spends (see `reviewEffortLevelSchema`): its confidence
+   * floor, how many findings it may report, whether it verifies each one before reporting it, and
+   * how widely it fans out. Resolved by the engine for the two kinds that read it: a `review` task's
+   * `pr-reviewer` takes the task's own pick, and the post-implementation `reviewer` companion takes
+   * the run's risk policy. The prompt assembly renders it as a section of the user prompt.
+   *
+   * Absent on every other kind, so their prompts stay byte-identical.
+   */
+  reviewEffort?: ReviewEffortLevel
   /**
    * The initiative context a run carries, resolved by the engine from the block's `initiatives`
    * entity. Two shapes:

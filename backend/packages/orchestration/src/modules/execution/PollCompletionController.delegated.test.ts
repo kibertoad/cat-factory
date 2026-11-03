@@ -61,7 +61,6 @@ function controller() {
         calls.persists += 1
       },
     },
-    prReviewController: {},
     recordBackendDiagnostics: () => {},
     recoverContainerEviction: async () => null,
     markDispatchErrored: async () => {
