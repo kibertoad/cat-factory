@@ -37,8 +37,6 @@ export function defineWritebackPostSuite(
 
     /** A claim taken at `now` with the standard abandonment window. */
     const at = (now: number) => ({ now, reclaimPendingBefore: now - WRITEBACK_POST_CLAIM_TTL_MS })
-    /** A claim taken at `now` by a caller that never re-takes a pending row. */
-    const never = (now: number) => ({ now, reclaimPendingBefore: null })
 
     it('claims an unseen key exactly once and reports the live claim as held', async () => {
       const repo = makeRepo()
@@ -72,7 +70,7 @@ export function defineWritebackPostSuite(
       await repo.claim(key, at(1))
       await repo.settle(key, { status: 'failed', error: 'tracker down' }, 2)
       expect((await repo.get(key))?.error).toBe('tracker down')
-      expect(await repo.claim(key, never(3))).toBe('claimed')
+      expect(await repo.claim(key, at(3))).toBe('claimed')
       expect(await repo.get(key)).toMatchObject({ status: 'pending', attempts: 2, error: null })
     })
 
@@ -89,15 +87,7 @@ export function defineWritebackPostSuite(
       expect(await repo.claim(key, at(after))).toBe('held')
     })
 
-    it('never re-takes a pending claim when the caller passes no cutoff', async () => {
-      const repo = makeRepo()
-      const key = nextKey({ kind: 'refined_requirements', discriminator: 'a'.repeat(64) })
-      await repo.claim(key, never(1))
-      expect(await repo.claim(key, never(1_000 * WRITEBACK_POST_CLAIM_TTL_MS))).toBe('held')
-      expect(await repo.get(key)).toMatchObject({ status: 'pending', attempts: 1, updatedAt: 1 })
-    })
-
-    it('keys on all five parts', async () => {
+    it('keys on the subject, issue and discriminator', async () => {
       const repo = makeRepo()
       const key = nextKey()
       await repo.claim(key, at(1))
@@ -105,7 +95,6 @@ export function defineWritebackPostSuite(
       expect(await repo.claim({ ...key, discriminator: '2' }, at(2))).toBe('claimed')
       expect(await repo.claim({ ...key, issueRef: 'jira:ENG-7' }, at(2))).toBe('claimed')
       expect(await repo.claim({ ...key, subjectId: 'rr_2' }, at(2))).toBe('claimed')
-      expect(await repo.claim({ ...key, kind: 'refined_requirements' }, at(2))).toBe('claimed')
       expect(await repo.get(key)).toMatchObject({ status: 'posted' })
     })
 

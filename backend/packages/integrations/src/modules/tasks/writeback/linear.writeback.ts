@@ -1,11 +1,17 @@
-import type { TaskSourceWritebackAdapter, TaskWritebackContext } from '@cat-factory/kernel'
+import {
+  sameIssueDescription,
+  type TaskSourceWritebackAdapter,
+  type TaskWritebackContext,
+} from '@cat-factory/kernel'
 import { LinearGraphqlClient, linearAuthFromCredentials } from '../../shared/linear.client.js'
 import {
   LINEAR_COMMENT_CREATE_MUTATION,
+  LINEAR_ISSUE_DESCRIPTION_QUERY,
   LINEAR_ISSUE_ID_QUERY,
   LINEAR_ISSUE_RESOLVE_LOOKUP_QUERY,
   LINEAR_ISSUE_UPDATE_MUTATION,
   buildLinearCommentVariables,
+  buildLinearDescriptionUpdateVariables,
   buildLinearStateUpdateVariables,
   pickStateIdByType,
   type LinearWorkflowState,
@@ -48,6 +54,22 @@ export const linearWriteback: TaskSourceWritebackAdapter = {
   /** Linear HAS workflow states, so the intake mark is a transition and `mark.label` is unused. */
   async markInProgress(ctx, externalId) {
     await transition(ctx, externalId, 'started')
+  },
+
+  /** Linear descriptions are Markdown, so the body is compared and written as it is. */
+  async replaceDescription(ctx, externalId, body) {
+    const client = clientFor(ctx)
+    const lookup = await client.query<{ issue?: { id?: string; description?: string | null } }>(
+      LINEAR_ISSUE_DESCRIPTION_QUERY,
+      { id: externalId },
+    )
+    const issueId = requireIssueId(lookup?.issue?.id, externalId)
+    if (sameIssueDescription(lookup?.issue?.description, body)) return 'unchanged'
+    await client.query(
+      LINEAR_ISSUE_UPDATE_MUTATION,
+      buildLinearDescriptionUpdateVariables(issueId, body),
+    )
+    return 'updated'
   },
 }
 

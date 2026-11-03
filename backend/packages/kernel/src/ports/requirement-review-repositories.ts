@@ -1,3 +1,4 @@
+import type { RefinedRequirementsWritebackRecord } from '@cat-factory/contracts'
 import type { RequirementReview } from '../domain/types.js'
 
 // Persistence port for the requirements-review feature. The worker implements it
@@ -41,4 +42,16 @@ export interface RequirementReviewRepository {
    * the runtime rather than of the design.
    */
   replaceForBlock(workspaceId: string, review: RequirementReview): Promise<void>
+  /**
+   * Record the review's last refined-requirements writeback (`RequirementReview.issueWriteback`).
+   * It is its own column and its own statement: no whole-row write ({@link upsert},
+   * {@link compareAndSwap}) touches it, so recording it cannot clobber a concurrent edit and an
+   * edit cannot drop it. {@link replaceForBlock} clears it, since a new review has written nothing.
+   * A missing review is a no-op.
+   */
+  recordIssueWriteback(
+    workspaceId: string,
+    reviewId: string,
+    record: RefinedRequirementsWritebackRecord,
+  ): Promise<void>
 }

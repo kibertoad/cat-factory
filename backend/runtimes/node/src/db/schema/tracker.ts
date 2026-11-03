@@ -22,6 +22,11 @@ export const trackerSettings = pgTable('tracker_settings', {
   // Headless clarification loop (mirror of D1 migration 0062): echo a PARKED public-API run's
   // open requirements findings onto the task's linked tracker issue(s). Per-task overridable.
   writeback_questions_on_park: integer('writeback_questions_on_park').notNull().default(0),
+  // Write the refined requirements into the linked issue's description when a requirements review
+  // settles (mirror of D1 migration 0111). Off by default.
+  writeback_requirements_to_description: integer('writeback_requirements_to_description')
+    .notNull()
+    .default(0),
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
 

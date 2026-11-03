@@ -477,6 +477,10 @@
         "questionsOnPark": {
           "label": "Pubblica le domande aperte di un'esecuzione headless in pausa",
           "help": "Quando un'esecuzione avviata fuori dall'app si mette in pausa per chiarire i requisiti (tramite API o da un ticket del tracker), pubblica le sue domande aperte sull'issue collegato, ciascuna con l'id che una risposta deve indicare. Le attività avviate nell'app non sono interessate."
+        },
+        "requirementsToDescription": {
+          "label": "Scrivi i requisiti rifiniti nella descrizione dell'issue collegata",
+          "help": "Quando la revisione dei requisiti di un'attività si chiude e l'esecuzione prosegue, sostituisce la descrizione dell'issue collegata con i requisiti rifiniti. Il tracker conserva la descrizione precedente nella sua cronologia. Disattivato per impostazione predefinita e impostabile solo per l'intero workspace."
         }
       },
       "probeFailure": {
@@ -5259,22 +5263,21 @@
     "reRequest": "Richiedi di nuovo",
     "finalRequirements": "Requisiti finali",
     "incorporatedDraft": "Requisiti incorporati (bozza)",
-    "postToIssues": {
-      "action": "Pubblica nelle issue collegate",
-      "hint": "Aggiunge questi requisiti come commento a ogni issue collegata del tracker. La descrizione della issue non cambia.",
-      "error": "Impossibile pubblicare i requisiti nelle issue collegate",
+    "updateIssues": {
+      "action": "Aggiorna le issue collegate",
+      "hint": "Sostituisce la descrizione di ogni issue collegata con questi requisiti. Il tracker conserva la descrizione precedente nella sua cronologia.",
+      "error": "Impossibile aggiornare le issue collegate",
+      "automatic": "Scritto automaticamente nelle issue collegate alla chiusura della revisione:",
       "toast": {
-        "posted": "Requisiti pubblicati nelle issue collegate",
+        "updated": "Issue collegate aggiornate con i requisiti",
         "nothingNew": "Le issue collegate contengono già questi requisiti",
-        "partial": "Alcune issue collegate non hanno ricevuto i requisiti",
-        "inFlight": "Una pubblicazione nelle issue collegate è già in corso"
+        "partial": "Alcune issue collegate non sono state aggiornate"
       },
       "outcome": {
-        "posted": "pubblicato",
-        "already_posted": "già pubblicato",
-        "in_flight": "pubblicazione già in corso, o il risultato non è stato registrato",
-        "failed": "non riuscito, pubblica di nuovo per riprovare",
-        "unsupported": "non è possibile scrivere in questo tracker"
+        "updated": "aggiornata",
+        "already_current": "già aggiornata",
+        "failed": "non riuscito, aggiorna di nuovo per riprovare",
+        "unsupported": "questo tracker non può essere aggiornato"
       }
     },
     "stats": {
@@ -6594,8 +6597,8 @@
         "draft_conflict": "Questa bozza di commento è stata modificata, pubblicata o scartata da quando l'hai caricata. Ricarica le bozze e ripeti la modifica.",
         "session_stale": "Sono arrivati nuovi commit dopo la preparazione di questa revisione, quindi le bozze potrebbero puntare alle righe sbagliate. Aggiorna la revisione, controlla le bozze e poi pubblica.",
         "cursor_expired": "Le modifiche successive a questo cursore non sono più conservate. Acquisisci una nuova istantanea della directory, poi segui il feed dalla posizione che riporta.",
-        "refined_requirements_unavailable": "La revisione non ha ancora prodotto un documento rivisto, oppure lo sta riscrivendo ora. Attendi la fine dell’incorporazione, poi pubblica di nuovo.",
-        "no_linked_issues": "Questa attività non ha issue del tracker collegate. Collega la issue da cui proviene, poi pubblica di nuovo."
+        "refined_requirements_unavailable": "La revisione non ha ancora prodotto un documento rivisto, oppure lo sta riscrivendo ora. Attendi la fine dell’incorporazione, poi aggiorna di nuovo.",
+        "no_linked_issues": "Questa attività non ha issue del tracker collegate. Collega la issue da cui proviene, poi aggiorna di nuovo."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

@@ -137,6 +137,9 @@ export function createRequirementsModule(
           publisher: new RefinedRequirementsPublisher({
             requirementReviewRepository,
             issueWriteback,
+            operationalMetrics: deps.operationalMetrics,
+            clock: deps.clock,
+            logger: deps.logger,
           }),
         }
       : {}),

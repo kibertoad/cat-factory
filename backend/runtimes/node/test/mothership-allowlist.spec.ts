@@ -711,8 +711,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   taskSourceSettingsRepository: {
     rowToRecord: 'helper',
   },
-  // The tracker writeback's exactly-once marker (parked-review question comments and the
-  // refined-requirements post). A mothership-mode node genuinely reaches it (unlike its ingest
+  // The tracker writeback's exactly-once marker (parked-review question comments). A mothership-mode node genuinely reaches it (unlike its ingest
   // sibling below), so `claim`/`settle`/`get` are allow-listed on the `workspaceField` rule (the
   // marker key carries its own `workspaceId`).
   writebackPostRepository: {},

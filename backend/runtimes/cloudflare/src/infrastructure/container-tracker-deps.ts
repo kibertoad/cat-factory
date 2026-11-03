@@ -59,9 +59,8 @@ export function selectRecurringDeps(
     trackerSettingsRepository: new D1TrackerSettingsRepository({ db }),
     taskRepository: new D1TaskRepository({ db }),
     taskSourceProviders,
-    // The exactly-once markers claimed before the parked-review question echo and each
-    // refined-requirements comment. Without them the question echo passes through (a replaying
-    // driver would otherwise re-post) and the refined-requirements post refuses.
+    // The exactly-once markers claimed before the parked-review question echo. Without them the
+    // echo passes through, since a replaying driver would otherwise re-post.
     writebackPostRepository: new D1WritebackPostRepository({ db }),
     clock,
     // Every hook here is fire-and-forget; without a logger a permanently broken tracker

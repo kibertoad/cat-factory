@@ -833,8 +833,8 @@
         "draft_conflict": "Ce brouillon de commentaire a été modifié, publié ou abandonné depuis que tu l'as chargé. Recharge les brouillons et refais ta modification.",
         "session_stale": "De nouveaux commits sont arrivés après la préparation de cette revue, donc ses brouillons peuvent viser les mauvaises lignes. Actualise la revue, vérifie les brouillons, puis publie.",
         "cursor_expired": "Les modifications après ce curseur ne sont plus conservées. Prenez un nouvel instantané de l’annuaire, puis suivez le flux à partir de la position qu’il indique.",
-        "refined_requirements_unavailable": "La revue n’a pas encore produit de document révisé, ou le réécrit en ce moment. Attendez la fin de l’intégration, puis publiez à nouveau.",
-        "no_linked_issues": "Aucun ticket n’est lié à cette tâche. Liez le ticket dont elle provient, puis publiez à nouveau."
+        "refined_requirements_unavailable": "La revue n’a pas encore produit de document révisé, ou le réécrit en ce moment. Attendez la fin de l’intégration, puis mettez à jour à nouveau.",
+        "no_linked_issues": "Aucun ticket n’est lié à cette tâche. Liez le ticket dont elle provient, puis mettez à jour à nouveau."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -3289,6 +3289,10 @@
         "questionsOnPark": {
           "label": "Publier les questions ouvertes d'une exécution headless en pause",
           "help": "Quand une exécution lancée hors de l'application se met en pause pour clarifier les exigences (via l'API ou depuis un ticket du traqueur), publie ses questions ouvertes sur le ticket lié, chacune avec l'identifiant qu'une réponse doit nommer. Les tâches lancées dans l'application ne sont pas concernées."
+        },
+        "requirementsToDescription": {
+          "label": "Écrire les exigences affinées dans la description du ticket lié",
+          "help": "Quand la revue des exigences d’une tâche se clôt et que l’exécution continue, remplace la description du ticket lié par les exigences affinées. Le tracker conserve la description précédente dans son historique. Désactivé par défaut, et réglable uniquement pour tout l’espace de travail."
         }
       },
       "probeFailure": {
@@ -5971,22 +5975,21 @@
     "reRequest": "Redemander",
     "finalRequirements": "Exigences finales",
     "incorporatedDraft": "Exigences incorporées (brouillon)",
-    "postToIssues": {
-      "action": "Publier dans les tickets liés",
-      "hint": "Ajoute ces exigences en commentaire sur chaque ticket lié. La description du ticket n’est pas modifiée.",
-      "error": "Impossible de publier les exigences dans les tickets liés",
+    "updateIssues": {
+      "action": "Mettre à jour les tickets liés",
+      "hint": "Remplace la description de chaque ticket lié par ces exigences. Le tracker conserve la description précédente dans son historique.",
+      "error": "Impossible de mettre à jour les tickets liés",
+      "automatic": "Écrit automatiquement dans les tickets liés à la clôture de la revue :",
       "toast": {
-        "posted": "Exigences publiées dans les tickets liés",
+        "updated": "Tickets liés mis à jour avec les exigences",
         "nothingNew": "Les tickets liés contiennent déjà ces exigences",
-        "partial": "Certains tickets liés n’ont pas reçu les exigences",
-        "inFlight": "Une publication dans les tickets liés est déjà en cours"
+        "partial": "Certains tickets liés n’ont pas été mis à jour"
       },
       "outcome": {
-        "posted": "publié",
-        "already_posted": "déjà publié",
-        "in_flight": "publication déjà en cours, ou son résultat n’a pas été enregistré",
-        "failed": "échec, publiez à nouveau pour réessayer",
-        "unsupported": "impossible d’écrire dans ce gestionnaire de tickets"
+        "updated": "mis à jour",
+        "already_current": "déjà à jour",
+        "failed": "échec, mettez à jour de nouveau pour réessayer",
+        "unsupported": "ce tracker ne peut pas être mis à jour"
       }
     },
     "stats": {

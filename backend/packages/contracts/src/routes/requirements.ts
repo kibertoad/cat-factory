@@ -2,7 +2,7 @@ import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contrac
 import * as v from 'valibot'
 import {
   incorporateRequirementsSchema,
-  refinedRequirementsPostResultSchema,
+  refinedRequirementsWritebackResultSchema,
   reRequestRecommendationSchema,
   replyReviewItemSchema,
   requestRecommendationsSchema,
@@ -121,14 +121,14 @@ export const resolveRequirementsExceededContract = defineApiContract({
 })
 
 /**
- * Post the block's refined requirements onto its linked tracker issue(s) as a comment. The
- * issue's own description is never rewritten. Idempotent per document: posting the same
- * document again reports `already_posted` for every issue that already carries it.
+ * Write the block's refined requirements into the description of each linked tracker issue.
+ * Idempotent by content: an issue whose description already holds the document reports
+ * `already_current` and is not written.
  */
-export const postRefinedRequirementsContract = defineApiContract({
+export const writeRefinedRequirementsContract = defineApiContract({
   method: 'post',
   requestPathParamsSchema: blockIdParams,
-  pathResolver: ({ blockId }) => `/blocks/${blockId}/requirement-review/post-to-issues`,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/requirement-review/update-linked-issues`,
   requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: refinedRequirementsPostResultSchema, ...errorResponses },
+  responsesByStatusCode: { 200: refinedRequirementsWritebackResultSchema, ...errorResponses },
 })

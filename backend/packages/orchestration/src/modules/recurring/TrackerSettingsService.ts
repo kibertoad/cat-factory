@@ -118,5 +118,8 @@ function pickWriteback(input: PutTrackerSettingsInput): Partial<TrackerWriteback
   if (input.writebackQuestionsOnPark !== undefined) {
     patch.writebackQuestionsOnPark = input.writebackQuestionsOnPark
   }
+  if (input.writebackRequirementsToDescription !== undefined) {
+    patch.writebackRequirementsToDescription = input.writebackRequirementsToDescription
+  }
   return patch
 }

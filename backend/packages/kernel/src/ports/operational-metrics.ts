@@ -54,6 +54,13 @@ export type OperationalCounter =
   | 'sweep.run_recovery_failed'
   /** A sweeper pass threw. Dimensioned by `sweep`, so one sick sweeper is identifiable. */
   | 'sweep.failed'
+  /**
+   * A refined-requirements writeback into a linked issue's description ran for one issue.
+   * Dimensioned by `trigger` (`automatic` / `manual`) and `outcome` (`updated` / `already_current`
+   * / `failed` / `unsupported`), both bounded. The automatic one is best-effort and never blocks
+   * the run, so `outcome=failed` is the only fleet-wide signal that trackers are refusing it.
+   */
+  | 'writeback.requirements_description'
   /** A container job dispatch threw — the job never existed, so no poll can report it. */
   | 'container.dispatch_failed'
   /** A container job settled as evicted/crashed. Dimensioned by the eviction kind. */

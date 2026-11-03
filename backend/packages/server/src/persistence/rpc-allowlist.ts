@@ -622,10 +622,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   // The tracker writeback's exactly-once marker (`IssueWritebackService`): one row per
   // `(workspace, kind, subject, linked issue, discriminator)`, claimed BEFORE a comment is posted.
-  // Two callers claim through it: the parked-review question echo, which the ENGINE drives from a
-  // replaying durable driver, and the refined-requirements post a person asks for in the review
-  // window. A mothership-mode node reaches both, and a claim that answered `unknown_method` would
-  // read as "someone else holds the claim", silently skipping the ticket comment.
+  // The parked-review question echo claims through it, driven by the ENGINE from a replaying
+  // durable driver. A mothership-mode node reaches it, and a claim that answered `unknown_method`
+  // would read as "someone else holds the claim", silently skipping the ticket comment.
   //
   // Its INBOUND sibling (`trackerCommentIngestRepository`) stays off for a permanent reason: a
   // webhook delivery reaches the deployment holding the public URL, never a laptop.
@@ -942,6 +941,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // A fresh review run atomically replaces the block's prior one
     // (`RequirementReviewService.review`). Workspace-scoped on arg0 — completes the repo.
     replaceForBlock: { scope: { kind: 'workspace', arg: 0 } },
+    // The refined-requirements writeback records its per-issue outcome on the review, from the
+    // gate as the review settles and from the review window's button. Workspace-scoped on arg0.
+    recordIssueWriteback: { scope: { kind: 'workspace', arg: 0 } },
   },
   // Interactive document-interview sessions (WS5). The doc-authoring RUN PATH reads the
   // converged brief (`getByBlock`, via the agent-context builder on every doc-writer dispatch),

@@ -17,3 +17,7 @@ SELECT "workspace_id", 'review_questions', "review_id", "issue_ref", "iteration"
 FROM "review_question_posts";
 --> statement-breakpoint
 DROP TABLE "review_question_posts";
+--> statement-breakpoint
+ALTER TABLE "tracker_settings" ADD COLUMN "writeback_requirements_to_description" integer DEFAULT 0 NOT NULL;
+--> statement-breakpoint
+ALTER TABLE "requirement_reviews" ADD COLUMN "issue_writeback" text;

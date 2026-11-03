@@ -429,7 +429,7 @@ export type {
   TaskSourceWritebackAdapter,
   TaskWritebackContext,
 } from './task-source-writeback.js'
-export { createTaskWritebackContext } from './task-source-writeback.js'
+export { createTaskWritebackContext, sameIssueDescription } from './task-source-writeback.js'
 export type { BugHuntAssessor, BugHuntSubject } from './bug-hunt.js'
 export type {
   BuiltinTaskSourceKind,
@@ -959,7 +959,7 @@ export type {
 export type { CreateTicketRequest, CreatedTicket, TicketTrackerProvider } from './ticket-tracker.js'
 export type {
   IssueWritebackProvider,
-  RefinedRequirementsPost,
+  RefinedRequirementsWritebackTrigger,
   ReviewQuestionFinding,
   ReviewQuestionPolicy,
   ReviewQuestionPost,

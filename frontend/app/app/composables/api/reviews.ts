@@ -7,7 +7,6 @@ import {
   incorporateBrainstormContract,
   incorporateClarityContract,
   incorporateRequirementsContract,
-  postRefinedRequirementsContract,
   proceedBrainstormContract,
   proceedClarityContract,
   proceedRequirementsContract,
@@ -26,6 +25,7 @@ import {
   updateBrainstormItemStatusContract,
   updateClarityItemStatusContract,
   updateRequirementItemStatusContract,
+  writeRefinedRequirementsContract,
 } from '@cat-factory/contracts'
 import type {
   RequestRecommendationItem,
@@ -99,10 +99,10 @@ export function reviewsApi({ send, ws }: ApiContext) {
     proceedRequirements: (workspaceId: string, blockId: string) =>
       send(proceedRequirementsContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
 
-    // Post the refined requirements onto the block's linked tracker issues as a comment.
-    // Returns the per-issue outcome; posting the same document again is a no-op per issue.
-    postRefinedRequirements: (workspaceId: string, blockId: string) =>
-      send(postRefinedRequirementsContract, {
+    // Write the refined requirements into the block's linked tracker issues' descriptions.
+    // Returns the per-issue outcome; an issue already holding the document is left alone.
+    writeRefinedRequirements: (workspaceId: string, blockId: string) =>
+      send(writeRefinedRequirementsContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { blockId },
       }),

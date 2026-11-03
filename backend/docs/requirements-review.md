@@ -86,36 +86,47 @@ software: an invention that now reads as researched. Its `groundedIn` provenance
 `project-spec` / `web` / `general-practice`) is reported per suggestion, and an unreported level
 stays NULL rather than defaulting.
 
-## Posting the refined requirements back to the source issue
+## Writing the refined requirements into the source issue
 
 When the task came from a tracker issue (Jira, GitHub Issues, GitLab Issues, Linear, or a
-deployment's own source), the review window offers "Post to linked issues" once a document exists.
-`RefinedRequirementsPublisher` (orchestration) picks the document and refuses with
-`refined_requirements_unavailable` while there is none or a fold is rewriting it, and with
-`no_linked_issues` when nothing is linked. `IssueWritebackService.postRefinedRequirements`
-(integrations) does the rest through each source's `writeback.comment`, so a source gets it by
-declaring the adapter it already declares for the PR comments.
+deployment's own source), the refined document can replace that issue's description. Two triggers
+share one path through `RefinedRequirementsPublisher` (orchestration):
 
-- **A comment, never an edit of the description.** The reporter's text stays as written and the
-  revision sits under it, opened by the platform marker that keeps the inbound reply path from
-  reading it as a human's comment.
-- **Converted mechanically, with no model.** The document is Markdown in a fixed structure, GitHub,
-  GitLab and Linear take Markdown as it is, and Jira's transport converts it to ADF with
-  `tracker/markdown-adf.logic.ts` (nested lists, code, emphasis and links included). Nothing in that
-  mapping needs judgement, so an LLM step would only add cost and a chance to change the meaning.
-- **A person asks for it.** It is never automatic: a run that writes over someone's tracker unasked
-  is the outcome to avoid, and the opt-in writeback settings exist for one-line courtesy comments,
-  not for a document.
-- **At most once per document and issue.** A `writeback_posts` marker (kind
-  `refined_requirements`, discriminator the document's SHA-256) is claimed before each comment, so
-  a repeated click reports `already_posted`, a concurrent one `in_flight`, and a revised document
-  posts again. `failed` is retried by posting again. A `pending` claim is never re-taken: the
-  poster is a live request, so a `pending` that outlives it is a settle that did not land, possibly
-  after the comment did. The settles retry for that reason, and one that still fails leaves the
-  issue reporting `in_flight` for that document rather than risking a second copy.
-- **Jira's size limit is counted on the ADF.** Jira caps a comment at 32,767 characters of stored
-  ADF JSON, which outgrows the Markdown by a shape-dependent factor, so the Jira transport cuts the
-  converted document to fit and marks the cut (`markdownToAdfWithin`).
+- **The "Update linked issues" button** in the review window, always available once a document
+  exists. It refuses with `refined_requirements_unavailable` while there is none or a fold is
+  rewriting it, and with `no_linked_issues` when nothing is linked.
+- **The `writebackRequirementsToDescription` workspace setting**, off by default. When it is on,
+  the review gate's settle hook (`ReviewKind.onSettled`, requirements kind only) writes the approved
+  document as the gate lets the run move on, on every path that settles it: an auto-pass, a
+  converged re-review, an unattended cap settle, and a person proceeding. It never fires on an
+  incorporation that still has findings.
+
+`IssueWritebackService.writeRefinedRequirements` (integrations) fans out over the linked issues
+through each source's optional `writeback.replaceDescription`; a source without it reports
+`unsupported`. Every outcome is counted (`writeback.requirements_description`, by trigger and
+outcome) and recorded on the review (`RequirementReview.issueWriteback`), which is what the window
+lists per issue.
+
+- **The description, replaced.** The description is what everyone reads, and every tracker keeps
+  its history (Jira's history, GitHub's edit history, GitLab's description versions, Linear's
+  history), so the reporter's words stay one click away. The rendered body opens with a line saying
+  so.
+- **Idempotent by content, with no marker.** Each adapter reads the stored description and writes
+  only when it differs (`sameIssueDescription`; Jira compares through `adfToMarkdown`, so attributes
+  Jira adds on save do not read as a change), answering `already_current` otherwise. A repeat, a
+  replay of the gate step, or two clicks at once therefore write at most once and add no history
+  entry. A replayed gate step records `already_current` over the first run's `updated`; the
+  description holds the document either way.
+- **Best-effort when automatic.** The settle hook runs through `runBestEffort` and is awaited before
+  the run advances (so a Worker cannot drop it), and a tracker failure costs the writeback, never
+  the run: the issue reports `failed` and the button retries it.
+- **The outcome record is its own column.** `recordIssueWriteback` writes it in its own statement,
+  outside `rev`, so neither it nor a concurrent review edit can clobber the other; `replaceForBlock`
+  clears it with the review it replaces.
+- **Converted mechanically, with no model.** GitHub, GitLab and Linear take the Markdown as it is;
+  Jira's adapter converts it to ADF with `tracker/markdown-adf.logic.ts`. Jira caps a field at
+  32,767 characters of stored ADF JSON, which outgrows the Markdown by a shape-dependent factor, so
+  the conversion is cut to fit at a line and marked (`jiraFieldAdf`).
 
 ## Inline engine kinds and prompt overrides
 

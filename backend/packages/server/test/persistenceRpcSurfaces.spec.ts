@@ -1163,9 +1163,9 @@ describe('document / task integration surface (workspace-scoped)', () => {
 
 describe('writeback post markers (workspaceField-scoped)', () => {
   // `IssueWritebackService` claims one marker per `(workspace, kind, subject, linked issue,
-  // discriminator)` BEFORE posting, so neither a replaying driver nor a repeated request comments
-  // the same thing twice. A mothership-mode node reaches it on the run path and from the review
-  // window; every method takes the KEY as arg0, whose `workspaceId` is a FIELD.
+  // discriminator)` BEFORE posting, so a replaying driver never comments the same thing twice. A
+  // mothership-mode node reaches it on the run path; every method takes the KEY as arg0, whose
+  // `workspaceId` is a FIELD.
   const key = (workspaceId: string) => ({
     workspaceId,
     kind: 'review_questions',

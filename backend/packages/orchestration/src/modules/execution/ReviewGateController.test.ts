@@ -81,6 +81,7 @@ function fakeKind() {
     markRecommendationPending: vi.fn(async () => current),
     fillRecommendations: vi.fn(async () => current),
     autoRecommend: vi.fn(async () => {}),
+    onSettled: vi.fn(async () => {}),
     emit: vi.fn(async () => {}),
   } satisfies ReviewKind<FakeReview> & Record<string, unknown>
   return {
@@ -220,6 +221,26 @@ describe('ReviewGateController.evaluate', () => {
     expect(result).toEqual({ kind: 'continue' })
     expect(k.kind.review).toHaveBeenCalled()
     expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
+    // The review settled, so the kind's settle hook (the opt-in issue writeback) ran once.
+    expect(k.kind.onSettled).toHaveBeenCalledExactlyOnceWith('ws', BLOCK.id)
+  })
+
+  it('does not fire the settle hook on a pass-through or a park', async () => {
+    ;(k.kind.enabled as ReturnType<typeof vi.fn>).mockReturnValue(false)
+    const s = step()
+    await ctrl.evaluate(
+      k.kind,
+      'ws',
+      instance([s, step({ agentKind: 'architect' })]),
+      s,
+      BLOCK,
+      false,
+    )
+    ;(k.kind.enabled as ReturnType<typeof vi.fn>).mockReturnValue(true)
+    k.set(review({ status: 'ready' }))
+    const parked = step()
+    await ctrl.evaluate(k.kind, 'ws', instance([parked]), parked, BLOCK, false)
+    expect(k.kind.onSettled).not.toHaveBeenCalled()
   })
 
   it('parks the run when the fresh review raises findings', async () => {
@@ -500,6 +521,7 @@ describe('ReviewGateController public surface', () => {
     expect(k.kind.markIncorporated).toHaveBeenCalled()
     expect(deps.stateMachine.settleAdvancedGate).toHaveBeenCalled()
     expect(out.status).toBe('incorporated')
+    expect(k.kind.onSettled).toHaveBeenCalledExactlyOnceWith('ws', 'blk_1')
   })
 
   it('resolveExceeded dispatches the iteration-cap choice with grant/proceed handlers', async () => {

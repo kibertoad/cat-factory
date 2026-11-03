@@ -1,8 +1,10 @@
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
-import type {
-  RequirementRecommendation,
-  RequirementReview,
-  RequirementReviewItem,
+import {
+  parseRefinedRequirementsWritebackRecord,
+  type RefinedRequirementsWritebackRecord,
+  type RequirementRecommendation,
+  type RequirementReview,
+  type RequirementReviewItem,
 } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -17,6 +19,7 @@ interface RequirementReviewRow {
   max_iterations: number
   recommendations: string | null
   rev: number | null
+  issue_writeback: string | null
   created_at: number
   updated_at: number
 }
@@ -43,6 +46,7 @@ function rowToReview(row: RequirementReviewRow): RequirementReview {
     maxIterations: row.max_iterations,
     recommendations: parseJsonArray<RequirementRecommendation>(row.recommendations),
     rev: row.rev ?? 0,
+    issueWriteback: parseRefinedRequirementsWritebackRecord(row.issue_writeback),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -191,6 +195,7 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
            max_iterations = excluded.max_iterations,
            recommendations = excluded.recommendations,
            rev = 0,
+           issue_writeback = NULL,
            created_at = excluded.created_at,
            updated_at = excluded.updated_at
          RETURNING rev`,
@@ -213,5 +218,21 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
     // Read the revision back rather than assuming it: the caller keeps mutating this object
     // through `compareAndSwap`, so a `rev` it only believes is right desynchronises it.
     review.rev = row?.rev ?? 0
+    review.issueWriteback = null
+  }
+
+  async recordIssueWriteback(
+    workspaceId: string,
+    reviewId: string,
+    record: RefinedRequirementsWritebackRecord,
+  ): Promise<void> {
+    // Its own column in its own statement, outside `rev`: no whole-row write names it, so neither
+    // side can clobber the other.
+    await this.db
+      .prepare(
+        `UPDATE requirement_reviews SET issue_writeback = ? WHERE workspace_id = ? AND id = ?`,
+      )
+      .bind(JSON.stringify(record), workspaceId, reviewId)
+      .run()
   }
 }

@@ -30,6 +30,7 @@ function seeded(options: {
       writebackCommentOnPrOpen: true,
       writebackResolveOnMerge: true,
       writebackQuestionsOnPark: false,
+      writebackRequirementsToDescription: false,
       updatedAt: Date.UTC(2026, 9, 1),
       ...options.settings,
     }

@@ -21,8 +21,7 @@ const KEY_WHERE =
 const keyBinds = (key: WritebackPostKey) =>
   [key.workspaceId, key.kind, key.subjectId, key.issueRef, key.discriminator] as const
 
-// Whether the existing row may be re-taken. `?8` is the abandonment cutoff; a NULL cutoff makes the
-// comparison NULL, so a `pending` row is then never re-taken.
+// Whether the existing row may be re-taken: `failed`, or a `pending` at or before the cutoff `?8`.
 const RECLAIMABLE = `(writeback_posts.status = 'failed'
   OR (writeback_posts.status = 'pending' AND writeback_posts.updated_at <= ?8))`
 

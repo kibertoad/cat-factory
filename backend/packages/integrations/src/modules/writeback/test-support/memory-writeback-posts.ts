@@ -7,7 +7,7 @@ import type {
 /**
  * An in-memory {@link WritebackPostRepository} with the claim contract both facades' repos hold
  * (`writeback-post-suite.ts` in `@cat-factory/conformance` pins those): `failed` re-claims, a
- * `pending` row is re-taken only past a non-null cutoff, and `posted` is terminal.
+ * `pending` row is re-taken only past the cutoff, and `posted` is terminal.
  */
 export function memoryWritebackPosts(): WritebackPostRepository & {
   rows: Map<string, WritebackPostRecord>
@@ -20,9 +20,7 @@ export function memoryWritebackPosts(): WritebackPostRepository & {
     async claim(key, window) {
       const existing = rows.get(id(key))
       const abandoned =
-        existing?.status === 'pending' &&
-        window.reclaimPendingBefore !== null &&
-        existing.updatedAt <= window.reclaimPendingBefore
+        existing?.status === 'pending' && existing.updatedAt <= window.reclaimPendingBefore
       if (existing && existing.status !== 'failed' && !abandoned) {
         return existing.status === 'posted' ? 'posted' : 'held'
       }

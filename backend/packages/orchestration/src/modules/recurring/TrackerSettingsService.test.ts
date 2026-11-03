@@ -65,6 +65,7 @@ const stored = (overrides: Partial<TrackerSettings> = {}): TrackerSettings => ({
   writebackCommentOnPrOpen: false,
   writebackResolveOnMerge: false,
   writebackQuestionsOnPark: false,
+  writebackRequirementsToDescription: false,
   updatedAt: 1,
   ...overrides,
 })

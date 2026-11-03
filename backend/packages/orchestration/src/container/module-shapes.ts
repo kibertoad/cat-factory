@@ -58,8 +58,9 @@ import type { WorkspaceSettingsService } from '../modules/settings/WorkspaceSett
 export interface RequirementsModule {
   service: RequirementReviewService
   /**
-   * Posts the refined requirements back to the block's linked tracker issues. Present only when
-   * the deployment wires an issue writeback provider.
+   * Writes the refined requirements into the block's linked tracker issues' descriptions, on a
+   * click and (opt-in) as the review settles. Present only when the deployment wires an issue
+   * writeback provider.
    */
   publisher?: RefinedRequirementsPublisher
 }

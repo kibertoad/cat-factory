@@ -42,7 +42,8 @@ import { githubProjection as gp } from '@cat-factory/integrations'
 import { logger } from '../observability/logger.js'
 import type { CommitFilesInput } from '@cat-factory/contracts'
 import type { AppTokenSource } from './GitHubAppRegistry.js'
-import { postPrReview } from './reviewPosting.js'
+import * as issueWrites from './issueWrites.js'
+import { type GitHubRequestFn, postPrReview } from './reviewPosting.js'
 import { probeBranchProtection, readRequiredApprovingReviewCount } from './branchProtection.js'
 import {
   type ContentsRequest,
@@ -85,9 +86,6 @@ export { GitHubApiError } from './githubHttpHelpers.js'
 // responses to projection entities with the shared pure mappers. Octokit is
 // deliberately avoided — Web Crypto + fetch cover everything we need without the
 // bundle weight (see backend/docs/adr/0001-github-app-integration.md).
-
-/** Neutral default colour for a label we create on the fly (GitHub requires a colour). */
-const DEFAULT_LABEL_COLOR = 'ededed'
 
 // (installationId, owner, repo) → numeric repo id. GitHub never reassigns a repo's numeric
 // id, so this mapping is immutable and safe to memoize per-process — sparing a
@@ -1105,40 +1103,30 @@ export class FetchGitHubClient implements GitHubClient {
     })
   }
 
-  async closeIssue(installationId: number, ref: GitHubRepoRef, number: number): Promise<void> {
-    await this.request(`/repos/${ref.owner}/${ref.repo}/issues/${number}`, {
-      installationId,
-      method: 'PATCH',
-      body: { state: 'closed', state_reason: 'completed' },
-    })
+  // The issue writeback's writes live in `issueWrites.ts`; these stay thin transport delegates.
+  closeIssue(installationId: number, ref: GitHubRepoRef, number: number): Promise<void> {
+    return issueWrites.closeIssue(this.requester, installationId, ref, number)
   }
 
-  async applyIssueLabel(
+  replaceIssueBody(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+    body: string,
+  ): Promise<'updated' | 'unchanged'> {
+    return issueWrites.replaceIssueBody(this.requester, installationId, ref, number, body)
+  }
+
+  applyIssueLabel(
     installationId: number,
     ref: GitHubRepoRef,
     number: number,
     label: string,
   ): Promise<void> {
-    // Ensure the label exists first — a 422 means it already does, which is fine.
-    // (Relying on the add-labels endpoint to auto-create is undocumented behaviour.)
-    // GitHub's create-label endpoint requires BOTH `name` and `color`; omitting the
-    // colour makes every create fail 422 (missing field), which the catch below would
-    // otherwise mistake for "already exists" — so send a neutral default colour.
-    try {
-      await this.request(`/repos/${ref.owner}/${ref.repo}/labels`, {
-        installationId,
-        method: 'POST',
-        body: { name: label, color: DEFAULT_LABEL_COLOR },
-      })
-    } catch (err) {
-      if (!(err instanceof GitHubApiError && err.status === 422)) throw err
-    }
-    await this.request(`/repos/${ref.owner}/${ref.repo}/issues/${number}/labels`, {
-      installationId,
-      method: 'POST',
-      body: { labels: [label] },
-    })
+    return issueWrites.applyIssueLabel(this.requester, installationId, ref, number, label)
   }
+
+  private readonly requester: GitHubRequestFn = (path, opts) => this.request(path, opts)
 
   // ---- internals ----------------------------------------------------------
 

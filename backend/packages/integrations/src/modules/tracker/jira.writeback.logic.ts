@@ -12,11 +12,23 @@ import { type AdfDoc, markdownToAdfWithin } from './markdown-adf.logic.js'
 export const JIRA_FIELD_MAX_CHARS = 32_767
 
 /** Appended to a body cut to fit {@link JIRA_FIELD_MAX_CHARS}. */
-export const JIRA_TRUNCATION_NOTE = '(Cut short: the rest did not fit in one Jira comment.)'
+export const JIRA_TRUNCATION_NOTE = '(Cut short: the rest did not fit in one Jira field.)'
+
+/** A Markdown body as the ADF Jira stores, cut to fit {@link JIRA_FIELD_MAX_CHARS}. */
+export function jiraFieldAdf(markdown: string): AdfDoc {
+  return markdownToAdfWithin(markdown, JIRA_FIELD_MAX_CHARS, JIRA_TRUNCATION_NOTE)
+}
 
 /** Build the POST /rest/api/3/issue/{key}/comment request body from a Markdown comment. */
 export function buildJiraCommentPayload(body: string): { body: AdfDoc } {
-  return { body: markdownToAdfWithin(body, JIRA_FIELD_MAX_CHARS, JIRA_TRUNCATION_NOTE) }
+  return { body: jiraFieldAdf(body) }
+}
+
+/** Build the PUT /rest/api/3/issue/{key} request body that replaces the description. */
+export function buildJiraDescriptionPayload(description: AdfDoc): {
+  fields: { description: AdfDoc }
+} {
+  return { fields: { description } }
 }
 
 /** One transition as returned by GET /rest/api/3/issue/{key}/transitions. */

@@ -1,8 +1,7 @@
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
-import { PLATFORM_COMMENT_MARKER } from './reviewReplies.logic.js'
 
-// Rendering + keying for posting a requirements review's revised document back onto the tracker
-// issue(s) the task came from.
+// Rendering for writing a requirements review's revised document into the description of the
+// tracker issue(s) the task came from.
 //
 // The document is model-authored (the incorporation editor's reply) and is derived from text a
 // customer wrote, so it is UNTRUSTED on its way onto a host-parsed surface: it goes through
@@ -10,36 +9,25 @@ import { PLATFORM_COMMENT_MARKER } from './reviewReplies.logic.js'
 // mentions, issue references and closing keywords, and closes a fence it leaves open. Jira's
 // transport decodes those defusing entities again when it converts to ADF, where text is inert.
 //
-// It is posted as a COMMENT, never written over the issue's description: the reporter's own words
-// stay where they were, and the revision sits under them with the platform marker that keeps the
-// inbound reply path from reading it as a human's comment.
+// It REPLACES the description: the description is what everyone reads, and every tracker keeps its
+// history, so the reporter's own words stay one click away. The opening line says so. The render is
+// deterministic, which is what lets each adapter compare it with the stored description and skip a
+// write that would change nothing.
 
 /**
- * Longest document rendered, under GitHub's 65,536-character comment limit with room for the
- * header: a rejected comment posts nothing, so a pathological document is cut (and the cut marked)
- * rather than lost. Jira's limit counts the converted ADF instead, so its transport sizes its own
- * cut (`buildJiraCommentPayload`).
+ * Longest document rendered, under GitHub's 65,536-character issue-body limit with room for the
+ * opening line: a rejected write changes nothing, so a pathological document is cut (and the cut
+ * marked) rather than lost. Jira's limit counts the converted ADF instead, so its adapter sizes its
+ * own cut (`jiraFieldAdf`).
  */
 const MAX_DOCUMENT_CHARS = 64_000
 
-/** Render the revised requirements as one tracker comment, Markdown being the shared format. */
-export function renderRefinedRequirementsComment(document: string): string {
+/** Render the revised requirements as an issue description, Markdown being the shared format. */
+export function renderRefinedRequirementsDescription(document: string): string {
   return [
-    `${PLATFORM_COMMENT_MARKER}cat-factory refined the requirements for this issue during ` +
-      'review. The issue description above is unchanged. The work will be built against the ' +
-      'revised requirements below.',
-    '',
-    '---',
+    '_cat-factory refined these requirements during review. The previous description is in this ' +
+      "issue's history._",
     '',
     hostMarkdown.prose(redactSecrets(document.trim()) ?? '', MAX_DOCUMENT_CHARS),
   ].join('\n')
-}
-
-/**
- * The marker's document key: lowercase hex SHA-256 of the document as stored, so posting the same
- * document again is recognised and a revised one is a new post.
- */
-export async function refinedDocumentHash(document: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(document))
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }

@@ -630,9 +630,8 @@ function buildNodeIssueWriteback(args: {
     // registered once and is then both readable and writeable, so a deployment's own tracker
     // cannot end up with intake and no way to answer it.
     taskSourceProviders,
-    // The exactly-once markers claimed before the parked-review question echo and each
-    // refined-requirements comment. Without them the question echo passes through (a replaying
-    // driver would otherwise re-post) and the refined-requirements post refuses.
+    // The exactly-once markers claimed before the parked-review question echo. Without them the
+    // echo passes through, since a replaying driver would otherwise re-post.
     writebackPostRepository: sourced(
       'writebackPostRepository',
       (d) => new DrizzleWritebackPostRepository(d),

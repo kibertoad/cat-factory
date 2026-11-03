@@ -9,7 +9,7 @@
 // agent step and the spec-writer consume.
 import { parseOutputOutline } from '~/utils/agentOutput'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
-import RefinedRequirementsIssuePost from '~/components/requirements/RefinedRequirementsIssuePost.vue'
+import RefinedRequirementsIssueUpdate from '~/components/requirements/RefinedRequirementsIssueUpdate.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import {
   orderFindings,
@@ -1140,7 +1140,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 }}
               </span>
             </UButton>
-            <RefinedRequirementsIssuePost
+            <RefinedRequirementsIssueUpdate
               v-if="blockId"
               :block-id="blockId"
               :disabled="incorporating || !access.canWriteBoard.value"

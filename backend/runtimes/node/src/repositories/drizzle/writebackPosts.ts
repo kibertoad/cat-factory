@@ -34,10 +34,7 @@ export class DrizzleWritebackPostRepository implements WritebackPostRepository {
     window: WritebackPostClaimWindow,
   ): Promise<WritebackPostClaim> {
     const token = crypto.randomUUID()
-    const reclaimable =
-      window.reclaimPendingBefore === null
-        ? sql`${table.status} = 'failed'`
-        : sql`(${table.status} = 'failed' OR (${table.status} = 'pending' AND ${table.updated_at} <= ${window.reclaimPendingBefore}))`
+    const reclaimable = sql`(${table.status} = 'failed' OR (${table.status} = 'pending' AND ${table.updated_at} <= ${window.reclaimPendingBefore}))`
     const [row] = await this.db
       .insert(table)
       .values({

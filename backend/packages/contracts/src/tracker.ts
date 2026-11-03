@@ -46,14 +46,24 @@ export const trackerSettingsSchema = v.object({
    * (see `backend/docs/adr/0047-headless-clarification-loop.md`).
    */
   writebackQuestionsOnPark: v.boolean(),
+  /**
+   * Writeback: when a requirements review settles and the run moves on, write the refined
+   * requirements into the DESCRIPTION of the task's linked tracker issue(s), replacing it (the
+   * tracker keeps the history). Off by default (see {@link DEFAULT_TRACKER_WRITEBACK}); the review
+   * window's "Update linked issues" button does the same on request whatever this says.
+   */
+  writebackRequirementsToDescription: v.boolean(),
   updatedAt: v.number(),
 })
 export type TrackerSettings = v.InferOutput<typeof trackerSettingsSchema>
 
-/** The three writeback actions, as they are spelled on a workspace's settings row. */
+/** The writeback actions, as they are spelled on a workspace's settings row. */
 export type TrackerWritebackFlags = Pick<
   TrackerSettings,
-  'writebackCommentOnPrOpen' | 'writebackResolveOnMerge' | 'writebackQuestionsOnPark'
+  | 'writebackCommentOnPrOpen'
+  | 'writebackResolveOnMerge'
+  | 'writebackQuestionsOnPark'
+  | 'writebackRequirementsToDescription'
 >
 
 /**
@@ -85,6 +95,9 @@ export const DEFAULT_TRACKER_WRITEBACK: TrackerWritebackFlags = {
   writebackCommentOnPrOpen: true,
   writebackResolveOnMerge: true,
   writebackQuestionsOnPark: true,
+  // OFF, unlike the three above: those add a comment beside the reporter's text, while this one
+  // REPLACES the issue's description, which a workspace should choose to let the platform do.
+  writebackRequirementsToDescription: false,
 }
 
 /**
@@ -110,5 +123,6 @@ export const putTrackerSettingsSchema = v.object({
   writebackCommentOnPrOpen: v.optional(v.boolean()),
   writebackResolveOnMerge: v.optional(v.boolean()),
   writebackQuestionsOnPark: v.optional(v.boolean()),
+  writebackRequirementsToDescription: v.optional(v.boolean()),
 })
 export type PutTrackerSettingsInput = v.InferOutput<typeof putTrackerSettingsSchema>

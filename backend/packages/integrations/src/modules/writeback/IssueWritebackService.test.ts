@@ -41,6 +41,7 @@ function settings(overrides: Partial<TrackerSettings> = {}): TrackerSettings {
     writebackCommentOnPrOpen: false,
     writebackResolveOnMerge: false,
     writebackQuestionsOnPark: false,
+    writebackRequirementsToDescription: false,
     updatedAt: 0,
     ...overrides,
   }

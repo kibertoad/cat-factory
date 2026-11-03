@@ -1,6 +1,6 @@
 {
   "dialect": "postgres",
-  "id": "1fedf100-6482-4c8d-bbd3-b1b1c658a50d",
+  "id": "27e9ad1b-73c4-4f4d-a63e-b3a4cdb1cd61",
   "prevIds": [
     "ec3015b1-f041-4f1a-bca9-73ed6fa0538d",
     "18bcacbe-43de-46ac-9de5-92e5432e94df"
@@ -13605,6 +13605,19 @@
       "table": "requirement_reviews"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "issue_writeback",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "requirement_reviews"
+    },
+    {
       "type": "bigint",
       "typeSchema": null,
       "notNull": true,
@@ -17110,6 +17123,19 @@
       "generated": null,
       "identity": null,
       "name": "writeback_questions_on_park",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "tracker_settings"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "writeback_requirements_to_description",
       "entityType": "columns",
       "schema": "public",
       "table": "tracker_settings"

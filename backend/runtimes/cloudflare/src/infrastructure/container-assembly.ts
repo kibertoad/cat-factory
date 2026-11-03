@@ -990,8 +990,7 @@ function buildWorkerPersistenceRegistry(
     // node's dispatch resolution + inspector reads come back `... is not wired`.
     validationConfigRepository: new D1ValidationConfigRepository({ db }),
     // The writeback exactly-once marker is built inside the issue writeback, not the Core, so it is
-    // folded in here for a mothership-mode node's claims (the parked-review question echo and the
-    // refined-requirements post) to reach.
+    // folded in here for a mothership-mode node's parked-review question claims to reach.
     writebackPostRepository: new D1WritebackPostRepository({ db }),
     // GitHub projection + installation reads the mothership serves over the persistence RPC even
     // when its OWN github service is off. A mothership-mode local node reaches GitHub by token

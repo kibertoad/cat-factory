@@ -331,6 +331,7 @@ const TRACKER_COLUMNS: Record<
   writebackCommentOnPrOpen: 'writeback_comment_on_pr_open',
   writebackResolveOnMerge: 'writeback_resolve_on_merge',
   writebackQuestionsOnPark: 'writeback_questions_on_park',
+  writebackRequirementsToDescription: 'writeback_requirements_to_description',
 }
 
 const TRACKER_FIELDS = Object.keys(TRACKER_COLUMNS) as (keyof Required<TrackerSettingsPatch>)[]
@@ -342,6 +343,7 @@ type TrackerRow = {
   writeback_comment_on_pr_open: number
   writeback_resolve_on_merge: number
   writeback_questions_on_park: number
+  writeback_requirements_to_description: number
   updated_at: number
 }
 
@@ -353,6 +355,7 @@ function toTrackerSettings(row: TrackerRow): TrackerSettings {
     writebackCommentOnPrOpen: row.writeback_comment_on_pr_open === 1,
     writebackResolveOnMerge: row.writeback_resolve_on_merge === 1,
     writebackQuestionsOnPark: row.writeback_questions_on_park === 1,
+    writebackRequirementsToDescription: row.writeback_requirements_to_description === 1,
     updatedAt: row.updated_at,
   }
 }
@@ -390,6 +393,7 @@ export class DrizzleTrackerSettingsRepository implements TrackerSettingsReposito
       writeback_comment_on_pr_open: inserted.writebackCommentOnPrOpen ? 1 : 0,
       writeback_resolve_on_merge: inserted.writebackResolveOnMerge ? 1 : 0,
       writeback_questions_on_park: inserted.writebackQuestionsOnPark ? 1 : 0,
+      writeback_requirements_to_description: inserted.writebackRequirementsToDescription ? 1 : 0,
       updated_at: updatedAt,
     }
     // The conflict branch touches only what the patch NAMED, reading each value back off the row
