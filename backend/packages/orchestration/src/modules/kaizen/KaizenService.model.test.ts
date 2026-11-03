@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Block, ModelFlavor, ModelRef } from '@cat-factory/kernel'
+import { createRecordingLogger } from '@cat-factory/kernel'
+import type {
+  Block,
+  ExecutionInstance,
+  ModelFlavor,
+  ModelRef,
+  ProviderCapabilities,
+} from '@cat-factory/kernel'
 import { KaizenService, type KaizenServiceDependencies } from './KaizenService.js'
 
 // Regression coverage for the Kaizen grader's model resolution. The grader is "just another
@@ -109,5 +116,147 @@ describe('KaizenService model resolution', () => {
     const resolvePresetRouting = routingTo('claude-subscription')
     await makeService({ resolvePresetRouting }, { modelId: 'openai-direct' })
     expect(resolvePresetRouting).toHaveBeenCalledTimes(1)
+  })
+})
+
+// The grader is an inline LLM call, so a Kaizen model that resolves to a subscription-only model
+// this deployment can't run inline (or to nothing usable) can't grade at all. Rather than degrade
+// to the routing default and fill the table with `failed` rows, `scheduleForRun` SKIPS the run so
+// the SPA can steer the user to a compatible model.
+describe('KaizenService.scheduleForRun model-fitness skip', () => {
+  const CAPS: ProviderCapabilities = {
+    directProviders: new Set(),
+    subscriptionVendors: new Set(['claude']), // a connected Claude subscription
+    cloudflareEnabled: true, // and Cloudflare AI enabled
+  }
+
+  function makeSchedulerService(over: Partial<KaizenServiceDependencies>, block?: Partial<Block>) {
+    const kaizenGradingRepository = {
+      getByStep: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue(undefined),
+    }
+    const deps = {
+      kaizenGradingRepository,
+      kaizenVerifiedComboRepository: { getByKey: vi.fn().mockResolvedValue(null) },
+      blockRepository: {
+        get: vi.fn().mockResolvedValue({ id: 'task_login', ...block } as Block),
+        findByIds: vi.fn().mockResolvedValue([]),
+      },
+      idGenerator: { next: (p: string) => `${p}_1` },
+      clock: { now: () => 1_000 },
+      // The grader itself is enabled (a provider and a routing default are wired).
+      modelProvider: { resolve: vi.fn() },
+      modelRef: QWEN,
+      resolveBlockModel: (id: string | undefined) => (id ? CATALOG[id] : undefined),
+      resolveProviderCapabilities: vi.fn().mockResolvedValue(CAPS),
+      ...over,
+    } as unknown as KaizenServiceDependencies
+    return { service: new KaizenService(deps), kaizenGradingRepository }
+  }
+
+  const instance = {
+    id: 'exe_1',
+    blockId: 'task_login',
+    initiatedBy: 'usr_1',
+    steps: [{ agentKind: 'coder', state: 'done', skipped: false, model: 'cloudflare-llama' }],
+  } as unknown as ExecutionInstance
+
+  it('skips scheduling when the Kaizen model is subscription-only (cannot run inline)', async () => {
+    // The preset's `kaizen` default is a subscription-only model. It is `available` (Claude is
+    // connected) but not inline-usable, so nothing may be scheduled.
+    const { service, kaizenGradingRepository } = makeSchedulerService({
+      resolvePresetRouting: routingTo('claude-sonnet'),
+    })
+    await service.scheduleForRun('ws', instance)
+    expect(kaizenGradingRepository.upsert).not.toHaveBeenCalled()
+  })
+
+  it('schedules when the Kaizen model can drive the inline grader', async () => {
+    // A Cloudflare-backed model is inline-usable, so the completed step is scheduled as normal.
+    const { service, kaizenGradingRepository } = makeSchedulerService({
+      resolvePresetRouting: routingTo('cloudflare-llama'),
+    })
+    await service.scheduleForRun('ws', instance)
+    expect(kaizenGradingRepository.upsert).toHaveBeenCalledTimes(1)
+  })
+
+  it("checks the block's pinned model ahead of the preset default", async () => {
+    // The preset would be fit, but the task pins a subscription-only model for every step.
+    const { service, kaizenGradingRepository } = makeSchedulerService(
+      {
+        resolvePresetRouting: routingTo('cloudflare-llama'),
+        resolveBlockModel: (id: string | undefined) =>
+          id === 'claude-sonnet' ? CLAUDE_SUB : id ? CATALOG[id] : undefined,
+      },
+      { modelId: 'claude-sonnet' },
+    )
+    await service.scheduleForRun('ws', instance)
+    expect(kaizenGradingRepository.upsert).not.toHaveBeenCalled()
+  })
+
+  it('counts and logs a skip, checking capabilities on the workspace scope with no initiator', async () => {
+    // The grader runs with no signed-in person, so the check must not see the initiator's
+    // personal credentials: it would schedule rows `runGrading` can only fail.
+    const logger = createRecordingLogger()
+    const metrics = { increment: vi.fn() }
+    const resolveProviderCapabilities = vi.fn().mockResolvedValue(CAPS)
+    const { service } = makeSchedulerService({
+      resolvePresetRouting: routingTo('claude-sonnet'),
+      resolveProviderCapabilities,
+      logger,
+      metrics,
+    })
+    await service.scheduleForRun('ws', instance)
+    expect(resolveProviderCapabilities).toHaveBeenCalledWith('ws', undefined, undefined)
+    expect(metrics.increment).toHaveBeenCalledWith('kaizen.grading_skipped')
+    expect(logger.lines).toContainEqual(
+      expect.objectContaining({
+        level: 'info',
+        fields: expect.objectContaining({ executionId: 'exe_1' }),
+      }),
+    )
+  })
+
+  it('schedules as before when no preset routing is wired and the block pins nothing', async () => {
+    // Nothing names a Kaizen model, so the grader runs on the routing default as it always did.
+    const { service, kaizenGradingRepository } = makeSchedulerService({
+      resolvePresetRouting: undefined,
+    })
+    await service.scheduleForRun('ws', instance)
+    expect(kaizenGradingRepository.upsert).toHaveBeenCalledTimes(1)
+  })
+
+  it('resolves no capabilities when no step is left to schedule', async () => {
+    const resolveProviderCapabilities = vi.fn().mockResolvedValue(CAPS)
+    const { service, kaizenGradingRepository } = makeSchedulerService({
+      resolveProviderCapabilities,
+      resolvePresetRouting: routingTo('claude-sonnet'),
+    })
+    kaizenGradingRepository.getByStep.mockResolvedValue({ id: 'kzn_existing' })
+    await service.scheduleForRun('ws', instance)
+    expect(resolveProviderCapabilities).not.toHaveBeenCalled()
+    expect(kaizenGradingRepository.upsert).not.toHaveBeenCalled()
+  })
+
+  it('settles the row failed when the capability resolution throws during grading', async () => {
+    const { service, kaizenGradingRepository } = makeSchedulerService({
+      resolveProviderCapabilities: vi.fn().mockRejectedValue(new Error('keys store down')),
+      resolvePresetRouting: routingTo('cloudflare-llama'),
+    })
+    const grading = { id: 'kzn_1', blockId: 'task_login', status: 'scheduled' }
+    await service.runGrading('ws', grading as never)
+    expect(kaizenGradingRepository.upsert).toHaveBeenLastCalledWith(
+      'ws',
+      expect.objectContaining({ status: 'failed', error: 'keys store down' }),
+    )
+  })
+
+  it('schedules as before when no capability resolver is wired', async () => {
+    const { service, kaizenGradingRepository } = makeSchedulerService({
+      resolveProviderCapabilities: undefined,
+      resolvePresetRouting: routingTo('claude-sonnet'),
+    })
+    await service.scheduleForRun('ws', instance)
+    expect(kaizenGradingRepository.upsert).toHaveBeenCalledTimes(1)
   })
 })
