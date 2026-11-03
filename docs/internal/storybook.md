@@ -255,17 +255,17 @@ every later story in the session.
 
 ## Checks
 
-| What                                                                                    | Where it runs                   |
-| --------------------------------------------------------------------------------------- | ------------------------------- |
-| The stories typecheck                                                                   | the app's `typecheck`, every PR |
-| `fixtures.spec.ts`                                                                      | the app's unit tests, every PR  |
-| `node scripts/check-story-titles.mjs` (titles, one file per component, `Default` first) | CI's guard steps, every PR      |
-| `test:stories`: every story renders in headless Chromium, with an axe check             | nightly, and on request         |
+| What                                                                                    | Where it runs                                       |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| The stories typecheck                                                                   | the app's `typecheck`, every PR                     |
+| `fixtures.spec.ts`                                                                      | the app's unit tests, every PR                      |
+| `node scripts/check-story-titles.mjs` (titles, one file per component, `Default` first) | CI's guard steps, every PR                          |
+| `test:stories`: every story renders in headless Chromium, with an axe check             | nightly, on a PR that edits a story, and on request |
 
 `test:stories` takes about 10 minutes for the whole tree on a laptop and about half an hour on CI's
-runner, where the job's limit is 45 minutes, so no PR waits on it. Each new stories file adds a
-garbage collection to that time. It also runs on a PR that changes the lane itself, except a
-release PR, which changes only package versions.
+runner, where the job's limit is 45 minutes, so an ordinary PR does not wait on it. Each new stories file adds a
+garbage collection to that time. It also runs on a PR that changes the lane itself or edits a
+story, except a release PR, which changes only package versions.
 `--browser.isolate=false` cut that to about 2 minutes, and was rejected: with the files shuffled,
 2 of 4 runs timed out on stories that pass alone, and no story failed twice. Those runs used
 Vitest's default worker count, before the cap below, so contention may explain the timeouts; the

@@ -36,7 +36,7 @@ the infrastructure (#2367) and one per domain (#2384 to #2391).
   `app/stories/fixtures.spec.ts` that parses it with its contract schema.
 - **A story is a test.** The story lane renders each story in headless Chromium with an axe
   check. A play ends by waiting for the state its story is named after.
-- **The lane is nightly, and runs on a PR that changes the lane.** The whole tree takes about 10
+- **The lane is nightly, and runs on a PR that changes the lane or edits a story.** The whole tree takes about 10
   minutes on a laptop and about half an hour in CI, with browser isolation. A run without
   isolation took about 2 minutes, but 2 of 4 shuffled runs timed out on stories that pass alone,
   so isolation stays and the lane does not run on every PR.
