@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { RefinedRequirementsWritebackResult } from '@cat-factory/contracts'
+import type {
+  IncorporateRequirementsInput,
+  RefinedRequirementsWritebackResult,
+} from '@cat-factory/contracts'
 import type {
   RequirementReview,
   ResolveRequirementsExceededChoice,
@@ -173,18 +176,18 @@ export const useRequirementsStore = defineStore('requirements', () => {
   }
 
   /**
-   * Ask the driver to incorporate the answers ASYNCHRONOUSLY. Optional `feedback` is the "do
-   * it differently" direction when redoing a merge. Returns at once with the `incorporating`
-   * review (the fold + re-review run in the background); the caller returns the user to the
-   * board. A live `requirements` event / a notification reflects the outcome later.
+   * Ask the driver to incorporate the answers ASYNCHRONOUSLY (see `IncorporateRequirementsInput`
+   * for `feedback` and `after`). Returns at once with the `incorporating` review (the fold, and
+   * any re-review, run in the background); the caller returns the user to the board. A live
+   * `requirements` event / a notification reflects the outcome later.
    */
-  async function incorporate(review: RequirementReview, feedback?: string) {
+  async function incorporate(review: RequirementReview, input: IncorporateRequirementsInput = {}) {
     withFlag(incorporating, review.id, true)
     try {
       const updated = await api.incorporateRequirements(
         workspace.requireId(),
         review.blockId,
-        feedback,
+        input,
       )
       store(updated)
       return updated

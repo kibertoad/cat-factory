@@ -37,6 +37,7 @@ import {
   reviewItemSeveritySchema,
 } from './requirement-finding-floor.js'
 import {
+  incorporateAfterSchema,
   requirementReviewStatusSchema,
   reviewItemCategorySchema,
   reviewItemStatusSchema,
@@ -134,6 +135,11 @@ export const publicReviewFindingSchema = v.object({
   status: reviewItemStatusSchema,
   /** The recorded answer, or null while unanswered. */
   reply: v.nullable(v.string()),
+  /**
+   * On a requirements re-review, the title of the previous round's finding whose answer this one
+   * follows up on: why a finding below `high` was raised again. Null otherwise.
+   */
+  followsUpOn: v.nullable(v.string()),
 })
 export type PublicReviewFinding = v.InferOutput<typeof publicReviewFindingSchema>
 
@@ -172,6 +178,11 @@ export const publicRequirementsFindingFloorSchema = v.object({
   score: v.nullable(v.number()),
   /** Findings the reviewer returned below the floor anyway, which the pass dropped. */
   suppressed: v.number(),
+  /**
+   * Findings a re-review dropped because they were neither `high` nor a follow-up on an answer the
+   * previous round gave. Null on a first pass, which has no previous round.
+   */
+  followUpSuppressed: v.nullable(v.number()),
 })
 export type PublicRequirementsFindingFloor = v.InferOutput<
   typeof publicRequirementsFindingFloorSchema
@@ -1235,9 +1246,12 @@ export type PublicSetFindingStatusInput = v.InferOutput<typeof publicSetFindingS
  * Incorporate the recorded answers. Optional `feedback` is the "do it differently" lever when
  * redoing a merge, exactly as in the SPA. Asynchronous: the durable driver folds and re-reviews in
  * the background, so the response is the `incorporating` review, not the finished document.
+ * `after: 'proceed'` skips that re-review: the folded document settles the review and the run
+ * advances. Absent reads as `rereview`.
  */
 export const publicIncorporateSchema = v.object({
   feedback: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
+  after: v.optional(incorporateAfterSchema),
 })
 export type PublicIncorporateInput = v.InferOutput<typeof publicIncorporateSchema>
 

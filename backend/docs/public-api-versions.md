@@ -576,6 +576,23 @@ Additive. The clients tolerate unknown enum values by design, so a consumer buil
 
 ## 1.93.0
 
+The three `incorporate` bodies (requirements, clarity, brainstorm) gain an optional `after`:
+`rereview` (the default, unchanged) or `proceed`, which folds the answers in and settles the review
+on the result, advancing the run with no further reviewer pass.
+
+`PublicRequirementsFindingFloor` gains `followUpSuppressed`: how many findings a re-review dropped
+for being neither `high` nor a follow-up on an answer the previous round gave. A re-review now
+holds new findings to that bar, so without the count a quiet second round reads like a clean one.
+Null on a first pass.
+
+`PublicReviewFinding` gains `followsUpOn`: on a requirements re-review, the title of the previous
+round's finding whose answer this one follows up on, which is why a finding below `high` was raised
+again. Null on every other finding, and always null on clarity and brainstorm.
+
+Additive: one optional request field, and two required-nullable response fields.
+
+## 1.94.0
+
 `PublicUnanswerableWait.reason` gains `credential_lapsed`: a run whose personal subscription credential lapsed before a step could dispatch. The step parks instead of failing the run, and only the run's initiator can resume it, by entering their personal password in the app. The error vocabulary gains the `credential_wait_not_parked` conflict reason, answered by the app's resume route when the run is no longer parked.
 
-Additive. A consumer built against 1.92.0 keeps parsing; before this, the same run would have arrived as `failed`.
+Additive. A consumer built against 1.93.0 keeps parsing; before this, the same run would have arrived as `failed`.

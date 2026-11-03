@@ -98,6 +98,12 @@ export const requirementFindingFloorRecordSchema = v.object({
   score: v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(1))),
   /** Findings the reviewer returned below the floor, which this pass dropped. */
   suppressed: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /**
+   * Findings a RE-REVIEW dropped for clearing neither half of the follow-up bar: not `high`, and
+   * not following up on an answer the previous round gave. Null on a first pass, which has no
+   * previous round to follow up on.
+   */
+  followUpSuppressed: v.optional(v.nullable(v.pipe(v.number(), v.integer(), v.minValue(0)))),
 })
 export type RequirementFindingFloorRecord = v.InferOutput<
   typeof requirementFindingFloorRecordSchema

@@ -22,6 +22,7 @@ import { binaryOutputReportSchema } from './binary-outputs.js'
 import { binaryCandidateStepStateSchema } from './binary-candidates.js'
 import { stepToolServersSchema } from './tool-servers.js'
 import { stepContextDocumentSchema } from './documents.js'
+import { incorporateAfterSchema } from './requirements.js'
 // The polling-GATE and the human-verdict-gate step-state clusters each live in their own
 // module (the `forkDecision.ts` / `judge.ts` shape); `PipelineStep` composes them back in below.
 import { gateStepStateSchema } from './gate.js'
@@ -807,9 +808,14 @@ export const pipelineStepSchema = v.object({
    * to wake and the durable driver, on re-entering the gate, folds the answers into a
    * document and re-reviews it (the LLM work that used to block the HTTP request). Cleared
    * once that async cycle completes. `feedback` is the human's optional "do it differently"
-   * direction (a redo). Absent when no incorporation is pending.
+   * direction (a redo). `after: 'proceed'` settles the review on the folded document and advances
+   * instead of re-reviewing it; absent reads as `rereview`. Absent when no incorporation is pending.
    */
-  pendingIncorporation: v.optional(v.nullable(v.object({ feedback: v.optional(v.string()) }))),
+  pendingIncorporation: v.optional(
+    v.nullable(
+      v.object({ feedback: v.optional(v.string()), after: v.optional(incorporateAfterSchema) }),
+    ),
+  ),
   /**
    * Transient recommendation intent carried on a parked `requirements-review` gate step.
    * Set when the human asks the Requirement Writer to suggest answers for a batch of findings

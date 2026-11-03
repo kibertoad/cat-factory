@@ -6044,7 +6044,8 @@
     },
     "actions": {
       "proceedNothing": "Devam et (dahil edilecek bir şey yok)",
-      "incorporateAnswers": "Yanıtları dahil et",
+      "incorporateAndReReview": "Dahil et ve yeniden incele",
+      "incorporateAndProceed": "Dahil et ve devam et",
       "requestRecommendations": "{count} öneri iste | {count} öneri iste | {count} öneri iste",
       "reReview": "İyi görünüyor — yeniden incele",
       "reReviewing": "Yeniden inceleniyor…",
@@ -6053,7 +6054,7 @@
     },
     "help": {
       "canProceed": "Tüm bulgular göz ardı edildi — yeniden çalışmadan sonraki aşamaya geçin.",
-      "canIncorporate": "Yanıtlarınızı tek bir standart biçimli belgeye katar, ardından otomatik olarak yeniden inceler.",
+      "canIncorporate": "İkisi de yanıtlarınızı tek bir standart biçimli belgeye katar. Yeniden incele, inceleyicinin bu belgeyi tekrar kontrol etmesini sağlar; devam et doğrudan sonraki aşamaya geçer.",
       "answerAll": "Devam etmek için her bulguyu yanıtlayın veya göz ardı edin.",
       "merged": "Yeniden inceleme, denetleyiciyi bu belgeye karşı çalıştırır. Birleştirilme şeklinden memnun değilseniz, bunun yerine bir yorumla yeniden yapın."
     },
@@ -6065,6 +6066,8 @@
       "recommendationsReady": "{count} öneri hazır | {count} öneri hazır | {count} öneri hazır",
       "incorporating": "Yanıtlarınız arka planda katılıyor",
       "incorporatingDescription": "Panoya geri döndünüz — yalnızca daha fazla girdi gerekirse sizi bilgilendireceğiz.",
+      "incorporatingThenProceeding": "Yanıtlarınız dahil ediliyor",
+      "incorporatingThenProceedingDescription": "Yanıtlar dahil edilir edilmez çalıştırma sonraki aşamaya geçer.",
       "reviewerSatisfied": "Denetleyici tatmin oldu — boru hattı devam ediyor",
       "iterationLimitReached": "Yineleme sınırına ulaşıldı — nasıl devam edileceğini seçin",
       "newFindings": "tepki verilecek yeni bulgu yok | tepki verilecek {count} yeni bulgu | tepki verilecek {count} yeni bulgu",
@@ -6106,8 +6109,10 @@
         "estimate": "Görev tahminiyle belirlendi (%{score}).",
         "no_estimate": "Politika görev tahminini izliyor, ancak bu görevin tahmini yok; bu yüzden yedek değer uygulandı."
       },
-      "suppressed": "Bu seviyenin altında dışarıda bırakılan bulgular: {count}."
-    }
+      "suppressed": "Bu seviyenin altında dışarıda bırakılan bulgular: {count}.",
+      "followUpSuppressed": "Yüksek önemde olmadığı ve yanıtlarınızın devamı olmadığı için bu yeniden incelemede dışarıda bırakılan bulgular: {count}."
+    },
+    "followsUpOn": "Şu konudaki yanıtınızın devamı: {title}"
   },
   "clarity": {
     "title": "Hata raporu triyajı",

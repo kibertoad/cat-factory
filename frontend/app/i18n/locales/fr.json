@@ -6044,7 +6044,8 @@
     },
     "actions": {
       "proceedNothing": "Continuer (rien à incorporer)",
-      "incorporateAnswers": "Incorporer les réponses",
+      "incorporateAndReReview": "Incorporer et relire",
+      "incorporateAndProceed": "Incorporer et continuer",
       "requestRecommendations": "Demander {count} recommandation | Demander {count} recommandations",
       "reReview": "Ça me va — relire",
       "reReviewing": "Nouvelle revue…",
@@ -6053,7 +6054,7 @@
     },
     "help": {
       "canProceed": "Toutes les observations sont écartées — passez à la phase suivante sans retravailler.",
-      "canIncorporate": "Regroupe vos réponses dans un document au format standard, puis le relit automatiquement.",
+      "canIncorporate": "Les deux regroupent vos réponses dans un document au format standard. Relire fait vérifier ce document à nouveau par le relecteur ; continuer passe directement à la phase suivante.",
       "answerAll": "Répondez à chaque observation ou écartez-la pour continuer.",
       "merged": "La nouvelle revue exécute le relecteur sur ce document. Si la fusion ne vous convient pas, refaites-la plutôt avec un commentaire."
     },
@@ -6065,6 +6066,8 @@
       "recommendationsReady": "{count} recommandation prête | {count} recommandations prêtes",
       "incorporating": "Incorporation de vos réponses en arrière-plan",
       "incorporatingDescription": "Vous êtes de retour sur le tableau — nous vous préviendrons uniquement si plus d'informations sont nécessaires.",
+      "incorporatingThenProceeding": "Incorporation de vos réponses",
+      "incorporatingThenProceedingDescription": "L'exécution passe à la phase suivante dès qu'elles sont incorporées.",
       "reviewerSatisfied": "Le relecteur est satisfait — poursuite du pipeline",
       "iterationLimitReached": "Limite d'itérations atteinte — choisissez comment continuer",
       "newFindings": "aucune nouvelle observation à traiter | {count} nouvelle observation à traiter | {count} nouvelles observations à traiter",
@@ -6106,8 +6109,10 @@
         "estimate": "Fixé par l’estimation de la tâche ({score} %).",
         "no_estimate": "La politique suit l’estimation de la tâche, mais cette tâche n’en a pas, donc sa valeur de repli s’est appliquée."
       },
-      "suppressed": "Constats écartés sous ce niveau : {count}."
-    }
+      "suppressed": "Constats écartés sous ce niveau : {count}.",
+      "followUpSuppressed": "Écartés de cette relecture car ni de gravité élevée ni une suite à vos réponses : {count}."
+    },
+    "followsUpOn": "Fait suite à votre réponse sur : {title}"
   },
   "clarity": {
     "title": "Tri du rapport de bogue",

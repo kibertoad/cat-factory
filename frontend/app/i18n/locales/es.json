@@ -6044,7 +6044,8 @@
     },
     "actions": {
       "proceedNothing": "Continuar (nada que incorporar)",
-      "incorporateAnswers": "Incorporar respuestas",
+      "incorporateAndReReview": "Incorporar y volver a revisar",
+      "incorporateAndProceed": "Incorporar y continuar",
       "requestRecommendations": "Pedir {count} recomendación | Pedir {count} recomendaciones",
       "reReview": "Se ve bien — volver a revisar",
       "reReviewing": "Volviendo a revisar…",
@@ -6053,7 +6054,7 @@
     },
     "help": {
       "canProceed": "Todos los hallazgos están descartados — continúa a la siguiente fase sin rehacer nada.",
-      "canIncorporate": "Reúne tus respuestas en un único documento de formato estándar y luego lo vuelve a revisar automáticamente.",
+      "canIncorporate": "Ambas reúnen tus respuestas en un único documento de formato estándar. Volver a revisar hace que el revisor compruebe ese documento de nuevo; continuar pasa directamente a la siguiente fase.",
       "answerAll": "Responde o descarta cada hallazgo para continuar.",
       "merged": "La nueva revisión ejecuta el revisor sobre este documento. Si no estás conforme con cómo se combinó, rehazlo con un comentario en su lugar."
     },
@@ -6065,6 +6066,8 @@
       "recommendationsReady": "{count} recomendación lista | {count} recomendaciones listas",
       "incorporating": "Incorporando tus respuestas en segundo plano",
       "incorporatingDescription": "Has vuelto al tablero — te avisaremos solo si se necesita más información.",
+      "incorporatingThenProceeding": "Incorporando tus respuestas",
+      "incorporatingThenProceedingDescription": "La ejecución pasará a la siguiente fase en cuanto estén incorporadas.",
       "reviewerSatisfied": "El revisor está conforme — continuando la canalización",
       "iterationLimitReached": "Se alcanzó el límite de iteraciones — elige cómo continuar",
       "newFindings": "sin nuevos hallazgos a los que reaccionar | {count} nuevo hallazgo al que reaccionar | {count} nuevos hallazgos a los que reaccionar",
@@ -6106,8 +6109,10 @@
         "estimate": "Fijado por la estimación de la tarea ({score} %).",
         "no_estimate": "La política sigue la estimación de la tarea, pero esta tarea no tiene ninguna, así que se aplicó su valor de respaldo."
       },
-      "suppressed": "Hallazgos omitidos por debajo de ese nivel: {count}."
-    }
+      "suppressed": "Hallazgos omitidos por debajo de ese nivel: {count}.",
+      "followUpSuppressed": "Omitidos en esta nueva revisión por no ser de gravedad alta ni un seguimiento de tus respuestas: {count}."
+    },
+    "followsUpOn": "Da seguimiento a tu respuesta sobre: {title}"
   },
   "clarity": {
     "title": "Clasificación del informe de error",

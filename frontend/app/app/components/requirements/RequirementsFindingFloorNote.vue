@@ -48,5 +48,8 @@ const basis = computed(() => {
     <template v-if="floor.suppressed > 0">
       {{ t('requirements.findingFloor.suppressed', { count: floor.suppressed }) }}
     </template>
+    <template v-if="(floor.followUpSuppressed ?? 0) > 0">
+      {{ t('requirements.findingFloor.followUpSuppressed', { count: floor.followUpSuppressed }) }}
+    </template>
   </p>
 </template>
