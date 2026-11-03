@@ -182,9 +182,14 @@ function findingFloorDirective(floor: ReviewItemSeverity | null): string[] {
   ]
 }
 
+/**
+ * The reviewer's user prompt. `floor` is required so every caller states it: the default risk
+ * policy holds a review to `medium`, so a caller rendering this prompt without one renders a
+ * prompt production does not send.
+ */
 export function buildReviewPrompt(
   ctx: RequirementsContext,
-  floor: ReviewItemSeverity | null = null,
+  floor: ReviewItemSeverity | null,
 ): string {
   return [
     'Here are the collected requirements to review:',
