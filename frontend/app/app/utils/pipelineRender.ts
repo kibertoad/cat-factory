@@ -167,7 +167,12 @@ export function isCompanionKind(kind: string): boolean {
  * The parks a surface must NOT answer with the generic approve rail, named so the tables below
  * and every consumer can be keyed exhaustively by them rather than by a string.
  */
-export type DedicatedParkView = 'follow-ups' | 'fork-decision' | 'binary-candidates' | 'input-gate'
+export type DedicatedParkView =
+  | 'follow-ups'
+  | 'fork-decision'
+  | 'binary-candidates'
+  | 'input-gate'
+  | 'credential'
 
 /**
  * The dedicated window that owns a step's approval park, when the park is NOT a generic
@@ -179,9 +184,9 @@ export type DedicatedParkView = 'follow-ups' | 'fork-decision' | 'binary-candida
  * approval must route these to their window instead of the generic "Approve & proceed"
  * rail — which would blink a 409 and resolve nothing.
  *
- * `input-gate` is the odd one out: it is resolved by an inline NOTICE rather than an overlay,
- * because its remedy is to go and edit the task, which is a board action rather than something
- * a modal could hold.
+ * `input-gate` and `credential` are the odd ones out: each is resolved by an inline NOTICE rather
+ * than an overlay. The input gate's remedy is to go and edit the task, a board action a modal would
+ * be in the way of; the credential wait's is the personal-password prompt, which is its own modal.
  */
 export function dedicatedParkView(
   step: PipelineStep,
@@ -201,6 +206,9 @@ export function dedicatedParkView(
   if (instance?.inputGate?.status === 'blocked' && step.approval?.status === 'pending') {
     return 'input-gate'
   }
+  // A step whose dispatch found the run's personal-subscription credential lapsed. Any step kind
+  // can park here, so it is checked ahead of the kind-shaped parks below.
+  if (step.credentialWait && step.approval?.status === 'pending') return 'credential'
   // The fork park sits BEFORE the coder's build dispatch; `answering` (a chat turn in
   // flight) still belongs to the fork window, which renders the pending reply.
   const fork = step.forkDecision?.status
@@ -221,11 +229,15 @@ export function dedicatedParkView(
 }
 
 /**
- * The parks a dedicated WINDOW answers: every member of {@link DedicatedParkView} except the
- * pre-dispatch input gate, which is answered by an inline notice because its remedy is to go and
- * edit the task.
+ * The parks a dedicated WINDOW answers: every member of {@link DedicatedParkView} except the two
+ * answered by an inline notice (the input gate and the credential wait).
  */
-export type RedirectParkView = Exclude<DedicatedParkView, 'input-gate'>
+export type RedirectParkView = Exclude<DedicatedParkView, 'input-gate' | 'credential'>
+
+/** Whether a dedicated park is answered by a WINDOW (as opposed to an inline notice). */
+export function isRedirectPark(view: DedicatedParkView | null): view is RedirectParkView {
+  return view !== null && view !== 'input-gate' && view !== 'credential'
+}
 
 /** How a redirect park presents itself on a surface that has to send a human to its window. */
 export interface RedirectParkPresentation {

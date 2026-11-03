@@ -6499,6 +6499,7 @@
       "startFailed": "Start fehlgeschlagen",
       "mergeFailed": "Zusammenführen fehlgeschlagen",
       "restartFailed": "Neustart fehlgeschlagen",
+      "resumeCredentialFailed": "Lauf konnte nicht fortgesetzt werden",
       "approveFailed": "Freigeben fehlgeschlagen",
       "requestChangesFailed": "Anfordern von Änderungen fehlgeschlagen",
       "rejectFailed": "Ablehnen fehlgeschlagen"
@@ -6553,6 +6554,7 @@
         "binary_output_generator_invalid": "Generator für Binärausgaben nicht auflösbar",
         "foundational_service_not_inherited": "Dieses Board hat den Dienst registriert",
         "input_gate_not_parked": "Nichts zu beantworten",
+        "credential_wait_not_parked": "Nichts fortzusetzen",
         "input_gate_parked": "Über die Eingabeprüfung der Aufgabe beantworten",
         "ticket_already_linked": "Dieses Ticket hat bereits eine Aufgabe",
         "document_already_linked": "Dokument bereits angehängt",
@@ -6616,6 +6618,7 @@
         "binary_output_generator_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt eine generative Integration aus, die diese Installation nicht registriert, keine der gewählten Integrationen erzeugt einen Inhaltstyp, den der Schritt liefern muss, oder eine davon wird von einer Agenten-CLI erzeugt, auf der das Modell dieses Schritts nicht läuft. Generative Integrationen werden im Code der Installation registriert, nicht in diesem Workspace: registrieren Sie sie, korrigieren Sie die Auswahl des Schritts oder legen Sie für den Schritt ein Modell fest, das die erforderliche CLI ausführt, und starten Sie erneut.",
         "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards.",
         "input_gate_not_parked": "Dieser Lauf wartet nicht mehr auf seine Eingabeprüfung. Möglicherweise hat sie jemand schon beantwortet oder der Lauf ist weitergelaufen.",
+        "credential_wait_not_parked": "Dieser Lauf wartet nicht mehr auf die Anmeldedaten Ihres persönlichen Abonnements. Er wurde möglicherweise bereits fortgesetzt, oder der Lauf ist weitergegangen.",
         "input_gate_parked": "Dieser Lauf wartet auf seine Eingabeprüfung, die über die Freigabe nicht beantwortet werden kann. Nutzen Sie den Hinweis am Lauf: Aufgabe ergänzen und erneut prüfen, oder trotzdem ausführen.",
         "ticket_already_linked": "Ein Ticket kann nur eine Aufgabe stützen. Es erneut zu verknüpfen würde der bestehenden Aufgabe genau den Kontext entziehen, mit dem sie angelegt wurde. Öffne stattdessen diese Aufgabe oder hebe die Verknüpfung des Tickets zuerst auf.",
         "document_already_linked": "Dieses Dokument ist an eine andere Aufgabe angehängt. Lösen Sie es dort zuerst, oder hängen Sie eine separate Kopie an.",
@@ -6998,6 +7001,11 @@
         "hint": "Dieser Lauf hat eine Prüfung erfasst, die diese Version nicht mehr kennt. Sieh die Aufgabe von Hand durch, bevor du fortfährst."
       }
     }
+  },
+  "credentialWait": {
+    "title": "Ihre Anmeldedaten für das persönliche Abonnement sind abgelaufen",
+    "body": "Die Anmeldedaten des persönlichen Abonnements für diesen Lauf sind abgelaufen, bevor der nächste Schritt starten konnte. Der Lauf ist daher pausiert. Geben Sie Ihr persönliches Passwort ein, um sie zu erneuern und mit diesem Schritt fortzufahren.",
+    "resume": "Passwort eingeben und fortfahren"
   },
   "consensus": {
     "titlePrefix": "Konsens",

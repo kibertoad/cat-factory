@@ -10,6 +10,7 @@ import {
   dedicatedParkView,
   REDIRECT_PARK_PRESENTATION,
   type RedirectParkView,
+  isRedirectPark,
 } from '~/utils/pipelineRender'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentFailureHistory from '~/components/board/AgentFailureHistory.vue'
@@ -20,6 +21,7 @@ import type { PipelineStep } from '~/types/execution'
 import type { ChangeClass, ReviewEffort } from '~/types/merge'
 import MergeEffortChips from '~/components/merge/MergeEffortChips.vue'
 import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
+import CredentialWaitNotice from '~/components/credential/CredentialWaitNotice.vue'
 import { inputGateNoticeFor } from '~/utils/inputGate'
 import { composeRunOutcome, hasOutcomeToShow } from '~/utils/runOutcome'
 import SectionLabel from '~/components/common/SectionLabel.vue'
@@ -89,6 +91,13 @@ const runLive = computed(() => !!instance.value && !execution.isTerminal(instanc
  * kind-specific behind. Which verdicts earn a notice is `inputGateNoticeFor`'s call.
  */
 const inputGateNotice = computed(() => inputGateNoticeFor(instance.value))
+
+/** Whether the run's current step is parked because its personal credential lapsed. */
+const credentialWaitParked = computed(() => {
+  const run = instance.value
+  const step = run?.steps[run.currentStep]
+  return !!step && dedicatedParkView(step, run) === 'credential'
+})
 
 // Failures from prior attempts, preserved across retries — shown regardless of the run's
 // CURRENT status, so the error trail stays viewable after a restart clears the top banner.
@@ -191,13 +200,14 @@ function openStep(i: number) {
 }
 
 /**
- * The window-owned park holding a step, or null. `input-gate` is filtered out because it has no
- * window: it is answered by the inline notice this list renders above itself, so offering a
- * button here would send a human to an overlay that does not exist.
+ * The window-owned park holding a step, or null. The input gate and the credential wait are
+ * filtered out because neither has a window: each is answered by the inline notice this list
+ * renders above itself, so offering a button here would send a human to an overlay that does not
+ * exist.
  */
 function redirectPark(step: PipelineStep): RedirectParkView | null {
   const park = dedicatedParkView(step, instance.value)
-  return park && park !== 'input-gate' ? park : null
+  return isRedirectPark(park) ? park : null
 }
 
 /**
@@ -380,6 +390,7 @@ async function mergePr() {
         :execution-id="instance.id"
         class="mb-2"
       />
+      <CredentialWaitNotice v-if="credentialWaitParked" :execution-id="instance.id" class="mb-2" />
       <ul class="space-y-1">
         <li
           v-for="(s, i) in instance.steps"

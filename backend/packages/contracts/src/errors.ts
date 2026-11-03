@@ -242,6 +242,10 @@ export const CONFLICT_REASONS = [
   // The remedy is "nothing to do here": the SPA refreshes the run rather than re-offering a
   // decision that has already been taken.
   'input_gate_not_parked',
+  // A caller tried to resume a run's credential wait that is not (or is no longer) parked: the
+  // resume already went through (a double click, a second tab), or the run moved on. Like the
+  // input gate's twin above, the remedy is to refresh the run rather than to retry.
+  'credential_wait_not_parked',
   // The OPPOSITE fact, and deliberately its own reason rather than a second use of the one above.
   // The run IS parked on the input gate and the caller tried to answer it through the GENERIC
   // approval rail. The gate parks whatever step 0 happens to be, so a generic approve would mark

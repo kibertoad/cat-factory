@@ -53,14 +53,14 @@ async function resolvePersonalVendorPredicate(
 }
 
 /**
- * Re-mint a run's individual-usage activation(s) when a user interacts with it (resolve
- * decision / approve / request changes / resolve-exceeded). Runs BEFORE the engine advances
- * and dispatches the next step, so a fresh full-TTL activation is in place even if the prior
- * one lapsed. Unlike a silent best-effort refresh, this HARD-GATES exactly like start/retry:
- * a needed-but-absent/withheld password throws `428 credential_required` so the client
- * re-prompts EARLY (while the user is present at this interaction) instead of letting the run
- * break mid-pipeline on the next dispatch. No-op for a non-individual run (empty vendor set),
- * so the common path never prompts. See `getCachedPassword`'s 8h expiry buffer on the client.
+ * Re-mint a run's individual-usage activation(s) from the request's personal password, for the
+ * route that resumes a step parked on a lapsed credential. HARD-GATES exactly like start/retry: a
+ * needed-but-absent password throws `428 credential_required`, which is what makes the client
+ * prompt. No-op for a non-individual run (empty vendor set).
+ *
+ * The routes that merely ADVANCE a run do not call this. Whether a dispatch's credential is live
+ * is decided once, by the dispatch's own lease, and a refused lease parks the step (see
+ * `CredentialWaitController` in orchestration) rather than every such route re-minting up front.
  */
 export async function activateForInteraction<E extends AppEnv>(
   c: Context<E>,

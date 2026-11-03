@@ -23,10 +23,12 @@ import { useStepApproval } from '~/composables/useStepApproval'
 import {
   REDIRECT_PARK_PRESENTATION,
   type RedirectParkView,
+  isRedirectPark,
   dedicatedParkView,
   runIsActive,
 } from '~/utils/pipelineRender'
 import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
+import CredentialWaitNotice from '~/components/credential/CredentialWaitNotice.vue'
 import RunDetailLoadState from '~/components/panels/RunDetailLoadState.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
@@ -249,9 +251,7 @@ const genericApprovalPending = computed(
  * go on naming the fork decision for a park that is not one.
  */
 const parkPresentation = computed(() =>
-  dedicatedPark.value && dedicatedPark.value !== 'input-gate'
-    ? REDIRECT_PARK_PRESENTATION[dedicatedPark.value]
-    : null,
+  isRedirectPark(dedicatedPark.value) ? REDIRECT_PARK_PRESENTATION[dedicatedPark.value] : null,
 )
 
 /**
@@ -271,7 +271,7 @@ const PARK_OPENERS: Record<RedirectParkView, (instanceId: string, stepIndex: num
 function openDedicatedWindow() {
   const c = ctx.value
   const park = dedicatedPark.value
-  if (!c || !park || park === 'input-gate') return
+  if (!c || !isRedirectPark(park)) return
   close()
   PARK_OPENERS[park](c.instanceId, c.stepIndex)
 }
@@ -601,6 +601,12 @@ async function copyOutput() {
             v-if="inputGateVerdict && instance"
             :gate="inputGateVerdict"
             tone="blocked"
+            :execution-id="instance.id"
+            compact
+          />
+          <!-- the run's personal-subscription credential lapsed before this step dispatched -->
+          <CredentialWaitNotice
+            v-if="dedicatedPark === 'credential' && instance"
             :execution-id="instance.id"
             compact
           />

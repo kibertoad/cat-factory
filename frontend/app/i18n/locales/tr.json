@@ -692,6 +692,7 @@
       "startFailed": "Başlatılamadı",
       "mergeFailed": "Birleştirilemedi",
       "restartFailed": "Yeniden başlatılamadı",
+      "resumeCredentialFailed": "Çalıştırma sürdürülemedi",
       "approveFailed": "Onaylanamadı",
       "requestChangesFailed": "Değişiklik istenemedi",
       "rejectFailed": "Reddedilemedi"
@@ -746,6 +747,7 @@
         "binary_output_generator_invalid": "İkili çıktı üreticisi çözümlenemiyor",
         "foundational_service_not_inherited": "Bu hizmeti bu pano kaydetti",
         "input_gate_not_parked": "Yanıtlanacak bir şey yok",
+        "credential_wait_not_parked": "Sürdürülecek bir şey yok",
         "input_gate_parked": "Görevin girdi kontrolünden yanıtlayın",
         "ticket_already_linked": "Bu kayda ait bir görev zaten var",
         "document_already_linked": "Belge zaten ekli",
@@ -809,6 +811,7 @@
         "binary_output_generator_invalid": "İkili çıktı üreten bir adım, bu kurulumun kaydetmediği bir üretken entegrasyon seçiyor; seçili entegrasyonlardan hiçbiri adımın teslim etmesi gereken içerik türünü üretmiyor; ya da bunlardan biri, bu adımın modelinin çalışmadığı bir aracı CLI tarafından üretiliyor. Üretken entegrasyonlar bu çalışma alanında değil, kurulumun kodunda kaydedilir: entegrasyonu kaydedin, adımın seçimini düzeltin ya da adıma gereken CLI üzerinde çalışan bir model sabitleyin, sonra yeniden başlatın.",
         "foundational_service_not_inherited": "Devre dışı bırakma, hesaptan devralınan bir hizmet için geçerlidir. Bu kimlik bu pano tarafından kaydedilmiş, dolayısıyla devre dışı bırakılacak bir şey yok - bunun yerine panonun kendi kaydını silin.",
         "input_gate_not_parked": "Bu çalışma artık giriş denetimini beklemiyor. Biri onu yanıtlamış ya da çalışma ilerlemiş olabilir.",
+        "credential_wait_not_parked": "Bu çalıştırma artık kişisel aboneliğinizin kimlik bilgilerini beklemiyor. Zaten sürdürülmüş olabilir ya da çalıştırma ilerlemiş olabilir.",
         "input_gate_parked": "Bu çalıştırma girdi kontrolünde bekliyor ve onay akışı bunu yanıtlayamaz. Çalıştırmadaki bildirimi kullanın: görevi düzeltip yeniden kontrol edin ya da yine de çalıştırın.",
         "ticket_already_linked": "Bir kayıt yalnızca tek bir görevi besleyebilir; yeniden bağlamak mevcut görevi oluşturulduğu bağlamdan yoksun bırakır. Bunun yerine o görevi açın ya da önce kaydın bağlantısını kaldırın.",
         "document_already_linked": "Bu belge başka bir göreve ekli. Önce oradan ayırın ya da ayrı bir kopya ekleyin.",
@@ -5927,6 +5930,11 @@
         "hint": "Bu çalışma, bu sürümün artık bilmediği bir denetimi kaydetmiş. Devam etmeden önce görevi elle gözden geçirin."
       }
     }
+  },
+  "credentialWait": {
+    "title": "Kişisel aboneliğinizin kimlik bilgilerinin süresi doldu",
+    "body": "Bu çalıştırmanın kişisel abonelik kimlik bilgilerinin süresi sonraki adım başlamadan doldu, bu yüzden çalıştırma duraklatıldı. Bilgileri yenilemek ve bu adımdan devam etmek için kişisel parolanızı girin.",
+    "resume": "Parolayı gir ve devam et"
   },
   "requirements": {
     "title": "Gereksinim incelemesi",

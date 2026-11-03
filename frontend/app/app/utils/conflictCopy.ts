@@ -84,6 +84,10 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
     titleKey: 'errors.conflict.title.input_gate_not_parked',
     descriptionKey: 'errors.conflict.description.input_gate_not_parked',
   },
+  credential_wait_not_parked: {
+    titleKey: 'errors.conflict.title.credential_wait_not_parked',
+    descriptionKey: 'errors.conflict.description.credential_wait_not_parked',
+  },
   input_gate_parked: {
     titleKey: 'errors.conflict.title.input_gate_parked',
     descriptionKey: 'errors.conflict.description.input_gate_parked',

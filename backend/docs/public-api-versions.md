@@ -573,3 +573,9 @@ existed.
 `PublicPrReviewDecision.findings[].challenge.status` gains `queued`: a challenged finding whose investigator has not started yet. At most three investigators run at once per review, and the rest wait in a queue, so a challenge can now sit in a state that is neither `investigating` nor settled.
 
 Additive. The clients tolerate unknown enum values by design, so a consumer built against 1.91.0 keeps parsing. One that treats every non-settled status as `investigating` reads a queued challenge as already running, which is wrong only about timing: both settle the same way.
+
+## 1.93.0
+
+`PublicUnanswerableWait.reason` gains `credential_lapsed`: a run whose personal subscription credential lapsed before a step could dispatch. The step parks instead of failing the run, and only the run's initiator can resume it, by entering their personal password in the app. The error vocabulary gains the `credential_wait_not_parked` conflict reason, answered by the app's resume route when the run is no longer parked.
+
+Additive. A consumer built against 1.92.0 keeps parsing; before this, the same run would have arrived as `failed`.
