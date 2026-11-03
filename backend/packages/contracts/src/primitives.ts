@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { descriptorFieldValuesSchema } from './form-fields.js'
 import { BUG_FISHING_MAX_PASS_BUDGET } from './bugFishing.js'
+import { reviewEffortLevelSchema } from './review-effort-level.js'
 
 // Shared scalar schemas. Picklists mirror the frontend's `app/types/domain.ts`
 // unions exactly, so a payload that validates here drops straight into the Pinia
@@ -322,6 +323,12 @@ export const taskTypeFieldsSchema = v.object({
   prUrl: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
   /** Review: freeform focus/guidance for the reviewer (e.g. "focus on the auth changes"). */
   reviewFocus: v.optional(v.pipe(v.string(), v.maxLength(4000))),
+  /**
+   * Review: how much effort the reviewer spends (see {@link reviewEffortLevelSchema}). Picked when
+   * the task is created; absent ⇒ `DEFAULT_REVIEW_EFFORT_LEVEL` (`high`), so a task filed before the
+   * setting existed reviews exactly as it did.
+   */
+  reviewEffort: v.optional(reviewEffortLevelSchema),
   /**
    * Review: the account-catalog skills QUEUED onto this review, in the order they were picked.
    * Each is a specialist playbook the team authored ("Performance review", "Security review") that
