@@ -335,6 +335,75 @@ export function reviewSettledForUnattended(
   })
 }
 
+/**
+ * What happened on ONE linked tracker issue when the refined requirements were written into its
+ * description:
+ *
+ * - `updated`: the description now holds the document.
+ * - `already_current`: the description already held exactly this document, so nothing was written.
+ * - `failed`: the tracker refused or could not be reached; updating again retries it.
+ * - `unsupported`: the issue's source cannot have its description written in this deployment.
+ */
+export const refinedRequirementsWritebackOutcomeSchema = v.picklist([
+  'updated',
+  'already_current',
+  'failed',
+  'unsupported',
+])
+export type RefinedRequirementsWritebackOutcome = v.InferOutput<
+  typeof refinedRequirementsWritebackOutcomeSchema
+>
+
+/** One linked issue's outcome of a refined-requirements writeback. */
+export const refinedRequirementsIssueOutcomeSchema = v.object({
+  /** The task source the issue was imported from (`jira`, `github`, a namespaced id). */
+  source: v.string(),
+  externalId: v.string(),
+  outcome: refinedRequirementsWritebackOutcomeSchema,
+})
+export type RefinedRequirementsIssueOutcome = v.InferOutput<
+  typeof refinedRequirementsIssueOutcomeSchema
+>
+
+/** The per-issue result of writing a block's refined requirements into its linked issues. */
+export const refinedRequirementsWritebackResultSchema = v.object({
+  issues: v.array(refinedRequirementsIssueOutcomeSchema),
+})
+export type RefinedRequirementsWritebackResult = v.InferOutput<
+  typeof refinedRequirementsWritebackResultSchema
+>
+
+/**
+ * The last refined-requirements writeback a review recorded, so the review window can say what
+ * happened on each linked issue whether a person clicked or the workspace setting fired it.
+ */
+export const refinedRequirementsWritebackRecordSchema = v.object({
+  /** `automatic` when the workspace setting fired it as the review settled; `manual` on a click. */
+  trigger: v.picklist(['automatic', 'manual']),
+  at: v.number(),
+  issues: v.array(refinedRequirementsIssueOutcomeSchema),
+})
+export type RefinedRequirementsWritebackRecord = v.InferOutput<
+  typeof refinedRequirementsWritebackRecordSchema
+>
+
+/**
+ * Read a stored writeback record back. Both facades store it as JSON text and read it through
+ * this, so a row neither can parse reads as "no writeback recorded" on both rather than throwing
+ * on one.
+ */
+export function parseRefinedRequirementsWritebackRecord(
+  raw: string | null | undefined,
+): RefinedRequirementsWritebackRecord | null {
+  if (!raw) return null
+  try {
+    const parsed = v.safeParse(refinedRequirementsWritebackRecordSchema, JSON.parse(raw))
+    return parsed.success ? parsed.output : null
+  } catch {
+    return null
+  }
+}
+
 /** A completed requirements review for one board block. */
 export const requirementReviewSchema = v.object({
   id: v.string(),
@@ -377,6 +446,12 @@ export const requirementReviewSchema = v.object({
    * reads as 0.
    */
   rev: v.optional(v.number(), 0),
+  /**
+   * The last time the refined requirements were written into the block's linked issues, and what
+   * happened on each. Written only through its own repository method, never by a whole-row write,
+   * so a concurrent edit of the review cannot drop it. Null until a writeback has run.
+   */
+  issueWriteback: v.optional(v.nullable(refinedRequirementsWritebackRecordSchema)),
   createdAt: v.number(),
   updatedAt: v.number(),
 })

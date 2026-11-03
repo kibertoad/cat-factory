@@ -31,6 +31,7 @@ function makeSettings(over: Partial<TrackerSettings>): TrackerSettings {
     writebackCommentOnPrOpen: false,
     writebackResolveOnMerge: false,
     writebackQuestionsOnPark: false,
+    writebackRequirementsToDescription: false,
     updatedAt: 0,
     ...over,
   }

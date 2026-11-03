@@ -315,17 +315,11 @@ export class ExecutionService {
       boardService,
       spendService,
       environmentProvisioning,
-      requirementReviewService,
-      docInterviewService,
       forkChatService,
       testerQualityReviewer,
       kaizenScheduler,
-      clarityReviewService,
-      brainstormServices,
       environmentTeardown,
       branchUpdater,
-      initiativeService,
-      initiativeInterviewService,
       notificationService,
       runLifecycleSink,
       resolveBinaryArtifactStore,
@@ -453,19 +447,9 @@ export class ExecutionService {
     })
     // The review-gate subjects + the two interactive interview gates, built by the sibling
     // factory over the same collaborators (see gate-window-controllers.ts).
-    const reviewSubjects = buildReviewSubjects({
-      blockRepository,
-      executionRepository,
-      workRunner,
+    const reviewSubjects = buildReviewSubjects(dependencies, {
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
-      executionEventPublisher,
-      requirementReviewService,
-      clarityReviewService,
-      brainstormServices,
-      initiativeService,
-      initiativeInterviewService,
-      docInterviewService,
     })
     this.requirementsKind = reviewSubjects.requirementsKind
     this.clarityKind = reviewSubjects.clarityKind

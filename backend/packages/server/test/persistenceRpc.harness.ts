@@ -426,11 +426,12 @@ function buildBoardConfigRepos() {
       get: async (ws: string) => ({ ws }),
       upsert: async () => undefined,
     },
-    // The parked-review question writeback marker. Every method takes the marker KEY as arg0, whose
-    // `workspaceId` is a FIELD — so the reads echo the key back and `claim` echoes the bound
-    // workspace through its boolean, letting the round-trip prove which workspace was bound.
-    reviewQuestionPostRepository: {
-      claim: async (key: { workspaceId: string }) => key.workspaceId === 'ws_in',
+    // The writeback exactly-once marker. Every method takes the marker KEY as arg0, whose
+    // `workspaceId` is a FIELD, so the reads echo the key back and `claim` echoes the bound
+    // workspace through its answer, letting the round-trip prove which workspace was bound.
+    writebackPostRepository: {
+      claim: async (key: { workspaceId: string }) =>
+        key.workspaceId === 'ws_in' ? 'claimed' : 'held',
       settle: async () => undefined,
       get: async (key: { workspaceId: string }) => ({ ...key }),
     },

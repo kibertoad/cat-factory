@@ -149,6 +149,10 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     client.applyIssueLabel = (i, ref, n, label) =>
       vcs.applyIssueLabel!(conn(i), toRepoRef(ref), n, label)
   }
+  if (vcs.replaceIssueBody) {
+    client.replaceIssueBody = (i, ref, n, body) =>
+      vcs.replaceIssueBody!(conn(i), toRepoRef(ref), n, body)
+  }
   if (vcs.listRequestedReviewers) {
     client.listRequestedReviewers = (i, ref, n) =>
       vcs.listRequestedReviewers!(conn(i), toRepoRef(ref), n)

@@ -458,6 +458,10 @@ export {
   RequirementReviewService,
   type RequirementReviewServiceDependencies,
 } from './modules/requirements/RequirementReviewService.js'
+export {
+  RefinedRequirementsPublisher,
+  type RefinedRequirementsPublisherDependencies,
+} from './modules/requirements/RefinedRequirementsPublisher.js'
 export * as requirementsLogic from './modules/requirements/requirements.logic.js'
 
 export { KaizenService, type KaizenServiceDependencies } from './modules/kaizen/KaizenService.js'

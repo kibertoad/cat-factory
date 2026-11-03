@@ -170,6 +170,7 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     llmObservability,
     ticketTrackerProvider: dependencies.ticketTrackerProvider,
     issueWriteback: dependencies.issueWritebackProvider,
+    refinedRequirementsWriteback: requirements?.publisher,
     // Let the personal-credential gate + start guard resolve the model the same way
     // dispatch does, so a run whose block has no pin but resolves (via its preset) to an
     // individual-usage model is still gated up-front. Reuses the model-preset repository.

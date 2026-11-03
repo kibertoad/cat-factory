@@ -98,7 +98,6 @@ export const WORKSPACE_SCOPED_TABLES = [
   'release_health_configs',
   'requirement_reviews',
   'risk_policy_suppressions',
-  'review_question_posts',
   'runner_pool_connections',
   'service_catalog_connections',
   'shared_stacks',
@@ -116,6 +115,7 @@ export const WORKSPACE_SCOPED_TABLES = [
   'workspace_fragment_defaults',
   'workspace_members',
   'workspace_settings',
+  'writeback_posts',
 ] as const
 
 export type WorkspaceScopedTable = (typeof WORKSPACE_SCOPED_TABLES)[number]

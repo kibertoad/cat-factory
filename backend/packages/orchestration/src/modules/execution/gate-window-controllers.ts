@@ -318,19 +318,22 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
  * The already-built collaborators {@link buildReviewSubjects} needs. Same values the
  * constructor used inline.
  */
-export interface ReviewSubjectDeps {
-  blockRepository: BlockRepository
-  executionRepository: ExecutionRepository
-  workRunner: WorkRunner
+export type ReviewSubjectDeps = Pick<
+  ExecutionServiceDependencies,
+  | 'blockRepository'
+  | 'executionRepository'
+  | 'workRunner'
+  | 'executionEventPublisher'
+  | 'requirementReviewService'
+  | 'clarityReviewService'
+  | 'brainstormServices'
+  | 'initiativeService'
+  | 'initiativeInterviewService'
+  | 'docInterviewService'
+  | 'refinedRequirementsWriteback'
+> & {
   stateMachine: RunStateMachine
   stepGraph: StepGraph
-  executionEventPublisher: ExecutionServiceDependencies['executionEventPublisher']
-  requirementReviewService: ExecutionServiceDependencies['requirementReviewService']
-  clarityReviewService: ExecutionServiceDependencies['clarityReviewService']
-  brainstormServices: ExecutionServiceDependencies['brainstormServices']
-  initiativeService: ExecutionServiceDependencies['initiativeService']
-  initiativeInterviewService: ExecutionServiceDependencies['initiativeInterviewService']
-  docInterviewService: ExecutionServiceDependencies['docInterviewService']
 }
 
 /**
@@ -339,7 +342,11 @@ export interface ReviewSubjectDeps {
  * from the {@link ExecutionService} constructor for the per-function line budget — each
  * subject's differentiators still live in `review-kinds.ts`, not on the engine.
  */
-export function buildReviewSubjects(deps: ReviewSubjectDeps) {
+export function buildReviewSubjects(
+  dependencies: Omit<ReviewSubjectDeps, 'stateMachine' | 'stepGraph'>,
+  engine: Pick<ReviewSubjectDeps, 'stateMachine' | 'stepGraph'>,
+) {
+  const deps: ReviewSubjectDeps = { ...dependencies, ...engine }
   const {
     blockRepository,
     executionRepository,
@@ -364,6 +371,9 @@ export function buildReviewSubjects(deps: ReviewSubjectDeps) {
     requirementReviewService,
     clarityReviewService,
     brainstormServices,
+    ...(deps.refinedRequirementsWriteback
+      ? { refinedRequirementsWriteback: deps.refinedRequirementsWriteback }
+      : {}),
   }
   const requirementsKind = buildRequirementsKind(reviewKindDeps)
   const clarityKind = buildClarityKind(reviewKindDeps)

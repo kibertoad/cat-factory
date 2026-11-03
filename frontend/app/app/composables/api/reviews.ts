@@ -25,6 +25,7 @@ import {
   updateBrainstormItemStatusContract,
   updateClarityItemStatusContract,
   updateRequirementItemStatusContract,
+  writeRefinedRequirementsContract,
 } from '@cat-factory/contracts'
 import type {
   RequestRecommendationItem,
@@ -97,6 +98,14 @@ export function reviewsApi({ send, ws }: ApiContext) {
     // Proceed: settle the requirements and advance the parked run (all findings dismissed).
     proceedRequirements: (workspaceId: string, blockId: string) =>
       send(proceedRequirementsContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
+
+    // Write the refined requirements into the block's linked tracker issues' descriptions.
+    // Returns the per-issue outcome; an issue already holding the document is left alone.
+    writeRefinedRequirements: (workspaceId: string, blockId: string) =>
+      send(writeRefinedRequirementsContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+      }),
 
     // Resolve a review that hit its iteration cap: extra-round / proceed / stop-reset.
     resolveRequirementsExceeded: (

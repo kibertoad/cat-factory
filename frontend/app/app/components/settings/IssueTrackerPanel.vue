@@ -33,6 +33,7 @@ const linearTeamId = ref('')
 const commentOnPrOpen = ref(false)
 const resolveOnMerge = ref(false)
 const questionsOnPark = ref(false)
+const requirementsToDescription = ref(false)
 const saving = ref(false)
 
 function hydrate() {
@@ -42,6 +43,7 @@ function hydrate() {
   commentOnPrOpen.value = tracker.settings.writebackCommentOnPrOpen
   resolveOnMerge.value = tracker.settings.writebackResolveOnMerge
   questionsOnPark.value = tracker.settings.writebackQuestionsOnPark
+  requirementsToDescription.value = tracker.settings.writebackRequirementsToDescription
 }
 onMounted(() => {
   hydrate()
@@ -114,6 +116,7 @@ async function save() {
       writebackCommentOnPrOpen: commentOnPrOpen.value,
       writebackResolveOnMerge: resolveOnMerge.value,
       writebackQuestionsOnPark: questionsOnPark.value,
+      writebackRequirementsToDescription: requirementsToDescription.value,
     })
     actionToast.success('settings.issueTracker.toast.saved')
   } catch (e) {
@@ -431,6 +434,18 @@ async function checkSetup(source: TaskSourceKind) {
           </span>
           <span class="block text-xs text-dimmed">
             {{ t('settings.issueTracker.writeback.questionsOnPark.help') }}
+          </span>
+        </span>
+      </label>
+
+      <label class="flex items-start gap-3 rounded-lg border border-muted bg-elevated/40 p-3">
+        <USwitch v-model="requirementsToDescription" />
+        <span class="text-sm">
+          <span class="block text-default">
+            {{ t('settings.issueTracker.writeback.requirementsToDescription.label') }}
+          </span>
+          <span class="block text-xs text-dimmed">
+            {{ t('settings.issueTracker.writeback.requirementsToDescription.help') }}
           </span>
         </span>
       </label>

@@ -325,6 +325,13 @@ export interface VcsClient {
     number: number,
     label: string,
   ): Promise<void>
+  /** Replace an issue's description when it differs. See the {@link GitHubClient} twin. */
+  replaceIssueBody?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+    body: string,
+  ): Promise<'updated' | 'unchanged'>
   openPullRequest(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,

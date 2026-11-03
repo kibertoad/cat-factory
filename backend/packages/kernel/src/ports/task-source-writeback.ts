@@ -92,6 +92,16 @@ export function createTaskWritebackContext(input: {
   }
 }
 
+/**
+ * Whether a stored issue description already holds `next`, for the read-compare-write a
+ * `replaceDescription` does. Line endings and trailing whitespace are ignored, because trackers
+ * normalise both on save and a difference there is not a different document.
+ */
+export function sameIssueDescription(current: string | null | undefined, next: string): boolean {
+  const normalise = (text: string) => text.replace(/\r\n?/g, '\n').trimEnd()
+  return normalise(current ?? '') === normalise(next)
+}
+
 /** How a picked-up issue is marked as being worked, where the vendor needs a value for it. */
 export interface TaskInProgressMark {
   /**
@@ -150,4 +160,15 @@ export interface TaskSourceWritebackAdapter {
     externalId: string,
     mark: TaskInProgressMark,
   ): Promise<void>
+  /**
+   * Replace the issue's description with `body` (Markdown, converted to the vendor's format by the
+   * adapter). The adapter READS the description first and writes only when it differs, answering
+   * `unchanged` otherwise, which is what makes a repeated or replayed write a no-op that adds no
+   * history entry. Optional: a source whose vendor has no editable description omits it.
+   */
+  replaceDescription?(
+    ctx: TaskWritebackContext,
+    externalId: string,
+    body: string,
+  ): Promise<'updated' | 'unchanged'>
 }

@@ -769,7 +769,9 @@
         "thread_busy": "Este hilo todavía está respondiendo",
         "draft_conflict": "Este borrador ha cambiado",
         "session_stale": "La pull request ha avanzado",
-        "cursor_expired": "El registro de cambios ya superó este cursor"
+        "cursor_expired": "El registro de cambios ya superó este cursor",
+        "refined_requirements_unavailable": "Todavía no hay requisitos refinados",
+        "no_linked_issues": "No hay ninguna incidencia vinculada"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -830,7 +832,9 @@
         "thread_busy": "La pregunta anterior de este hilo aún no tiene respuesta. Espera esa respuesta o pregunta en otro hilo.",
         "draft_conflict": "Este borrador de comentario se ha editado, publicado o descartado desde que lo cargaste. Vuelve a cargar los borradores y repite tu cambio.",
         "session_stale": "Llegaron commits nuevos después de preparar esta revisión, así que sus borradores pueden apuntar a líneas equivocadas. Actualiza la revisión, revisa los borradores y luego publica.",
-        "cursor_expired": "Los cambios posteriores a este cursor ya no se conservan. Toma una instantánea nueva del directorio y sigue el registro desde la posición que indique."
+        "cursor_expired": "Los cambios posteriores a este cursor ya no se conservan. Toma una instantánea nueva del directorio y sigue el registro desde la posición que indique.",
+        "refined_requirements_unavailable": "La revisión aún no ha producido un documento revisado o lo está reescribiendo ahora. Espera a que termine la incorporación y vuelve a actualizar.",
+        "no_linked_issues": "Esta tarea no tiene ninguna incidencia del gestor vinculada. Vincula la incidencia de la que proviene y vuelve a actualizar."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -3285,6 +3289,10 @@
         "questionsOnPark": {
           "label": "Publicar preguntas abiertas cuando un ejecución headless se detiene",
           "help": "Cuando una ejecución iniciada fuera de la aplicación se detiene para aclarar requisitos (por la API o despachada desde una incidencia del rastreador), publica sus preguntas abiertas en la incidencia vinculada, cada una con el id que debe nombrar la respuesta. Las tareas iniciadas en la aplicación no se ven afectadas."
+        },
+        "requirementsToDescription": {
+          "label": "Escribir los requisitos refinados en la descripción de la incidencia vinculada",
+          "help": "Cuando la revisión de requisitos de una tarea se cierra y la ejecución continúa, sustituye la descripción de la incidencia vinculada por los requisitos refinados. El tracker conserva la descripción anterior en su historial. Desactivado por defecto y configurable solo para todo el espacio de trabajo."
         }
       },
       "probeFailure": {
@@ -5981,6 +5989,23 @@
     "reRequest": "Volver a pedir",
     "finalRequirements": "Requisitos finales",
     "incorporatedDraft": "Requisitos incorporados (borrador)",
+    "updateIssues": {
+      "action": "Actualizar incidencias vinculadas",
+      "hint": "Sustituye la descripción de cada incidencia vinculada por estos requisitos. El tracker conserva la descripción anterior en su historial.",
+      "error": "No se pudieron actualizar las incidencias vinculadas",
+      "automatic": "Escrito automáticamente en las incidencias vinculadas cuando se cerró la revisión:",
+      "toast": {
+        "updated": "Incidencias vinculadas actualizadas con los requisitos",
+        "nothingNew": "Las incidencias vinculadas ya contienen estos requisitos",
+        "partial": "Algunas incidencias vinculadas no se actualizaron"
+      },
+      "outcome": {
+        "updated": "actualizada",
+        "already_current": "ya estaba al día",
+        "failed": "falló, vuelve a actualizar para reintentarlo",
+        "unsupported": "este tracker no se puede actualizar"
+      }
+    },
     "stats": {
       "findings": "Hallazgos",
       "open": "Abiertos",

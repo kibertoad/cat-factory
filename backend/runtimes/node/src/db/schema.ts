@@ -649,6 +649,8 @@ export const requirementReviews = pgTable(
     // Optimistic-concurrency token (mirror of the D1 column): every read-modify-write CASes on
     // it, so two writers editing different findings can't clobber each other.
     rev: integer('rev').notNull().default(0),
+    // The last refined-requirements writeback (JSON), outside `rev` (mirror of D1 migration 0111).
+    issue_writeback: text('issue_writeback'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },

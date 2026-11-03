@@ -119,3 +119,44 @@ describe('jiraWriteback', () => {
     expect(calls).toEqual([])
   })
 })
+
+describe('jiraWriteback.replaceDescription', () => {
+  /** Stub a Jira site whose issue description is `stored` (ADF), recording every call. */
+  function stubIssue(stored: unknown): Call[] {
+    const calls: Call[] = []
+    vi.stubGlobal('fetch', async (url: string, init: { method: string; body?: string }) => {
+      calls.push({ url, method: init.method, body: init.body })
+      const json = init.method === 'GET' ? { fields: { description: stored } } : null
+      return { ok: true, status: 200, text: async () => '', json: async () => json }
+    })
+    return calls
+  }
+
+  it('PUTs the description as ADF when it differs', async () => {
+    const calls = stubIssue(null)
+    expect(await jiraWriteback.replaceDescription!(CTX, 'PROJ-1', '## Goal\n- one')).toBe('updated')
+    expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([
+      'GET https://acme.atlassian.net/rest/api/3/issue/PROJ-1?fields=description',
+      'PUT https://acme.atlassian.net/rest/api/3/issue/PROJ-1',
+    ])
+    const sent = JSON.parse(calls[1]!.body!) as { fields: { description: { type: string } } }
+    expect(sent.fields.description.type).toBe('doc')
+  })
+
+  it('leaves an identical description alone, attributes Jira added on save included', async () => {
+    const stored = {
+      type: 'doc',
+      version: 1,
+      content: [
+        {
+          type: 'heading',
+          attrs: { level: 2, localId: 'abc' },
+          content: [{ type: 'text', text: 'Goal' }],
+        },
+      ],
+    }
+    const calls = stubIssue(stored)
+    expect(await jiraWriteback.replaceDescription!(CTX, 'PROJ-1', '## Goal')).toBe('unchanged')
+    expect(calls.map((c) => c.method)).toEqual(['GET'])
+  })
+})

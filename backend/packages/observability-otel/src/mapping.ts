@@ -755,6 +755,7 @@ const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'fragments.dropped_from_run': 'cat_factory.platform.fragments_dropped_from_run',
   'document.freshness_gap': 'cat_factory.platform.document_freshness_gaps',
   'followup.send_back_dropped': 'cat_factory.platform.followup_send_backs_dropped',
+  'writeback.requirements_description': 'cat_factory.platform.requirements_description_writebacks',
 }
 
 /** Metric name per operational gauge. Exhaustive, for the same reason. */
@@ -821,6 +822,8 @@ const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
   // One human DECISION thrown away, not one run that threw any: a triage that queued four items
   // into a spent budget lost four decisions, and the unit is what makes that read as four.
   'followup.send_back_dropped': '{decision}',
+  // One linked issue, not one review: a review linked to three issues writes back three times.
+  'writeback.requirements_description': '{issue}',
 }
 
 /**

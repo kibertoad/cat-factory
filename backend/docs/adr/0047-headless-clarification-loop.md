@@ -109,7 +109,7 @@ deliberately the opposite of the `types` filter. See [ADR 0030](./0030-public-ap
   chatty thread can drive; the cursor dedup bounds replay.
 - **D8, reliability of the question-out.** A silently failed post leaves a run parked with nobody
   told, so a failed question post raises the in-app `requirement_review` card the SPA park raises. A
-  `review_question_posts` marker per `(workspace, review, iteration, issue ref)` is written
+  `writeback_posts` marker (kind `review_questions`) per `(workspace, review, iteration, issue ref)` is written
   insert-or-ignore before the comment counts as done, so replays cannot double-post.
 
 ## Rationale

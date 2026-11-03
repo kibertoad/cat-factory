@@ -10,12 +10,11 @@ import {
   noopLogger,
   type PullRequestRef,
   redactSecrets,
+  type RefinedRequirementsWritebackTrigger,
   resolveWritebackFlag,
   REVIEW_QUESTION_POLICIES,
-  REVIEW_QUESTION_POST_CLAIM_TTL_MS,
   type ReviewQuestionPost,
   type ReviewQuestionPostOutcome,
-  type ReviewQuestionPostRepository,
   type ReviewReplyAck,
   runBestEffort,
   type TaskConnectionStore,
@@ -28,15 +27,24 @@ import {
   type TaskWritebackContext,
   type TrackerSettingsRepository,
   trackerWebhookSecret,
+  WRITEBACK_POST_CLAIM_TTL_MS,
+  type WritebackPostKey,
+  type WritebackPostRepository,
 } from '@cat-factory/kernel'
+import type {
+  RefinedRequirementsIssueOutcome,
+  RefinedRequirementsWritebackResult,
+} from '@cat-factory/contracts'
 import { issueRefFor, renderReviewQuestionsComment } from './reviewQuestions.logic.js'
 import { renderReviewReplyAck } from './reviewReplies.logic.js'
+import { renderRefinedRequirementsDescription } from './refinedRequirements.logic.js'
 import { MapTaskSourceRegistry } from '../tasks/tasks.logic.js'
 
 // IssueWritebackService: the runtime-neutral `IssueWritebackProvider`. As a task's PR progresses
 // the execution engine calls it to write back to the task's linked tracker issue(s): comment when
 // the PR opens, comment + resolve when it merges, claim an issue the recurring intake picked up,
-// echo a parked review's open questions, and acknowledge a reply that answered them.
+// echo a parked review's open questions, acknowledge a reply that answered them, and post a
+// review's refined requirements when a person asks for it.
 //
 // It owns the SHARED half of every one of those: the workspace's writeback settings (with the
 // per-task override on the block), the linked-issue lookup, the per-issue failure isolation, and
@@ -82,11 +90,11 @@ export interface IssueWritebackServiceDependencies {
    */
   taskConnectionStore?: TaskConnectionStore
   /**
-   * Idempotency markers for the parked-review question writeback. Absent → the writeback
-   * passes through entirely, because posting without a marker would re-post the same
-   * findings on every durable-driver replay (see the port doc).
+   * The exactly-once markers the parked-review question echo claims through. Absent: the echo
+   * passes through entirely, because posting without a marker would re-post the same findings on
+   * every durable-driver replay (see the port doc).
    */
-  reviewQuestionPostRepository?: ReviewQuestionPostRepository
+  writebackPostRepository?: WritebackPostRepository
   /**
    * Wall clock for the marker rows and their abandonment window. The facade's shared `Clock`,
    * like every other service here; defaults to the real clock so a test can pin time without
@@ -210,7 +218,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
     post: ReviewQuestionPost,
   ): Promise<ReviewQuestionPostOutcome> {
     const empty: ReviewQuestionPostOutcome = { posted: 0, skipped: 0, failed: 0 }
-    const markers = this.deps.reviewQuestionPostRepository
+    const markers = this.deps.writebackPostRepository
     // No marker store ⇒ no idempotency ⇒ a replaying driver would spam the issue. Pass through
     // rather than post unsafely; the park is still surfaced by the in-app review card.
     if (!markers || post.findings.length === 0) return empty
@@ -248,11 +256,12 @@ export class IssueWritebackService implements IssueWritebackProvider {
     // long comment to several trackers at once buys nothing while making a rate-limit
     // response more likely.
     for (const issue of issues) {
-      const key = {
+      const key: WritebackPostKey = {
         workspaceId,
-        reviewId: post.reviewId,
-        iteration: post.iteration,
+        kind: 'review_questions',
+        subjectId: post.reviewId,
         issueRef: issueRefFor(issue),
+        discriminator: String(post.iteration),
       }
       // Claim BEFORE posting: a crash between the comment and the marker write must not
       // re-post on the next replay. A `failed` marker is re-claimable, so a tracker outage is
@@ -261,22 +270,28 @@ export class IssueWritebackService implements IssueWritebackProvider {
       const at = now()
       const window = {
         now: at,
-        reclaimPendingBefore: at - REVIEW_QUESTION_POST_CLAIM_TTL_MS,
+        reclaimPendingBefore: at - WRITEBACK_POST_CLAIM_TTL_MS,
       }
       // A store failure reads as "someone else holds the claim", which silently suppresses this
       // iteration's post — so it is the one fallback-value catch here that must still say why.
-      const claimed = await markers.claim(key, window).catch((error: unknown) => {
+      const claim = await markers.claim(key, window).catch((error: unknown) => {
         this.log.warn('review question claim unreadable; treating it as already claimed', {
           workspaceId,
           blockId: block.id,
           issueRef: key.issueRef,
           ...describeError(error),
         })
-        return false
+        return 'held' as const
       })
-      if (!claimed) {
+      if (claim !== 'claimed') {
         outcome.skipped += 1
         continue
+      }
+      const fields = {
+        workspaceId,
+        blockId: block.id,
+        source: issue.source,
+        externalId: issue.externalId,
       }
       const source = resolved.get(issue.source)
       const ticketReplies = source?.status === 'ready' && source.ticketReplies
@@ -303,8 +318,6 @@ export class IssueWritebackService implements IssueWritebackProvider {
         // row re-claimable — self-healing without ever inventing a duplicate.
         const delivered = await this.comment(workspaceId, resolved, issue, bodyFor(ticketReplies))
         if (!delivered) throw new Error(`No ${issue.source} writeback is wired`)
-        await markers.settle(key, { status: 'posted' }, now())
-        outcome.posted += 1
       } catch (e) {
         outcome.failed += 1
         // Scrubbed like every other stored free text: a transport error can quote the request
@@ -319,14 +332,25 @@ export class IssueWritebackService implements IssueWritebackProvider {
           err: error,
         })
         // A settle that ALSO fails leaves the claim `pending` until its TTL reclaims it, so the
-        // post still self-heals — but the marker store being the second broken thing needs saying.
+        // post still self-heals.
         await runBestEffort(
           this.log,
           'reviewQuestionPost.settleFailed',
           () => markers.settle(key, { status: 'failed', error }, now()),
-          { workspaceId, blockId: block.id, source: issue.source, externalId: issue.externalId },
+          fields,
         )
+        continue
       }
+      // Outside the `try`: the comment landed, so a marker write that fails must not settle the
+      // row `failed`, which the next replay would read as "post again". A row left `pending` is
+      // re-taken after its TTL, the same as a poster that died.
+      await runBestEffort(
+        this.log,
+        'reviewQuestionPost.settlePosted',
+        () => markers.settle(key, { status: 'posted' }, now()),
+        fields,
+      )
+      outcome.posted += 1
     }
     return outcome
   }
@@ -350,6 +374,63 @@ export class IssueWritebackService implements IssueWritebackProvider {
   ): Promise<void> {
     const resolved = await this.resolveSources(workspaceId, [issue])
     await this.comment(workspaceId, resolved, issue, renderReviewReplyAck(ack))
+  }
+
+  async writeRefinedRequirements(
+    workspaceId: string,
+    blockId: string,
+    document: string,
+    trigger: RefinedRequirementsWritebackTrigger,
+  ): Promise<RefinedRequirementsWritebackResult | 'disabled'> {
+    if (trigger === 'automatic') {
+      const settings = await this.deps.trackerSettingsRepository.get(workspaceId)
+      const enabled =
+        settings?.writebackRequirementsToDescription ??
+        DEFAULT_TRACKER_WRITEBACK.writebackRequirementsToDescription
+      if (!enabled) return 'disabled'
+    }
+    const issues = await this.deps.taskRepository.listByBlock(workspaceId, blockId)
+    if (issues.length === 0) return { issues: [] }
+    const resolved = await this.resolveSources(workspaceId, issues)
+    const body = renderRefinedRequirementsDescription(document)
+    const results: RefinedRequirementsIssueOutcome[] = []
+    // Sequential: a block typically has ONE linked issue, and writing a long document to several
+    // trackers at once buys nothing while making a rate-limit response more likely.
+    for (const issue of issues) {
+      const ref = { source: issue.source, externalId: issue.externalId }
+      const source = resolved.get(issue.source)
+      if (
+        source?.status === 'unwired' ||
+        (source?.status === 'ready' && !source.adapter.replaceDescription)
+      ) {
+        this.log.warn(
+          'this source cannot have its description written; refined requirements not written',
+          {
+            workspaceId,
+            blockId,
+            ...ref,
+          },
+        )
+        results.push({ ...ref, outcome: 'unsupported' })
+        continue
+      }
+      try {
+        if (source?.status !== 'ready') {
+          throw new Error(`The ${issue.source} connection for this workspace could not be opened`)
+        }
+        const written = await source.adapter.replaceDescription!(source.ctx, issue.externalId, body)
+        results.push({ ...ref, outcome: written === 'updated' ? 'updated' : 'already_current' })
+      } catch (e) {
+        this.log.warn('refined requirements description write failed', {
+          workspaceId,
+          blockId,
+          ...ref,
+          err: (redactSecrets(getErrorMessage(e)) ?? '').slice(0, 500),
+        })
+        results.push({ ...ref, outcome: 'failed' })
+      }
+    }
+    return { issues: results }
   }
 
   /**

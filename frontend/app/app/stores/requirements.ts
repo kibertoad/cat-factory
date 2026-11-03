@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { RefinedRequirementsWritebackResult } from '@cat-factory/contracts'
 import type {
   RequirementReview,
   ResolveRequirementsExceededChoice,
@@ -204,6 +205,17 @@ export const useRequirementsStore = defineStore('requirements', () => {
     }
   }
 
+  /**
+   * Write the refined requirements into the block's linked tracker issues' descriptions. The
+   * per-issue outcome comes back for the caller to report, and is recorded on the review, so the
+   * review is reloaded to carry it.
+   */
+  async function updateLinkedIssues(blockId: string): Promise<RefinedRequirementsWritebackResult> {
+    const result = await api.writeRefinedRequirements(workspace.requireId(), blockId)
+    await load(blockId)
+    return result
+  }
+
   /** Proceed: settle the requirements and advance the parked run. */
   async function proceed(blockId: string): Promise<RequirementReview> {
     const updated = await api.proceedRequirements(workspace.requireId(), blockId)
@@ -258,6 +270,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     incorporate,
     reReview,
     proceed,
+    updateLinkedIssues,
     resolveExceeded,
     requestRecommendations,
     acceptRecommendation,

@@ -23,6 +23,11 @@ export const LINEAR_ISSUE_RESOLVE_LOOKUP_QUERY = `query IssueResolveLookup($id: 
   }
 }`
 
+/** Look up an issue's UUID plus its current Markdown description (for a description replace). */
+export const LINEAR_ISSUE_DESCRIPTION_QUERY = `query IssueDescription($id: String!) {
+  issue(id: $id) { id description }
+}`
+
 /** The `commentCreate` mutation. */
 export const LINEAR_COMMENT_CREATE_MUTATION = `mutation CommentCreate($input: CommentCreateInput!) {
   commentCreate(input: $input) { success }
@@ -47,6 +52,14 @@ export function buildLinearStateUpdateVariables(
   stateId: string,
 ): { id: string; input: Record<string, unknown> } {
   return { id: issueId, input: { stateId } }
+}
+
+/** Build the `issueUpdate` variables that replace an issue's Markdown description. */
+export function buildLinearDescriptionUpdateVariables(
+  issueId: string,
+  description: string,
+): { id: string; input: Record<string, unknown> } {
+  return { id: issueId, input: { description } }
 }
 
 /** One workflow state as returned by the team-states lookup. */

@@ -224,3 +224,32 @@ describe('GitLabIssuesProvider.writeback', () => {
     )
   })
 })
+
+describe('repo-backed replaceDescription', () => {
+  it('writes the issue body through the client and passes its answer back', async () => {
+    const writes: { number: number; body: string }[] = []
+    const gh = client({
+      replaceIssueBody: async (_i, _ref, number, body) => {
+        writes.push({ number, body })
+        return 'updated'
+      },
+    })
+    const provider = new GitHubIssuesProvider({
+      githubClient: gh.client,
+      installations: installations({ provider: 'github' }),
+    })
+    expect(await provider.writeback.replaceDescription!(ctx(), 'acme/web#7', 'doc')).toBe('updated')
+    expect(writes).toEqual([{ number: 7, body: 'doc' }])
+  })
+
+  it('refuses when the client cannot edit an issue body, so the caller reports it failed', async () => {
+    const gh = client()
+    const provider = new GitHubIssuesProvider({
+      githubClient: gh.client,
+      installations: installations({ provider: 'github' }),
+    })
+    await expect(
+      provider.writeback.replaceDescription!(ctx(), 'acme/web#7', 'doc'),
+    ).rejects.toThrow(/cannot edit an issue description/)
+  })
+})

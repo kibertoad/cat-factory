@@ -120,6 +120,7 @@ import { D1ServiceRepository } from './repositories/D1ServiceRepository'
 import { D1SubscriptionActivationRepository } from './repositories/D1PersonalSubscriptionRepository'
 import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
 import { D1ValidationConfigRepository } from './repositories/D1ValidationConfigRepository'
+import { D1WritebackPostRepository } from './repositories/D1WritebackPostRepository'
 import { D1ReportsRepository } from './repositories/D1ReportsRepository'
 import { D1SpendRollupRepository } from './repositories/D1SpendRollupRepository'
 import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
@@ -990,6 +991,9 @@ function buildWorkerPersistenceRegistry(
     // so the repo isn't in `CoreDependencies` — reflect it explicitly or a mothership-mode
     // node's dispatch resolution + inspector reads come back `... is not wired`.
     validationConfigRepository: new D1ValidationConfigRepository({ db }),
+    // The writeback exactly-once marker is built inside the issue writeback, not the Core, so it is
+    // folded in here for a mothership-mode node's parked-review question claims to reach.
+    writebackPostRepository: new D1WritebackPostRepository({ db }),
     // GitHub projection + installation reads the mothership serves over the persistence RPC even
     // when its OWN github service is off. A mothership-mode local node reaches GitHub by token
     // DELEGATION (no local App), which enables `container.github`, so its board snapshot

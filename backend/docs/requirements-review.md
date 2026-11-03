@@ -86,6 +86,48 @@ software: an invention that now reads as researched. Its `groundedIn` provenance
 `project-spec` / `web` / `general-practice`) is reported per suggestion, and an unreported level
 stays NULL rather than defaulting.
 
+## Writing the refined requirements into the source issue
+
+When the task came from a tracker issue (Jira, GitHub Issues, GitLab Issues, Linear, or a
+deployment's own source), the refined document can replace that issue's description. Two triggers
+share one path through `RefinedRequirementsPublisher` (orchestration):
+
+- **The "Update linked issues" button** in the review window, always available once a document
+  exists. It refuses with `refined_requirements_unavailable` while there is none or a fold is
+  rewriting it, and with `no_linked_issues` when nothing is linked.
+- **The `writebackRequirementsToDescription` workspace setting**, off by default. When it is on,
+  the review gate's settle hook (`ReviewKind.onSettled`, requirements kind only) writes the approved
+  document as the gate lets the run move on, on every path that settles it: an auto-pass, a
+  converged re-review, an unattended cap settle, and a person proceeding. It never fires on an
+  incorporation that still has findings.
+
+`IssueWritebackService.writeRefinedRequirements` (integrations) fans out over the linked issues
+through each source's optional `writeback.replaceDescription`; a source without it reports
+`unsupported`. Every outcome is counted (`writeback.requirements_description`, by trigger and
+outcome) and recorded on the review (`RequirementReview.issueWriteback`), which is what the window
+lists per issue.
+
+- **The description, replaced.** The description is what everyone reads, and every tracker keeps
+  its history (Jira's history, GitHub's edit history, GitLab's description versions, Linear's
+  history), so the reporter's words stay one click away. The rendered body opens with a line saying
+  so.
+- **Idempotent by content, with no marker.** Each adapter reads the stored description and writes
+  only when it differs (`sameIssueDescription`; Jira compares through `adfToMarkdown`, so attributes
+  Jira adds on save do not read as a change), answering `already_current` otherwise. A repeat, a
+  replay of the gate step, or two clicks at once therefore write at most once and add no history
+  entry. A replayed gate step records `already_current` over the first run's `updated`; the
+  description holds the document either way.
+- **Best-effort when automatic.** The settle hook runs through `runBestEffort` and is awaited before
+  the run advances (so a Worker cannot drop it), and a tracker failure costs the writeback, never
+  the run: the issue reports `failed` and the button retries it.
+- **The outcome record is its own column.** `recordIssueWriteback` writes it in its own statement,
+  outside `rev`, so neither it nor a concurrent review edit can clobber the other; `replaceForBlock`
+  clears it with the review it replaces.
+- **Converted mechanically, with no model.** GitHub, GitLab and Linear take the Markdown as it is;
+  Jira's adapter converts it to ADF with `tracker/markdown-adf.logic.ts`. Jira caps a field at
+  32,767 characters of stored ADF JSON, which outgrows the Markdown by a shape-dependent factor, so
+  the conversion is cut to fit at a line and marked (`jiraFieldAdf`).
+
 ## Inline engine kinds and prompt overrides
 
 These kinds run as bare inline `generateText` calls, so they bypass `systemPromptFor` and take

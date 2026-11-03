@@ -654,6 +654,34 @@ function registerTrackerWritebackTests(harness: ConformanceHarness): void {
     expect(keptReread.body.writebackQuestionsOnPark).toBe(false)
   })
 
+  it('round-trips the refined-requirements description writeback toggle, off by default', async () => {
+    // The opt-in that lets a settled requirements review replace the linked issues' descriptions.
+    // A facade that forgot the column would either never fire it or fire it for everyone.
+    const app = harness.makeApp()
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+
+    const unset = await app.call<TrackerSettings>('GET', `/workspaces/${wsId}/tracker-settings`)
+    expect(unset.body.writebackRequirementsToDescription).toBe(
+      DEFAULT_TRACKER_WRITEBACK.writebackRequirementsToDescription,
+    )
+    expect(DEFAULT_TRACKER_WRITEBACK.writebackRequirementsToDescription).toBe(false)
+
+    const on = await app.call<TrackerSettings>('PUT', `/workspaces/${wsId}/tracker-settings`, {
+      tracker: 'github',
+      writebackRequirementsToDescription: true,
+    })
+    expect(on.body.writebackRequirementsToDescription).toBe(true)
+
+    const kept = await app.call<TrackerSettings>('PUT', `/workspaces/${wsId}/tracker-settings`, {
+      tracker: 'github',
+      writebackQuestionsOnPark: false,
+    })
+    expect(kept.body.writebackRequirementsToDescription).toBe(true)
+    const reread = await app.call<TrackerSettings>('GET', `/workspaces/${wsId}/tracker-settings`)
+    expect(reread.body.writebackRequirementsToDescription).toBe(true)
+  })
+
   it('merges a public writeback patch onto the stored row, leaving the untouched flags alone', async () => {
     // The `/api/v1` half of the same row, and the property that separates it from the PUT above:
     // a caller naming ONE action must not move the other two. Only a conformance test can pin it

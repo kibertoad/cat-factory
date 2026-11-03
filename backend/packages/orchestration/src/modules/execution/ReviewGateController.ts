@@ -95,6 +95,12 @@ export interface ReviewKind<TReview extends ReviewCommon> {
   review(workspaceId: string, block: Block, preset: ReviewPreset): Promise<TReview>
   /** Re-review the incorporated document (one more pass). */
   reReview(workspaceId: string, reviewId: string, preset: ReviewPreset): Promise<TReview>
+  /**
+   * The review settled and its gate is about to let the run move on. Requirements-only today: the
+   * opt-in refined-requirements writeback. Must not throw; it is awaited before the run advances
+   * so a Worker cannot drop it, and a failure costs the writeback, never the run. Optional.
+   */
+  onSettled?(workspaceId: string, blockId: string): Promise<void>
   /** Fold the human's settled answers (+ any redo feedback) into the standardized document. */
   incorporate(
     workspaceId: string,
@@ -297,7 +303,7 @@ export class ReviewGateController {
             )
           : cycled
       if (review.status === 'incorporated') {
-        return this.completeStep(workspaceId, instance, step, isFinalStep)
+        return this.completeSettledStep(kind, workspaceId, instance, step, block, isFinalStep)
       }
       const settled = await this.settleCapUnattended(
         kind,
@@ -307,7 +313,8 @@ export class ReviewGateController {
         review,
         step,
       )
-      if (settled) return this.completeStep(workspaceId, instance, step, isFinalStep)
+      if (settled)
+        return this.completeSettledStep(kind, workspaceId, instance, step, block, isFinalStep)
       // `ready`/`exceeded`: re-park (a fresh decision id) and wait for the human again.
       // At the cap, raise a notification so the three-choice decision is discoverable.
       if (review.status === 'exceeded')
@@ -321,13 +328,13 @@ export class ReviewGateController {
     // the dedicated window.
     const review = await this.review(kind, workspaceId, block.id, instance)
     if (review.status === 'incorporated') {
-      return this.completeStep(workspaceId, instance, step, isFinalStep)
+      return this.completeSettledStep(kind, workspaceId, instance, step, block, isFinalStep)
     }
     // At the cap with nobody to ask: settle on the last clarified report and advance (see
     // `settleCapUnattended`). Checked before the auto-recommendation pass below, which exists to
     // hand a HUMAN a mostly-filled review and buys an unattended run nothing.
     if (await this.settleCapUnattended(kind, workspaceId, instance, block, review, step)) {
-      return this.completeStep(workspaceId, instance, step, isFinalStep)
+      return this.completeSettledStep(kind, workspaceId, instance, step, block, isFinalStep)
     }
     // Pre-answer the findings the reviewer judged answerable without a product owner, so the
     // human is handed a mostly-filled review (only the genuine business decisions remain
@@ -346,10 +353,10 @@ export class ReviewGateController {
       )
     }
     if (current.status === 'incorporated') {
-      return this.completeStep(workspaceId, instance, step, isFinalStep)
+      return this.completeSettledStep(kind, workspaceId, instance, step, block, isFinalStep)
     }
     if (await this.settleCapUnattended(kind, workspaceId, instance, block, current, step)) {
-      return this.completeStep(workspaceId, instance, step, isFinalStep)
+      return this.completeSettledStep(kind, workspaceId, instance, step, block, isFinalStep)
     }
     if (current.status === 'exceeded')
       await this.deps.stateMachine.raiseDecisionRequired(workspaceId, instance)
@@ -642,6 +649,19 @@ export class ReviewGateController {
   ): Promise<AdvanceResult> {
     this.deps.stateMachine.finishHumanGateStep(step)
     return this.deps.stateMachine.settleStepAndAdvance(workspaceId, instance, isFinalStep)
+  }
+
+  /** {@link completeStep} for a gate whose review SETTLED, after the kind's settle hook. */
+  private async completeSettledStep<TReview extends ReviewCommon>(
+    kind: ReviewKind<TReview>,
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+  ): Promise<AdvanceResult> {
+    await kind.onSettled?.(workspaceId, block.id)
+    return this.completeStep(workspaceId, instance, step, isFinalStep)
   }
 
   /** Resolve a block's current review or throw. */
@@ -985,6 +1005,7 @@ export class ReviewGateController {
     // faulting on a gone run) when there is no parked gate — matching the prior resume.
     const current = await this.deps.executionRepository.get(workspaceId, executionId)
     if (!current || !current.steps.some(isGate)) return
+    await kind.onSettled?.(workspaceId, blockId)
     // Advance past the resolved gate under OPTIMISTIC CONCURRENCY (race-audit 2.2 controller-half):
     // the pure in-memory advance (`advanceRunPastGate`) runs inside the CAS; its non-idempotent
     // side effects (`settleAdvancedGate`: block writes + driver signal + emit) run once after, on

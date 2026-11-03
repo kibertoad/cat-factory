@@ -34,6 +34,13 @@ export interface ReviewKindDeps {
   requirementReviewService?: RequirementReviewService
   clarityReviewService?: ClarityReviewService
   brainstormServices?: Record<BrainstormStage, BrainstormService>
+  /** The opt-in refined-requirements writeback the requirements kind fires as its review settles. */
+  refinedRequirementsWriteback?: RefinedRequirementsWriteback
+}
+
+/** What the requirements kind needs from `RefinedRequirementsPublisher`. */
+export interface RefinedRequirementsWriteback {
+  onReviewSettled(workspaceId: string, blockId: string): Promise<void>
 }
 
 /**
@@ -60,6 +67,12 @@ export function buildRequirementsKind(deps: ReviewKindDeps): ReviewKind<Requirem
       }),
     reReview: (ws, reviewId, preset) =>
       require().reReview(ws, reviewId, { concernThreshold: preset.maxRequirementConcernAllowed }),
+    ...(deps.refinedRequirementsWriteback
+      ? {
+          onSettled: (ws: string, blockId: string) =>
+            deps.refinedRequirementsWriteback!.onReviewSettled(ws, blockId),
+        }
+      : {}),
     incorporate: async (ws, _blockId, reviewId, feedback) => {
       await require().incorporate(ws, reviewId, { feedback })
     },

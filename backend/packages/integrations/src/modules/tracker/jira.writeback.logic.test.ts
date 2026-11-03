@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildJiraCommentPayload, pickTransitionByCategory } from './jira.writeback.logic.js'
+import {
+  buildJiraCommentPayload,
+  JIRA_FIELD_MAX_CHARS,
+  JIRA_TRUNCATION_NOTE,
+  pickTransitionByCategory,
+} from './jira.writeback.logic.js'
 
 describe('buildJiraCommentPayload', () => {
   it('wraps a Markdown comment body in an ADF document', () => {
@@ -8,6 +13,13 @@ describe('buildJiraCommentPayload', () => {
     }
     expect(payload.body.type).toBe('doc')
     expect(payload.body.content.length).toBeGreaterThan(0)
+  })
+
+  it("keeps the stored ADF under Jira's field limit, marking the cut", () => {
+    const markdown = Array.from({ length: 3_000 }, (_, i) => `- item ${i}`).join('\n')
+    const { body } = buildJiraCommentPayload(markdown)
+    expect(JSON.stringify(body).length).toBeLessThanOrEqual(JIRA_FIELD_MAX_CHARS)
+    expect(JSON.stringify(body.content.at(-1))).toContain(JIRA_TRUNCATION_NOTE)
   })
 })
 

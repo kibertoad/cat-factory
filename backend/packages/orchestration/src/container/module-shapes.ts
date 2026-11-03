@@ -24,6 +24,7 @@ import type { NotificationSettingsService } from '../modules/notifications/Notif
 import type { PreviewService } from '../modules/preview/PreviewService.js'
 import type { RecurringPipelineService } from '../modules/recurring/RecurringPipelineService.js'
 import type { ReleaseHealthService } from '../modules/releaseHealth/ReleaseHealthService.js'
+import type { RefinedRequirementsPublisher } from '../modules/requirements/RefinedRequirementsPublisher.js'
 import type { RequirementReviewService } from '../modules/requirements/RequirementReviewService.js'
 import type { SandboxRunService } from '../modules/sandbox/SandboxRunService.js'
 import type { SandboxService } from '../modules/sandbox/SandboxService.js'
@@ -56,6 +57,12 @@ import type { WorkspaceSettingsService } from '../modules/settings/WorkspaceSett
 /** The requirements-review feature's service, present only when its repository is wired. */
 export interface RequirementsModule {
   service: RequirementReviewService
+  /**
+   * Writes the refined requirements into the block's linked tracker issues' descriptions, on a
+   * click and (opt-in) as the review settles. Present only when the deployment wires an issue
+   * writeback provider.
+   */
+  publisher?: RefinedRequirementsPublisher
 }
 
 /** The Kaizen feature's service, present only when its repositories are wired. */

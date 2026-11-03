@@ -1,4 +1,11 @@
+import type { RefinedRequirementsWritebackResult } from '@cat-factory/contracts'
 import type { Block, PullRequestRef, TaskSourceKind } from '../domain/types.js'
+
+/**
+ * Who asked for a refined-requirements writeback: `manual` is a person's click and always runs;
+ * `automatic` is the review settling, and runs only when the workspace opted in.
+ */
+export type RefinedRequirementsWritebackTrigger = 'automatic' | 'manual'
 
 /** One open finding of a parked review, as rendered onto a tracker issue. */
 export interface ReviewQuestionFinding {
@@ -177,6 +184,25 @@ export interface IssueWritebackProvider {
     issue: { source: TaskSourceKind; externalId: string },
     ack: ReviewReplyAck,
   ): Promise<void>
+  /**
+   * Write the block's refined requirements (Markdown, model-authored, so untrusted) into the
+   * DESCRIPTION of each linked issue, through each source's `replaceDescription`. The tracker keeps
+   * the description's history, so the reporter's text is still there to read.
+   *
+   * Idempotent by content: each adapter reads the description first and leaves an identical one
+   * alone (`already_current`), so a repeat, a replay or two people clicking at once write at most
+   * once and need no marker. Failures are isolated per issue and REPORTED in the result rather than
+   * thrown. An empty result means the block has no linked issues.
+   *
+   * An `automatic` trigger reads the workspace's `writebackRequirementsToDescription` setting and
+   * answers `'disabled'` when it is off; a `manual` one always runs.
+   */
+  writeRefinedRequirements(
+    workspaceId: string,
+    blockId: string,
+    document: string,
+    trigger: RefinedRequirementsWritebackTrigger,
+  ): Promise<RefinedRequirementsWritebackResult | 'disabled'>
 }
 
 /** How a ticket reply's command was disposed of, when it could not be applied. */

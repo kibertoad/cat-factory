@@ -7,9 +7,12 @@ import {
 } from '@cat-factory/kernel'
 import {
   buildJiraCommentPayload,
+  buildJiraDescriptionPayload,
+  jiraFieldAdf,
   pickTransitionByCategory,
   type JiraTransition,
 } from '../../tracker/jira.writeback.logic.js'
+import { adfToMarkdown } from '../jira.logic.js'
 
 // The writeback capability of the Jira task source: comment, resolve (a transition into the
 // `done` status category) and claim (a transition into `indeterminate`, Jira's In Progress).
@@ -47,6 +50,23 @@ export const jiraWriteback: TaskSourceWritebackAdapter = {
   /** Jira HAS a workflow status, so the intake mark is a transition and `mark.label` is unused. */
   async markInProgress(ctx, externalId) {
     await transition(ctx, externalId, 'indeterminate')
+  },
+
+  /**
+   * The description is ADF. The stored one and the one about to be written are compared as
+   * Markdown through the same `adfToMarkdown` the import reads with, so attributes Jira adds on
+   * save do not read as a changed document.
+   */
+  async replaceDescription(ctx, externalId, body) {
+    const path = `issue/${encodeURIComponent(externalId)}`
+    const next = jiraFieldAdf(body)
+    const current = (await jiraRequest(ctx, `${path}?fields=description`, { method: 'GET' })) as {
+      fields?: { description?: unknown }
+    } | null
+    const stored = current?.fields?.description
+    if (stored && adfToMarkdown(stored) === adfToMarkdown(next)) return 'unchanged'
+    await jiraRequest(ctx, path, { method: 'PUT', body: buildJiraDescriptionPayload(next) })
+    return 'updated'
   },
 }
 
