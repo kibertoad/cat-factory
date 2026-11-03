@@ -1,6 +1,10 @@
 import * as v from 'valibot'
 import { iterationCapChoiceSchema } from './iteration-cap.js'
-import { requirementReviewItemSchema, requirementReviewStatusSchema } from './requirements.js'
+import {
+  incorporateAfterSchema,
+  requirementReviewItemSchema,
+  requirementReviewStatusSchema,
+} from './requirements.js'
 
 // ---------------------------------------------------------------------------
 // Clarity-review wire contracts. A clarity reviewer triages a board block's BUG
@@ -73,10 +77,12 @@ export type UpdateClarityItemStatusInput = v.InferOutput<typeof updateClarityIte
 
 /**
  * Incorporate the settled answers into a standardized, clear bug report. An optional
- * `feedback` comment is the human's "do it differently" lever when redoing a merge.
+ * `feedback` comment is the human's "do it differently" lever when redoing a merge; `after` is
+ * whether a re-review follows (see `incorporateAfterSchema`).
  */
 export const incorporateClaritySchema = v.object({
   feedback: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
+  after: v.optional(incorporateAfterSchema),
 })
 export type IncorporateClarityInput = v.InferOutput<typeof incorporateClaritySchema>
 
