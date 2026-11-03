@@ -8,6 +8,8 @@ import type {
   PipelineStep,
   RequestRecommendationItem,
   RequirementConcernLevel,
+  RequirementFloorProgression,
+  ReviewItemSeverity,
   RequirementRecommendation,
   ResolveRequirementsExceededChoice,
   ReviewQuestionSubject,
@@ -71,6 +73,13 @@ export interface ReviewPreset {
    * model never graded.
    */
   minAutoAnswerConfidence?: number
+  /**
+   * The lowest severity the requirements reviewer raises, and the estimate bands that move it.
+   * Optional for the reason `autonomy` is; absent reads as the shipped default floor, never as
+   * "raise everything", so a hand-built preset cannot quietly make a review louder.
+   */
+  requirementFindingFloor?: ReviewItemSeverity
+  requirementFloorProgression?: RequirementFloorProgression | null
 }
 
 /**

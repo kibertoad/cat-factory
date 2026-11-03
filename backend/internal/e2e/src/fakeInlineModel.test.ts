@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_REQUIREMENT_FINDING_FLOOR } from '@cat-factory/contracts'
 import { requirementsLogic } from '@cat-factory/orchestration'
 import { classifyInlineCall, inlineReplyFor, type InlineCallKind } from './fakeInlineModel.ts'
 import { FakeProfileRegistry } from './fakeProfile.ts'
@@ -54,9 +55,11 @@ function classifyAsSent(prompt: string): InlineCallKind {
 
 describe('classifyInlineCall', () => {
   it('reads a first-pass reviewer prompt as the review', () => {
-    expect(classifyAsSent(requirementsLogic.buildReviewPrompt(firstPassContext()))).toBe(
-      'requirements-review',
-    )
+    expect(
+      classifyAsSent(
+        requirementsLogic.buildReviewPrompt(firstPassContext(), DEFAULT_REQUIREMENT_FINDING_FLOOR),
+      ),
+    ).toBe('requirements-review')
   })
 
   it('reads a reviewer prompt carrying the incorporated document as the RE-review', () => {
@@ -64,9 +67,11 @@ describe('classifyInlineCall', () => {
     // INSIDE the review prompt, so both markers are present and the more specific one must win.
     // Collapsing the two would make the fake raise its findings again forever, and the loop would
     // never converge.
-    expect(classifyAsSent(requirementsLogic.buildReviewPrompt(laterPassContext()))).toBe(
-      'requirements-re-review',
-    )
+    expect(
+      classifyAsSent(
+        requirementsLogic.buildReviewPrompt(laterPassContext(), DEFAULT_REQUIREMENT_FINDING_FLOOR),
+      ),
+    ).toBe('requirements-re-review')
   })
 
   it('reads the incorporation prompt as the incorporation, on the first pass and later ones', () => {
@@ -170,7 +175,13 @@ describe('E2eInlineModels', () => {
           {
             role: 'user',
             content: [
-              { type: 'text', text: requirementsLogic.buildReviewPrompt(firstPassContext()) },
+              {
+                type: 'text',
+                text: requirementsLogic.buildReviewPrompt(
+                  firstPassContext(),
+                  DEFAULT_REQUIREMENT_FINDING_FLOOR,
+                ),
+              },
             ],
           },
         ],

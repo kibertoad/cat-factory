@@ -117,6 +117,34 @@ export function defineReviewStoreConcurrencyConformance(harness: ConformanceHarn
       expect(await repo.get(workspace.id, 'rrv_cas')).toBeNull()
     })
 
+    it('round-trips the finding floor through every whole-row write', async () => {
+      const app = harness.makeApp()
+      const repo = app.requirementReviewRepository()
+      const { workspace } = await app.createWorkspace()
+      const first = {
+        severity: 'high' as const,
+        basis: 'estimate' as const,
+        score: 0.2,
+        suppressed: 3,
+      }
+      await repo.replaceForBlock(workspace.id, review({ findingFloor: first }))
+      const stored = (await repo.getByBlock(workspace.id, 'blk_review_cas'))!
+      expect(stored.findingFloor).toEqual(first)
+
+      // A re-review pass records its own floor through the rev-guarded write.
+      const next = {
+        severity: 'medium' as const,
+        basis: 'no_estimate' as const,
+        score: null,
+        suppressed: 0,
+      }
+      expect(await repo.compareAndSwap(workspace.id, { ...stored, findingFloor: next })).toBe(true)
+      expect((await repo.get(workspace.id, 'rrv_cas'))?.findingFloor).toEqual(next)
+
+      await repo.upsert(workspace.id, { ...stored, findingFloor: null, updatedAt: 3 })
+      expect((await repo.get(workspace.id, 'rrv_cas'))?.findingFloor).toBeNull()
+    })
+
     it('replaceForBlock leaves exactly one live review per block', async () => {
       const app = harness.makeApp()
       const repo = app.requirementReviewRepository()

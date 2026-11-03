@@ -3,13 +3,16 @@ import {
   DEFAULT_JUDGE_MAX_BOUNCES,
   DEFAULT_JUDGE_MIN_SCORE,
   DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE,
+  DEFAULT_REQUIREMENT_FINDING_FLOOR,
 } from '@cat-factory/contracts'
 import type {
   BlockType,
   ClassRulesByRole,
+  RequirementFloorProgression,
   MergeClassRules,
   ModelPreset,
   RequirementConcernLevel,
+  ReviewItemSeverity,
   RiskPolicy,
   RunAutonomy,
   StepGating,
@@ -102,6 +105,9 @@ export const DEFAULT_RISK_POLICY = {
   maxRequirementIterations: 6,
   // Tolerate nothing by default: any reviewer finding pauses the run for a human.
   maxRequirementConcernAllowed: 'none',
+  // Raise `high` and `medium` findings and drop `low` ones, on every task.
+  requirementFindingFloor: DEFAULT_REQUIREMENT_FINDING_FLOOR,
+  requirementFloorProgression: null,
   // Test quality-control companion: how many times it may loop the Tester for a more
   // complete report before letting the run proceed to the greenlight / fixer decision.
   maxTesterQualityIterations: 3,
@@ -221,6 +227,10 @@ export interface RiskPolicySeed {
   ciMaxAttempts: number
   maxRequirementIterations: number
   maxRequirementConcernAllowed: RequirementConcernLevel
+  /** The lowest severity the requirements reviewer raises. */
+  requirementFindingFloor: ReviewItemSeverity
+  /** Estimate bands that move the floor; null on the built-ins. */
+  requirementFloorProgression: RequirementFloorProgression | null
   maxTesterQualityIterations: number
   /** How many automatic rework rounds a companion may drive before it parks for a person. */
   companionMaxReworks: number
@@ -286,6 +296,8 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     ciMaxAttempts: DEFAULT_RISK_POLICY.ciMaxAttempts,
     maxRequirementIterations: DEFAULT_RISK_POLICY.maxRequirementIterations,
     maxRequirementConcernAllowed: DEFAULT_RISK_POLICY.maxRequirementConcernAllowed,
+    requirementFindingFloor: DEFAULT_RISK_POLICY.requirementFindingFloor,
+    requirementFloorProgression: DEFAULT_RISK_POLICY.requirementFloorProgression,
     maxTesterQualityIterations: DEFAULT_RISK_POLICY.maxTesterQualityIterations,
     companionMaxReworks: DEFAULT_RISK_POLICY.companionMaxReworks,
     releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
@@ -343,6 +355,8 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     // passes only delay the same `proceed` on a conversation nobody is having.
     maxRequirementIterations: 3,
     maxRequirementConcernAllowed: DEFAULT_RISK_POLICY.maxRequirementConcernAllowed,
+    requirementFindingFloor: DEFAULT_RISK_POLICY.requirementFindingFloor,
+    requirementFloorProgression: DEFAULT_RISK_POLICY.requirementFloorProgression,
     maxTesterQualityIterations: 2,
     // NOT narrowed, unlike the three budgets around it, and the difference is what each round buys.
     // A reviewer pass and a judge re-grade produce a JUDGEMENT nobody unwatched will read, so extra
@@ -395,6 +409,8 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     ciMaxAttempts: DEFAULT_RISK_POLICY.ciMaxAttempts,
     maxRequirementIterations: DEFAULT_RISK_POLICY.maxRequirementIterations,
     maxRequirementConcernAllowed: 'none',
+    requirementFindingFloor: DEFAULT_RISK_POLICY.requirementFindingFloor,
+    requirementFloorProgression: DEFAULT_RISK_POLICY.requirementFloorProgression,
     maxTesterQualityIterations: DEFAULT_RISK_POLICY.maxTesterQualityIterations,
     // The stock budget, NOT the 0 this preset gives judge bounces. A judge bounce buys another
     // rubric verdict, which this preset has already decided a human will read anyway; a companion
@@ -456,6 +472,8 @@ export function riskPolicyFromSeed(seed: RiskPolicySeed, createdAt: number): Ris
     ciMaxAttempts: seed.ciMaxAttempts,
     maxRequirementIterations: seed.maxRequirementIterations,
     maxRequirementConcernAllowed: seed.maxRequirementConcernAllowed,
+    requirementFindingFloor: seed.requirementFindingFloor,
+    requirementFloorProgression: seed.requirementFloorProgression,
     maxTesterQualityIterations: seed.maxTesterQualityIterations,
     companionMaxReworks: seed.companionMaxReworks,
     releaseWatchWindowMinutes: seed.releaseWatchWindowMinutes,

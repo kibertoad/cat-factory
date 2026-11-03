@@ -7,6 +7,7 @@ import type {
   RequirementReviewItem,
   RequestRecommendationItem,
   ResolveRunRepoContext,
+  ReviewItemSeverity,
 } from '@cat-factory/kernel'
 import type {
   DocumentRepository,
@@ -154,8 +155,8 @@ export class RequirementReviewService extends IterativeReviewService<
     return `Requirements review: ${block.title}`
   }
 
-  protected buildReviewPrompt(ctx: RequirementsContext): string {
-    return buildReviewPrompt(ctx)
+  protected buildReviewPrompt(ctx: RequirementsContext, floor: ReviewItemSeverity | null): string {
+    return buildReviewPrompt(ctx, floor)
   }
 
   protected buildReworkPrompt(ctx: RequirementsContext, items: RequirementReviewItem[]): string {

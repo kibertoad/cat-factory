@@ -9,6 +9,11 @@ import {
 import { DEFAULT_COMPANION_MAX_ATTEMPTS } from './companion.js'
 import { DEFAULT_JUDGE_MAX_BOUNCES, DEFAULT_JUDGE_MIN_SCORE } from './judge.js'
 import { DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE } from './requirements.js'
+import {
+  DEFAULT_REQUIREMENT_FINDING_FLOOR,
+  requirementFloorProgressionSchema,
+  reviewItemSeveritySchema,
+} from './requirement-finding-floor.js'
 import { WORKSPACE_ROLES, workspaceRoleSchema, type WorkspaceRole } from './workspace-members.js'
 
 // ---------------------------------------------------------------------------
@@ -422,6 +427,18 @@ export const riskPolicySchema = v.object({
    */
   maxRequirementConcernAllowed: requirementConcernLevelSchema,
   /**
+   * The lowest severity the requirements reviewer RAISES: `high` asks only what blocks
+   * implementation, `medium` adds what risks rework, `low` asks everything. A finding below it is
+   * dropped and counted on the review. Also the fallback floor of a progressive policy whose task
+   * has no estimate.
+   */
+  requirementFindingFloor: reviewItemSeveritySchema,
+  /**
+   * When set, the floor follows the task's estimate instead of staying fixed (see
+   * `requirementFloorProgressionSchema`). Null keeps `requirementFindingFloor` for every task.
+   */
+  requirementFloorProgression: v.nullable(requirementFloorProgressionSchema),
+  /**
    * How many times the test quality-control companion may loop the Tester for a more
    * complete report before it stops gating and lets the run proceed to the greenlight /
    * fixer decision. One QC-driven Tester re-run = one iteration, so this is the maximum
@@ -662,6 +679,9 @@ export const createRiskPolicySchema = v.object({
   ciMaxAttempts: attemptsSchema,
   maxRequirementIterations: iterationsSchema,
   maxRequirementConcernAllowed: requirementConcernLevelSchema,
+  requirementFindingFloor: v.optional(reviewItemSeveritySchema, DEFAULT_REQUIREMENT_FINDING_FLOOR),
+  /** Absent or null ⇒ the fixed floor for every task. */
+  requirementFloorProgression: v.optional(v.nullable(requirementFloorProgressionSchema), null),
   maxTesterQualityIterations: v.optional(iterationsSchema, 3),
   /** Automatic companion rework rounds; absent ⇒ {@link DEFAULT_COMPANION_MAX_ATTEMPTS}. */
   companionMaxReworks: v.optional(companionReworksSchema, DEFAULT_COMPANION_MAX_ATTEMPTS),
@@ -705,6 +725,9 @@ export const updateRiskPolicySchema = v.object({
   ciMaxAttempts: v.optional(attemptsSchema),
   maxRequirementIterations: v.optional(iterationsSchema),
   maxRequirementConcernAllowed: v.optional(requirementConcernLevelSchema),
+  requirementFindingFloor: v.optional(reviewItemSeveritySchema),
+  /** Null switches the policy back to the fixed floor. */
+  requirementFloorProgression: v.optional(v.nullable(requirementFloorProgressionSchema)),
   maxTesterQualityIterations: v.optional(iterationsSchema),
   companionMaxReworks: v.optional(companionReworksSchema),
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema),

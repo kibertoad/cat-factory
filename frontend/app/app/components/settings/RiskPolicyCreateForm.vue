@@ -3,11 +3,15 @@
 // numbers only. Class and role rules start at their identity and are edited on the saved policy,
 // where each rule can be shown beside the base rule (and the track record) it narrows.
 import { computed, reactive } from 'vue'
+import type { ReviewItemSeverity } from '@cat-factory/contracts'
 import type { CreateRiskPolicyInput, RequirementConcernLevel } from '~/types/merge'
 import {
   CONCERN_LABEL_KEYS,
   CONCERN_LEVELS,
+  FINDING_FLOOR_LABEL_KEYS,
+  FINDING_FLOORS,
   blankRiskPolicyDraft,
+  floorProgressionFromDraft,
   forkGatingFromDraft,
 } from '~/utils/riskPolicyDraft'
 import SectionLabel from '~/components/common/SectionLabel.vue'
@@ -22,6 +26,10 @@ const draft = reactive(blankRiskPolicyDraft())
 
 const concernOptions = computed<{ value: RequirementConcernLevel; label: string }[]>(() =>
   CONCERN_LEVELS.map((value) => ({ value, label: t(CONCERN_LABEL_KEYS[value]) })),
+)
+
+const floorOptions = computed<{ value: ReviewItemSeverity; label: string }[]>(() =>
+  FINDING_FLOORS.map((value) => ({ value, label: t(FINDING_FLOOR_LABEL_KEYS[value]) })),
 )
 
 const canSubmit = computed(() => draft.name.trim().length > 0 && !props.busy)
@@ -44,6 +52,8 @@ function submit() {
     ciMaxAttempts: draft.ciMaxAttempts,
     maxRequirementIterations: draft.maxRequirementIterations,
     maxRequirementConcernAllowed: draft.maxRequirementConcernAllowed,
+    requirementFindingFloor: draft.requirementFindingFloor,
+    requirementFloorProgression: floorProgressionFromDraft(draft),
     companionMaxReworks: draft.companionMaxReworks,
     autoMergeEnabled: draft.autoMergeEnabled,
     autonomy: draft.unattended ? 'unattended' : 'attended',
@@ -161,6 +171,18 @@ function submit() {
           class="w-32"
           v-model="draft.maxRequirementConcernAllowed"
           :items="concernOptions"
+          value-key="value"
+          size="sm"
+        />
+      </label>
+      <label class="block">
+        <SectionLabel as="span" class="mb-1 block">
+          {{ t('settings.riskPolicy.findingFloor.label') }}
+        </SectionLabel>
+        <USelect
+          class="w-56"
+          v-model="draft.requirementFindingFloor"
+          :items="floorOptions"
           value-key="value"
           size="sm"
         />

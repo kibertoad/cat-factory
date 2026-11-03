@@ -3615,6 +3615,20 @@
       "confirmHide": {
         "title": "Bu ilke gizlensin mi?",
         "body": "\"{name}\" bu panoda sunulmayacak ve onu seçmiş görevler panonun varsayılan ilkesine döner. Daha sonra geri getirebilirsiniz."
+      },
+      "findingFloor": {
+        "label": "Gereksinim incelemesinin dile getirdikleri",
+        "fallbackLabel": "Görevin tahmini yokken dile getirilenler",
+        "hint": "Bu önem derecesinin altındaki bulgular incelemeye alınmaz. Çalıştırmayı yalnızca dile getirilen bir bulgu durdurabilir.",
+        "high": "Yalnızca yüksek bulgular",
+        "medium": "Yüksek ve orta bulgular",
+        "low": "Küçükler dahil her şey",
+        "progressiveLabel": "Görev tahminini izle",
+        "progressiveHint": "Daha büyük görevlerde daha çok sor; tahminin karmaşıklık, risk ve etki değerlerinden en yükseğine göre belirlenir. İncelemeden önce bir Task Estimator ya da önceki bir çalıştırmadan kalan tahmin gerekir.",
+        "mediumFrom": "Orta bulguları şu tahminden itibaren ekle (%)",
+        "lowFrom": "Her şeyi şu tahminden itibaren dile getir (%)",
+        "bandsCrossed": "Orta bulgular eşiği, her şey eşiğinden yüksek olamaz.",
+        "bandsOutOfRange": "İki eşik de 0 ile 100 arasında bir sayı olmalıdır."
       }
     },
     "observabilityConnection": {
@@ -6067,6 +6081,19 @@
       "high": "Yüksek güven",
       "medium": "Orta güven",
       "low": "Düşük güven"
+    },
+    "findingFloor": {
+      "raised": {
+        "high": "Bu geçiş yalnızca yüksek bulguları dile getirdi.",
+        "medium": "Bu geçiş yüksek ve orta bulguları dile getirdi.",
+        "low": "Bu geçiş her önem derecesindeki bulguları dile getirdi."
+      },
+      "basis": {
+        "fixed": "Risk politikasıyla belirlendi.",
+        "estimate": "Görev tahminiyle belirlendi (%{score}).",
+        "no_estimate": "Politika görev tahminini izliyor, ancak bu görevin tahmini yok; bu yüzden yedek değer uygulandı."
+      },
+      "suppressed": "Bu seviyenin altında dışarıda bırakılan bulgular: {count}."
     }
   },
   "clarity": {

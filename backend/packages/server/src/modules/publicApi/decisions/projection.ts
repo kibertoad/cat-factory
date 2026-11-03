@@ -75,6 +75,14 @@ function toRequirementsDecision(review: RequirementReview): PublicDecision {
     maxIterations: review.maxIterations ?? 1,
     findings: review.items.map(toFinding),
     incorporatedRequirements: review.incorporatedRequirements,
+    findingFloor: review.findingFloor
+      ? {
+          severity: review.findingFloor.severity,
+          basis: review.findingFloor.basis,
+          score: review.findingFloor.score,
+          suppressed: review.findingFloor.suppressed,
+        }
+      : null,
   }
 }
 

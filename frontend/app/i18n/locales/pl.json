@@ -3474,6 +3474,20 @@
       "confirmHide": {
         "title": "Ukryć tę zasadę?",
         "body": "„{name}” nie będzie oferowana na tej tablicy, a zadania, które ją wybrały, wrócą do domyślnej zasady tablicy. Możesz ją później przywrócić."
+      },
+      "findingFloor": {
+        "label": "Przegląd wymagań zgłasza",
+        "fallbackLabel": "Zgłasza, gdy zadanie nie ma szacunku",
+        "hint": "Uwagi poniżej tej wagi są pomijane w przeglądzie. Tylko zgłoszona uwaga może zatrzymać przebieg.",
+        "high": "Tylko uwagi o wysokiej wadze",
+        "medium": "Uwagi o wysokiej i średniej wadze",
+        "low": "Wszystko, także drobne",
+        "progressiveLabel": "Według szacunku zadania",
+        "progressiveHint": "Pytaj więcej przy większych zadaniach, według najwyższej z wartości złożoności, ryzyka i wpływu w szacunku. Wymaga kroku Task Estimator przed przeglądem albo szacunku z wcześniejszego przebiegu.",
+        "mediumFrom": "Dodaj uwagi o średniej wadze od szacunku (%)",
+        "lowFrom": "Zgłaszaj wszystko od szacunku (%)",
+        "bandsCrossed": "Próg dla uwag o średniej wadze nie może być wyższy niż próg dla wszystkiego.",
+        "bandsOutOfRange": "Oba progi muszą być liczbami od 0 do 100."
       }
     },
     "observabilityConnection": {
@@ -6067,6 +6081,19 @@
       "high": "Wysoka pewność",
       "medium": "Średnia pewność",
       "low": "Niska pewność"
+    },
+    "findingFloor": {
+      "raised": {
+        "high": "Ten przebieg zgłosił tylko uwagi o wysokiej wadze.",
+        "medium": "Ten przebieg zgłosił uwagi o wysokiej i średniej wadze.",
+        "low": "Ten przebieg zgłosił uwagi o każdej wadze."
+      },
+      "basis": {
+        "fixed": "Ustawione przez politykę ryzyka.",
+        "estimate": "Ustawione przez szacunek zadania ({score}%).",
+        "no_estimate": "Polityka działa według szacunku zadania, ale to zadanie go nie ma, więc zastosowano wartość zastępczą."
+      },
+      "suppressed": "Uwagi pominięte poniżej tego poziomu: {count}."
     }
   },
   "clarity": {

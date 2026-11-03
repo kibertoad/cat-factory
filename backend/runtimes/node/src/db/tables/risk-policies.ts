@@ -56,6 +56,8 @@ export const accountRiskPolicies = pgTable(
     min_auto_answer_confidence: doublePrecision('min_auto_answer_confidence')
       .notNull()
       .default(0.8),
+    requirement_finding_floor: text('requirement_finding_floor').notNull().default('medium'),
+    requirement_floor_progression: text('requirement_floor_progression'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [primaryKey({ columns: [t.account_id, t.id] })],

@@ -275,6 +275,10 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicReviewFindingSchema>
 >()
 expectMutuallyAssignable<
+  sdk.PublicRequirementsFindingFloor,
+  v.InferOutput<typeof contracts.publicRequirementsFindingFloorSchema>
+>()
+expectMutuallyAssignable<
   sdk.PublicRequirementsDecision,
   v.InferOutput<typeof contracts.publicRequirementsDecisionSchema>
 >()
@@ -764,6 +768,7 @@ const ASSERTED_COMPONENTS = [
   'PublicDeployment',
   'PublicUnanswerableWait',
   'PublicReviewFinding',
+  'PublicRequirementsFindingFloor',
   'PublicRequirementsDecision',
   'PublicForkDecision',
   'PublicDecision',

@@ -1,4 +1,13 @@
-import { DEFAULT_COMPANION_MAX_ATTEMPTS, type StepGating } from '@cat-factory/contracts'
+import * as v from 'valibot'
+import {
+  DEFAULT_COMPANION_MAX_ATTEMPTS,
+  DEFAULT_REQUIREMENT_FINDING_FLOOR,
+  DEFAULT_REQUIREMENT_FLOOR_PROGRESSION,
+  requirementFloorProgressionSchema,
+  type RequirementFloorProgression,
+  type ReviewItemSeverity,
+  type StepGating,
+} from '@cat-factory/contracts'
 import type {
   ClassRulesByRole,
   DryRunRoles,
@@ -25,6 +34,15 @@ export interface RiskPolicyDraft {
   ciMaxAttempts: number
   maxRequirementIterations: number
   maxRequirementConcernAllowed: RequirementConcernLevel
+  /** The lowest severity the requirements reviewer raises; the fallback while progressive. */
+  requirementFindingFloor: ReviewItemSeverity
+  /**
+   * Whether the floor follows the task estimate. The two band edges are PERCENTS like the numbers
+   * above, and are kept while the switch is off so turning it back on restores them.
+   */
+  floorProgressive: boolean
+  floorMediumFrom: number
+  floorLowFrom: number
   /**
    * How many automatic rework rounds a companion (reviewer / architect-companion /
    * spec-companion) may drive before the run parks for a person. `0` sends the first verdict below
@@ -93,6 +111,7 @@ export function toRiskPolicyDraft(p: RiskPolicy): RiskPolicyDraft {
     ciMaxAttempts: p.ciMaxAttempts,
     maxRequirementIterations: p.maxRequirementIterations,
     maxRequirementConcernAllowed: p.maxRequirementConcernAllowed,
+    ...floorDraftFields(p.requirementFindingFloor, p.requirementFloorProgression),
     companionMaxReworks: p.companionMaxReworks,
     autoMergeEnabled: p.autoMergeEnabled,
     unattended: p.autonomy === 'unattended',
@@ -119,6 +138,7 @@ export function blankRiskPolicyDraft(): RiskPolicyDraft {
     ciMaxAttempts: 10,
     maxRequirementIterations: 6,
     maxRequirementConcernAllowed: 'none',
+    ...floorDraftFields(DEFAULT_REQUIREMENT_FINDING_FLOOR, null),
     // Off the constant the create schema itself defaults to, so the form cannot pre-fill a number
     // the platform has stopped shipping. The percentages above are literals because they are the
     // EDITING scale (0..100) rather than the stored value; this one is stored as typed.
@@ -141,6 +161,37 @@ export function blankRiskPolicyDraft(): RiskPolicyDraft {
     forkMinImpact: 40,
     forkOnMissing: 'run',
   }
+}
+
+function floorDraftFields(
+  floor: ReviewItemSeverity,
+  progression: RequirementFloorProgression | null,
+): Pick<
+  RiskPolicyDraft,
+  'requirementFindingFloor' | 'floorProgressive' | 'floorMediumFrom' | 'floorLowFrom'
+> {
+  const bands = progression ?? DEFAULT_REQUIREMENT_FLOOR_PROGRESSION
+  return {
+    requirementFindingFloor: floor,
+    floorProgressive: progression !== null,
+    floorMediumFrom: Math.round(bands.mediumFrom * 100),
+    floorLowFrom: Math.round(bands.lowFrom * 100),
+  }
+}
+
+/** The stored progression from a draft: null while the floor is fixed. */
+export function floorProgressionFromDraft(d: RiskPolicyDraft): RequirementFloorProgression | null {
+  return d.floorProgressive
+    ? { mediumFrom: d.floorMediumFrom / 100, lowFrom: d.floorLowFrom / 100 }
+    : null
+}
+
+/** Whether the draft's bands pass the stored schema (in range and in order), which a save needs. */
+export function floorBandsValid(d: RiskPolicyDraft): boolean {
+  return (
+    !d.floorProgressive ||
+    v.safeParse(requirementFloorProgressionSchema, floorProgressionFromDraft(d)).success
+  )
 }
 
 /** The `StepGating` payload for the fork-decision gate from a draft. */
@@ -173,6 +224,8 @@ export function riskPolicyPatchFromDraft(
     ciMaxAttempts: d.ciMaxAttempts,
     maxRequirementIterations: d.maxRequirementIterations,
     maxRequirementConcernAllowed: d.maxRequirementConcernAllowed,
+    requirementFindingFloor: d.requirementFindingFloor,
+    requirementFloorProgression: floorProgressionFromDraft(d),
     companionMaxReworks: d.companionMaxReworks,
     autoMergeEnabled: d.autoMergeEnabled,
     autonomy: d.unattended ? 'unattended' : 'attended',
@@ -213,3 +266,16 @@ export const CONCERN_LABEL_KEYS: Record<RequirementConcernLevel, string> = {
 
 /** The concern levels in severity order, for the select. */
 export const CONCERN_LEVELS: readonly RequirementConcernLevel[] = ['none', 'low', 'medium', 'high']
+
+/**
+ * Label keys for the requirements finding floor, keyed by the LOWEST severity raised. Literal
+ * catalog keys for the typed-message-keys check.
+ */
+export const FINDING_FLOOR_LABEL_KEYS: Record<ReviewItemSeverity, string> = {
+  high: 'settings.riskPolicy.findingFloor.high',
+  medium: 'settings.riskPolicy.findingFloor.medium',
+  low: 'settings.riskPolicy.findingFloor.low',
+}
+
+/** The floors from quietest to loudest, for the select. */
+export const FINDING_FLOORS: readonly ReviewItemSeverity[] = ['high', 'medium', 'low']

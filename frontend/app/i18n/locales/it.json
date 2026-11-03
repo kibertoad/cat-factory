@@ -662,6 +662,20 @@
       "confirmHide": {
         "title": "Nascondere questo criterio?",
         "body": "«{name}» non verrà più offerto in questa bacheca e le attività che lo avevano scelto torneranno al criterio predefinito della bacheca. Potrai ripristinarlo più tardi."
+      },
+      "findingFloor": {
+        "label": "La revisione dei requisiti segnala",
+        "fallbackLabel": "Segnala, quando l’attività non ha una stima",
+        "hint": "I rilievi sotto questa gravità vengono esclusi dalla revisione. Solo un rilievo segnalato può fermare l’esecuzione.",
+        "high": "Solo rilievi alti",
+        "medium": "Rilievi alti e medi",
+        "low": "Tutto, compresi quelli minori",
+        "progressiveLabel": "Seguire la stima dell’attività",
+        "progressiveHint": "Chiedere di più sulle attività più grandi, in base al valore più alto tra complessità, rischio e impatto della stima. Richiede un Task Estimator prima della revisione o una stima di un’esecuzione precedente.",
+        "mediumFrom": "Aggiungere i rilievi medi da una stima di (%)",
+        "lowFrom": "Segnalare tutto da una stima di (%)",
+        "bandsCrossed": "La soglia dei rilievi medi non può superare la soglia di tutto.",
+        "bandsOutOfRange": "Entrambe le soglie devono essere numeri da 0 a 100."
       }
     },
     "observabilityConnection": {
@@ -5355,6 +5369,19 @@
       "high": "Confidenza alta",
       "medium": "Confidenza media",
       "low": "Confidenza bassa"
+    },
+    "findingFloor": {
+      "raised": {
+        "high": "Questo passaggio ha segnalato solo rilievi alti.",
+        "medium": "Questo passaggio ha segnalato rilievi alti e medi.",
+        "low": "Questo passaggio ha segnalato rilievi di ogni gravità."
+      },
+      "basis": {
+        "fixed": "Impostato dalla policy di rischio.",
+        "estimate": "Impostato dalla stima dell’attività ({score}%).",
+        "no_estimate": "La policy segue la stima dell’attività, ma questa attività non ne ha una, quindi si è applicato il valore di riserva."
+      },
+      "suppressed": "Rilievi esclusi sotto quel livello: {count}."
     }
   },
   "bootstrap": {

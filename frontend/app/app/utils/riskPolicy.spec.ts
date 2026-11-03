@@ -19,6 +19,8 @@ const policy = (over: Partial<RiskPolicy> = {}): RiskPolicy =>
     ciMaxAttempts: 10,
     maxRequirementIterations: 6,
     maxRequirementConcernAllowed: 'none',
+    requirementFindingFloor: 'medium',
+    requirementFloorProgression: null,
     maxTesterQualityIterations: 3,
     companionMaxReworks: 3,
     releaseWatchWindowMinutes: 30,

@@ -31,6 +31,12 @@ describe('renderFixtureInput', () => {
     expect(input).toContain('Notification preferences')
   })
 
+  it('holds the requirements reviewer to the floor the default risk policy sends', () => {
+    expect(render('req-notify-prefs-simple', 'requirements-review')).toContain(
+      'This review raises `high` and `medium` findings only.',
+    )
+  })
+
   it('tells the reviewer not to pick a product when the fixture states none, and stays quiet when it does', () => {
     // `buildReviewPrompt` branches on this, so the two fixtures genuinely pose different tasks.
     expect(render('req-notify-prefs-simple', 'requirements-review')).toContain(

@@ -10,6 +10,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicRequirementsDecision} wire model.
+ * @param findingFloor Always present; {@code null} when the server has no value for it.
  * @param findings the {@code findings} field.
  * @param incorporatedRequirements Always present; {@code null} when the server has no value for
  * it.
@@ -22,6 +23,9 @@ import org.jspecify.annotations.Nullable;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicRequirementsDecision(
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("findingFloor") @Nullable PublicRequirementsFindingFloor findingFloor,
+
     @JsonProperty("findings") List<PublicReviewFinding> findings,
 
     /** Always present; {@code null} when the server has no value for it. */
@@ -52,6 +56,7 @@ public record PublicRequirementsDecision(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable PublicRequirementsFindingFloor findingFloor;
         private @Nullable List<PublicReviewFinding> findings;
         private @Nullable String incorporatedRequirements;
         private @Nullable Double iteration;
@@ -60,6 +65,12 @@ public record PublicRequirementsDecision(
         private @Nullable String reviewId;
         private @Nullable PublicRequirementsDecisionStatus status;
         private @Nullable String taskId;
+
+        /** Set {@code findingFloor}. */
+        public Builder findingFloor(@Nullable PublicRequirementsFindingFloor findingFloor) {
+            this.findingFloor = findingFloor;
+            return this;
+        }
 
         /** Set {@code findings}. */
         public Builder findings(@Nullable List<PublicReviewFinding> findings) {
@@ -111,7 +122,7 @@ public record PublicRequirementsDecision(
 
         /** Build the {@link PublicRequirementsDecision}. */
         public PublicRequirementsDecision build() {
-            return new PublicRequirementsDecision(findings, incorporatedRequirements, iteration, kind, maxIterations, reviewId, status, taskId);
+            return new PublicRequirementsDecision(findingFloor, findings, incorporatedRequirements, iteration, kind, maxIterations, reviewId, status, taskId);
         }
     }
 }

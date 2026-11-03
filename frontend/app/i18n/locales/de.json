@@ -662,6 +662,20 @@
       "confirmHide": {
         "title": "Diese Richtlinie ausblenden?",
         "body": "„{name}“ wird auf diesem Board nicht mehr angeboten; Aufgaben mit dieser Auswahl fallen auf die Board-Standardrichtlinie zurück. Du kannst sie später wiederherstellen."
+      },
+      "findingFloor": {
+        "label": "Die Anforderungsprüfung meldet",
+        "fallbackLabel": "Meldet, wenn die Aufgabe keine Schätzung hat",
+        "hint": "Befunde unterhalb dieses Schweregrads werden in der Prüfung ausgelassen. Nur ein gemeldeter Befund kann den Lauf anhalten.",
+        "high": "Nur hohe Befunde",
+        "medium": "Hohe und mittlere Befunde",
+        "low": "Alles, auch geringfügige",
+        "progressiveLabel": "Der Aufgabenschätzung folgen",
+        "progressiveHint": "Bei größeren Aufgaben mehr fragen, gemessen am höchsten Wert aus Komplexität, Risiko und Auswirkung der Schätzung. Erfordert einen Task Estimator vor der Prüfung oder eine Schätzung aus einem früheren Lauf.",
+        "mediumFrom": "Mittlere Befunde ab einer Schätzung von (%)",
+        "lowFrom": "Alles ab einer Schätzung von (%)",
+        "bandsCrossed": "Die Schwelle für mittlere Befunde darf nicht über der Schwelle für alles liegen.",
+        "bandsOutOfRange": "Beide Schwellen müssen Zahlen von 0 bis 100 sein."
       }
     },
     "observabilityConnection": {
@@ -5355,6 +5369,19 @@
       "high": "Hohe Zuversicht",
       "medium": "Mittlere Zuversicht",
       "low": "Geringe Zuversicht"
+    },
+    "findingFloor": {
+      "raised": {
+        "high": "Dieser Durchlauf hat nur hohe Befunde gemeldet.",
+        "medium": "Dieser Durchlauf hat hohe und mittlere Befunde gemeldet.",
+        "low": "Dieser Durchlauf hat Befunde jedes Schweregrads gemeldet."
+      },
+      "basis": {
+        "fixed": "Festgelegt durch die Risikorichtlinie.",
+        "estimate": "Festgelegt durch die Aufgabenschätzung ({score} %).",
+        "no_estimate": "Die Richtlinie folgt der Aufgabenschätzung, aber diese Aufgabe hat keine, daher galt der Ersatzwert."
+      },
+      "suppressed": "Unterhalb dieser Stufe ausgelassene Befunde: {count}."
     }
   },
   "bootstrap": {

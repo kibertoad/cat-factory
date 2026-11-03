@@ -1,5 +1,9 @@
 import * as v from 'valibot'
 import { iterationCapChoiceSchema } from './iteration-cap.js'
+import {
+  requirementFindingFloorRecordSchema,
+  reviewItemSeveritySchema,
+} from './requirement-finding-floor.js'
 
 // ---------------------------------------------------------------------------
 // Requirements-review wire contracts. A reviewer agent inspects a board block's
@@ -27,10 +31,6 @@ export const reviewItemCategorySchema = v.picklist([
   'question',
 ])
 export type ReviewItemCategory = v.InferOutput<typeof reviewItemCategorySchema>
-
-/** How important resolving the item is before implementation should proceed. */
-export const reviewItemSeveritySchema = v.picklist(['low', 'medium', 'high'])
-export type ReviewItemSeverity = v.InferOutput<typeof reviewItemSeveritySchema>
 
 /**
  * Lifecycle of a single item: `open` until a human engages, `answered` once a
@@ -452,6 +452,11 @@ export const requirementReviewSchema = v.object({
    * so a concurrent edit of the review cannot drop it. Null until a writeback has run.
    */
   issueWriteback: v.optional(v.nullable(refinedRequirementsWritebackRecordSchema)),
+  /**
+   * The severity floor the latest reviewer pass raised against, where it came from, and how many
+   * findings it dropped below it. Null on a review that predates the floor or whose kind has none.
+   */
+  findingFloor: v.optional(v.nullable(requirementFindingFloorRecordSchema)),
   createdAt: v.number(),
   updatedAt: v.number(),
 })

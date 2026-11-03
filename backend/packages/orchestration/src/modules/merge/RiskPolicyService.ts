@@ -24,6 +24,7 @@ import {
   UnavailableError,
   ValidationError,
 } from '@cat-factory/kernel'
+import { applyRiskPolicyPatch } from './riskPolicyPatch.js'
 import type { WorkspaceRiskPolicyLibrary } from './WorkspaceRiskPolicyLibrary.js'
 
 export interface RiskPolicyServiceDependencies {
@@ -281,6 +282,8 @@ export class RiskPolicyService {
       ciMaxAttempts: input.ciMaxAttempts,
       maxRequirementIterations: input.maxRequirementIterations,
       maxRequirementConcernAllowed: input.maxRequirementConcernAllowed,
+      requirementFindingFloor: input.requirementFindingFloor,
+      requirementFloorProgression: input.requirementFloorProgression,
       maxTesterQualityIterations: input.maxTesterQualityIterations,
       companionMaxReworks: input.companionMaxReworks,
       releaseWatchWindowMinutes: input.releaseWatchWindowMinutes,
@@ -331,52 +334,7 @@ export class RiskPolicyService {
       )
     }
     const updated: RiskPolicy = {
-      ...existing,
-      ...(patch.name !== undefined ? { name: patch.name } : {}),
-      ...(patch.maxComplexity !== undefined ? { maxComplexity: patch.maxComplexity } : {}),
-      ...(patch.maxRisk !== undefined ? { maxRisk: patch.maxRisk } : {}),
-      ...(patch.maxImpact !== undefined ? { maxImpact: patch.maxImpact } : {}),
-      ...(patch.ciMaxAttempts !== undefined ? { ciMaxAttempts: patch.ciMaxAttempts } : {}),
-      ...(patch.maxRequirementIterations !== undefined
-        ? { maxRequirementIterations: patch.maxRequirementIterations }
-        : {}),
-      ...(patch.maxRequirementConcernAllowed !== undefined
-        ? { maxRequirementConcernAllowed: patch.maxRequirementConcernAllowed }
-        : {}),
-      ...(patch.maxTesterQualityIterations !== undefined
-        ? { maxTesterQualityIterations: patch.maxTesterQualityIterations }
-        : {}),
-      ...(patch.companionMaxReworks !== undefined
-        ? { companionMaxReworks: patch.companionMaxReworks }
-        : {}),
-      ...(patch.releaseWatchWindowMinutes !== undefined
-        ? { releaseWatchWindowMinutes: patch.releaseWatchWindowMinutes }
-        : {}),
-      ...(patch.releaseMaxAttempts !== undefined
-        ? { releaseMaxAttempts: patch.releaseMaxAttempts }
-        : {}),
-      ...(patch.humanReviewGraceMinutes !== undefined
-        ? { humanReviewGraceMinutes: patch.humanReviewGraceMinutes }
-        : {}),
-      ...(patch.judgeMinScore !== undefined ? { judgeMinScore: patch.judgeMinScore } : {}),
-      ...(patch.judgeMaxBounces !== undefined ? { judgeMaxBounces: patch.judgeMaxBounces } : {}),
-      ...(patch.autoMergeEnabled !== undefined ? { autoMergeEnabled: patch.autoMergeEnabled } : {}),
-      ...(patch.forkDecision !== undefined ? { forkDecision: patch.forkDecision } : {}),
-      // Each of the three role/class maps replaces the whole stored value rather than merging,
-      // so clearing one entry is a plain omission from the submitted set (there is no "delete
-      // this one key" wire shape). All three are applied here, and an editor that submits the
-      // full map every save depends on it: a patch field the service drops is indistinguishable
-      // from a save that worked, right up until the operator reloads the settings panel.
-      ...(patch.classRules !== undefined ? { classRules: patch.classRules } : {}),
-      ...(patch.classRulesByRole !== undefined ? { classRulesByRole: patch.classRulesByRole } : {}),
-      ...(patch.dryRunRoles !== undefined ? { dryRunRoles: patch.dryRunRoles } : {}),
-      ...(patch.submissionClassesByRole !== undefined
-        ? { submissionClassesByRole: patch.submissionClassesByRole }
-        : {}),
-      ...(patch.autonomy !== undefined ? { autonomy: patch.autonomy } : {}),
-      ...(patch.minAutoAnswerConfidence !== undefined
-        ? { minAutoAnswerConfidence: patch.minAutoAnswerConfidence }
-        : {}),
+      ...applyRiskPolicyPatch(existing, patch),
       ...(patch.isDefault !== undefined ? { isDefault: patch.isDefault } : {}),
       ...(patch.isUnattendedDefault !== undefined
         ? { isUnattendedDefault: patch.isUnattendedDefault }
