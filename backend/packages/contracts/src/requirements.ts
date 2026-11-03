@@ -483,17 +483,17 @@ export const updateReviewItemStatusSchema = v.object({
 export type UpdateReviewItemStatusInput = v.InferOutput<typeof updateReviewItemStatusSchema>
 
 /**
- * Incorporate the settled answers into a standardized requirements document. An optional
- * `feedback` comment is the human's "do it differently" lever when redoing a merge they
- * were unhappy with — it is folded into the rework prompt alongside the prior document.
- */
-/**
  * What follows an incorporation. `rereview` (the default) runs one more reviewer pass over the
  * folded document; `proceed` settles the review on it and advances the run, with no further pass.
  */
 export const incorporateAfterSchema = v.picklist(['rereview', 'proceed'])
 export type IncorporateAfter = v.InferOutput<typeof incorporateAfterSchema>
 
+/**
+ * Incorporate the settled answers into a standardized requirements document. An optional
+ * `feedback` comment is the human's "do it differently" lever when redoing a merge they
+ * were unhappy with: it is folded into the rework prompt alongside the prior document.
+ */
 export const incorporateRequirementsSchema = v.object({
   feedback: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
   after: v.optional(incorporateAfterSchema),

@@ -59,6 +59,11 @@ export function applyFollowUpBar(
   return { items: kept, suppressed: items.length - kept.length }
 }
 
+/** Keeps a multi-line answer inside its list entry, so its own lines cannot read as another ref. */
+function indentContinuation(text: string): string {
+  return text.replace(/\r?\n/g, '\n    ')
+}
+
 /** The re-review section of the reviewer's user prompt: what the last round settled, and the bar. */
 export function renderPriorRoundLines(round: PriorRound): string[] {
   const lines = ['## What the previous review round settled', '']
@@ -69,7 +74,10 @@ export function renderPriorRoundLines(round: PriorRound): string[] {
       '',
     )
     for (const a of round.answered) {
-      lines.push(`- [${a.ref}] ${a.title}: ${a.detail}`, `  Answer: ${a.reply}`)
+      lines.push(
+        `- [${a.ref}] ${a.title}: ${indentContinuation(a.detail)}`,
+        `  Answer: ${indentContinuation(a.reply)}`,
+      )
     }
     lines.push('')
   }

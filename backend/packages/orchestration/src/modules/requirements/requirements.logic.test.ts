@@ -194,6 +194,29 @@ describe('coerceReviewItems', () => {
     const byTitle = Object.fromEntries(items.map((i) => [i.title, i.autoAnswerable]))
     expect(byTitle).toEqual({ a: true, b: false, c: false, d: false })
   })
+
+  it('resolves a followsUp citation written the way the prompt lists it, and only a handed-out ref', () => {
+    const refs = new Map([['A1', 'Who can export?']])
+    const items = coerceReviewItems(
+      {
+        items: [
+          { title: 'bare', detail: 'd', followsUp: 'A1' },
+          { title: 'bracketed', detail: 'd', followsUp: '[a1]' },
+          { title: 'invented', detail: 'd', followsUp: 'A2' },
+          { title: 'none', detail: 'd', followsUp: null },
+        ],
+      },
+      newId,
+      0,
+      refs,
+    )
+    expect(items.map((i) => [i.title, i.followsUpOn])).toEqual([
+      ['bare', 'Who can export?'],
+      ['bracketed', 'Who can export?'],
+      ['invented', null],
+      ['none', null],
+    ])
+  })
 })
 
 describe('coerceChunkRecommendations', () => {

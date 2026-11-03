@@ -261,6 +261,16 @@ function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+/**
+ * A `followsUp` citation reduced to its bare ref. The prompt lists answers as `[A1]`, so a model
+ * echoing the brackets (or adding punctuation) still cites the answer it names.
+ */
+function citedRef(value: unknown): string {
+  return asString(value)
+    .replace(/[^a-z0-9]/gi, '')
+    .toUpperCase()
+}
+
 function coerceCategory(value: unknown): ReviewItemCategory {
   return CATEGORIES.includes(value as ReviewItemCategory)
     ? (value as ReviewItemCategory)
@@ -309,9 +319,7 @@ export function coerceReviewItems(
       autoAnswerable: obj.autoAnswerable === true,
       // A re-review's citation resolves to the answered finding it names; a ref the prompt never
       // handed out resolves to nothing, so an invented citation cannot carry a finding past the bar.
-      ...(followUpRefs
-        ? { followsUpOn: followUpRefs.get(asString(obj.followsUp).toUpperCase()) ?? null }
-        : {}),
+      ...(followUpRefs ? { followsUpOn: followUpRefs.get(citedRef(obj.followsUp)) ?? null } : {}),
       createdAt: now,
       updatedAt: now,
     })

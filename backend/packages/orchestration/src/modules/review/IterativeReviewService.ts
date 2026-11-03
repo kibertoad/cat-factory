@@ -414,7 +414,7 @@ export abstract class IterativeReviewService<
     const floor = resolveFloor(opts.findingFloor, block)
     // The round this pass replaces is the one it may follow up on.
     const round = this.applyPriorRound ? priorRoundOf(review.items) : null
-    if (round) this.applyPriorRound!(context, round)
+    if (round) this.applyPriorRound?.(context, round)
     const reviewed = await this.runReviewer(workspaceId, block, context, floor, round)
     const { ref } = reviewed
     const raised = applyFindingFloor(reviewed.items, floor)
