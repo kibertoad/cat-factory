@@ -12,13 +12,21 @@ A built-in row refuses every structural edit except one: `PUT /pipelines/:id/app
 `gates` and the approval half of each step's `gateConfig`. A workspace may ADD checkpoints but never
 remove one the catalog ships, because nothing on the row records which checkpoints came from where.
 That one-way rule is what lets `reseed` rebuild the row as the catalog definition plus every
-checkpoint the stored copy carried, with no override storage.
+checkpoint the stored copy carried, with no override storage. "Remove" means switching off a
+shipped checkpoint the row CARRIES (`lockedCheckpoints` in contracts): a copy older than the catalog
+version that added one does not carry it, may leave it off, and adopts it on its next reseed.
+
+The same union means a catalog version that STOPS shipping a checkpoint does not take it off a
+reseeded copy: the row cannot tell it from one the workspace added. It stays as an ordinary,
+unlocked checkpoint the workspace can switch off in the approvals dialog.
 
 The carry matches each checkpoint to the same STEP by `stepOccurrenceKeys` (kind plus occurrence,
 in `@cat-factory/contracts`), never by index: a version that inserts a step would otherwise move
 the Architect's checkpoint onto the Coder. A checkpoint the new definition refuses (it made that
-step estimate-gated) or whose step left the chain is dropped and logged, and the SPA names it to
-the person who reseeded, diffing the row it held before against the one returned.
+step estimate-gated) or whose step left the chain is dropped and logged. An approver policy the
+new definition refuses on its own is dropped the same way, keeping its checkpoint on the default
+approvers. The SPA names both to the person who reseeded, diffing the row it held before against
+the one returned.
 
 ## Retiring a built-in is TWO edits, and doing only the first is a silent no-op
 

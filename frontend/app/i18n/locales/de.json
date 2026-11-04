@@ -5147,7 +5147,8 @@
         "reseedFailed": "Pipeline konnte nicht neu aufgesetzt werden",
         "deleteFailed": "Pipeline konnte nicht gelöscht werden",
         "removeFailed": "Pipeline konnte nicht entfernt werden",
-        "checkpointsDropped": "Beim Neuladen von {name} wurden Freigabe-Checkpoints entfernt, die die neue Definition nicht zulässt"
+        "checkpointsDropped": "Beim Neuladen von {name} wurden Freigabe-Checkpoints entfernt, die die neue Definition nicht zulässt",
+        "approverPoliciesDropped": "Beim Neuladen von {name} wurden Freigaberegeln, die die neue Definition nicht zulässt, auf die Standardwerte zurückgesetzt"
       }
     },
     "outputBudget": {
@@ -5182,7 +5183,8 @@
         "companion": "Freigabe-Checkpoint, sobald {companion} den Entwurf von {producer} freigibt. Klicken zum Ändern.",
         "both": "Freigabe-Checkpoints nach jedem Entwurf von {producer} und sobald {companion} ihn freigibt. Klicken zum Ändern."
       },
-      "locked": "Dieser Checkpoint gehört zur integrierten Pipeline. Klone die Pipeline, um ihn zu entfernen."
+      "locked": "Dieser Checkpoint gehört zur integrierten Pipeline. Klone die Pipeline, um ihn zu entfernen.",
+      "unreachable": "Die Aufgabenschätzung oder eine Ausführungsbedingung kann diesen Schritt überspringen, daher würde ein Checkpoint hier nicht immer erreicht."
     },
     "approvals": {
       "open": "Freigabe-Checkpoints",

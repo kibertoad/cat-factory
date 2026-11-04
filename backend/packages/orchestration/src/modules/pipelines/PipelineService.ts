@@ -588,8 +588,9 @@ export class PipelineService {
    * see `pipelineApprovals.ts` for why a checkpoint is the workspace's to choose, and why a built-in
    * may gain checkpoints but never lose one its catalog definition ships.
    *
-   * The composed row is held to the FULL shape validation rather than the checkpoint subset,
-   * because it is the row every later run starts from.
+   * The composed row is held to the checkpoint rules (`validateCheckpointShape`) only. The request
+   * changes nothing else, and a row that breaks a structural rule on its own (a built-in older than
+   * the rule) must still take a checkpoint; run start applies the full validation either way.
    */
   async setApprovals(
     workspaceId: string,
@@ -605,26 +606,27 @@ export class PipelineService {
       ...existing,
       ...approvalsApplied(existing, input, catalogApprovalsOf(seed)),
     }
-    validatePipelineShape({ ...pipeline, ...this.shapeRegistries() })
+    validateCheckpointShape({ ...pipeline, ...this.shapeRegistries() })
     await this.pipelineRepository.update(workspaceId, pipeline)
     return pipeline
   }
 
   /**
    * The reseeded row with the workspace's checkpoints carried across (`carriedApprovals`). A
-   * checkpoint the new definition refuses is dropped and logged; the SPA, which holds the row from
-   * before the reseed, tells the person which ones.
+   * checkpoint or approver policy the new definition refuses is dropped and logged; the SPA, which
+   * holds the row from before the reseed, tells the person which ones.
    */
   private withCarriedApprovals(workspaceId: string, seeded: Pipeline, existing: Pipeline) {
-    const { pipeline, dropped } = carriedApprovals(seeded, existing, (candidate) =>
+    const { pipeline, dropped, droppedPolicies } = carriedApprovals(seeded, existing, (candidate) =>
       this.admitsCheckpoints(candidate),
     )
-    if (dropped.length) {
+    if (dropped.length || droppedPolicies.length) {
       this.logger.warn('Reseed dropped approval checkpoints the new definition does not admit', {
         workspaceId,
         pipelineId: seeded.id,
         version: seeded.version,
         dropped,
+        droppedPolicies,
       })
     }
     return pipeline

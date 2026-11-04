@@ -5699,7 +5699,8 @@
         "reseedFailed": "Nie udało się zregenerować pipeline'u",
         "deleteFailed": "Nie udało się usunąć pipeline'u",
         "removeFailed": "Nie udało się usunąć pipeline’u",
-        "checkpointsDropped": "Ponowne zasianie {name} usunęło punkty zatwierdzenia, na które nowa definicja nie pozwala"
+        "checkpointsDropped": "Ponowne zasianie {name} usunęło punkty zatwierdzenia, na które nowa definicja nie pozwala",
+        "approverPoliciesDropped": "Ponowne zasianie {name} przywróciło domyślne reguły zatwierdzających, na które nowa definicja nie pozwala"
       }
     },
     "outputBudget": {
@@ -5734,7 +5735,8 @@
         "companion": "Punkt zatwierdzenia, gdy {companion} zaakceptuje szkic {producer}. Kliknij, aby zmienić.",
         "both": "Punkty zatwierdzenia po każdym szkicu {producer} i gdy {companion} go zaakceptuje. Kliknij, aby zmienić."
       },
-      "locked": "Ten punkt zatwierdzenia jest częścią wbudowanego pipeline'u. Sklonuj pipeline, aby go usunąć."
+      "locked": "Ten punkt zatwierdzenia jest częścią wbudowanego pipeline'u. Sklonuj pipeline, aby go usunąć.",
+      "unreachable": "Szacunek zadania lub warunek uruchomienia może pominąć ten krok, więc punkt zatwierdzenia tutaj nie zawsze zostałby osiągnięty."
     },
     "approvals": {
       "open": "Punkty zatwierdzenia",

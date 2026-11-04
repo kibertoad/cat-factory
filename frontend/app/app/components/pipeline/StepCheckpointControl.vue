@@ -28,8 +28,17 @@ const props = withDefaults(
     companionLabel?: string
     lockedProducer?: boolean
     lockedCompanion?: boolean
+    /** The estimate or a run condition may skip this step, so a new checkpoint here is refused. */
+    unreachableProducer?: boolean
+    unreachableCompanion?: boolean
   }>(),
-  { companionLabel: '', lockedProducer: false, lockedCompanion: false },
+  {
+    companionLabel: '',
+    lockedProducer: false,
+    lockedCompanion: false,
+    unreachableProducer: false,
+    unreachableCompanion: false,
+  },
 )
 
 const emit = defineEmits<{ update: [gates: { producer: boolean; companion: boolean }] }>()
@@ -41,10 +50,16 @@ const placement = computed(() =>
 )
 const gated = computed(() => placement.value !== 'none')
 
-/** A placement that would switch off a checkpoint the built-in ships is not offered. */
+/**
+ * A placement is not offered when it would switch off a checkpoint the built-in ships, or add one
+ * the run could skip past. A checkpoint already on stays selectable, so a stored one can be kept.
+ */
 function allowed(candidate: CheckpointPlacement): boolean {
   const gates = placementGates(candidate)
-  return (!props.lockedProducer || gates.producer) && (!props.lockedCompanion || gates.companion)
+  if (props.lockedProducer && !gates.producer) return false
+  if (props.lockedCompanion && !gates.companion) return false
+  if (props.unreachableProducer && gates.producer && !props.producerGated) return false
+  return !(props.unreachableCompanion && gates.companion && props.companionGated !== true)
 }
 
 const names = computed(() => ({ producer: props.producerLabel, companion: props.companionLabel }))
@@ -61,6 +76,9 @@ const items = computed(() =>
 const summary = computed(() => t(`pipeline.checkpoint.summary.${placement.value}`, names.value))
 
 const locked = computed(() => props.lockedProducer && props.companionGated === null)
+const unreachable = computed(
+  () => props.unreachableProducer && !props.producerGated && props.companionGated === null,
+)
 
 function toggle() {
   emit('update', { producer: !props.producerGated, companion: false })
@@ -74,13 +92,15 @@ function toggle() {
     :color="gated ? 'warning' : 'neutral'"
     variant="ghost"
     size="xs"
-    :disabled="locked"
+    :disabled="locked || unreachable"
     :label="
       locked
         ? t('pipeline.checkpoint.locked')
-        : gated
-          ? t('pipeline.builder.approvalRemoveTooltip')
-          : t('pipeline.builder.approvalAddTooltip')
+        : unreachable
+          ? t('pipeline.checkpoint.unreachable')
+          : gated
+            ? t('pipeline.builder.approvalRemoveTooltip')
+            : t('pipeline.builder.approvalAddTooltip')
     "
     data-testid="pipeline-step-gate"
     @click="toggle"

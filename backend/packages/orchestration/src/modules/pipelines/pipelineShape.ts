@@ -9,6 +9,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { BinaryOutputConfig } from '@cat-factory/contracts'
 import {
+  checkpointSkippedBy,
   conflictingOutputSizeOptions,
   producesTaskEstimate,
   effectiveGateConfigFields,
@@ -643,9 +644,9 @@ export function assertValidRunConditions({
 
 /**
  * The rules {@link validatePipelineShape} applies to a pipeline's human approval CHECKPOINTS, for a
- * caller that changes only those and must not be held to the rest: a reseed carrying a workspace's
- * checkpoints onto a new catalog definition asks, per checkpoint, whether that definition admits
- * it, and a structural rule the definition itself breaks is not the checkpoint's fault.
+ * caller that changes only those and must not be held to the rest: `setApprovals`, and a reseed
+ * carrying a workspace's checkpoints onto a new catalog definition. A structural rule the row breaks
+ * on its own is not the checkpoint's fault, and run start still applies the full validation.
  */
 export function validateCheckpointShape(pipeline: PipelineShape): void {
   assertValidGating(pipeline)
@@ -665,25 +666,17 @@ export function validateCheckpointShape(pipeline: PipelineShape): void {
  * run condition. The producer is the nearest preceding ENABLED step, the step the companion
  * reviews, which {@link assertValidCompanionPlacement} guarantees is one of its targets.
  */
-export function assertCompanionCheckpointsReachable({
-  agentKinds,
-  enabled,
-  gates,
-  gating,
-  stepOptions,
-  agentKindRegistry,
-}: PipelineShape): void {
+export function assertCompanionCheckpointsReachable(pipeline: PipelineShape): void {
+  const { agentKinds, enabled, gates, agentKindRegistry } = pipeline
   if (!gates) return
-  const isEnabled = (i: number) => enabled?.[i] !== false
+  const isCompanion = (kind: string) => isCompanionKind(kind, agentKindRegistry)
   for (let i = 0; i < agentKinds.length; i++) {
     const kind = agentKinds[i]
-    if (kind === undefined || gates[i] !== true || !isEnabled(i)) continue
-    if (!isCompanionKind(kind, agentKindRegistry)) continue
-    let producer = i - 1
-    while (producer >= 0 && !isEnabled(producer)) producer--
-    if (producer < 0) continue
-    const skippable = gating?.[producer]?.enabled === true || !!stepOptions?.[producer]?.condition
-    if (!skippable) continue
+    if (kind === undefined || gates[i] !== true || enabled?.[i] === false) continue
+    if (!isCompanion(kind)) continue
+    const producer = checkpointSkippedBy(pipeline, i, isCompanion)
+    // A skip on the companion's own step is refused by the gating and run-condition rules.
+    if (producer === null || producer === i) continue
     throw new ValidationError(
       `Step '${kind}' carries a human approval gate, but it reviews '${agentKinds[producer]}', which the task estimate or a run condition may skip, and the review is skipped with it. The checkpoint would then never be reached. Make '${agentKinds[producer]}' unconditional to keep the checkpoint, or drop it.`,
     )

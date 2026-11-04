@@ -5699,7 +5699,8 @@
         "reseedFailed": "No se pudo regenerar el pipeline",
         "deleteFailed": "No se pudo eliminar el pipeline",
         "removeFailed": "No se pudo quitar el pipeline",
-        "checkpointsDropped": "Al restablecer {name} se quitaron puntos de aprobación que la nueva definición no admite"
+        "checkpointsDropped": "Al restablecer {name} se quitaron puntos de aprobación que la nueva definición no admite",
+        "approverPoliciesDropped": "Al restablecer {name} se devolvieron a los valores predeterminados las reglas de aprobadores que la nueva definición no admite"
       }
     },
     "outputBudget": {
@@ -5734,7 +5735,8 @@
         "companion": "Punto de aprobación cuando {companion} aprueba el borrador de {producer}. Haz clic para cambiarlo.",
         "both": "Puntos de aprobación tras cada borrador de {producer} y cuando {companion} lo aprueba. Haz clic para cambiarlo."
       },
-      "locked": "Este punto de aprobación viene con el pipeline integrado. Clona el pipeline para quitarlo."
+      "locked": "Este punto de aprobación viene con el pipeline integrado. Clona el pipeline para quitarlo.",
+      "unreachable": "La estimación de la tarea o una condición de ejecución pueden omitir este paso, así que un punto de aprobación aquí no siempre se alcanzaría."
     },
     "approvals": {
       "open": "Puntos de aprobación",

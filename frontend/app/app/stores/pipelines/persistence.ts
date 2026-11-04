@@ -1,6 +1,6 @@
 import type { ApprovalPolicy } from '@cat-factory/contracts'
 import type { Pipeline } from '~/types/domain'
-import { droppedCheckpoints } from '~/utils/pipelineCheckpoints'
+import { droppedApproverPolicies, droppedCheckpoints } from '~/utils/pipelineCheckpoints'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { savedStepOptions } from '~/utils/binaryOutputSelection'
 import type { PipelinesContext } from './context'
@@ -107,10 +107,14 @@ export function createPipelinePersistence(
    * Reseed a built-in pipeline from the backend's current catalog definition: restores its
    * canonical structure + version (adopting an update, or repairing a drifted/invalid copy)
    * while preserving its labels/archive state and the checkpoints the workspace added. Replaces
-   * the pipeline in the cache, and names the steps whose checkpoint the new definition did not
-   * keep, so the caller can tell the person.
+   * the pipeline in the cache, and names the steps whose checkpoint (or approver policy) the new
+   * definition did not keep, so the caller can tell the person.
    */
-  async function reseed(id: string): Promise<{ pipeline: Pipeline; droppedCheckpoints: string[] }> {
+  async function reseed(id: string): Promise<{
+    pipeline: Pipeline
+    droppedCheckpoints: string[]
+    droppedApproverPolicies: string[]
+  }> {
     const before = ctx.pipelines.value.find((pipeline) => pipeline.id === id)
     const updated = await api.reseedPipeline(useWorkspaceStore().requireId(), id)
     upsertPipeline(updated)
@@ -118,6 +122,7 @@ export function createPipelinePersistence(
     return {
       pipeline: updated,
       droppedCheckpoints: before ? droppedCheckpoints(before, updated) : [],
+      droppedApproverPolicies: before ? droppedApproverPolicies(before, updated) : [],
     }
   }
 

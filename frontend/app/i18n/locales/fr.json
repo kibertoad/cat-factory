@@ -5699,7 +5699,8 @@
         "reseedFailed": "Impossible de régénérer le pipeline",
         "deleteFailed": "Impossible de supprimer le pipeline",
         "removeFailed": "Impossible de retirer le pipeline",
-        "checkpointsDropped": "La réinitialisation de {name} a retiré des points d'approbation que la nouvelle définition n'autorise pas"
+        "checkpointsDropped": "La réinitialisation de {name} a retiré des points d'approbation que la nouvelle définition n'autorise pas",
+        "approverPoliciesDropped": "La réinitialisation de {name} a rétabli par défaut les règles d'approbateurs que la nouvelle définition n'autorise pas"
       }
     },
     "outputBudget": {
@@ -5734,7 +5735,8 @@
         "companion": "Point d'approbation dès que {companion} valide le brouillon de {producer}. Cliquez pour modifier.",
         "both": "Points d'approbation après chaque brouillon de {producer} et dès que {companion} le valide. Cliquez pour modifier."
       },
-      "locked": "Ce point d'approbation est fourni avec le pipeline intégré. Clonez le pipeline pour le retirer."
+      "locked": "Ce point d'approbation est fourni avec le pipeline intégré. Clonez le pipeline pour le retirer.",
+      "unreachable": "L'estimation de la tâche ou une condition d'exécution peut ignorer cette étape, donc un point d'approbation ici ne serait pas toujours atteint."
     },
     "approvals": {
       "open": "Points d'approbation",

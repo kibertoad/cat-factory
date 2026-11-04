@@ -1,8 +1,8 @@
 import {
   approvalPolicyOf,
-  catalogGatedSteps,
   stepOccurrenceKeys,
   type ApprovalPolicy,
+  lockedCheckpoints,
   type CatalogApprovals,
   type SetPipelineApprovalsInput,
 } from '@cat-factory/contracts'
@@ -21,7 +21,7 @@ import type { Pipeline, StepGateConfig, StepOptions } from '@cat-factory/kernel'
 // two instead of having to remember a removal.
 // ---------------------------------------------------------------------------
 
-/** The catalog half of a pipeline, in the shape {@link catalogGatedSteps} reads. */
+/** The catalog half of a pipeline, in the shape {@link lockedCheckpoints} reads. */
 export function catalogApprovalsOf(seed: Pipeline | undefined): CatalogApprovals | undefined {
   return seed ? { agentKinds: seed.agentKinds, gates: seed.gates ?? [] } : undefined
 }
@@ -48,8 +48,8 @@ export function approvalsApplied(
     )
   }
   if (existing.builtin) {
-    const shipped = catalogGatedSteps(existing.agentKinds, catalog)
-    const removed = existing.agentKinds.filter((_, i) => shipped[i] && !input.gates[i])
+    const locked = lockedCheckpoints(existing, catalog)
+    const removed = existing.agentKinds.filter((_, i) => locked[i] && !input.gates[i])
     if (removed.length) {
       throw new ValidationError(
         `The checkpoint after ${removed.map((kind) => `'${kind}'`).join(', ')} is part of the built-in pipeline '${existing.name}'. Clone the pipeline to remove it.`,
@@ -100,6 +100,11 @@ export interface CarriedApprovals {
   pipeline: Pipeline
   /** The step kinds whose checkpoint could not be carried onto the new definition. */
   dropped: string[]
+  /**
+   * The step kinds whose checkpoint was carried but whose approver policy the new definition
+   * refuses, so the step takes the default approvers again.
+   */
+  droppedPolicies: string[]
 }
 
 /**
@@ -114,7 +119,8 @@ export interface CarriedApprovals {
  * caller can say so rather than silently shrinking the oversight somebody asked for.
  *
  * The approver policy travels with its checkpoint, onto a checkpoint the catalog ships as much as
- * onto one the workspace added.
+ * onto one the workspace added. A policy the new definition refuses on its own is dropped
+ * separately (`droppedPolicies`) and the checkpoint is kept with the default approvers.
  */
 export function carriedApprovals(
   seed: Pipeline,
@@ -127,29 +133,41 @@ export function carriedApprovals(
   })
   let pipeline = seed
   const dropped: string[] = []
+  const droppedPolicies: string[] = []
+  const withCheckpoint = (i: number, policy: ApprovalPolicy | null): Pipeline => ({
+    ...pipeline,
+    ...approvalsApplied(
+      { ...pipeline, builtin: false },
+      {
+        gates: pipeline.agentKinds.map((_, j) => j === i || pipeline.gates?.[j] === true),
+        policies: pipeline.agentKinds.map((_, j) =>
+          j === i ? policy : approvalPolicyOf(pipeline.stepOptions?.[j]),
+        ),
+      },
+      undefined,
+    ),
+  })
   const seedKeys = stepOccurrenceKeys(seed.agentKinds)
   seedKeys.forEach((key, i) => {
     if (!stored.has(key)) return
     const policy = stored.get(key) ?? null
-    const candidate: Pipeline = {
-      ...pipeline,
-      ...approvalsApplied(
-        { ...pipeline, builtin: false },
-        {
-          gates: pipeline.agentKinds.map((_, j) => j === i || pipeline.gates?.[j] === true),
-          policies: pipeline.agentKinds.map((_, j) =>
-            j === i ? policy : approvalPolicyOf(pipeline.stepOptions?.[j]),
-          ),
-        },
-        undefined,
-      ),
+    const candidate = withCheckpoint(i, policy)
+    if (admits(candidate)) {
+      pipeline = candidate
+      return
     }
-    if (admits(candidate)) pipeline = candidate
-    else dropped.push(seed.agentKinds[i]!)
+    // The checkpoint and its policy are separate refusals: keep whichever half still fits.
+    const bare = policy ? withCheckpoint(i, null) : undefined
+    if (bare && admits(bare)) {
+      pipeline = bare
+      droppedPolicies.push(seed.agentKinds[i]!)
+    } else {
+      dropped.push(seed.agentKinds[i]!)
+    }
   })
   const kept = new Set(seedKeys)
   stepOccurrenceKeys(existing.agentKinds).forEach((key, i) => {
     if (stored.has(key) && !kept.has(key)) dropped.push(existing.agentKinds[i]!)
   })
-  return { pipeline, dropped }
+  return { pipeline, dropped, droppedPolicies }
 }

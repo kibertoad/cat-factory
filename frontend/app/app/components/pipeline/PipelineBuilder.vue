@@ -635,6 +635,11 @@ const visiblePipelines = computed(() => library.value.offered)
                     "
                     :producer-label="agentKindMeta(unit.kind).label"
                     :companion-label="companionLabel(unit.kind) ?? ''"
+                    :unreachable-producer="pipelines.draftUnreachableCheckpoints[unit.index]"
+                    :unreachable-companion="
+                      unit.companionIndex !== null &&
+                      pipelines.draftUnreachableCheckpoints[unit.companionIndex] === true
+                    "
                     @update="pipelines.setDraftCheckpoints(unit.index, unit.companionIndex, $event)"
                   />
                   <!-- Consensus: run this step through the multi-model mechanism (eligible

@@ -68,21 +68,30 @@ async function run(id: string, action: () => Promise<unknown>, failTitleKey: str
 
 const actionToast = useActionToast()
 
+function warnDropped(
+  key: 'checkpointsDropped' | 'approverPoliciesDropped',
+  name: string,
+  kinds: string[],
+) {
+  if (!kinds.length) return
+  actionToast.warning(`pipeline.health.toast.${key}`, {
+    params: { name },
+    description: kinds.map((kind) => agentKindMeta(kind).label).join(', '),
+  })
+}
+
 /**
- * Reseed, then say which checkpoints the new definition did not keep. The backend drops a
- * checkpoint the definition refuses (it may have made that step estimate-gated) rather than failing
- * the reseed, so this is the only place the person who asked for it hears about the loss.
+ * Reseed, then say which checkpoints and approver policies the new definition did not keep. The
+ * backend drops what the definition refuses (it may have made that step estimate-gated) rather than
+ * failing the reseed, so this is the only place the person who asked for it hears about the loss.
  */
 const reseed = (id: string) =>
   run(
     id,
     async () => {
-      const { pipeline, droppedCheckpoints } = await pipelines.reseed(id)
-      if (!droppedCheckpoints.length) return
-      actionToast.warning('pipeline.health.toast.checkpointsDropped', {
-        params: { name: pipeline.name },
-        description: droppedCheckpoints.map((kind) => agentKindMeta(kind).label).join(', '),
-      })
+      const result = await pipelines.reseed(id)
+      warnDropped('checkpointsDropped', result.pipeline.name, result.droppedCheckpoints)
+      warnDropped('approverPoliciesDropped', result.pipeline.name, result.droppedApproverPolicies)
     },
     'pipeline.health.toast.reseedFailed',
   )

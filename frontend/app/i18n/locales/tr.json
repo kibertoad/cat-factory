@@ -5699,7 +5699,8 @@
         "reseedFailed": "Pipeline yeniden tohumlanamadı",
         "deleteFailed": "Pipeline silinemedi",
         "removeFailed": "Pipeline kaldırılamadı",
-        "checkpointsDropped": "{name} yeniden yüklenirken yeni tanımın izin vermediği onay kontrol noktaları kaldırıldı"
+        "checkpointsDropped": "{name} yeniden yüklenirken yeni tanımın izin vermediği onay kontrol noktaları kaldırıldı",
+        "approverPoliciesDropped": "{name} yeniden yüklenirken yeni tanımın izin vermediği onaylayıcı kuralları varsayılana döndürüldü"
       }
     },
     "outputBudget": {
@@ -5734,7 +5735,8 @@
         "companion": "{companion}, {producer} taslağını onayladığında onay kontrol noktası. Değiştirmek için tıklayın.",
         "both": "{producer} her taslağından sonra ve {companion} onayladığında onay kontrol noktaları. Değiştirmek için tıklayın."
       },
-      "locked": "Bu kontrol noktası yerleşik pipeline ile birlikte gelir. Kaldırmak için pipeline'ı kopyalayın."
+      "locked": "Bu kontrol noktası yerleşik pipeline ile birlikte gelir. Kaldırmak için pipeline'ı kopyalayın.",
+      "unreachable": "Görev tahmini veya bir çalıştırma koşulu bu adımı atlayabilir, bu nedenle buradaki bir kontrol noktasına her zaman ulaşılamaz."
     },
     "approvals": {
       "open": "Onay kontrol noktaları",

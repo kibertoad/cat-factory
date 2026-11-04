@@ -8,6 +8,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { PipelineService } from './PipelineService.js'
+import { validatePipelineShape } from './pipelineShape.js'
 
 // A pipeline's human approval checkpoints are the one thing a BUILT-IN lets a workspace change.
 // These pin the write (what it accepts, what it refuses) and the reseed that has to keep it.
@@ -88,6 +89,25 @@ describe('PipelineService.setApprovals', () => {
     await expect(svc.setApprovals(WS, bugfix.id, { gates: gatesAfter(bugfix) })).rejects.toThrow(
       /part of the built-in pipeline/,
     )
+  })
+
+  it('lets a copy older than the catalog leave off a shipped checkpoint it never carried', async () => {
+    const bugfix = seed('pl_bugfix')
+    const stale: Pipeline = { ...bugfix, gates: undefined }
+    const { svc } = service([stale])
+    const saved = await svc.setApprovals(WS, bugfix.id, { gates: gatesAfter(bugfix, 'coder') })
+    expect(gatedKinds(saved)).toEqual(['coder'])
+  })
+
+  it('takes a checkpoint on a row that breaks a structural rule of its own', async () => {
+    // A companion with no producer before it is a structural refusal unrelated to checkpoints.
+    const complex = seed('pl_complex')
+    const agentKinds = ['reviewer', ...complex.agentKinds]
+    const broken: Pipeline = { ...complex, agentKinds, gates: undefined, stepOptions: undefined }
+    expect(() => validatePipelineShape(broken)).toThrow(ValidationError)
+    const { svc } = service([broken])
+    const saved = await svc.setApprovals(WS, broken.id, { gates: gatesAfter(broken, 'architect') })
+    expect(gatedKinds(saved)).toEqual(['architect'])
   })
 
   it('removes any checkpoint from a custom pipeline', async () => {
@@ -173,6 +193,32 @@ describe('PipelineService.reseed carries the workspace checkpoints', () => {
     const warnings = logger.lines.filter((line) => line.level === 'warn')
     expect(warnings).toHaveLength(1)
     expect(warnings[0]?.fields).toMatchObject({ dropped: ['architect', 'documenter'] })
+  })
+})
+
+describe('PipelineService.reseed approver policies', () => {
+  it('keeps the checkpoint and drops only an approver policy the definition refuses', async () => {
+    const complex = seed('pl_complex')
+    const companion = complex.agentKinds.indexOf('architect-companion')
+    // Two approvals from one named approver can never be met.
+    const stale: Pipeline = {
+      ...complex,
+      gates: complex.agentKinds.map((_, i) => i === companion),
+      stepOptions: complex.agentKinds.map((_, i) =>
+        i === companion
+          ? { gateConfig: { minApprovals: 2, approvers: { userIds: ['u_1'] } } }
+          : (complex.stepOptions?.[i] ?? null),
+      ),
+    }
+    const { svc, logger } = service([stale])
+    const reseeded = await svc.reseed(WS, complex.id)
+    expect(gatedKinds(reseeded)).toEqual(['architect-companion'])
+    expect(reseeded.stepOptions?.[companion] ?? null).toBeNull()
+    const warnings = logger.lines.filter((line) => line.level === 'warn')
+    expect(warnings[0]?.fields).toMatchObject({
+      dropped: [],
+      droppedPolicies: ['architect-companion'],
+    })
   })
 })
 

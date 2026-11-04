@@ -5147,7 +5147,8 @@
         "reseedFailed": "Impossibile ripristinare la pipeline",
         "deleteFailed": "Impossibile eliminare la pipeline",
         "removeFailed": "Impossibile rimuovere la pipeline",
-        "checkpointsDropped": "Il ripristino di {name} ha rimosso punti di approvazione che la nuova definizione non consente"
+        "checkpointsDropped": "Il ripristino di {name} ha rimosso punti di approvazione che la nuova definizione non consente",
+        "approverPoliciesDropped": "Il ripristino di {name} ha riportato ai valori predefiniti le regole sugli approvatori che la nuova definizione non consente"
       }
     },
     "outputBudget": {
@@ -5182,7 +5183,8 @@
         "companion": "Punto di approvazione quando {companion} approva la bozza di {producer}. Fai clic per modificare.",
         "both": "Punti di approvazione dopo ogni bozza di {producer} e quando {companion} la approva. Fai clic per modificare."
       },
-      "locked": "Questo punto di approvazione è incluso nella pipeline predefinita. Clona la pipeline per rimuoverlo."
+      "locked": "Questo punto di approvazione è incluso nella pipeline predefinita. Clona la pipeline per rimuoverlo.",
+      "unreachable": "La stima dell'attività o una condizione di esecuzione possono saltare questo passaggio, quindi un punto di approvazione qui non verrebbe sempre raggiunto."
     },
     "approvals": {
       "open": "Punti di approvazione",

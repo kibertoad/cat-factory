@@ -1,11 +1,14 @@
 import {
+  approvalPolicyOf,
+  checkpointSkippedBy,
   hasApproverPolicy,
   stepOccurrenceKeys,
+  type SkippableStepsShape,
   type StepGateConfig,
   type StepOptions,
 } from '@cat-factory/contracts'
-import type { AgentKind } from '~/types/domain'
-import { companionForProducer } from '~/utils/catalog'
+import type { AgentKind, Pipeline } from '~/types/domain'
+import { companionForProducer, isProducerCompanion } from '~/utils/catalog'
 
 /**
  * One row of a pipeline as the builder shows it: a step, with the companion that sits immediately
@@ -107,4 +110,36 @@ export function droppedCheckpoints(
   return stepOccurrenceKeys(before.agentKinds)
     .map((key, i) => (before.gates?.[i] && !kept.has(key) ? before.agentKinds[i] : undefined))
     .filter((kind): kind is string => kind !== undefined)
+}
+
+/**
+ * The steps whose checkpoint a reseed kept but whose approver policy it did not: gated with a
+ * policy on the row before it, gated on the same step after it, with a different policy. The
+ * backend drops a policy the new definition refuses and keeps the checkpoint on the defaults.
+ */
+export function droppedApproverPolicies(
+  before: Pick<Pipeline, 'agentKinds' | 'gates' | 'stepOptions'>,
+  after: Pick<Pipeline, 'agentKinds' | 'gates' | 'stepOptions'>,
+): string[] {
+  const policyAfter = new Map<string, string>()
+  stepOccurrenceKeys(after.agentKinds).forEach((key, i) => {
+    if (after.gates?.[i])
+      policyAfter.set(key, JSON.stringify(approvalPolicyOf(after.stepOptions?.[i])))
+  })
+  return stepOccurrenceKeys(before.agentKinds)
+    .map((key, i) => {
+      const policy = approvalPolicyOf(before.stepOptions?.[i])
+      if (!before.gates?.[i] || !policy || !policyAfter.has(key)) return undefined
+      return policyAfter.get(key) === JSON.stringify(policy) ? undefined : before.agentKinds[i]
+    })
+    .filter((kind): kind is string => kind !== undefined)
+}
+
+/**
+ * For each step, whether a checkpoint there could never be reached on some runs, because the step
+ * (or the producer a companion reviews) may be skipped by the task estimate or a run condition. The
+ * backend refuses such a checkpoint, so the controls do not offer one.
+ */
+export function unreachableCheckpoints(shape: SkippableStepsShape): boolean[] {
+  return shape.agentKinds.map((_, i) => checkpointSkippedBy(shape, i, isProducerCompanion) !== null)
 }

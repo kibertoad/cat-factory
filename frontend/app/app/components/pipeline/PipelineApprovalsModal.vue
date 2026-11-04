@@ -17,6 +17,7 @@ import { showOverrideField } from '~/utils/uiMode'
 import {
   foldCompanionUnits,
   patchedGateConfig,
+  unreachableCheckpoints,
   type PipelineUnit,
 } from '~/utils/pipelineCheckpoints'
 
@@ -30,16 +31,13 @@ const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 const kinds = props.pipeline.agentKinds
-const shipped = computed(() => pipelines.shippedCheckpoints(props.pipeline))
-// A copy older than the catalog may lack a checkpoint the catalog now ships. It starts on, because
-// the control locks it and the backend refuses any request that leaves it off.
-const gates = ref(
-  kinds.map((_, i) => props.pipeline.gates?.[i] === true || shipped.value[i] === true),
-)
+const locked = computed(() => pipelines.lockedCheckpointsOf(props.pipeline))
+const gates = ref(kinds.map((_, i) => props.pipeline.gates?.[i] === true))
 // The approval half only: a gate's own parameters belong to the built-in's structure.
 const policies = ref<(StepGateConfig | null)[]>(
   kinds.map((_, i) => approvalPolicyOf(props.pipeline.stepOptions?.[i])),
 )
+const unreachable = unreachableCheckpoints(props.pipeline)
 const units = computed(() => foldCompanionUnits(kinds))
 const saving = ref(false)
 
@@ -112,9 +110,13 @@ async function save() {
               "
               :producer-label="label(unit.index)"
               :companion-label="label(unit.companionIndex)"
-              :locked-producer="shipped[unit.index] === true"
+              :locked-producer="locked[unit.index] === true"
               :locked-companion="
-                unit.companionIndex !== null && shipped[unit.companionIndex] === true
+                unit.companionIndex !== null && locked[unit.companionIndex] === true
+              "
+              :unreachable-producer="unreachable[unit.index] === true"
+              :unreachable-companion="
+                unit.companionIndex !== null && unreachable[unit.companionIndex] === true
               "
               @update="setCheckpoints(unit, $event)"
             />

@@ -36,3 +36,8 @@ export const AfterCompanion: Story = { args: { companionGated: true } }
 export const Locked: Story = {
   args: { producerLabel: 'Clarity Review', producerGated: true, lockedProducer: true },
 }
+
+/** An estimate-gated Architect: neither it nor its reviewer is offered a new checkpoint. */
+export const Unreachable: Story = {
+  args: { companionGated: false, unreachableProducer: true, unreachableCompanion: true },
+}

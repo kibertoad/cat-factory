@@ -8,7 +8,7 @@ import type {
   RetiredPipelineWire,
   RunDefaultScope,
 } from '@cat-factory/contracts'
-import { catalogGatedSteps, declaredDefaultPipelineId } from '@cat-factory/contracts'
+import { declaredDefaultPipelineId, lockedCheckpoints } from '@cat-factory/contracts'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { createDraftStepState, type PipelinesContext } from '~/stores/pipelines/context'
 import { createPipelineDraftActions } from '~/stores/pipelines/draftActions'
@@ -150,9 +150,9 @@ export const usePipelinesStore = defineStore('pipelines', () => {
    * For each step of `pipeline`, whether it carries a checkpoint its catalog definition ships, and
    * so one a workspace may not switch off. All `false` for a custom pipeline.
    */
-  function shippedCheckpoints(pipeline: Pipeline): boolean[] {
+  function lockedCheckpointsOf(pipeline: Pipeline): boolean[] {
     const catalog = pipeline.builtin ? catalogApprovals.value[pipeline.id] : undefined
-    return catalogGatedSteps(pipeline.agentKinds, catalog)
+    return lockedCheckpoints(pipeline, catalog)
   }
 
   /**
@@ -222,7 +222,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     hydrate,
     hydrateGateConfigForms,
     getPipeline,
-    shippedCheckpoints,
+    lockedCheckpointsOf,
     declaredDefaultId,
     ...draftActions,
     ...persistence,

@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import type { StepGating } from './consensus.js'
 import type { StepOptions } from './entities.js'
 import { stepGateConfigSchema } from './gate-config.js'
 
@@ -73,6 +74,21 @@ export function catalogGatedSteps(
   return stepOccurrenceKeys(agentKinds).map((key) => shipped.has(key))
 }
 
+/**
+ * For each step of a stored built-in row, whether its checkpoint is LOCKED: the catalog ships it
+ * ({@link catalogGatedSteps}) and the row carries it. Switching one of these off is the removal a
+ * built-in refuses. A shipped checkpoint a row does not carry (a copy older than the catalog
+ * version that added it) is not locked: leaving it off removes nothing, and a reseed adopts it.
+ */
+export function lockedCheckpoints(
+  row: { agentKinds: readonly string[]; gates?: readonly boolean[] },
+  catalog: CatalogApprovals | undefined,
+): boolean[] {
+  return catalogGatedSteps(row.agentKinds, catalog).map(
+    (shipped, i) => shipped && row.gates?.[i] === true,
+  )
+}
+
 /** The approval half of a step's stored gate configuration, or null when it takes the defaults. */
 export function approvalPolicyOf(options: StepOptions | null | undefined): ApprovalPolicy | null {
   const config = options?.gateConfig
@@ -81,4 +97,37 @@ export function approvalPolicyOf(options: StepOptions | null | undefined): Appro
   if (config.approvers) policy.approvers = config.approvers
   if (config.minApprovals !== undefined) policy.minApprovals = config.minApprovals
   return Object.keys(policy).length ? policy : null
+}
+
+/** The parts of a pipeline that decide whether a step may be skipped on a run. */
+export interface SkippableStepsShape {
+  agentKinds: readonly string[]
+  enabled?: readonly boolean[]
+  gating?: readonly (StepGating | null | undefined)[]
+  stepOptions?: readonly (StepOptions | null | undefined)[]
+}
+
+/** Whether a run may skip step `index`: it is estimate-gated or carries a run condition. */
+export function stepMaySkip(shape: SkippableStepsShape, index: number): boolean {
+  return shape.gating?.[index]?.enabled === true || !!shape.stepOptions?.[index]?.condition
+}
+
+/**
+ * The step whose skip would cancel a human approval checkpoint on step `index`, or null when a
+ * checkpoint there is always reached. That is the step itself when it may be skipped, and for a
+ * COMPANION also the producer it reviews (the nearest preceding enabled step), because a companion
+ * is skipped whenever its producer is. The backend refuses a checkpoint this names; the SPA does not
+ * offer one.
+ */
+export function checkpointSkippedBy(
+  shape: SkippableStepsShape,
+  index: number,
+  isCompanion: (kind: string) => boolean,
+): number | null {
+  if (stepMaySkip(shape, index)) return index
+  const kind = shape.agentKinds[index]
+  if (kind === undefined || !isCompanion(kind)) return null
+  let producer = index - 1
+  while (producer >= 0 && shape.enabled?.[producer] === false) producer--
+  return producer >= 0 && stepMaySkip(shape, producer) ? producer : null
 }

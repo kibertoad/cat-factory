@@ -2,7 +2,11 @@ import { computed } from 'vue'
 import type { AgentKind, Pipeline } from '~/types/domain'
 import { companionForProducer } from '~/utils/catalog'
 import { approvalPolicyOf } from '@cat-factory/contracts'
-import { foldCompanionUnits, patchedGateConfig } from '~/utils/pipelineCheckpoints'
+import {
+  foldCompanionUnits,
+  patchedGateConfig,
+  unreachableCheckpoints,
+} from '~/utils/pipelineCheckpoints'
 import type { PipelinesContext } from './context'
 import { createPipelineGateConfigActions } from './draftGateConfig'
 import { createPipelineStepConfigActions } from './draftStepConfig'
@@ -134,6 +138,16 @@ export function createPipelineDraftActions(ctx: PipelinesContext) {
    */
   const units = computed(() => foldCompanionUnits(draft.value))
 
+  /** Per draft step, whether a new checkpoint there would be refused as unreachable. */
+  const draftUnreachableCheckpoints = computed(() =>
+    unreachableCheckpoints({
+      agentKinds: draft.value,
+      enabled: draftEnabled.value,
+      gating: draftGating.value,
+      stepOptions: draftStepOptions.value,
+    }),
+  )
+
   /**
    * Move the unit at visible position `from` to `to`, carrying its attached companion. Rebuilds
    * every parallel array by the SAME unit boundaries so they stay index-aligned.
@@ -207,6 +221,7 @@ export function createPipelineDraftActions(ctx: PipelinesContext) {
     hasCompanion,
     toggleCompanion,
     units,
+    draftUnreachableCheckpoints,
     moveUnit,
     clearDraft,
     loadForEdit,

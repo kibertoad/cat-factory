@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   checkpointPlacement,
+  droppedApproverPolicies,
   droppedCheckpoints,
   foldCompanionUnits,
   patchedGateConfig,
   placementGates,
+  unreachableCheckpoints,
 } from '~/utils/pipelineCheckpoints'
 
 describe('foldCompanionUnits', () => {
@@ -54,5 +56,36 @@ describe('droppedCheckpoints', () => {
       gates: [false, false, true],
     }
     expect(droppedCheckpoints(before, after)).toEqual(['architect'])
+  })
+})
+
+describe('droppedApproverPolicies', () => {
+  const policy = { gateConfig: { approvers: { roles: ['admin' as const] } } }
+
+  it('names a step that kept its checkpoint but lost its approver policy', () => {
+    const before = {
+      agentKinds: ['architect', 'coder'],
+      gates: [true, false],
+      stepOptions: [policy, null],
+    }
+    const after = { agentKinds: ['researcher', 'architect', 'coder'], gates: [false, true, false] }
+    expect(droppedApproverPolicies(before, after)).toEqual(['architect'])
+  })
+
+  it('names nothing when the policy survived, or when the checkpoint itself went', () => {
+    const before = { agentKinds: ['architect'], gates: [true], stepOptions: [policy] }
+    expect(droppedApproverPolicies(before, before)).toEqual([])
+    expect(droppedApproverPolicies(before, { agentKinds: ['architect'] })).toEqual([])
+  })
+})
+
+describe('unreachableCheckpoints', () => {
+  it('marks an estimate-gated producer and the companion that reviews it', () => {
+    expect(
+      unreachableCheckpoints({
+        agentKinds: ['architect', 'architect-companion', 'coder'],
+        gating: [{ enabled: true, minRisk: 3, onMissingEstimate: 'run' }, null, null],
+      }),
+    ).toEqual([true, true, false])
   })
 })

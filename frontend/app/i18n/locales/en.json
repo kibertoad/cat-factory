@@ -5905,7 +5905,8 @@
         "reseedFailed": "Could not reseed pipeline",
         "deleteFailed": "Could not delete pipeline",
         "removeFailed": "Could not remove pipeline",
-        "checkpointsDropped": "Reseeding {name} dropped approval checkpoints the new definition does not allow"
+        "checkpointsDropped": "Reseeding {name} dropped approval checkpoints the new definition does not allow",
+        "approverPoliciesDropped": "Reseeding {name} reset approver rules the new definition does not allow to the defaults"
       }
     },
     "outputBudget": {
@@ -5940,7 +5941,8 @@
         "companion": "Approval checkpoint once {companion} passes the {producer} draft. Click to change.",
         "both": "Approval checkpoints after each {producer} draft and once {companion} passes it. Click to change."
       },
-      "locked": "This checkpoint ships with the built-in pipeline. Clone the pipeline to remove it."
+      "locked": "This checkpoint ships with the built-in pipeline. Clone the pipeline to remove it.",
+      "unreachable": "The task estimate or a run condition may skip this step, so a checkpoint here would not always be reached."
     },
     "approvals": {
       "open": "Approval checkpoints",
