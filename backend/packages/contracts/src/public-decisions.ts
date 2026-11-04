@@ -1126,6 +1126,9 @@ export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
  *   whichever one it did not mean. The step's approval gate can still be resolved to END such a
  *   run, and that is worth knowing rather than a contradiction: ending a curation discards what it
  *   caught, so it is an exit, not an answer.
+ * - `credential_lapsed`: the run's personal-subscription credential lapsed before a step could
+ *   dispatch, so the step parked. Only the run's initiator can answer it, by entering their
+ *   personal password in the app, which re-mints the credential and resumes the step.
  *
  * Every member is a wait that is BOTH live and beyond this surface, and both halves are load-
  * bearing. A run that has finished (`done` / `failed`, the stop included) lists nothing at all: its
@@ -1140,6 +1143,7 @@ export const publicUnanswerableReasonSchema = v.picklist([
   'unclassified_gate',
   'unwired_interview_gate',
   'curation_gate',
+  'credential_lapsed',
 ])
 export type PublicUnanswerableReason = v.InferOutput<typeof publicUnanswerableReasonSchema>
 

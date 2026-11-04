@@ -681,6 +681,7 @@
         "reference_repo_unreadable": "Le dépôt de l'architecture de référence de cette exécution n'a pas pu être lu pour l'instant, l'exécution n'a donc pas été lancée sur un modèle qu'elle pourrait ne pas savoir cloner. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
         "oauth_state_invalid": "Ce lien d’autorisation a expiré ou a déjà été utilisé, il ne peut donc pas finaliser la connexion.",
         "oauth_started_by_other_user": "Quelqu’un d’autre a lancé cette connexion, donc seule cette personne peut la finaliser.",
+        "credential_wait_not_initiator": "Seule la personne qui a lancé cette exécution peut renouveler ses identifiants d’abonnement personnel, car l’exécution utilise son abonnement. Demandez-lui de la poursuivre.",
         "oauth_exchange_refused": "Le serveur d’autorisation du serveur d’outils a refusé l’autorisation. Demandez à l’opérateur de votre déploiement de vérifier les paramètres du client OAuth du serveur d’outils.",
         "oauth_client_secret_unavailable": "Le secret du client OAuth du serveur d’outils n’est pas disponible sur ce tableau. Ajoutez-le dans la fenêtre Infrastructure.",
         "tool_server_without_oauth": "Ce serveur d’outils n’utilise plus OAuth, il n’y a donc aucune connexion à finaliser.",
@@ -692,6 +693,7 @@
       "startFailed": "Échec du démarrage",
       "mergeFailed": "Échec de la fusion",
       "restartFailed": "Échec du redémarrage",
+      "resumeCredentialFailed": "Impossible de reprendre l'exécution",
       "approveFailed": "Échec de l'approbation",
       "requestChangesFailed": "Échec de la demande de modifications",
       "rejectFailed": "Échec du rejet"
@@ -746,6 +748,7 @@
         "binary_output_generator_invalid": "Générateur de sorties binaires introuvable",
         "foundational_service_not_inherited": "Ce tableau a enregistré ce service",
         "input_gate_not_parked": "Rien à répondre",
+        "credential_wait_not_parked": "Rien à reprendre",
         "input_gate_parked": "Répondez-y dans la vérification d'entrée de la tâche",
         "ticket_already_linked": "Ce ticket a déjà une tâche",
         "document_already_linked": "Document déjà joint",
@@ -809,6 +812,7 @@
         "binary_output_generator_invalid": "Une étape qui génère des sorties binaires sélectionne une intégration générative que ce déploiement n’enregistre pas, aucune des intégrations sélectionnées ne produit un type de contenu que l’étape doit livrer, ou l’une d’elles est générée par une CLI d’agent sur laquelle le modèle de cette étape ne s’exécute pas. Les intégrations génératives sont enregistrées dans le code du déploiement, pas dans cet espace de travail : enregistrez-la, corrigez la sélection de l’étape, ou fixez pour l’étape un modèle exécutant la CLI requise, puis relancez.",
         "foundational_service_not_inherited": "L'écartement s'applique à un service hérité du compte. Cet identifiant est enregistré par ce tableau : il n'y a donc rien à écarter - supprimez plutôt l'entrée propre au tableau.",
         "input_gate_not_parked": "Cette exécution n'attend plus sa vérification d'entrée. Quelqu'un y a peut-être déjà répondu, ou l'exécution a avancé.",
+        "credential_wait_not_parked": "Cette exécution n'attend plus les identifiants de votre abonnement personnel. Elle a peut-être déjà été reprise, ou l'exécution a avancé.",
         "input_gate_parked": "Cette exécution est en attente de sa vérification d'entrée, à laquelle la validation ne peut pas répondre. Utilisez l'avis sur l'exécution : corrigez la tâche et relancez la vérification, ou exécutez-la quand même.",
         "ticket_already_linked": "Un ticket ne peut alimenter qu'une seule tâche : le relier à nouveau priverait la tâche existante du contexte avec lequel elle a été créée. Ouvrez plutôt cette tâche, ou dissociez d'abord le ticket.",
         "document_already_linked": "Ce document est joint à une autre tâche. Détachez-le d'abord, ou joignez-en une copie distincte.",
@@ -5927,6 +5931,13 @@
         "hint": "Cette exécution a enregistré une vérification que cette version ne connaît plus. Relisez la tâche à la main avant de continuer."
       }
     }
+  },
+  "credentialWait": {
+    "title": "Les identifiants de votre abonnement personnel ont expiré",
+    "body": "Les identifiants de l'abonnement personnel de cette exécution ont expiré avant le démarrage de l'étape suivante : l'exécution est donc en pause. Saisissez votre mot de passe personnel pour les renouveler et reprendre à cette étape.",
+    "resume": "Saisir le mot de passe et continuer",
+    "othersTitle": "Les identifiants d’abonnement personnel de cette exécution ont expiré",
+    "othersRun": "Seule la personne qui a lancé cette exécution peut les renouveler avec son mot de passe personnel. Demandez-lui de la poursuivre."
   },
   "requirements": {
     "title": "Revue des exigences",

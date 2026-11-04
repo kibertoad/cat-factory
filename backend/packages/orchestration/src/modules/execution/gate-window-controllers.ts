@@ -38,6 +38,7 @@ import { ReviewGateController, type ReviewGateControllerDeps } from './ReviewGat
 import { BinaryCandidateController } from './BinaryCandidateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { InputGateController } from './InputGateController.js'
+import { CredentialWaitController } from './CredentialWaitController.js'
 import { PrReviewController } from './PrReviewController.js'
 import { BugFishingController } from './BugFishingController.js'
 import { createTaskTypeCreationDefaults } from '../board/taskTypeCreationDefaults.js'
@@ -454,6 +455,25 @@ export function buildInputGateController(
     // nothing declaring required fields, which is a real answer rather than a missing one.
     taskTypeRegistry: dependencies.taskTypeRegistry ?? defaultTaskTypeRegistry(),
     workspaceSettingsService: dependencies.workspaceSettingsService,
+    logger: dependencies.logger,
+  })
+}
+
+/**
+ * The run's CREDENTIAL WAIT: parks a step whose dispatch could not lease the run's personal
+ * subscription credential. Built here beside the input gate, the other park that guards a
+ * dispatch rather than being a step of its own.
+ */
+export function buildCredentialWaitController(
+  dependencies: ExecutionServiceDependencies,
+  runtime: { stateMachine: RunStateMachine; stepGraph: StepGraph },
+): CredentialWaitController {
+  return new CredentialWaitController({
+    stateMachine: runtime.stateMachine,
+    stepGraph: runtime.stepGraph,
+    executionRepository: dependencies.executionRepository,
+    clock: dependencies.clock,
+    workRunner: dependencies.workRunner,
     logger: dependencies.logger,
   })
 }

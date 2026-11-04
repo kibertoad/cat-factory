@@ -20,9 +20,10 @@
 // NOT a raise, and each exclusion is a different thing:
 //   - a SPREAD of the existing approval (`{ ...step.approval, proposal }`) is a refresh; whatever
 //     the builder froze onto it survives, which is exactly the property being protected;
-//   - `RunStateMachine.parkStepOnDecision` raises the AGENT-DECISION parks (fork choice, human
-//     test, visual confirmation, input gate). Those carry no per-step approver policy and are
-//     answered through their own resolvers, never the generic approve verbs.
+//   - `RunStateMachine.parkStepOnDecision` (and its in-memory half `openDecisionPark`) raises the
+//     AGENT-DECISION parks (fork choice, human test, visual confirmation, input gate, credential
+//     wait). Those carry no per-step approver policy and are answered through their own resolvers,
+//     never the generic approve verbs.
 
 /** The single-file check: the 1-based line numbers carrying a hand-rolled gate raise. */
 export function findHandRolledApprovalRaises(source) {

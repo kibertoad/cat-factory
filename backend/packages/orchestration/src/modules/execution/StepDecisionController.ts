@@ -86,6 +86,8 @@ export interface StepDecisionControllerDeps {
 const WRONG_SURFACE_MESSAGES: Record<DedicatedParkSurface, string> = {
   'input-gate':
     "Resolve this run's input check through its notice (fix the task and re-check, or proceed anyway), not the approval gate",
+  credential:
+    'Resume this run by entering your personal password on its credential notice, not the approval gate',
   'requirements-review':
     'Resolve the requirements review through its review window, not the approval gate',
   'clarity-review': 'Resolve the clarity review through its review window, not the approval gate',

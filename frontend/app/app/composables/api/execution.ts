@@ -15,6 +15,7 @@ import {
   resolveDecisionContract,
   resolveStepExceededContract,
   restartExecutionContract,
+  resumeCredentialWaitContract,
   resumeSpendContract,
   startAgentKindExecutionContract,
   startExecutionContract,
@@ -89,9 +90,8 @@ export function executionApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
       executionId: string,
       decisionId: string,
       body: { choice: string },
-      password?: string,
     ) =>
-      sendWith(pwHeaders(password), resolveDecisionContract, {
+      send(resolveDecisionContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { executionId, decisionId },
         body,
@@ -102,9 +102,8 @@ export function executionApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
       executionId: string,
       approvalId: string,
       body: { proposal?: string },
-      password?: string,
     ) =>
-      sendWith(pwHeaders(password), approveStepContract, {
+      send(approveStepContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { executionId, approvalId },
         body,
@@ -115,9 +114,8 @@ export function executionApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
       executionId: string,
       approvalId: string,
       body: RequestStepChangesInput,
-      password?: string,
     ) =>
-      sendWith(pwHeaders(password), requestStepChangesContract, {
+      send(requestStepChangesContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { executionId, approvalId },
         body,
@@ -142,9 +140,8 @@ export function executionApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
       executionId: string,
       approvalId: string,
       body: { choice: IterationCapChoice },
-      password?: string,
     ) =>
-      sendWith(pwHeaders(password), resolveStepExceededContract, {
+      send(resolveStepExceededContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { executionId, approvalId },
         body,
@@ -164,6 +161,15 @@ export function executionApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
         pathPrefix: ws(workspaceId),
         pathParams: { executionId },
         body: { fromStepIndex },
+      }),
+
+    // Resume a step parked because the run's personal-subscription credential lapsed. The
+    // password re-mints the run's activation; without one the server answers 428 and the
+    // credential modal prompts.
+    resumeCredentialWait: (workspaceId: string, executionId: string, password?: string) =>
+      sendWith(pwHeaders(password), resumeCredentialWaitContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { executionId },
       }),
 
     // ---- LLM observability (per-run model-call metrics) -------------------

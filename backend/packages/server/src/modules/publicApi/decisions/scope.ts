@@ -175,15 +175,16 @@ export async function gateDecisionAction<E extends AppEnv>(
 }
 
 /**
- * Re-mint the run's individual-usage activation(s) before a bound key's answer advances it — the
- * key-authenticated twin of the SPA's `activateForInteraction`, and mounted in the shared preamble
- * so every mutating decision route gets it without a per-route decision to forget.
+ * Re-mint the run's individual-usage activation(s) before a bound key's answer advances it, mounted
+ * in the shared preamble so every mutating decision route gets it without a per-route decision to
+ * forget.
  *
  * Answering a park WAKES the durable driver, which dispatches the next step, which leases the
  * credential the activation holds. That activation has a bounded TTL, so a long pass that answers
- * several gates is exactly the shape that outlives one: the SPA re-mints for the same reason, and
- * hard-gates rather than refreshing best-effort so the caller is told to supply the password while
- * it is still holding one, instead of discovering the lapse as a step that failed hours later.
+ * several gates is exactly the shape that outlives one. The SPA does not re-mint here: a lapsed
+ * lease parks the step on a credential wait, which its person resumes in the app. This surface has
+ * no resume route, so a headless caller would be left holding a run it cannot move. It hard-gates
+ * instead, telling the caller to supply the password while it is still holding one.
  *
  * A no-op for an UNBOUND key, and that is load-bearing rather than an optimisation: such a key can
  * unlock nothing, so probing the gate could only ever produce a 428 on a route that answers parks

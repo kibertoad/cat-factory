@@ -13,6 +13,7 @@ import { reproductionReportSchema } from './reproduction.js'
 import { bugFishingStepStateSchema } from './bugFishing.js'
 import { prReviewChallengeJobSchema, prReviewStepStateSchema } from './prReview.js'
 import { runInputGateSchema } from './input-gate.js'
+import { stepCredentialWaitSchema } from './credential-wait.js'
 import { stepSkipReasonSchema } from './step-conditions.js'
 import { fragmentAdherenceSchema } from './fragment-adherence.js'
 import { agentEffortReportSchema } from './agent-effort.js'
@@ -1100,6 +1101,12 @@ export const pipelineStepSchema = v.object({
    * See {@link binaryCandidateStepStateSchema}.
    */
   binaryCandidates: v.optional(v.nullable(binaryCandidateStepStateSchema)),
+  /**
+   * Set while the step is PARKED because its dispatch could not lease the run's personal
+   * subscription credential (the activation lapsed). Cleared when the person resumes the step.
+   * See {@link stepCredentialWaitSchema}.
+   */
+  credentialWait: v.optional(v.nullable(stepCredentialWaitSchema)),
   /**
    * Identifier of an in-flight asynchronous agent job (a container run polled by
    * the durable driver). Set while the step is dispatched-but-not-yet-finished so
