@@ -7,6 +7,7 @@ import type {
   RequestRecommendationItem,
   ResolveRequirementsExceededChoice,
 } from '@cat-factory/kernel'
+import type { IncorporateAfter } from '@cat-factory/contracts'
 import type { ReviewCommon } from '../review/IterativeReviewService.js'
 import type { ReviewGateController, ReviewKind } from './ReviewGateController.js'
 
@@ -46,9 +47,15 @@ class ReviewWindowActions<TReview extends ReviewCommon> {
    * answered/dismissed, flags the review `incorporating`, records the intent on the parked
    * gate step, and signals the durable driver to wake — which folds the answers and
    * re-reviews in the background. Off-path (no parked run) the fold + re-review run inline.
+   * `after: 'proceed'` settles on the folded document and advances instead of re-reviewing.
    */
-  incorporate(workspaceId: string, blockId: string, feedback?: string): Promise<TReview> {
-    return this.reviewGate.incorporate(this.kind, workspaceId, blockId, feedback)
+  incorporate(
+    workspaceId: string,
+    blockId: string,
+    feedback?: string,
+    after?: IncorporateAfter,
+  ): Promise<TReview> {
+    return this.reviewGate.incorporate(this.kind, workspaceId, blockId, feedback, after)
   }
 
   /**
@@ -132,8 +139,9 @@ export class BrainstormActions {
     blockId: string,
     stage: BrainstormStage,
     feedback?: string,
+    after?: IncorporateAfter,
   ): Promise<BrainstormSession> {
-    return this.reviewGate.incorporate(this.kindFor(stage), workspaceId, blockId, feedback)
+    return this.reviewGate.incorporate(this.kindFor(stage), workspaceId, blockId, feedback, after)
   }
 
   /** Re-run the brainstorm against the converged direction (one more pass). */

@@ -101,6 +101,7 @@ export function brainstormController(): Hono<AppEnv> {
         blockId,
         stage,
         c.req.valid('json').feedback,
+        c.req.valid('json').after,
       )
     return c.json(session, 200)
   })

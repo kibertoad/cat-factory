@@ -37,6 +37,7 @@ import {
   reviewItemSeveritySchema,
 } from './requirement-finding-floor.js'
 import {
+  incorporateAfterSchema,
   requirementReviewStatusSchema,
   reviewItemCategorySchema,
   reviewItemStatusSchema,
@@ -134,6 +135,11 @@ export const publicReviewFindingSchema = v.object({
   status: reviewItemStatusSchema,
   /** The recorded answer, or null while unanswered. */
   reply: v.nullable(v.string()),
+  /**
+   * On a requirements re-review, the title of the previous round's finding whose answer this one
+   * follows up on: why a finding below `high` was raised again. Null otherwise.
+   */
+  followsUpOn: v.nullable(v.string()),
 })
 export type PublicReviewFinding = v.InferOutput<typeof publicReviewFindingSchema>
 
@@ -172,6 +178,11 @@ export const publicRequirementsFindingFloorSchema = v.object({
   score: v.nullable(v.number()),
   /** Findings the reviewer returned below the floor anyway, which the pass dropped. */
   suppressed: v.number(),
+  /**
+   * Findings a re-review dropped because they were neither `high` nor a follow-up on an answer the
+   * previous round gave. Null on a first pass, which has no previous round.
+   */
+  followUpSuppressed: v.nullable(v.number()),
 })
 export type PublicRequirementsFindingFloor = v.InferOutput<
   typeof publicRequirementsFindingFloorSchema
@@ -1115,6 +1126,9 @@ export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
  *   whichever one it did not mean. The step's approval gate can still be resolved to END such a
  *   run, and that is worth knowing rather than a contradiction: ending a curation discards what it
  *   caught, so it is an exit, not an answer.
+ * - `credential_lapsed`: the run's personal-subscription credential lapsed before a step could
+ *   dispatch, so the step parked. Only the run's initiator can answer it, by entering their
+ *   personal password in the app, which re-mints the credential and resumes the step.
  *
  * Every member is a wait that is BOTH live and beyond this surface, and both halves are load-
  * bearing. A run that has finished (`done` / `failed`, the stop included) lists nothing at all: its
@@ -1129,6 +1143,7 @@ export const publicUnanswerableReasonSchema = v.picklist([
   'unclassified_gate',
   'unwired_interview_gate',
   'curation_gate',
+  'credential_lapsed',
 ])
 export type PublicUnanswerableReason = v.InferOutput<typeof publicUnanswerableReasonSchema>
 
@@ -1231,9 +1246,12 @@ export type PublicSetFindingStatusInput = v.InferOutput<typeof publicSetFindingS
  * Incorporate the recorded answers. Optional `feedback` is the "do it differently" lever when
  * redoing a merge, exactly as in the SPA. Asynchronous: the durable driver folds and re-reviews in
  * the background, so the response is the `incorporating` review, not the finished document.
+ * `after: 'proceed'` skips that re-review: the folded document settles the review and the run
+ * advances. Absent reads as `rereview`.
  */
 export const publicIncorporateSchema = v.object({
   feedback: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
+  after: v.optional(incorporateAfterSchema),
 })
 export type PublicIncorporateInput = v.InferOutput<typeof publicIncorporateSchema>
 

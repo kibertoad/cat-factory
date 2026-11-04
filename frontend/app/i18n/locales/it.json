@@ -5348,7 +5348,8 @@
     },
     "actions": {
       "proceedNothing": "Procedi (nulla da incorporare)",
-      "incorporateAnswers": "Incorpora le risposte",
+      "incorporateAndReReview": "Incorpora e rivedi",
+      "incorporateAndProceed": "Incorpora e procedi",
       "requestRecommendations": "Richiedi {count} raccomandazione | Richiedi {count} raccomandazione | Richiedi {count} raccomandazioni",
       "reReview": "Va bene — rivedi di nuovo",
       "reReviewing": "Nuova revisione in corso…",
@@ -5357,7 +5358,7 @@
     },
     "help": {
       "canProceed": "Ogni rilievo e ignorato — procedi alla fase successiva senza rielaborare.",
-      "canIncorporate": "Unisce le tue risposte in un unico documento in formato standard, poi lo rivede automaticamente.",
+      "canIncorporate": "Entrambe uniscono le tue risposte in un unico documento in formato standard. Rivedi fa controllare di nuovo quel documento al revisore; procedi passa subito alla fase successiva.",
       "answerAll": "Rispondi o ignora ogni rilievo per continuare.",
       "merged": "La nuova revisione esegue il revisore su questo documento. Se non sei soddisfatto di come e stato unito, rifallo con un commento."
     },
@@ -5369,6 +5370,8 @@
       "recommendationsReady": "{count} raccomandazione pronta | {count} raccomandazione pronta | {count} raccomandazioni pronte",
       "incorporating": "Incorporazione delle tue risposte in background",
       "incorporatingDescription": "Sei di nuovo sulla lavagna — ti avviseremo solo se occorrono altre indicazioni.",
+      "incorporatingThenProceeding": "Incorporazione delle tue risposte",
+      "incorporatingThenProceedingDescription": "L'esecuzione passa alla fase successiva non appena sono incorporate.",
       "reviewerSatisfied": "Il revisore e soddisfatto — la pipeline prosegue",
       "iterationLimitReached": "Limite di iterazioni raggiunto — scegli come procedere",
       "newFindings": "nessun nuovo rilievo a cui reagire | {count} nuovo rilievo a cui reagire | {count} nuovi rilievi a cui reagire",
@@ -5410,8 +5413,10 @@
         "estimate": "Impostato dalla stima dell’attività ({score}%).",
         "no_estimate": "La policy segue la stima dell’attività, ma questa attività non ne ha una, quindi si è applicato il valore di riserva."
       },
-      "suppressed": "Rilievi esclusi sotto quel livello: {count}."
-    }
+      "suppressed": "Rilievi esclusi sotto quel livello: {count}.",
+      "followUpSuppressed": "Esclusi da questa revisione perché né di gravità alta né un seguito alle tue risposte: {count}."
+    },
+    "followsUpOn": "Segue la tua risposta su: {title}"
   },
   "bootstrap": {
     "title": "Avvia un repository",
@@ -6515,6 +6520,7 @@
         "reference_repo_unreadable": "Non è stato possibile leggere in questo momento il repository dietro l'architettura di riferimento di questa esecuzione, quindi l'esecuzione non è stata avviata su un modello che potrebbe non riuscire a clonare. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
         "oauth_state_invalid": "Questo link di autorizzazione è scaduto o è già stato usato, quindi non può completare la connessione.",
         "oauth_started_by_other_user": "Questa connessione è stata avviata da un’altra persona, quindi solo lei può completarla.",
+        "credential_wait_not_initiator": "Solo la persona che ha avviato questa esecuzione può rinnovarne le credenziali dell’abbonamento personale, perché l’esecuzione usa il suo abbonamento. Chiedile di proseguirla.",
         "oauth_exchange_refused": "Il server di autorizzazione del server degli strumenti ha rifiutato la concessione. Chiedi a chi gestisce il deployment di controllare le impostazioni del client OAuth del server degli strumenti.",
         "oauth_client_secret_unavailable": "Il segreto del client OAuth del server degli strumenti non è disponibile su questa board. Aggiungilo dalla finestra Infrastruttura.",
         "tool_server_without_oauth": "Questo server degli strumenti non usa più OAuth, quindi non c’è nessuna connessione da completare.",
@@ -6526,6 +6532,7 @@
       "startFailed": "Avvio non riuscito",
       "mergeFailed": "Merge non riuscito",
       "restartFailed": "Riavvio non riuscito",
+      "resumeCredentialFailed": "Impossibile riprendere l'esecuzione",
       "approveFailed": "Approvazione non riuscita",
       "requestChangesFailed": "Richiesta di modifiche non riuscita",
       "rejectFailed": "Rifiuto non riuscito"
@@ -6580,6 +6587,7 @@
         "binary_output_generator_invalid": "Impossibile risolvere il generatore per gli output binari",
         "foundational_service_not_inherited": "Questa bacheca ha registrato quel servizio",
         "input_gate_not_parked": "Niente a cui rispondere",
+        "credential_wait_not_parked": "Niente da riprendere",
         "input_gate_parked": "Rispondi nel controllo di input dell'attività",
         "ticket_already_linked": "Questo ticket ha già un'attività",
         "document_already_linked": "Documento già allegato",
@@ -6643,6 +6651,7 @@
         "binary_output_generator_invalid": "Un passaggio che genera output binari seleziona un’integrazione generativa che questa installazione non registra, nessuna delle integrazioni selezionate produce un tipo di contenuto che il passaggio deve consegnare, oppure una di esse è generata da una CLI dell’agente su cui il modello di questo passaggio non viene eseguito. Le integrazioni generative si registrano nel codice dell’installazione, non in questo workspace: registrala, correggi la selezione del passaggio, oppure fissa per il passaggio un modello che esegua la CLI richiesta, poi riavvia.",
         "foundational_service_not_inherited": "L'esclusione vale per un servizio ereditato dall'account. Questo id è registrato da questa bacheca, quindi non c'è nulla da escludere: elimina invece la voce propria della bacheca.",
         "input_gate_not_parked": "Questa esecuzione non attende più il controllo dell'input. Forse qualcuno ha già risposto, o l'esecuzione è andata avanti.",
+        "credential_wait_not_parked": "Questa esecuzione non è più in attesa delle credenziali del tuo abbonamento personale. Potrebbe essere già stata ripresa, oppure l'esecuzione è andata avanti.",
         "input_gate_parked": "Questa esecuzione è in attesa del suo controllo di input, a cui l'approvazione non può rispondere. Usa l'avviso sull'esecuzione: correggi l'attività e ricontrolla, oppure eseguila comunque.",
         "ticket_already_linked": "Un ticket può sostenere una sola attività, quindi ricollegarlo toglierebbe all'attività esistente il contesto con cui è stata creata. Apri invece quell'attività, oppure scollega prima il ticket.",
         "document_already_linked": "Quel documento è allegato a un'altra attività. Scollegalo prima da lì oppure allega una copia separata.",
@@ -7025,6 +7034,13 @@
         "hint": "Questa esecuzione ha registrato un controllo che questa versione non conosce più. Rivedi l'attività a mano prima di continuare."
       }
     }
+  },
+  "credentialWait": {
+    "title": "Le credenziali del tuo abbonamento personale sono scadute",
+    "body": "Le credenziali dell'abbonamento personale di questa esecuzione sono scadute prima che potesse iniziare il passaggio successivo, quindi l'esecuzione è in pausa. Inserisci la tua password personale per rinnovarle e riprendere da questo passaggio.",
+    "resume": "Inserisci la password e continua",
+    "othersTitle": "Le credenziali dell’abbonamento personale di questa esecuzione sono scadute",
+    "othersRun": "Solo la persona che ha avviato questa esecuzione può rinnovarle con la propria password personale. Chiedile di proseguirla."
   },
   "consensus": {
     "titlePrefix": "Consenso",

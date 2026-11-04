@@ -1,6 +1,10 @@
 import * as v from 'valibot'
 import { iterationCapChoiceSchema } from './iteration-cap.js'
-import { requirementReviewItemSchema, requirementReviewStatusSchema } from './requirements.js'
+import {
+  incorporateAfterSchema,
+  requirementReviewItemSchema,
+  requirementReviewStatusSchema,
+} from './requirements.js'
 
 // ---------------------------------------------------------------------------
 // Brainstorm wire contracts. A brainstorm agent runs a STRUCTURED DIALOGUE to
@@ -84,10 +88,12 @@ export type UpdateBrainstormItemStatusInput = v.InferOutput<typeof updateBrainst
 
 /**
  * Incorporate the human's picks into one converged direction document. An optional
- * `feedback` comment is the human's "do it differently" lever when redoing a merge.
+ * `feedback` comment is the human's "do it differently" lever when redoing a merge; `after` is
+ * whether a re-run follows (see `incorporateAfterSchema`).
  */
 export const incorporateBrainstormSchema = v.object({
   feedback: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
+  after: v.optional(incorporateAfterSchema),
 })
 export type IncorporateBrainstormInput = v.InferOutput<typeof incorporateBrainstormSchema>
 

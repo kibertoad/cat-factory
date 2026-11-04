@@ -5348,7 +5348,8 @@
     },
     "actions": {
       "proceedNothing": "Fortfahren (nichts einzuarbeiten)",
-      "incorporateAnswers": "Antworten einarbeiten",
+      "incorporateAndReReview": "Einarbeiten und erneut prüfen",
+      "incorporateAndProceed": "Einarbeiten und fortfahren",
       "requestRecommendations": "{count} Empfehlung anfordern | {count} Empfehlung anfordern | {count} Empfehlungen anfordern",
       "reReview": "Sieht gut aus — erneut prüfen",
       "reReviewing": "Wird erneut geprüft…",
@@ -5357,7 +5358,7 @@
     },
     "help": {
       "canProceed": "Jeder Befund ist verworfen — fahren Sie ohne Überarbeitung zur nächsten Phase fort.",
-      "canIncorporate": "Fügt Ihre Antworten in ein Dokument im Standardformat zusammen und prüft es dann automatisch erneut.",
+      "canIncorporate": "Beide fügen Ihre Antworten in ein Dokument im Standardformat zusammen. Erneut prüfen lässt den Reviewer dieses Dokument noch einmal prüfen; Fortfahren geht direkt zur nächsten Phase über.",
       "answerAll": "Beantworten oder verwerfen Sie jeden Befund, um fortzufahren.",
       "merged": "Die erneute Prüfung führt den Prüfer gegen dieses Dokument aus. Wenn Sie mit der Zusammenführung unzufrieden sind, wiederholen Sie sie stattdessen mit einem Kommentar."
     },
@@ -5369,6 +5370,8 @@
       "recommendationsReady": "{count} Empfehlung bereit | {count} Empfehlung bereit | {count} Empfehlungen bereit",
       "incorporating": "Ihre Antworten werden im Hintergrund eingearbeitet",
       "incorporatingDescription": "Sie sind zurück auf dem Board — wir benachrichtigen Sie nur, wenn weitere Eingaben benötigt werden.",
+      "incorporatingThenProceeding": "Ihre Antworten werden eingearbeitet",
+      "incorporatingThenProceedingDescription": "Der Lauf geht zur nächsten Phase über, sobald sie eingearbeitet sind.",
       "reviewerSatisfied": "Prüfer ist zufrieden — Pipeline wird fortgesetzt",
       "iterationLimitReached": "Iterationslimit erreicht — wählen Sie, wie Sie fortfahren",
       "newFindings": "keine neuen Befunde, auf die zu reagieren ist | {count} neuer Befund, auf den zu reagieren ist | {count} neue Befunde, auf die zu reagieren ist",
@@ -5410,8 +5413,10 @@
         "estimate": "Festgelegt durch die Aufgabenschätzung ({score} %).",
         "no_estimate": "Die Richtlinie folgt der Aufgabenschätzung, aber diese Aufgabe hat keine, daher galt der Ersatzwert."
       },
-      "suppressed": "Unterhalb dieser Stufe ausgelassene Befunde: {count}."
-    }
+      "suppressed": "Unterhalb dieser Stufe ausgelassene Befunde: {count}.",
+      "followUpSuppressed": "In dieser erneuten Prüfung ausgelassen, weil weder schwerwiegend noch eine Folgefrage zu Ihren Antworten: {count}."
+    },
+    "followsUpOn": "Knüpft an Ihre Antwort an zu: {title}"
   },
   "bootstrap": {
     "title": "Repository bootstrappen",
@@ -6515,6 +6520,7 @@
         "reference_repo_unreadable": "Das Repository hinter der Referenzarchitektur dieses Laufs konnte gerade nicht gelesen werden, deshalb wurde der Lauf nicht gegen eine Vorlage gestartet, die er möglicherweise nicht klonen kann. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
         "oauth_state_invalid": "Dieser Autorisierungslink ist abgelaufen oder wurde bereits verwendet, daher kann er die Verbindung nicht abschließen.",
         "oauth_started_by_other_user": "Jemand anderes hat diese Verbindung gestartet, daher kann nur diese Person sie abschließen.",
+        "credential_wait_not_initiator": "Nur die Person, die diesen Lauf gestartet hat, kann die Anmeldedaten seines persönlichen Abonnements erneuern, denn der Lauf nutzt ihr Abonnement. Bitten Sie sie, den Lauf fortzusetzen.",
         "oauth_exchange_refused": "Der Autorisierungsserver des Werkzeugservers hat die Freigabe abgelehnt. Bitten Sie Ihren Deployment-Betreiber, die OAuth-Client-Einstellungen des Werkzeugservers zu prüfen.",
         "oauth_client_secret_unavailable": "Das OAuth-Client-Secret des Werkzeugservers ist auf diesem Board nicht verfügbar. Fügen Sie es im Infrastruktur-Fenster hinzu.",
         "tool_server_without_oauth": "Dieser Werkzeugserver verwendet kein OAuth mehr, daher gibt es keine Verbindung abzuschließen.",
@@ -6526,6 +6532,7 @@
       "startFailed": "Start fehlgeschlagen",
       "mergeFailed": "Zusammenführen fehlgeschlagen",
       "restartFailed": "Neustart fehlgeschlagen",
+      "resumeCredentialFailed": "Lauf konnte nicht fortgesetzt werden",
       "approveFailed": "Freigeben fehlgeschlagen",
       "requestChangesFailed": "Anfordern von Änderungen fehlgeschlagen",
       "rejectFailed": "Ablehnen fehlgeschlagen"
@@ -6580,6 +6587,7 @@
         "binary_output_generator_invalid": "Generator für Binärausgaben nicht auflösbar",
         "foundational_service_not_inherited": "Dieses Board hat den Dienst registriert",
         "input_gate_not_parked": "Nichts zu beantworten",
+        "credential_wait_not_parked": "Nichts fortzusetzen",
         "input_gate_parked": "Über die Eingabeprüfung der Aufgabe beantworten",
         "ticket_already_linked": "Dieses Ticket hat bereits eine Aufgabe",
         "document_already_linked": "Dokument bereits angehängt",
@@ -6643,6 +6651,7 @@
         "binary_output_generator_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt eine generative Integration aus, die diese Installation nicht registriert, keine der gewählten Integrationen erzeugt einen Inhaltstyp, den der Schritt liefern muss, oder eine davon wird von einer Agenten-CLI erzeugt, auf der das Modell dieses Schritts nicht läuft. Generative Integrationen werden im Code der Installation registriert, nicht in diesem Workspace: registrieren Sie sie, korrigieren Sie die Auswahl des Schritts oder legen Sie für den Schritt ein Modell fest, das die erforderliche CLI ausführt, und starten Sie erneut.",
         "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards.",
         "input_gate_not_parked": "Dieser Lauf wartet nicht mehr auf seine Eingabeprüfung. Möglicherweise hat sie jemand schon beantwortet oder der Lauf ist weitergelaufen.",
+        "credential_wait_not_parked": "Dieser Lauf wartet nicht mehr auf die Anmeldedaten Ihres persönlichen Abonnements. Er wurde möglicherweise bereits fortgesetzt, oder der Lauf ist weitergegangen.",
         "input_gate_parked": "Dieser Lauf wartet auf seine Eingabeprüfung, die über die Freigabe nicht beantwortet werden kann. Nutzen Sie den Hinweis am Lauf: Aufgabe ergänzen und erneut prüfen, oder trotzdem ausführen.",
         "ticket_already_linked": "Ein Ticket kann nur eine Aufgabe stützen. Es erneut zu verknüpfen würde der bestehenden Aufgabe genau den Kontext entziehen, mit dem sie angelegt wurde. Öffne stattdessen diese Aufgabe oder hebe die Verknüpfung des Tickets zuerst auf.",
         "document_already_linked": "Dieses Dokument ist an eine andere Aufgabe angehängt. Lösen Sie es dort zuerst, oder hängen Sie eine separate Kopie an.",
@@ -7025,6 +7034,13 @@
         "hint": "Dieser Lauf hat eine Prüfung erfasst, die diese Version nicht mehr kennt. Sieh die Aufgabe von Hand durch, bevor du fortfährst."
       }
     }
+  },
+  "credentialWait": {
+    "title": "Ihre Anmeldedaten für das persönliche Abonnement sind abgelaufen",
+    "body": "Die Anmeldedaten des persönlichen Abonnements für diesen Lauf sind abgelaufen, bevor der nächste Schritt starten konnte. Der Lauf ist daher pausiert. Geben Sie Ihr persönliches Passwort ein, um sie zu erneuern und mit diesem Schritt fortzufahren.",
+    "resume": "Passwort eingeben und fortfahren",
+    "othersTitle": "Die Anmeldedaten des persönlichen Abonnements für diesen Lauf sind abgelaufen",
+    "othersRun": "Nur die Person, die diesen Lauf gestartet hat, kann sie mit ihrem persönlichen Passwort erneuern. Bitten Sie sie, den Lauf fortzusetzen."
   },
   "consensus": {
     "titlePrefix": "Konsens",

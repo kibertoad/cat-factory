@@ -81,6 +81,7 @@ function toRequirementsDecision(review: RequirementReview): PublicDecision {
           basis: review.findingFloor.basis,
           score: review.findingFloor.score,
           suppressed: review.findingFloor.suppressed,
+          followUpSuppressed: review.findingFloor.followUpSuppressed ?? null,
         }
       : null,
   }
@@ -130,6 +131,7 @@ function toFinding(item: RequirementReview['items'][number]) {
     detail: item.detail,
     status: item.status,
     reply: item.reply,
+    followsUpOn: item.followsUpOn ?? null,
   }
 }
 
@@ -765,6 +767,16 @@ export function unanswerableWaits(
   execution.steps.forEach((step, stepIndex) => {
     const curation = curationWait(step, stepIndex, agentKinds)
     if (curation) waits.push(curation)
+    if (step.credentialWait) {
+      waits.push({
+        reason: 'credential_lapsed',
+        stepKind: step.agentKind,
+        stepIndex,
+        detail:
+          "The run's personal subscription credential lapsed before this step could dispatch. " +
+          "The run's initiator resumes it by entering their personal password in the app.",
+      })
+    }
     if (!step.gate || step.state === 'done' || answered.has(stepIndex)) return
     const pollExhaustion = gates.pollExhaustion(step.agentKind)
     if (pollExhaustion === 'rearm') {

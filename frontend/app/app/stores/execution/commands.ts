@@ -24,9 +24,10 @@ export interface ExecutionCommandContext {
  * execution store exposes. Each drives the backend and then refreshes the workspace snapshot,
  * since advancing a run also rolls status/progress up onto its block server-side.
  *
- * Every command that can (re-)dispatch a step rides the initiator's personal password through
- * `withCredential`, so an individual-usage (Claude/Codex) run re-mints its short-TTL activation
- * while the user is present instead of breaking mid-pipeline.
+ * Only the commands that MINT a run's personal-subscription activation ride the initiator's
+ * password through `withCredential`: start, restart and the credential-wait resume. Every other
+ * command just advances the run; if its activation has lapsed by the next dispatch, the engine
+ * parks that step on a credential wait, which `resumeCredentialWait` answers.
  */
 export function createExecutionCommands(ctx: ExecutionCommandContext) {
   const { api, runErrors, instances } = ctx
@@ -95,26 +96,37 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
     }
   }
 
-  // Interacting with a running individual-usage run (resolve/approve/request-changes) advances
-  // + re-dispatches the run, so the server re-mints its short-TTL activation from the personal
-  // password first. It rides the cached password transparently, and — like start/retry — is
-  // gated through `withCredential`: a within-buffer/lapsed cache re-prompts EARLY here (while
-  // the user is present) rather than letting the run break mid-pipeline. For a non-individual
-  // run the server ignores it and nothing prompts.
   async function resolveDecision(instanceId: string, decisionId: string, choice: string) {
     const ws = useWorkspaceStore()
+    await api.resolveDecision(ws.requireId(), instanceId, decisionId, { choice })
+    await ws.refresh()
+    return true
+  }
+
+  /**
+   * Resume a step parked because the run's personal-subscription credential lapsed. Rides the
+   * cached password and prompts for it on a 428, which re-mints the run's activation before the
+   * step re-dispatches. Returns false when the prompt was cancelled or the server refused.
+   */
+  async function resumeCredentialWait(instanceId: string): Promise<boolean> {
+    const ws = useWorkspaceStore()
     const personal = usePersonalSubscriptionsStore()
-    return await personal.withCredential(async (password) => {
-      await api.resolveDecision(ws.requireId(), instanceId, decisionId, { choice }, password)
-      await ws.refresh()
-    })
+    try {
+      return await personal.withCredential(async (password) => {
+        await api.resumeCredentialWait(ws.requireId(), instanceId, password)
+        await ws.refresh()
+      })
+    } catch (e) {
+      runErrors.present(e, 'errors.action.resumeCredentialFailed')
+      return false
+    }
   }
 
   /**
    * Approve a step's gated proposal (optionally edited); the run advances. Returns false —
    * with the failure surfaced as an actionable toast — when the server refused (e.g. a 409
-   * for a park a dedicated window owns) or the user cancelled the credential prompt, so the
-   * approval rail can stay open instead of closing over a silently-failed approve.
+   * for a park a dedicated window owns), so the approval rail can stay open instead of closing
+   * over a silently-failed approve.
    */
   async function approveStep(
     instanceId: string,
@@ -122,12 +134,10 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
     proposal?: string,
   ): Promise<boolean> {
     const ws = useWorkspaceStore()
-    const personal = usePersonalSubscriptionsStore()
     try {
-      return await personal.withCredential(async (password) => {
-        await api.approveStep(ws.requireId(), instanceId, approvalId, { proposal }, password)
-        await ws.refresh()
-      })
+      await api.approveStep(ws.requireId(), instanceId, approvalId, { proposal })
+      await ws.refresh()
+      return true
     } catch (e) {
       runErrors.present(e, 'errors.action.approveFailed')
       return false
@@ -135,19 +145,17 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
   }
 
   /** Request changes on a gated proposal; the step re-runs with the review. Returns false
-   *  (with a toast) on refusal / a cancelled credential prompt, like {@link approveStep}. */
+   *  (with a toast) on refusal, like {@link approveStep}. */
   async function requestStepChanges(
     instanceId: string,
     approvalId: string,
     review: RequestStepChangesInput,
   ): Promise<boolean> {
     const ws = useWorkspaceStore()
-    const personal = usePersonalSubscriptionsStore()
     try {
-      return await personal.withCredential(async (password) => {
-        await api.requestStepChanges(ws.requireId(), instanceId, approvalId, review, password)
-        await ws.refresh()
-      })
+      await api.requestStepChanges(ws.requireId(), instanceId, approvalId, review)
+      await ws.refresh()
+      return true
     } catch (e) {
       runErrors.present(e, 'errors.action.requestChangesFailed')
       return false
@@ -175,9 +183,6 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
   /**
    * Resolve a companion step parked at its rework cap: extra-round (one more pass) /
    * proceed (advance with the current output) / stop-reset (cancel + reset the task).
-   * Rides the cached personal password (gated through `withCredential`, so a within-buffer
-   * cache re-prompts early) for the server to re-mint the run's activation before
-   * re-dispatching on extra-round/proceed.
    */
   async function resolveCompanionExceeded(
     instanceId: string,
@@ -185,17 +190,9 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
     choice: IterationCapChoice,
   ) {
     const ws = useWorkspaceStore()
-    const personal = usePersonalSubscriptionsStore()
-    return await personal.withCredential(async (password) => {
-      await api.resolveCompanionExceeded(
-        ws.requireId(),
-        instanceId,
-        approvalId,
-        { choice },
-        password,
-      )
-      await ws.refresh()
-    })
+    await api.resolveCompanionExceeded(ws.requireId(), instanceId, approvalId, { choice })
+    await ws.refresh()
+    return true
   }
 
   /**
@@ -263,6 +260,7 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
     start,
     startAgentKind,
     resolveDecision,
+    resumeCredentialWait,
     approveStep,
     requestStepChanges,
     rejectStep,

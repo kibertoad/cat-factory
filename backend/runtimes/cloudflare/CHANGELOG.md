@@ -1,5 +1,28 @@
 # @cat-factory/worker
 
+## 0.232.1
+
+### Patch Changes
+
+- Updated dependencies [0883cfa]
+  - @cat-factory/contracts@0.381.0
+  - @cat-factory/agents@0.176.0
+  - @cat-factory/orchestration@0.328.0
+  - @cat-factory/server@0.347.0
+  - @cat-factory/binary-generators@0.3.84
+  - @cat-factory/consensus@0.20.4
+  - @cat-factory/eks@0.1.423
+  - @cat-factory/gates@0.12.20
+  - @cat-factory/gitlab@0.25.3
+  - @cat-factory/integrations@0.179.3
+  - @cat-factory/kernel@0.367.1
+  - @cat-factory/observability-otel@0.24.3
+  - @cat-factory/prompt-fragments@1.1.80
+  - @cat-factory/spend@0.23.29
+  - @cat-factory/provider-cloudflare@0.7.578
+  - @cat-factory/caching@0.20.118
+  - @cat-factory/observability-langfuse@0.11.84
+
 ## 0.232.0
 
 ### Minor Changes

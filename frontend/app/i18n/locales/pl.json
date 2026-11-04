@@ -681,6 +681,7 @@
         "reference_repo_unreadable": "Nie udało się teraz odczytać repozytorium stojącego za architekturą referencyjną tego uruchomienia, więc nie zostało ono uruchomione na szablonie, którego może nie umieć sklonować. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
         "oauth_state_invalid": "Ten link autoryzacyjny wygasł lub został już użyty, więc nie może dokończyć połączenia.",
         "oauth_started_by_other_user": "To połączenie rozpoczął ktoś inny, więc tylko ta osoba może je dokończyć.",
+        "credential_wait_not_initiator": "Tylko osoba, która rozpoczęła to uruchomienie, może odnowić jego poświadczenie osobistej subskrypcji, ponieważ uruchomienie korzysta z jej subskrypcji. Poproś ją o kontynuowanie.",
         "oauth_exchange_refused": "Serwer autoryzacji serwera narzędzi odrzucił zgodę. Poproś operatora wdrożenia o sprawdzenie ustawień klienta OAuth serwera narzędzi.",
         "oauth_client_secret_unavailable": "Sekret klienta OAuth serwera narzędzi nie jest dostępny na tej tablicy. Dodaj go w oknie Infrastruktura.",
         "tool_server_without_oauth": "Ten serwer narzędzi nie używa już OAuth, więc nie ma połączenia do dokończenia.",
@@ -692,6 +693,7 @@
       "startFailed": "Nie udało się uruchomić",
       "mergeFailed": "Nie udało się scalić",
       "restartFailed": "Nie udało się ponownie uruchomić",
+      "resumeCredentialFailed": "Nie udało się wznowić uruchomienia",
       "approveFailed": "Nie udało się zatwierdzić",
       "requestChangesFailed": "Nie udało się poprosić o zmiany",
       "rejectFailed": "Nie udało się odrzucić"
@@ -746,6 +748,7 @@
         "binary_output_generator_invalid": "Nie można rozpoznać generatora danych binarnych",
         "foundational_service_not_inherited": "Ta tablica zarejestrowała tę usługę",
         "input_gate_not_parked": "Nie ma na co odpowiadać",
+        "credential_wait_not_parked": "Nie ma czego wznawiać",
         "input_gate_parked": "Odpowiedz w kontroli danych wejściowych zadania",
         "ticket_already_linked": "To zgłoszenie ma już zadanie",
         "document_already_linked": "Dokument jest już załączony",
@@ -809,6 +812,7 @@
         "binary_output_generator_invalid": "Krok generujący dane binarne wybiera integrację generatywną, której to wdrożenie nie rejestruje, żadna z wybranych integracji nie tworzy typu treści, który krok ma dostarczyć, albo jedną z nich tworzy CLI agenta, na którym model tego kroku nie działa. Integracje generatywne rejestruje się w kodzie wdrożenia, a nie w tej przestrzeni roboczej: zarejestruj ją, popraw wybór kroku albo przypisz krokowi model działający w wymaganym CLI, a następnie uruchom ponownie.",
         "foundational_service_not_inherited": "Wyłączenie dotyczy usługi dziedziczonej z konta. Ten identyfikator jest zarejestrowany przez tę tablicę, więc nie ma czego wyłączać - usuń zamiast tego własny wpis tablicy.",
         "input_gate_not_parked": "Ten przebieg nie czeka już na kontrolę danych wejściowych. Ktoś mógł już na nią odpowiedzieć albo przebieg poszedł dalej.",
+        "credential_wait_not_parked": "To uruchomienie nie czeka już na dane uwierzytelniające Twojej osobistej subskrypcji. Mogło zostać już wznowione albo uruchomienie poszło dalej.",
         "input_gate_parked": "To uruchomienie czeka na kontrolę danych wejściowych, której nie da się rozstrzygnąć przez zatwierdzenie. Skorzystaj z powiadomienia przy uruchomieniu: popraw zadanie i sprawdź ponownie albo uruchom mimo to.",
         "ticket_already_linked": "Zgłoszenie może stać za tylko jednym zadaniem, więc ponowne powiązanie pozbawiłoby istniejące zadanie kontekstu, z którym powstało. Otwórz to zadanie albo najpierw odłącz zgłoszenie.",
         "document_already_linked": "Ten dokument jest załączony do innego zadania. Najpierw odłącz go tam albo załącz osobną kopię.",
@@ -5955,6 +5959,13 @@
       }
     }
   },
+  "credentialWait": {
+    "title": "Dane uwierzytelniające Twojej osobistej subskrypcji wygasły",
+    "body": "Dane uwierzytelniające osobistej subskrypcji tego uruchomienia wygasły, zanim mógł się rozpocząć kolejny krok, dlatego uruchomienie jest wstrzymane. Wpisz swoje osobiste hasło, aby je odnowić i kontynuować od tego kroku.",
+    "resume": "Wpisz hasło i kontynuuj",
+    "othersTitle": "Poświadczenie osobistej subskrypcji tego uruchomienia wygasło",
+    "othersRun": "Tylko osoba, która rozpoczęła to uruchomienie, może je odnowić swoim osobistym hasłem. Poproś ją o kontynuowanie."
+  },
   "requirements": {
     "title": "Przegląd wymagań",
     "iteration": "Iteracja {current} / {max}",
@@ -6060,7 +6071,8 @@
     },
     "actions": {
       "proceedNothing": "Kontynuuj (nic do włączenia)",
-      "incorporateAnswers": "Włącz odpowiedzi",
+      "incorporateAndReReview": "Włącz i przejrzyj ponownie",
+      "incorporateAndProceed": "Włącz i kontynuuj",
       "requestRecommendations": "Poproś o {count} rekomendację | Poproś o {count} rekomendacje | Poproś o {count} rekomendacji",
       "reReview": "Wygląda dobrze — przejrzyj ponownie",
       "reReviewing": "Ponowne przeglądanie…",
@@ -6069,7 +6081,7 @@
     },
     "help": {
       "canProceed": "Wszystkie uwagi są odrzucone — przejdź do następnej fazy bez przerabiania.",
-      "canIncorporate": "Łączy Twoje odpowiedzi w jeden dokument o standardowym formacie, a następnie automatycznie go ponownie przegląda.",
+      "canIncorporate": "Obie opcje łączą Twoje odpowiedzi w jeden dokument o standardowym formacie. Ponowny przegląd każe recenzentowi sprawdzić ten dokument jeszcze raz; kontynuacja przechodzi od razu do następnej fazy.",
       "answerAll": "Odpowiedz na każdą uwagę lub ją odrzuć, aby kontynuować.",
       "merged": "Ponowny przegląd uruchamia recenzenta na tym dokumencie. Jeśli nie odpowiada Ci sposób połączenia, powtórz je z komentarzem."
     },
@@ -6081,6 +6093,8 @@
       "recommendationsReady": "{count} rekomendacja gotowa | {count} rekomendacje gotowe | {count} rekomendacji gotowych",
       "incorporating": "Włączanie Twoich odpowiedzi w tle",
       "incorporatingDescription": "Wróciłeś do tablicy — powiadomimy Cię tylko, jeśli będą potrzebne dodatkowe informacje.",
+      "incorporatingThenProceeding": "Włączanie Twoich odpowiedzi",
+      "incorporatingThenProceedingDescription": "Przebieg przejdzie do następnej fazy, gdy tylko zostaną włączone.",
       "reviewerSatisfied": "Recenzent jest zadowolony — kontynuowanie potoku",
       "iterationLimitReached": "Osiągnięto limit iteracji — wybierz, jak kontynuować",
       "newFindings": "brak nowych uwag do rozpatrzenia | {count} nowa uwaga do rozpatrzenia | {count} nowych uwag do rozpatrzenia",
@@ -6122,8 +6136,10 @@
         "estimate": "Ustawione przez szacunek zadania ({score}%).",
         "no_estimate": "Polityka działa według szacunku zadania, ale to zadanie go nie ma, więc zastosowano wartość zastępczą."
       },
-      "suppressed": "Uwagi pominięte poniżej tego poziomu: {count}."
-    }
+      "suppressed": "Uwagi pominięte poniżej tego poziomu: {count}.",
+      "followUpSuppressed": "Pominięte w tym ponownym przeglądzie, bo nie mają wysokiej wagi ani nie nawiązują do Twoich odpowiedzi: {count}."
+    },
+    "followsUpOn": "Nawiązuje do Twojej odpowiedzi na: {title}"
   },
   "clarity": {
     "title": "Klasyfikacja zgłoszenia błędu",

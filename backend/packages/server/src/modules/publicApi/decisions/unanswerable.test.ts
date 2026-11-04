@@ -259,6 +259,18 @@ describe('unanswerableWaits', () => {
     expect(waitsFor([step('acme-triage', { state: 'done' })], { agentKinds: own })).toEqual([])
   })
 
+  it('names a step parked on a lapsed personal credential, which only the initiator can answer', () => {
+    expect(
+      waitsFor([
+        step('requirements-review', { state: 'done' }),
+        step('architect', {
+          ...parked('architect'),
+          credentialWait: { raisedAt: 1 },
+        }),
+      ]).map((w) => ({ reason: w.reason, stepKind: w.stepKind, stepIndex: w.stepIndex })),
+    ).toEqual([{ reason: 'credential_lapsed', stepKind: 'architect', stepIndex: 1 }])
+  })
+
   it('still names an unanswered wait beside an answered one', () => {
     // The exclusion is per STEP, not a switch that silences the whole report: a run can carry an
     // exhausted gate the caller can answer and a human-review gate they cannot.

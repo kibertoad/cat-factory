@@ -15,9 +15,9 @@ import type {
 //
 // To keep the password mostly transparent, it is cached CLIENT-SIDE in localStorage with a
 // TTL: the backend gate applies one password to ALL of a run's individual-usage vendors, so
-// there's no point keying the cache per vendor. A task start/retry (and each interaction with a
-// live run) rides along with the cached password — sent as the `X-Personal-Password` header —
-// and the user is only re-prompted once it expires (or is wrong).
+// there's no point keying the cache per vendor. A task start/retry/restart (and the resume of a
+// run parked on a lapsed credential) rides along with the cached password, sent as the
+// `X-Personal-Password` header, and the user is only re-prompted once it expires (or is wrong).
 //
 // The cache key is scoped PER INSTALLATION and PER USER (ADR 0026 D7): `cf.personal-pw:<hash of
 // the configured API base>:<user id>`. The bare `cf.personal-pw` it replaced was keyed only by
@@ -30,7 +30,7 @@ import type {
 // (the backend applies one to all of a run's individual-usage vendors), so it would only add
 // redundant prompts.
 //
-// Every gated action (start / retry / confirm) re-validates the cache against an 8h EXPIRY
+// Every gated action (start / retry / restart / resume) re-validates the cache against an 8h EXPIRY
 // BUFFER: a key with less than that runway left is withheld (treated as absent) so the
 // server's 428 gate re-challenges EARLY and the modal refreshes the full window. This is
 // what keeps a key from lapsing MID-PIPELINE — the run breaks with a retry only if the key

@@ -9,6 +9,7 @@ import { missingI18nKeys } from '../../test/i18nKeys'
 import {
   REDIRECT_PARK_PRESENTATION,
   dedicatedParkView,
+  isRedirectPark,
   runIsActive,
   stepSkipReasonKey,
 } from './pipelineRender'
@@ -128,6 +129,17 @@ describe('dedicatedParkView', () => {
       } as never)
       expect(dedicatedParkView(step({}), settled)).toBeNull()
     }
+  })
+
+  // Any step kind can park on a lapsed credential, including one another park would claim by
+  // its kind, so the credential wait has to win.
+  it('owns a step parked on a lapsed personal credential, ahead of its kind-shaped park', () => {
+    const lapsed = step({
+      credentialWait: { raisedAt: 1 },
+      forkDecision: { status: 'awaiting_choice' } as never,
+    })
+    expect(dedicatedParkView(lapsed, run())).toBe('credential')
+    expect(isRedirectPark('credential')).toBe(false)
   })
 
   it('does not claim a step with no pending approval, whatever the gate says', () => {

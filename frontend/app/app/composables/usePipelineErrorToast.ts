@@ -35,6 +35,7 @@ import { useCopyToClipboard } from '~/composables/useCopyToClipboard'
 import type {
   ApiErrorCode,
   BootstrapReferenceReason,
+  CredentialWaitReason,
   GateConfigRefusalReason,
   ToolServerOAuthReason,
   UnavailableReason,
@@ -123,11 +124,19 @@ const GENERIC_DESCRIPTION_KEYS: Record<Exclude<ApiErrorCode, 'conflict'>, string
  *
  * `GateConfigRefusalReason` joins it because the 422 it names points at one place to fix (a gate
  * step's parameters in the pipeline), which the generic validation wording does not say.
+ *
+ * `CredentialWaitReason` joins it because its 403 is not a missing permission: it names the one
+ * person (the run's initiator) whose password can resume the run.
  */
 const REASON_DESCRIPTION_KEYS: Record<
-  UnavailableReason | BootstrapReferenceReason | ToolServerOAuthReason | GateConfigRefusalReason,
+  | UnavailableReason
+  | BootstrapReferenceReason
+  | ToolServerOAuthReason
+  | GateConfigRefusalReason
+  | CredentialWaitReason,
   string
 > = {
+  credential_wait_not_initiator: 'errors.reason.description.credential_wait_not_initiator',
   gate_config_fields_invalid: 'errors.reason.description.gate_config_fields_invalid',
   reference_repo_not_found: 'errors.reason.description.reference_repo_not_found',
   reference_repo_unreadable: 'errors.reason.description.reference_repo_unreadable',
