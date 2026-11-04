@@ -150,7 +150,7 @@ function choose(id: string) {
     <template #content>
       <!-- A FIXED height, for the reason <PipelinePicker> gives: a hover must never resize it. -->
       <div
-        class="flex h-[min(24rem,var(--reka-popover-content-available-height))] w-[min(40rem,94vw)]"
+        class="flex h-[min(24rem,var(--reka-popover-content-available-height,24rem))] w-[min(40rem,94vw)]"
         ref="panel"
         data-testid="risk-policy-picker-panel"
         @mouseleave="activeId = undefined"
