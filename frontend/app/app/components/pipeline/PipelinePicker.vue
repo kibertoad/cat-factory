@@ -8,6 +8,7 @@
 // `#trigger` slot (the inspector uses a bare icon button; the modal a full-width labelled one).
 import { computed, ref } from 'vue'
 import type { Pipeline } from '~/types/domain'
+import MasterDetailPanel from '~/components/common/MasterDetailPanel.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -92,15 +93,13 @@ function choose(id: string) {
     </slot>
 
     <template #content>
-      <!-- A FIXED height: sized by the hovered preview, the panel would resize on every hover, the
-           popover would reposition, and a different row would land under a still pointer. -->
-      <div
-        class="flex h-[min(28rem,var(--reka-popover-content-available-height,28rem))] w-[min(44rem,94vw)]"
+      <MasterDetailPanel
+        height="28rem"
+        width="44rem"
         data-testid="pipeline-picker-panel"
         @mouseleave="hoverId = undefined"
       >
-        <!-- left: selectable options -->
-        <ul class="w-1/2 shrink-0 overflow-y-auto border-e border-default p-1">
+        <template #options>
           <li v-if="noneLabel !== undefined">
             <UButton
               color="neutral"
@@ -139,14 +138,13 @@ function choose(id: string) {
               />
             </UButton>
           </li>
-        </ul>
+        </template>
 
-        <!-- right: preview of the hovered (or selected) pipeline -->
-        <div class="w-1/2 overflow-y-auto p-3">
+        <template #detail>
           <PipelinePreview v-if="previewPipeline" :pipeline="previewPipeline" />
           <div v-else class="text-xs leading-snug text-dimmed">{{ emptyHint }}</div>
-        </div>
-      </div>
+        </template>
+      </MasterDetailPanel>
     </template>
   </UPopover>
 </template>
