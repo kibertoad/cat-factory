@@ -5146,7 +5146,8 @@
       "toast": {
         "reseedFailed": "Pipeline konnte nicht neu aufgesetzt werden",
         "deleteFailed": "Pipeline konnte nicht gelöscht werden",
-        "removeFailed": "Pipeline konnte nicht entfernt werden"
+        "removeFailed": "Pipeline konnte nicht entfernt werden",
+        "checkpointsDropped": "Beim Neuladen von {name} wurden Freigabe-Checkpoints entfernt, die die neue Definition nicht zulässt"
       }
     },
     "outputBudget": {
@@ -5167,6 +5168,32 @@
       "requiredApprovalsHint": "Jeweils von einer anderen Person, bevor der Lauf fortgesetzt wird.",
       "anyoneHint": "Alle, die dieses Board bearbeiten dürfen, können diesen Schritt freigeben.",
       "gateParametersLabel": "Gate-Einstellungen"
+    },
+    "checkpoint": {
+      "placement": {
+        "none": "Kein Freigabe-Checkpoint",
+        "producer": "Nach jedem Entwurf von {producer}, bevor {companion} ihn prüft",
+        "companion": "Sobald {companion} den Entwurf von {producer} freigibt",
+        "both": "Beides: nach jedem Entwurf von {producer} und erneut, sobald {companion} ihn freigibt"
+      },
+      "summary": {
+        "none": "Freigabe-Checkpoint hinzufügen",
+        "producer": "Freigabe-Checkpoint nach jedem Entwurf von {producer}. Klicken zum Ändern.",
+        "companion": "Freigabe-Checkpoint, sobald {companion} den Entwurf von {producer} freigibt. Klicken zum Ändern.",
+        "both": "Freigabe-Checkpoints nach jedem Entwurf von {producer} und sobald {companion} ihn freigibt. Klicken zum Ändern."
+      },
+      "locked": "Dieser Checkpoint gehört zur integrierten Pipeline. Klone die Pipeline, um ihn zu entfernen."
+    },
+    "approvals": {
+      "open": "Freigabe-Checkpoints",
+      "title": "Freigabe-Checkpoints: {name}",
+      "description": "Lege fest, wo diese integrierte Pipeline anhält, damit eine Person prüft und freigibt. Ihre Schritte bleiben so, wie der Katalog sie definiert.",
+      "reviewedBy": "geprüft von {companion}",
+      "lockedHint": "Checkpoints, die die integrierte Pipeline mitbringt, bleiben aktiv. Klone die Pipeline, um einen zu entfernen.",
+      "toast": {
+        "saved": "Freigabe-Checkpoints von {name} gespeichert",
+        "saveFailed": "Die Freigabe-Checkpoints konnten nicht gespeichert werden"
+      }
     }
   },
   "agentPrompt": {

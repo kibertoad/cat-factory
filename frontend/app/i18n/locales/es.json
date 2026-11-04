@@ -5694,7 +5694,8 @@
       "toast": {
         "reseedFailed": "No se pudo regenerar el pipeline",
         "deleteFailed": "No se pudo eliminar el pipeline",
-        "removeFailed": "No se pudo quitar el pipeline"
+        "removeFailed": "No se pudo quitar el pipeline",
+        "checkpointsDropped": "Al restablecer {name} se quitaron puntos de aprobación que la nueva definición no admite"
       }
     },
     "outputBudget": {
@@ -5715,6 +5716,32 @@
       "requiredApprovalsHint": "Cada una de una persona distinta antes de que la ejecución continúe.",
       "anyoneHint": "Cualquiera que pueda editar este tablero puede aprobar este paso.",
       "gateParametersLabel": "Ajustes de la compuerta"
+    },
+    "checkpoint": {
+      "placement": {
+        "none": "Sin punto de aprobación",
+        "producer": "Tras cada borrador de {producer}, antes de que {companion} lo revise",
+        "companion": "Cuando {companion} aprueba el borrador de {producer}",
+        "both": "Ambos: tras cada borrador de {producer} y de nuevo cuando {companion} lo aprueba"
+      },
+      "summary": {
+        "none": "Añadir un punto de aprobación",
+        "producer": "Punto de aprobación tras cada borrador de {producer}. Haz clic para cambiarlo.",
+        "companion": "Punto de aprobación cuando {companion} aprueba el borrador de {producer}. Haz clic para cambiarlo.",
+        "both": "Puntos de aprobación tras cada borrador de {producer} y cuando {companion} lo aprueba. Haz clic para cambiarlo."
+      },
+      "locked": "Este punto de aprobación viene con el pipeline integrado. Clona el pipeline para quitarlo."
+    },
+    "approvals": {
+      "open": "Puntos de aprobación",
+      "title": "Puntos de aprobación: {name}",
+      "description": "Elige dónde se detiene este pipeline integrado para que una persona revise y apruebe. Sus pasos se mantienen tal como los define el catálogo.",
+      "reviewedBy": "revisado por {companion}",
+      "lockedHint": "Los puntos de aprobación que trae el pipeline integrado siguen activos. Clona el pipeline para quitar uno.",
+      "toast": {
+        "saved": "Se guardaron los puntos de aprobación de {name}",
+        "saveFailed": "No se pudieron guardar los puntos de aprobación"
+      }
     }
   },
   "agentPrompt": {

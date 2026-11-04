@@ -75,6 +75,8 @@ export function pipelineHasEnabledBugIntake(agentKinds: string[], enabled?: bool
  *  - {@link assertValidRunConditions}: a step carrying a RUN CONDITION must satisfy the two
  *    structural rules an estimate gate satisfies — a gatable kind, and no human approval gate on
  *    the same step — because a skip is a skip whichever of the two axes caused it.
+ *  - {@link assertCompanionCheckpointsReachable}: a human approval gate on a companion whose
+ *    producer can be skipped is refused too, because the companion cascades with its producer.
  *  - {@link assertValidAgentVariants}: a step selecting a registered agent-kind VARIANT must name
  *    one that exists and that varies THIS step's kind — an unknown id would silently fall back to
  *    the shipped prompt, and a mismatched one would run the step under another role's prompt.
@@ -131,6 +133,7 @@ export function validatePipelineShape(pipeline: PipelineShape): void {
   assertValidCompanionPlacement(pipeline)
   assertValidGating(pipeline)
   assertValidRunConditions(pipeline)
+  assertCompanionCheckpointsReachable(pipeline)
   assertValidTesterQualityGating(pipeline)
   assertValidSkillSteps(pipeline)
   assertValidAgentVariants(pipeline)
@@ -635,6 +638,55 @@ export function assertValidRunConditions({
         `Step '${kind}' carries a human approval gate, so it cannot also carry a run condition — a condition may leave a checkpoint un-reached but never remove one the pipeline author asked for. Drop the approval gate to make the step conditional, or drop the condition to keep it unconditional.`,
       )
     }
+  }
+}
+
+/**
+ * The rules {@link validatePipelineShape} applies to a pipeline's human approval CHECKPOINTS, for a
+ * caller that changes only those and must not be held to the rest: a reseed carrying a workspace's
+ * checkpoints onto a new catalog definition asks, per checkpoint, whether that definition admits
+ * it, and a structural rule the definition itself breaks is not the checkpoint's fault.
+ */
+export function validateCheckpointShape(pipeline: PipelineShape): void {
+  assertValidGating(pipeline)
+  assertValidRunConditions(pipeline)
+  assertCompanionCheckpointsReachable(pipeline)
+  assertValidGateConfig(pipeline)
+}
+
+/**
+ * A human approval gate on a COMPANION whose producer can be skipped is refused, for the reason a
+ * gate on the skippable step itself is (see {@link assertValidGating}).
+ *
+ * A companion carries no skip of its own: it cascades, skipped whenever its producer was
+ * (`producerWasSkipped`). So a checkpoint after the Architect Reviewer of an estimate-gated
+ * Architect is a checkpoint the estimate cancels on every task it scores below the bar, which is
+ * the one thing a model's own triage may never decide. The same holds for a producer carrying a
+ * run condition. The producer is the nearest preceding ENABLED step, the step the companion
+ * reviews, which {@link assertValidCompanionPlacement} guarantees is one of its targets.
+ */
+export function assertCompanionCheckpointsReachable({
+  agentKinds,
+  enabled,
+  gates,
+  gating,
+  stepOptions,
+  agentKindRegistry,
+}: PipelineShape): void {
+  if (!gates) return
+  const isEnabled = (i: number) => enabled?.[i] !== false
+  for (let i = 0; i < agentKinds.length; i++) {
+    const kind = agentKinds[i]
+    if (kind === undefined || gates[i] !== true || !isEnabled(i)) continue
+    if (!isCompanionKind(kind, agentKindRegistry)) continue
+    let producer = i - 1
+    while (producer >= 0 && !isEnabled(producer)) producer--
+    if (producer < 0) continue
+    const skippable = gating?.[producer]?.enabled === true || !!stepOptions?.[producer]?.condition
+    if (!skippable) continue
+    throw new ValidationError(
+      `Step '${kind}' carries a human approval gate, but it reviews '${agentKinds[producer]}', which the task estimate or a run condition may skip, and the review is skipped with it. The checkpoint would then never be reached. Make '${agentKinds[producer]}' unconditional to keep the checkpoint, or drop it.`,
+    )
   }
 }
 

@@ -5900,7 +5900,8 @@
       "toast": {
         "reseedFailed": "Could not reseed pipeline",
         "deleteFailed": "Could not delete pipeline",
-        "removeFailed": "Could not remove pipeline"
+        "removeFailed": "Could not remove pipeline",
+        "checkpointsDropped": "Reseeding {name} dropped approval checkpoints the new definition does not allow"
       }
     },
     "outputBudget": {
@@ -5921,6 +5922,32 @@
       "requiredApprovalsHint": "Each from a different person before the run continues.",
       "anyoneHint": "Anyone who can edit this board may approve this step.",
       "gateParametersLabel": "Gate settings"
+    },
+    "checkpoint": {
+      "placement": {
+        "none": "No approval checkpoint",
+        "producer": "After each {producer} draft, before {companion} reviews it",
+        "companion": "Once {companion} passes the {producer} draft",
+        "both": "Both: after each {producer} draft, and again once {companion} passes it"
+      },
+      "summary": {
+        "none": "Add an approval checkpoint",
+        "producer": "Approval checkpoint after each {producer} draft. Click to change.",
+        "companion": "Approval checkpoint once {companion} passes the {producer} draft. Click to change.",
+        "both": "Approval checkpoints after each {producer} draft and once {companion} passes it. Click to change."
+      },
+      "locked": "This checkpoint ships with the built-in pipeline. Clone the pipeline to remove it."
+    },
+    "approvals": {
+      "open": "Approval checkpoints",
+      "title": "Approval checkpoints: {name}",
+      "description": "Choose where this built-in pipeline pauses for a person to review and approve. Its steps stay as the catalog defines them.",
+      "reviewedBy": "reviewed by {companion}",
+      "lockedHint": "Checkpoints the built-in ships stay on. Clone the pipeline to remove one.",
+      "toast": {
+        "saved": "Saved the approval checkpoints of {name}",
+        "saveFailed": "Could not save the approval checkpoints"
+      }
     }
   },
   "agentPrompt": {

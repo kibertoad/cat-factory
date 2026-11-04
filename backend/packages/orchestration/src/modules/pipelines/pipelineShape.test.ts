@@ -3,6 +3,7 @@ import { seedPipelines } from '@cat-factory/kernel'
 import { BUILTIN_GATABLE_KINDS } from '@cat-factory/contracts'
 import { AgentKindRegistry, defaultAgentKindRegistry } from '@cat-factory/agents'
 import {
+  assertCompanionCheckpointsReachable,
   assertPipelineLaunchable,
   assertValidBinaryOutputSteps,
   assertValidCompanionPlacement,
@@ -568,6 +569,50 @@ describe('assertValidRunConditions', () => {
         agentKinds: ['org:auditor'],
         stepOptions: [conditional('frontend')],
         agentKindRegistry: registry,
+      }),
+    ).not.toThrow()
+  })
+})
+
+describe('assertCompanionCheckpointsReachable', () => {
+  const chain = ['task-estimator', 'architect', 'architect-companion', 'coder']
+
+  it('accepts a checkpoint after the companion of an unconditional producer', () => {
+    expect(() =>
+      assertCompanionCheckpointsReachable({
+        agentKinds: chain,
+        gates: [false, false, true, false],
+      }),
+    ).not.toThrow()
+  })
+
+  it('refuses one when the estimate may skip the producer, since the companion cascades', () => {
+    expect(() =>
+      assertCompanionCheckpointsReachable({
+        agentKinds: chain,
+        gates: [false, false, true, false],
+        gating: [null, gated, null, null],
+      }),
+    ).toThrow(/may skip/)
+  })
+
+  it('refuses one when a run condition may skip the producer', () => {
+    expect(() =>
+      assertCompanionCheckpointsReachable({
+        agentKinds: chain,
+        gates: [false, false, true, false],
+        stepOptions: [null, { condition: { serviceScope: 'backend' } }, null, null],
+      }),
+    ).toThrow(/may skip/)
+  })
+
+  it('ignores a disabled checkpointed companion, and a skippable non-companion step', () => {
+    expect(() =>
+      assertCompanionCheckpointsReachable({
+        agentKinds: chain,
+        enabled: [true, true, false, true],
+        gates: [false, false, true, true],
+        gating: [null, gated, null, null],
       }),
     ).not.toThrow()
   })

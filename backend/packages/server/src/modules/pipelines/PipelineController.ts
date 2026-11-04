@@ -5,6 +5,7 @@ import {
   listPipelinesContract,
   organizePipelineContract,
   reseedPipelineContract,
+  setPipelineApprovalsContract,
   updatePipelineContract,
 } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -51,13 +52,25 @@ export function pipelineController(): Hono<AppEnv> {
     return c.json(pipeline, 200)
   })
 
-  // Organize a pipeline in the library: set labels / archive state. The only mutation
-  // allowed on a built-in pipeline (view metadata, not structure), so built-ins reject
-  // `update`/`delete` but accept this.
+  // Organize a pipeline in the library: set labels / archive state. Allowed on a built-in
+  // pipeline (view metadata, not structure), which rejects `update`/`delete`.
   buildHonoRoute(app, organizePipelineContract, async (c) => {
     const pipeline = await c
       .get('container')
       .pipelineService.organize(
+        param(c, 'workspaceId'),
+        c.req.valid('param').pipelineId,
+        c.req.valid('json'),
+      )
+    return c.json(pipeline, 200)
+  })
+
+  // Replace a pipeline's human approval checkpoints. Accepted on built-ins too: a checkpoint is
+  // oversight the workspace chooses, not structure the catalog owns.
+  buildHonoRoute(app, setPipelineApprovalsContract, async (c) => {
+    const pipeline = await c
+      .get('container')
+      .pipelineService.setApprovals(
         param(c, 'workspaceId'),
         c.req.valid('param').pipelineId,
         c.req.valid('json'),

@@ -12,9 +12,9 @@
 //     rendered through the shared `DescriptorFields`, so a deployment's gate gets an authoring
 //     form from its registration alone and this component learns nothing about it.
 //
-// Extracted rather than inlined into `PipelineBuilder.vue` for the size rule (split along a seam,
-// never grow the ratchet) and because the approver controls need a roster load this component can
-// own on its own terms.
+// Value-driven (a `config` prop in, `patch` events out) so the builder's draft and the built-in
+// approvals dialog bind the same controls to their own state. The dialog hides the gate's own
+// parameters, which tune a built-in's structure rather than its oversight.
 import { computed, ref, watch } from 'vue'
 import {
   effectiveGateConfigFields,
@@ -25,21 +25,28 @@ import type { DescriptorFieldValues, StepGateConfig, WorkspaceRole } from '~/typ
 import DescriptorFields from '~/components/common/DescriptorFields.vue'
 import { withoutDescriptorFieldDefaults } from '~/utils/descriptorFields'
 
-const props = defineProps<{
-  /** The step's index in the draft, for the store patch. */
-  index: number
-  /** Whether the step carries a human approval gate (the approval half renders only then). */
-  gated: boolean
-  /** The step's agent kind, for looking up its registered gate's declared parameters. */
-  kind: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    /** The step's current gate configuration (`{}` when it takes every default). */
+    config: StepGateConfig
+    /** Whether the step carries a human approval gate (the approval half renders only then). */
+    gated: boolean
+    /** The step's agent kind, for looking up its registered gate's declared parameters. */
+    kind: string
+    /** Whether to offer the registered gate's own parameters beside the approval policy. */
+    showParameters?: boolean
+  }>(),
+  { showParameters: true },
+)
+
+const emit = defineEmits<{ patch: [patch: Partial<StepGateConfig>] }>()
 
 const { t } = useI18n()
 const pipelines = usePipelinesStore()
 const workspace = useWorkspaceStore()
 const members = useWorkspaceMembersStore()
 
-const config = computed<StepGateConfig>(() => pipelines.draftGateConfig(props.index) ?? {})
+const config = computed<StepGateConfig>(() => props.config)
 
 /**
  * The roles a gate may name. `viewer` is deliberately absent: the workspace RBAC write floor
@@ -94,9 +101,7 @@ function patchApprovers(patch: { roles?: WorkspaceRole[]; userIds?: string[] }) 
   const approvers: NonNullable<StepGateConfig['approvers']> = {}
   if (merged.roles?.length) approvers.roles = merged.roles
   if (merged.userIds?.length) approvers.userIds = merged.userIds
-  pipelines.patchDraftGateConfig(props.index, {
-    approvers: Object.keys(approvers).length ? approvers : undefined,
-  })
+  emit('patch', { approvers: Object.keys(approvers).length ? approvers : undefined })
 }
 
 function setRequiredApprovals(raw: string) {
@@ -104,12 +109,14 @@ function setRequiredApprovals(raw: string) {
   const bounded = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), MAX_GATE_APPROVALS) : 1
   // The store drops a value of 1 (the default), so an author who types the default back persists
   // nothing — the same normalization every other per-step option follows.
-  pipelines.patchDraftGateConfig(props.index, { minApprovals: bounded })
+  emit('patch', { minApprovals: bounded })
 }
 
 /** The parameters the registered gate for this step's kind declares, if any. */
-const gateFields = computed(
-  () => pipelines.gateConfigForms.find((form) => form.kind === props.kind)?.fields,
+const gateFields = computed(() =>
+  props.showParameters
+    ? pipelines.gateConfigForms.find((form) => form.kind === props.kind)?.fields
+    : undefined,
 )
 
 /**
@@ -122,14 +129,12 @@ const gateFields = computed(
 const gateFieldValues = computed<DescriptorFieldValues>({
   get: () => effectiveGateConfigFields(gateFields.value ?? [], config.value.fields),
   set: (fields) =>
-    pipelines.patchDraftGateConfig(props.index, {
-      fields: withoutDescriptorFieldDefaults(gateFields.value ?? [], fields),
-    }),
+    emit('patch', { fields: withoutDescriptorFieldDefaults(gateFields.value ?? [], fields) }),
 })
 </script>
 
 <template>
-  <div v-if="gated || gateFields?.length" class="ms-6 space-y-2" data-testid="gate-config">
+  <div v-if="gated || gateFields?.length" class="space-y-2" data-testid="gate-config">
     <div
       v-if="gated"
       class="space-y-2 rounded-md border border-app-warning-800/40 bg-app-warning-950/10 p-2"

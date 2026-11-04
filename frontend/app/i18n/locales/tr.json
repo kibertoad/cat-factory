@@ -5694,7 +5694,8 @@
       "toast": {
         "reseedFailed": "Pipeline yeniden tohumlanamadı",
         "deleteFailed": "Pipeline silinemedi",
-        "removeFailed": "Pipeline kaldırılamadı"
+        "removeFailed": "Pipeline kaldırılamadı",
+        "checkpointsDropped": "{name} yeniden yüklenirken yeni tanımın izin vermediği onay kontrol noktaları kaldırıldı"
       }
     },
     "outputBudget": {
@@ -5715,6 +5716,32 @@
       "requiredApprovalsHint": "Çalışma devam etmeden önce her biri farklı bir kişiden.",
       "anyoneHint": "Bu panoyu düzenleyebilen herkes bu adımı onaylayabilir.",
       "gateParametersLabel": "Kapı ayarları"
+    },
+    "checkpoint": {
+      "placement": {
+        "none": "Onay kontrol noktası yok",
+        "producer": "{producer} her taslağından sonra, {companion} incelemeden önce",
+        "companion": "{companion}, {producer} taslağını onayladığında",
+        "both": "İkisi de: {producer} her taslağından sonra ve {companion} onayladığında yeniden"
+      },
+      "summary": {
+        "none": "Onay kontrol noktası ekle",
+        "producer": "{producer} her taslağından sonra onay kontrol noktası. Değiştirmek için tıklayın.",
+        "companion": "{companion}, {producer} taslağını onayladığında onay kontrol noktası. Değiştirmek için tıklayın.",
+        "both": "{producer} her taslağından sonra ve {companion} onayladığında onay kontrol noktaları. Değiştirmek için tıklayın."
+      },
+      "locked": "Bu kontrol noktası yerleşik pipeline ile birlikte gelir. Kaldırmak için pipeline'ı kopyalayın."
+    },
+    "approvals": {
+      "open": "Onay kontrol noktaları",
+      "title": "Onay kontrol noktaları: {name}",
+      "description": "Bu yerleşik pipeline'ın bir kişinin inceleyip onaylaması için nerede duracağını seçin. Adımları kataloğun tanımladığı gibi kalır.",
+      "reviewedBy": "{companion} tarafından incelenir",
+      "lockedHint": "Yerleşik pipeline ile gelen kontrol noktaları açık kalır. Birini kaldırmak için pipeline'ı kopyalayın.",
+      "toast": {
+        "saved": "{name} onay kontrol noktaları kaydedildi",
+        "saveFailed": "Onay kontrol noktaları kaydedilemedi"
+      }
     }
   },
   "agentPrompt": {

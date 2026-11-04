@@ -1,6 +1,7 @@
 import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { pipelineSchema } from '../entities.js'
+import { setPipelineApprovalsSchema } from '../pipeline-approvals.js'
 import {
   clonePipelineSchema,
   createPipelineSchema,
@@ -60,6 +61,14 @@ export const organizePipelineContract = defineApiContract({
   requestPathParamsSchema: pipelineIdParams,
   pathResolver: ({ pipelineId }) => `/pipelines/${pipelineId}/organize`,
   requestBodySchema: organizePipelineSchema,
+  responsesByStatusCode: { 200: pipelineSchema, ...errorResponses },
+})
+
+export const setPipelineApprovalsContract = defineApiContract({
+  method: 'put',
+  requestPathParamsSchema: pipelineIdParams,
+  pathResolver: ({ pipelineId }) => `/pipelines/${pipelineId}/approvals`,
+  requestBodySchema: setPipelineApprovalsSchema,
   responsesByStatusCode: { 200: pipelineSchema, ...errorResponses },
 })
 

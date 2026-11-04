@@ -418,10 +418,10 @@ export const clonePipelineSchema = v.object({
 export type ClonePipelineInput = v.InferOutput<typeof clonePipelineSchema>
 
 /**
- * Organize a pipeline in the library: set labels and/or archive state. The ONLY
- * mutation allowed on a built-in pipeline (it touches view/organization metadata,
- * not structure), so built-ins can be tagged/archived while staying read-only for
- * their steps. Every field optional — only the supplied fields change.
+ * Organize a pipeline in the library: set labels and/or archive state. Allowed on a
+ * built-in pipeline (it touches view/organization metadata, not structure), so built-ins
+ * can be tagged/archived while staying read-only for their steps. Every field optional:
+ * only the supplied fields change.
  */
 export const organizePipelineSchema = v.object({
   labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),

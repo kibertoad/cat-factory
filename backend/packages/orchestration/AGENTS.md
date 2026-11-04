@@ -175,7 +175,9 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   a prospective run (every gate in front of a start, so a bare `pipelineRepository.get` there is the
   smell); `adoptableCatalog` is the bulk form for a caller already holding the workspace's whole
   list. Only `builtin` entries adopt, the write is the idempotent `insertIfAbsent`, and
-  `PipelineService.reseed` shares its row builder. See
+  `PipelineService.reseed` shares its row builder. Beside it, `pipelineApprovals.ts` is the one
+  edit a built-in accepts (its approval checkpoints, add-only against the catalog's) and the reseed
+  carry that keeps them, matched by step rather than index. See
   `backend/docs/pipeline-catalog-lifecycle.md`.
 - `board/taskTypeCreationDefaults.ts`: everything a new task's TYPE implies for the row
   `BoardService.addTask` writes, together because all three are one `TaskTypeRegistry` lookup read

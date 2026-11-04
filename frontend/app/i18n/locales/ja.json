@@ -5694,7 +5694,8 @@
       "toast": {
         "reseedFailed": "パイプラインを再シードできませんでした",
         "deleteFailed": "パイプラインを削除できませんでした",
-        "removeFailed": "パイプラインを削除できませんでした"
+        "removeFailed": "パイプラインを削除できませんでした",
+        "checkpointsDropped": "{name} を再シードした際に、新しい定義で許可されない承認チェックポイントが削除されました"
       }
     },
     "outputBudget": {
@@ -5715,6 +5716,32 @@
       "requiredApprovalsHint": "実行を再開する前に、それぞれ別の人からの承認が必要です。",
       "anyoneHint": "このボードを編集できる人なら誰でもこのステップを承認できます。",
       "gateParametersLabel": "ゲートの設定"
+    },
+    "checkpoint": {
+      "placement": {
+        "none": "承認チェックポイントなし",
+        "producer": "{producer} の各ドラフトの後、{companion} がレビューする前",
+        "companion": "{companion} が {producer} のドラフトを通過させた時点",
+        "both": "両方: {producer} の各ドラフトの後と、{companion} が通過させた時点"
+      },
+      "summary": {
+        "none": "承認チェックポイントを追加",
+        "producer": "{producer} の各ドラフトの後に承認チェックポイントがあります。クリックして変更します。",
+        "companion": "{companion} が {producer} のドラフトを通過させた時点で承認チェックポイントがあります。クリックして変更します。",
+        "both": "{producer} の各ドラフトの後と、{companion} が通過させた時点に承認チェックポイントがあります。クリックして変更します。"
+      },
+      "locked": "このチェックポイントは組み込みパイプラインに含まれています。削除するにはパイプラインを複製してください。"
+    },
+    "approvals": {
+      "open": "承認チェックポイント",
+      "title": "承認チェックポイント: {name}",
+      "description": "この組み込みパイプラインが、人によるレビューと承認のために停止する箇所を選びます。ステップはカタログの定義のままです。",
+      "reviewedBy": "{companion} がレビュー",
+      "lockedHint": "組み込みパイプラインに含まれるチェックポイントはオンのままです。削除するにはパイプラインを複製してください。",
+      "toast": {
+        "saved": "{name} の承認チェックポイントを保存しました",
+        "saveFailed": "承認チェックポイントを保存できませんでした"
+      }
     }
   },
   "agentPrompt": {

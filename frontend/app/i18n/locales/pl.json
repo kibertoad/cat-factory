@@ -5694,7 +5694,8 @@
       "toast": {
         "reseedFailed": "Nie udało się zregenerować pipeline'u",
         "deleteFailed": "Nie udało się usunąć pipeline'u",
-        "removeFailed": "Nie udało się usunąć pipeline’u"
+        "removeFailed": "Nie udało się usunąć pipeline’u",
+        "checkpointsDropped": "Ponowne zasianie {name} usunęło punkty zatwierdzenia, na które nowa definicja nie pozwala"
       }
     },
     "outputBudget": {
@@ -5715,6 +5716,32 @@
       "requiredApprovalsHint": "Każde od innej osoby, zanim przebieg ruszy dalej.",
       "anyoneHint": "Każdy, kto może edytować tę tablicę, może zatwierdzić ten krok.",
       "gateParametersLabel": "Ustawienia bramki"
+    },
+    "checkpoint": {
+      "placement": {
+        "none": "Bez punktu zatwierdzenia",
+        "producer": "Po każdym szkicu {producer}, zanim {companion} go sprawdzi",
+        "companion": "Gdy {companion} zaakceptuje szkic {producer}",
+        "both": "Oba: po każdym szkicu {producer} i ponownie, gdy {companion} go zaakceptuje"
+      },
+      "summary": {
+        "none": "Dodaj punkt zatwierdzenia",
+        "producer": "Punkt zatwierdzenia po każdym szkicu {producer}. Kliknij, aby zmienić.",
+        "companion": "Punkt zatwierdzenia, gdy {companion} zaakceptuje szkic {producer}. Kliknij, aby zmienić.",
+        "both": "Punkty zatwierdzenia po każdym szkicu {producer} i gdy {companion} go zaakceptuje. Kliknij, aby zmienić."
+      },
+      "locked": "Ten punkt zatwierdzenia jest częścią wbudowanego pipeline'u. Sklonuj pipeline, aby go usunąć."
+    },
+    "approvals": {
+      "open": "Punkty zatwierdzenia",
+      "title": "Punkty zatwierdzenia: {name}",
+      "description": "Wybierz, gdzie ten wbudowany pipeline zatrzymuje się, aby osoba mogła sprawdzić i zatwierdzić. Jego kroki pozostają takie, jak definiuje je katalog.",
+      "reviewedBy": "sprawdzany przez {companion}",
+      "lockedHint": "Punkty zatwierdzenia dostarczone z wbudowanym pipeline'em pozostają włączone. Sklonuj pipeline, aby usunąć któryś z nich.",
+      "toast": {
+        "saved": "Zapisano punkty zatwierdzenia pipeline'u {name}",
+        "saveFailed": "Nie udało się zapisać punktów zatwierdzenia"
+      }
     }
   },
   "agentPrompt": {

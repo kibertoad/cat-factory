@@ -25,6 +25,7 @@ import { workspaceSettingsSchema } from './workspace-settings.js'
 import { agentKindVariantSchema, customAgentKindSchema } from './agent-presentation.js'
 import { customTaskTypeSchema } from './task-types.js'
 import { gateConfigFormSchema } from './gate-config.js'
+import { catalogApprovalsSchema } from './pipeline-approvals.js'
 import { registeredBinaryGeneratorSchema } from './binary-generators.js'
 import { infraEngineSchema } from './environments.js'
 import { infraSetupOwnersSchema, infraSetupSchema } from './infra-setup.js'
@@ -345,6 +346,13 @@ export const workspaceSnapshotSchema = v.object({
    * `Record<string, number>` the SPA compares numerically.
    */
   pipelineCatalogNames: v.optional(v.record(v.string(), v.string())),
+  /**
+   * The human approval checkpoints each catalog pipeline SHIPS, keyed by pipeline id, for the
+   * entries that ship at least one. A stored built-in row cannot answer this itself: it holds the
+   * catalog's checkpoints together with the ones the workspace added, and the builder has to tell
+   * them apart, because a catalog checkpoint is part of the built-in and only a clone may drop it.
+   */
+  pipelineCatalogApprovals: v.optional(v.record(v.string(), catalogApprovalsSchema)),
   /**
    * Built-in pipelines WITHDRAWN from the catalog (`retiredPipelines()`) — the complement of
    * `pipelineCatalogVersions`, and the only signal that a stored built-in is no longer relevant.

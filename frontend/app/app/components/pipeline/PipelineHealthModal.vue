@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppModal from '~/components/common/AppModal.vue'
+import { agentKindMeta } from '~/utils/catalog'
 // Startup advisory for unhealthy pipelines. Opened once per session from the board page when
 // `usePipelineHealth` reports any issue. Lists:
 //   • new built-in pipelines the workspace doesn't have yet (ADD them);
@@ -65,8 +66,26 @@ async function run(id: string, action: () => Promise<unknown>, failTitleKey: str
   }
 }
 
+const actionToast = useActionToast()
+
+/**
+ * Reseed, then say which checkpoints the new definition did not keep. The backend drops a
+ * checkpoint the definition refuses (it may have made that step estimate-gated) rather than failing
+ * the reseed, so this is the only place the person who asked for it hears about the loss.
+ */
 const reseed = (id: string) =>
-  run(id, () => pipelines.reseed(id), 'pipeline.health.toast.reseedFailed')
+  run(
+    id,
+    async () => {
+      const { pipeline, droppedCheckpoints } = await pipelines.reseed(id)
+      if (!droppedCheckpoints.length) return
+      actionToast.warning('pipeline.health.toast.checkpointsDropped', {
+        params: { name: pipeline.name },
+        description: droppedCheckpoints.map((kind) => agentKindMeta(kind).label).join(', '),
+      })
+    },
+    'pipeline.health.toast.reseedFailed',
+  )
 
 /**
  * Confirm, then delete. Both removal buttons land here (UX-93): a reseed restores what the catalog

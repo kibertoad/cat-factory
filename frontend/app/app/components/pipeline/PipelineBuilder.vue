@@ -7,6 +7,8 @@ import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
 import AgentPromptEditor from '~/components/pipeline/AgentPromptEditor.vue'
 import EstimateThresholdFields from '~/components/pipeline/EstimateThresholdFields.vue'
 import GateConfigFields from '~/components/pipeline/GateConfigFields.vue'
+import StepCheckpointControl from '~/components/pipeline/StepCheckpointControl.vue'
+import PipelineLibraryRowActions from '~/components/pipeline/PipelineLibraryRowActions.vue'
 import OutputBudgetInput from '~/components/pipeline/OutputBudgetInput.vue'
 import BinaryOutputStepPicker from '~/components/pipeline/BinaryOutputStepPicker.vue'
 import { ESTIMATE_AXES, ESTIMATE_AXIS_FIELD, type EstimateAxis } from '~/utils/estimateGating'
@@ -166,6 +168,17 @@ function inheritedOutputBudget(kind: AgentKind): number | undefined {
 function showVariantPicker(index: number, kind: AgentKind): boolean {
   if (!agents.variantsForKind(kind).length) return false
   return showOverrideField(uiMode.isAdvanced, pipelines.draftAgentVariantId(index) ?? null)
+}
+
+/** The steps of a row that can carry a gate configuration: the step, and its companion if folded in. */
+function gateConfigSteps(unit: DraftUnit): { index: number; kind: AgentKind }[] {
+  const companion = unit.companionIndex === null ? undefined : pipelines.draft[unit.companionIndex]
+  return companion === undefined
+    ? [{ index: unit.index, kind: unit.kind }]
+    : [
+        { index: unit.index, kind: unit.kind },
+        { index: unit.companionIndex!, kind: companion },
+      ]
 }
 
 /**
@@ -403,10 +416,6 @@ const library = computed(() =>
   }),
 )
 const visiblePipelines = computed(() => library.value.offered)
-// The library ROW's actions (archive, the two scope defaults, edit, clone, delete) — one cohesive
-// group, extracted so this component stays inside its size budget. See
-// `usePipelineLibraryActions` for why they belong together.
-const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelineLibraryActions()
 </script>
 
 <template>
@@ -615,22 +624,18 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     data-testid="pipeline-step-condition"
                     @click="pipelines.cycleDraftStepCondition(unit.index)"
                   />
-                  <!-- Approval gate: pause after this step so a human reviews (and
-                     can edit) its proposal before the next step runs. -->
-                  <IconButton
-                    :icon="
-                      pipelines.draftGates[unit.index] ? 'i-lucide-shield-check' : 'i-lucide-shield'
+                  <!-- Approval checkpoint: pause so a human reviews (and can edit) the proposal
+                     before the next step runs; after the step, its companion, or both. -->
+                  <StepCheckpointControl
+                    :producer-gated="pipelines.draftGates[unit.index] === true"
+                    :companion-gated="
+                      unit.companionIndex === null
+                        ? null
+                        : pipelines.draftGates[unit.companionIndex] === true
                     "
-                    :color="pipelines.draftGates[unit.index] ? 'warning' : 'neutral'"
-                    variant="ghost"
-                    size="xs"
-                    :label="
-                      pipelines.draftGates[unit.index]
-                        ? t('pipeline.builder.approvalRemoveTooltip')
-                        : t('pipeline.builder.approvalAddTooltip')
-                    "
-                    data-testid="pipeline-step-gate"
-                    @click="pipelines.toggleDraftGate(unit.index)"
+                    :producer-label="agentKindMeta(unit.kind).label"
+                    :companion-label="companionLabel(unit.kind) ?? ''"
+                    @update="pipelines.setDraftCheckpoints(unit.index, unit.companionIndex, $event)"
                   />
                   <!-- Consensus: run this step through the multi-model mechanism (eligible
                      kinds only — architect/analysis/task-estimator). -->
@@ -829,12 +834,16 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                  so it is advanced-only until a step actually configures something — at which point
                  it must stay visible in both tiers, or a member editing the pipeline would save
                  over a policy they were never shown. -->
-              <GateConfigFields
-                v-if="showGateConfig(unit.index, unit.kind)"
-                :index="unit.index"
-                :gated="pipelines.draftGates[unit.index] === true"
-                :kind="unit.kind"
-              />
+              <template v-for="step in gateConfigSteps(unit)" :key="step.index">
+                <GateConfigFields
+                  v-if="showGateConfig(step.index, step.kind)"
+                  class="ms-6"
+                  :config="pipelines.draftGateConfig(step.index) ?? {}"
+                  :gated="pipelines.draftGates[step.index] === true"
+                  :kind="step.kind"
+                  @patch="pipelines.patchDraftGateConfig(step.index, $event)"
+                />
+              </template>
 
               <!-- Binary-output picker: a generator kind's step is parametrized by the
                  foundational STORAGE service its artifacts go through (`stepOptions.binaryOutput`)
@@ -1267,87 +1276,10 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     }}
                   </span>
                 </UButton>
-                <div
+                <PipelineLibraryRowActions
                   class="flex shrink-0 items-center opacity-0 transition group-hover:opacity-100"
-                >
-                  <!-- The two DEFAULT claims, advanced-tier (see `toggleDefault`). An archived
-                         pipeline is not offered either: the backend refuses a hidden row as a
-                         default, and a control that can only fail is worse than no control. Safe
-                         to hide rather than a way to strand a claim, because the same rule refuses
-                         ARCHIVING a row that still holds one: a hidden row never holds a default,
-                         so there is never one here to release. -->
-                  <template v-if="uiMode.isAdvanced && !p.archived && !p.internal">
-                    <IconButton
-                      :icon="p.isDefault ? 'i-lucide-star' : 'i-lucide-star-off'"
-                      :color="p.isDefault ? 'primary' : 'neutral'"
-                      variant="ghost"
-                      size="xs"
-                      :label="
-                        p.isDefault
-                          ? t('pipeline.builder.scopeDefault.releaseInteractive')
-                          : t('pipeline.builder.scopeDefault.claimInteractive')
-                      "
-                      @click="toggleDefault(p, 'interactive')"
-                    />
-                    <IconButton
-                      :icon="p.isUnattendedDefault ? 'i-lucide-bot' : 'i-lucide-bot-off'"
-                      :color="p.isUnattendedDefault ? 'info' : 'neutral'"
-                      variant="ghost"
-                      size="xs"
-                      :label="
-                        p.isUnattendedDefault
-                          ? t('pipeline.builder.scopeDefault.releaseUnattended')
-                          : t('pipeline.builder.scopeDefault.claimUnattended')
-                      "
-                      @click="toggleDefault(p, 'unattended')"
-                    />
-                  </template>
-                  <!-- Archive/unarchive: organize the library without deleting. Works on
-                         built-ins too (view metadata, not structure). -->
-                  <IconButton
-                    :icon="p.archived ? 'i-lucide-archive-restore' : 'i-lucide-archive'"
-                    color="neutral"
-                    variant="ghost"
-                    size="xs"
-                    :label="
-                      p.archived ? t('pipeline.builder.unarchive') : t('pipeline.builder.archive')
-                    "
-                    @click="toggleArchive(p)"
-                  />
-                  <!-- Clone is available on every pipeline — it's how a read-only
-                         built-in template becomes an editable copy. -->
-                  <IconButton
-                    icon="i-lucide-copy"
-                    color="neutral"
-                    variant="ghost"
-                    size="xs"
-                    :label="
-                      p.builtin ? t('pipeline.builder.cloneDefault') : t('pipeline.builder.clone')
-                    "
-                    @click="clone(p)"
-                  />
-                  <!-- Built-in templates are read-only; only custom pipelines edit in place. -->
-                  <IconButton
-                    v-if="!p.builtin"
-                    icon="i-lucide-pencil"
-                    color="neutral"
-                    variant="ghost"
-                    size="xs"
-                    :label="t('pipeline.builder.edit')"
-                    @click="edit(p)"
-                  />
-                  <!-- Built-in templates are read-only — they can be cloned but not
-                         deleted (the backend rejects it too); only custom ones delete. -->
-                  <IconButton
-                    v-if="!p.builtin"
-                    icon="i-lucide-trash-2"
-                    color="error"
-                    variant="ghost"
-                    size="xs"
-                    :label="t('pipeline.builder.delete')"
-                    @click="removePipeline(p)"
-                  />
-                </div>
+                  :pipeline="p"
+                />
               </div>
 
               <!-- Full ordered step list, revealed on click. -->

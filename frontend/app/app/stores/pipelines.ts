@@ -2,12 +2,13 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { Pipeline } from '~/types/domain'
 import type {
+  CatalogApprovals,
   GateConfigForm,
   PipelinePurpose,
   RetiredPipelineWire,
   RunDefaultScope,
 } from '@cat-factory/contracts'
-import { declaredDefaultPipelineId } from '@cat-factory/contracts'
+import { catalogGatedSteps, declaredDefaultPipelineId } from '@cat-factory/contracts'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { createDraftStepState, type PipelinesContext } from '~/stores/pipelines/context'
 import { createPipelineDraftActions } from '~/stores/pipelines/draftActions'
@@ -45,6 +46,12 @@ export const usePipelinesStore = defineStore('pipelines', () => {
    * name is the answer. Empty for a facade that ships no name map.
    */
   const catalogNames = ref<Record<string, string>>({})
+  /**
+   * The checkpoints each catalog pipeline SHIPS, from the same snapshot read. A stored built-in
+   * holds these together with the ones the workspace added, and only these are locked: a built-in
+   * may gain checkpoints, but dropping a shipped one takes a clone.
+   */
+  const catalogApprovals = ref<Record<string, CatalogApprovals>>({})
   /**
    * Built-in pipelines WITHDRAWN from the catalog (`retiredPipelines()`), from the workspace
    * snapshot. A stored pipeline whose id appears here is no longer relevant and can be REMOVED —
@@ -103,6 +110,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     versions?: Record<string, number>,
     retired?: RetiredPipelineWire[],
     names?: Record<string, string>,
+    approvals?: Record<string, CatalogApprovals>,
   ) {
     pipelines.value = next
     // The two catalog maps move TOGETHER, because they are one snapshot read split in two and are
@@ -112,6 +120,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     if (versions) {
       catalogVersions.value = versions
       catalogNames.value = names ?? {}
+      catalogApprovals.value = approvals ?? {}
     }
     retiredPipelines.value = retired ?? []
   }
@@ -135,6 +144,15 @@ export const usePipelinesStore = defineStore('pipelines', () => {
 
   function getPipeline(id: string) {
     return pipelineById.value.get(id)
+  }
+
+  /**
+   * For each step of `pipeline`, whether it carries a checkpoint its catalog definition ships, and
+   * so one a workspace may not switch off. All `false` for a custom pipeline.
+   */
+  function shippedCheckpoints(pipeline: Pipeline): boolean[] {
+    const catalog = pipeline.builtin ? catalogApprovals.value[pipeline.id] : undefined
+    return catalogGatedSteps(pipeline.agentKinds, catalog)
   }
 
   /**
@@ -184,6 +202,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     pipelines,
     catalogVersions,
     catalogNames,
+    catalogApprovals,
     retiredPipelines,
     gateConfigForms,
     draft,
@@ -203,6 +222,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     hydrate,
     hydrateGateConfigForms,
     getPipeline,
+    shippedCheckpoints,
     declaredDefaultId,
     ...draftActions,
     ...persistence,

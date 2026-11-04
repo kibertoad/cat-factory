@@ -67,6 +67,16 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
     draftGates.value[index] = !draftGates.value[index]
   }
 
+  /** Set the approval gates of a producer and, when it has one, the companion after it. */
+  function setDraftCheckpoints(
+    index: number,
+    companionIndex: number | null,
+    gates: { producer: boolean; companion: boolean },
+  ) {
+    draftGates.value[index] = gates.producer
+    if (companionIndex !== null) draftGates.value[companionIndex] = gates.companion
+  }
+
   /** Toggle the Follow-up companion on the draft (coder) step at `index` (default on → off). */
   function toggleDraftFollowUps(index: number) {
     // Default (null/true) is enabled, so the first toggle disables it (false); toggle back to null.
@@ -111,6 +121,7 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
     setDraftConsensus,
     toggleDraftConsensusGroup,
     toggleDraftGate,
+    setDraftCheckpoints,
     toggleDraftFollowUps,
     toggleDraftTesterQuality,
     toggleDraftTesterQualityGating,

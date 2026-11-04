@@ -15,6 +15,7 @@ import {
   removeBlockContract,
   reparentBlockContract,
   reseedPipelineContract,
+  setPipelineApprovalsContract,
   resizeBlockContract,
   restoreBlockContract,
   toggleDependencyContract,
@@ -23,6 +24,7 @@ import {
 } from '@cat-factory/contracts'
 import type {
   CreatePipelineInput,
+  SetPipelineApprovalsInput,
   UpdateBlockInput,
   UpdatePipelineInput,
 } from '@cat-factory/contracts'
@@ -151,5 +153,17 @@ export function boardApi({ send, ws }: ApiContext) {
     // built-in, or repair a drifted/invalid one). Custom pipelines reject this.
     reseedPipeline: (workspaceId: string, pipelineId: string) =>
       send(reseedPipelineContract, { pathPrefix: ws(workspaceId), pathParams: { pipelineId } }),
+
+    // Replace a pipeline's human approval checkpoints. Accepted on built-ins too.
+    setPipelineApprovals: (
+      workspaceId: string,
+      pipelineId: string,
+      body: SetPipelineApprovalsInput,
+    ) =>
+      send(setPipelineApprovalsContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { pipelineId },
+        body,
+      }),
   }
 }

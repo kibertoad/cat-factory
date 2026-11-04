@@ -10,6 +10,7 @@ import {
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 import { definePrReviewSuite } from './execution-pr-review.js'
+import { registerPipelineApprovalTests } from './pipeline-approvals.js'
 import { defineBugFishingSuite } from './execution-bug-fishing.js'
 import { defineResolveConflictsSuite } from './execution-resolve-conflicts.js'
 
@@ -25,6 +26,7 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
     registerPublicNotificationTests(harness)
   })
   registerPipelineCatalogTests(harness)
+  registerPipelineApprovalTests(harness)
 
   describe('service spec read', () => {
     it('serves an empty service-spec view when GitHub is not wired', async () => {

@@ -5694,7 +5694,8 @@
       "toast": {
         "reseedFailed": "Impossible de régénérer le pipeline",
         "deleteFailed": "Impossible de supprimer le pipeline",
-        "removeFailed": "Impossible de retirer le pipeline"
+        "removeFailed": "Impossible de retirer le pipeline",
+        "checkpointsDropped": "La réinitialisation de {name} a retiré des points d'approbation que la nouvelle définition n'autorise pas"
       }
     },
     "outputBudget": {
@@ -5715,6 +5716,32 @@
       "requiredApprovalsHint": "Chacune d'une personne différente avant que l'exécution reprenne.",
       "anyoneHint": "Toute personne pouvant modifier ce tableau peut approuver cette étape.",
       "gateParametersLabel": "Paramètres du contrôle"
+    },
+    "checkpoint": {
+      "placement": {
+        "none": "Aucun point d'approbation",
+        "producer": "Après chaque brouillon de {producer}, avant que {companion} ne le relise",
+        "companion": "Dès que {companion} valide le brouillon de {producer}",
+        "both": "Les deux : après chaque brouillon de {producer}, puis dès que {companion} le valide"
+      },
+      "summary": {
+        "none": "Ajouter un point d'approbation",
+        "producer": "Point d'approbation après chaque brouillon de {producer}. Cliquez pour modifier.",
+        "companion": "Point d'approbation dès que {companion} valide le brouillon de {producer}. Cliquez pour modifier.",
+        "both": "Points d'approbation après chaque brouillon de {producer} et dès que {companion} le valide. Cliquez pour modifier."
+      },
+      "locked": "Ce point d'approbation est fourni avec le pipeline intégré. Clonez le pipeline pour le retirer."
+    },
+    "approvals": {
+      "open": "Points d'approbation",
+      "title": "Points d'approbation : {name}",
+      "description": "Choisissez où ce pipeline intégré s'arrête pour qu'une personne relise et approuve. Ses étapes restent telles que le catalogue les définit.",
+      "reviewedBy": "relu par {companion}",
+      "lockedHint": "Les points d'approbation fournis avec le pipeline intégré restent actifs. Clonez le pipeline pour en retirer un.",
+      "toast": {
+        "saved": "Points d'approbation de {name} enregistrés",
+        "saveFailed": "Impossible d'enregistrer les points d'approbation"
+      }
     }
   },
   "agentPrompt": {

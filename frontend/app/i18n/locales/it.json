@@ -5146,7 +5146,8 @@
       "toast": {
         "reseedFailed": "Impossibile ripristinare la pipeline",
         "deleteFailed": "Impossibile eliminare la pipeline",
-        "removeFailed": "Impossibile rimuovere la pipeline"
+        "removeFailed": "Impossibile rimuovere la pipeline",
+        "checkpointsDropped": "Il ripristino di {name} ha rimosso punti di approvazione che la nuova definizione non consente"
       }
     },
     "outputBudget": {
@@ -5167,6 +5168,32 @@
       "requiredApprovalsHint": "Ciascuna da una persona diversa prima che l'esecuzione prosegua.",
       "anyoneHint": "Chiunque possa modificare questa board può approvare questo passo.",
       "gateParametersLabel": "Impostazioni del gate"
+    },
+    "checkpoint": {
+      "placement": {
+        "none": "Nessun punto di approvazione",
+        "producer": "Dopo ogni bozza di {producer}, prima che {companion} la revisioni",
+        "companion": "Quando {companion} approva la bozza di {producer}",
+        "both": "Entrambi: dopo ogni bozza di {producer} e di nuovo quando {companion} la approva"
+      },
+      "summary": {
+        "none": "Aggiungi un punto di approvazione",
+        "producer": "Punto di approvazione dopo ogni bozza di {producer}. Fai clic per modificare.",
+        "companion": "Punto di approvazione quando {companion} approva la bozza di {producer}. Fai clic per modificare.",
+        "both": "Punti di approvazione dopo ogni bozza di {producer} e quando {companion} la approva. Fai clic per modificare."
+      },
+      "locked": "Questo punto di approvazione è incluso nella pipeline predefinita. Clona la pipeline per rimuoverlo."
+    },
+    "approvals": {
+      "open": "Punti di approvazione",
+      "title": "Punti di approvazione: {name}",
+      "description": "Scegli dove questa pipeline predefinita si ferma perché una persona revisioni e approvi. I suoi passaggi restano come li definisce il catalogo.",
+      "reviewedBy": "revisionato da {companion}",
+      "lockedHint": "I punti di approvazione inclusi nella pipeline predefinita restano attivi. Clona la pipeline per rimuoverne uno.",
+      "toast": {
+        "saved": "Punti di approvazione di {name} salvati",
+        "saveFailed": "Impossibile salvare i punti di approvazione"
+      }
     }
   },
   "agentPrompt": {
