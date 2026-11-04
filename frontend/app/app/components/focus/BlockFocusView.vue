@@ -158,7 +158,7 @@ function openApprovalFor(approvalId: string) {
       <div class="min-w-0">
         <h1 class="text-lg font-semibold text-highlighted">{{ block.title }}</h1>
         <div class="text-xs text-dimmed">
-          {{ t('focus.typeSubtitle', { type: typeMeta.label }) }}
+          {{ t('focus.typeSubtitle', { type: t(typeMeta.labelKey) }) }}
         </div>
       </div>
       <UBadge :color="statusMeta.chip" variant="subtle" class="ms-2">

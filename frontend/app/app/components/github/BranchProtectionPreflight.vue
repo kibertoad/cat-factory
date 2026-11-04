@@ -80,8 +80,16 @@ function detailLine(row: Row): string {
   if (!p.detail) return ''
   return p.detail.requiresPullRequest
     ? t('vcs.branchProtection.requiresPr', {
-        reviews: p.detail.requiredApprovingReviewCount,
-        checks: p.detail.requiredStatusChecks.length,
+        reviews: t(
+          'vcs.branchProtection.approvingReviews',
+          { count: p.detail.requiredApprovingReviewCount },
+          p.detail.requiredApprovingReviewCount,
+        ),
+        checks: t(
+          'vcs.branchProtection.requiredChecks',
+          { count: p.detail.requiredStatusChecks.length },
+          p.detail.requiredStatusChecks.length,
+        ),
       })
     : t('vcs.branchProtection.noPrRequired')
 }

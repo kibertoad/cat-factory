@@ -8,6 +8,7 @@ import FailureMessage from '~/components/common/FailureMessage.vue'
 import JourneyStepNav from '~/components/environments/steps/JourneyStepNav.vue'
 import { useEnvironmentWizardTarget } from '~/modular/journeys/environmentSetup.frame'
 import EmptyState from '~/components/common/EmptyState.vue'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
 
 const props = defineProps<{
   input: { frameId: string | null }
@@ -91,10 +92,12 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
           </span>
         </div>
         <p v-if="r.detail" class="mt-1 text-2xs text-muted">{{ r.detail }}</p>
-        <pre
+        <!-- The remediation is Markdown: prose with the commands to run in code spans. -->
+        <MarkdownProse
           v-if="r.status !== 'pass' && r.remediation"
-          class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-sm border border-app-warning-900/40 bg-app-warning-950/20 p-1.5 text-2xs text-app-warning-200/90"
-          >{{ r.remediation }}</pre>
+          class="mt-1 max-h-40 overflow-auto rounded-sm border border-app-warning-900/40 bg-app-warning-950/20 p-1.5 text-2xs text-app-warning-200/90"
+          :text="r.remediation"
+        />
       </li>
     </ul>
 

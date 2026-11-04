@@ -133,11 +133,11 @@ const selectableModels = computed(() => {
       const flavor = displayFlavor(m, configured)
       const ctx = contextLabel(flavor.contextTokens)
       const price =
-        costLabel(flavor) ??
+        costLabel(flavor, t) ??
         (flavor.quotaBased ? t('settings.modelConfiguration.quota') : undefined)
       // Surface caching in the suffix: a cache-less flavour (the Workers-AI hot path)
       // re-bills its whole growing prompt every turn, which the user can act on.
-      const caching = cachingLabel(flavor)
+      const caching = cachingLabel(flavor, t)
       const suffix = [flavor.providerLabel, ctx, price, caching].filter(Boolean).join(' · ')
       return {
         id: m.id,

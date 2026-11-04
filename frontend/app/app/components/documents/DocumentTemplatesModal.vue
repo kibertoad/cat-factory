@@ -12,6 +12,7 @@ import AppModal from '~/components/common/AppModal.vue'
 // sections override the built-in skeleton (template) and the author agents study it (exemplar).
 // Reuses the same imported-document corpus as context linking — no new fetch surface.
 const { t } = useI18n()
+const docKindLabel = useDocKindLabel()
 const ui = useUiStore()
 const documents = useDocumentsStore()
 const { present } = usePipelineErrorToast()
@@ -118,14 +119,13 @@ async function unlink(doc: SourceDocument) {
                 :color="kind === k ? 'primary' : 'neutral'"
                 :variant="kind === k ? 'soft' : 'ghost'"
                 size="xs"
-                class="uppercase"
                 @click="
                   () => {
                     kind = k
                   }
                 "
               >
-                {{ k }}
+                {{ docKindLabel(k) }}
               </UButton>
             </div>
           </UFormField>

@@ -251,10 +251,11 @@ async function unlink(id: string) {
         <p class="text-xs text-dimmed">
           <template v-if="s.mode === 'files'">
             {{
-              t('foundational.sources.metaFiles', {
-                service: s.serviceName ?? s.serviceId ?? '',
-                count: s.filePaths.length,
-              })
+              t(
+                'foundational.sources.metaFiles',
+                { service: s.serviceName ?? s.serviceId ?? '', count: s.filePaths.length },
+                s.filePaths.length,
+              )
             }}
           </template>
           <template v-else-if="s.mode === 'folder'">

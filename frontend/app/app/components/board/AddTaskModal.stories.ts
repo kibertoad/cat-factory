@@ -111,7 +111,7 @@ export const Document: Story = {
   decorators: [opened()],
   play: async () => {
     await pick('document')()
-    await userEvent.click(await screen.findByRole('button', { name: 'prd' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'PRD' }))
     await screen.findByText('Target users')
   },
 }

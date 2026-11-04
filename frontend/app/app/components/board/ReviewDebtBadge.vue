@@ -19,7 +19,7 @@ const color = computed(() => (blocked.value ? 'error' : 'warning'))
     variant="subtle"
     size="sm"
     icon="i-lucide-clock"
-    :title="t('errors.reviewFriction.badge', { count: debtCount })"
+    :title="t('errors.reviewFriction.badge', { count: debtCount }, debtCount)"
   >
     {{ debtCount }}
   </UBadge>

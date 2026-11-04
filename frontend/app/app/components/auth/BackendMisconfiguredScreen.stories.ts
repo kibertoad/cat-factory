@@ -7,7 +7,7 @@ import BackendMisconfiguredScreen from './BackendMisconfiguredScreen.vue'
 // variable is missing or invalid. It reads the problems from the auth store. The text below has
 // the shape of the backend's help for two variables (`ENV_HELP` in `server/src/config/problems.ts`),
 // but it is the story's own copy, not a quote. The remedies mark commands with Markdown backticks, which
-// the screen prints as plain characters. Reload reloads the Storybook frame.
+// the screen renders as code spans. Reload reloads the Storybook frame.
 const meta = {
   title: 'Shell/Components/BackendMisconfiguredScreen',
   component: BackendMisconfiguredScreen,

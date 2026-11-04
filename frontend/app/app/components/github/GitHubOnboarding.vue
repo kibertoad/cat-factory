@@ -8,7 +8,7 @@
 // who landed on a board they cannot connect had no way to reach a board they can.
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import BoardSwitcher from '~/components/layout/BoardSwitcher.vue'
-import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
+import { VCS_PROVIDER_LABELS, vcsProviderIcon } from '~/utils/vcs'
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -17,7 +17,7 @@ const github = useGitHubStore()
 // A deployment that serves exactly one provider names it; one serving several stays neutral
 // (the per-surface copy below then says which is which).
 const sole = computed(() => github.soleConnectProvider)
-const icon = computed(() => (sole.value ? VCS_PROVIDER_ICONS[sole.value] : 'i-lucide-git-branch'))
+const icon = computed(() => vcsProviderIcon(sole.value))
 const title = computed(() =>
   sole.value
     ? t('vcs.onboarding.title', { provider: VCS_PROVIDER_LABELS[sole.value] })

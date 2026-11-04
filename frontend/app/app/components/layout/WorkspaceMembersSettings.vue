@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import type { WorkspaceAccessMode, WorkspaceRole } from '~/types/domain'
+import { WORKSPACE_ROLES } from '@cat-factory/contracts'
+import { WORKSPACE_ROLE_LABEL_KEYS } from '~/utils/roles'
 import EmptyState from '~/components/common/EmptyState.vue'
 
 // Workspace-membership management (workspace-rbac initiative, slice 9). The tier BELOW
@@ -24,11 +26,9 @@ const { confirmAction, toastDone } = useConfirmAction()
 
 const busy = ref(false)
 
-const ROLE_ITEMS = computed<{ label: string; value: WorkspaceRole }[]>(() => [
-  { label: t('layout.workspaceMembers.roles.admin'), value: 'admin' },
-  { label: t('layout.workspaceMembers.roles.member'), value: 'member' },
-  { label: t('layout.workspaceMembers.roles.viewer'), value: 'viewer' },
-])
+const ROLE_ITEMS = computed<{ label: string; value: WorkspaceRole }[]>(() =>
+  WORKSPACE_ROLES.map((value) => ({ label: t(WORKSPACE_ROLE_LABEL_KEYS[value]), value })),
+)
 
 /** The active board's row (carries `accountId` + `accessMode`). */
 const board = computed(() => workspace.workspaces.find((w) => w.id === props.workspaceId) ?? null)

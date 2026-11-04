@@ -95,8 +95,8 @@ const draftReport = {
 /**
  * The reviewer asked for comments: of three proposed, two are kept as drafts and the third named
  * a file the pull request does not change. One draft is already posted, and nothing is ticked,
- * so the post button reads "Post 0" and is disabled. Each draft's rationale is plain text, so
- * the code in the second one shows its backticks.
+ * so the post button reads "Post 0" and is disabled. Each draft's rationale renders as Markdown,
+ * so the code in the second one shows as a code span.
  */
 export const WithDrafts: Story = {
   args: {
