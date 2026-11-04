@@ -1,5 +1,11 @@
 # @cat-factory/caching
 
+## 0.20.119
+
+### Patch Changes
+
+- @cat-factory/kernel@0.367.2
+
 ## 0.20.118
 
 ### Patch Changes
