@@ -92,8 +92,10 @@ function choose(id: string) {
     </slot>
 
     <template #content>
+      <!-- A FIXED height: sized by the hovered preview, the panel would resize on every hover, the
+           popover would reposition, and a different row would land under a still pointer. -->
       <div
-        class="flex max-h-[28rem] w-[min(44rem,94vw)]"
+        class="flex h-[min(28rem,var(--reka-popover-content-available-height))] w-[min(44rem,94vw)]"
         data-testid="pipeline-picker-panel"
         @mouseleave="hoverId = undefined"
       >
