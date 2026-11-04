@@ -620,24 +620,19 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
   },
-  // The parked-review question writeback's idempotency marker (`IssueWritebackService.
-  // postReviewQuestions`): one row per `(workspace, review, iteration, linked issue)`, claimed
-  // BEFORE the comment is posted so a replaying durable driver cannot post a review's findings onto
-  // the reporter's issue twice.
+  // The tracker writeback's exactly-once marker (`IssueWritebackService`): one row per
+  // `(workspace, kind, subject, linked issue, discriminator)`, claimed BEFORE a comment is posted.
+  // The parked-review question echo claims through it, driven by the ENGINE from a replaying
+  // durable driver. A mothership-mode node reaches it, and a claim that answered `unknown_method`
+  // would read as "someone else holds the claim", silently skipping the ticket comment.
   //
-  // The ENGINE writes it, so a mothership-mode node genuinely reaches it — and its failure mode was
-  // the quiet kind this bucket exists to prevent. `claim` answered `unknown_method`, which the
-  // caller's deliberate fallback reads as "someone else holds the claim", so every parked review on
-  // a local run silently skipped its ticket comment: the reporter is never asked the question, the
-  // run parks waiting for an answer to something nobody was told about, and the only trace is a
-  // `warn`. Its INBOUND sibling (`trackerCommentIngestRepository`) stays off for a different and
-  // permanent reason: a webhook delivery reaches the deployment holding the public URL, never a
-  // laptop, so there is nothing there to claim.
+  // Its INBOUND sibling (`trackerCommentIngestRepository`) stays off for a permanent reason: a
+  // webhook delivery reaches the deployment holding the public URL, never a laptop.
   //
-  // All three methods take the `ReviewQuestionPostKey` as arg0, whose `workspaceId` is a FIELD →
-  // the `workspaceField` rule, exactly like the record-based `upsert`s above. The marker carries no
-  // secrets (a status, an attempt count, and a `redactSecrets`-scrubbed error string).
-  reviewQuestionPostRepository: {
+  // All three methods take the `WritebackPostKey` as arg0, whose `workspaceId` is a FIELD: the
+  // `workspaceField` rule. The marker carries no secrets (a status, an attempt count, a claim
+  // token and a `redactSecrets`-scrubbed error string).
+  writebackPostRepository: {
     claim: { scope: { kind: 'workspaceField', arg: 0 } },
     settle: { scope: { kind: 'workspaceField', arg: 0 } },
     get: { scope: { kind: 'workspaceField', arg: 0 } },
@@ -946,6 +941,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // A fresh review run atomically replaces the block's prior one
     // (`RequirementReviewService.review`). Workspace-scoped on arg0 — completes the repo.
     replaceForBlock: { scope: { kind: 'workspace', arg: 0 } },
+    // The refined-requirements writeback records its per-issue outcome on the review, from the
+    // gate as the review settles and from the review window's button. Workspace-scoped on arg0.
+    recordIssueWriteback: { scope: { kind: 'workspace', arg: 0 } },
   },
   // Interactive document-interview sessions (WS5). The doc-authoring RUN PATH reads the
   // converged brief (`getByBlock`, via the agent-context builder on every doc-writer dispatch),
@@ -1265,14 +1263,22 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // rule); the record-based `insert(record)` binds on the record's `workspaceId` FIELD (the
   // `workspaceField` rule). Every read already filters by the (authenticated) workspaceId, so a
   // row's non-authoritative `executionId`/`blockId` need no separate scope check. The retention
-  // sweep (`listOlderThan`/`deleteOlderThan`) stays mothership-internal (the mothership owns
-  // durable-state retention), like the other global sweeper methods.
+  // sweep (`listOlderThan`/`deleteOlderThan`/`listBlockAnchorsOlderThan`) stays
+  // mothership-internal (the mothership owns durable-state retention), like the other global
+  // sweeper methods.
   binaryArtifactMetadataStore: {
     insert: { scope: { kind: 'workspaceField', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
     listByExecution: { scope: { kind: 'workspace', arg: 0 } },
     countByExecution: { scope: { kind: 'workspace', arg: 0 } },
     listByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    // The block-delete reclaim's read: a task's attached images are retained until their block
+    // goes, so a delete must reach the mothership's rows or they would outlive the task.
+    listByBlocks: { scope: { kind: 'workspace', arg: 0 } },
+    // A cross-home reparent carries a task's attached images with it. The source and destination
+    // workspaces travel as one list, so the `workspaceList` rule binds BOTH: a node can only move
+    // rows between two boards it may already write.
+    moveBlocks: { scope: { kind: 'workspaceList', arg: 0 } },
     countByBlock: { scope: { kind: 'workspace', arg: 0 } },
     // The document reclaim's two halves: an import running on a node retains a design source's
     // rendered frames and replaces the previous revision's, so both have to reach the mothership's

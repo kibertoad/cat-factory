@@ -146,6 +146,18 @@ export function createRepoIssueWriteback(
         mark.label ?? DEFAULT_IN_PROGRESS_LABEL,
       )
     },
+
+    /** A client without the body write refuses: the caller reports it as a failed update. */
+    async replaceDescription(ctx, externalId, body) {
+      const { installationId, ref, id } = await target(ctx, externalId)
+      const replace = deps.client.replaceIssueBody
+      if (!replace) {
+        throw new UnavailableError(
+          `This deployment's ${deps.label} client cannot edit an issue description.`,
+        )
+      }
+      return replace.call(deps.client, installationId, ref, id.number, body)
+    },
   }
 }
 

@@ -9,6 +9,12 @@ import {
 import { DEFAULT_COMPANION_MAX_ATTEMPTS } from './companion.js'
 import { DEFAULT_JUDGE_MAX_BOUNCES, DEFAULT_JUDGE_MIN_SCORE } from './judge.js'
 import { DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE } from './requirements.js'
+import { DEFAULT_REVIEW_EFFORT_LEVEL, reviewEffortLevelSchema } from './review-effort-level.js'
+import {
+  DEFAULT_REQUIREMENT_FINDING_FLOOR,
+  requirementFloorProgressionSchema,
+  reviewItemSeveritySchema,
+} from './requirement-finding-floor.js'
 import { WORKSPACE_ROLES, workspaceRoleSchema, type WorkspaceRole } from './workspace-members.js'
 
 // ---------------------------------------------------------------------------
@@ -422,6 +428,18 @@ export const riskPolicySchema = v.object({
    */
   maxRequirementConcernAllowed: requirementConcernLevelSchema,
   /**
+   * The lowest severity the requirements reviewer RAISES: `high` asks only what blocks
+   * implementation, `medium` adds what risks rework, `low` asks everything. A finding below it is
+   * dropped and counted on the review. Also the fallback floor of a progressive policy whose task
+   * has no estimate.
+   */
+  requirementFindingFloor: reviewItemSeveritySchema,
+  /**
+   * When set, the floor follows the task's estimate instead of staying fixed (see
+   * `requirementFloorProgressionSchema`). Null keeps `requirementFindingFloor` for every task.
+   */
+  requirementFloorProgression: v.nullable(requirementFloorProgressionSchema),
+  /**
    * How many times the test quality-control companion may loop the Tester for a more
    * complete report before it stops gating and lets the run proceed to the greenlight /
    * fixer decision. One QC-driven Tester re-run = one iteration, so this is the maximum
@@ -452,6 +470,14 @@ export const riskPolicySchema = v.object({
    * ask for.
    */
   companionMaxReworks: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /**
+   * How much effort the post-implementation `reviewer` companion spends on the code it reviews:
+   * the breadth of what it reports and the confidence a finding needs before it is reported.
+   * Higher levels surface more findings, including less certain ones, and take longer. It is
+   * guidance the reviewer is handed, not a model or reasoning-budget pick. The default is `high`,
+   * the level the reviewer ran at before the policy could state one.
+   */
+  postImplementationReviewEffort: reviewEffortLevelSchema,
   /**
    * How long (minutes) the post-release-health gate watches the deployed release's
    * Datadog monitors/SLOs before declaring it healthy and advancing.
@@ -662,9 +688,14 @@ export const createRiskPolicySchema = v.object({
   ciMaxAttempts: attemptsSchema,
   maxRequirementIterations: iterationsSchema,
   maxRequirementConcernAllowed: requirementConcernLevelSchema,
+  requirementFindingFloor: v.optional(reviewItemSeveritySchema, DEFAULT_REQUIREMENT_FINDING_FLOOR),
+  /** Absent or null ⇒ the fixed floor for every task. */
+  requirementFloorProgression: v.optional(v.nullable(requirementFloorProgressionSchema), null),
   maxTesterQualityIterations: v.optional(iterationsSchema, 3),
   /** Automatic companion rework rounds; absent ⇒ {@link DEFAULT_COMPANION_MAX_ATTEMPTS}. */
   companionMaxReworks: v.optional(companionReworksSchema, DEFAULT_COMPANION_MAX_ATTEMPTS),
+  /** Post-implementation review effort; absent ⇒ {@link DEFAULT_REVIEW_EFFORT_LEVEL}. */
+  postImplementationReviewEffort: v.optional(reviewEffortLevelSchema, DEFAULT_REVIEW_EFFORT_LEVEL),
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema, 30),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema, 1),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema, 10),
@@ -705,8 +736,12 @@ export const updateRiskPolicySchema = v.object({
   ciMaxAttempts: v.optional(attemptsSchema),
   maxRequirementIterations: v.optional(iterationsSchema),
   maxRequirementConcernAllowed: v.optional(requirementConcernLevelSchema),
+  requirementFindingFloor: v.optional(reviewItemSeveritySchema),
+  /** Null switches the policy back to the fixed floor. */
+  requirementFloorProgression: v.optional(v.nullable(requirementFloorProgressionSchema)),
   maxTesterQualityIterations: v.optional(iterationsSchema),
   companionMaxReworks: v.optional(companionReworksSchema),
+  postImplementationReviewEffort: v.optional(reviewEffortLevelSchema),
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema),

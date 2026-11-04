@@ -15,6 +15,7 @@ import {
   requestStepChangesContract,
   resolveDecisionContract,
   restartExecutionContract,
+  resumeCredentialWaitContract,
   resumeSpendContract,
   startAgentKindExecutionContract,
   startExecutionContract,
@@ -148,9 +149,6 @@ export function executionController(): Hono<AppEnv> {
 
   buildHonoRoute(app, resolveDecisionContract, async (c) => {
     const { executionId, decisionId } = c.req.valid('param')
-    // Re-mint the run's activation BEFORE the engine advances + dispatches the next step
-    // (gates: a needed-but-absent/within-buffer password 428s so the client re-prompts early).
-    await activateForInteraction(c, param(c, 'workspaceId'), executionId)
     const instance = await c
       .get('container')
       .executionService.resolveDecision(
@@ -166,9 +164,6 @@ export function executionController(): Hono<AppEnv> {
   // the run advances to the next step carrying it forward as context.
   buildHonoRoute(app, approveStepContract, async (c) => {
     const { executionId, approvalId } = c.req.valid('param')
-    // Re-mint the run's activation BEFORE the engine advances + dispatches the next step
-    // (gates: a needed-but-absent/within-buffer password 428s so the client re-prompts early).
-    await activateForInteraction(c, param(c, 'workspaceId'), executionId)
     const instance = await c
       .get('container')
       .executionService.approveStep(
@@ -186,9 +181,6 @@ export function executionController(): Hono<AppEnv> {
   buildHonoRoute(app, requestStepChangesContract, async (c) => {
     const { executionId, approvalId } = c.req.valid('param')
     const { feedback, comments } = c.req.valid('json')
-    // The step re-runs (dispatches) — re-mint the run's activation first (gates: a
-    // needed-but-absent/within-buffer password 428s so the client re-prompts early).
-    await activateForInteraction(c, param(c, 'workspaceId'), executionId)
     const instance = await c
       .get('container')
       .executionService.requestStepChanges(
@@ -207,9 +199,6 @@ export function executionController(): Hono<AppEnv> {
   // generic approve/reject can't short-circuit it.
   buildHonoRoute(app, resolveStepExceededContract, async (c) => {
     const { executionId, approvalId } = c.req.valid('param')
-    // extra-round / proceed re-dispatch the next agent step — re-mint first (gates: a
-    // needed-but-absent/within-buffer password 428s so the client re-prompts early).
-    await activateForInteraction(c, param(c, 'workspaceId'), executionId)
     const instance = await c
       .get('container')
       .executionService.resolveCompanionExceeded(
@@ -217,6 +206,24 @@ export function executionController(): Hono<AppEnv> {
         executionId,
         approvalId,
         c.req.valid('json').choice,
+      )
+    return c.json(instance, 200)
+  })
+
+  // Resume a step parked because the run's personal-subscription credential lapsed. Once the park
+  // and the caller (the run's initiator) are confirmed, re-mints the run's activation from the
+  // request's personal password (a 428 without one, which is what makes the client prompt), then
+  // re-dispatches the step.
+  buildHonoRoute(app, resumeCredentialWaitContract, async (c) => {
+    const workspaceId = param(c, 'workspaceId')
+    const { executionId } = c.req.valid('param')
+    const instance = await c
+      .get('container')
+      .executionService.resumeCredentialWait(
+        workspaceId,
+        executionId,
+        c.get('user')?.id ?? null,
+        () => activateForInteraction(c, workspaceId, executionId),
       )
     return c.json(instance, 200)
   })

@@ -70,10 +70,8 @@ import {
   DrizzleTaskRepository,
   DrizzleTaskSourceSettingsRepository,
 } from './repositories/tasks.js'
-import {
-  DrizzleReviewQuestionPostRepository,
-  DrizzleTrackerCommentIngestRepository,
-} from './repositories/drizzle/settings.js'
+import { DrizzleTrackerCommentIngestRepository } from './repositories/drizzle/settings.js'
+import { DrizzleWritebackPostRepository } from './repositories/drizzle/writebackPosts.js'
 import { DrizzleUserRepoAccessRepository } from './repositories/userRepoAccess.js'
 
 // The engine's CI/mergeability gate reads never persist rate-limit snapshots (that is the
@@ -632,11 +630,11 @@ function buildNodeIssueWriteback(args: {
     // registered once and is then both readable and writeable, so a deployment's own tracker
     // cannot end up with intake and no way to answer it.
     taskSourceProviders,
-    // Idempotency markers for the headless clarification loop's question echo — without them
-    // the writeback passes through, since a replaying driver would otherwise re-post.
-    reviewQuestionPostRepository: sourced(
-      'reviewQuestionPostRepository',
-      (d) => new DrizzleReviewQuestionPostRepository(d),
+    // The exactly-once markers claimed before the parked-review question echo. Without them the
+    // echo passes through, since a replaying driver would otherwise re-post.
+    writebackPostRepository: sourced(
+      'writebackPostRepository',
+      (d) => new DrizzleWritebackPostRepository(d),
     ),
     clock,
     // Every hook here is fire-and-forget; without a logger a permanently broken tracker

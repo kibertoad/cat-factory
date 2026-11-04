@@ -38,6 +38,9 @@ export const accountRiskPolicies = pgTable(
       .default('none'),
     max_tester_quality_iterations: integer('max_tester_quality_iterations').notNull().default(3),
     companion_max_reworks: integer('companion_max_reworks').notNull().default(3),
+    post_implementation_review_effort: text('post_implementation_review_effort')
+      .notNull()
+      .default('high'),
     release_watch_window_minutes: integer('release_watch_window_minutes').notNull().default(30),
     release_max_attempts: integer('release_max_attempts').notNull().default(1),
     human_review_grace_minutes: integer('human_review_grace_minutes').notNull().default(10),
@@ -56,6 +59,8 @@ export const accountRiskPolicies = pgTable(
     min_auto_answer_confidence: doublePrecision('min_auto_answer_confidence')
       .notNull()
       .default(0.8),
+    requirement_finding_floor: text('requirement_finding_floor').notNull().default('medium'),
+    requirement_floor_progression: text('requirement_floor_progression'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [primaryKey({ columns: [t.account_id, t.id] })],

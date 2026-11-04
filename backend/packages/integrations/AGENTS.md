@@ -136,9 +136,12 @@ prerequisites are configured.
   owns both directions of the tracker clarification loop: `reviewQuestions.logic.ts` (questions
   OUT) and its sibling `reviewReplies.logic.ts` (the reply grammar + the acknowledgement), kept
   side by side because they share the finding ids, and splitting them is how the two halves would
-  desync. `IssueWritebackService` beside them is the SHARED half of every writeback (settings
-  gating, the linked-issue fan-out and its isolation, the per-source connection read, the
-  parked-review marker); the vendor half lives on the providers in `tasks/writeback/`.
+  desync. `refinedRequirements.logic.ts` renders a review's revised document as the source issue's
+  new description. `IssueWritebackService` beside them is the SHARED half of every writeback
+  (settings gating, the linked-issue fan-out and its isolation, the per-source connection read, the
+  parked-review marker); the vendor half lives on the providers in `tasks/writeback/` (including
+  each source's read-compare-write `replaceDescription`), and Jira's Markdown-to-ADF conversion in
+  `tracker/markdown-adf.logic.ts`.
 - `audit/`: `AuditService`, the ONE writer of the account audit log and the implementation of
   kernel's `AuditRecorder`. It lives here rather than beside the tenancy services that call it
   because those are in `@cat-factory/workspaces`, which the facades do not depend on; they consume

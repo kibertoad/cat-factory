@@ -1,3 +1,7 @@
+import {
+  parseRequirementFindingFloor,
+  parseRequirementFloorProgression,
+} from '@cat-factory/contracts'
 import type {
   AccountRiskPolicy,
   AccountRiskPolicyRepository,
@@ -35,6 +39,8 @@ function rowToPolicy(row: AccountRiskPolicyRow): AccountRiskPolicy {
       row.max_requirement_concern_allowed as AccountRiskPolicy['maxRequirementConcernAllowed'],
     maxTesterQualityIterations: row.max_tester_quality_iterations,
     companionMaxReworks: row.companion_max_reworks,
+    postImplementationReviewEffort:
+      row.post_implementation_review_effort as AccountRiskPolicy['postImplementationReviewEffort'],
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
@@ -58,6 +64,10 @@ function rowToPolicy(row: AccountRiskPolicyRow): AccountRiskPolicy {
       : {},
     autonomy: row.autonomy === 'unattended' ? 'unattended' : 'attended',
     minAutoAnswerConfidence: row.min_auto_answer_confidence,
+    requirementFindingFloor: parseRequirementFindingFloor(row.requirement_finding_floor),
+    requirementFloorProgression: parseRequirementFloorProgression(
+      row.requirement_floor_progression,
+    ),
     ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
   }
@@ -130,6 +140,7 @@ export class DrizzleAccountRiskPolicyRepository implements AccountRiskPolicyRepo
       max_requirement_concern_allowed: policy.maxRequirementConcernAllowed,
       max_tester_quality_iterations: policy.maxTesterQualityIterations,
       companion_max_reworks: policy.companionMaxReworks,
+      post_implementation_review_effort: policy.postImplementationReviewEffort,
       release_watch_window_minutes: policy.releaseWatchWindowMinutes,
       release_max_attempts: policy.releaseMaxAttempts,
       human_review_grace_minutes: policy.humanReviewGraceMinutes,
@@ -144,6 +155,10 @@ export class DrizzleAccountRiskPolicyRepository implements AccountRiskPolicyRepo
       version: policy.version ?? null,
       autonomy: policy.autonomy,
       min_auto_answer_confidence: policy.minAutoAnswerConfidence,
+      requirement_finding_floor: policy.requirementFindingFloor,
+      requirement_floor_progression: policy.requirementFloorProgression
+        ? JSON.stringify(policy.requirementFloorProgression)
+        : null,
       created_at: policy.createdAt,
     }
     await this.db
@@ -164,6 +179,7 @@ export class DrizzleAccountRiskPolicyRepository implements AccountRiskPolicyRepo
           max_requirement_concern_allowed: values.max_requirement_concern_allowed,
           max_tester_quality_iterations: values.max_tester_quality_iterations,
           companion_max_reworks: values.companion_max_reworks,
+          post_implementation_review_effort: values.post_implementation_review_effort,
           release_watch_window_minutes: values.release_watch_window_minutes,
           release_max_attempts: values.release_max_attempts,
           human_review_grace_minutes: values.human_review_grace_minutes,
@@ -178,6 +194,8 @@ export class DrizzleAccountRiskPolicyRepository implements AccountRiskPolicyRepo
           version: values.version,
           autonomy: values.autonomy,
           min_auto_answer_confidence: values.min_auto_answer_confidence,
+          requirement_finding_floor: values.requirement_finding_floor,
+          requirement_floor_progression: values.requirement_floor_progression,
         },
       })
   }

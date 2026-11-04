@@ -1886,6 +1886,7 @@ there rather than left as an empty list:
 | `unclassified_gate`      | A gate **this deployment registered itself**                                                                                                                                                                                            | Whether its poll ever ends is declared where the gate was built and is unreadable at request time. Its answer lives wherever the deployment surfaced it.                                       |
 | `unwired_interview_gate` | An interviewer registered as an agent kind with no controller wired                                                                                                                                                                     | An operator's fix, not a caller's: the questions are readable from no surface until the deployment wires it.                                                                                   |
 | `curation_gate`          | A step that CURATES parked so a person can mark what it found is worth acting on, and marking has no route here. Both SHIPPED curating kinds are answerable (`pr-review`, `bug-fishing`), so this is now a kind a DEPLOYMENT registered | The marking lives wherever that deployment surfaced it. The step's approval gate can be resolved from here, but that ENDS the run with everything it found unacted on: an exit, not an answer. |
+| `credential_lapsed`      | The run's personal subscription credential lapsed before a step could dispatch, so that step parked                                                                                                                                     | Only the run's initiator can answer it, by entering their personal password on the run in the app, which renews the credential and resumes the step.                                           |
 
 Each entry carries `stepKind` and `stepIndex` (line them up with `publicRun.steps`) plus a prose
 `detail`. It is deliberately **not** gated on `parked`: an unbounded wait gate keeps the run
@@ -2188,14 +2189,14 @@ model-authored: treat it as data, never as markup.
 
 Then curate, with one call per decision you make:
 
-| You want to                   | Call                                                                                                                                                           |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Drop a finding entirely       | `POST …/pr-review/findings/:findingId/dismiss`; the run stays parked                                                                                           |
-| Push back on one              | `POST …/pr-review/findings/:findingId/challenge` with an optional `question`; poll for the `challenge` verdict (`upheld` / `amended` / `retracted` / `failed`) |
-| Post the keepers inline       | `POST …/pr-review/resolve` with `{"action":"post","findingIds":[…]}`                                                                                           |
-| Hand them to a fixer instead  | `…/resolve` with `{"action":"fix","findingIds":[…]}`; commits onto the PR's own branch, opens no new PR                                                        |
-| Record the selection and stop | `…/resolve` with `{"action":"finish"}`; no side effect on the PR                                                                                               |
-| Nudge a wedged review         | `POST …/pr-review/resume`, valid only while `reviewing`, and bounded (see below)                                                                               |
+| You want to                   | Call                                                                                                                                                                                            |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Drop a finding entirely       | `POST …/pr-review/findings/:findingId/dismiss`; the run stays parked                                                                                                                            |
+| Push back on one              | `POST …/pr-review/findings/:findingId/challenge` with an optional `question`; poll for the `challenge` verdict (`queued` / `investigating`, then `upheld` / `amended` / `retracted` / `failed`) |
+| Post the keepers inline       | `POST …/pr-review/resolve` with `{"action":"post","findingIds":[…]}`                                                                                                                            |
+| Hand them to a fixer instead  | `…/resolve` with `{"action":"fix","findingIds":[…]}`; commits onto the PR's own branch, opens no new PR                                                                                         |
+| Record the selection and stop | `…/resolve` with `{"action":"finish"}`; no side effect on the PR                                                                                                                                |
+| Nudge a wedged review         | `POST …/pr-review/resume`, valid only while `reviewing`, and bounded (see below)                                                                                                                |
 
 Dismissing is not required before posting: `post` acts on the `findingIds` you name and nothing
 else, so dismissing is for pruning what you render, and the selection is for what lands. A

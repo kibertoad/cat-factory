@@ -11,8 +11,9 @@
 // line would otherwise put them out of reach of anyone driving the list from the keyboard,
 // who never fires a `mouseenter` — the thresholds are the whole point of the pane, so they
 // cannot be pointer-only.
-import { computed, ref } from 'vue'
+import { computed, ref, useTemplateRef } from 'vue'
 import type { RiskPolicy } from '~/types/merge'
+import MasterDetailPanel from '~/components/common/MasterDetailPanel.vue'
 import RiskPolicyPreview from '~/components/riskPolicy/RiskPolicyPreview.vue'
 import {
   refusedRiskPolicySelections,
@@ -104,7 +105,7 @@ function onPanelFocusOut(event: FocusEvent) {
   activeId.value = undefined
 }
 
-const panel = ref<HTMLElement | null>(null)
+const panel = useTemplateRef<InstanceType<typeof MasterDetailPanel>>('panel')
 
 /**
  * Opening moves focus into the list, and a focused row drives the preview. Left to the popover,
@@ -113,7 +114,7 @@ const panel = ref<HTMLElement | null>(null)
  * only when that row is not in the list.
  */
 function focusSelected(event: Event) {
-  const row = panel.value?.querySelector<HTMLElement>(
+  const row = panel.value?.root?.querySelector<HTMLElement>(
     `[data-option-id="${CSS.escape(props.modelValue)}"]`,
   )
   if (!row) return
@@ -148,15 +149,16 @@ function choose(id: string) {
     </slot>
 
     <template #content>
-      <div
-        class="flex max-h-[24rem] w-[min(40rem,94vw)]"
+      <MasterDetailPanel
         ref="panel"
+        height="24rem"
+        width="40rem"
         data-testid="risk-policy-picker-panel"
         @mouseleave="activeId = undefined"
         @focusout="onPanelFocusOut"
       >
-        <!-- left: selectable options, NAME ONLY -->
-        <ul class="w-1/2 shrink-0 overflow-y-auto border-e border-default p-1">
+        <!-- options by NAME ONLY; the thresholds live in the detail pane -->
+        <template #options>
           <li>
             <UButton
               color="neutral"
@@ -215,10 +217,9 @@ function choose(id: string) {
               />
             </UButton>
           </li>
-        </ul>
+        </template>
 
-        <!-- right: what the active (or selected) policy actually does -->
-        <div class="w-1/2 overflow-y-auto p-3">
+        <template #detail>
           <template v-if="preview.policy">
             <p
               v-if="previewRefusal"
@@ -235,8 +236,8 @@ function choose(id: string) {
           <div v-else class="text-xs leading-snug text-dimmed">
             {{ t('riskPolicy.picker.noneHint') }}
           </div>
-        </div>
-      </div>
+        </template>
+      </MasterDetailPanel>
     </template>
   </UPopover>
 </template>

@@ -1,5 +1,53 @@
 # @cat-factory/sdk
 
+## 0.68.0
+
+### Minor Changes
+
+- 71dd42a: A run whose personal subscription credential lapses now parks instead of failing.
+  
+  - When a step's dispatch cannot lease the run's personal-subscription activation (it expired, typically because a requirements review or another park ran past its 12h lifetime), the step parks on a credential wait (`PipelineStep.credentialWait`) and the run goes `blocked`. The run panel and the step detail show a notice whose button rides the cached personal password, or prompts for it, re-mints the activation through `POST /executions/:executionId/credential/resume`, and re-dispatches the same step.
+  - The engine recognises the refused lease in one place, around every call that can dispatch a step, so it covers every path that advances a run. The approve, request-changes, resolve-decision and resolve-exceeded routes no longer re-mint the activation themselves, and the SPA no longer sends the personal password on those calls.
+  - Public API: `credential_lapsed` joins the unanswerable-wait reasons a run's decision list reports (OpenAPI 1.93.0, SDKs regenerated). `credential_wait_not_parked` joins the conflict reasons.
+
+## 0.67.0
+
+### Minor Changes
+
+- 0883cfa: A requirements re-review is held to a bar: a new finding must be `high`, or follow up on an answer the previous round gave. The reviewer's user prompt lists that round's answers (each under a ref such as `A1`) and dismissals and asks for a `followsUp` citation (`requirement-review` prompt v8). The engine resolves each citation against the refs it handed out, drops what clears neither half, and records the count as `findingFloor.followUpSuppressed`. A kept follow-up carries the answered finding's title as `followsUpOn`, which the review window shows. Clarity and brainstorm re-reviews are unchanged.
+  
+  `incorporate` takes an optional `after`: `rereview` (the default, unchanged) or `proceed`, which folds the answers in and settles the review on the result with no reviewer pass, advancing the run. The review window replaces "Incorporate answers" with "Incorporate and re-review" and "Incorporate and proceed". The three `/api/v1` incorporate decisions accept the same field, `PublicRequirementsFindingFloor` gains `followUpSuppressed`, and `PublicReviewFinding` gains `followsUpOn`: the OpenAPI surface is 1.93.0, and the SDKs are regenerated.
+
+## 0.66.0
+
+### Minor Changes
+
+- 534264e: Review effort levels and a challenge queue for the PR deep review.
+  
+  - A review task takes an effort level (`low`, `medium`, `high`, `xhigh`, `max`; `high` by default) on `taskTypeFields.reviewEffort`. A risk policy carries `postImplementationReviewEffort` (default `high`) for the post-implementation reviewer. The level sets the findings cap, whether unconfirmed findings are reported, whether each finding gets a verification pass, and the pr-reviewer's slice fan-out. The default `high` now runs a verification pass, so a default review spends more than before.
+  - Challenged findings queue: at most three investigators run at once, the rest read `queued`, and selection stays editable while they run. Resolve and dismiss wait for the queue to drain. Public API: `queued` joins the PR review finding challenge status (OpenAPI 1.92.0, SDKs regenerated).
+  - Internal break: the step field `pendingChallenge` is replaced by `challengeJobs`. A challenge in flight on an existing run when this deploys is dropped: the review returns to awaiting selection with that finding still marked `investigating`, so it cannot be challenged again, while the rest of the review resolves normally.
+
+## 0.65.0
+
+### Minor Changes
+
+- 69f364e: A risk policy now sets how verbose a requirements review is. `requirementFindingFloor` is the lowest severity the reviewer raises (`high`, `medium` or `low`). It defaults to `medium`, so `low` findings are no longer raised on existing policies either. `requirementFloorProgression` (null by default) moves that floor with the task estimate. Below `mediumFrom` only `high` is raised, from `mediumFrom` `high` and `medium`, and from `lowFrom` everything, read against the highest of the estimate's complexity, risk and impact. With no estimate on the task, the fixed floor applies. The reviewer prompt names the floor (`requirement-review` prompt v7), the engine drops anything returned below it, and each pass records the floor, where it came from and how many findings it dropped on `RequirementReview.findingFloor`. The review window shows that record, and the risk-policy editor gains the controls.
+  
+  `reviewItemSeveritySchema` moves to the new `requirement-finding-floor` module of `@cat-factory/contracts` and is still exported from the package root. Migration: D1 `0112_requirement_finding_floor`, plus a Drizzle migration on Node, adds `requirement_finding_floor` and `requirement_floor_progression` to `merge_threshold_presets` and `account_risk_policies`, and `finding_floor` to `requirement_reviews`.
+  
+  A requirements decision read through `/api/v1` carries the same record as `findingFloor` (`PublicRequirementsFindingFloor`, null on a review recorded without one), so a headless caller can tell a filtered review from one that found little: the OpenAPI surface is 1.91.0, and the SDKs are regenerated.
+
+## 0.64.0
+
+### Minor Changes
+
+- dbbcfd9: Images can be attached to a task as context, when creating it or later from the inspector (up to six per task). They are stored as `context` artifacts in the account's binary-artifact storage, at the workspace that homes the task (so a task under a shared service keeps one set whichever board attached them), kept for as long as the task exists, moved with it when it is dragged into a service homed elsewhere, and removed with it. The retention sweep reclaims any whose task no longer exists. Only a task takes images: an upload naming another block is refused with `task_image_block_not_task`.
+  
+  The agents that work on the task are shown them as real image input wherever their model path accepts images: an inline step attaches them to its model request, the requirements, clarity and brainstorm reviewers do the same, and a container step on an image-capable CLI gets them as files under `.cat-context/task-images/`. Where a step cannot carry an image (a text-only model, an undeclared model, a Pi or Codex container, the ambient text-only inline path, a consensus panel or a delegated executor) its prompt names the images and states why they were withheld.
+  
+  `GET /api/v1/runs/{runId}/artifacts` can now list a `context` artifact (task-scoped) beside screenshots, references and assets: the OpenAPI surface is 1.90.0. The executor image is 1.164.0, which parses the new `taskImages` job field and reports it on the capability handshake.
+
 ## 0.63.1
 
 ### Patch Changes

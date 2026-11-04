@@ -19,11 +19,6 @@ import type {
   NotificationWebhookPutOutcome,
   NotificationWebhookRecord,
   NotificationWebhookRepository,
-  ReviewQuestionPostClaimWindow,
-  ReviewQuestionPostKey,
-  ReviewQuestionPostRecord,
-  ReviewQuestionPostRepository,
-  ReviewQuestionPostStatus,
   TaskSourceKind,
   TaskTypeSuppressionRepository,
   TrackerCommentIngestClaimWindow,
@@ -60,7 +55,6 @@ import {
   localSettings,
   modelPresets,
   notificationWebhooks,
-  reviewQuestionPosts,
   taskTypeSuppressions,
   trackerCommentIngests,
   trackerSettings,
@@ -337,6 +331,7 @@ const TRACKER_COLUMNS: Record<
   writebackCommentOnPrOpen: 'writeback_comment_on_pr_open',
   writebackResolveOnMerge: 'writeback_resolve_on_merge',
   writebackQuestionsOnPark: 'writeback_questions_on_park',
+  writebackRequirementsToDescription: 'writeback_requirements_to_description',
 }
 
 const TRACKER_FIELDS = Object.keys(TRACKER_COLUMNS) as (keyof Required<TrackerSettingsPatch>)[]
@@ -348,6 +343,7 @@ type TrackerRow = {
   writeback_comment_on_pr_open: number
   writeback_resolve_on_merge: number
   writeback_questions_on_park: number
+  writeback_requirements_to_description: number
   updated_at: number
 }
 
@@ -359,6 +355,7 @@ function toTrackerSettings(row: TrackerRow): TrackerSettings {
     writebackCommentOnPrOpen: row.writeback_comment_on_pr_open === 1,
     writebackResolveOnMerge: row.writeback_resolve_on_merge === 1,
     writebackQuestionsOnPark: row.writeback_questions_on_park === 1,
+    writebackRequirementsToDescription: row.writeback_requirements_to_description === 1,
     updatedAt: row.updated_at,
   }
 }
@@ -396,6 +393,7 @@ export class DrizzleTrackerSettingsRepository implements TrackerSettingsReposito
       writeback_comment_on_pr_open: inserted.writebackCommentOnPrOpen ? 1 : 0,
       writeback_resolve_on_merge: inserted.writebackResolveOnMerge ? 1 : 0,
       writeback_questions_on_park: inserted.writebackQuestionsOnPark ? 1 : 0,
+      writeback_requirements_to_description: inserted.writebackRequirementsToDescription ? 1 : 0,
       updated_at: updatedAt,
     }
     // The conflict branch touches only what the patch NAMED, reading each value back off the row
@@ -808,105 +806,11 @@ export class DrizzleLocalSettingsRepository implements LocalSettingsRepository {
 }
 
 /**
- * Idempotency markers for the headless clarification loop's question writeback — one row per
- * `(workspace, review, iteration, linked issue)` in `review_question_posts` (mirror of the D1
- * `D1ReviewQuestionPostRepository`).
- *
- * {@link claim} is a single atomic statement on purpose: an insert that, on conflict, only
- * updates a row already marked `failed` (or a `pending` one abandoned by a poster that died
- * mid-post), with `RETURNING` reporting whether either half fired. A read-then-write would let
- * two concurrent driver replays both decide to post.
- */
-export class DrizzleReviewQuestionPostRepository implements ReviewQuestionPostRepository {
-  constructor(private readonly db: DrizzleDb) {}
-
-  private where(key: ReviewQuestionPostKey) {
-    return and(
-      eq(reviewQuestionPosts.workspace_id, key.workspaceId),
-      eq(reviewQuestionPosts.review_id, key.reviewId),
-      eq(reviewQuestionPosts.iteration, key.iteration),
-      eq(reviewQuestionPosts.issue_ref, key.issueRef),
-    )
-  }
-
-  async claim(key: ReviewQuestionPostKey, window: ReviewQuestionPostClaimWindow): Promise<boolean> {
-    const claimed = await this.db
-      .insert(reviewQuestionPosts)
-      .values({
-        workspace_id: key.workspaceId,
-        review_id: key.reviewId,
-        iteration: key.iteration,
-        issue_ref: key.issueRef,
-        status: 'pending',
-        attempts: 1,
-        error: null,
-        updated_at: window.now,
-      })
-      .onConflictDoUpdate({
-        target: [
-          reviewQuestionPosts.workspace_id,
-          reviewQuestionPosts.review_id,
-          reviewQuestionPosts.iteration,
-          reviewQuestionPosts.issue_ref,
-        ],
-        set: {
-          status: 'pending',
-          attempts: sql`${reviewQuestionPosts.attempts} + 1`,
-          error: null,
-          updated_at: window.now,
-        },
-        // `failed` retries a tracker outage; an old `pending` takes over from a poster that
-        // died mid-post (see REVIEW_QUESTION_POST_CLAIM_TTL_MS). A fresh `pending` is a post
-        // still in flight and must NOT be stolen.
-        setWhere: or(
-          eq(reviewQuestionPosts.status, 'failed'),
-          and(
-            eq(reviewQuestionPosts.status, 'pending'),
-            lte(reviewQuestionPosts.updated_at, window.reclaimPendingBefore),
-          ),
-        ),
-      })
-      .returning({ issueRef: reviewQuestionPosts.issue_ref })
-    return claimed.length > 0
-  }
-
-  async settle(
-    key: ReviewQuestionPostKey,
-    outcome: { status: 'posted' } | { status: 'failed'; error: string },
-    now: number,
-  ): Promise<void> {
-    await this.db
-      .update(reviewQuestionPosts)
-      .set({
-        status: outcome.status,
-        error: outcome.status === 'failed' ? outcome.error : null,
-        updated_at: now,
-      })
-      .where(this.where(key))
-  }
-
-  async get(key: ReviewQuestionPostKey): Promise<ReviewQuestionPostRecord | null> {
-    const [row] = await this.db.select().from(reviewQuestionPosts).where(this.where(key)).limit(1)
-    if (!row) return null
-    return {
-      workspaceId: row.workspace_id,
-      reviewId: row.review_id,
-      iteration: row.iteration,
-      issueRef: row.issue_ref,
-      status: row.status as ReviewQuestionPostStatus,
-      attempts: row.attempts,
-      error: row.error,
-      updatedAt: row.updated_at,
-    }
-  }
-}
-
-/**
  * Idempotency markers for INBOUND tracker comments — one row per
  * `(workspace, source, externalId, commentId)` in `tracker_comment_ingests` (mirror of the D1
  * `D1TrackerCommentIngestRepository`).
  *
- * Same atomic-claim shape as {@link DrizzleReviewQuestionPostRepository} above, for the same
+ * Same atomic-claim shape as `DrizzleWritebackPostRepository`, for the same
  * reason: a read-then-write would let two concurrent deliveries of one comment both decide to
  * apply it, and each apply answers a finding a human is reading.
  */

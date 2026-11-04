@@ -53,7 +53,6 @@ import {
 } from '../src/repositories/notifications.js'
 import {
   DrizzleNotificationWebhookRepository,
-  DrizzleReviewQuestionPostRepository,
   DrizzleTrackerCommentIngestRepository,
 } from '../src/repositories/drizzle/settings.js'
 import {
@@ -447,6 +446,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     deleteOlderThan: 'sweeper',
     listByWorkspace: 'sweeper',
     deleteByWorkspace: 'sweeper',
+    listBlockAnchorsOlderThan: 'sweeper',
     documentScope: 'helper',
     agedScope: 'helper',
   },
@@ -712,15 +712,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   taskSourceSettingsRepository: {
     rowToRecord: 'helper',
   },
-  // The tracker writeback's idempotency marker for a parked review's question comments. The ENGINE
-  // writes it, so a mothership-mode node genuinely reaches it (unlike its ingest sibling below), and
-  // `claim`/`settle`/`get` are now allow-listed on the `workspaceField` rule (the marker key carries
-  // its own `workspaceId`). Until then a claim answered `unknown_method`, which the caller's
-  // deliberate fallback reads as "someone else holds the claim" — so every parked review on a local
-  // run skipped its ticket comment and only a `warn` said so. `where` is a private row predicate.
-  reviewQuestionPostRepository: {
-    where: 'helper',
-  },
+  // The tracker writeback's exactly-once marker (parked-review question comments). A mothership-mode node genuinely reaches it (unlike its ingest
+  // sibling below), so `claim`/`settle`/`get` are allow-listed on the `workspaceField` rule (the
+  // marker key carries its own `workspaceId`).
+  writebackPostRepository: {},
   // The INBOUND half of the same idea: dedupe for tracker comments arriving by webhook. It rides
   // `'inbound'` rather than `'pending'` because there is nothing to complete — a delivery reaches
   // the deployment holding the public URL, which is the mothership, and a laptop that receives no
@@ -883,7 +878,6 @@ function reflectAllRepositories(): Record<string, string[]> {
     taskRepository: DrizzleTaskRepository,
     taskConnectionRepository: DrizzleTaskConnectionRepository,
     taskSourceSettingsRepository: DrizzleTaskSourceSettingsRepository,
-    reviewQuestionPostRepository: DrizzleReviewQuestionPostRepository,
     trackerCommentIngestRepository: DrizzleTrackerCommentIngestRepository,
     providerApiKeyRepository: DrizzleProviderApiKeyRepository,
     providerModelCatalogRepository: DrizzleProviderModelCatalogRepository,

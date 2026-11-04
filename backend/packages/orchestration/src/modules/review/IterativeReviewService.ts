@@ -1,10 +1,17 @@
 import { generateText } from 'ai'
+import {
+  clearsRequirementFindingFloor,
+  type RequirementFindingFloorPolicy,
+  type RequirementFindingFloorRecord,
+  resolveRequirementFindingFloor,
+} from '@cat-factory/contracts'
 import type {
   ResolveBlockRunContext,
   Block,
   BlockRepository,
   Clock,
   IdGenerator,
+  Logger,
   ModelProvider,
   ModelProviderResolver,
   ModelRef,
@@ -13,6 +20,8 @@ import type {
   RequirementConcernLevel,
   RequirementReviewItem,
   RequirementReviewStatus,
+  ResolveBinaryArtifactStore,
+  ReviewItemSeverity,
   ReviewItemStatus,
 } from '@cat-factory/kernel'
 import {
@@ -34,12 +43,19 @@ import {
 
 import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
+import { reviewRequestWithTaskImages } from './reviewTaskImages.js'
 import {
   type ReviewDisposition,
   coerceReviewItems,
   disposeReview,
   extractJson,
 } from '../requirements/requirements.logic.js'
+import {
+  type PriorRound,
+  applyFollowUpBar,
+  followUpRefs,
+  priorRoundOf,
+} from './follow-up-bar.logic.js'
 
 // ---------------------------------------------------------------------------
 // The iterative-review engine, shared by the requirements-review and
@@ -67,6 +83,8 @@ export interface ReviewCommon {
   maxIterations: number
   /** Optimistic-concurrency token; see the contracts' `rev`. A fresh review starts at 0. */
   rev: number
+  /** The severity floor the latest pass raised against; absent on a kind that is given none. */
+  findingFloor?: RequirementFindingFloorRecord | null
   createdAt: number
   updatedAt: number
 }
@@ -130,6 +148,13 @@ export interface IterativeReviewDeps {
    * absent in tests/conformance → workspace-only scope (pooled lease only), unchanged.
    */
   resolveRunContext?: ResolveBlockRunContext
+  /**
+   * The account's artifact store, for the images attached to the task under review: the reviewer
+   * and the rework call carry them as image input. Absent ⇒ text only, as before.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /** Where a failed attached-image read reports itself. Absent ⇒ `noopLogger`. */
+  logger?: Logger
   /** Raises a notification when a review yields findings. Optional. */
   notificationService?: NotificationService
   /**
@@ -145,6 +170,41 @@ export interface IterativeReviewDeps {
     workspaceId: string,
     agentKind: string,
   ) => Promise<string | undefined>
+}
+
+/** The per-pass knobs a review kind's gate hands the reviewer. */
+export interface ReviewPassOptions {
+  maxIterations?: number
+  concernThreshold?: RequirementConcernLevel
+  /** The lowest severity to raise. Absent ⇒ the pass raises whatever the reviewer returns. */
+  findingFloor?: RequirementFindingFloorPolicy
+}
+
+type ResolvedFloor = Omit<RequirementFindingFloorRecord, 'suppressed'>
+
+/** The floor that drops nothing: `low` keeps every severity and states nothing in the prompt. */
+const RAISE_EVERY_SEVERITY: ResolvedFloor = { severity: 'low', basis: 'fixed', score: null }
+
+/** Resolve a pass's floor against the estimate the block carries when the pass starts. */
+function resolveFloor(
+  policy: RequirementFindingFloorPolicy | undefined,
+  block: Block,
+): ResolvedFloor | null {
+  return policy ? resolveRequirementFindingFloor(policy, block.estimate) : null
+}
+
+/**
+ * Drop what the reviewer returned below the floor, and count it. The prompt already names the
+ * floor, so this only catches a model that ignored it; the count makes a quiet review readable as
+ * a filtered one rather than a clean one.
+ */
+function applyFindingFloor(
+  items: RequirementReviewItem[],
+  floor: ResolvedFloor | null,
+): { items: RequirementReviewItem[]; record: RequirementFindingFloorRecord | null } {
+  if (!floor) return { items, record: null }
+  const kept = items.filter((item) => clearsRequirementFindingFloor(item.severity, floor.severity))
+  return { items: kept, record: { ...floor, suppressed: items.length - kept.length } }
 }
 
 /** Output budget for the rework generation (a full standard-format document). */
@@ -222,10 +282,16 @@ export abstract class IterativeReviewService<
     block: Block,
     input: TContextInput,
   ): Promise<TContext>
-  protected abstract buildReviewPrompt(ctx: TContext): string
+  /** `floor` is the lowest severity this pass raises, or null when the kind was given none. */
+  protected abstract buildReviewPrompt(ctx: TContext, floor: ReviewItemSeverity | null): string
   protected abstract buildReworkPrompt(ctx: TContext, items: RequirementReviewItem[]): string
   /** Apply a prior incorporated document to the context (a re-review / redo base). */
   protected abstract applyIncorporatedDoc(ctx: TContext, doc: string): void
+  /**
+   * Hand a re-review the round it follows. A kind that implements this holds its re-reviews to the
+   * follow-up bar (`follow-up-bar.logic.ts`); one that does not re-reviews with no such bar.
+   */
+  protected applyPriorRound?(ctx: TContext, round: PriorRound): void
   /** Apply the human's freeform "do it differently" feedback to the context. */
   protected abstract applyFeedback(ctx: TContext, feedback: string): void
   /** Read the kind-specific document field off a review. */
@@ -256,13 +322,7 @@ export abstract class IterativeReviewService<
   async review(
     workspaceId: string,
     blockId: string,
-    opts: {
-      maxIterations?: number
-      concernThreshold?: RequirementConcernLevel
-    } & TContextInput = {} as {
-      maxIterations?: number
-      concernThreshold?: RequirementConcernLevel
-    } & TContextInput,
+    opts: ReviewPassOptions & TContextInput = {} as ReviewPassOptions & TContextInput,
   ): Promise<TReview> {
     const block = assertFound(
       await this.deps.blockRepository.get(workspaceId, blockId),
@@ -272,11 +332,16 @@ export abstract class IterativeReviewService<
     const maxIterations = opts.maxIterations ?? DEFAULT_MAX_REQUIREMENT_ITERATIONS
     const concernThreshold = opts.concernThreshold ?? 'none'
     const context = await this.gatherContext(workspaceId, block, opts)
-    const { ref, items } = await this.runReviewer(workspaceId, block, context)
-    return this.persistInitialReview(workspaceId, block, items, `${ref.provider}:${ref.model}`, {
-      maxIterations,
-      concernThreshold,
-    })
+    const floor = resolveFloor(opts.findingFloor, block)
+    const { ref, items } = await this.runReviewer(workspaceId, block, context, floor)
+    const raised = applyFindingFloor(items, floor)
+    return this.persistInitialReview(
+      workspaceId,
+      block,
+      raised.items,
+      `${ref.provider}:${ref.model}`,
+      { maxIterations, concernThreshold, findingFloor: raised.record },
+    )
   }
 
   /**
@@ -292,7 +357,11 @@ export abstract class IterativeReviewService<
     block: Block,
     items: RequirementReviewItem[],
     model: string | null,
-    opts: { maxIterations: number; concernThreshold: RequirementConcernLevel },
+    opts: {
+      maxIterations: number
+      concernThreshold: RequirementConcernLevel
+      findingFloor?: RequirementFindingFloorRecord | null
+    },
   ): Promise<TReview> {
     const now = this.deps.clock.now()
     const disposition = disposeReview(items, {
@@ -310,6 +379,7 @@ export abstract class IterativeReviewService<
       maxIterations: opts.maxIterations,
       // A fresh review; the store re-stamps this on insert.
       rev: 0,
+      findingFloor: opts.findingFloor ?? null,
       createdAt: now,
       updatedAt: now,
     })
@@ -332,7 +402,7 @@ export abstract class IterativeReviewService<
   async reReview(
     workspaceId: string,
     reviewId: string,
-    opts: { concernThreshold?: RequirementConcernLevel } = {},
+    opts: Omit<ReviewPassOptions, 'maxIterations'> = {},
   ): Promise<TReview> {
     const review = await this.load(workspaceId, reviewId)
     const block = assertFound(
@@ -344,7 +414,20 @@ export abstract class IterativeReviewService<
     const context = await this.gatherContext(workspaceId, block, {} as TContextInput)
     const doc = this.readDoc(review)
     if (doc) this.applyIncorporatedDoc(context, doc)
-    const { ref, items } = await this.runReviewer(workspaceId, block, context)
+    // The round this pass replaces is the one it may follow up on.
+    const round = this.applyPriorRound ? priorRoundOf(review.items) : null
+    if (round) this.applyPriorRound?.(context, round)
+    // A barred pass always records what it dropped, so with no policy it records the floor that
+    // keeps every severity rather than no record at all.
+    const floor = resolveFloor(opts.findingFloor, block) ?? (round ? RAISE_EVERY_SEVERITY : null)
+    const reviewed = await this.runReviewer(workspaceId, block, context, floor, round)
+    const { ref } = reviewed
+    const raised = applyFindingFloor(reviewed.items, floor)
+    const barred = applyFollowUpBar(raised.items, round)
+    const items = barred.items
+    const findingFloor = raised.record
+      ? { ...raised.record, followUpSuppressed: barred.suppressed }
+      : null
     // The reviewer call is slow, so the snapshot loaded above is stale by the time it returns
     // (a human can grant an extra round, or answer an item that this pass is about to replace).
     // Re-derive the counters from the FRESH review under CAS rather than writing the pre-call
@@ -360,6 +443,7 @@ export abstract class IterativeReviewService<
         model: `${ref.provider}:${ref.model}`,
         iteration,
         maxIterations,
+        findingFloor,
       })
     })
     // Re-derived from what was actually PERSISTED, not smuggled out of the mutation on a closure
@@ -440,7 +524,13 @@ export abstract class IterativeReviewService<
       const result = await generateText({
         model,
         system: await this.systemPromptFor(workspaceId, this.reworkAgentKind, this.reworkPrompt),
-        prompt: this.buildReworkPrompt(context, review.items),
+        ...(await reviewRequestWithTaskImages(
+          this.deps,
+          workspaceId,
+          block,
+          ref,
+          this.buildReworkPrompt(context, review.items),
+        )),
         temperature: 0.2,
         // The reworked doc is a full standard-format document that becomes the SOLE source of
         // truth fed to every downstream agent step; a generous budget keeps a real spec from
@@ -596,6 +686,8 @@ export abstract class IterativeReviewService<
     workspaceId: string,
     block: Block,
     context: TContext,
+    floor: ResolvedFloor | null,
+    round: PriorRound | null = null,
   ): Promise<{ ref: ModelRef; items: RequirementReviewItem[] }> {
     const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
     let text: string
@@ -604,7 +696,13 @@ export abstract class IterativeReviewService<
       const result = await generateText({
         model,
         system: await this.systemPromptFor(workspaceId, this.reviewAgentKind, this.reviewPrompt),
-        prompt: this.buildReviewPrompt(context),
+        ...(await reviewRequestWithTaskImages(
+          this.deps,
+          workspaceId,
+          block,
+          ref,
+          this.buildReviewPrompt(context, floor?.severity ?? null),
+        )),
         temperature: 0.2,
         maxOutputTokens: 5000,
         providerOptions: catFactoryObservability({ agentKind: this.reviewAgentKind, workspaceId }),
@@ -618,6 +716,7 @@ export abstract class IterativeReviewService<
       extractJson(text),
       () => this.deps.idGenerator.next(this.itemIdPrefix),
       now,
+      round ? followUpRefs(round) : undefined,
     )
     return { ref, items }
   }

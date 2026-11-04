@@ -10,10 +10,14 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicIncorporate} wire model.
+ * @param after May be absent entirely.
  * @param feedback May be absent entirely. Length 0..4000.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicIncorporate(
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("after") @Nullable PublicIncorporateAfter after,
+
     /** May be absent entirely. Length 0..4000. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("feedback") @Nullable String feedback
 ) {
@@ -30,7 +34,14 @@ public record PublicIncorporate(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable PublicIncorporateAfter after;
         private @Nullable String feedback;
+
+        /** Set {@code after}. */
+        public Builder after(@Nullable PublicIncorporateAfter after) {
+            this.after = after;
+            return this;
+        }
 
         /** Set {@code feedback}. */
         public Builder feedback(@Nullable String feedback) {
@@ -40,7 +51,7 @@ public record PublicIncorporate(
 
         /** Build the {@link PublicIncorporate}. */
         public PublicIncorporate build() {
-            return new PublicIncorporate(feedback);
+            return new PublicIncorporate(after, feedback);
         }
     }
 }

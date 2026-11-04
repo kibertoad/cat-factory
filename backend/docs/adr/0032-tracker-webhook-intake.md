@@ -185,7 +185,7 @@ CAS/approval-id arbitration and the task's preset knobs apply identically. **The
 parallel mutation path into the engine.**
 
 Idempotency is a `tracker_comment_ingests` claim per `(workspace, source, externalId, commentId)`,
-taken BEFORE anything is applied, copied verbatim from the `review_question_posts` design:
+taken BEFORE anything is applied, copied from the question-post marker's design (`writeback_posts`, kind `review_questions`):
 including its answer to "what if the claimer dies" (a `failed` row is re-claimable; a `pending` one
 is re-claimable once older than `TRACKER_COMMENT_INGEST_CLAIM_TTL_MS`).
 
@@ -372,7 +372,7 @@ third mode cannot inherit a fail-open rule written for someone else's cost model
   comment paths, like the question comment before it. Worth a Jira-ADF variant only if a reader
   complains.
 - **A `pending` ingest claim is not swept.** It self-heals on the next delivery once abandoned,
-  which is the same guarantee `review_question_posts` gives; a proactive sweeper would be a second
+  which is the same guarantee the question-post marker gives; a proactive sweeper would be a second
   runtime-symmetric cron for a row that costs nothing while it sits.
 
 ## Consequences: the rules a change here must keep
@@ -381,8 +381,8 @@ third mode cannot inherit a fail-open rule written for someone else's cost model
   receivers. Parsing first and verifying the re-serialised body is a classic signature bypass.
 - **Fail closed on an unconfigured secret.** An empty HMAC key lets an attacker forge a signature
   over their own body. The connection with no `webhookSecret` 503s rather than accepting.
-- **A claim-before-apply MUST answer "what if the claimer dies"**: carried verbatim from
-  `review_question_posts`. A `pending` row needs an abandonment window or a killed ingester silences
+- **A claim-before-apply MUST answer "what if the claimer dies"**: carried from the
+  question-post marker (`writeback_posts`). A `pending` row needs an abandonment window or a killed ingester silences
   that comment forever, trading a double-apply for a never-apply (the harder failure to notice).
 - **Commit the state, THEN talk to the tracker.** The reply is applied and settled before the
   follow-up comment is attempted; a failed ack must never roll back an applied answer.

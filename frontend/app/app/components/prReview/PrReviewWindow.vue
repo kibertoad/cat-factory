@@ -58,11 +58,18 @@ const step = computed(() => {
 })
 const state = computed<PrReviewStepState | null>(() => step.value?.prReview ?? null)
 const status = computed(() => state.value?.status ?? null)
+const findings = computed<PrReviewFinding[]>(() => state.value?.findings ?? [])
 const awaiting = computed(() => status.value === 'awaiting_selection')
-// A finding is being re-examined by the Challenge Investigator (the whole review is `challenging`
-// while it runs). The findings stay visible — the challenged one shows a spinner — but the
-// selection controls + per-finding actions are disabled until the verdict lands and it re-parks.
+// One or more challenged findings are queued for, or being re-examined by, the Challenge
+// Investigator (up to three at once). The human keeps curating meanwhile: selection and further
+// challenges stay live, and only the resolutions (finish / post / fix) and dismiss wait for the
+// queue to drain, because they act on findings whose verdicts may still change them.
 const challenging = computed(() => status.value === 'challenging')
+const curating = computed(() => awaiting.value || challenging.value)
+const runningChallenges = computed(
+  () => findings.value.filter((f) => f.challenge?.status === 'investigating').length,
+)
+const queuedChallenges = computed(() => findings.value.filter(isQueued).length)
 // The reviewer's live todo list while it works, streamed onto the step. Its entries are the
 // cohesive slices/chunks the agent grouped the diff into (plus a final "aggregate" step). The
 // derivation of the `reviewing`-phase sub-states from it lives in `~/utils/prReviewProgress`
@@ -110,8 +117,6 @@ function chunkStatusLabel(status: StepSubtaskItem['status']): string {
 // A resolution is executing (the Fixer is committing, or comments are being posted) — show a
 // working state between the human's choice and the run advancing/the stream echoing `done`.
 const working = computed(() => status.value === 'fixing' || status.value === 'posting')
-const findings = computed<PrReviewFinding[]>(() => state.value?.findings ?? [])
-
 // The outcome of the last `post` attempt (null until one runs). A partial/failed post re-parks
 // the review at `awaiting_selection` carrying this, so the human sees what posted / what failed
 // and can retry ONLY the posting rather than re-running the whole review.
@@ -157,6 +162,10 @@ function isRetracted(f: PrReviewFinding): boolean {
 /** A finding currently being re-examined by the Challenge Investigator. */
 function isInvestigating(f: PrReviewFinding): boolean {
   return f.challenge?.status === 'investigating'
+}
+/** A finding whose challenge is waiting for a free investigator slot. */
+function isQueued(f: PrReviewFinding): boolean {
+  return f.challenge?.status === 'queued'
 }
 /** A finding the investigator UPHELD + strengthened after a challenge (its body actually changed). */
 function isAmended(f: PrReviewFinding): boolean {
@@ -206,6 +215,8 @@ function clearAll(): void {
 }
 
 const canResolve = computed(() => awaiting.value && !prReview.resolving)
+// A challenge can be added while the review is parked or while earlier challenges run.
+const canChallenge = computed(() => curating.value && !prReview.resolving)
 // Fix / Post act on the selection, so they need at least one selected finding; Finish always
 // works (it just records the — possibly empty — curated selection and completes the review).
 const hasSelection = computed(() => activeSelectedIds.value.length > 0)
@@ -237,7 +248,8 @@ async function onResume(): Promise<void> {
 }
 
 // Per-finding CHALLENGE: the open finding's id (its inline concern box is showing) + the drafted
-// concern text. Dispatching moves the whole review to `challenging` until the verdict lands.
+// concern text. Submitting queues the finding for an investigator; the review is `challenging`
+// until every queued challenge has its verdict.
 const challengeForId = ref<string | null>(null)
 const challengeText = ref('')
 function openChallenge(id: string): void {
@@ -250,7 +262,7 @@ function cancelChallenge(): void {
 }
 async function submitChallenge(id: string): Promise<void> {
   const inst = instanceId.value
-  if (!inst || !canResolve.value) return
+  if (!inst || !canChallenge.value) return
   const question = challengeText.value.trim()
   // Close the box only once the turn is actually recorded (UX-83): clearing first made a failed
   // dispatch cost the typed concern, and left the guard below with nothing to protect.
@@ -565,18 +577,23 @@ const { requestClose } = useUnsavedGuard({
           />
 
           <template v-else>
-            <!-- A challenge is in flight: the Challenge Investigator is re-examining a finding. -->
+            <!-- Challenges are in flight: how many investigators run, how many wait for a slot. -->
             <div
               v-if="challenging"
               data-testid="pr-review-challenging"
               class="mb-3 flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary"
             >
               <Spinner class="h-4 w-4 shrink-0" />
-              <span>{{ t('prReview.challenge.investigatingBanner') }}</span>
+              <span>{{
+                t('prReview.challenge.queueBanner', {
+                  running: runningChallenges,
+                  queued: queuedChallenges,
+                })
+              }}</span>
             </div>
 
             <!-- Selection toolbar -->
-            <div v-if="awaiting" class="mb-2 flex items-center gap-3 text-2xs text-muted">
+            <div v-if="curating" class="mb-2 flex items-center gap-3 text-2xs text-muted">
               <span data-testid="pr-review-selected-count">
                 {{ t('prReview.selectedCount', { count: activeSelectedIds.length }) }}
               </span>
@@ -610,7 +627,7 @@ const { requestClose } = useUnsavedGuard({
                 data-testid="pr-review-finding"
                 class="mb-1.5 rounded-xl border px-3 py-2 transition"
                 :class="[
-                  awaiting && selected.has(f.id) && !isRetracted(f)
+                  curating && selected.has(f.id) && !isRetracted(f)
                     ? 'border-primary/60 bg-primary/5'
                     : 'border-default bg-default/60',
                   isRetracted(f) ? 'opacity-60' : '',
@@ -618,12 +635,12 @@ const { requestClose } = useUnsavedGuard({
               >
                 <div class="flex items-start gap-2">
                   <UCheckbox
-                    v-if="awaiting || challenging"
+                    v-if="curating"
                     size="xs"
                     class="mt-1"
                     data-testid="pr-review-finding-toggle"
                     :model-value="selected.has(f.id) && !isRetracted(f)"
-                    :disabled="!awaiting || isRetracted(f)"
+                    :disabled="isRetracted(f)"
                     @update:model-value="toggle(f.id)"
                   />
                   <div class="min-w-0 flex-1">
@@ -680,6 +697,14 @@ const { requestClose } = useUnsavedGuard({
                       >
                         <Spinner class="h-3 w-3" />
                         {{ t('prReview.challenge.investigatingBadge') }}
+                      </span>
+                      <span
+                        v-else-if="isQueued(f)"
+                        data-testid="pr-review-finding-queued"
+                        class="flex items-center gap-1 rounded-sm bg-elevated px-1.5 py-0.5 text-3xs font-semibold uppercase text-toned ring-1 ring-default"
+                      >
+                        <UIcon name="i-lucide-clock" class="h-3 w-3" />
+                        {{ t('prReview.challenge.queuedBadge') }}
                       </span>
                       <h4
                         class="min-w-0 flex-1 text-sm font-medium text-app-100"
@@ -745,9 +770,10 @@ const { requestClose } = useUnsavedGuard({
                       <MarkdownProse :text="f.challenge.justification" />
                     </div>
 
-                    <!-- Per-finding actions: Challenge + Dismiss (only while awaiting a selection). -->
+                    <!-- Per-finding actions: Challenge (also while other challenges run) + Dismiss
+                         (only once the review is parked again). -->
                     <div
-                      v-if="awaiting && !isInvestigating(f)"
+                      v-if="curating && !isInvestigating(f) && !isQueued(f)"
                       class="mt-1.5 flex items-center gap-3 text-2xs"
                     >
                       <UButton
@@ -755,7 +781,7 @@ const { requestClose } = useUnsavedGuard({
                         v-if="!isRetracted(f)"
                         data-testid="pr-review-finding-challenge"
                         class="p-0 text-2xs flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
-                        :disabled="!canResolve || !access.canExecuteRuns.value"
+                        :disabled="!canChallenge || !access.canExecuteRuns.value"
                         @click="openChallenge(f.id)"
                       >
                         <UIcon name="i-lucide-gavel" class="h-3.5 w-3.5" />
@@ -766,6 +792,7 @@ const { requestClose } = useUnsavedGuard({
                         }}
                       </UButton>
                       <UButton
+                        v-if="awaiting"
                         color="neutral"
                         variant="link"
                         data-testid="pr-review-finding-dismiss"
@@ -810,7 +837,7 @@ const { requestClose } = useUnsavedGuard({
                           variant="ghost"
                           data-testid="pr-review-challenge-submit"
                           class="rounded-sm bg-primary/80 px-2 py-1 text-2xs font-medium text-inverted hover:bg-primary/90 disabled:opacity-50"
-                          :disabled="!canResolve"
+                          :disabled="!canChallenge"
                           @click="submitChallenge(f.id)"
                         >
                           {{ t('prReview.challenge.submit') }}
@@ -846,9 +873,16 @@ const { requestClose } = useUnsavedGuard({
 
     <!-- Footer -->
     <footer
-      v-if="awaiting"
+      v-if="curating"
       class="flex items-center justify-end gap-2 border-t border-default px-5 py-3"
     >
+      <span
+        v-if="challenging"
+        data-testid="pr-review-resolve-after-investigations"
+        class="me-auto text-2xs text-muted"
+      >
+        {{ t('prReview.challenge.resolveAfterInvestigations') }}
+      </span>
       <UButton
         color="neutral"
         variant="ghost"

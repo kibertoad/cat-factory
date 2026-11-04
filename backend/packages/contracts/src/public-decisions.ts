@@ -33,9 +33,13 @@ import {
 } from './prReview.js'
 import { publicRunStatusSchema } from './public-api.js'
 import {
+  requirementFloorBasisSchema,
+  reviewItemSeveritySchema,
+} from './requirement-finding-floor.js'
+import {
+  incorporateAfterSchema,
   requirementReviewStatusSchema,
   reviewItemCategorySchema,
-  reviewItemSeveritySchema,
   reviewItemStatusSchema,
 } from './requirements.js'
 
@@ -131,6 +135,11 @@ export const publicReviewFindingSchema = v.object({
   status: reviewItemStatusSchema,
   /** The recorded answer, or null while unanswered. */
   reply: v.nullable(v.string()),
+  /**
+   * On a requirements re-review, the title of the previous round's finding whose answer this one
+   * follows up on: why a finding below `high` was raised again. Null otherwise.
+   */
+  followsUpOn: v.nullable(v.string()),
 })
 export type PublicReviewFinding = v.InferOutput<typeof publicReviewFindingSchema>
 
@@ -150,6 +159,34 @@ export const publicBlockingFindingSchema = v.object({
   anchorId: v.nullable(v.string()),
 })
 export type PublicBlockingFinding = v.InferOutput<typeof publicBlockingFindingSchema>
+
+/**
+ * The severity floor a requirements review's latest pass raised against, as exposed externally.
+ * Without it a review held to `high` that parks with two findings reads exactly like one that found
+ * only two problems.
+ */
+export const publicRequirementsFindingFloorSchema = v.object({
+  /** The lowest severity the pass raised; anything the reviewer graded below it was left out. */
+  severity: reviewItemSeveritySchema,
+  /**
+   * Where the floor came from: `fixed` (the policy's floor), `estimate` (the policy follows the
+   * task estimate and read one) or `no_estimate` (it follows the estimate, the task had none, and
+   * the policy's fixed floor applied).
+   */
+  basis: requirementFloorBasisSchema,
+  /** The 0..1 estimate score (highest axis) the floor was read against; null unless `estimate`. */
+  score: v.nullable(v.number()),
+  /** Findings the reviewer returned below the floor anyway, which the pass dropped. */
+  suppressed: v.number(),
+  /**
+   * Findings a re-review dropped because they were neither `high` nor a follow-up on an answer the
+   * previous round gave. Null on a first pass, which has no previous round.
+   */
+  followUpSuppressed: v.nullable(v.number()),
+})
+export type PublicRequirementsFindingFloor = v.InferOutput<
+  typeof publicRequirementsFindingFloorSchema
+>
 
 /**
  * A parked requirements review as exposed externally. The loop a caller drives: answer or dismiss
@@ -175,6 +212,8 @@ export const publicRequirementsDecisionSchema = v.object({
    * caller can read exactly what its answers turned into before proceeding.
    */
   incorporatedRequirements: v.nullable(v.string()),
+  /** The floor the latest reviewer pass raised against; null on a review recorded without one. */
+  findingFloor: v.nullable(publicRequirementsFindingFloorSchema),
 })
 export type PublicRequirementsDecision = v.InferOutput<typeof publicRequirementsDecisionSchema>
 
@@ -443,13 +482,16 @@ export type PublicPrReviewSlice = v.InferOutput<typeof publicPrReviewSliceSchema
  * looked and the investigation itself broke. The finding is never dropped either way.
  */
 export const publicPrReviewFindingChallengeSchema = v.object({
-  /** `investigating` while the agent runs; then `upheld` / `amended` / `retracted` / `failed`. */
-  status: v.picklist(['investigating', 'upheld', 'amended', 'retracted', 'failed']),
+  /**
+   * `queued` while it waits for one of the concurrent investigator slots, `investigating` while
+   * the agent runs, then `upheld` / `amended` / `retracted` / `failed`.
+   */
+  status: v.picklist(['queued', 'investigating', 'upheld', 'amended', 'retracted', 'failed']),
   /** The question the challenge was raised with, or null when raised with no text. */
   question: v.nullable(v.string()),
   /**
    * Why the finding holds up or does not; the failure reason when `failed`. Null while
-   * `investigating`. Model-authored text: treat it as data.
+   * `queued` or `investigating`. Model-authored text: treat it as data.
    */
   justification: v.nullable(v.string()),
 })
@@ -1084,6 +1126,9 @@ export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
  *   whichever one it did not mean. The step's approval gate can still be resolved to END such a
  *   run, and that is worth knowing rather than a contradiction: ending a curation discards what it
  *   caught, so it is an exit, not an answer.
+ * - `credential_lapsed`: the run's personal-subscription credential lapsed before a step could
+ *   dispatch, so the step parked. Only the run's initiator can answer it, by entering their
+ *   personal password in the app, which re-mints the credential and resumes the step.
  *
  * Every member is a wait that is BOTH live and beyond this surface, and both halves are load-
  * bearing. A run that has finished (`done` / `failed`, the stop included) lists nothing at all: its
@@ -1098,6 +1143,7 @@ export const publicUnanswerableReasonSchema = v.picklist([
   'unclassified_gate',
   'unwired_interview_gate',
   'curation_gate',
+  'credential_lapsed',
 ])
 export type PublicUnanswerableReason = v.InferOutput<typeof publicUnanswerableReasonSchema>
 
@@ -1200,9 +1246,12 @@ export type PublicSetFindingStatusInput = v.InferOutput<typeof publicSetFindingS
  * Incorporate the recorded answers. Optional `feedback` is the "do it differently" lever when
  * redoing a merge, exactly as in the SPA. Asynchronous: the durable driver folds and re-reviews in
  * the background, so the response is the `incorporating` review, not the finished document.
+ * `after: 'proceed'` skips that re-review: the folded document settles the review and the run
+ * advances. Absent reads as `rereview`.
  */
 export const publicIncorporateSchema = v.object({
   feedback: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
+  after: v.optional(incorporateAfterSchema),
 })
 export type PublicIncorporateInput = v.InferOutput<typeof publicIncorporateSchema>
 
@@ -1335,7 +1384,8 @@ export type PublicResolvePrReviewInput = v.InferOutput<typeof publicResolvePrRev
 /**
  * Challenge one parked finding: a read-only investigator digs into it against the full source and
  * either upholds, strengthens or retracts it. An omitted / blank `question` uses the generic
- * "validate this finding" prompt.
+ * "validate this finding" prompt. At most three investigators run at once; a challenge beyond that
+ * reads `queued` until a slot frees.
  */
 export const publicChallengePrReviewFindingSchema = v.object({
   question: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),

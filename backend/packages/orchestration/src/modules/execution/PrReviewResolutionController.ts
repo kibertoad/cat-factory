@@ -12,17 +12,19 @@ import type {
 } from '@cat-factory/kernel'
 import { FIXER_AGENT_KIND, getErrorMessage } from '@cat-factory/kernel'
 import { resolvePrNumber } from '@cat-factory/contracts'
-import { CHALLENGE_INVESTIGATOR_KIND } from '@cat-factory/agents'
 import type { AdvanceResult } from './advance.js'
 import {
   buildPrReviewPost,
   buildPrReviewPostReport,
   computeCommentableLines,
   isPrReviewPostComplete,
-  renderChallengeInvestigatorFeedback,
   renderPrReviewFixerFeedback,
 } from './prReview.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import {
+  PrReviewChallengeQueue,
+  type PrReviewChallengeQueueDeps,
+} from './PrReviewChallengeQueue.js'
 import type { StepHandlerContext } from './step-handler-registry.js'
 
 /**
@@ -52,6 +54,8 @@ export interface PrReviewResolutionControllerDeps {
     dispatchKind?: string,
     augmentContext?: (context: AgentRunContext) => void,
   ) => Promise<AdvanceResult>
+  /** What the challenge queue needs beyond the state machine (see {@link PrReviewChallengeQueue}). */
+  challengeQueue: Omit<PrReviewChallengeQueueDeps, 'runStateMachine'>
 }
 
 /**
@@ -63,61 +67,36 @@ export interface PrReviewResolutionControllerDeps {
  * controllers with bound call-backs into the dispatcher's completion / agent-dispatch methods.
  */
 export class PrReviewResolutionController {
-  constructor(private readonly deps: PrReviewResolutionControllerDeps) {}
+  /** The challenge investigators, run side by side off the parked review (see its own note). */
+  private readonly challenges: PrReviewChallengeQueue
+
+  constructor(private readonly deps: PrReviewResolutionControllerDeps) {
+    this.challenges = new PrReviewChallengeQueue({
+      ...deps.challengeQueue,
+      runStateMachine: deps.runStateMachine,
+    })
+  }
+
+  /** @see PrReviewChallengeQueue.poll */
+  pollChallenges(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+  ): Promise<AdvanceResult> {
+    return this.challenges.poll(workspaceId, instance, step)
+  }
 
   /**
-   * - `challenging`: dispatch the read-only Challenge Investigator against the ONE challenged
-   *   finding (parks on the job; its verdict is applied by the `pr-review-challenge` interceptor,
-   *   which re-parks the review).
+   * - `challenging`: drive the challenge queue (start queued investigators into free slots and
+   *   park on the running ones; re-park for the human once it drains).
    * - `fixing`: dispatch the Fixer against the reviewed PR's head branch with the selected
    *   findings folded in (parks on the job; its completion marks the review `done`).
    * - `posting`: publish the selected findings as inline PR review comments, then finish the step.
    */
   handle(ctx: StepHandlerContext): Promise<AdvanceResult> {
-    if (ctx.step.prReview?.status === 'challenging') return this.dispatchChallenge(ctx)
+    if (ctx.step.prReview?.status === 'challenging') return this.challenges.drive(ctx)
     if (ctx.step.prReview?.status === 'posting') return this.post(ctx)
     return this.dispatchFixer(ctx)
-  }
-
-  /**
-   * Dispatch the read-only Challenge Investigator for a challenged finding. The finding + the
-   * human's optional concern (else the generic "dig deeper + validate" prompt) are folded into the
-   * dispatch as a prior output — the same injection point the Fixer uses — so the investigator
-   * re-examines that ONE finding against the full source (it dispatches under
-   * {@link CHALLENGE_INVESTIGATOR_KIND}, so it resolves its OWN — possibly stronger — model). The
-   * step's own `pr-reviewer` pre-ops still run (they key off the step kind), so the investigator
-   * also gets the PR diff in `.cat-context/pr-diff.md`. On a replay (jobId already set) it
-   * re-attaches without re-injecting.
-   */
-  private dispatchChallenge(ctx: StepHandlerContext): Promise<AdvanceResult> {
-    const { step } = ctx
-    const review = step.prReview!
-    const pending = step.pendingChallenge
-    const finding = review.findings?.find((f) => f.id === pending?.findingId)
-    // The challenged finding is resolved from the marker `challengeFinding` set, and nothing can
-    // remove it while the review is parked in `challenging` (dismiss requires `awaiting_selection`).
-    // If it's somehow gone, fail loudly rather than dispatch a context-less investigator that would
-    // return a groundless verdict — mirrors `dispatchFixer`'s preflight guard.
-    if (!finding) {
-      return Promise.resolve({
-        kind: 'job_failed',
-        failureKind: 'preflight',
-        error: 'The challenged finding is no longer part of the review.',
-      })
-    }
-    return this.deps.handleAgentStep(ctx, CHALLENGE_INVESTIGATOR_KIND, (context) => {
-      context.priorOutputs = [
-        ...context.priorOutputs,
-        {
-          agentKind: CHALLENGE_INVESTIGATOR_KIND,
-          output: renderChallengeInvestigatorFeedback(
-            finding,
-            pending?.question ?? null,
-            review.summary,
-          ),
-        },
-      ]
-    })
   }
 
   /**

@@ -955,6 +955,21 @@ describe('FetchGitLabClient — issue writes', () => {
     ])
   })
 
+  it('replaces an issue description only when it differs from the stored one', async () => {
+    const { c, calls } = client({
+      'GET /projects/7/issues/12': { body: { description: 'same doc\r\n' } },
+      'PUT /projects/7/issues/12': { status: 200 },
+    })
+    expect(await c.replaceIssueBody(connection, ref, 12, 'same doc')).toBe('unchanged')
+    expect(await c.replaceIssueBody(connection, ref, 12, 'new doc')).toBe('updated')
+    expect(calls.map((x) => `${x.method} ${x.url}`)).toEqual([
+      'GET /projects/7/issues/12',
+      'GET /projects/7/issues/12',
+      'PUT /projects/7/issues/12',
+    ])
+    expect(calls.at(-1)!.body).toEqual({ description: 'new doc' })
+  })
+
   // The regression this pins is SIZE-dependent, which is why it is asserted on the request shape
   // rather than on an outcome: as a query parameter a comment body works for every short notice
   // and 414s only on the long ones (a parked review's question echo runs to several KB, and

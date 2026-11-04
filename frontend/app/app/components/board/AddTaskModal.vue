@@ -26,15 +26,19 @@ import {
   BUG_FISHING_DEFAULT_PASS_BUDGET,
   BUG_FISHING_MAX_PASS_BUDGET,
   BUG_FISHING_PHASES,
+  DEFAULT_REVIEW_EFFORT_LEVEL,
+  type ReviewEffortLevel,
 } from '@cat-factory/contracts'
 import { resolveComponentRegistry } from '@modular-vue/core'
 import { useReactiveSlots } from '@modular-vue/runtime'
 import type { AppSlots, ResultViewContribution } from '~/modular/slots'
 import ContextAttachmentFields from '~/components/context/ContextAttachmentFields.vue'
+import TaskImageStaging from '~/components/tasks/TaskImageStaging.vue'
 import AgentConfigField from '~/components/common/AgentConfigField.vue'
 import DescriptorFields from '~/components/common/DescriptorFields.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
 import ReviewSkillQueue from '~/components/skills/ReviewSkillQueue.vue'
+import ReviewEffortSelect from '~/components/skills/ReviewEffortSelect.vue'
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
 import { isReviewDebtConflict, reviewFrictionContext } from '~/utils/reviewFriction'
@@ -78,6 +82,9 @@ const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
 const { resolvePending, linkPending, presentLinkFailures } = useContextLinking()
+const { uploadStaged } = useTaskImageUpload()
+/** Images to attach once the task exists; an upload needs its block id. */
+const stagedImages = ref<File[]>([])
 
 const open = computed(() => ui.addTaskContainerId !== null)
 
@@ -178,6 +185,7 @@ const reviewFocus = ref('')
 // Specialist review playbooks queued onto the review, in the order the reviewer applies them.
 // Offered from the account catalog's `review` group only (see ReviewSkillQueue).
 const reviewSkillIds = ref<string[]>([])
+const reviewEffort = ref<ReviewEffortLevel>(DEFAULT_REVIEW_EFFORT_LEVEL)
 
 // Best-practice prompt fragments the user pins on the task up front (folded into its agents
 // on top of the service-level standards, exactly like the inspector's picker). Chosen from the
@@ -400,7 +408,8 @@ function buildTypeFields(): TaskTypeFields | undefined {
     const f: TaskTypeFields = { ...parseReviewPrRef(reviewPrRef.value) }
     if (reviewFocus.value.trim()) f.reviewFocus = reviewFocus.value.trim()
     if (reviewSkillIds.value.length) f.reviewSkillIds = [...reviewSkillIds.value]
-    return Object.keys(f).length ? f : undefined
+    f.reviewEffort = reviewEffort.value
+    return f
   }
   return buildCustomTypeFields()
 }
@@ -659,6 +668,7 @@ onModalOpen(open, () => {
   reviewPrRef.value = ''
   reviewFocus.value = ''
   reviewSkillIds.value = []
+  reviewEffort.value = DEFAULT_REVIEW_EFFORT_LEVEL
   // Empty rather than default-seeded: `taskType` was just reset to a BUILT-IN above, which
   // declares no descriptor fields. Picking a custom type from here runs the `taskType` watcher,
   // and that is the one place the new type's declared defaults are seeded.
@@ -680,6 +690,7 @@ onModalOpen(open, () => {
   pipelineId.value = defaultPipelineIdFor(taskType.value)
   agentConfigValues.value = {}
   pendingContext.value = []
+  stagedImages.value = []
   // Seed from a prefill when opened from another surface (e.g. "create task from
   // issue" sets the title + stages the issue as linked context). Pipeline / preset stay at their
   // defaults unless the opener carries a choice the person already made (the one-sentence
@@ -746,6 +757,7 @@ const { requestClose } = useUnsavedGuard({
     agentConfig: { ...agentConfigValues.value },
     fragmentIds: [...fragmentIds.value],
     context: pendingContext.value.map(contextKey),
+    images: stagedImages.value.length,
   }),
 })
 
@@ -861,6 +873,7 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
       // (a doc another task already holds). Surfaced with its specific cause plus a one-click
       // "Copy details" for a bug report, and after the create because the task is already sound.
       presentLinkFailures(await linkPending(block.id, pendingContext.value), block.id)
+      await uploadStaged(block.id, stagedImages.value)
     }
     ui.closeReviewFriction()
     ui.closeAddTask()
@@ -1329,6 +1342,7 @@ function createRefusalMessage(error: unknown): string | null {
                  role. Always shown (not advanced-only): queueing a security or performance pass is
                  a per-review judgement a reviewer makes, not a platform setting. -->
             <ReviewSkillQueue v-model="reviewSkillIds" />
+            <ReviewEffortSelect v-model="reviewEffort" />
           </div>
 
           <!-- A CUSTOM (deployment-registered) task type: a bespoke create-form section when its
@@ -1439,6 +1453,10 @@ function createRefusalMessage(error: unknown): string | null {
             :docs-hint="t('board.addTask.noDocsHint')"
             :issues-hint="t('board.addTask.noIssuesHint')"
           />
+
+          <!-- Images that explain the task, staged until it exists. A recurring task hands off to
+               the schedule modal and creates no task here, so it is not offered. -->
+          <TaskImageStaging v-if="!isRecurring" v-model="stagedImages" />
 
           <p class="text-2xs text-dimmed">
             {{ t('board.addTask.plannedHint') }}

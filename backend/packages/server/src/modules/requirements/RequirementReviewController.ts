@@ -11,6 +11,7 @@ import {
   resolveRequirementsExceededContract,
   reviewRequirementsContract,
   updateRequirementItemStatusContract,
+  writeRefinedRequirementsContract,
 } from '@cat-factory/contracts'
 import type { RequirementsModule } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -110,6 +111,7 @@ export function requirementReviewController(): Hono<AppEnv> {
         param(c, 'workspaceId'),
         c.req.valid('param').blockId,
         c.req.valid('json').feedback,
+        c.req.valid('json').after,
       )
     return c.json(review, 200)
   })
@@ -213,6 +215,17 @@ export function requirementReviewController(): Hono<AppEnv> {
         c.req.valid('json').choice,
       )
     return c.json(review, 200)
+  })
+
+  // Write the refined requirements into the description of the block's linked tracker issue(s),
+  // on the person's request. Idempotent by content; the per-issue outcome says what changed where.
+  buildHonoRoute(app, writeRefinedRequirementsContract, async (c) => {
+    const publisher = requireCapability(
+      requireRequirements(c).publisher,
+      'Writing refined requirements to tracker issues is not configured',
+    )
+    const result = await publisher.publish(param(c, 'workspaceId'), c.req.valid('param').blockId)
+    return c.json(result, 200)
   })
 
   return app

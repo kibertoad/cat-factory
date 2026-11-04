@@ -10,6 +10,7 @@ import type {
   UpdateRiskPolicyInput,
 } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
+import { applyRiskPolicyPatch } from './riskPolicyPatch.js'
 
 export interface AccountRiskPolicyServiceDependencies {
   accountRiskPolicyRepository: AccountRiskPolicyRepository
@@ -57,8 +58,11 @@ export class AccountRiskPolicyService {
       ciMaxAttempts: input.ciMaxAttempts,
       maxRequirementIterations: input.maxRequirementIterations,
       maxRequirementConcernAllowed: input.maxRequirementConcernAllowed,
+      requirementFindingFloor: input.requirementFindingFloor,
+      requirementFloorProgression: input.requirementFloorProgression,
       maxTesterQualityIterations: input.maxTesterQualityIterations,
       companionMaxReworks: input.companionMaxReworks,
+      postImplementationReviewEffort: input.postImplementationReviewEffort,
       releaseWatchWindowMinutes: input.releaseWatchWindowMinutes,
       releaseMaxAttempts: input.releaseMaxAttempts,
       humanReviewGraceMinutes: input.humanReviewGraceMinutes,
@@ -94,49 +98,7 @@ export class AccountRiskPolicyService {
       'RiskPolicy',
       id,
     )
-    const updated: AccountRiskPolicy = {
-      ...existing,
-      ...(patch.name !== undefined ? { name: patch.name } : {}),
-      ...(patch.maxComplexity !== undefined ? { maxComplexity: patch.maxComplexity } : {}),
-      ...(patch.maxRisk !== undefined ? { maxRisk: patch.maxRisk } : {}),
-      ...(patch.maxImpact !== undefined ? { maxImpact: patch.maxImpact } : {}),
-      ...(patch.ciMaxAttempts !== undefined ? { ciMaxAttempts: patch.ciMaxAttempts } : {}),
-      ...(patch.maxRequirementIterations !== undefined
-        ? { maxRequirementIterations: patch.maxRequirementIterations }
-        : {}),
-      ...(patch.maxRequirementConcernAllowed !== undefined
-        ? { maxRequirementConcernAllowed: patch.maxRequirementConcernAllowed }
-        : {}),
-      ...(patch.maxTesterQualityIterations !== undefined
-        ? { maxTesterQualityIterations: patch.maxTesterQualityIterations }
-        : {}),
-      ...(patch.companionMaxReworks !== undefined
-        ? { companionMaxReworks: patch.companionMaxReworks }
-        : {}),
-      ...(patch.releaseWatchWindowMinutes !== undefined
-        ? { releaseWatchWindowMinutes: patch.releaseWatchWindowMinutes }
-        : {}),
-      ...(patch.releaseMaxAttempts !== undefined
-        ? { releaseMaxAttempts: patch.releaseMaxAttempts }
-        : {}),
-      ...(patch.humanReviewGraceMinutes !== undefined
-        ? { humanReviewGraceMinutes: patch.humanReviewGraceMinutes }
-        : {}),
-      ...(patch.judgeMinScore !== undefined ? { judgeMinScore: patch.judgeMinScore } : {}),
-      ...(patch.judgeMaxBounces !== undefined ? { judgeMaxBounces: patch.judgeMaxBounces } : {}),
-      ...(patch.autoMergeEnabled !== undefined ? { autoMergeEnabled: patch.autoMergeEnabled } : {}),
-      ...(patch.forkDecision !== undefined ? { forkDecision: patch.forkDecision } : {}),
-      ...(patch.classRules !== undefined ? { classRules: patch.classRules } : {}),
-      ...(patch.classRulesByRole !== undefined ? { classRulesByRole: patch.classRulesByRole } : {}),
-      ...(patch.dryRunRoles !== undefined ? { dryRunRoles: patch.dryRunRoles } : {}),
-      ...(patch.submissionClassesByRole !== undefined
-        ? { submissionClassesByRole: patch.submissionClassesByRole }
-        : {}),
-      ...(patch.autonomy !== undefined ? { autonomy: patch.autonomy } : {}),
-      ...(patch.minAutoAnswerConfidence !== undefined
-        ? { minAutoAnswerConfidence: patch.minAutoAnswerConfidence }
-        : {}),
-    }
+    const updated = applyRiskPolicyPatch(existing, patch)
     await this.deps.accountRiskPolicyRepository.upsert(accountId, updated)
     await this.invalidate()
     return accountEntry(updated)

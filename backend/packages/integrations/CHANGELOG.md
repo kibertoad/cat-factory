@@ -1,5 +1,70 @@
 # @cat-factory/integrations
 
+## 0.179.4
+
+### Patch Changes
+
+- Updated dependencies [71dd42a]
+  - @cat-factory/contracts@0.382.0
+  - @cat-factory/kernel@0.367.2
+
+## 0.179.3
+
+### Patch Changes
+
+- Updated dependencies [0883cfa]
+  - @cat-factory/contracts@0.381.0
+  - @cat-factory/kernel@0.367.1
+
+## 0.179.2
+
+### Patch Changes
+
+- Updated dependencies [534264e]
+  - @cat-factory/contracts@0.380.0
+  - @cat-factory/kernel@0.367.0
+
+## 0.179.1
+
+### Patch Changes
+
+- Updated dependencies [69f364e]
+  - @cat-factory/contracts@0.379.0
+  - @cat-factory/kernel@0.366.0
+
+## 0.179.0
+
+### Minor Changes
+
+- 7c1214e: A task's refined requirements can be written into the description of the tracker issue(s) it came from, replacing it; every tracker keeps the previous description in its history. The requirements review window has an "Update linked issues" button, and a new workspace writeback setting, `writebackRequirementsToDescription` (off by default), does the same automatically when a requirements review settles and the run moves on. The write is idempotent by content: an issue already holding the document is left alone and reported `already_current`. The last outcome per issue is recorded on the review (`issueWriteback`) and listed in the window, and counted on `writeback.requirements_description`. Jira receives ADF, now with nested lists, code blocks, quotes, emphasis and links, sized against Jira's 32,767-character field limit; that converter also improves the Jira tickets the platform files and every Jira comment it writes.
+  
+  New internal route `POST /workspaces/:workspaceId/blocks/:blockId/requirement-review/update-linked-issues`, two conflict reasons (`refined_requirements_unavailable`, `no_linked_issues`), a new `IssueWritebackProvider.writeRefinedRequirements` port method, an optional `TaskSourceWritebackAdapter.replaceDescription` (implemented for Jira, Linear, GitHub Issues and GitLab Issues) and an optional `replaceIssueBody` on the GitHub and VCS client ports. `RequirementReviewRepository` gains `recordIssueWriteback`.
+  
+  The tracker writeback's exactly-once marker for comments is now one generic table, `writeback_posts`, replacing `review_question_posts`: the migration (D1 `0111`, a Drizzle migration on Node) copies the parked-review question markers over and drops the old table, and `reviewQuestionPostRepository` becomes `writebackPostRepository` on `IssueWritebackService` and the persistence RPC. Its claim answers `claimed`, `posted` or `held` in one statement. The same migration adds `tracker_settings.writeback_requirements_to_description` and `requirement_reviews.issue_writeback`.
+
+### Patch Changes
+
+- Updated dependencies [7c1214e]
+  - @cat-factory/contracts@0.378.0
+  - @cat-factory/kernel@0.365.0
+
+## 0.178.3
+
+### Patch Changes
+
+- Updated dependencies [dbbcfd9]
+  - @cat-factory/contracts@0.377.0
+  - @cat-factory/kernel@0.364.0
+
+## 0.178.2
+
+### Patch Changes
+
+- Updated dependencies [09ccd89]
+- Updated dependencies [31f32a1]
+  - @cat-factory/contracts@0.376.0
+  - @cat-factory/kernel@0.363.2
+
 ## 0.178.1
 
 ### Patch Changes

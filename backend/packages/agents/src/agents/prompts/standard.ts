@@ -650,13 +650,14 @@ export function designImagesSection(context: AgentRunContext): string {
  * Each states the CAUSE without naming a remedy, because the reader is the agent and none of the
  * fixes are its to make: a run told "ask an operator to configure this" spends turns on it.
  */
-const DESIGN_IMAGE_REFUSALS: Record<DesignImageUnavailableReason, string> = {
+export const DESIGN_IMAGE_REFUSALS: Record<DesignImageUnavailableReason, string> = {
   harness_no_image_input: 'the agent CLI running this step cannot read an image',
   model_no_image_input: 'the model running this step does not accept image input',
   unknown_model_image_input:
     'the platform does not know whether the model running this step accepts image input',
   inline_harness_text_only: 'this step reaches its model through a text-only channel',
   consensus_panel: 'this step is running as a multi-model panel, which carries text only',
+  delegated_brief: 'this step is delegated to an external executor whose brief carries text only',
   transfer_failed: 'they could not be retrieved from storage',
 }
 

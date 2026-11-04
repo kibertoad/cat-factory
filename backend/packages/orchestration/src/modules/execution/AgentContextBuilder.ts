@@ -29,6 +29,7 @@ import type {
   PipelineStep,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
+  BinaryArtifactBlockIndex,
   DeclaredToolServers,
   ResolvedSkill,
   SkillVersionPin,
@@ -89,6 +90,10 @@ import { buildReworkContext } from './companion-review-context.js'
 import { type FoundationalServiceResolver } from './run-foundational-services.js'
 import { CatalogRunContext } from './run-catalog-context.js'
 import { resolveRunImages } from './run-images.js'
+import {
+  reviewEffortSlice,
+  type ResolvePostImplementationReviewEffort,
+} from './builder-review-effort.js'
 import { buildBlockPayload } from './builder-block-payload.js'
 import { getFragment, withDesignContextFragment } from '@cat-factory/prompt-fragments'
 import {
@@ -156,6 +161,8 @@ export type { DocumentUrlResolver } from './linked-context.js'
 
 /** The collaborators the context builder reads from (all owned by the engine container). */
 export interface AgentContextBuilderDeps {
+  /** Reads the run's risk policy for the post-implementation reviewer's effort level. */
+  resolvePostImplementationReviewEffort?: ResolvePostImplementationReviewEffort
   workspaceRepository: WorkspaceRepository
   blockRepository: BlockRepository
   accountRepository: AccountRepository
@@ -314,6 +321,8 @@ export interface AgentContextBuilderDeps {
    * views: the documented fallback, not a degradation.
    */
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /** Optional: lists a task's attached images without resolving the store (see `run-images.ts`). */
+  binaryArtifactIndex?: BinaryArtifactBlockIndex
   /**
    * Optional: the run logger, used to report a capability that was declared but skipped (an
    * unregistered bundled-skill id, an optional catalog skill that could not resolve). Absent ⇒
@@ -472,6 +481,7 @@ export class AgentContextBuilder {
       // The task's images, from ONE read of its reference set (see `resolveRunImages`): a
       // spread-ready partial, empty for a kind that wants neither half.
       runImages,
+      reviewEffort,
     ] = await Promise.all([
       linked.linkedContext,
       this.resolveEnvironment(workspaceId, block, serviceFrame),
@@ -500,6 +510,7 @@ export class AgentContextBuilder {
       this.resolveConsensusConfig(workspaceId, step, block),
       this.catalogContext().sliceFor(workspaceId, agentKind, step, instance),
       resolveRunImages(this.deps, agentKind, workspaceId, block.id),
+      reviewEffortSlice(this.deps, workspaceId, agentKind, block, instance),
     ])
     const agentConfig = block.agentConfig
     const customTaskType = this.customTaskTypeFor(block)
@@ -619,6 +630,7 @@ export class AgentContextBuilder {
         ? { foundationalCredentials: catalogSlice.foundationalCredentials }
         : {}),
       ...runImages,
+      ...reviewEffort,
       priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)

@@ -6,7 +6,7 @@ import {
   jiraWebhookAdapter,
   linearWebhookAdapter,
 } from './adapters.js'
-import { markdownToAdf } from '../../tracker/jira.create.logic.js'
+import { markdownToAdf } from '../../tracker/markdown-adf.logic.js'
 import {
   isPlatformAuthoredComment,
   parseReviewReplyCommands,

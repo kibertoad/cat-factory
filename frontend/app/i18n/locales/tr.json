@@ -684,6 +684,7 @@
         "reference_repo_unreadable": "Bu çalıştırmanın referans mimarisinin arkasındaki depo şu anda okunamadı, bu yüzden klonlayamayabileceği bir şablon üzerinde başlatılmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
         "oauth_state_invalid": "Bu yetkilendirme bağlantısının süresi dolmuş ya da bağlantı zaten kullanılmış, bu yüzden bağlantıyı tamamlayamaz.",
         "oauth_started_by_other_user": "Bu bağlantıyı başka biri başlattı, bu yüzden yalnızca o kişi tamamlayabilir.",
+        "credential_wait_not_initiator": "Çalıştırma o kişinin aboneliğini kullandığı için kişisel abonelik kimlik bilgisini yalnızca çalıştırmayı başlatan kişi yenileyebilir. Devam ettirmesini ondan isteyin.",
         "oauth_exchange_refused": "Araç sunucusunun yetkilendirme sunucusu izni reddetti. Dağıtım operatörünüzden araç sunucusunun OAuth istemci ayarlarını kontrol etmesini isteyin.",
         "oauth_client_secret_unavailable": "Araç sunucusunun OAuth istemci gizli anahtarı bu panoda kullanılamıyor. Altyapı penceresinden ekleyin.",
         "tool_server_without_oauth": "Bu araç sunucusu artık OAuth kullanmıyor, bu yüzden tamamlanacak bir bağlantı yok.",
@@ -695,6 +696,7 @@
       "startFailed": "Başlatılamadı",
       "mergeFailed": "Birleştirilemedi",
       "restartFailed": "Yeniden başlatılamadı",
+      "resumeCredentialFailed": "Çalıştırma sürdürülemedi",
       "approveFailed": "Onaylanamadı",
       "requestChangesFailed": "Değişiklik istenemedi",
       "rejectFailed": "Reddedilemedi"
@@ -749,6 +751,7 @@
         "binary_output_generator_invalid": "İkili çıktı üreticisi çözümlenemiyor",
         "foundational_service_not_inherited": "Bu hizmeti bu pano kaydetti",
         "input_gate_not_parked": "Yanıtlanacak bir şey yok",
+        "credential_wait_not_parked": "Sürdürülecek bir şey yok",
         "input_gate_parked": "Görevin girdi kontrolünden yanıtlayın",
         "ticket_already_linked": "Bu kayda ait bir görev zaten var",
         "document_already_linked": "Belge zaten ekli",
@@ -772,7 +775,9 @@
         "thread_busy": "Bu konu hâlâ yanıtlanıyor",
         "draft_conflict": "Bu taslak değişti",
         "session_stale": "Pull request ilerledi",
-        "cursor_expired": "Değişiklik akışı bu imlecin ötesine geçti"
+        "cursor_expired": "Değişiklik akışı bu imlecin ötesine geçti",
+        "refined_requirements_unavailable": "Henüz iyileştirilmiş gereksinim yok",
+        "no_linked_issues": "Bağlı takip kaydı yok"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -810,6 +815,7 @@
         "binary_output_generator_invalid": "İkili çıktı üreten bir adım, bu kurulumun kaydetmediği bir üretken entegrasyon seçiyor; seçili entegrasyonlardan hiçbiri adımın teslim etmesi gereken içerik türünü üretmiyor; ya da bunlardan biri, bu adımın modelinin çalışmadığı bir aracı CLI tarafından üretiliyor. Üretken entegrasyonlar bu çalışma alanında değil, kurulumun kodunda kaydedilir: entegrasyonu kaydedin, adımın seçimini düzeltin ya da adıma gereken CLI üzerinde çalışan bir model sabitleyin, sonra yeniden başlatın.",
         "foundational_service_not_inherited": "Devre dışı bırakma, hesaptan devralınan bir hizmet için geçerlidir. Bu kimlik bu pano tarafından kaydedilmiş, dolayısıyla devre dışı bırakılacak bir şey yok - bunun yerine panonun kendi kaydını silin.",
         "input_gate_not_parked": "Bu çalışma artık giriş denetimini beklemiyor. Biri onu yanıtlamış ya da çalışma ilerlemiş olabilir.",
+        "credential_wait_not_parked": "Bu çalıştırma artık kişisel aboneliğinizin kimlik bilgilerini beklemiyor. Zaten sürdürülmüş olabilir ya da çalıştırma ilerlemiş olabilir.",
         "input_gate_parked": "Bu çalıştırma girdi kontrolünde bekliyor ve onay akışı bunu yanıtlayamaz. Çalıştırmadaki bildirimi kullanın: görevi düzeltip yeniden kontrol edin ya da yine de çalıştırın.",
         "ticket_already_linked": "Bir kayıt yalnızca tek bir görevi besleyebilir; yeniden bağlamak mevcut görevi oluşturulduğu bağlamdan yoksun bırakır. Bunun yerine o görevi açın ya da önce kaydın bağlantısını kaldırın.",
         "document_already_linked": "Bu belge başka bir göreve ekli. Önce oradan ayırın ya da ayrı bir kopya ekleyin.",
@@ -833,7 +839,9 @@
         "thread_busy": "Bu konudaki önceki soru henüz yanıtlanmadı. Yanıtı bekleyin ya da başka bir konuda sorun.",
         "draft_conflict": "Bu yorum taslağı siz yükledikten sonra düzenlendi, gönderildi ya da atıldı. Taslakları yeniden yükleyip değişikliğinizi tekrar yapın.",
         "session_stale": "Bu inceleme hazırlandıktan sonra yeni commit'ler geldi, bu yüzden taslaklar yanlış satırları gösteriyor olabilir. İncelemeyi yenileyin, taslakları kontrol edin, sonra gönderin.",
-        "cursor_expired": "Bu imleçten sonraki değişiklikler artık saklanmıyor. Dizinin yeni bir anlık görüntüsünü alın, ardından akışı bildirdiği konumdan izleyin."
+        "cursor_expired": "Bu imleçten sonraki değişiklikler artık saklanmıyor. Dizinin yeni bir anlık görüntüsünü alın, ardından akışı bildirdiği konumdan izleyin.",
+        "refined_requirements_unavailable": "İnceleme henüz gözden geçirilmiş bir belge üretmedi ya da şu anda yeniden yazıyor. Birleştirmenin bitmesini bekleyin, ardından tekrar güncelleyin.",
+        "no_linked_issues": "Bu göreve bağlı bir takip kaydı yok. Görevin geldiği kaydı bağlayın, ardından tekrar güncelleyin."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -3432,6 +3440,10 @@
         "questionsOnPark": {
           "label": "Duraklatılan başsız çalıştırmanın açık sorularını gönder",
           "help": "Uygulama dışında başlatılan bir çalıştırma gereksinimleri netleştirmek için duraklattığında (API üzerinden ya da bir izleyici kaydından gönderilerek), açık sorularını, her biri bir yanıtın belirteceği kimlikle, bağlı soruna gönderir. Uygulamada başlatılan görevler etkilenmez."
+        },
+        "requirementsToDescription": {
+          "label": "İyileştirilmiş gereksinimleri bağlı kaydın açıklamasına yaz",
+          "help": "Bir görevin gereksinim incelemesi tamamlanıp çalışma devam ettiğinde, bağlı kaydın açıklamasını iyileştirilmiş gereksinimlerle değiştirir. Önceki açıklama izleyicinin geçmişinde kalır. Varsayılan olarak kapalıdır ve yalnızca tüm çalışma alanı için ayarlanır."
         }
       },
       "probeFailure": {
@@ -3498,6 +3510,8 @@
         "maxRequirementIterations": "Gereksinim yinelemeleri",
         "maxRequirementConcernAllowed": "Şu düzeyde veya altında otomatik geç",
         "companionMaxReworks": "Yardımcı yeniden çalışma turları",
+        "postImplementationReviewEffort": "Uygulama sonrası inceleme düzeyi",
+        "postImplementationReviewEffortHelp": "Uygulamadan sonraki kod incelemesinin ne kadar titiz olduğu. Daha yüksek düzeyler, daha az kesin olanlar da dahil olmak üzere daha fazla bulgu bildirir ve daha uzun sürer.",
         "autoMerge": "Otomatik birleştirme"
       },
       "newPreset": "Yeni ilke",
@@ -3613,6 +3627,20 @@
       "confirmHide": {
         "title": "Bu ilke gizlensin mi?",
         "body": "\"{name}\" bu panoda sunulmayacak ve onu seçmiş görevler panonun varsayılan ilkesine döner. Daha sonra geri getirebilirsiniz."
+      },
+      "findingFloor": {
+        "label": "Gereksinim incelemesinin dile getirdikleri",
+        "fallbackLabel": "Görevin tahmini yokken dile getirilenler",
+        "hint": "Bu önem derecesinin altındaki bulgular incelemeye alınmaz. Çalıştırmayı yalnızca dile getirilen bir bulgu durdurabilir.",
+        "high": "Yalnızca yüksek bulgular",
+        "medium": "Yüksek ve orta bulgular",
+        "low": "Küçükler dahil her şey",
+        "progressiveLabel": "Görev tahminini izle",
+        "progressiveHint": "Daha büyük görevlerde daha çok sor; tahminin karmaşıklık, risk ve etki değerlerinden en yükseğine göre belirlenir. İncelemeden önce bir Task Estimator ya da önceki bir çalıştırmadan kalan tahmin gerekir.",
+        "mediumFrom": "Orta bulguları şu tahminden itibaren ekle (%)",
+        "lowFrom": "Her şeyi şu tahminden itibaren dile getir (%)",
+        "bandsCrossed": "Orta bulgular eşiği, her şey eşiğinden yüksek olamaz.",
+        "bandsOutOfRange": "İki eşik de 0 ile 100 arasında bir sayı olmalıdır."
       }
     },
     "observabilityConnection": {
@@ -5128,6 +5156,20 @@
       "oauthButton": "{label} ile bağlan",
       "oauthOr": "veya bir API anahtarıyla bağlan",
       "disconnectFailed": "Bağlantı kesilemedi"
+    },
+    "images": {
+      "heading": "Görseller",
+      "hint": "Bu görevi açıklayan ekran görüntüleri, eskizler veya diyagramlar. Görev üzerinde çalışan ajanlar, modelleri görsel kabul ettiği her yerde bunları görür.",
+      "add": "Görsel ekle",
+      "count": "{count} / {max}",
+      "truncated": "Bir görev en fazla {max} görsel içerebilir, bu yüzden yalnızca ilkleri eklendi.",
+      "rejected": "Yalnızca PNG, JPEG, WebP ve GIF görselleri kabul edildiği için eklenmedi: {names}",
+      "remove": "{name} öğesini kaldır",
+      "unnamed": "Eklenen görsel",
+      "attached": "Görseller eklendi",
+      "uploadFailed": "Görsel eklenemedi",
+      "removeFailed": "Görsel kaldırılamadı",
+      "loadFailed": "Eklenen görseller yüklenemedi"
     }
   },
   "bugHunt": {
@@ -5900,6 +5942,13 @@
       }
     }
   },
+  "credentialWait": {
+    "title": "Kişisel aboneliğinizin kimlik bilgilerinin süresi doldu",
+    "body": "Bu çalıştırmanın kişisel abonelik kimlik bilgilerinin süresi sonraki adım başlamadan doldu, bu yüzden çalıştırma duraklatıldı. Bilgileri yenilemek ve bu adımdan devam etmek için kişisel parolanızı girin.",
+    "resume": "Parolayı gir ve devam et",
+    "othersTitle": "Bu çalıştırmanın kişisel abonelik kimlik bilgisinin süresi doldu",
+    "othersRun": "Bunu yalnızca çalıştırmayı başlatan kişi kendi kişisel parolasıyla yenileyebilir. Devam ettirmesini ondan isteyin."
+  },
   "requirements": {
     "title": "Gereksinim incelemesi",
     "iteration": "Yineleme {current} / {max}",
@@ -5977,6 +6026,23 @@
     "reRequest": "Yeniden iste",
     "finalRequirements": "Nihai gereksinimler",
     "incorporatedDraft": "Dahil edilen gereksinimler (taslak)",
+    "updateIssues": {
+      "action": "Bağlı kayıtları güncelle",
+      "hint": "Her bağlı kaydın açıklamasını bu gereksinimlerle değiştirir. Önceki açıklama izleyicinin geçmişinde kalır.",
+      "error": "Bağlı kayıtlar güncellenemedi",
+      "automatic": "İnceleme tamamlandığında bağlı kayıtlara otomatik olarak yazıldı:",
+      "toast": {
+        "updated": "Bağlı kayıtlar gereksinimlerle güncellendi",
+        "nothingNew": "Bağlı kayıtlarda bu gereksinimler zaten var",
+        "partial": "Bazı bağlı kayıtlar güncellenmedi"
+      },
+      "outcome": {
+        "updated": "güncellendi",
+        "already_current": "zaten güncel",
+        "failed": "başarısız, yeniden denemek için tekrar güncelleyin",
+        "unsupported": "bu izleyici güncellenemiyor"
+      }
+    },
     "stats": {
       "findings": "Bulgular",
       "open": "Açık",
@@ -5988,7 +6054,8 @@
     },
     "actions": {
       "proceedNothing": "Devam et (dahil edilecek bir şey yok)",
-      "incorporateAnswers": "Yanıtları dahil et",
+      "incorporateAndReReview": "Dahil et ve yeniden incele",
+      "incorporateAndProceed": "Dahil et ve devam et",
       "requestRecommendations": "{count} öneri iste | {count} öneri iste | {count} öneri iste",
       "reReview": "İyi görünüyor — yeniden incele",
       "reReviewing": "Yeniden inceleniyor…",
@@ -5997,7 +6064,7 @@
     },
     "help": {
       "canProceed": "Tüm bulgular göz ardı edildi — yeniden çalışmadan sonraki aşamaya geçin.",
-      "canIncorporate": "Yanıtlarınızı tek bir standart biçimli belgeye katar, ardından otomatik olarak yeniden inceler.",
+      "canIncorporate": "İkisi de yanıtlarınızı tek bir standart biçimli belgeye katar. Yeniden incele, inceleyicinin bu belgeyi tekrar kontrol etmesini sağlar; devam et doğrudan sonraki aşamaya geçer.",
       "answerAll": "Devam etmek için her bulguyu yanıtlayın veya göz ardı edin.",
       "merged": "Yeniden inceleme, denetleyiciyi bu belgeye karşı çalıştırır. Birleştirilme şeklinden memnun değilseniz, bunun yerine bir yorumla yeniden yapın."
     },
@@ -6009,6 +6076,8 @@
       "recommendationsReady": "{count} öneri hazır | {count} öneri hazır | {count} öneri hazır",
       "incorporating": "Yanıtlarınız arka planda katılıyor",
       "incorporatingDescription": "Panoya geri döndünüz — yalnızca daha fazla girdi gerekirse sizi bilgilendireceğiz.",
+      "incorporatingThenProceeding": "Yanıtlarınız dahil ediliyor",
+      "incorporatingThenProceedingDescription": "Yanıtlar dahil edilir edilmez çalıştırma sonraki aşamaya geçer.",
       "reviewerSatisfied": "Denetleyici tatmin oldu — boru hattı devam ediyor",
       "iterationLimitReached": "Yineleme sınırına ulaşıldı — nasıl devam edileceğini seçin",
       "newFindings": "tepki verilecek yeni bulgu yok | tepki verilecek {count} yeni bulgu | tepki verilecek {count} yeni bulgu",
@@ -6039,7 +6108,22 @@
       "medium": "Orta güven",
       "low": "Düşük güven"
     },
-    "loadFailed": "Gereksinim incelemesi yüklenemedi"
+    "loadFailed": "Gereksinim incelemesi yüklenemedi",
+    "findingFloor": {
+      "raised": {
+        "high": "Bu geçiş yalnızca yüksek bulguları dile getirdi.",
+        "medium": "Bu geçiş yüksek ve orta bulguları dile getirdi.",
+        "low": "Bu geçiş her önem derecesindeki bulguları dile getirdi."
+      },
+      "basis": {
+        "fixed": "Risk politikasıyla belirlendi.",
+        "estimate": "Görev tahminiyle belirlendi (%{score}).",
+        "no_estimate": "Politika görev tahminini izliyor, ancak bu görevin tahmini yok; bu yüzden yedek değer uygulandı."
+      },
+      "suppressed": "Bu seviyenin altında dışarıda bırakılan bulgular: {count}.",
+      "followUpSuppressed": "Yüksek önemde olmadığı ve yanıtlarınızın devamı olmadığı için bu yeniden incelemede dışarıda bırakılan bulgular: {count}."
+    },
+    "followsUpOn": "Şu konudaki yanıtınızın devamı: {title}"
   },
   "clarity": {
     "title": "Hata raporu triyajı",
@@ -7910,7 +7994,9 @@
       "submit": "İncele",
       "placeholder": "İsteğe bağlı: Bu bulguda tam olarak yanlış veya ikna edici olmayan nedir?",
       "hint": "Araştırmacının daha derine inmesi, bulguyu gerekçelendirmesi ve doğru ve ilgili olduğunu doğrulaması için boş bırakın.",
-      "investigatingBanner": "İtiraz Araştırmacısı bir bulguyu kaynak koda göre yeniden inceliyor…",
+      "queuedBadge": "Sırada",
+      "queueBanner": "İnceleniyor: {running} · Sırada: {queued}. Bu sırada bulguları seçmeye ve itiraz etmeye devam edebilirsiniz.",
+      "resolveAfterInvestigations": "“İncelemeyi bitir”, “Yorum olarak gönder” ve “Seçilenleri düzelt”, her itirazın sonucu çıktığında kullanılabilir olur.",
       "investigatingBadge": "İnceleniyor",
       "strengthenedBadge": "Güçlendirildi",
       "upheldBadge": "Onaylandı",
@@ -9011,5 +9097,16 @@
     "add": "Kuyruğa ekle",
     "addAndStart": "Ekle ve başlat",
     "addedToast": "“{title}” kuyruğa eklendi"
+  },
+  "reviewEffort": {
+    "label": "İnceleme düzeyi",
+    "help": "İncelemenin ne kadar titiz olduğu. Daha yüksek düzeyler, daha az kesin olanlar da dahil olmak üzere daha fazla bulgu bildirir ve daha uzun sürer.",
+    "levels": {
+      "low": "Düşük",
+      "medium": "Orta",
+      "high": "Yüksek",
+      "xhigh": "Çok yüksek",
+      "max": "Maksimum"
+    }
   }
 }

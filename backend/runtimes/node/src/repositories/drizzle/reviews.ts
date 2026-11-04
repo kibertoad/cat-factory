@@ -4,6 +4,11 @@
 // matches across stores; this layer only owns the Drizzle queries. Assembled into the
 // CoreRepositories set by ./drizzle.ts (the barrel).
 
+import {
+  parseRefinedRequirementsWritebackRecord,
+  parseRequirementFindingFloorRecord,
+  type RefinedRequirementsWritebackRecord,
+} from '@cat-factory/contracts'
 import { parseJsonArray } from './_shared.js'
 import type {
   BrainstormItem,
@@ -52,6 +57,8 @@ function rowToRequirementReview(row: RequirementReviewRow): RequirementReview {
     maxIterations: row.max_iterations,
     recommendations: parseJsonArray<RequirementRecommendation>(row.recommendations ?? '[]'),
     rev: row.rev ?? 0,
+    issueWriteback: parseRefinedRequirementsWritebackRecord(row.issue_writeback),
+    findingFloor: parseRequirementFindingFloorRecord(row.finding_floor),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -82,6 +89,7 @@ function requirementReviewValues(workspaceId: string, review: RequirementReview)
     iteration: review.iteration ?? 1,
     max_iterations: review.maxIterations ?? 1,
     recommendations: JSON.stringify(review.recommendations ?? []),
+    finding_floor: review.findingFloor ? JSON.stringify(review.findingFloor) : null,
     rev: 0,
     created_at: review.createdAt,
     updated_at: review.updatedAt,
@@ -135,6 +143,7 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
           iteration: values.iteration,
           max_iterations: values.max_iterations,
           recommendations: values.recommendations,
+          finding_floor: values.finding_floor,
           rev: sql`${requirementReviews.rev} + 1`,
           updated_at: values.updated_at,
         },
@@ -158,6 +167,7 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
         iteration: values.iteration,
         max_iterations: values.max_iterations,
         recommendations: values.recommendations,
+        finding_floor: values.finding_floor,
         rev: sql`${requirementReviews.rev} + 1`,
         updated_at: values.updated_at,
       })
@@ -206,7 +216,9 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
           iteration: values.iteration,
           max_iterations: values.max_iterations,
           recommendations: values.recommendations,
+          finding_floor: values.finding_floor,
           rev: 0,
+          issue_writeback: null,
           created_at: values.created_at,
           updated_at: values.updated_at,
         },
@@ -215,6 +227,22 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
     // Read the revision back rather than assuming it: the caller keeps mutating this object
     // through `compareAndSwap`, so a `rev` it only believes is right desynchronises it.
     review.rev = rows[0]?.rev ?? 0
+    review.issueWriteback = null
+  }
+
+  async recordIssueWriteback(
+    workspaceId: string,
+    reviewId: string,
+    record: RefinedRequirementsWritebackRecord,
+  ): Promise<void> {
+    // Its own column in its own statement, outside `rev`: no whole-row write names it, so neither
+    // side can clobber the other.
+    await this.db
+      .update(requirementReviews)
+      .set({ issue_writeback: JSON.stringify(record) })
+      .where(
+        and(eq(requirementReviews.workspace_id, workspaceId), eq(requirementReviews.id, reviewId)),
+      )
   }
 }
 

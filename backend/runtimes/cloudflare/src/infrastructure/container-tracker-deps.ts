@@ -16,7 +16,7 @@ import type { Env } from './env.js'
 import { buildAppRegistry, buildResolveRepoTarget } from './container.js'
 import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleRepository.js'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository.js'
-import { D1ReviewQuestionPostRepository } from './repositories/D1ReviewQuestionPostRepository.js'
+import { D1WritebackPostRepository } from './repositories/D1WritebackPostRepository.js'
 import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository.js'
 import { D1TaskRepository } from './repositories/D1TaskRepository.js'
 import { D1TrackerSettingsRepository } from './repositories/D1TrackerSettingsRepository.js'
@@ -59,9 +59,9 @@ export function selectRecurringDeps(
     trackerSettingsRepository: new D1TrackerSettingsRepository({ db }),
     taskRepository: new D1TaskRepository({ db }),
     taskSourceProviders,
-    // Idempotency markers for the headless clarification loop's question echo — without them
-    // the writeback passes through, since a replaying driver would otherwise re-post.
-    reviewQuestionPostRepository: new D1ReviewQuestionPostRepository({ db }),
+    // The exactly-once markers claimed before the parked-review question echo. Without them the
+    // echo passes through, since a replaying driver would otherwise re-post.
+    writebackPostRepository: new D1WritebackPostRepository({ db }),
     clock,
     // Every hook here is fire-and-forget; without a logger a permanently broken tracker
     // connection produces no symptom but comments that never appear.

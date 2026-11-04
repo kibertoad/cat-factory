@@ -910,6 +910,17 @@ export interface GitHubClient {
     number: number,
     label: string,
   ): Promise<void>
+  /**
+   * Replace an issue's body with `body`: read it (`GET /issues/{number}`), and PATCH only when it
+   * differs ({@link sameIssueDescription}), answering `unchanged` otherwise. Used by the
+   * refined-requirements writeback. Optional: a client without it leaves the source `unsupported`.
+   */
+  replaceIssueBody?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+    body: string,
+  ): Promise<'updated' | 'unchanged'>
   openPullRequest(
     installationId: number,
     ref: GitHubRepoRef,

@@ -116,21 +116,27 @@ describe('hasNotesToIncorporate', () => {
 
 describe('buildReviewPrompt', () => {
   it('instructs the reviewer to assign a severity to every finding', () => {
-    const prompt = buildReviewPrompt({
-      block: { title: 'T', type: 'service', description: 'do a thing' },
-      docs: [],
-      tasks: [],
-    })
+    const prompt = buildReviewPrompt(
+      {
+        block: { title: 'T', type: 'service', description: 'do a thing' },
+        docs: [],
+        tasks: [],
+      },
+      null,
+    )
     expect(prompt).toContain('severity')
     expect(prompt).toContain('Assign a severity to EVERY item')
   })
 
   it('instructs the reviewer to classify each finding as autoAnswerable', () => {
-    const prompt = buildReviewPrompt({
-      block: { title: 'T', type: 'service', description: 'do a thing' },
-      docs: [],
-      tasks: [],
-    })
+    const prompt = buildReviewPrompt(
+      {
+        block: { title: 'T', type: 'service', description: 'do a thing' },
+        docs: [],
+        tasks: [],
+      },
+      null,
+    )
     expect(prompt).toContain('autoAnswerable')
   })
 
@@ -139,11 +145,14 @@ describe('buildReviewPrompt', () => {
   // including the escape hatch a model reaches for otherwise: keeping a technical question by
   // downgrading its severity.
   it('confines findings to the product / business layer and names who owns the rest', () => {
-    const prompt = buildReviewPrompt({
-      block: { title: 'T', type: 'service', description: 'do a thing' },
-      docs: [],
-      tasks: [],
-    })
+    const prompt = buildReviewPrompt(
+      {
+        block: { title: 'T', type: 'service', description: 'do a thing' },
+        docs: [],
+        tasks: [],
+      },
+      null,
+    )
     expect(prompt).toContain('Every item must be a PRODUCT / BUSINESS question')
     expect(prompt).toContain('Do NOT raise technical design questions')
     expect(prompt).toContain('The Architect and Researcher steps own those')
@@ -151,11 +160,14 @@ describe('buildReviewPrompt', () => {
   })
 
   it('accepts an empty result for purely technical work', () => {
-    const prompt = buildReviewPrompt({
-      block: { title: 'T', type: 'service', description: 'do a thing' },
-      docs: [],
-      tasks: [],
-    })
+    const prompt = buildReviewPrompt(
+      {
+        block: { title: 'T', type: 'service', description: 'do a thing' },
+        docs: [],
+        tasks: [],
+      },
+      null,
+    )
     expect(prompt).toContain('the work is purely technical')
     expect(prompt).toContain('return an empty items array')
   })
@@ -181,6 +193,29 @@ describe('coerceReviewItems', () => {
     )
     const byTitle = Object.fromEntries(items.map((i) => [i.title, i.autoAnswerable]))
     expect(byTitle).toEqual({ a: true, b: false, c: false, d: false })
+  })
+
+  it('resolves a followsUp citation written the way the prompt lists it, and only a handed-out ref', () => {
+    const refs = new Map([['A1', 'Who can export?']])
+    const items = coerceReviewItems(
+      {
+        items: [
+          { title: 'bare', detail: 'd', followsUp: 'A1' },
+          { title: 'bracketed', detail: 'd', followsUp: '[a1]' },
+          { title: 'invented', detail: 'd', followsUp: 'A2' },
+          { title: 'none', detail: 'd', followsUp: null },
+        ],
+      },
+      newId,
+      0,
+      refs,
+    )
+    expect(items.map((i) => [i.title, i.followsUpOn])).toEqual([
+      ['bare', 'Who can export?'],
+      ['bracketed', 'Who can export?'],
+      ['invented', null],
+      ['none', null],
+    ])
   })
 })
 
@@ -404,19 +439,25 @@ describe('buildReviewPrompt — unidentified system', () => {
   }
 
   it('tells the reviewer to raise the unknown system as a finding instead of picking one', () => {
-    const prompt = buildReviewPrompt({
-      ...base,
-      service: { stated: false, reason: 'not-under-a-service' },
-    })
+    const prompt = buildReviewPrompt(
+      {
+        ...base,
+        service: { stated: false, reason: 'not-under-a-service' },
+      },
+      null,
+    )
     expect(prompt).toContain('does not identify which system this work belongs to')
     expect(prompt).toContain('raise THAT as a finding')
   })
 
   it('adds nothing when the system IS identified', () => {
-    const prompt = buildReviewPrompt({
-      ...base,
-      service: { stated: true, frameId: 'b', title: 'billing-api' },
-    })
+    const prompt = buildReviewPrompt(
+      {
+        ...base,
+        service: { stated: true, frameId: 'b', title: 'billing-api' },
+      },
+      null,
+    )
     expect(prompt).not.toContain('does not identify which system')
   })
 })

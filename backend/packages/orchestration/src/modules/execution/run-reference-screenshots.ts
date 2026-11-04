@@ -44,7 +44,9 @@ function slugify(view: string): string {
  * deterministic, and the prompt states which view each file is, so the suffix never has to be
  * interpreted.
  */
-export function assignFileNames(references: readonly BlockReference[]): string[] {
+export function assignFileNames(
+  references: readonly Pick<BlockReference, 'view' | 'contentType'>[],
+): string[] {
   const used = new Set<string>()
   return references.map((reference) => {
     const extension = EXTENSIONS[reference.contentType] ?? 'png'

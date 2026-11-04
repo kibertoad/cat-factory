@@ -5,9 +5,60 @@ The FIRST step of the default pipelines, handled inline in the engine
 The reviewer raises severity-tagged findings, the run parks, and the dedicated window drives an
 iterative loop: answer/dismiss, then an incorporation companion folds the answers into ONE
 document, then a re-review converges (`incorporated`), continues (`ready`), or hits the cap
-(`exceeded`, where the human picks extra-round / proceed / stop-reset). Findings at or below
+(`exceeded`, where the human picks extra-round / proceed / stop-reset). The human can also
+incorporate and proceed, skipping that re-review. Findings at or below
 the merge preset's `maxRequirementConcernAllowed` tolerance auto-pass, and its
 `maxRequirementIterations` is the cap above. Pass-through when the reviewer model isn't wired.
+
+## The severity floor decides what is RAISED; the concern tolerance decides what STOPS
+
+Two policy fields act on severity, at different points, and neither replaces the other.
+`requirementFindingFloor` (default `medium`) is the lowest severity a pass raises at all;
+`maxRequirementConcernAllowed` then decides whether the findings that were raised park the run.
+Operator-facing account: the website's
+[requirements guide](https://www.catfactory.ai/guide/requirements.html).
+
+- **Both halves enforce it.** The reviewer's user prompt names the floor so it spends no effort
+  below it, and `IterativeReviewService` drops whatever still comes back under it. Only the
+  requirements kind is handed a floor (`review-kinds.ts`); clarity and brainstorm raise everything.
+- **Progressive mode reads the block's estimate at the start of each pass**
+  (`requirementFloorProgression`, resolved by `resolveRequirementFindingFloor` in contracts against
+  the highest of complexity / risk / impact). The seeded pipelines run `requirements-review` before
+  any `task-estimator`, so a first run usually has no estimate: the fixed floor applies and the pass
+  records `basis: 'no_estimate'`, which the window states rather than letting the fallback read as a
+  decision. Running an estimator inside the step was rejected: it costs a call per run, and the brief
+  it would score is the vague one this review exists to fix.
+- **Every pass records what it raised against** (`RequirementReview.findingFloor`: severity, basis,
+  score, and how many findings it dropped), so a quiet review held to `high` never reads like a clean
+  one. The review window shows it, and the `/api/v1` requirements decision carries it as
+  `findingFloor`. The dropped count covers only what the model returned despite the prompt; what it never
+  wrote cannot be counted, which is why the floor itself is shown too.
+
+## A re-review raises only what the last round opened
+
+Shown only the incorporated document, a re-review reviews it as if fresh, and a round where every
+finding was dismissed or kept its recommended default comes back with a new batch of questions about
+text nobody changed. Two things hold it to a bar (`review/follow-up-bar.logic.ts`):
+
+- **The prompt states the previous round.** Every answer with text, under a ref (`A1`, `A2`, ...),
+  and every dismissed title, with the rule: raise a finding only if it is `high`, or if it follows
+  from one of those answers, citing it in `followsUp`.
+- **The platform checks the citation.** A ref the prompt never handed out resolves to nothing, so an
+  invented citation cannot carry a finding past the bar; what is neither `high` nor a resolved
+  follow-up is dropped and counted as `findingFloor.followUpSuppressed` (null on a first pass). A
+  kept follow-up stores the answered finding's title as `followsUpOn`, which the window shows.
+
+The bar applies after the severity floor, so it can only narrow what the floor let through. Only the
+requirements kind opts in (`applyPriorRound`); clarity and brainstorm re-review as before. Redo
+feedback is not a citable answer: it rewrites the fold rather than adding a decision to follow up on.
+
+## Incorporate and proceed
+
+`incorporate` takes `after: 'rereview' | 'proceed'`. `proceed` rides the same async path (it is
+recorded on `pendingIncorporation`), folds the answers in, and settles the review through
+`markIncorporated` with no reviewer pass, so the run advances on the folded document. It is the
+choice for a person who trusts their answers and does not want another round; it spends one LLM
+call instead of two.
 
 ## Scope: the product / business layer ONLY
 
@@ -86,6 +137,48 @@ software: an invention that now reads as researched. Its `groundedIn` provenance
 `project-spec` / `web` / `general-practice`) is reported per suggestion, and an unreported level
 stays NULL rather than defaulting.
 
+## Writing the refined requirements into the source issue
+
+When the task came from a tracker issue (Jira, GitHub Issues, GitLab Issues, Linear, or a
+deployment's own source), the refined document can replace that issue's description. Two triggers
+share one path through `RefinedRequirementsPublisher` (orchestration):
+
+- **The "Update linked issues" button** in the review window, always available once a document
+  exists. It refuses with `refined_requirements_unavailable` while there is none or a fold is
+  rewriting it, and with `no_linked_issues` when nothing is linked.
+- **The `writebackRequirementsToDescription` workspace setting**, off by default. When it is on,
+  the review gate's settle hook (`ReviewKind.onSettled`, requirements kind only) writes the approved
+  document as the gate lets the run move on, on every path that settles it: an auto-pass, a
+  converged re-review, an unattended cap settle, and a person proceeding. It never fires on an
+  incorporation that still has findings.
+
+`IssueWritebackService.writeRefinedRequirements` (integrations) fans out over the linked issues
+through each source's optional `writeback.replaceDescription`; a source without it reports
+`unsupported`. Every outcome is counted (`writeback.requirements_description`, by trigger and
+outcome) and recorded on the review (`RequirementReview.issueWriteback`), which is what the window
+lists per issue.
+
+- **The description, replaced.** The description is what everyone reads, and every tracker keeps
+  its history (Jira's history, GitHub's edit history, GitLab's description versions, Linear's
+  history), so the reporter's words stay one click away. The rendered body opens with a line saying
+  so.
+- **Idempotent by content, with no marker.** Each adapter reads the stored description and writes
+  only when it differs (`sameIssueDescription`; Jira compares through `adfToMarkdown`, so attributes
+  Jira adds on save do not read as a change), answering `already_current` otherwise. A repeat, a
+  replay of the gate step, or two clicks at once therefore write at most once and add no history
+  entry. A replayed gate step records `already_current` over the first run's `updated`; the
+  description holds the document either way.
+- **Best-effort when automatic.** The settle hook runs through `runBestEffort` and is awaited before
+  the run advances (so a Worker cannot drop it), and a tracker failure costs the writeback, never
+  the run: the issue reports `failed` and the button retries it.
+- **The outcome record is its own column.** `recordIssueWriteback` writes it in its own statement,
+  outside `rev`, so neither it nor a concurrent review edit can clobber the other; `replaceForBlock`
+  clears it with the review it replaces.
+- **Converted mechanically, with no model.** GitHub, GitLab and Linear take the Markdown as it is;
+  Jira's adapter converts it to ADF with `tracker/markdown-adf.logic.ts`. Jira caps a field at
+  32,767 characters of stored ADF JSON, which outgrows the Markdown by a shape-dependent factor, so
+  the conversion is cut to fit at a line and marked (`jiraFieldAdf`).
+
 ## Inline engine kinds and prompt overrides
 
 These kinds run as bare inline `generateText` calls, so they bypass `systemPromptFor` and take
@@ -104,7 +197,7 @@ its JSON output contract.
   [`the e2e README`](../internal/e2e/README.md#inline-llm-calls-the-e2einlinemodels-seam).
 - Prompt overrides and the role/directives split:
   [`agent-prompt-overrides.md`](./agent-prompt-overrides.md).
-- The preset the two knobs above live on: `RiskPolicySeed` in kernel's `domain/catalog.ts`. The
+- The preset the knobs above live on: `RiskPolicySeed` in kernel's `domain/catalog.ts`. The
   merge policy it belongs to (auto-merge ceilings, `classRules`, who may land what): AGENTS.md,
   "Merge lifecycle".
 - The precheck-first sibling: `hasNotesToIncorporate` short-circuits `runIncorporationCycle` so

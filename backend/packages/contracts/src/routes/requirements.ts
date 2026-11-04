@@ -2,6 +2,7 @@ import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contrac
 import * as v from 'valibot'
 import {
   incorporateRequirementsSchema,
+  refinedRequirementsWritebackResultSchema,
   reRequestRecommendationSchema,
   replyReviewItemSchema,
   requestRecommendationsSchema,
@@ -117,4 +118,17 @@ export const resolveRequirementsExceededContract = defineApiContract({
   pathResolver: ({ blockId }) => `/blocks/${blockId}/requirement-review/resolve-exceeded`,
   requestBodySchema: resolveRequirementsExceededSchema,
   responsesByStatusCode: { 200: requirementReviewSchema, ...errorResponses },
+})
+
+/**
+ * Write the block's refined requirements into the description of each linked tracker issue.
+ * Idempotent by content: an issue whose description already holds the document reports
+ * `already_current` and is not written.
+ */
+export const writeRefinedRequirementsContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/requirement-review/update-linked-issues`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: refinedRequirementsWritebackResultSchema, ...errorResponses },
 })

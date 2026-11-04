@@ -277,6 +277,17 @@ export const restartExecutionContract = defineApiContract({
   responsesByStatusCode: { 200: executionInstanceSchema, ...errorResponses },
 })
 
+// Resume a step parked because the run's personal-subscription credential lapsed. The handler
+// re-mints the activation from the request's personal password (a `428 credential_required` when
+// none rides along, which is what makes the client prompt) and then re-dispatches the step.
+export const resumeCredentialWaitContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: executionIdParams,
+  pathResolver: ({ executionId }) => `/executions/${executionId}/credential/resume`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: executionInstanceSchema, ...errorResponses },
+})
+
 export const rejectStepContract = defineApiContract({
   method: 'post',
   requestPathParamsSchema: approvalParams,

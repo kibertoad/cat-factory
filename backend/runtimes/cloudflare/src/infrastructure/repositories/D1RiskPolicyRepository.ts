@@ -5,9 +5,14 @@ import type {
   RiskPolicy,
   RunDefaultScope,
   RequirementConcernLevel,
+  ReviewEffortLevel,
   StepGating,
   SubmissionClassesByRole,
   WorkspaceRole,
+} from '@cat-factory/contracts'
+import {
+  parseRequirementFindingFloor,
+  parseRequirementFloorProgression,
 } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -22,6 +27,7 @@ interface RiskPolicyRow {
   max_requirement_concern_allowed: string
   max_tester_quality_iterations: number
   companion_max_reworks: number
+  post_implementation_review_effort: string
   release_watch_window_minutes: number
   release_max_attempts: number
   human_review_grace_minutes: number
@@ -36,6 +42,8 @@ interface RiskPolicyRow {
   version: number | null
   autonomy: string | null
   min_auto_answer_confidence: number
+  requirement_finding_floor: string | null
+  requirement_floor_progression: string | null
   is_default: number
   is_unattended_default: number
   created_at: number
@@ -53,6 +61,7 @@ function rowToPreset(row: RiskPolicyRow): RiskPolicy {
     maxRequirementConcernAllowed: row.max_requirement_concern_allowed as RequirementConcernLevel,
     maxTesterQualityIterations: row.max_tester_quality_iterations,
     companionMaxReworks: row.companion_max_reworks,
+    postImplementationReviewEffort: row.post_implementation_review_effort as ReviewEffortLevel,
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
@@ -80,6 +89,10 @@ function rowToPreset(row: RiskPolicyRow): RiskPolicy {
     // posture that stops for a person — never a licence this row cannot be shown to have granted.
     autonomy: row.autonomy === 'unattended' ? 'unattended' : 'attended',
     minAutoAnswerConfidence: row.min_auto_answer_confidence,
+    requirementFindingFloor: parseRequirementFindingFloor(row.requirement_finding_floor),
+    requirementFloorProgression: parseRequirementFloorProgression(
+      row.requirement_floor_progression,
+    ),
     isDefault: row.is_default === 1,
     isUnattendedDefault: row.is_unattended_default === 1,
     ...(row.version != null ? { version: row.version } : {}),
@@ -178,14 +191,15 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
         `INSERT INTO merge_threshold_presets
            (workspace_id, id, name, max_complexity, max_risk, max_impact, ci_max_attempts,
             max_requirement_iterations, max_requirement_concern_allowed,
-            max_tester_quality_iterations, companion_max_reworks,
+            max_tester_quality_iterations, companion_max_reworks, post_implementation_review_effort,
             release_watch_window_minutes, release_max_attempts, human_review_grace_minutes,
             judge_min_score, judge_max_bounces,
             auto_merge_enabled, fork_decision, class_rules, class_rules_by_role, dry_run_roles,
             submission_classes_by_role, version, autonomy, min_auto_answer_confidence,
+            requirement_finding_floor, requirement_floor_progression,
             is_default, is_unattended_default,
             created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
@@ -196,6 +210,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
            max_requirement_concern_allowed = excluded.max_requirement_concern_allowed,
            max_tester_quality_iterations = excluded.max_tester_quality_iterations,
            companion_max_reworks = excluded.companion_max_reworks,
+           post_implementation_review_effort = excluded.post_implementation_review_effort,
            release_watch_window_minutes = excluded.release_watch_window_minutes,
            release_max_attempts = excluded.release_max_attempts,
            human_review_grace_minutes = excluded.human_review_grace_minutes,
@@ -210,6 +225,8 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
            version = excluded.version,
            autonomy = excluded.autonomy,
            min_auto_answer_confidence = excluded.min_auto_answer_confidence,
+           requirement_finding_floor = excluded.requirement_finding_floor,
+           requirement_floor_progression = excluded.requirement_floor_progression,
            is_default = excluded.is_default,
            is_unattended_default = excluded.is_unattended_default`,
       )
@@ -225,6 +242,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
         preset.maxRequirementConcernAllowed,
         preset.maxTesterQualityIterations,
         preset.companionMaxReworks,
+        preset.postImplementationReviewEffort,
         preset.releaseWatchWindowMinutes,
         preset.releaseMaxAttempts,
         preset.humanReviewGraceMinutes,
@@ -239,6 +257,10 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
         preset.version ?? null,
         preset.autonomy,
         preset.minAutoAnswerConfidence,
+        preset.requirementFindingFloor,
+        preset.requirementFloorProgression
+          ? JSON.stringify(preset.requirementFloorProgression)
+          : null,
         preset.isDefault ? 1 : 0,
         preset.isUnattendedDefault ? 1 : 0,
         preset.createdAt,

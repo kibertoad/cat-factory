@@ -8,6 +8,8 @@ import type {
   PipelineStep,
   RequestRecommendationItem,
   RequirementConcernLevel,
+  RequirementFloorProgression,
+  ReviewItemSeverity,
   RequirementRecommendation,
   ResolveRequirementsExceededChoice,
   ReviewQuestionSubject,
@@ -16,6 +18,7 @@ import type {
 } from '@cat-factory/kernel'
 import { assertFound, ConflictError, ValidationError } from '@cat-factory/kernel'
 import {
+  type IncorporateAfter,
   DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE,
   reviewSettledForUnattended,
 } from '@cat-factory/contracts'
@@ -71,6 +74,13 @@ export interface ReviewPreset {
    * model never graded.
    */
   minAutoAnswerConfidence?: number
+  /**
+   * The lowest severity the requirements reviewer raises, and the estimate bands that move it.
+   * Optional for the reason `autonomy` is; absent reads as the shipped default floor, never as
+   * "raise everything", so a hand-built preset cannot quietly make a review louder.
+   */
+  requirementFindingFloor?: ReviewItemSeverity
+  requirementFloorProgression?: RequirementFloorProgression | null
 }
 
 /**
@@ -95,6 +105,12 @@ export interface ReviewKind<TReview extends ReviewCommon> {
   review(workspaceId: string, block: Block, preset: ReviewPreset): Promise<TReview>
   /** Re-review the incorporated document (one more pass). */
   reReview(workspaceId: string, reviewId: string, preset: ReviewPreset): Promise<TReview>
+  /**
+   * The review settled and its gate is about to let the run move on. Requirements-only today: the
+   * opt-in refined-requirements writeback. Must not throw; it is awaited before the run advances
+   * so a Worker cannot drop it, and a failure costs the writeback, never the run. Optional.
+   */
+  onSettled?(workspaceId: string, blockId: string): Promise<void>
   /** Fold the human's settled answers (+ any redo feedback) into the standardized document. */
   incorporate(
     workspaceId: string,
@@ -274,6 +290,10 @@ export class ReviewGateController {
     const pending = step.pendingIncorporation
     if (pending) {
       step.pendingIncorporation = null
+      if (pending.after === 'proceed') {
+        await this.incorporateAndSettle(kind, workspaceId, block.id, pending.feedback)
+        return this.completeSettledStep(kind, workspaceId, instance, step, block, isFinalStep)
+      }
       const cycled = await this.runIncorporationCycle(
         kind,
         workspaceId,
@@ -297,7 +317,7 @@ export class ReviewGateController {
             )
           : cycled
       if (review.status === 'incorporated') {
-        return this.completeStep(workspaceId, instance, step, isFinalStep)
+        return this.completeSettledStep(kind, workspaceId, instance, step, block, isFinalStep)
       }
       const settled = await this.settleCapUnattended(
         kind,
@@ -307,7 +327,8 @@ export class ReviewGateController {
         review,
         step,
       )
-      if (settled) return this.completeStep(workspaceId, instance, step, isFinalStep)
+      if (settled)
+        return this.completeSettledStep(kind, workspaceId, instance, step, block, isFinalStep)
       // `ready`/`exceeded`: re-park (a fresh decision id) and wait for the human again.
       // At the cap, raise a notification so the three-choice decision is discoverable.
       if (review.status === 'exceeded')
@@ -321,13 +342,13 @@ export class ReviewGateController {
     // the dedicated window.
     const review = await this.review(kind, workspaceId, block.id, instance)
     if (review.status === 'incorporated') {
-      return this.completeStep(workspaceId, instance, step, isFinalStep)
+      return this.completeSettledStep(kind, workspaceId, instance, step, block, isFinalStep)
     }
     // At the cap with nobody to ask: settle on the last clarified report and advance (see
     // `settleCapUnattended`). Checked before the auto-recommendation pass below, which exists to
     // hand a HUMAN a mostly-filled review and buys an unattended run nothing.
     if (await this.settleCapUnattended(kind, workspaceId, instance, block, review, step)) {
-      return this.completeStep(workspaceId, instance, step, isFinalStep)
+      return this.completeSettledStep(kind, workspaceId, instance, step, block, isFinalStep)
     }
     // Pre-answer the findings the reviewer judged answerable without a product owner, so the
     // human is handed a mostly-filled review (only the genuine business decisions remain
@@ -346,10 +367,10 @@ export class ReviewGateController {
       )
     }
     if (current.status === 'incorporated') {
-      return this.completeStep(workspaceId, instance, step, isFinalStep)
+      return this.completeSettledStep(kind, workspaceId, instance, step, block, isFinalStep)
     }
     if (await this.settleCapUnattended(kind, workspaceId, instance, block, current, step)) {
-      return this.completeStep(workspaceId, instance, step, isFinalStep)
+      return this.completeSettledStep(kind, workspaceId, instance, step, block, isFinalStep)
     }
     if (current.status === 'exceeded')
       await this.deps.stateMachine.raiseDecisionRequired(workspaceId, instance)
@@ -612,6 +633,26 @@ export class ReviewGateController {
   }
 
   /**
+   * Fold the human's settled answers in and settle the review on the result, with no re-review: the
+   * "incorporate and proceed" choice. The caller advances the run. Nothing to fold in settles the
+   * review as it stands, exactly as {@link runIncorporationCycle} does.
+   */
+  private async incorporateAndSettle<TReview extends ReviewCommon>(
+    kind: ReviewKind<TReview>,
+    workspaceId: string,
+    blockId: string,
+    feedback?: string,
+  ): Promise<TReview> {
+    const review = await this.currentReview(kind, workspaceId, blockId)
+    if (hasNotesToIncorporate(review.items, feedback)) {
+      await kind.incorporate(workspaceId, blockId, review.id, feedback)
+    }
+    const settled = await kind.markIncorporated(workspaceId, review.id)
+    await kind.emit(workspaceId, settled)
+    return settled
+  }
+
+  /**
    * Run the auto-recommendation automation for a block's review when the kind supports it
    * (requirements only). Best-effort: the recommendations are a convenience, so a Writer
    * failure must never wedge the parked run — it just leaves those findings blank for the
@@ -642,6 +683,19 @@ export class ReviewGateController {
   ): Promise<AdvanceResult> {
     this.deps.stateMachine.finishHumanGateStep(step)
     return this.deps.stateMachine.settleStepAndAdvance(workspaceId, instance, isFinalStep)
+  }
+
+  /** {@link completeStep} for a gate whose review SETTLED, after the kind's settle hook. */
+  private async completeSettledStep<TReview extends ReviewCommon>(
+    kind: ReviewKind<TReview>,
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+  ): Promise<AdvanceResult> {
+    await kind.onSettled?.(workspaceId, block.id)
+    return this.completeStep(workspaceId, instance, step, isFinalStep)
   }
 
   /** Resolve a block's current review or throw. */
@@ -690,12 +744,16 @@ export class ReviewGateController {
    * No parked run (an off-path inspector review with no active pipeline) → there is no driver
    * to offload to, so the fold + re-review run inline here. That path never had the
    * pipeline-gate freeze this method exists to remove.
+   *
+   * `after: 'proceed'` folds the answers in and settles on the result instead of re-reviewing it,
+   * advancing the run (see {@link incorporateAndSettle}).
    */
   async incorporate<TReview extends ReviewCommon>(
     kind: ReviewKind<TReview>,
     workspaceId: string,
     blockId: string,
     feedback?: string,
+    after: IncorporateAfter = 'rereview',
   ): Promise<TReview> {
     const review = await this.currentReview(kind, workspaceId, blockId)
     const open = review.items.filter((i) => i.status === 'open')
@@ -709,7 +767,9 @@ export class ReviewGateController {
     if (!parked) {
       // Off-path: no pipeline parked on this review. Do the work inline (it cannot be
       // offloaded to a driver that isn't running) and return the re-reviewed result.
-      return this.runIncorporationCycle(kind, workspaceId, blockId, feedback)
+      return after === 'proceed'
+        ? this.incorporateAndSettle(kind, workspaceId, blockId, feedback)
+        : this.runIncorporationCycle(kind, workspaceId, blockId, feedback)
     }
 
     // Record the intent + re-arm the run under OPTIMISTIC CONCURRENCY (race-audit 2.2
@@ -733,7 +793,10 @@ export class ReviewGateController {
         if (!step?.approval) {
           throw new ConflictError('The review is no longer awaiting incorporation')
         }
-        step.pendingIncorporation = feedback ? { feedback } : {}
+        step.pendingIncorporation = {
+          ...(feedback ? { feedback } : {}),
+          ...(after === 'proceed' ? { after } : {}),
+        }
         if (inst.status === 'blocked') inst.status = 'running'
         approvalId = step.approval.id
       },
@@ -985,6 +1048,7 @@ export class ReviewGateController {
     // faulting on a gone run) when there is no parked gate — matching the prior resume.
     const current = await this.deps.executionRepository.get(workspaceId, executionId)
     if (!current || !current.steps.some(isGate)) return
+    await kind.onSettled?.(workspaceId, blockId)
     // Advance past the resolved gate under OPTIMISTIC CONCURRENCY (race-audit 2.2 controller-half):
     // the pure in-memory advance (`advanceRunPastGate`) runs inside the CAS; its non-idempotent
     // side effects (`settleAdvancedGate`: block writes + driver signal + emit) run once after, on

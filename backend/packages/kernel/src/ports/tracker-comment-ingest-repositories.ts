@@ -13,8 +13,8 @@ import type { TaskSourceKind } from '../domain/types.js'
 // The claim below is atomic (an insert-or-conditionally-update reporting whether the caller now
 // owns the ingest) and is taken BEFORE anything is applied, not after: a crash between applying
 // the reply and writing the marker would otherwise re-apply on the next delivery. This is the
-// same shape as `review_question_posts` — deliberately, per that port's own note ("Slice 2b's
-// cursor dedup is the same shape — copy the marker repo, don't invent a read-then-write").
+// same shape as the outbound `writeback_posts` marker (`writeback-post-repositories.ts`), on
+// purpose: a read-then-write would let two deliveries both decide to apply.
 //
 // A `failed` row is re-claimable so a transient outage is retried; an `applied` row is terminal.
 // A `pending` row is re-claimable only once ABANDONED (see TRACKER_COMMENT_INGEST_CLAIM_TTL_MS),
@@ -50,7 +50,7 @@ export interface TrackerCommentIngestRecord extends TrackerCommentIngestKey {
  * Sized well above a live ingest (which settles its row in seconds — it is a handful of local
  * service calls plus one outbound comment) and well below a human's turnaround on the question,
  * so a takeover cannot race a still-running apply. Mirrors
- * {@link REVIEW_QUESTION_POST_CLAIM_TTL_MS}; the two windows are independent knobs on purpose,
+ * `WRITEBACK_POST_CLAIM_TTL_MS`; the two windows are independent knobs on purpose,
  * because they bound different work.
  */
 export const TRACKER_COMMENT_INGEST_CLAIM_TTL_MS = 10 * 60_000

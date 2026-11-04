@@ -38,6 +38,7 @@ import { ReviewGateController, type ReviewGateControllerDeps } from './ReviewGat
 import { BinaryCandidateController } from './BinaryCandidateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { InputGateController } from './InputGateController.js'
+import { CredentialWaitController } from './CredentialWaitController.js'
 import { PrReviewController } from './PrReviewController.js'
 import { BugFishingController } from './BugFishingController.js'
 import { createTaskTypeCreationDefaults } from '../board/taskTypeCreationDefaults.js'
@@ -318,19 +319,22 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
  * The already-built collaborators {@link buildReviewSubjects} needs. Same values the
  * constructor used inline.
  */
-export interface ReviewSubjectDeps {
-  blockRepository: BlockRepository
-  executionRepository: ExecutionRepository
-  workRunner: WorkRunner
+export type ReviewSubjectDeps = Pick<
+  ExecutionServiceDependencies,
+  | 'blockRepository'
+  | 'executionRepository'
+  | 'workRunner'
+  | 'executionEventPublisher'
+  | 'requirementReviewService'
+  | 'clarityReviewService'
+  | 'brainstormServices'
+  | 'initiativeService'
+  | 'initiativeInterviewService'
+  | 'docInterviewService'
+  | 'refinedRequirementsWriteback'
+> & {
   stateMachine: RunStateMachine
   stepGraph: StepGraph
-  executionEventPublisher: ExecutionServiceDependencies['executionEventPublisher']
-  requirementReviewService: ExecutionServiceDependencies['requirementReviewService']
-  clarityReviewService: ExecutionServiceDependencies['clarityReviewService']
-  brainstormServices: ExecutionServiceDependencies['brainstormServices']
-  initiativeService: ExecutionServiceDependencies['initiativeService']
-  initiativeInterviewService: ExecutionServiceDependencies['initiativeInterviewService']
-  docInterviewService: ExecutionServiceDependencies['docInterviewService']
 }
 
 /**
@@ -339,7 +343,11 @@ export interface ReviewSubjectDeps {
  * from the {@link ExecutionService} constructor for the per-function line budget — each
  * subject's differentiators still live in `review-kinds.ts`, not on the engine.
  */
-export function buildReviewSubjects(deps: ReviewSubjectDeps) {
+export function buildReviewSubjects(
+  dependencies: Omit<ReviewSubjectDeps, 'stateMachine' | 'stepGraph'>,
+  engine: Pick<ReviewSubjectDeps, 'stateMachine' | 'stepGraph'>,
+) {
+  const deps: ReviewSubjectDeps = { ...dependencies, ...engine }
   const {
     blockRepository,
     executionRepository,
@@ -364,6 +372,9 @@ export function buildReviewSubjects(deps: ReviewSubjectDeps) {
     requirementReviewService,
     clarityReviewService,
     brainstormServices,
+    ...(deps.refinedRequirementsWriteback
+      ? { refinedRequirementsWriteback: deps.refinedRequirementsWriteback }
+      : {}),
   }
   const requirementsKind = buildRequirementsKind(reviewKindDeps)
   const clarityKind = buildClarityKind(reviewKindDeps)
@@ -444,6 +455,25 @@ export function buildInputGateController(
     // nothing declaring required fields, which is a real answer rather than a missing one.
     taskTypeRegistry: dependencies.taskTypeRegistry ?? defaultTaskTypeRegistry(),
     workspaceSettingsService: dependencies.workspaceSettingsService,
+    logger: dependencies.logger,
+  })
+}
+
+/**
+ * The run's CREDENTIAL WAIT: parks a step whose dispatch could not lease the run's personal
+ * subscription credential. Built here beside the input gate, the other park that guards a
+ * dispatch rather than being a step of its own.
+ */
+export function buildCredentialWaitController(
+  dependencies: ExecutionServiceDependencies,
+  runtime: { stateMachine: RunStateMachine; stepGraph: StepGraph },
+): CredentialWaitController {
+  return new CredentialWaitController({
+    stateMachine: runtime.stateMachine,
+    stepGraph: runtime.stepGraph,
+    executionRepository: dependencies.executionRepository,
+    clock: dependencies.clock,
+    workRunner: dependencies.workRunner,
     logger: dependencies.logger,
   })
 }

@@ -95,10 +95,12 @@ export async function resolveBlockReferences(
   store: BinaryArtifactStore | null,
   workspaceId: string,
   blockId: string,
+  /** The block's artifacts when the caller already listed them, so the set costs no second read. */
+  blockArtifacts?: readonly BinaryArtifactRecord[],
 ): Promise<BlockReferenceSet> {
   if (!store) return { references: [], design: null }
   const design = await resolveDesignReferences(documentRepository, store, workspaceId, blockId)
-  const uploads = (await store.listByBlock(workspaceId, blockId)).filter(
+  const uploads = (blockArtifacts ?? (await store.listByBlock(workspaceId, blockId))).filter(
     (record) => record.kind === 'reference',
   )
   return {

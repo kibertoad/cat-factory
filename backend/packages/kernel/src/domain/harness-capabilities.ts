@@ -51,6 +51,7 @@ export type HarnessBodyCapability =
   | 'piMcpServers'
   | 'skills'
   | 'designImages'
+  | 'taskImages'
   | 'generateImages'
 
 /** Operator-facing prose for each capability: what the body carried, in words. */
@@ -59,6 +60,7 @@ const HARNESS_BODY_CAPABILITY_LABELS: Record<HarnessBodyCapability, string> = {
   piMcpServers: 'tool servers (MCP) on the Pi harness (executor image 1.162.0 or newer)',
   skills: 'skills',
   designImages: 'design pictures',
+  taskImages: 'task images',
   generateImages: "the agent CLI's own image generation",
 }
 
@@ -73,6 +75,7 @@ export const HARNESS_BODY_CAPABILITY_FIELDS: Readonly<Record<HarnessBodyCapabili
   piMcpServers: 'mcpServers',
   skills: 'skills',
   designImages: 'designImages',
+  taskImages: 'taskImages',
   generateImages: 'generateImages',
 }
 
@@ -133,6 +136,15 @@ function runsOnPi(body: Readonly<Record<string, unknown>>): boolean {
   return body.harness !== 'claude-code' && body.harness !== 'codex'
 }
 
+/** An image manifest (`{ url, token, files }`) naming at least one file. */
+function isPopulatedManifest(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    isPopulatedList((value as { files?: unknown }).files)
+  )
+}
+
 /** A non-empty array: the wire shape of every capability that is simply a list. */
 function isPopulatedList(value: unknown): boolean {
   return Array.isArray(value) && value.length > 0
@@ -165,10 +177,8 @@ const HARNESS_BODY_CAPABILITY_CARRIED: Record<
   piMcpServers: (body) => runsOnPi(body) && isPopulatedList(body.mcpServers),
   skills: (body) => isPopulatedList(body.skills),
   // A manifest with no files promises the agent nothing, exactly as an empty server list does.
-  designImages: ({ designImages: value }) =>
-    typeof value === 'object' &&
-    value !== null &&
-    isPopulatedList((value as { files?: unknown }).files),
+  designImages: ({ designImages: value }) => isPopulatedManifest(value),
+  taskImages: ({ taskImages: value }) => isPopulatedManifest(value),
   // A plain flag, and the only shape here that is neither a list nor a manifest. `=== true`
   // rather than truthiness, because the field is the wire's own boolean and anything else in it
   // is a body this backend did not compose.

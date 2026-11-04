@@ -100,15 +100,14 @@ re-encrypted with the **system key only** (no password layer), scoped to one run
 asynchronous container steps can authenticate without the user online. During that window the
 token is recoverable with the system key alone, the one spot the password layer is bypassed,
 so the window is kept tight: the default TTL is **~12h**, and a healthy run **deletes its
-activation the moment it finishes**, so in the common case the window is far shorter. The TTL
-can stay short without ever re-prompting a working user because an actively-tended run
-**re-mints** the activation on each interaction (resolve a decision / approve a step / retry)
-from the cached password; the interaction hard-gates exactly like start/retry, so a healthy
-(≥8h) key re-mints silently while a within-buffer/lapsed one prompts for early re-entry rather
-than coasting. The TTL only ever bounds a stuck or abandoned run, never a live
-one. It also has to outlast a fully-autonomous run (which has no human touch-points to
-re-mint at), which 12h comfortably does; the expiry sweep reclaims any straggler as a
-backstop. Even at its widest the exposure only matters to a system-key holder, the actor
+activation the moment it finishes**, so in the common case the window is far shorter. A run
+that outlives its activation (a long human review, a park left overnight) does not fail: the
+next dispatch's **lease** is refused, and the engine parks that step on a **credential wait**
+instead (`CredentialWaitController`). The run's initiator resumes it from the run panel, which rides the
+cached password (or prompts for it), re-mints the activation and re-dispatches the same step.
+The lease is the one place the question is asked, so it holds for every way a run reaches a
+dispatch: a human answering a park, a review converging in the background, a timer. The
+expiry sweep reclaims any straggler as a backstop. Even at its widest the exposure only matters to a system-key holder, the actor
 already out of scope, and on a system-key compromise every other system-encrypted secret (the
 whole pooled-subscription pool, GitHub/Slack tokens, and so on) is exposed too, so a personal
 token in an active run is marginal incremental exposure.
@@ -126,10 +125,9 @@ token in an active run is marginal incremental exposure.
    body field. Restricted to printable ASCII so it is header-safe. Re-validated against an 8h
    expiry buffer on every gated action, so the user re-enters early instead of mid-pipeline.
 4. **Short, transparently-extended per-run activations**: system-key-only, scoped to the
-   run, ~12h TTL, deleted on completion (or when the block's run is replaced), re-minted from
-   the cached password on each user interaction (which hard-gates like start/retry, so a
-   within-buffer/lapsed key prompts for early re-entry) so a live run never lapses, TTL-swept
-   as a backstop (§3).
+   run, ~12h TTL, deleted on completion (or when the block's run is replaced). A dispatch whose
+   lease finds the activation lapsed parks its step for the person to re-enter their password
+   rather than failing the run. TTL-swept as a backstop (§3).
 5. **No unattended use.** A recurring schedule whose block resolves to an individual-usage
    model (by pin _or_ workspace default) is refused at fire time (no one is present to
    unlock it). A HEADLESS start over `/api/v1` is the same rule seen from the other side, and
@@ -164,11 +162,14 @@ Each async container step:
   ContainerAgentExecutor → leasePersonalSubscriptionToken(execId, user, vendor)
     → system.decrypt(activation) → raw token handed to the runner transport
 
-Interact with a live run (resolve decision / approve / request changes):
-  POST … (same X-Personal-Password header, ridden from the cache; a within-buffer/
-          lapsed key is withheld → 428 → the client re-prompts early)
+A dispatch whose lease is refused (the activation lapsed):
+  CredentialWaitController.guard → the step parks (step.credentialWait, run `blocked`)
+  POST /executions/:id/credential/resume (X-Personal-Password, ridden from the cache;
+       none → 428 → the client prompts)
+    → refused unless the run is still parked (409) and the caller is its initiator (403),
+      both checked before anything is minted
     → activateForInteraction: gate (like start/retry) + re-mint the run's activation(s)
-      BEFORE advancing, so the short TTL never lapses a run the user is actively tending
+    → the same step re-dispatches
 
 Run finishes (done/failed), or is replaced by a new run on the block:
   ExecutionService deletes the run's subscription_activations immediately

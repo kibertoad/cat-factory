@@ -70,6 +70,7 @@ import type {
   WorkspaceMountRepository,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
+  WritebackPostRepository,
 } from '@cat-factory/kernel'
 import type { DirectoryRepository } from '@cat-factory/kernel'
 import { DrizzleDirectoryRepository } from './directoryRepository.js'
@@ -113,10 +114,10 @@ import {
   DrizzleAgentContextSnapshotRepository,
   DrizzleAgentSearchQueryRepository,
   DrizzleAgentToolCallRepository,
-  DrizzleBinaryArtifactMetadataStore,
   DrizzleLlmCallMetricRepository,
   DrizzleProvisioningLogRepository,
 } from './drizzle/telemetry.js'
+import { DrizzleBinaryArtifactMetadataStore } from './drizzle/binaryArtifacts.js'
 import { DrizzleTokenUsageRepository } from './drizzle/tokenUsage.js'
 
 import {
@@ -172,6 +173,7 @@ import {
 } from './drizzle/connections.js'
 
 import { DrizzleServiceCatalogConnectionRepository } from './drizzle/serviceCatalog.js'
+import { DrizzleWritebackPostRepository } from './drizzle/writebackPosts.js'
 
 export interface CoreRepositories {
   workspaceRepository: WorkspaceRepository
@@ -239,6 +241,7 @@ export interface CoreRepositories {
   mcpOAuthGrantRepository: McpOAuthGrantRepository
   validationConfigRepository: ValidationConfigRepository
   provisioningLogRepository: ProvisioningLogRepository
+  writebackPostRepository: WritebackPostRepository
 }
 
 /** Build the Drizzle/Postgres-backed core repositories. */
@@ -309,6 +312,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     capabilityCredentialRepository: new DrizzleCapabilityCredentialRepository(db),
     mcpOAuthGrantRepository: new DrizzleMcpOAuthGrantRepository(db),
     provisioningLogRepository: new DrizzleProvisioningLogRepository(db),
+    writebackPostRepository: new DrizzleWritebackPostRepository(db),
   }
 }
 

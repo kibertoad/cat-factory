@@ -11,8 +11,9 @@ import { ralphStepStateSchema } from './ralph.js'
 import { validationReportSchema } from './validation-checks.js'
 import { reproductionReportSchema } from './reproduction.js'
 import { bugFishingStepStateSchema } from './bugFishing.js'
-import { prReviewStepStateSchema } from './prReview.js'
+import { prReviewChallengeJobSchema, prReviewStepStateSchema } from './prReview.js'
 import { runInputGateSchema } from './input-gate.js'
+import { stepCredentialWaitSchema } from './credential-wait.js'
 import { stepSkipReasonSchema } from './step-conditions.js'
 import { fragmentAdherenceSchema } from './fragment-adherence.js'
 import { agentEffortReportSchema } from './agent-effort.js'
@@ -21,6 +22,7 @@ import { binaryOutputReportSchema } from './binary-outputs.js'
 import { binaryCandidateStepStateSchema } from './binary-candidates.js'
 import { stepToolServersSchema } from './tool-servers.js'
 import { stepContextDocumentSchema } from './documents.js'
+import { incorporateAfterSchema } from './requirements.js'
 // The polling-GATE and the human-verdict-gate step-state clusters each live in their own
 // module (the `forkDecision.ts` / `judge.ts` shape); `PipelineStep` composes them back in below.
 import { gateStepStateSchema } from './gate.js'
@@ -762,15 +764,15 @@ export const pipelineStepSchema = v.object({
    */
   pendingPrReviewPost: v.optional(v.nullable(v.boolean())),
   /**
-   * The transient driver marker for a PR-review "challenge": set when a human challenges a
-   * finding, naming the finding + their optional specific concern, so the durable driver — on
-   * re-entry, off the HTTP request — dispatches the read-only Challenge Investigator against that
-   * finding exactly once. Consumed when the investigator's verdict is applied (the finding is
-   * strengthened or retracted) and the review re-parks. Absent when no challenge is in flight.
+   * The PR-review CHALLENGE QUEUE: one entry per challenged finding still waiting on, or being dug
+   * into by, a read-only Challenge Investigator, in the order the human asked. The durable driver
+   * starts entries while fewer than `MAX_CONCURRENT_CHALLENGE_INVESTIGATIONS` are running, polls the
+   * running ones, and removes each as its verdict is applied. Empty when no challenge is in flight.
+   *
+   * Each running investigator is its OWN container job beside the step's, so it carries what the
+   * step-level fields carry for the step's job: what the poll site cannot re-derive.
    */
-  pendingChallenge: v.optional(
-    v.nullable(v.object({ findingId: v.string(), question: v.optional(v.nullable(v.string())) })),
-  ),
+  challengeJobs: v.optional(v.array(prReviewChallengeJobSchema)),
   /**
    * Transient rework feedback carried on a PRODUCER step while it is being re-run by
    * a downstream reviewer (the analogue of an approval's `changes_requested`
@@ -806,9 +808,14 @@ export const pipelineStepSchema = v.object({
    * to wake and the durable driver, on re-entering the gate, folds the answers into a
    * document and re-reviews it (the LLM work that used to block the HTTP request). Cleared
    * once that async cycle completes. `feedback` is the human's optional "do it differently"
-   * direction (a redo). Absent when no incorporation is pending.
+   * direction (a redo). `after: 'proceed'` settles the review on the folded document and advances
+   * instead of re-reviewing it; absent reads as `rereview`. Absent when no incorporation is pending.
    */
-  pendingIncorporation: v.optional(v.nullable(v.object({ feedback: v.optional(v.string()) }))),
+  pendingIncorporation: v.optional(
+    v.nullable(
+      v.object({ feedback: v.optional(v.string()), after: v.optional(incorporateAfterSchema) }),
+    ),
+  ),
   /**
    * Transient recommendation intent carried on a parked `requirements-review` gate step.
    * Set when the human asks the Requirement Writer to suggest answers for a batch of findings
@@ -1094,6 +1101,12 @@ export const pipelineStepSchema = v.object({
    * See {@link binaryCandidateStepStateSchema}.
    */
   binaryCandidates: v.optional(v.nullable(binaryCandidateStepStateSchema)),
+  /**
+   * Set while the step is PARKED because its dispatch could not lease the run's personal
+   * subscription credential (the activation lapsed). Cleared when the person resumes the step.
+   * See {@link stepCredentialWaitSchema}.
+   */
+  credentialWait: v.optional(v.nullable(stepCredentialWaitSchema)),
   /**
    * Identifier of an in-flight asynchronous agent job (a container run polled by
    * the durable driver). Set while the step is dispatched-but-not-yet-finished so

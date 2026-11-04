@@ -5,7 +5,9 @@ import type {
   DocumentRepository,
   ExecutionRepository,
   InitiativeRepository,
+  Logger,
   PreloadedBlocks,
+  ResolveBinaryArtifactStore,
   ServiceRepository,
   TaskRepository,
   WorkspaceMountRepository,
@@ -14,6 +16,7 @@ import { ValidationError } from '@cat-factory/kernel'
 import { descendantIds, unfinishedTasksUnder } from './board.logic.js'
 import type { BoardChangeReason } from './board.logic.js'
 import { pruneDanglingEdges, reclaimDoomedEntities } from './removal-cascade.js'
+import { reclaimBlockArtifacts } from './blockArtifacts.js'
 
 /**
  * The block DELETE path, extracted from `BoardService` following the established
@@ -34,6 +37,12 @@ export interface BlockRemovalDeps {
   initiativeRepository?: InitiativeRepository
   documentRepository?: DocumentRepository
   taskRepository?: TaskRepository
+  /**
+   * The account's artifact store, so a delete reclaims what the doomed blocks carried (a task's
+   * attached images are retained until then). Absent or unconfigured ⇒ nothing to reclaim.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  logger?: Logger
   /** 404s an unknown board before anything is read. */
   requireWorkspace: (workspaceId: string) => Promise<unknown>
   /**
@@ -137,6 +146,7 @@ export function createBlockRemoval(deps: BlockRemovalDeps) {
       { homeWorkspaceId, deletedId: id, blocks, doomed },
     )
     await deps.blockRepository.deleteMany(homeWorkspaceId, [...doomed])
+    await reclaimBlockArtifacts(deps, homeWorkspaceId, [...doomed])
 
     await pruneDanglingEdges(deps.blockRepository, homeWorkspaceId, blocks, doomed)
 

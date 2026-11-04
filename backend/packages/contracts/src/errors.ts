@@ -242,6 +242,10 @@ export const CONFLICT_REASONS = [
   // The remedy is "nothing to do here": the SPA refreshes the run rather than re-offering a
   // decision that has already been taken.
   'input_gate_not_parked',
+  // A caller tried to resume a run's credential wait that is not (or is no longer) parked: the
+  // resume already went through (a double click, a second tab), or the run moved on. Like the
+  // input gate's twin above, the remedy is to refresh the run rather than to retry.
+  'credential_wait_not_parked',
   // The OPPOSITE fact, and deliberately its own reason rather than a second use of the one above.
   // The run IS parked on the input gate and the caller tried to answer it through the GENERIC
   // approval rail. The gate parks whatever step 0 happens to be, so a generic approve would mark
@@ -325,6 +329,13 @@ export const CONFLICT_REASONS = [
   // pruned, so replaying cannot bring the consumer's copy up to date. Reconciling from a snapshot
   // is the remedy, which is what the directory-sync client does on its own.
   'cursor_expired',
+  // Posting refined requirements to a block's tracker issues needs a document to post: the review
+  // has not produced one yet, or a fold is rewriting it right now. Waiting for the incorporation is
+  // the remedy.
+  'refined_requirements_unavailable',
+  // Posting refined requirements needs a tracker issue linked to the block. Linking the issue the
+  // task came from is the remedy.
+  'no_linked_issues',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]
@@ -547,3 +558,16 @@ export const TOOL_SERVER_OAUTH_REASONS = [
 ] as const
 
 export type ToolServerOAuthReason = (typeof TOOL_SERVER_OAUTH_REASONS)[number]
+
+/**
+ * Machine-readable reasons resuming a run's credential wait is refused, beyond the
+ * `credential_wait_not_parked` conflict.
+ *
+ *  - `credential_wait_not_initiator` (403): the caller did not start the run. The step leases the
+ *    initiator's credential, so a password from anyone else cannot unblock it.
+ *
+ * The SPA keys an exhaustive `Record<CredentialWaitReason, …>` of message keys off this.
+ */
+export const CREDENTIAL_WAIT_REASONS = ['credential_wait_not_initiator'] as const
+
+export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]

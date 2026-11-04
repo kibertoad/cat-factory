@@ -478,6 +478,10 @@
         "questionsOnPark": {
           "label": "Pubblica le domande aperte di un'esecuzione headless in pausa",
           "help": "Quando un'esecuzione avviata fuori dall'app si mette in pausa per chiarire i requisiti (tramite API o da un ticket del tracker), pubblica le sue domande aperte sull'issue collegato, ciascuna con l'id che una risposta deve indicare. Le attività avviate nell'app non sono interessate."
+        },
+        "requirementsToDescription": {
+          "label": "Scrivi i requisiti rifiniti nella descrizione dell'issue collegata",
+          "help": "Quando la revisione dei requisiti di un'attività si chiude e l'esecuzione prosegue, sostituisce la descrizione dell'issue collegata con i requisiti rifiniti. Il tracker conserva la descrizione precedente nella sua cronologia. Disattivato per impostazione predefinita e impostabile solo per l'intero workspace."
         }
       },
       "probeFailure": {
@@ -548,6 +552,8 @@
         "maxRequirementIterations": "Iterazioni sui requisiti",
         "maxRequirementConcernAllowed": "Auto-pass per criticita pari o inferiori a",
         "companionMaxReworks": "Cicli di rielaborazione del companion",
+        "postImplementationReviewEffort": "Impegno della revisione dopo l'implementazione",
+        "postImplementationReviewEffortHelp": "Quanto è approfondita la revisione del codice dopo l'implementazione. I livelli più alti segnalano più rilievi, compresi quelli meno certi, e richiedono più tempo.",
         "autoMerge": "Auto-merge"
       },
       "autoMergeOnHint": "Mergia automaticamente quando rientra nei limiti del criterio.",
@@ -659,6 +665,20 @@
       "confirmHide": {
         "title": "Nascondere questo criterio?",
         "body": "«{name}» non verrà più offerto in questa bacheca e le attività che lo avevano scelto torneranno al criterio predefinito della bacheca. Potrai ripristinarlo più tardi."
+      },
+      "findingFloor": {
+        "label": "La revisione dei requisiti segnala",
+        "fallbackLabel": "Segnala, quando l’attività non ha una stima",
+        "hint": "I rilievi sotto questa gravità vengono esclusi dalla revisione. Solo un rilievo segnalato può fermare l’esecuzione.",
+        "high": "Solo rilievi alti",
+        "medium": "Rilievi alti e medi",
+        "low": "Tutto, compresi quelli minori",
+        "progressiveLabel": "Seguire la stima dell’attività",
+        "progressiveHint": "Chiedere di più sulle attività più grandi, in base al valore più alto tra complessità, rischio e impatto della stima. Richiede un Task Estimator prima della revisione o una stima di un’esecuzione precedente.",
+        "mediumFrom": "Aggiungere i rilievi medi da una stima di (%)",
+        "lowFrom": "Segnalare tutto da una stima di (%)",
+        "bandsCrossed": "La soglia dei rilievi medi non può superare la soglia di tutto.",
+        "bandsOutOfRange": "Entrambe le soglie devono essere numeri da 0 a 100."
       }
     },
     "observabilityConnection": {
@@ -4584,6 +4604,20 @@
       "oauthButton": "Collega con {label}",
       "oauthOr": "oppure collega con una chiave API",
       "disconnectFailed": "Impossibile scollegare"
+    },
+    "images": {
+      "heading": "Immagini",
+      "hint": "Screenshot, bozzetti o diagrammi che spiegano questa attività. Gli agenti che ci lavorano li vedono ovunque il loro modello accetti immagini.",
+      "add": "Aggiungi immagini",
+      "count": "{count} di {max}",
+      "truncated": "Un'attività contiene al massimo {max} immagini, quindi sono state aggiunte solo le prime.",
+      "rejected": "Non aggiunti, perché sono accettate solo immagini PNG, JPEG, WebP e GIF: {names}",
+      "remove": "Rimuovi {name}",
+      "unnamed": "Immagine allegata",
+      "attached": "Immagini allegate",
+      "uploadFailed": "Impossibile allegare l'immagine",
+      "removeFailed": "Impossibile rimuovere l'immagine",
+      "loadFailed": "Impossibile caricare le immagini allegate"
     }
   },
   "bugHunt": {
@@ -5269,6 +5303,23 @@
     "reRequest": "Richiedi di nuovo",
     "finalRequirements": "Requisiti finali",
     "incorporatedDraft": "Requisiti incorporati (bozza)",
+    "updateIssues": {
+      "action": "Aggiorna le issue collegate",
+      "hint": "Sostituisce la descrizione di ogni issue collegata con questi requisiti. Il tracker conserva la descrizione precedente nella sua cronologia.",
+      "error": "Impossibile aggiornare le issue collegate",
+      "automatic": "Scritto automaticamente nelle issue collegate alla chiusura della revisione:",
+      "toast": {
+        "updated": "Issue collegate aggiornate con i requisiti",
+        "nothingNew": "Le issue collegate contengono già questi requisiti",
+        "partial": "Alcune issue collegate non sono state aggiornate"
+      },
+      "outcome": {
+        "updated": "aggiornata",
+        "already_current": "già aggiornata",
+        "failed": "non riuscito, aggiorna di nuovo per riprovare",
+        "unsupported": "questo tracker non può essere aggiornato"
+      }
+    },
     "stats": {
       "findings": "Rilievi",
       "open": "Aperti",
@@ -5280,7 +5331,8 @@
     },
     "actions": {
       "proceedNothing": "Procedi (nulla da incorporare)",
-      "incorporateAnswers": "Incorpora le risposte",
+      "incorporateAndReReview": "Incorpora e rivedi",
+      "incorporateAndProceed": "Incorpora e procedi",
       "requestRecommendations": "Richiedi {count} raccomandazione | Richiedi {count} raccomandazione | Richiedi {count} raccomandazioni",
       "reReview": "Va bene — rivedi di nuovo",
       "reReviewing": "Nuova revisione in corso…",
@@ -5289,7 +5341,7 @@
     },
     "help": {
       "canProceed": "Ogni rilievo e ignorato — procedi alla fase successiva senza rielaborare.",
-      "canIncorporate": "Unisce le tue risposte in un unico documento in formato standard, poi lo rivede automaticamente.",
+      "canIncorporate": "Entrambe uniscono le tue risposte in un unico documento in formato standard. Rivedi fa controllare di nuovo quel documento al revisore; procedi passa subito alla fase successiva.",
       "answerAll": "Rispondi o ignora ogni rilievo per continuare.",
       "merged": "La nuova revisione esegue il revisore su questo documento. Se non sei soddisfatto di come e stato unito, rifallo con un commento."
     },
@@ -5301,6 +5353,8 @@
       "recommendationsReady": "{count} raccomandazione pronta | {count} raccomandazione pronta | {count} raccomandazioni pronte",
       "incorporating": "Incorporazione delle tue risposte in background",
       "incorporatingDescription": "Sei di nuovo sulla lavagna — ti avviseremo solo se occorrono altre indicazioni.",
+      "incorporatingThenProceeding": "Incorporazione delle tue risposte",
+      "incorporatingThenProceedingDescription": "L'esecuzione passa alla fase successiva non appena sono incorporate.",
       "reviewerSatisfied": "Il revisore e soddisfatto — la pipeline prosegue",
       "iterationLimitReached": "Limite di iterazioni raggiunto — scegli come procedere",
       "newFindings": "nessun nuovo rilievo a cui reagire | {count} nuovo rilievo a cui reagire | {count} nuovi rilievi a cui reagire",
@@ -5331,7 +5385,22 @@
       "medium": "Confidenza media",
       "low": "Confidenza bassa"
     },
-    "loadFailed": "Impossibile caricare la revisione dei requisiti"
+    "loadFailed": "Impossibile caricare la revisione dei requisiti",
+    "findingFloor": {
+      "raised": {
+        "high": "Questo passaggio ha segnalato solo rilievi alti.",
+        "medium": "Questo passaggio ha segnalato rilievi alti e medi.",
+        "low": "Questo passaggio ha segnalato rilievi di ogni gravità."
+      },
+      "basis": {
+        "fixed": "Impostato dalla policy di rischio.",
+        "estimate": "Impostato dalla stima dell’attività ({score}%).",
+        "no_estimate": "La policy segue la stima dell’attività, ma questa attività non ne ha una, quindi si è applicato il valore di riserva."
+      },
+      "suppressed": "Rilievi esclusi sotto quel livello: {count}.",
+      "followUpSuppressed": "Esclusi da questa revisione perché né di gravità alta né un seguito alle tue risposte: {count}."
+    },
+    "followsUpOn": "Segue la tua risposta su: {title}"
   },
   "bootstrap": {
     "title": "Avvia un repository",
@@ -6437,6 +6506,7 @@
         "reference_repo_unreadable": "Non è stato possibile leggere in questo momento il repository dietro l'architettura di riferimento di questa esecuzione, quindi l'esecuzione non è stata avviata su un modello che potrebbe non riuscire a clonare. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
         "oauth_state_invalid": "Questo link di autorizzazione è scaduto o è già stato usato, quindi non può completare la connessione.",
         "oauth_started_by_other_user": "Questa connessione è stata avviata da un’altra persona, quindi solo lei può completarla.",
+        "credential_wait_not_initiator": "Solo la persona che ha avviato questa esecuzione può rinnovarne le credenziali dell’abbonamento personale, perché l’esecuzione usa il suo abbonamento. Chiedile di proseguirla.",
         "oauth_exchange_refused": "Il server di autorizzazione del server degli strumenti ha rifiutato la concessione. Chiedi a chi gestisce il deployment di controllare le impostazioni del client OAuth del server degli strumenti.",
         "oauth_client_secret_unavailable": "Il segreto del client OAuth del server degli strumenti non è disponibile su questa board. Aggiungilo dalla finestra Infrastruttura.",
         "tool_server_without_oauth": "Questo server degli strumenti non usa più OAuth, quindi non c’è nessuna connessione da completare.",
@@ -6448,6 +6518,7 @@
       "startFailed": "Avvio non riuscito",
       "mergeFailed": "Merge non riuscito",
       "restartFailed": "Riavvio non riuscito",
+      "resumeCredentialFailed": "Impossibile riprendere l'esecuzione",
       "approveFailed": "Approvazione non riuscita",
       "requestChangesFailed": "Richiesta di modifiche non riuscita",
       "rejectFailed": "Rifiuto non riuscito"
@@ -6502,6 +6573,7 @@
         "binary_output_generator_invalid": "Impossibile risolvere il generatore per gli output binari",
         "foundational_service_not_inherited": "Questa bacheca ha registrato quel servizio",
         "input_gate_not_parked": "Niente a cui rispondere",
+        "credential_wait_not_parked": "Niente da riprendere",
         "input_gate_parked": "Rispondi nel controllo di input dell'attività",
         "ticket_already_linked": "Questo ticket ha già un'attività",
         "document_already_linked": "Documento già allegato",
@@ -6525,7 +6597,9 @@
         "thread_busy": "Questa discussione sta ancora rispondendo",
         "draft_conflict": "Questa bozza è cambiata",
         "session_stale": "La pull request è andata avanti",
-        "cursor_expired": "Il feed delle modifiche ha superato questo cursore"
+        "cursor_expired": "Il feed delle modifiche ha superato questo cursore",
+        "refined_requirements_unavailable": "Nessun requisito raffinato per ora",
+        "no_linked_issues": "Nessuna issue collegata"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6563,6 +6637,7 @@
         "binary_output_generator_invalid": "Un passaggio che genera output binari seleziona un’integrazione generativa che questa installazione non registra, nessuna delle integrazioni selezionate produce un tipo di contenuto che il passaggio deve consegnare, oppure una di esse è generata da una CLI dell’agente su cui il modello di questo passaggio non viene eseguito. Le integrazioni generative si registrano nel codice dell’installazione, non in questo workspace: registrala, correggi la selezione del passaggio, oppure fissa per il passaggio un modello che esegua la CLI richiesta, poi riavvia.",
         "foundational_service_not_inherited": "L'esclusione vale per un servizio ereditato dall'account. Questo id è registrato da questa bacheca, quindi non c'è nulla da escludere: elimina invece la voce propria della bacheca.",
         "input_gate_not_parked": "Questa esecuzione non attende più il controllo dell'input. Forse qualcuno ha già risposto, o l'esecuzione è andata avanti.",
+        "credential_wait_not_parked": "Questa esecuzione non è più in attesa delle credenziali del tuo abbonamento personale. Potrebbe essere già stata ripresa, oppure l'esecuzione è andata avanti.",
         "input_gate_parked": "Questa esecuzione è in attesa del suo controllo di input, a cui l'approvazione non può rispondere. Usa l'avviso sull'esecuzione: correggi l'attività e ricontrolla, oppure eseguila comunque.",
         "ticket_already_linked": "Un ticket può sostenere una sola attività, quindi ricollegarlo toglierebbe all'attività esistente il contesto con cui è stata creata. Apri invece quell'attività, oppure scollega prima il ticket.",
         "document_already_linked": "Quel documento è allegato a un'altra attività. Scollegalo prima da lì oppure allega una copia separata.",
@@ -6586,7 +6661,9 @@
         "thread_busy": "La domanda precedente in questa discussione non ha ancora una risposta. Attendi la risposta o chiedi in un'altra discussione.",
         "draft_conflict": "Questa bozza di commento è stata modificata, pubblicata o scartata da quando l'hai caricata. Ricarica le bozze e ripeti la modifica.",
         "session_stale": "Sono arrivati nuovi commit dopo la preparazione di questa revisione, quindi le bozze potrebbero puntare alle righe sbagliate. Aggiorna la revisione, controlla le bozze e poi pubblica.",
-        "cursor_expired": "Le modifiche successive a questo cursore non sono più conservate. Acquisisci una nuova istantanea della directory, poi segui il feed dalla posizione che riporta."
+        "cursor_expired": "Le modifiche successive a questo cursore non sono più conservate. Acquisisci una nuova istantanea della directory, poi segui il feed dalla posizione che riporta.",
+        "refined_requirements_unavailable": "La revisione non ha ancora prodotto un documento rivisto, oppure lo sta riscrivendo ora. Attendi la fine dell’incorporazione, poi aggiorna di nuovo.",
+        "no_linked_issues": "Questa attività non ha issue del tracker collegate. Collega la issue da cui proviene, poi aggiorna di nuovo."
       },
       "action": {
         "connectGitHub": "Collega GitHub",
@@ -6943,6 +7020,13 @@
         "hint": "Questa esecuzione ha registrato un controllo che questa versione non conosce più. Rivedi l'attività a mano prima di continuare."
       }
     }
+  },
+  "credentialWait": {
+    "title": "Le credenziali del tuo abbonamento personale sono scadute",
+    "body": "Le credenziali dell'abbonamento personale di questa esecuzione sono scadute prima che potesse iniziare il passaggio successivo, quindi l'esecuzione è in pausa. Inserisci la tua password personale per rinnovarle e riprendere da questo passaggio.",
+    "resume": "Inserisci la password e continua",
+    "othersTitle": "Le credenziali dell’abbonamento personale di questa esecuzione sono scadute",
+    "othersRun": "Solo la persona che ha avviato questa esecuzione può rinnovarle con la propria password personale. Chiedile di proseguirla."
   },
   "consensus": {
     "titlePrefix": "Consenso",
@@ -7910,7 +7994,9 @@
       "submit": "Indaga",
       "placeholder": "Facoltativo: cosa c'è di preciso di sbagliato o poco convincente in questo rilievo?",
       "hint": "Lascia vuoto per far approfondire l'investigatore, giustificare il rilievo e verificarne accuratezza e pertinenza.",
-      "investigatingBanner": "L'investigatore delle contestazioni sta riesaminando un rilievo rispetto al codice sorgente…",
+      "queuedBadge": "In coda",
+      "queueBanner": "In esame: {running} · In coda: {queued}. Nel frattempo puoi continuare a selezionare e contestare i rilievi.",
+      "resolveAfterInvestigations": "“Concludi revisione”, “Pubblica come commenti” e “Correggi selezionati” saranno disponibili quando ogni contestazione avrà il suo verdetto.",
       "investigatingBadge": "In esame",
       "strengthenedBadge": "Rafforzato",
       "upheldBadge": "Confermato",
@@ -9011,5 +9097,16 @@
     "add": "Aggiungi alla coda",
     "addAndStart": "Aggiungi e avvia",
     "addedToast": "«{title}» aggiunta alla coda"
+  },
+  "reviewEffort": {
+    "label": "Impegno della revisione",
+    "help": "Quanto è approfondita la revisione. I livelli più alti segnalano più rilievi, compresi quelli meno certi, e richiedono più tempo.",
+    "levels": {
+      "low": "Basso",
+      "medium": "Medio",
+      "high": "Alto",
+      "xhigh": "Molto alto",
+      "max": "Massimo"
+    }
   }
 }

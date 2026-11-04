@@ -1,5 +1,199 @@
 # @cat-factory/worker
 
+## 0.232.2
+
+### Patch Changes
+
+- Updated dependencies [71dd42a]
+  - @cat-factory/contracts@0.382.0
+  - @cat-factory/orchestration@0.329.0
+  - @cat-factory/server@0.348.0
+  - @cat-factory/agents@0.176.1
+  - @cat-factory/binary-generators@0.3.85
+  - @cat-factory/consensus@0.20.5
+  - @cat-factory/eks@0.1.424
+  - @cat-factory/gates@0.12.21
+  - @cat-factory/gitlab@0.25.4
+  - @cat-factory/integrations@0.179.4
+  - @cat-factory/kernel@0.367.2
+  - @cat-factory/observability-otel@0.24.4
+  - @cat-factory/prompt-fragments@1.1.81
+  - @cat-factory/spend@0.23.30
+  - @cat-factory/provider-cloudflare@0.7.579
+  - @cat-factory/caching@0.20.119
+  - @cat-factory/observability-langfuse@0.11.85
+
+## 0.232.1
+
+### Patch Changes
+
+- Updated dependencies [0883cfa]
+  - @cat-factory/contracts@0.381.0
+  - @cat-factory/agents@0.176.0
+  - @cat-factory/orchestration@0.328.0
+  - @cat-factory/server@0.347.0
+  - @cat-factory/binary-generators@0.3.84
+  - @cat-factory/consensus@0.20.4
+  - @cat-factory/eks@0.1.423
+  - @cat-factory/gates@0.12.20
+  - @cat-factory/gitlab@0.25.3
+  - @cat-factory/integrations@0.179.3
+  - @cat-factory/kernel@0.367.1
+  - @cat-factory/observability-otel@0.24.3
+  - @cat-factory/prompt-fragments@1.1.80
+  - @cat-factory/spend@0.23.29
+  - @cat-factory/provider-cloudflare@0.7.578
+  - @cat-factory/caching@0.20.118
+  - @cat-factory/observability-langfuse@0.11.84
+
+## 0.232.0
+
+### Minor Changes
+
+- 534264e: Review effort levels and a challenge queue for the PR deep review.
+  
+  - A review task takes an effort level (`low`, `medium`, `high`, `xhigh`, `max`; `high` by default) on `taskTypeFields.reviewEffort`. A risk policy carries `postImplementationReviewEffort` (default `high`) for the post-implementation reviewer. The level sets the findings cap, whether unconfirmed findings are reported, whether each finding gets a verification pass, and the pr-reviewer's slice fan-out. The default `high` now runs a verification pass, so a default review spends more than before.
+  - Challenged findings queue: at most three investigators run at once, the rest read `queued`, and selection stays editable while they run. Resolve and dismiss wait for the queue to drain. Public API: `queued` joins the PR review finding challenge status (OpenAPI 1.92.0, SDKs regenerated).
+  - Internal break: the step field `pendingChallenge` is replaced by `challengeJobs`. A challenge in flight on an existing run when this deploys is dropped: the review returns to awaiting selection with that finding still marked `investigating`, so it cannot be challenged again, while the rest of the review resolves normally.
+
+### Patch Changes
+
+- Updated dependencies [534264e]
+  - @cat-factory/contracts@0.380.0
+  - @cat-factory/kernel@0.367.0
+  - @cat-factory/agents@0.175.0
+  - @cat-factory/orchestration@0.327.0
+  - @cat-factory/server@0.346.0
+  - @cat-factory/binary-generators@0.3.83
+  - @cat-factory/consensus@0.20.3
+  - @cat-factory/eks@0.1.422
+  - @cat-factory/gates@0.12.19
+  - @cat-factory/gitlab@0.25.2
+  - @cat-factory/integrations@0.179.2
+  - @cat-factory/observability-otel@0.24.2
+  - @cat-factory/prompt-fragments@1.1.79
+  - @cat-factory/spend@0.23.28
+  - @cat-factory/caching@0.20.117
+  - @cat-factory/observability-langfuse@0.11.83
+  - @cat-factory/provider-cloudflare@0.7.577
+
+## 0.231.0
+
+### Minor Changes
+
+- 69f364e: A risk policy now sets how verbose a requirements review is. `requirementFindingFloor` is the lowest severity the reviewer raises (`high`, `medium` or `low`). It defaults to `medium`, so `low` findings are no longer raised on existing policies either. `requirementFloorProgression` (null by default) moves that floor with the task estimate. Below `mediumFrom` only `high` is raised, from `mediumFrom` `high` and `medium`, and from `lowFrom` everything, read against the highest of the estimate's complexity, risk and impact. With no estimate on the task, the fixed floor applies. The reviewer prompt names the floor (`requirement-review` prompt v7), the engine drops anything returned below it, and each pass records the floor, where it came from and how many findings it dropped on `RequirementReview.findingFloor`. The review window shows that record, and the risk-policy editor gains the controls.
+  
+  `reviewItemSeveritySchema` moves to the new `requirement-finding-floor` module of `@cat-factory/contracts` and is still exported from the package root. Migration: D1 `0112_requirement_finding_floor`, plus a Drizzle migration on Node, adds `requirement_finding_floor` and `requirement_floor_progression` to `merge_threshold_presets` and `account_risk_policies`, and `finding_floor` to `requirement_reviews`.
+  
+  A requirements decision read through `/api/v1` carries the same record as `findingFloor` (`PublicRequirementsFindingFloor`, null on a review recorded without one), so a headless caller can tell a filtered review from one that found little: the OpenAPI surface is 1.91.0, and the SDKs are regenerated.
+
+### Patch Changes
+
+- Updated dependencies [69f364e]
+  - @cat-factory/contracts@0.379.0
+  - @cat-factory/kernel@0.366.0
+  - @cat-factory/agents@0.174.0
+  - @cat-factory/orchestration@0.326.0
+  - @cat-factory/server@0.345.0
+  - @cat-factory/binary-generators@0.3.82
+  - @cat-factory/consensus@0.20.2
+  - @cat-factory/eks@0.1.421
+  - @cat-factory/gates@0.12.18
+  - @cat-factory/gitlab@0.25.1
+  - @cat-factory/integrations@0.179.1
+  - @cat-factory/observability-otel@0.24.1
+  - @cat-factory/prompt-fragments@1.1.78
+  - @cat-factory/spend@0.23.27
+  - @cat-factory/caching@0.20.116
+  - @cat-factory/observability-langfuse@0.11.82
+  - @cat-factory/provider-cloudflare@0.7.576
+
+## 0.230.0
+
+### Minor Changes
+
+- 7c1214e: A task's refined requirements can be written into the description of the tracker issue(s) it came from, replacing it; every tracker keeps the previous description in its history. The requirements review window has an "Update linked issues" button, and a new workspace writeback setting, `writebackRequirementsToDescription` (off by default), does the same automatically when a requirements review settles and the run moves on. The write is idempotent by content: an issue already holding the document is left alone and reported `already_current`. The last outcome per issue is recorded on the review (`issueWriteback`) and listed in the window, and counted on `writeback.requirements_description`. Jira receives ADF, now with nested lists, code blocks, quotes, emphasis and links, sized against Jira's 32,767-character field limit; that converter also improves the Jira tickets the platform files and every Jira comment it writes.
+  
+  New internal route `POST /workspaces/:workspaceId/blocks/:blockId/requirement-review/update-linked-issues`, two conflict reasons (`refined_requirements_unavailable`, `no_linked_issues`), a new `IssueWritebackProvider.writeRefinedRequirements` port method, an optional `TaskSourceWritebackAdapter.replaceDescription` (implemented for Jira, Linear, GitHub Issues and GitLab Issues) and an optional `replaceIssueBody` on the GitHub and VCS client ports. `RequirementReviewRepository` gains `recordIssueWriteback`.
+  
+  The tracker writeback's exactly-once marker for comments is now one generic table, `writeback_posts`, replacing `review_question_posts`: the migration (D1 `0111`, a Drizzle migration on Node) copies the parked-review question markers over and drops the old table, and `reviewQuestionPostRepository` becomes `writebackPostRepository` on `IssueWritebackService` and the persistence RPC. Its claim answers `claimed`, `posted` or `held` in one statement. The same migration adds `tracker_settings.writeback_requirements_to_description` and `requirement_reviews.issue_writeback`.
+
+### Patch Changes
+
+- Updated dependencies [7c1214e]
+  - @cat-factory/contracts@0.378.0
+  - @cat-factory/kernel@0.365.0
+  - @cat-factory/integrations@0.179.0
+  - @cat-factory/orchestration@0.325.0
+  - @cat-factory/server@0.344.0
+  - @cat-factory/gitlab@0.25.0
+  - @cat-factory/observability-otel@0.24.0
+  - @cat-factory/agents@0.173.1
+  - @cat-factory/binary-generators@0.3.81
+  - @cat-factory/consensus@0.20.1
+  - @cat-factory/eks@0.1.420
+  - @cat-factory/gates@0.12.17
+  - @cat-factory/prompt-fragments@1.1.77
+  - @cat-factory/spend@0.23.26
+  - @cat-factory/caching@0.20.115
+  - @cat-factory/observability-langfuse@0.11.81
+  - @cat-factory/provider-cloudflare@0.7.575
+
+## 0.229.0
+
+### Minor Changes
+
+- dbbcfd9: Images can be attached to a task as context, when creating it or later from the inspector (up to six per task). They are stored as `context` artifacts in the account's binary-artifact storage, at the workspace that homes the task (so a task under a shared service keeps one set whichever board attached them), kept for as long as the task exists, moved with it when it is dragged into a service homed elsewhere, and removed with it. The retention sweep reclaims any whose task no longer exists. Only a task takes images: an upload naming another block is refused with `task_image_block_not_task`.
+  
+  The agents that work on the task are shown them as real image input wherever their model path accepts images: an inline step attaches them to its model request, the requirements, clarity and brainstorm reviewers do the same, and a container step on an image-capable CLI gets them as files under `.cat-context/task-images/`. Where a step cannot carry an image (a text-only model, an undeclared model, a Pi or Codex container, the ambient text-only inline path, a consensus panel or a delegated executor) its prompt names the images and states why they were withheld.
+  
+  `GET /api/v1/runs/{runId}/artifacts` can now list a `context` artifact (task-scoped) beside screenshots, references and assets: the OpenAPI surface is 1.90.0. The executor image is 1.164.0, which parses the new `taskImages` job field and reports it on the capability handshake.
+
+### Patch Changes
+
+- Updated dependencies [dbbcfd9]
+  - @cat-factory/contracts@0.377.0
+  - @cat-factory/kernel@0.364.0
+  - @cat-factory/agents@0.173.0
+  - @cat-factory/orchestration@0.324.0
+  - @cat-factory/consensus@0.20.0
+  - @cat-factory/server@0.343.0
+  - @cat-factory/binary-generators@0.3.80
+  - @cat-factory/eks@0.1.419
+  - @cat-factory/gates@0.12.16
+  - @cat-factory/gitlab@0.24.16
+  - @cat-factory/integrations@0.178.3
+  - @cat-factory/observability-otel@0.23.73
+  - @cat-factory/prompt-fragments@1.1.76
+  - @cat-factory/spend@0.23.25
+  - @cat-factory/caching@0.20.114
+  - @cat-factory/observability-langfuse@0.11.80
+  - @cat-factory/provider-cloudflare@0.7.574
+
+## 0.228.2
+
+### Patch Changes
+
+- Updated dependencies [09ccd89]
+- Updated dependencies [31f32a1]
+  - @cat-factory/contracts@0.376.0
+  - @cat-factory/orchestration@0.323.2
+  - @cat-factory/kernel@0.363.2
+  - @cat-factory/agents@0.172.10
+  - @cat-factory/binary-generators@0.3.79
+  - @cat-factory/consensus@0.19.27
+  - @cat-factory/eks@0.1.418
+  - @cat-factory/gates@0.12.15
+  - @cat-factory/gitlab@0.24.15
+  - @cat-factory/integrations@0.178.2
+  - @cat-factory/observability-otel@0.23.72
+  - @cat-factory/prompt-fragments@1.1.75
+  - @cat-factory/server@0.342.1
+  - @cat-factory/spend@0.23.24
+  - @cat-factory/caching@0.20.113
+  - @cat-factory/observability-langfuse@0.11.79
+  - @cat-factory/provider-cloudflare@0.7.573
+
 ## 0.228.1
 
 ### Patch Changes

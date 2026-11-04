@@ -21,7 +21,7 @@ import type {
   WorkspaceMountRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import type { BlockRepository } from '@cat-factory/kernel'
+import type { BlockRepository, ResolveBinaryArtifactStore } from '@cat-factory/kernel'
 import {
   assertFound,
   ConflictError,
@@ -34,6 +34,7 @@ import {
 import type { IntakeOrigin, IssueIntakeConfig } from '@cat-factory/contracts'
 import { judgeIssueEventForIntake, type TaskConnectionService } from '@cat-factory/integrations'
 import type { ExecutionService } from '../execution/ExecutionService.js'
+import { reclaimBlockArtifacts } from '../board/blockArtifacts.js'
 import {
   assertPipelineLaunchable,
   pipelineHasEnabledBugIntake,
@@ -58,6 +59,8 @@ export interface RecurringPipelineServiceDependencies {
    */
   serviceRepository?: ServiceRepository
   workspaceMountRepository?: WorkspaceMountRepository
+  /** Reclaims the artifacts a removed schedule's block carried (a task's attached images). */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   /**
    * Resolves whether a task source is a connected/enabled source for the workspace, so a
    * `bug-intake` pipeline's schedule can be validated to carry an `issueIntake` config pointed at a
@@ -164,6 +167,7 @@ export class RecurringPipelineService {
   private readonly taskConnectionService?: TaskConnectionService
   private readonly events?: ExecutionEventPublisher
   private readonly log: Logger
+  private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   private readonly adoptIssueAsTask?: RecurringPipelineServiceDependencies['adoptIssueAsTask']
 
   constructor(deps: RecurringPipelineServiceDependencies) {
@@ -180,6 +184,7 @@ export class RecurringPipelineService {
     this.taskConnectionService = deps.taskConnectionService
     this.events = deps.executionEventPublisher
     this.log = deps.logger ?? noopLogger
+    this.resolveBinaryArtifactStore = deps.resolveBinaryArtifactStore
     this.adoptIssueAsTask = deps.adoptIssueAsTask
   }
 
@@ -429,6 +434,11 @@ export class RecurringPipelineService {
     const existing = assertFound(await this.schedules.get(workspaceId, id), 'Schedule', id)
     await this.executionRepository.deleteByBlock(workspaceId, existing.blockId)
     await this.blockRepository.deleteMany(workspaceId, [existing.blockId])
+    await reclaimBlockArtifacts(
+      { resolveBinaryArtifactStore: this.resolveBinaryArtifactStore, logger: this.log },
+      workspaceId,
+      [existing.blockId],
+    )
     await this.schedules.remove(workspaceId, id)
   }
 

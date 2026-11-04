@@ -86,6 +86,87 @@ export function defineReviewStoreConcurrencyConformance(harness: ConformanceHarn
       expect((await repo.getByBlock(workspace.id, 'blk_review_cas'))?.id).toBe('rrv_cas_2')
     })
 
+    it('keeps the recorded issue writeback across whole-row writes, and clears it on replace', async () => {
+      // The writeback outcome is its own column, written by its own statement: a review edit that
+      // re-writes the whole row from a snapshot taken before the writeback must not drop it.
+      const app = harness.makeApp()
+      const repo = app.requirementReviewRepository()
+      const { workspace } = await app.createWorkspace()
+      await repo.upsert(workspace.id, review())
+      const stale = (await repo.get(workspace.id, 'rrv_cas'))!
+
+      const record = {
+        trigger: 'automatic' as const,
+        at: 42,
+        issues: [{ source: 'jira', externalId: 'ENG-7', outcome: 'updated' as const }],
+      }
+      await repo.recordIssueWriteback(workspace.id, 'rrv_cas', record)
+      expect((await repo.get(workspace.id, 'rrv_cas'))?.issueWriteback).toEqual(record)
+
+      stale.status = 'incorporated'
+      expect(await repo.compareAndSwap(workspace.id, stale)).toBe(true)
+      await repo.upsert(workspace.id, { ...stale, updatedAt: 2 })
+      expect((await repo.getByBlock(workspace.id, 'blk_review_cas'))?.issueWriteback).toEqual(
+        record,
+      )
+
+      await repo.replaceForBlock(workspace.id, review({ id: 'rrv_cas_next' }))
+      expect((await repo.getByBlock(workspace.id, 'blk_review_cas'))?.issueWriteback).toBeNull()
+      // Recording against a review that no longer exists writes nothing.
+      await repo.recordIssueWriteback(workspace.id, 'rrv_cas', record)
+      expect(await repo.get(workspace.id, 'rrv_cas')).toBeNull()
+    })
+
+    it('round-trips the finding floor through every whole-row write', async () => {
+      const app = harness.makeApp()
+      const repo = app.requirementReviewRepository()
+      const { workspace } = await app.createWorkspace()
+      const first = {
+        severity: 'high' as const,
+        basis: 'estimate' as const,
+        score: 0.2,
+        suppressed: 3,
+      }
+      await repo.replaceForBlock(workspace.id, review({ findingFloor: first }))
+      const stored = (await repo.getByBlock(workspace.id, 'blk_review_cas'))!
+      expect(stored.findingFloor).toEqual(first)
+
+      // A re-review pass records its own floor, and what the follow-up bar dropped, through the
+      // rev-guarded write; its findings carry the answer each one follows up on.
+      const next = {
+        severity: 'medium' as const,
+        basis: 'no_estimate' as const,
+        score: null,
+        suppressed: 0,
+        followUpSuppressed: 2,
+      }
+      const followUp = {
+        id: 'rri_follow_up',
+        category: 'gap' as const,
+        severity: 'medium' as const,
+        title: 'Which formats does an export offer?',
+        detail: 'The answer allows exports but names no format.',
+        status: 'open' as const,
+        reply: null,
+        followsUpOn: 'Who can export?',
+        createdAt: 1,
+        updatedAt: 1,
+      }
+      expect(
+        await repo.compareAndSwap(workspace.id, {
+          ...stored,
+          findingFloor: next,
+          items: [followUp],
+        }),
+      ).toBe(true)
+      const reReviewed = await repo.get(workspace.id, 'rrv_cas')
+      expect(reReviewed?.findingFloor).toEqual(next)
+      expect(reReviewed?.items[0]?.followsUpOn).toBe('Who can export?')
+
+      await repo.upsert(workspace.id, { ...stored, findingFloor: null, updatedAt: 3 })
+      expect((await repo.get(workspace.id, 'rrv_cas'))?.findingFloor).toBeNull()
+    })
+
     it('replaceForBlock leaves exactly one live review per block', async () => {
       const app = harness.makeApp()
       const repo = app.requirementReviewRepository()

@@ -107,3 +107,42 @@ describe('linearWriteback', () => {
     expect(operations).toEqual([])
   })
 })
+
+describe('linearWriteback.replaceDescription', () => {
+  /** Stub Linear answering the description lookup with `stored`. */
+  function stubDescription(stored: string | null): Operation[] {
+    const operations: Operation[] = []
+    vi.stubGlobal('fetch', async (_url: string, init: { body?: string }) => {
+      const parsed = JSON.parse(init.body ?? '{}') as {
+        query: string
+        variables: Record<string, unknown>
+      }
+      const name = parsed.query.includes('IssueDescription') ? 'lookup' : 'update'
+      operations.push({ name, variables: parsed.variables })
+      const data =
+        name === 'lookup'
+          ? { issue: { id: 'uuid-1', description: stored } }
+          : { issueUpdate: { success: true } }
+      return new Response(JSON.stringify({ data }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    return operations
+  }
+
+  it('updates the Markdown description by the issue UUID when it differs', async () => {
+    const operations = stubDescription('old text')
+    expect(await linearWriteback.replaceDescription!(CTX, 'ENG-1', 'new text')).toBe('updated')
+    expect(operations).toEqual([
+      { name: 'lookup', variables: { id: 'ENG-1' } },
+      { name: 'update', variables: { id: 'uuid-1', input: { description: 'new text' } } },
+    ])
+  })
+
+  it('leaves a description that already holds the body alone', async () => {
+    const operations = stubDescription('new text\r\n')
+    expect(await linearWriteback.replaceDescription!(CTX, 'ENG-1', 'new text')).toBe('unchanged')
+    expect(operations.map((op) => op.name)).toEqual(['lookup'])
+  })
+})

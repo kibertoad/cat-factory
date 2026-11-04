@@ -117,6 +117,16 @@ export const INLINE_IMAGE_MEDIA_TYPES: readonly string[] = [
 const INLINE_IMAGE_MEDIA_TYPE_SET: ReadonlySet<string> = new Set(INLINE_IMAGE_MEDIA_TYPES)
 
 /**
+ * How many images a person may attach to one task as context. The upload refuses past it, the SPA
+ * stops offering the picker at it, and a dispatch hands its agents at most this many, so the three
+ * agree and a dispatch never has to drop an attachment the author could see.
+ *
+ * Every attached image is input tokens on every turn of every run that carries it, which is why
+ * this is a handful rather than the per-block artifact ceiling.
+ */
+export const MAX_TASK_IMAGES = 6
+
+/**
  * Whether bytes of this media type are served back inline as an image. Takes the raw claim (a
  * model's `image/PNG`, a header's `image/png; charset=binary`) and reduces it through the ONE
  * media-type normalisation, so a caller never has to remember to.

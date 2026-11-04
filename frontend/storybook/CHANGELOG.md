@@ -1,5 +1,76 @@
 # @cat-factory/storybook
 
+## 0.0.22
+
+### Patch Changes
+
+- Updated dependencies [ad0dcbf]
+  - @cat-factory/app@0.327.1
+
+## 0.0.21
+
+### Patch Changes
+
+- Updated dependencies [71dd42a]
+  - @cat-factory/app@0.327.0
+
+## 0.0.20
+
+### Patch Changes
+
+- Updated dependencies [0883cfa]
+  - @cat-factory/app@0.326.0
+
+## 0.0.19
+
+### Patch Changes
+
+- Updated dependencies [534264e]
+  - @cat-factory/app@0.325.0
+
+## 0.0.18
+
+### Patch Changes
+
+- Updated dependencies [69f364e]
+  - @cat-factory/app@0.324.0
+
+## 0.0.17
+
+### Patch Changes
+
+- Updated dependencies [7c1214e]
+  - @cat-factory/app@0.323.0
+
+## 0.0.16
+
+### Patch Changes
+
+- Updated dependencies [dbbcfd9]
+  - @cat-factory/app@0.322.0
+
+## 0.0.15
+
+### Patch Changes
+
+- 32cc4f7: Bump `@storybook-vue/nuxt` to `10.0.3`, which fixes "StoryContext is not provided" under `@storybook/addon-vitest` (nuxt-modules/storybook#1140), and remove the local patch for that bug.
+- Updated dependencies [67c2058]
+- Updated dependencies [09ccd89]
+- Updated dependencies [86757f5]
+- Updated dependencies [09ccd89]
+- Updated dependencies [09ccd89]
+- Updated dependencies [09ccd89]
+- Updated dependencies [09ccd89]
+- Updated dependencies [31f32a1]
+- Updated dependencies [09ccd89]
+- Updated dependencies [09ccd89]
+- Updated dependencies [09ccd89]
+- Updated dependencies [09ccd89]
+- Updated dependencies [e7e552f]
+- Updated dependencies [09ccd89]
+- Updated dependencies [09ccd89]
+  - @cat-factory/app@0.321.8
+
 ## 0.0.14
 
 ### Patch Changes

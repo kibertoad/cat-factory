@@ -44,10 +44,12 @@ import { type ReviewKind } from './ReviewGateController.js'
 import { runStepPreamble, type StepPreambleDeps } from './stepPreamble.js'
 import { resolveScopeForRun } from './runServiceScope.js'
 import type { InputGateController } from './InputGateController.js'
+import type { CredentialWaitController } from './CredentialWaitController.js'
 import {
   type GateWindowControllerDeps,
   buildGateWindowControllers,
   buildInputGateController,
+  buildCredentialWaitController,
   buildReviewSubjects,
 } from './gate-window-controllers.js'
 import { buildStartStepDispatch, type StartStepDispatch } from './delegation.logic.js'
@@ -216,6 +218,7 @@ export class ExecutionService {
   private readonly startStepDispatch: StartStepDispatch
   /** The pre-dispatch input gate; see {@link InputGateController}. */
   private readonly inputGate: InputGateController
+  private readonly credentialWait: CredentialWaitController
   /** Bound collaborators for the shared pre-dispatch preamble ({@link runStepPreamble}). */
   private stepPreambleDepsCache?: StepPreambleDeps
   /** The three doors onto "what personal subscriptions would a run started here lease". */
@@ -315,17 +318,11 @@ export class ExecutionService {
       boardService,
       spendService,
       environmentProvisioning,
-      requirementReviewService,
-      docInterviewService,
       forkChatService,
       testerQualityReviewer,
       kaizenScheduler,
-      clarityReviewService,
-      brainstormServices,
       environmentTeardown,
       branchUpdater,
-      initiativeService,
-      initiativeInterviewService,
       notificationService,
       runLifecycleSink,
       resolveBinaryArtifactStore,
@@ -388,7 +385,11 @@ export class ExecutionService {
     // The prompt-composition builder + the run-admission preflight family it backs, built as one
     // pair by the sibling factory (see run-context-admission.ts) — admission is constructed ON the
     // context builder, so they are one seam.
-    const runContext = buildRunContextAndAdmission(dependencies)
+    const runContext = buildRunContextAndAdmission(
+      dependencies,
+      async (ws, block, run) =>
+        (await this.mergePolicy.resolve(ws, block, run)).postImplementationReviewEffort,
+    )
     this.contextBuilder = runContext.contextBuilder
     this.admission = runContext.admission
     this.postMergeBoard = this.buildPostMergeBoard(dependencies)
@@ -451,21 +452,15 @@ export class ExecutionService {
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
     })
-    // The review-gate subjects + the two interactive interview gates, built by the sibling
-    // factory over the same collaborators (see gate-window-controllers.ts).
-    const reviewSubjects = buildReviewSubjects({
-      blockRepository,
-      executionRepository,
-      workRunner,
+    this.credentialWait = buildCredentialWaitController(dependencies, {
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
-      executionEventPublisher,
-      requirementReviewService,
-      clarityReviewService,
-      brainstormServices,
-      initiativeService,
-      initiativeInterviewService,
-      docInterviewService,
+    })
+    // The review-gate subjects + the two interactive interview gates, built by the sibling
+    // factory over the same collaborators (see gate-window-controllers.ts).
+    const reviewSubjects = buildReviewSubjects(dependencies, {
+      stateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
     })
     this.requirementsKind = reviewSubjects.requirementsKind
     this.clarityKind = reviewSubjects.clarityKind
@@ -896,10 +891,25 @@ export class ExecutionService {
    * safe under replay/retry), no-ops unless the run is actively running, and
    * otherwise performs one agent step via the shared {@link stepInstance} logic.
    */
-  async advanceInstance(
+  advanceInstance(
     workspaceId: string,
     executionId: string,
     options: AdvanceOptions = {},
+  ): Promise<AdvanceResult> {
+    return this.credentialWait.guard(workspaceId, executionId, () =>
+      this.advanceOnce(workspaceId, executionId, options),
+    )
+  }
+
+  /** Resume a step parked on a lapsed personal credential; see {@link CredentialWaitController}. */
+  resumeCredentialWait(ws: string, id: string, actor: string | null, renew: () => Promise<void>) {
+    return this.credentialWait.resume(ws, id, actor, renew)
+  }
+
+  private async advanceOnce(
+    workspaceId: string,
+    executionId: string,
+    options: AdvanceOptions,
   ): Promise<AdvanceResult> {
     // The run-row load sits OUTSIDE the step's try/catch, and reads through `loadOrDispose`: a
     // row that cannot be decoded is poison (no driver will ever get past this line), so it is
@@ -1034,12 +1044,16 @@ export class ExecutionService {
 
   /** @see RunDispatcher.pollAgentJob */
   pollAgentJob(workspaceId: string, executionId: string): Promise<AdvanceResult> {
-    return this.runDispatcher.pollAgentJob(workspaceId, executionId)
+    return this.credentialWait.guard(workspaceId, executionId, () =>
+      this.runDispatcher.pollAgentJob(workspaceId, executionId),
+    )
   }
 
   /** @see RunDispatcher.pollGate */
   pollGate(workspaceId: string, executionId: string): Promise<AdvanceResult> {
-    return this.runDispatcher.pollGate(workspaceId, executionId)
+    return this.credentialWait.guard(workspaceId, executionId, () =>
+      this.runDispatcher.pollGate(workspaceId, executionId),
+    )
   }
 
   /** @see JudgeStepController.getActive */
@@ -1071,7 +1085,9 @@ export class ExecutionService {
 
   /** @see RunDispatcher.resolveGatePollExhaustion */
   resolveGatePollExhaustion(workspaceId: string, executionId: string): Promise<AdvanceResult> {
-    return this.runDispatcher.resolveGatePollExhaustion(workspaceId, executionId)
+    return this.credentialWait.guard(workspaceId, executionId, () =>
+      this.runDispatcher.resolveGatePollExhaustion(workspaceId, executionId),
+    )
   }
 
   /**

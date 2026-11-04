@@ -9,6 +9,8 @@
 // agent step and the spec-writer consume.
 import { parseOutputOutline } from '~/utils/agentOutput'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
+import RefinedRequirementsIssueUpdate from '~/components/requirements/RefinedRequirementsIssueUpdate.vue'
+import RequirementsFindingFloorNote from '~/components/requirements/RequirementsFindingFloorNote.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import {
   orderFindings,
@@ -18,7 +20,7 @@ import {
   type OrderedFinding,
 } from './RequirementsReviewWindow.logic'
 import { recommendationConfidenceBand } from '@cat-factory/contracts'
-import type { RecommendationConfidenceBand } from '@cat-factory/contracts'
+import type { IncorporateAfter, RecommendationConfidenceBand } from '@cat-factory/contracts'
 import type {
   RecommendationSource,
   RequirementRecommendation,
@@ -110,6 +112,8 @@ function retryLoad() {
 const reworking = computed(() =>
   review.value ? requirements.isIncorporating(review.value.id) : false,
 )
+// Which incorporate choice is in flight, so only the clicked button spins.
+const incorporatingAfter = ref<IncorporateAfter | null>(null)
 const acting = ref(false)
 
 const openCount = computed(() => (review.value ? requirements.openCount(review.value) : 0))
@@ -628,22 +632,31 @@ async function reRequestRecommendation(rec: RequirementRecommendation) {
   }
 }
 
-async function incorporate(feedback?: string) {
+async function incorporate(feedback?: string, after: IncorporateAfter = 'rereview') {
   if (!review.value || !blockId.value) return
+  incorporatingAfter.value = after
   try {
     await flushDrafts()
-    await requirements.incorporate(review.value, feedback)
+    await requirements.incorporate(review.value, { feedback, after })
   } catch (e) {
     present(e, 'requirements.errors.incorporate')
     return
+  } finally {
+    incorporatingAfter.value = null
   }
   redoComment.value = ''
   showRedo.value = false
-  // The fold + re-review now run in the durable driver. Hand the user back to the board;
-  // a notification calls them back only if the re-review needs more input.
-  actionToast.info('requirements.toast.incorporating', {
-    description: t('requirements.toast.incorporatingDescription'),
-  })
+  // The fold (and, unless proceeding, the re-review) now run in the durable driver. Hand the user
+  // back to the board; a notification calls them back only if the re-review needs more input.
+  if (after === 'proceed') {
+    actionToast.info('requirements.toast.incorporatingThenProceeding', {
+      description: t('requirements.toast.incorporatingThenProceedingDescription'),
+    })
+  } else {
+    actionToast.info('requirements.toast.incorporating', {
+      description: t('requirements.toast.incorporatingDescription'),
+    })
+  }
   close()
 }
 
@@ -737,6 +750,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                  product/business layer, and the architect/researcher steps settle the rest.
                  Without this a reader reads the missing technical questions as an oversight. -->
         <p class="mb-4 text-xs text-dimmed">{{ t('requirements.scopeNote') }}</p>
+        <RequirementsFindingFloorNote :floor="review?.findingFloor" />
 
         <!-- empty state — the reviewer runs automatically as the first pipeline
                  gate step, so there's nothing to do here until then -->
@@ -881,6 +895,13 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                          and textarea below are what the full width is actually for. -->
                     <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-muted">
                       {{ item.detail }}
+                    </p>
+                    <p
+                      v-if="item.followsUpOn"
+                      class="mt-1 max-w-3xl text-xs text-dimmed"
+                      data-testid="requirements-item-follows-up"
+                    >
+                      {{ t('requirements.followsUpOn', { title: item.followsUpOn }) }}
                     </p>
 
                     <!-- recorded answer (only for non-editable findings — for editable
@@ -1149,6 +1170,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 }}
               </span>
             </UButton>
+            <RefinedRequirementsIssueUpdate
+              v-if="blockId"
+              :block-id="blockId"
+              :disabled="incorporating || !access.canWriteBoard.value"
+            />
             <!-- The same reading measure the findings' own prose takes above (see the shell's
                  `width` prop): the window is `full`-width now, and this is continuous prose that
                  would otherwise run to 200-character lines. Left-aligned rather than centred, so
@@ -1279,19 +1305,34 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             >
               {{ t('requirements.actions.proceedNothing') }}
             </UButton>
-            <UButton
-              v-else
-              size="sm"
-              block
-              icon="i-lucide-wand-sparkles"
-              :loading="reworking"
-              :disabled="!canIncorporate || !access.canExecuteRuns.value"
-              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
-              data-testid="requirements-incorporate"
-              @click="incorporate()"
-            >
-              {{ t('requirements.actions.incorporateAnswers') }}
-            </UButton>
+            <template v-else>
+              <UButton
+                size="sm"
+                block
+                icon="i-lucide-wand-sparkles"
+                :loading="reworking && incorporatingAfter !== 'proceed'"
+                :disabled="reworking || !canIncorporate || !access.canExecuteRuns.value"
+                :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                data-testid="requirements-incorporate"
+                @click="incorporate()"
+              >
+                {{ t('requirements.actions.incorporateAndReReview') }}
+              </UButton>
+              <UButton
+                variant="soft"
+                size="sm"
+                block
+                icon="i-lucide-arrow-right"
+                :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
+                :loading="reworking && incorporatingAfter === 'proceed'"
+                :disabled="reworking || !canIncorporate || !access.canExecuteRuns.value"
+                :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                data-testid="requirements-incorporate-proceed"
+                @click="incorporate(undefined, 'proceed')"
+              >
+                {{ t('requirements.actions.incorporateAndProceed') }}
+              </UButton>
+            </template>
             <p class="text-2xs leading-relaxed text-dimmed">
               <template v-if="canProceed">
                 {{ t('requirements.help.canProceed') }}

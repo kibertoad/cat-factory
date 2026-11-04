@@ -357,6 +357,47 @@ function registerReviewChallengeTests(harness: ConformanceHarness): void {
     expect(reChallenge.status).toBe(409)
   })
 
+  it('queues a second challenge made while the first is pending, and settles both', async () => {
+    const { call, createWorkspace, drive } = harness.makeApp({
+      customResultByKind: {
+        'pr-reviewer': reviewerOutput,
+        'challenge-investigator': { verdict: 'upheld', justification: 'Confirmed by the caller.' },
+      },
+    })
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+    const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Review PR #42',
+      taskType: 'review',
+      taskTypeFields: { prNumber: 42, prUrl: 'https://github.com/o/r/pull/42' },
+    })
+    await call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+      pipelineId: 'pl_review',
+    })
+    const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    const findings =
+      parked.steps.find((s) => s.agentKind === 'pr-reviewer')!.prReview?.findings ?? []
+    const challengeUrl = (id: string) =>
+      `/workspaces/${wsId}/executions/${parked.id}/pr-review/findings/${id}/challenge`
+
+    const first = await call<PrReviewStepState>('POST', challengeUrl(findings[0]!.id), {})
+    expect(first.status).toBe(200)
+    // The review is `challenging` now, not parked: the second challenge joins the queue.
+    const second = await call<PrReviewStepState>('POST', challengeUrl(findings[1]!.id), {})
+    expect(second.status).toBe(200)
+    expect(second.body.status).toBe('challenging')
+    expect(second.body.findings?.find((f) => f.id === findings[1]!.id)?.challenge?.status).toBe(
+      'queued',
+    )
+    // A finding already in the queue can't be challenged twice.
+    expect((await call('POST', challengeUrl(findings[1]!.id), {})).status).toBe(409)
+
+    const reparked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    const reStep = reparked.steps.find((s) => s.agentKind === 'pr-reviewer')!
+    expect(reStep.prReview?.status).toBe('awaiting_selection')
+    expect(reStep.prReview?.findings?.map((f) => f.challenge?.status)).toEqual(['upheld', 'upheld'])
+  })
+
   it('challenges a finding — the investigator UPHOLDS + strengthens it', async () => {
     const { call, createWorkspace, drive } = harness.makeApp({
       customResultByKind: {

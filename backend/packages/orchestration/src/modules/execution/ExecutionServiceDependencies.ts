@@ -1,3 +1,4 @@
+import type { RefinedRequirementsWriteback } from './review-kinds.js'
 import type {
   AccountRepository,
   AgentExecutor,
@@ -43,6 +44,7 @@ import type {
   PullRequestMerger,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
+  BinaryArtifactBlockIndex,
   ResolveRunRepoContext,
   RiskPolicyCacheValue,
   WorkspaceRiskPolicyReader,
@@ -446,6 +448,8 @@ export interface ExecutionServiceDependencies {
    * is nowhere to read screenshots from.
    */
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /** Optional: the artifact metadata alone, see `CoreDependencies.binaryArtifactIndex`. */
+  binaryArtifactIndex?: BinaryArtifactBlockIndex
   /**
    * Optional: tears down ephemeral environments. Wired alongside
    * {@link environmentProvisioning}; the `human-test` gate uses it to destroy an env on
@@ -590,6 +594,12 @@ export interface ExecutionServiceDependencies {
    * so the engine works unchanged when no tracker writeback is wired.
    */
   issueWriteback?: IssueWritebackProvider
+  /**
+   * Optional: the opt-in refined-requirements writeback, fired as a requirements review settles
+   * (the requirements module's `RefinedRequirementsPublisher`). Absent: the gate settles exactly
+   * as before.
+   */
+  refinedRequirementsWriteback?: RefinedRequirementsWriteback
   /**
    * Optional: the recurring `bug-intake` step's read-and-claim helper. When wired, a `bug-intake`
    * step pulls one matching open issue from the schedule's configured tracker board, claims it, and

@@ -7,9 +7,14 @@ import type {
   ClassRulesByRole,
   MergeClassRules,
   RequirementConcernLevel,
+  ReviewEffortLevel,
   StepGating,
   SubmissionClassesByRole,
   WorkspaceRole,
+} from '@cat-factory/contracts'
+import {
+  parseRequirementFindingFloor,
+  parseRequirementFloorProgression,
 } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -31,6 +36,7 @@ interface AccountRiskPolicyRow {
   max_requirement_concern_allowed: string
   max_tester_quality_iterations: number
   companion_max_reworks: number
+  post_implementation_review_effort: string
   release_watch_window_minutes: number
   release_max_attempts: number
   human_review_grace_minutes: number
@@ -45,6 +51,8 @@ interface AccountRiskPolicyRow {
   version: number | null
   autonomy: string | null
   min_auto_answer_confidence: number
+  requirement_finding_floor: string | null
+  requirement_floor_progression: string | null
   created_at: number
 }
 
@@ -68,6 +76,7 @@ function rowToPolicy(row: AccountRiskPolicyRow): AccountRiskPolicy {
     maxRequirementConcernAllowed: row.max_requirement_concern_allowed as RequirementConcernLevel,
     maxTesterQualityIterations: row.max_tester_quality_iterations,
     companionMaxReworks: row.companion_max_reworks,
+    postImplementationReviewEffort: row.post_implementation_review_effort as ReviewEffortLevel,
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
@@ -85,6 +94,10 @@ function rowToPolicy(row: AccountRiskPolicyRow): AccountRiskPolicy {
       : {},
     autonomy: row.autonomy === 'unattended' ? 'unattended' : 'attended',
     minAutoAnswerConfidence: row.min_auto_answer_confidence,
+    requirementFindingFloor: parseRequirementFindingFloor(row.requirement_finding_floor),
+    requirementFloorProgression: parseRequirementFloorProgression(
+      row.requirement_floor_progression,
+    ),
     ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
   }
@@ -148,13 +161,14 @@ export class D1AccountRiskPolicyRepository implements AccountRiskPolicyRepositor
         `INSERT INTO account_risk_policies
            (account_id, id, name, max_complexity, max_risk, max_impact, ci_max_attempts,
             max_requirement_iterations, max_requirement_concern_allowed,
-            max_tester_quality_iterations, companion_max_reworks,
+            max_tester_quality_iterations, companion_max_reworks, post_implementation_review_effort,
             release_watch_window_minutes, release_max_attempts, human_review_grace_minutes,
             judge_min_score, judge_max_bounces,
             auto_merge_enabled, fork_decision, class_rules, class_rules_by_role, dry_run_roles,
             submission_classes_by_role, version, autonomy, min_auto_answer_confidence,
+            requirement_finding_floor, requirement_floor_progression,
             created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (account_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
@@ -165,6 +179,7 @@ export class D1AccountRiskPolicyRepository implements AccountRiskPolicyRepositor
            max_requirement_concern_allowed = excluded.max_requirement_concern_allowed,
            max_tester_quality_iterations = excluded.max_tester_quality_iterations,
            companion_max_reworks = excluded.companion_max_reworks,
+           post_implementation_review_effort = excluded.post_implementation_review_effort,
            release_watch_window_minutes = excluded.release_watch_window_minutes,
            release_max_attempts = excluded.release_max_attempts,
            human_review_grace_minutes = excluded.human_review_grace_minutes,
@@ -178,7 +193,9 @@ export class D1AccountRiskPolicyRepository implements AccountRiskPolicyRepositor
            submission_classes_by_role = excluded.submission_classes_by_role,
            version = excluded.version,
            autonomy = excluded.autonomy,
-           min_auto_answer_confidence = excluded.min_auto_answer_confidence`,
+           min_auto_answer_confidence = excluded.min_auto_answer_confidence,
+           requirement_finding_floor = excluded.requirement_finding_floor,
+           requirement_floor_progression = excluded.requirement_floor_progression`,
       )
       .bind(
         accountId,
@@ -192,6 +209,7 @@ export class D1AccountRiskPolicyRepository implements AccountRiskPolicyRepositor
         policy.maxRequirementConcernAllowed,
         policy.maxTesterQualityIterations,
         policy.companionMaxReworks,
+        policy.postImplementationReviewEffort,
         policy.releaseWatchWindowMinutes,
         policy.releaseMaxAttempts,
         policy.humanReviewGraceMinutes,
@@ -206,6 +224,10 @@ export class D1AccountRiskPolicyRepository implements AccountRiskPolicyRepositor
         policy.version ?? null,
         policy.autonomy,
         policy.minAutoAnswerConfidence,
+        policy.requirementFindingFloor,
+        policy.requirementFloorProgression
+          ? JSON.stringify(policy.requirementFloorProgression)
+          : null,
         policy.createdAt,
       )
       .run()

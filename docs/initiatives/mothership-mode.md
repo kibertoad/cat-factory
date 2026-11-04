@@ -379,7 +379,7 @@
     default; the entity → source-table map in `PersistenceController` is keyed by the UNION for the
     same reason, so a new library fails to compile until it names its table.
 
-  - **`reviewQuestionPostRepository` `claim`/`settle`/`get`** (the `workspaceField` rule, since the
+  - **`writebackPostRepository` `claim`/`settle`/`get`** (the `workspaceField` rule, since the
     marker key carries its own `workspaceId`). This one is the quietest failure the initiative has
     recorded: the ENGINE writes the marker, `claim` answered `unknown_method`, and the caller's
     DELIBERATE fallback reads a store failure as "someone else holds the claim". So every parked
@@ -1445,7 +1445,7 @@ never remotely invocable (mothership-internal cron).
 | `taskRepository`                         | ✅ done | whole repo: run-path context reads + import/link writes + the atomic `claimBlockLink`                               |
 | `taskConnectionRepository`               | ✅ done | connect/list/disconnect (sealed `credentialsCipher`, opened via `/internal/secrets/unseal`)                         |
 | `taskSourceSettingsRepository`           | ✅ done | the per-workspace source on/off toggles (no secrets)                                                                |
-| `reviewQuestionPostRepository`           | ✅ done | engine-written park writeback markers: claim/settle/get on `workspaceField`                                         |
+| `writebackPostRepository`                | ✅ done | comment writeback markers (parked-review questions): claim/settle/get on `workspaceField`                           |
 | `trackerCommentIngestRepository`         | n/a     | inbound webhook dedupe: written where a delivery ARRIVES, which is never a node                                     |
 | `githubInstallationRepository`           | ✅ done | run-path + id-keyed reads; `upsert`/`softDelete` admin (`integrations.manage`), cron `listActive` internal          |
 | `repoProjectionRepository`               | ✅ done | reads + sync/repo-write writes + cursors; `listStale`/`listByInstallation` internal                                 |

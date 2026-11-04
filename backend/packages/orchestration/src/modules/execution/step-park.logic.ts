@@ -1,5 +1,6 @@
 import type { ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
 import { type AgentKindRegistry, hasTrait, INTERVIEW_GATE_TRAIT } from '@cat-factory/agents'
+import { isCredentialWaitParked } from '@cat-factory/contracts'
 import {
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
@@ -41,6 +42,7 @@ import {
  */
 export type DedicatedParkSurface =
   | 'input-gate'
+  | 'credential'
   | 'requirements-review'
   | 'clarity-review'
   | 'brainstorm'
@@ -70,6 +72,9 @@ export function dedicatedParkSurface(
   registry: AgentKindRegistry,
 ): DedicatedParkSurface | null {
   if (instance.inputGate?.status === 'blocked') return 'input-gate'
+  // Ahead of every kind check: ANY step can park on a lapsed credential, a review step included,
+  // and only `resumeCredentialWait` answers it.
+  if (isCredentialWaitParked(step)) return 'credential'
   if (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND) return 'requirements-review'
   if (step.agentKind === CLARITY_REVIEW_AGENT_KIND) return 'clarity-review'
   if (

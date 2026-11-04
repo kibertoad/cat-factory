@@ -1,5 +1,141 @@
 # @cat-factory/local-server
 
+## 0.159.2
+
+### Patch Changes
+
+- Updated dependencies [71dd42a]
+  - @cat-factory/contracts@0.382.0
+  - @cat-factory/orchestration@0.329.0
+  - @cat-factory/server@0.348.0
+  - @cat-factory/executor-harness@1.165.0
+  - @cat-factory/agents@0.176.1
+  - @cat-factory/binary-generators@0.3.85
+  - @cat-factory/gitlab@0.25.4
+  - @cat-factory/integrations@0.179.4
+  - @cat-factory/kernel@0.367.2
+  - @cat-factory/prompt-fragments@1.1.81
+  - @cat-factory/node-server@0.246.2
+
+## 0.159.1
+
+### Patch Changes
+
+- Updated dependencies [0883cfa]
+  - @cat-factory/contracts@0.381.0
+  - @cat-factory/agents@0.176.0
+  - @cat-factory/orchestration@0.328.0
+  - @cat-factory/server@0.347.0
+  - @cat-factory/executor-harness@1.165.0
+  - @cat-factory/binary-generators@0.3.84
+  - @cat-factory/gitlab@0.25.3
+  - @cat-factory/integrations@0.179.3
+  - @cat-factory/kernel@0.367.1
+  - @cat-factory/prompt-fragments@1.1.80
+  - @cat-factory/node-server@0.246.1
+
+## 0.159.0
+
+### Minor Changes
+
+- 534264e: Review effort levels and a challenge queue for the PR deep review.
+  
+  - A review task takes an effort level (`low`, `medium`, `high`, `xhigh`, `max`; `high` by default) on `taskTypeFields.reviewEffort`. A risk policy carries `postImplementationReviewEffort` (default `high`) for the post-implementation reviewer. The level sets the findings cap, whether unconfirmed findings are reported, whether each finding gets a verification pass, and the pr-reviewer's slice fan-out. The default `high` now runs a verification pass, so a default review spends more than before.
+  - Challenged findings queue: at most three investigators run at once, the rest read `queued`, and selection stays editable while they run. Resolve and dismiss wait for the queue to drain. Public API: `queued` joins the PR review finding challenge status (OpenAPI 1.92.0, SDKs regenerated).
+  - Internal break: the step field `pendingChallenge` is replaced by `challengeJobs`. A challenge in flight on an existing run when this deploys is dropped: the review returns to awaiting selection with that finding still marked `investigating`, so it cannot be challenged again, while the rest of the review resolves normally.
+
+### Patch Changes
+
+- Updated dependencies [534264e]
+  - @cat-factory/contracts@0.380.0
+  - @cat-factory/kernel@0.367.0
+  - @cat-factory/agents@0.175.0
+  - @cat-factory/orchestration@0.327.0
+  - @cat-factory/server@0.346.0
+  - @cat-factory/node-server@0.246.0
+  - @cat-factory/executor-harness@1.165.0
+  - @cat-factory/binary-generators@0.3.83
+  - @cat-factory/gitlab@0.25.2
+  - @cat-factory/integrations@0.179.2
+  - @cat-factory/prompt-fragments@1.1.79
+
+## 0.158.2
+
+### Patch Changes
+
+- Updated dependencies [69f364e]
+  - @cat-factory/contracts@0.379.0
+  - @cat-factory/kernel@0.366.0
+  - @cat-factory/agents@0.174.0
+  - @cat-factory/orchestration@0.326.0
+  - @cat-factory/node-server@0.245.0
+  - @cat-factory/server@0.345.0
+  - @cat-factory/executor-harness@1.165.0
+  - @cat-factory/binary-generators@0.3.82
+  - @cat-factory/gitlab@0.25.1
+  - @cat-factory/integrations@0.179.1
+  - @cat-factory/prompt-fragments@1.1.78
+
+## 0.158.1
+
+### Patch Changes
+
+- Updated dependencies [7c1214e]
+  - @cat-factory/contracts@0.378.0
+  - @cat-factory/kernel@0.365.0
+  - @cat-factory/integrations@0.179.0
+  - @cat-factory/orchestration@0.325.0
+  - @cat-factory/server@0.344.0
+  - @cat-factory/node-server@0.244.0
+  - @cat-factory/gitlab@0.25.0
+  - @cat-factory/executor-harness@1.165.0
+  - @cat-factory/agents@0.173.1
+  - @cat-factory/binary-generators@0.3.81
+  - @cat-factory/prompt-fragments@1.1.77
+
+## 0.158.0
+
+### Minor Changes
+
+- dbbcfd9: Images can be attached to a task as context, when creating it or later from the inspector (up to six per task). They are stored as `context` artifacts in the account's binary-artifact storage, at the workspace that homes the task (so a task under a shared service keeps one set whichever board attached them), kept for as long as the task exists, moved with it when it is dragged into a service homed elsewhere, and removed with it. The retention sweep reclaims any whose task no longer exists. Only a task takes images: an upload naming another block is refused with `task_image_block_not_task`.
+  
+  The agents that work on the task are shown them as real image input wherever their model path accepts images: an inline step attaches them to its model request, the requirements, clarity and brainstorm reviewers do the same, and a container step on an image-capable CLI gets them as files under `.cat-context/task-images/`. Where a step cannot carry an image (a text-only model, an undeclared model, a Pi or Codex container, the ambient text-only inline path, a consensus panel or a delegated executor) its prompt names the images and states why they were withheld.
+  
+  `GET /api/v1/runs/{runId}/artifacts` can now list a `context` artifact (task-scoped) beside screenshots, references and assets: the OpenAPI surface is 1.90.0. The executor image is 1.164.0, which parses the new `taskImages` job field and reports it on the capability handshake.
+
+### Patch Changes
+
+- Updated dependencies [dbbcfd9]
+  - @cat-factory/contracts@0.377.0
+  - @cat-factory/kernel@0.364.0
+  - @cat-factory/agents@0.173.0
+  - @cat-factory/orchestration@0.324.0
+  - @cat-factory/server@0.343.0
+  - @cat-factory/node-server@0.243.0
+  - @cat-factory/executor-harness@1.165.0
+  - @cat-factory/binary-generators@0.3.80
+  - @cat-factory/gitlab@0.24.16
+  - @cat-factory/integrations@0.178.3
+  - @cat-factory/prompt-fragments@1.1.76
+
+## 0.157.2
+
+### Patch Changes
+
+- Updated dependencies [09ccd89]
+- Updated dependencies [31f32a1]
+  - @cat-factory/contracts@0.376.0
+  - @cat-factory/orchestration@0.323.2
+  - @cat-factory/kernel@0.363.2
+  - @cat-factory/executor-harness@1.163.6
+  - @cat-factory/agents@0.172.10
+  - @cat-factory/binary-generators@0.3.79
+  - @cat-factory/gitlab@0.24.15
+  - @cat-factory/integrations@0.178.2
+  - @cat-factory/prompt-fragments@1.1.75
+  - @cat-factory/server@0.342.1
+  - @cat-factory/node-server@0.242.2
+
 ## 0.157.1
 
 ### Patch Changes

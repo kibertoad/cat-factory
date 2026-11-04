@@ -1,5 +1,6 @@
 import type {
   AgentRunContext,
+  BinaryArtifactBlockIndex,
   BinaryArtifactStore,
   DesignImage,
   DocumentRepository,
@@ -8,7 +9,7 @@ import type {
 } from '@cat-factory/kernel'
 import { describeError, noopLogger } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { DESIGN_IMAGES_TRAIT, hasTrait } from '@cat-factory/agents'
+import { DESIGN_IMAGES_TRAIT, TASK_IMAGES_TRAIT, hasTrait } from '@cat-factory/agents'
 import { resolveBlockReferences } from './block-reference-set.js'
 import type { BlockReference } from './block-reference-set.js'
 import {
@@ -18,6 +19,7 @@ import {
   nameReferenceFiles,
 } from './run-reference-screenshots.js'
 import { MAX_DESIGN_IMAGES } from './run-design-images.js'
+import { taskImageSet } from './run-task-images.js'
 
 // ---------------------------------------------------------------------------
 // The images a dispatch is handed, from the ONE read of the task's reference set.
@@ -37,12 +39,14 @@ import { MAX_DESIGN_IMAGES } from './run-design-images.js'
 export interface RunImageDeps {
   documents?: DocumentRepository
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /** The metadata alone: what a kind that only READS attached images lists them through. */
+  binaryArtifactIndex?: BinaryArtifactBlockIndex
   agentKindRegistry: AgentKindRegistry
   logger?: Logger
 }
 
-/** The two image partials, spread-ready (the `validationChecksFor` shape). */
-type RunImages = Pick<AgentRunContext, 'referenceScreenshots' | 'designImages'>
+/** The image partials, spread-ready (the `validationChecksFor` shape). */
+type RunImages = Pick<AgentRunContext, 'referenceScreenshots' | 'designImages' | 'taskImages'>
 
 /**
  * Resolve this dispatch's images, as a SPREAD-READY partial so the hot context builder gains no
@@ -54,6 +58,10 @@ type RunImages = Pick<AgentRunContext, 'referenceScreenshots' | 'designImages'>
  * - The capture set is gated on the kind's declared `ui` image, the same fact the executor routes
  *   the job by, so a deployment's own browser-driven kind is served by the same rule.
  * - The design set is gated on the `design-images` trait, for the same reason.
+ * - The attached images are gated on the `task-images` trait. A kind that wants ONLY them needs
+ *   the rows and none of the bytes, so it lists them off {@link RunImageDeps.binaryArtifactIndex}
+ *   and never resolves the account's store: the reviewing kinds dispatch on most runs, and most
+ *   tasks attach nothing.
  *
  * The two halves answer an EMPTY set differently, deliberately. A capture that asked and found
  * nothing still tells a tester so ("you were asked, and there is nothing to compare against"); a
@@ -68,15 +76,38 @@ export async function resolveRunImages(
 ): Promise<RunImages> {
   const captures = deps.agentKindRegistry.agentStep(agentKind)?.image === 'ui'
   const builds = hasTrait(agentKind, DESIGN_IMAGES_TRAIT, deps.agentKindRegistry)
+  const readsTask = hasTrait(agentKind, TASK_IMAGES_TRAIT, deps.agentKindRegistry)
   const resolveStore = deps.resolveBinaryArtifactStore
-  if (!resolveStore || (!captures && !builds)) return {}
+  if (!resolveStore || (!captures && !builds && !readsTask)) return {}
   try {
+    if (!captures && !builds && deps.binaryArtifactIndex) {
+      const taskImages = taskImageSet(
+        await deps.binaryArtifactIndex.listByBlock(workspaceId, blockId),
+      )
+      return taskImages ? { taskImages } : {}
+    }
     const store: BinaryArtifactStore | null = await resolveStore(workspaceId)
     if (!store) return {}
-    const { references } = await resolveBlockReferences(deps.documents, store, workspaceId, blockId)
+    // ONE block listing serves every half: the uploads the reference set merges and the images
+    // attached to the task are both rows of it, told apart by kind.
+    const blockArtifacts = await store.listByBlock(workspaceId, blockId)
+    const references =
+      captures || builds
+        ? (
+            await resolveBlockReferences(
+              deps.documents,
+              store,
+              workspaceId,
+              blockId,
+              blockArtifacts,
+            )
+          ).references
+        : []
+    const taskImages = readsTask ? taskImageSet(blockArtifacts) : undefined
     return {
       ...(captures ? captureSet(references) : {}),
       ...(builds ? designSet(references) : {}),
+      ...(taskImages ? { taskImages } : {}),
     }
   } catch (error) {
     // An image read must never wedge a run. Resolving the store reads the ACCOUNT's

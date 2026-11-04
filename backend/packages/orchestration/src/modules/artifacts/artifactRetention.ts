@@ -1,4 +1,8 @@
-import type { BinaryArtifactStore, ResolveBinaryArtifactStore } from '@cat-factory/kernel'
+import type {
+  BinaryArtifactStore,
+  BlockRepository,
+  ResolveBinaryArtifactStore,
+} from '@cat-factory/kernel'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
@@ -27,6 +31,8 @@ export async function sweepBinaryArtifactRetention(deps: {
     | ((workspaceId: string) => Promise<BinaryArtifactStore | null>)
   listWorkspaceIds: () => Promise<string[]>
   retentionDaysFor: (workspaceId: string) => Promise<number>
+  /** Resolves block ids to the workspace homing each, for the orphan half below. */
+  findBlocks: BlockRepository['findByIds']
   now: number
 }): Promise<number> {
   const workspaceIds = await deps.listWorkspaceIds()
@@ -40,6 +46,32 @@ export async function sweepBinaryArtifactRetention(deps: {
     if (!store) continue
     const cutoff = deps.now - days * MS_PER_DAY
     removed += await store.pruneOlderThan(workspaceId, cutoff)
+    removed += await pruneOrphanedBlockArtifacts(store, deps.findBlocks, workspaceId, cutoff)
   }
   return removed
+}
+
+/**
+ * The backstop for the retained kinds whose lifetime is their block's: reclaim the rows anchored
+ * on a block that no longer exists in their workspace.
+ *
+ * A block delete reclaims them promptly, but that reclaim is best-effort and keeps any row whose
+ * blob delete failed, and nothing else ever names a deleted block again. Scoped by the same cutoff
+ * as the age sweep, so an image is never taken while a move or a delete may still be in flight.
+ */
+async function pruneOrphanedBlockArtifacts(
+  store: BinaryArtifactStore,
+  findBlocks: BlockRepository['findByIds'],
+  workspaceId: string,
+  cutoff: number,
+): Promise<number> {
+  const anchors = await store.listBlockAnchorsOlderThan(workspaceId, cutoff)
+  if (!anchors.length) return 0
+  const homed = new Set(
+    (await findBlocks(anchors))
+      .filter((found) => found.workspaceId === workspaceId)
+      .map((found) => found.block.id),
+  )
+  const orphaned = anchors.filter((blockId) => !homed.has(blockId))
+  return orphaned.length ? store.pruneByBlocks(workspaceId, orphaned) : 0
 }

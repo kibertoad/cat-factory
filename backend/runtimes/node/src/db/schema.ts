@@ -649,6 +649,10 @@ export const requirementReviews = pgTable(
     // Optimistic-concurrency token (mirror of the D1 column): every read-modify-write CASes on
     // it, so two writers editing different findings can't clobber each other.
     rev: integer('rev').notNull().default(0),
+    // The last refined-requirements writeback (JSON), outside `rev` (mirror of D1 migration 0111).
+    issue_writeback: text('issue_writeback'),
+    // The floor the latest reviewer pass raised against (JSON), mirror of D1 migration 0112.
+    finding_floor: text('finding_floor'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
@@ -1028,6 +1032,12 @@ export const riskPolicies = pgTable(
     // `companion_max_reworks`). The default is the ceiling the engine hard-coded before this was
     // policy, so an un-edited row behaves exactly as it did.
     companion_max_reworks: integer('companion_max_reworks').notNull().default(3),
+    // How thorough the post-implementation `reviewer` companion is (mirror of D1's
+    // `post_implementation_review_effort`): one of `REVIEW_EFFORT_LEVELS`. The default is the level
+    // the reviewer ran at before this was policy.
+    post_implementation_review_effort: text('post_implementation_review_effort')
+      .notNull()
+      .default('high'),
     release_watch_window_minutes: integer('release_watch_window_minutes').notNull().default(30),
     release_max_attempts: integer('release_max_attempts').notNull().default(1),
     human_review_grace_minutes: integer('human_review_grace_minutes').notNull().default(10),
@@ -1071,6 +1081,10 @@ export const riskPolicies = pgTable(
     min_auto_answer_confidence: doublePrecision('min_auto_answer_confidence')
       .notNull()
       .default(0.8),
+    // The lowest severity the requirements reviewer raises, and the JSON estimate bands that move
+    // it (NULL ⇒ fixed). Mirror of D1 0112_requirement_finding_floor.
+    requirement_finding_floor: text('requirement_finding_floor').notNull().default('medium'),
+    requirement_floor_progression: text('requirement_floor_progression'),
     is_default: integer('is_default').notNull().default(0),
     // The workspace's default for a run NOTHING is watching (the public API, a tracker dispatch,
     // a schedule fire). Independent of `is_default`: one row may hold both, and each scope has

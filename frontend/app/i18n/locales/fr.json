@@ -684,6 +684,7 @@
         "reference_repo_unreadable": "Le dépôt de l'architecture de référence de cette exécution n'a pas pu être lu pour l'instant, l'exécution n'a donc pas été lancée sur un modèle qu'elle pourrait ne pas savoir cloner. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
         "oauth_state_invalid": "Ce lien d’autorisation a expiré ou a déjà été utilisé, il ne peut donc pas finaliser la connexion.",
         "oauth_started_by_other_user": "Quelqu’un d’autre a lancé cette connexion, donc seule cette personne peut la finaliser.",
+        "credential_wait_not_initiator": "Seule la personne qui a lancé cette exécution peut renouveler ses identifiants d’abonnement personnel, car l’exécution utilise son abonnement. Demandez-lui de la poursuivre.",
         "oauth_exchange_refused": "Le serveur d’autorisation du serveur d’outils a refusé l’autorisation. Demandez à l’opérateur de votre déploiement de vérifier les paramètres du client OAuth du serveur d’outils.",
         "oauth_client_secret_unavailable": "Le secret du client OAuth du serveur d’outils n’est pas disponible sur ce tableau. Ajoutez-le dans la fenêtre Infrastructure.",
         "tool_server_without_oauth": "Ce serveur d’outils n’utilise plus OAuth, il n’y a donc aucune connexion à finaliser.",
@@ -695,6 +696,7 @@
       "startFailed": "Échec du démarrage",
       "mergeFailed": "Échec de la fusion",
       "restartFailed": "Échec du redémarrage",
+      "resumeCredentialFailed": "Impossible de reprendre l'exécution",
       "approveFailed": "Échec de l'approbation",
       "requestChangesFailed": "Échec de la demande de modifications",
       "rejectFailed": "Échec du rejet"
@@ -749,6 +751,7 @@
         "binary_output_generator_invalid": "Générateur de sorties binaires introuvable",
         "foundational_service_not_inherited": "Ce tableau a enregistré ce service",
         "input_gate_not_parked": "Rien à répondre",
+        "credential_wait_not_parked": "Rien à reprendre",
         "input_gate_parked": "Répondez-y dans la vérification d'entrée de la tâche",
         "ticket_already_linked": "Ce ticket a déjà une tâche",
         "document_already_linked": "Document déjà joint",
@@ -772,7 +775,9 @@
         "thread_busy": "Ce fil répond encore",
         "draft_conflict": "Ce brouillon a changé",
         "session_stale": "La pull request a évolué",
-        "cursor_expired": "Le flux de modifications a dépassé ce curseur"
+        "cursor_expired": "Le flux de modifications a dépassé ce curseur",
+        "refined_requirements_unavailable": "Pas encore d’exigences affinées",
+        "no_linked_issues": "Aucun ticket lié"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -810,6 +815,7 @@
         "binary_output_generator_invalid": "Une étape qui génère des sorties binaires sélectionne une intégration générative que ce déploiement n’enregistre pas, aucune des intégrations sélectionnées ne produit un type de contenu que l’étape doit livrer, ou l’une d’elles est générée par une CLI d’agent sur laquelle le modèle de cette étape ne s’exécute pas. Les intégrations génératives sont enregistrées dans le code du déploiement, pas dans cet espace de travail : enregistrez-la, corrigez la sélection de l’étape, ou fixez pour l’étape un modèle exécutant la CLI requise, puis relancez.",
         "foundational_service_not_inherited": "L'écartement s'applique à un service hérité du compte. Cet identifiant est enregistré par ce tableau : il n'y a donc rien à écarter - supprimez plutôt l'entrée propre au tableau.",
         "input_gate_not_parked": "Cette exécution n'attend plus sa vérification d'entrée. Quelqu'un y a peut-être déjà répondu, ou l'exécution a avancé.",
+        "credential_wait_not_parked": "Cette exécution n'attend plus les identifiants de votre abonnement personnel. Elle a peut-être déjà été reprise, ou l'exécution a avancé.",
         "input_gate_parked": "Cette exécution est en attente de sa vérification d'entrée, à laquelle la validation ne peut pas répondre. Utilisez l'avis sur l'exécution : corrigez la tâche et relancez la vérification, ou exécutez-la quand même.",
         "ticket_already_linked": "Un ticket ne peut alimenter qu'une seule tâche : le relier à nouveau priverait la tâche existante du contexte avec lequel elle a été créée. Ouvrez plutôt cette tâche, ou dissociez d'abord le ticket.",
         "document_already_linked": "Ce document est joint à une autre tâche. Détachez-le d'abord, ou joignez-en une copie distincte.",
@@ -833,7 +839,9 @@
         "thread_busy": "La question précédente de ce fil n'a pas encore reçu de réponse. Attends cette réponse ou pose ta question dans un autre fil.",
         "draft_conflict": "Ce brouillon de commentaire a été modifié, publié ou abandonné depuis que tu l'as chargé. Recharge les brouillons et refais ta modification.",
         "session_stale": "De nouveaux commits sont arrivés après la préparation de cette revue, donc ses brouillons peuvent viser les mauvaises lignes. Actualise la revue, vérifie les brouillons, puis publie.",
-        "cursor_expired": "Les modifications après ce curseur ne sont plus conservées. Prenez un nouvel instantané de l’annuaire, puis suivez le flux à partir de la position qu’il indique."
+        "cursor_expired": "Les modifications après ce curseur ne sont plus conservées. Prenez un nouvel instantané de l’annuaire, puis suivez le flux à partir de la position qu’il indique.",
+        "refined_requirements_unavailable": "La revue n’a pas encore produit de document révisé, ou le réécrit en ce moment. Attendez la fin de l’intégration, puis mettez à jour à nouveau.",
+        "no_linked_issues": "Aucun ticket n’est lié à cette tâche. Liez le ticket dont elle provient, puis mettez à jour à nouveau."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -3290,6 +3298,10 @@
         "questionsOnPark": {
           "label": "Publier les questions ouvertes d'une exécution headless en pause",
           "help": "Quand une exécution lancée hors de l'application se met en pause pour clarifier les exigences (via l'API ou depuis un ticket du traqueur), publie ses questions ouvertes sur le ticket lié, chacune avec l'identifiant qu'une réponse doit nommer. Les tâches lancées dans l'application ne sont pas concernées."
+        },
+        "requirementsToDescription": {
+          "label": "Écrire les exigences affinées dans la description du ticket lié",
+          "help": "Quand la revue des exigences d’une tâche se clôt et que l’exécution continue, remplace la description du ticket lié par les exigences affinées. Le tracker conserve la description précédente dans son historique. Désactivé par défaut, et réglable uniquement pour tout l’espace de travail."
         }
       },
       "probeFailure": {
@@ -3356,6 +3368,8 @@
         "maxRequirementIterations": "Itérations d'exigences",
         "maxRequirementConcernAllowed": "Validation auto. des préoccupations jusqu'à",
         "companionMaxReworks": "Cycles de retravail du compagnon",
+        "postImplementationReviewEffort": "Effort de revue après l'implémentation",
+        "postImplementationReviewEffortHelp": "Le degré de minutie de la revue de code après l'implémentation. Les niveaux plus élevés signalent davantage de constats, y compris les moins certains, et prennent plus de temps.",
         "autoMerge": "Fusion automatique"
       },
       "newPreset": "Nouvelle politique",
@@ -3471,6 +3485,20 @@
       "confirmHide": {
         "title": "Masquer cette politique ?",
         "body": "« {name} » ne sera plus proposée sur ce tableau et les tâches qui l'avaient choisie repasseront à la politique par défaut du tableau. Vous pourrez la rétablir plus tard."
+      },
+      "findingFloor": {
+        "label": "La revue des exigences soulève",
+        "fallbackLabel": "Soulève, quand la tâche n’a pas d’estimation",
+        "hint": "Les constats sous cette gravité sont écartés de la revue. Seul un constat soulevé peut arrêter l’exécution.",
+        "high": "Constats élevés uniquement",
+        "medium": "Constats élevés et moyens",
+        "low": "Tout, y compris les mineurs",
+        "progressiveLabel": "Suivre l’estimation de la tâche",
+        "progressiveHint": "Poser plus de questions sur les tâches plus grandes, selon la valeur la plus haute parmi la complexité, le risque et l’impact de l’estimation. Nécessite un Task Estimator avant la revue, ou une estimation d’une exécution précédente.",
+        "mediumFrom": "Ajouter les constats moyens à partir d’une estimation de (%)",
+        "lowFrom": "Tout soulever à partir d’une estimation de (%)",
+        "bandsCrossed": "Le seuil des constats moyens ne peut pas dépasser le seuil de tout.",
+        "bandsOutOfRange": "Les deux seuils doivent être des nombres compris entre 0 et 100."
       }
     },
     "observabilityConnection": {
@@ -5128,6 +5156,20 @@
       "oauthButton": "Se connecter avec {label}",
       "oauthOr": "ou connectez-vous avec une clé API",
       "disconnectFailed": "Impossible de déconnecter"
+    },
+    "images": {
+      "heading": "Images",
+      "hint": "Captures, croquis ou schémas qui expliquent cette tâche. Les agents qui y travaillent les voient partout où leur modèle accepte les images.",
+      "add": "Ajouter des images",
+      "count": "{count} sur {max}",
+      "truncated": "Une tâche contient au plus {max} images : seules les premières ont été ajoutées.",
+      "rejected": "Non ajoutés, car seules les images PNG, JPEG, WebP et GIF sont acceptées : {names}",
+      "remove": "Retirer {name}",
+      "unnamed": "Image jointe",
+      "attached": "Images jointes",
+      "uploadFailed": "Impossible de joindre l'image",
+      "removeFailed": "Impossible de retirer l'image",
+      "loadFailed": "Impossible de charger les images jointes"
     }
   },
   "bugHunt": {
@@ -5900,6 +5942,13 @@
       }
     }
   },
+  "credentialWait": {
+    "title": "Les identifiants de votre abonnement personnel ont expiré",
+    "body": "Les identifiants de l'abonnement personnel de cette exécution ont expiré avant le démarrage de l'étape suivante : l'exécution est donc en pause. Saisissez votre mot de passe personnel pour les renouveler et reprendre à cette étape.",
+    "resume": "Saisir le mot de passe et continuer",
+    "othersTitle": "Les identifiants d’abonnement personnel de cette exécution ont expiré",
+    "othersRun": "Seule la personne qui a lancé cette exécution peut les renouveler avec son mot de passe personnel. Demandez-lui de la poursuivre."
+  },
   "requirements": {
     "title": "Revue des exigences",
     "iteration": "Itération {current} / {max}",
@@ -5977,6 +6026,23 @@
     "reRequest": "Redemander",
     "finalRequirements": "Exigences finales",
     "incorporatedDraft": "Exigences incorporées (brouillon)",
+    "updateIssues": {
+      "action": "Mettre à jour les tickets liés",
+      "hint": "Remplace la description de chaque ticket lié par ces exigences. Le tracker conserve la description précédente dans son historique.",
+      "error": "Impossible de mettre à jour les tickets liés",
+      "automatic": "Écrit automatiquement dans les tickets liés à la clôture de la revue :",
+      "toast": {
+        "updated": "Tickets liés mis à jour avec les exigences",
+        "nothingNew": "Les tickets liés contiennent déjà ces exigences",
+        "partial": "Certains tickets liés n’ont pas été mis à jour"
+      },
+      "outcome": {
+        "updated": "mis à jour",
+        "already_current": "déjà à jour",
+        "failed": "échec, mettez à jour de nouveau pour réessayer",
+        "unsupported": "ce tracker ne peut pas être mis à jour"
+      }
+    },
     "stats": {
       "findings": "Observations",
       "open": "Ouvertes",
@@ -5988,7 +6054,8 @@
     },
     "actions": {
       "proceedNothing": "Continuer (rien à incorporer)",
-      "incorporateAnswers": "Incorporer les réponses",
+      "incorporateAndReReview": "Incorporer et relire",
+      "incorporateAndProceed": "Incorporer et continuer",
       "requestRecommendations": "Demander {count} recommandation | Demander {count} recommandations",
       "reReview": "Ça me va — relire",
       "reReviewing": "Nouvelle revue…",
@@ -5997,7 +6064,7 @@
     },
     "help": {
       "canProceed": "Toutes les observations sont écartées — passez à la phase suivante sans retravailler.",
-      "canIncorporate": "Regroupe vos réponses dans un document au format standard, puis le relit automatiquement.",
+      "canIncorporate": "Les deux regroupent vos réponses dans un document au format standard. Relire fait vérifier ce document à nouveau par le relecteur ; continuer passe directement à la phase suivante.",
       "answerAll": "Répondez à chaque observation ou écartez-la pour continuer.",
       "merged": "La nouvelle revue exécute le relecteur sur ce document. Si la fusion ne vous convient pas, refaites-la plutôt avec un commentaire."
     },
@@ -6009,6 +6076,8 @@
       "recommendationsReady": "{count} recommandation prête | {count} recommandations prêtes",
       "incorporating": "Incorporation de vos réponses en arrière-plan",
       "incorporatingDescription": "Vous êtes de retour sur le tableau — nous vous préviendrons uniquement si plus d'informations sont nécessaires.",
+      "incorporatingThenProceeding": "Incorporation de vos réponses",
+      "incorporatingThenProceedingDescription": "L'exécution passe à la phase suivante dès qu'elles sont incorporées.",
       "reviewerSatisfied": "Le relecteur est satisfait — poursuite du pipeline",
       "iterationLimitReached": "Limite d'itérations atteinte — choisissez comment continuer",
       "newFindings": "aucune nouvelle observation à traiter | {count} nouvelle observation à traiter | {count} nouvelles observations à traiter",
@@ -6039,7 +6108,22 @@
       "medium": "Confiance moyenne",
       "low": "Confiance faible"
     },
-    "loadFailed": "Impossible de charger la revue des exigences"
+    "loadFailed": "Impossible de charger la revue des exigences",
+    "findingFloor": {
+      "raised": {
+        "high": "Ce passage n’a soulevé que des constats élevés.",
+        "medium": "Ce passage a soulevé des constats élevés et moyens.",
+        "low": "Ce passage a soulevé des constats de toutes gravités."
+      },
+      "basis": {
+        "fixed": "Fixé par la politique de risque.",
+        "estimate": "Fixé par l’estimation de la tâche ({score} %).",
+        "no_estimate": "La politique suit l’estimation de la tâche, mais cette tâche n’en a pas, donc sa valeur de repli s’est appliquée."
+      },
+      "suppressed": "Constats écartés sous ce niveau : {count}.",
+      "followUpSuppressed": "Écartés de cette relecture car ni de gravité élevée ni une suite à vos réponses : {count}."
+    },
+    "followsUpOn": "Fait suite à votre réponse sur : {title}"
   },
   "clarity": {
     "title": "Tri du rapport de bogue",
@@ -7910,7 +7994,9 @@
       "submit": "Enquêter",
       "placeholder": "Facultatif : qu'y a-t-il précisément d'incorrect ou de peu convaincant dans ce constat ?",
       "hint": "Laissez vide pour que l'enquêteur approfondisse, justifie le constat et vérifie qu'il est exact et pertinent.",
-      "investigatingBanner": "L'enquêteur de contestation réexamine un constat par rapport au code source…",
+      "queuedBadge": "En file d’attente",
+      "queueBanner": "Enquêtes en cours : {running} · En file d’attente : {queued}. Vous pouvez continuer à sélectionner et contester des constats en attendant.",
+      "resolveAfterInvestigations": "« Terminer la revue », « Publier en commentaires » et « Corriger la sélection » seront disponibles dès que chaque contestation aura son verdict.",
       "investigatingBadge": "Enquête en cours",
       "strengthenedBadge": "Renforcé",
       "upheldBadge": "Confirmé",
@@ -9011,5 +9097,16 @@
     "add": "Ajouter à la file",
     "addAndStart": "Ajouter et démarrer",
     "addedToast": "« {title} » a été ajoutée à la file"
+  },
+  "reviewEffort": {
+    "label": "Effort de revue",
+    "help": "Le degré de minutie de la revue. Les niveaux plus élevés signalent davantage de constats, y compris les moins certains, et prennent plus de temps.",
+    "levels": {
+      "low": "Faible",
+      "medium": "Moyen",
+      "high": "Élevé",
+      "xhigh": "Très élevé",
+      "max": "Maximal"
+    }
   }
 }

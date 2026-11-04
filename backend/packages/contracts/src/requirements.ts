@@ -1,5 +1,9 @@
 import * as v from 'valibot'
 import { iterationCapChoiceSchema } from './iteration-cap.js'
+import {
+  requirementFindingFloorRecordSchema,
+  reviewItemSeveritySchema,
+} from './requirement-finding-floor.js'
 
 // ---------------------------------------------------------------------------
 // Requirements-review wire contracts. A reviewer agent inspects a board block's
@@ -27,10 +31,6 @@ export const reviewItemCategorySchema = v.picklist([
   'question',
 ])
 export type ReviewItemCategory = v.InferOutput<typeof reviewItemCategorySchema>
-
-/** How important resolving the item is before implementation should proceed. */
-export const reviewItemSeveritySchema = v.picklist(['low', 'medium', 'high'])
-export type ReviewItemSeverity = v.InferOutput<typeof reviewItemSeveritySchema>
 
 /**
  * Lifecycle of a single item: `open` until a human engages, `answered` once a
@@ -72,6 +72,12 @@ export const requirementReviewItemSchema = v.object({
    * auto-answer, safest).
    */
   autoAnswerable: v.optional(v.boolean()),
+  /**
+   * On a re-review, the title of the previous round's finding whose answer this one follows up
+   * on. It is how a finding below `high` earns a place in a later round, so the window shows it.
+   * Absent on a first pass and on a `high` finding the reviewer did not tie to an answer.
+   */
+  followsUpOn: v.optional(v.nullable(v.string())),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
@@ -335,6 +341,75 @@ export function reviewSettledForUnattended(
   })
 }
 
+/**
+ * What happened on ONE linked tracker issue when the refined requirements were written into its
+ * description:
+ *
+ * - `updated`: the description now holds the document.
+ * - `already_current`: the description already held exactly this document, so nothing was written.
+ * - `failed`: the tracker refused or could not be reached; updating again retries it.
+ * - `unsupported`: the issue's source cannot have its description written in this deployment.
+ */
+export const refinedRequirementsWritebackOutcomeSchema = v.picklist([
+  'updated',
+  'already_current',
+  'failed',
+  'unsupported',
+])
+export type RefinedRequirementsWritebackOutcome = v.InferOutput<
+  typeof refinedRequirementsWritebackOutcomeSchema
+>
+
+/** One linked issue's outcome of a refined-requirements writeback. */
+export const refinedRequirementsIssueOutcomeSchema = v.object({
+  /** The task source the issue was imported from (`jira`, `github`, a namespaced id). */
+  source: v.string(),
+  externalId: v.string(),
+  outcome: refinedRequirementsWritebackOutcomeSchema,
+})
+export type RefinedRequirementsIssueOutcome = v.InferOutput<
+  typeof refinedRequirementsIssueOutcomeSchema
+>
+
+/** The per-issue result of writing a block's refined requirements into its linked issues. */
+export const refinedRequirementsWritebackResultSchema = v.object({
+  issues: v.array(refinedRequirementsIssueOutcomeSchema),
+})
+export type RefinedRequirementsWritebackResult = v.InferOutput<
+  typeof refinedRequirementsWritebackResultSchema
+>
+
+/**
+ * The last refined-requirements writeback a review recorded, so the review window can say what
+ * happened on each linked issue whether a person clicked or the workspace setting fired it.
+ */
+export const refinedRequirementsWritebackRecordSchema = v.object({
+  /** `automatic` when the workspace setting fired it as the review settled; `manual` on a click. */
+  trigger: v.picklist(['automatic', 'manual']),
+  at: v.number(),
+  issues: v.array(refinedRequirementsIssueOutcomeSchema),
+})
+export type RefinedRequirementsWritebackRecord = v.InferOutput<
+  typeof refinedRequirementsWritebackRecordSchema
+>
+
+/**
+ * Read a stored writeback record back. Both facades store it as JSON text and read it through
+ * this, so a row neither can parse reads as "no writeback recorded" on both rather than throwing
+ * on one.
+ */
+export function parseRefinedRequirementsWritebackRecord(
+  raw: string | null | undefined,
+): RefinedRequirementsWritebackRecord | null {
+  if (!raw) return null
+  try {
+    const parsed = v.safeParse(refinedRequirementsWritebackRecordSchema, JSON.parse(raw))
+    return parsed.success ? parsed.output : null
+  } catch {
+    return null
+  }
+}
+
 /** A completed requirements review for one board block. */
 export const requirementReviewSchema = v.object({
   id: v.string(),
@@ -377,6 +452,17 @@ export const requirementReviewSchema = v.object({
    * reads as 0.
    */
   rev: v.optional(v.number(), 0),
+  /**
+   * The last time the refined requirements were written into the block's linked issues, and what
+   * happened on each. Written only through its own repository method, never by a whole-row write,
+   * so a concurrent edit of the review cannot drop it. Null until a writeback has run.
+   */
+  issueWriteback: v.optional(v.nullable(refinedRequirementsWritebackRecordSchema)),
+  /**
+   * The severity floor the latest reviewer pass raised against, where it came from, and how many
+   * findings it dropped below it. Null on a review that predates the floor or whose kind has none.
+   */
+  findingFloor: v.optional(v.nullable(requirementFindingFloorRecordSchema)),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
@@ -397,12 +483,20 @@ export const updateReviewItemStatusSchema = v.object({
 export type UpdateReviewItemStatusInput = v.InferOutput<typeof updateReviewItemStatusSchema>
 
 /**
+ * What follows an incorporation. `rereview` (the default) runs one more reviewer pass over the
+ * folded document; `proceed` settles the review on it and advances the run, with no further pass.
+ */
+export const incorporateAfterSchema = v.picklist(['rereview', 'proceed'])
+export type IncorporateAfter = v.InferOutput<typeof incorporateAfterSchema>
+
+/**
  * Incorporate the settled answers into a standardized requirements document. An optional
  * `feedback` comment is the human's "do it differently" lever when redoing a merge they
- * were unhappy with — it is folded into the rework prompt alongside the prior document.
+ * were unhappy with: it is folded into the rework prompt alongside the prior document.
  */
 export const incorporateRequirementsSchema = v.object({
   feedback: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
+  after: v.optional(incorporateAfterSchema),
 })
 export type IncorporateRequirementsInput = v.InferOutput<typeof incorporateRequirementsSchema>
 

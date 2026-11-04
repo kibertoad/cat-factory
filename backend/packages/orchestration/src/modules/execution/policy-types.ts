@@ -1,8 +1,11 @@
+import type { ReviewEffortLevel } from '@cat-factory/contracts'
 import type {
   ExecutionInstance,
   ClassRulesByRole,
   MergeClassRules,
   RequirementConcernLevel,
+  RequirementFloorProgression,
+  ReviewItemSeverity,
   RunAutonomy,
   StepGating,
   SubmissionClassesByRole,
@@ -54,6 +57,12 @@ export interface ResolvedRunRiskPolicy {
    * longer has.
    */
   companionMaxReworks: number
+  /**
+   * How much effort the post-implementation `reviewer` companion spends. Every resolved policy
+   * carries one: a stored row's column defaults to `high`, and the built-in fallback inherits
+   * `DEFAULT_RISK_POLICY.postImplementationReviewEffort`, which is also `high`.
+   */
+  postImplementationReviewEffort: ReviewEffortLevel
   releaseWatchWindowMinutes: number
   releaseMaxAttempts: number
   humanReviewGraceMinutes: number
@@ -71,6 +80,9 @@ export interface ResolvedRunRiskPolicy {
    * read as `attended` everywhere, which is the historical behaviour.
    */
   autonomy?: RunAutonomy
+  /** The requirements reviewer's severity floor and its estimate bands; optional as `autonomy` is. */
+  requirementFindingFloor?: ReviewItemSeverity
+  requirementFloorProgression?: RequirementFloorProgression | null
   forkDecision?: StepGating | null
   /**
    * Per-change-class auto-merge rules. Absent on the built-in fallback ⇒ every class uses the

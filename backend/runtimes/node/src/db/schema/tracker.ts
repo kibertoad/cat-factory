@@ -22,27 +22,37 @@ export const trackerSettings = pgTable('tracker_settings', {
   // Headless clarification loop (mirror of D1 migration 0062): echo a PARKED public-API run's
   // open requirements findings onto the task's linked tracker issue(s). Per-task overridable.
   writeback_questions_on_park: integer('writeback_questions_on_park').notNull().default(0),
+  // Write the refined requirements into the linked issue's description when a requirements review
+  // settles (mirror of D1 migration 0111). Off by default.
+  writeback_requirements_to_description: integer('writeback_requirements_to_description')
+    .notNull()
+    .default(0),
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
 
-// Idempotency markers for the question writeback above (mirror of D1 migration 0062): one row
-// per (workspace, review, iteration, linked issue). The post runs in the DURABLE driver, whose
-// steps replay, so the row is CLAIMED before the comment is attempted — otherwise every replay
-// of a parked gate step would re-post the same findings. A `failed` row is re-claimable (retry
-// a tracker outage); `posted` is terminal for that iteration.
-export const reviewQuestionPosts = pgTable(
-  'review_question_posts',
+// The tracker writeback's exactly-once markers (mirror of D1 migration 0111): one row per
+// (workspace, kind, subject, linked issue, discriminator), CLAIMED before the comment is attempted
+// so a replaying driver, a double click or two concurrent requests never post the same comment
+// twice. `claim_token` is minted per claim so the claiming statement reports who won.
+export const writebackPosts = pgTable(
+  'writeback_posts',
   {
     workspace_id: text('workspace_id').notNull(),
-    review_id: text('review_id').notNull(),
-    iteration: integer('iteration').notNull(),
+    kind: text('kind').notNull(),
+    subject_id: text('subject_id').notNull(),
     issue_ref: text('issue_ref').notNull(),
+    discriminator: text('discriminator').notNull(),
     status: text('status').notNull(),
     attempts: integer('attempts').notNull().default(0),
     error: text('error'),
+    claim_token: text('claim_token'),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.review_id, t.iteration, t.issue_ref] })],
+  (t) => [
+    primaryKey({
+      columns: [t.workspace_id, t.kind, t.subject_id, t.issue_ref, t.discriminator],
+    }),
+  ],
 )
 
 // Idempotency markers for INBOUND tracker comments (mirror of D1 migration 0064): one row per

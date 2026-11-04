@@ -6,6 +6,7 @@
 // The SPA cannot import kernel, so they are copies, and a copy can go stale.
 import {
   DEFAULT_COMPANION_MAX_ATTEMPTS,
+  DEFAULT_REVIEW_EFFORT_LEVEL,
   DEFAULT_JUDGE_MAX_BOUNCES,
   DEFAULT_JUDGE_MIN_SCORE,
   DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE,
@@ -33,8 +34,11 @@ export function riskPolicy(
     ciMaxAttempts: 10,
     maxRequirementIterations: 6,
     maxRequirementConcernAllowed: 'none',
+    requirementFindingFloor: 'medium',
+    requirementFloorProgression: null,
     maxTesterQualityIterations: 3,
     companionMaxReworks: DEFAULT_COMPANION_MAX_ATTEMPTS,
+    postImplementationReviewEffort: DEFAULT_REVIEW_EFFORT_LEVEL,
     releaseWatchWindowMinutes: 30,
     releaseMaxAttempts: 1,
     humanReviewGraceMinutes: 10,

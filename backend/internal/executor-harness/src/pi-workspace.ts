@@ -245,6 +245,8 @@ export interface AgentRunSpec {
    * downloaded and nothing is said.
    */
   designImages?: ImageManifestSpec
+  /** The images attached to the task, into `.cat-context/task-images/`; same correction rule. */
+  taskImages?: ImageManifestSpec
   /**
    * The skills to make available for this run — a `skill` step's picked skill and/or the playbooks
    * the running agent kind declares. Installed HARNESS-AWARE: the claude-code runner writes them

@@ -653,13 +653,24 @@ export class RunStateMachine {
     step: PipelineStep,
     proposal = '',
   ): Promise<AdvanceResult> {
-    step.approval = { id: this.idGenerator.next('appr'), status: 'pending', proposal }
-    this.stepGraph.pauseStepForInput(step)
+    const decisionId = this.openDecisionPark(step, proposal)
     instance.status = 'blocked'
     await this.updateBlockProgress(workspaceId, instance, 'blocked')
     await this.executionRepository.upsert(workspaceId, instance)
     await this.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_decision', decisionId: step.approval.id }
+    return { kind: 'awaiting_decision', decisionId }
+  }
+
+  /**
+   * The in-memory half of {@link parkStepOnDecision}: mint the approval and freeze the step's
+   * duration clock, for a park applied inside a `mutateInstance` callback that persists itself.
+   * Returns the decision id the driver parks on.
+   */
+  openDecisionPark(step: PipelineStep, proposal = ''): string {
+    const id = this.idGenerator.next('appr')
+    step.approval = { id, status: 'pending', proposal }
+    this.stepGraph.pauseStepForInput(step)
+    return id
   }
 
   /**

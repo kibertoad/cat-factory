@@ -27,7 +27,11 @@ function task(id: string, parentId: string): Block {
   return { ...frame(id), id, title: 'Task', level: 'task', status: 'done', parentId }
 }
 
-function build(opts: { local: boolean; blocks: Block[] }) {
+function build(opts: {
+  local: boolean
+  blocks: Block[]
+  extra?: Partial<BoardServiceDependencies>
+}) {
   const HOME = 'ws_home'
   const rows = new Map(opts.blocks.map((b) => [b.id, b]))
   let listCount = 0
@@ -69,6 +73,7 @@ function build(opts: { local: boolean; blocks: Block[] }) {
       async notificationChanged() {},
       async llmCallObserved() {},
     },
+    ...opts.extra,
   } as unknown as BoardServiceDependencies
 
   return { service: new BoardService(deps), listCalls: () => listCount, deleted, HOME }
@@ -146,5 +151,45 @@ describe('BoardService.assertRemovable — the delete preflight', () => {
     const { service } = build({ local: true, blocks: [frame('f1'), open] })
 
     await expect(service.assertRemovable('ws_local', 't1')).resolves.toBeDefined()
+  })
+})
+
+// A task's attached images are retained past the age sweep, so the delete is the only thing that
+// ever reclaims them: it must name every doomed block, and a store that fails must not fail it.
+describe('BoardService.removeBlock reclaims the artifacts of the doomed blocks', () => {
+  it('prunes every block in the subtree from the store of the home workspace', async () => {
+    const pruned: { ws: string; ids: readonly string[] }[] = []
+    const store = {
+      pruneByBlocks: async (ws: string, ids: readonly string[]) => {
+        pruned.push({ ws, ids })
+        return ids.length
+      },
+    }
+    const { service } = build({
+      local: true,
+      blocks: [frame('f1'), task('t1', 'f1')],
+      extra: { resolveBinaryArtifactStore: async () => store as never },
+    })
+
+    await service.removeBlock('ws_local', 'f1')
+
+    expect(pruned).toHaveLength(1)
+    expect([...pruned[0]!.ids].sort()).toEqual(['f1', 't1'])
+  })
+
+  it('still deletes the block when the artifact store is down', async () => {
+    const { service, deleted } = build({
+      local: true,
+      blocks: [frame('f1'), task('t1', 'f1')],
+      extra: {
+        resolveBinaryArtifactStore: async () => {
+          throw new Error('blob backend down')
+        },
+      },
+    })
+
+    await service.removeBlock('ws_local', 't1')
+
+    expect(deleted).toContainEqual(['t1'])
   })
 })

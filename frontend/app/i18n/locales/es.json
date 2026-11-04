@@ -684,6 +684,7 @@
         "reference_repo_unreadable": "No se ha podido leer en este momento el repositorio de la arquitectura de referencia de esta ejecución, así que no se ha iniciado contra una plantilla que quizá no pueda clonar. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión.",
         "oauth_state_invalid": "Este enlace de autorización ha caducado o ya se usó, así que no puede completar la conexión.",
         "oauth_started_by_other_user": "Otra persona inició esta conexión, así que solo ella puede completarla.",
+        "credential_wait_not_initiator": "Solo la persona que inició esta ejecución puede renovar su credencial de suscripción personal, porque la ejecución usa su suscripción. Pídele que la continúe.",
         "oauth_exchange_refused": "El servidor de autorización del servidor de herramientas rechazó la concesión. Pide a quien opera tu despliegue que revise la configuración del cliente OAuth del servidor de herramientas.",
         "oauth_client_secret_unavailable": "El secreto del cliente OAuth del servidor de herramientas no está disponible en este tablero. Añádelo en la ventana de Infraestructura.",
         "tool_server_without_oauth": "Este servidor de herramientas ya no usa OAuth, así que no hay ninguna conexión que completar.",
@@ -695,6 +696,7 @@
       "startFailed": "No se pudo iniciar",
       "mergeFailed": "No se pudo fusionar",
       "restartFailed": "No se pudo reiniciar",
+      "resumeCredentialFailed": "No se pudo reanudar la ejecución",
       "approveFailed": "No se pudo aprobar",
       "requestChangesFailed": "No se pudieron solicitar cambios",
       "rejectFailed": "No se pudo rechazar"
@@ -749,6 +751,7 @@
         "binary_output_generator_invalid": "No se puede resolver el generador de salidas binarias",
         "foundational_service_not_inherited": "Este tablero registró ese servicio",
         "input_gate_not_parked": "Nada que responder",
+        "credential_wait_not_parked": "Nada que reanudar",
         "input_gate_parked": "Respóndelo en la comprobación de entrada de la tarea",
         "ticket_already_linked": "Esta incidencia ya tiene una tarea",
         "document_already_linked": "El documento ya está adjunto",
@@ -772,7 +775,9 @@
         "thread_busy": "Este hilo todavía está respondiendo",
         "draft_conflict": "Este borrador ha cambiado",
         "session_stale": "La pull request ha avanzado",
-        "cursor_expired": "El registro de cambios ya superó este cursor"
+        "cursor_expired": "El registro de cambios ya superó este cursor",
+        "refined_requirements_unavailable": "Todavía no hay requisitos refinados",
+        "no_linked_issues": "No hay ninguna incidencia vinculada"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -810,6 +815,7 @@
         "binary_output_generator_invalid": "Un paso que genera salidas binarias selecciona una integración generativa que esta instalación no registra, ninguna de las integraciones seleccionadas produce un tipo de contenido que el paso debe entregar, o una de ellas la genera una CLI de agente en la que no se ejecuta el modelo de este paso. Las integraciones generativas se registran en el código de la instalación, no en este espacio de trabajo: regístrala, corrige la selección del paso o fija en el paso un modelo que ejecute la CLI necesaria, y vuelve a iniciar.",
         "foundational_service_not_inherited": "La exclusión se aplica a un servicio heredado de la cuenta. Este id está registrado por este tablero, así que no hay nada que excluir: elimina la entrada propia del tablero.",
         "input_gate_not_parked": "Esta ejecución ya no espera su comprobación de entrada. Puede que alguien la haya respondido o que la ejecución haya avanzado.",
+        "credential_wait_not_parked": "Esta ejecución ya no está esperando la credencial de tu suscripción personal. Puede que ya se haya reanudado o que la ejecución haya avanzado.",
         "input_gate_parked": "Esta ejecución está detenida en su comprobación de entrada, que la vía de aprobación no puede resolver. Usa el aviso de la ejecución: corrige la tarea y vuelve a comprobar, o ejecútala de todos modos.",
         "ticket_already_linked": "Una incidencia solo puede respaldar una tarea, así que volver a vincularla dejaría a la tarea existente sin el contexto con el que se creó. Abre esa tarea o desvincula antes la incidencia.",
         "document_already_linked": "Ese documento está adjunto a otra tarea. Sepáralo allí primero o adjunta una copia aparte.",
@@ -833,7 +839,9 @@
         "thread_busy": "La pregunta anterior de este hilo aún no tiene respuesta. Espera esa respuesta o pregunta en otro hilo.",
         "draft_conflict": "Este borrador de comentario se ha editado, publicado o descartado desde que lo cargaste. Vuelve a cargar los borradores y repite tu cambio.",
         "session_stale": "Llegaron commits nuevos después de preparar esta revisión, así que sus borradores pueden apuntar a líneas equivocadas. Actualiza la revisión, revisa los borradores y luego publica.",
-        "cursor_expired": "Los cambios posteriores a este cursor ya no se conservan. Toma una instantánea nueva del directorio y sigue el registro desde la posición que indique."
+        "cursor_expired": "Los cambios posteriores a este cursor ya no se conservan. Toma una instantánea nueva del directorio y sigue el registro desde la posición que indique.",
+        "refined_requirements_unavailable": "La revisión aún no ha producido un documento revisado o lo está reescribiendo ahora. Espera a que termine la incorporación y vuelve a actualizar.",
+        "no_linked_issues": "Esta tarea no tiene ninguna incidencia del gestor vinculada. Vincula la incidencia de la que proviene y vuelve a actualizar."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -3290,6 +3298,10 @@
         "questionsOnPark": {
           "label": "Publicar preguntas abiertas cuando un ejecución headless se detiene",
           "help": "Cuando una ejecución iniciada fuera de la aplicación se detiene para aclarar requisitos (por la API o despachada desde una incidencia del rastreador), publica sus preguntas abiertas en la incidencia vinculada, cada una con el id que debe nombrar la respuesta. Las tareas iniciadas en la aplicación no se ven afectadas."
+        },
+        "requirementsToDescription": {
+          "label": "Escribir los requisitos refinados en la descripción de la incidencia vinculada",
+          "help": "Cuando la revisión de requisitos de una tarea se cierra y la ejecución continúa, sustituye la descripción de la incidencia vinculada por los requisitos refinados. El tracker conserva la descripción anterior en su historial. Desactivado por defecto y configurable solo para todo el espacio de trabajo."
         }
       },
       "probeFailure": {
@@ -3356,6 +3368,8 @@
         "maxRequirementIterations": "Iteraciones de requisitos",
         "maxRequirementConcernAllowed": "Aprobación automática de inquietudes hasta",
         "companionMaxReworks": "Rondas de reelaboración del acompañante",
+        "postImplementationReviewEffort": "Esfuerzo de revisión tras la implementación",
+        "postImplementationReviewEffortHelp": "Qué tan exhaustiva es la revisión de código tras la implementación. Los niveles más altos informan de más hallazgos, incluidos los menos seguros, y tardan más.",
         "autoMerge": "Fusión automática"
       },
       "newPreset": "Nueva política",
@@ -3471,6 +3485,20 @@
       "confirmHide": {
         "title": "¿Ocultar esta política?",
         "body": "«{name}» no se ofrecerá en este tablero y las tareas que la eligieron pasarán a la política predeterminada del tablero. Puedes restaurarla más adelante."
+      },
+      "findingFloor": {
+        "label": "La revisión de requisitos plantea",
+        "fallbackLabel": "Plantea, cuando la tarea no tiene estimación",
+        "hint": "Los hallazgos por debajo de esta gravedad se omiten de la revisión. Solo un hallazgo planteado puede detener la ejecución.",
+        "high": "Solo hallazgos altos",
+        "medium": "Hallazgos altos y medios",
+        "low": "Todo, incluidos los menores",
+        "progressiveLabel": "Seguir la estimación de la tarea",
+        "progressiveHint": "Preguntar más en tareas mayores, según el valor más alto de complejidad, riesgo e impacto de la estimación. Requiere un Task Estimator antes de la revisión o una estimación de una ejecución anterior.",
+        "mediumFrom": "Añadir hallazgos medios desde una estimación de (%)",
+        "lowFrom": "Plantear todo desde una estimación de (%)",
+        "bandsCrossed": "El umbral de hallazgos medios no puede superar el umbral de todo.",
+        "bandsOutOfRange": "Ambos umbrales deben ser números entre 0 y 100."
       }
     },
     "observabilityConnection": {
@@ -5128,6 +5156,20 @@
       "oauthButton": "Conectar con {label}",
       "oauthOr": "o conecta con una clave API",
       "disconnectFailed": "No se pudo desconectar"
+    },
+    "images": {
+      "heading": "Imágenes",
+      "hint": "Capturas, bocetos o diagramas que explican esta tarea. Los agentes que trabajan en ella los ven siempre que su modelo acepte imágenes.",
+      "add": "Añadir imágenes",
+      "count": "{count} de {max}",
+      "truncated": "Una tarea admite como máximo {max} imágenes, así que solo se añadieron las primeras.",
+      "rejected": "No se añadieron, porque solo se aceptan imágenes PNG, JPEG, WebP y GIF: {names}",
+      "remove": "Quitar {name}",
+      "unnamed": "Imagen adjunta",
+      "attached": "Imágenes adjuntadas",
+      "uploadFailed": "No se pudo adjuntar la imagen",
+      "removeFailed": "No se pudo quitar la imagen",
+      "loadFailed": "No se pudieron cargar las imágenes adjuntas"
     }
   },
   "bugHunt": {
@@ -5900,6 +5942,13 @@
       }
     }
   },
+  "credentialWait": {
+    "title": "La credencial de tu suscripción personal ha caducado",
+    "body": "La credencial de la suscripción personal de esta ejecución caducó antes de que pudiera empezar el siguiente paso, así que la ejecución está en pausa. Introduce tu contraseña personal para renovarla y continuar desde este paso.",
+    "resume": "Introducir contraseña y continuar",
+    "othersTitle": "La credencial de suscripción personal de esta ejecución caducó",
+    "othersRun": "Solo la persona que inició esta ejecución puede renovarla con su contraseña personal. Pídele que la continúe."
+  },
   "requirements": {
     "title": "Revisión de requisitos",
     "iteration": "Iteración {current} / {max}",
@@ -5977,6 +6026,23 @@
     "reRequest": "Volver a pedir",
     "finalRequirements": "Requisitos finales",
     "incorporatedDraft": "Requisitos incorporados (borrador)",
+    "updateIssues": {
+      "action": "Actualizar incidencias vinculadas",
+      "hint": "Sustituye la descripción de cada incidencia vinculada por estos requisitos. El tracker conserva la descripción anterior en su historial.",
+      "error": "No se pudieron actualizar las incidencias vinculadas",
+      "automatic": "Escrito automáticamente en las incidencias vinculadas cuando se cerró la revisión:",
+      "toast": {
+        "updated": "Incidencias vinculadas actualizadas con los requisitos",
+        "nothingNew": "Las incidencias vinculadas ya contienen estos requisitos",
+        "partial": "Algunas incidencias vinculadas no se actualizaron"
+      },
+      "outcome": {
+        "updated": "actualizada",
+        "already_current": "ya estaba al día",
+        "failed": "falló, vuelve a actualizar para reintentarlo",
+        "unsupported": "este tracker no se puede actualizar"
+      }
+    },
     "stats": {
       "findings": "Hallazgos",
       "open": "Abiertos",
@@ -5988,7 +6054,8 @@
     },
     "actions": {
       "proceedNothing": "Continuar (nada que incorporar)",
-      "incorporateAnswers": "Incorporar respuestas",
+      "incorporateAndReReview": "Incorporar y volver a revisar",
+      "incorporateAndProceed": "Incorporar y continuar",
       "requestRecommendations": "Pedir {count} recomendación | Pedir {count} recomendaciones",
       "reReview": "Se ve bien — volver a revisar",
       "reReviewing": "Volviendo a revisar…",
@@ -5997,7 +6064,7 @@
     },
     "help": {
       "canProceed": "Todos los hallazgos están descartados — continúa a la siguiente fase sin rehacer nada.",
-      "canIncorporate": "Reúne tus respuestas en un único documento de formato estándar y luego lo vuelve a revisar automáticamente.",
+      "canIncorporate": "Ambas reúnen tus respuestas en un único documento de formato estándar. Volver a revisar hace que el revisor compruebe ese documento de nuevo; continuar pasa directamente a la siguiente fase.",
       "answerAll": "Responde o descarta cada hallazgo para continuar.",
       "merged": "La nueva revisión ejecuta el revisor sobre este documento. Si no estás conforme con cómo se combinó, rehazlo con un comentario en su lugar."
     },
@@ -6009,6 +6076,8 @@
       "recommendationsReady": "{count} recomendación lista | {count} recomendaciones listas",
       "incorporating": "Incorporando tus respuestas en segundo plano",
       "incorporatingDescription": "Has vuelto al tablero — te avisaremos solo si se necesita más información.",
+      "incorporatingThenProceeding": "Incorporando tus respuestas",
+      "incorporatingThenProceedingDescription": "La ejecución pasará a la siguiente fase en cuanto estén incorporadas.",
       "reviewerSatisfied": "El revisor está conforme — continuando la canalización",
       "iterationLimitReached": "Se alcanzó el límite de iteraciones — elige cómo continuar",
       "newFindings": "sin nuevos hallazgos a los que reaccionar | {count} nuevo hallazgo al que reaccionar | {count} nuevos hallazgos a los que reaccionar",
@@ -6039,7 +6108,22 @@
       "medium": "Confianza media",
       "low": "Confianza baja"
     },
-    "loadFailed": "No se pudo cargar la revisión de requisitos"
+    "loadFailed": "No se pudo cargar la revisión de requisitos",
+    "findingFloor": {
+      "raised": {
+        "high": "Esta pasada planteó solo hallazgos altos.",
+        "medium": "Esta pasada planteó hallazgos altos y medios.",
+        "low": "Esta pasada planteó hallazgos de todas las gravedades."
+      },
+      "basis": {
+        "fixed": "Fijado por la política de riesgo.",
+        "estimate": "Fijado por la estimación de la tarea ({score} %).",
+        "no_estimate": "La política sigue la estimación de la tarea, pero esta tarea no tiene ninguna, así que se aplicó su valor de respaldo."
+      },
+      "suppressed": "Hallazgos omitidos por debajo de ese nivel: {count}.",
+      "followUpSuppressed": "Omitidos en esta nueva revisión por no ser de gravedad alta ni un seguimiento de tus respuestas: {count}."
+    },
+    "followsUpOn": "Da seguimiento a tu respuesta sobre: {title}"
   },
   "clarity": {
     "title": "Clasificación del informe de error",
@@ -7910,7 +7994,9 @@
       "submit": "Investigar",
       "placeholder": "Opcional: ¿qué es exactamente lo incorrecto o poco convincente de este hallazgo?",
       "hint": "Déjalo en blanco para que el investigador profundice, justifique el hallazgo y compruebe que es preciso y relevante.",
-      "investigatingBanner": "El Investigador de Objeciones está reexaminando un hallazgo frente al código fuente…",
+      "queuedBadge": "En cola",
+      "queueBanner": "Investigando: {running} · En cola: {queued}. Mientras tanto, puedes seguir seleccionando y objetando hallazgos.",
+      "resolveAfterInvestigations": "«Finalizar revisión», «Publicar como comentarios» y «Corregir seleccionados» estarán disponibles cuando cada objeción tenga su veredicto.",
       "investigatingBadge": "Investigando",
       "strengthenedBadge": "Reforzado",
       "upheldBadge": "Confirmado",
@@ -9011,5 +9097,16 @@
     "add": "Añadir a la cola",
     "addAndStart": "Añadir e iniciar",
     "addedToast": "Se añadió «{title}» a la cola"
+  },
+  "reviewEffort": {
+    "label": "Esfuerzo de revisión",
+    "help": "Qué tan exhaustiva es la revisión. Los niveles más altos informan de más hallazgos, incluidos los menos seguros, y tardan más.",
+    "levels": {
+      "low": "Bajo",
+      "medium": "Medio",
+      "high": "Alto",
+      "xhigh": "Muy alto",
+      "max": "Máximo"
+    }
   }
 }

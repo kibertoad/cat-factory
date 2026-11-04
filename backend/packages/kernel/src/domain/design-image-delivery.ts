@@ -94,6 +94,10 @@ export function harnessAcceptsImages(harness: HarnessKind): boolean {
  *   for the surface rather than for a capability, and spelled to match the `UnavailableToolServer`
  *   reason a panel already reports for the same reason on the same surface.
  *
+ * - `delegated_brief` is a step delegated to an EXTERNAL executor: the brief it is handed is
+ *   prompts and text files, with no channel for bytes, and what model or CLI the executor runs is
+ *   not ours to know. Named for the surface, like `consensus_panel`.
+ *
  * There is deliberately no member for "the task has no design": that is an absent set, not a
  * refused delivery, and a run with nothing to show must not tell its agent that something was
  * withheld.
@@ -104,6 +108,7 @@ export type DesignImageUnavailableReason =
   | 'unknown_model_image_input'
   | 'inline_harness_text_only'
   | 'consensus_panel'
+  | 'delegated_brief'
   | 'transfer_failed'
 
 /**

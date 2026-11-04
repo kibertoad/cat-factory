@@ -142,6 +142,7 @@ of its own. Several things bite:
   below the bar goes straight to the iteration-cap park (or to `proceed` under
   `autonomy: 'unattended'`) instead of buying a round. It does not widen what counts as a pass: a
   blocker under a `0` budget parks immediately rather than being accepted.
+- **How thorough the post-implementation `reviewer` is comes from the same policy**: `postImplementationReviewEffort` (`low` to `max`, `high` on every built-in and by default), read off the resolved policy as `ResolvedRunRiskPolicy.postImplementationReviewEffort`.
 - **The first-batch rule is SUBORDINATE to that budget.** A companion's first batch of comments
   loops its producer back whatever the rating was, because that first set of findings is worth a
   round even from work that scored well. The round is bought from `companionMaxReworks`, so with

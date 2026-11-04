@@ -340,6 +340,7 @@ export type {
   BuiltinBinaryArtifactStorageKind,
   BinaryArtifactStore,
   BinaryArtifactMetadataStore,
+  BinaryArtifactBlockIndex,
   BinaryBlobBackend,
   DocumentArtifactRef,
   ResolveBinaryArtifactStore,
@@ -348,6 +349,7 @@ export type {
 export {
   BUILTIN_BINARY_ARTIFACT_STORAGE_KINDS,
   RETAINED_BINARY_ARTIFACT_KINDS,
+  BLOCK_ANCHORED_BINARY_ARTIFACT_KINDS,
   createBinaryArtifactStore,
   dedupeDocumentRefs,
 } from './binary-artifacts.js'
@@ -429,7 +431,7 @@ export type {
   TaskSourceWritebackAdapter,
   TaskWritebackContext,
 } from './task-source-writeback.js'
-export { createTaskWritebackContext } from './task-source-writeback.js'
+export { createTaskWritebackContext, sameIssueDescription } from './task-source-writeback.js'
 export type { BugHuntAssessor, BugHuntSubject } from './bug-hunt.js'
 export type {
   BuiltinTaskSourceKind,
@@ -959,6 +961,7 @@ export type {
 export type { CreateTicketRequest, CreatedTicket, TicketTrackerProvider } from './ticket-tracker.js'
 export type {
   IssueWritebackProvider,
+  RefinedRequirementsWritebackTrigger,
   ReviewQuestionFinding,
   ReviewQuestionPolicy,
   ReviewQuestionPost,
@@ -969,13 +972,15 @@ export type {
 } from './issue-writeback.js'
 export { REVIEW_QUESTION_POLICIES } from './issue-writeback.js'
 export type {
-  ReviewQuestionPostClaimWindow,
-  ReviewQuestionPostKey,
-  ReviewQuestionPostRecord,
-  ReviewQuestionPostRepository,
-  ReviewQuestionPostStatus,
-} from './review-question-post-repositories.js'
-export { REVIEW_QUESTION_POST_CLAIM_TTL_MS } from './review-question-post-repositories.js'
+  WritebackPostClaim,
+  WritebackPostClaimWindow,
+  WritebackPostKey,
+  WritebackPostKind,
+  WritebackPostRecord,
+  WritebackPostRepository,
+  WritebackPostStatus,
+} from './writeback-post-repositories.js'
+export { WRITEBACK_POST_CLAIM_TTL_MS, WRITEBACK_POST_KINDS } from './writeback-post-repositories.js'
 export type {
   TrackerCommentIngestClaimWindow,
   TrackerCommentIngestKey,

@@ -30,7 +30,12 @@ import type {
   VcsConnectionRef,
   VcsRepoRef,
 } from '@cat-factory/kernel'
-import { VcsApiError, describeVcsApiError, noopLogger } from '@cat-factory/kernel'
+import {
+  VcsApiError,
+  describeVcsApiError,
+  noopLogger,
+  sameIssueDescription,
+} from '@cat-factory/kernel'
 import type {
   CommitFilesInput,
   MergePullRequestInput,
@@ -881,6 +886,21 @@ export class FetchGitLabClient implements VcsClient {
       method: 'PUT',
       body: { state_event: 'close' },
     })
+  }
+
+  async replaceIssueBody(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+    body: string,
+  ): Promise<'updated' | 'unchanged'> {
+    const path = `/projects/${projectPath(ref)}/issues/${number}`
+    const { json } = await this.request(path, { connection })
+    if (sameIssueDescription((json as { description?: string | null } | null)?.description, body)) {
+      return 'unchanged'
+    }
+    await this.request(path, { connection, method: 'PUT', body: { description: body } })
+    return 'updated'
   }
 
   /**

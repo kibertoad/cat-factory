@@ -4,6 +4,7 @@ import { createRiskPolicySchema } from '@cat-factory/contracts'
 import type { RiskPolicy } from '~/types/merge'
 import {
   blankRiskPolicyDraft,
+  floorBandsValid,
   riskPolicyPatchFromDraft,
   toRiskPolicyDraft,
   type RiskPolicyDraft,
@@ -24,8 +25,11 @@ const policy = (over: Partial<RiskPolicy> = {}): RiskPolicy =>
     ciMaxAttempts: 10,
     maxRequirementIterations: 6,
     maxRequirementConcernAllowed: 'none',
+    requirementFindingFloor: 'medium',
+    requirementFloorProgression: null,
     maxTesterQualityIterations: 3,
     companionMaxReworks: 3,
+    postImplementationReviewEffort: 'high',
     releaseWatchWindowMinutes: 30,
     releaseMaxAttempts: 1,
     humanReviewGraceMinutes: 10,
@@ -66,8 +70,11 @@ describe('the risk-policy draft conversions', () => {
   it('carries every field the draft holds into the patch body', () => {
     // Iterating the draft's OWN keys is what makes this hold for a field added later: the interface
     // is what a new control is added to, and anything on it that `riskPolicyPatchFromDraft` forgets
-    // fails here rather than in production.
-    const base = toRiskPolicyDraft(policy())
+    // fails here rather than in production. Progressive, because the band edges reach the body only
+    // while the floor follows the estimate.
+    const base = toRiskPolicyDraft(
+      policy({ requirementFloorProgression: { mediumFrom: 0.3, lowFrom: 0.7 } }),
+    )
     const unchanged = riskPolicyPatchFromDraft(base, 'Balanced')
     for (const key of Object.keys(base) as (keyof RiskPolicyDraft)[]) {
       const edited = { ...base, [key]: nudge(base[key]) } as RiskPolicyDraft
@@ -79,7 +86,12 @@ describe('the risk-policy draft conversions', () => {
   })
 
   it('round-trips a stored policy unchanged when nothing is edited', () => {
-    const stored = policy({ companionMaxReworks: 7, maxRisk: 0.45, autonomy: 'unattended' })
+    const stored = policy({
+      companionMaxReworks: 7,
+      postImplementationReviewEffort: 'low',
+      maxRisk: 0.45,
+      autonomy: 'unattended',
+    })
     const patch = riskPolicyPatchFromDraft(toRiskPolicyDraft(stored), 'fallback')
 
     // The percentages went up by a hundred for editing and came back down; the counts and the
@@ -87,7 +99,41 @@ describe('the risk-policy draft conversions', () => {
     expect(patch.maxRisk).toBe(0.45)
     expect(patch.minAutoAnswerConfidence).toBe(0.8)
     expect(patch.companionMaxReworks).toBe(7)
+    expect(patch.postImplementationReviewEffort).toBe('low')
     expect(patch.autonomy).toBe('unattended')
+  })
+
+  it('round-trips the finding floor, and keeps the bands while the progression is off', () => {
+    const progressive = policy({
+      requirementFindingFloor: 'high',
+      requirementFloorProgression: { mediumFrom: 0.25, lowFrom: 0.6 },
+    })
+    const draft = toRiskPolicyDraft(progressive)
+    expect(riskPolicyPatchFromDraft(draft, 'x')).toMatchObject({
+      requirementFindingFloor: 'high',
+      requirementFloorProgression: { mediumFrom: 0.25, lowFrom: 0.6 },
+    })
+
+    // Switching it off saves the fixed floor alone; switching it back on restores the same bands.
+    draft.floorProgressive = false
+    expect(riskPolicyPatchFromDraft(draft, 'x').requirementFloorProgression).toBeNull()
+    draft.floorProgressive = true
+    expect(riskPolicyPatchFromDraft(draft, 'x').requirementFloorProgression).toEqual({
+      mediumFrom: 0.25,
+      lowFrom: 0.6,
+    })
+  })
+
+  it('refuses crossed bands only while the progression is on', () => {
+    const draft = { ...toRiskPolicyDraft(policy()), floorMediumFrom: 80, floorLowFrom: 40 }
+    expect(floorBandsValid(draft)).toBe(true)
+    expect(floorBandsValid({ ...draft, floorProgressive: true })).toBe(false)
+  })
+
+  it('refuses a band outside 0..100, which the stored schema rejects', () => {
+    const draft = { ...toRiskPolicyDraft(policy()), floorProgressive: true, floorMediumFrom: 30 }
+    expect(floorBandsValid({ ...draft, floorLowFrom: 70 })).toBe(true)
+    expect(floorBandsValid({ ...draft, floorLowFrom: 150 })).toBe(false)
   })
 
   it('keeps a blanked name from saving over the stored one', () => {
@@ -100,6 +146,9 @@ describe('the risk-policy draft conversions', () => {
     // blank form with it instead of leaving it pre-filling a number nothing else states.
     expect(blankRiskPolicyDraft().companionMaxReworks).toBe(
       v.getDefault(createRiskPolicySchema.entries.companionMaxReworks),
+    )
+    expect(blankRiskPolicyDraft().postImplementationReviewEffort).toBe(
+      v.getDefault(createRiskPolicySchema.entries.postImplementationReviewEffort),
     )
   })
 

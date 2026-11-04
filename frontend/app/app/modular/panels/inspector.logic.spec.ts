@@ -94,6 +94,7 @@ describe('inspector panel group', () => {
     expect(visibleIds(block('task'))).toEqual([
       'task-context-docs',
       'task-context-issues',
+      'task-context-images',
       'recurring-schedule',
       'task-execution',
       'task-estimate',

@@ -81,6 +81,7 @@ function fakeKind() {
     markRecommendationPending: vi.fn(async () => current),
     fillRecommendations: vi.fn(async () => current),
     autoRecommend: vi.fn(async () => {}),
+    onSettled: vi.fn(async () => {}),
     emit: vi.fn(async () => {}),
   } satisfies ReviewKind<FakeReview> & Record<string, unknown>
   return {
@@ -220,6 +221,26 @@ describe('ReviewGateController.evaluate', () => {
     expect(result).toEqual({ kind: 'continue' })
     expect(k.kind.review).toHaveBeenCalled()
     expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
+    // The review settled, so the kind's settle hook (the opt-in issue writeback) ran once.
+    expect(k.kind.onSettled).toHaveBeenCalledExactlyOnceWith('ws', BLOCK.id)
+  })
+
+  it('does not fire the settle hook on a pass-through or a park', async () => {
+    ;(k.kind.enabled as ReturnType<typeof vi.fn>).mockReturnValue(false)
+    const s = step()
+    await ctrl.evaluate(
+      k.kind,
+      'ws',
+      instance([s, step({ agentKind: 'architect' })]),
+      s,
+      BLOCK,
+      false,
+    )
+    ;(k.kind.enabled as ReturnType<typeof vi.fn>).mockReturnValue(true)
+    k.set(review({ status: 'ready' }))
+    const parked = step()
+    await ctrl.evaluate(k.kind, 'ws', instance([parked]), parked, BLOCK, false)
+    expect(k.kind.onSettled).not.toHaveBeenCalled()
   })
 
   it('parks the run when the fresh review raises findings', async () => {
@@ -352,6 +373,31 @@ describe('ReviewGateController.evaluate', () => {
     expect(result).toEqual({ kind: 'continue' })
   })
 
+  it('re-entry: incorporate-and-proceed folds the answers, settles, and advances with no re-review', async () => {
+    k.set(review({ status: 'ready', items: [{ status: 'answered' } as never] }))
+    const s = step({ pendingIncorporation: { feedback: 'do X', after: 'proceed' } })
+    const inst = instance([s, step({ agentKind: 'architect' })])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(s.pendingIncorporation).toBeNull()
+    expect(k.kind.incorporate).toHaveBeenCalledWith('ws', 'blk_1', 'rrv_1', 'do X')
+    expect(k.kind.markIncorporated).toHaveBeenCalled()
+    expect(k.kind.markReReviewing).not.toHaveBeenCalled()
+    expect(k.kind.reReview).not.toHaveBeenCalled()
+    expect(k.kind.onSettled).toHaveBeenCalledWith('ws', 'blk_1')
+    expect(result).toEqual({ kind: 'continue' })
+    expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
+  })
+
+  it('re-entry: incorporate-and-proceed with nothing to fold settles without the fold call', async () => {
+    k.set(review({ status: 'ready', items: [] }))
+    const s = step({ pendingIncorporation: { after: 'proceed' } })
+    const inst = instance([s, step({ agentKind: 'architect' })])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(k.kind.incorporate).not.toHaveBeenCalled()
+    expect(k.kind.markIncorporated).toHaveBeenCalled()
+    expect(result).toEqual({ kind: 'continue' })
+  })
+
   it('re-entry: a pending recommendation runs the Writer then re-parks (never advances)', async () => {
     k.set(review({ status: 'ready' }))
     const s = step({
@@ -427,6 +473,26 @@ describe('ReviewGateController public surface', () => {
     expect(k.kind.incorporate).not.toHaveBeenCalled()
   })
 
+  it('incorporate-and-proceed records the choice on the parked step for the driver', async () => {
+    k.set(review({ status: 'ready', items: [{ status: 'answered' } as never] }))
+    const parkedStep = step({
+      state: 'waiting_decision',
+      approval: { id: 'appr_9', status: 'pending', proposal: '' },
+    })
+    deps.executionRepository.get = vi.fn(async () => instance([parkedStep], { status: 'blocked' }))
+    await ctrl.incorporate(k.kind, 'ws', 'blk_1', undefined, 'proceed')
+    expect(parkedStep.pendingIncorporation).toEqual({ after: 'proceed' })
+  })
+
+  it('incorporate-and-proceed off-path folds and settles inline, never re-reviewing', async () => {
+    k.set(review({ status: 'ready', items: [{ status: 'answered' } as never] }))
+    deps.executionRepository.get = vi.fn(async () => null)
+    const out = await ctrl.incorporate(k.kind, 'ws', 'blk_1', 'feedback', 'proceed')
+    expect(k.kind.incorporate).toHaveBeenCalledWith('ws', 'blk_1', 'rrv_1', 'feedback')
+    expect(k.kind.reReview).not.toHaveBeenCalled()
+    expect(out.status).toBe('incorporated')
+  })
+
   it('reReview requires a merged document first', async () => {
     k.set(review({ status: 'ready' }))
     await expect(ctrl.reReview(k.kind, 'ws', 'blk_1')).rejects.toBeInstanceOf(ConflictError)
@@ -500,6 +566,7 @@ describe('ReviewGateController public surface', () => {
     expect(k.kind.markIncorporated).toHaveBeenCalled()
     expect(deps.stateMachine.settleAdvancedGate).toHaveBeenCalled()
     expect(out.status).toBe('incorporated')
+    expect(k.kind.onSettled).toHaveBeenCalledExactlyOnceWith('ws', 'blk_1')
   })
 
   it('resolveExceeded dispatches the iteration-cap choice with grant/proceed handlers', async () => {
