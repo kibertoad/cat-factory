@@ -1,7 +1,6 @@
 import {
   hasApproverPolicy,
   stepOccurrenceKeys,
-  type ApprovalPolicy,
   type StepGateConfig,
   type StepOptions,
 } from '@cat-factory/contracts'
@@ -92,16 +91,6 @@ export function patchedGateConfig(
   if (Object.keys(gateConfig).length) next.gateConfig = gateConfig
   else delete next.gateConfig
   return Object.keys(next).length ? next : null
-}
-
-/** The approval half of a step's gate configuration, or null when the step takes the defaults. */
-export function approvalPolicyOf(options: StepOptions | null | undefined): ApprovalPolicy | null {
-  const config = options?.gateConfig
-  if (!config) return null
-  const policy: ApprovalPolicy = {}
-  if (config.approvers) policy.approvers = config.approvers
-  if (config.minApprovals !== undefined) policy.minApprovals = config.minApprovals
-  return Object.keys(policy).length ? policy : null
 }
 
 /**

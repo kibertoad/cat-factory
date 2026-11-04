@@ -6,7 +6,7 @@
 // because only a clone may drop one. Holds its own copy of the gates and approver policies rather
 // than the builder's draft, so opening it never clobbers a pipeline someone is composing.
 import { computed, ref } from 'vue'
-import type { StepGateConfig } from '@cat-factory/contracts'
+import { approvalPolicyOf, type StepGateConfig } from '@cat-factory/contracts'
 import type { Pipeline } from '~/types/domain'
 import AppModal from '~/components/common/AppModal.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
@@ -15,7 +15,6 @@ import StepCheckpointControl from '~/components/pipeline/StepCheckpointControl.v
 import { agentKindMeta } from '~/utils/catalog'
 import { showOverrideField } from '~/utils/uiMode'
 import {
-  approvalPolicyOf,
   foldCompanionUnits,
   patchedGateConfig,
   type PipelineUnit,
@@ -31,12 +30,16 @@ const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 const kinds = props.pipeline.agentKinds
-const gates = ref(kinds.map((_, i) => props.pipeline.gates?.[i] === true))
+const shipped = computed(() => pipelines.shippedCheckpoints(props.pipeline))
+// A copy older than the catalog may lack a checkpoint the catalog now ships. It starts on, because
+// the control locks it and the backend refuses any request that leaves it off.
+const gates = ref(
+  kinds.map((_, i) => props.pipeline.gates?.[i] === true || shipped.value[i] === true),
+)
 // The approval half only: a gate's own parameters belong to the built-in's structure.
 const policies = ref<(StepGateConfig | null)[]>(
   kinds.map((_, i) => approvalPolicyOf(props.pipeline.stepOptions?.[i])),
 )
-const shipped = computed(() => pipelines.shippedCheckpoints(props.pipeline))
 const units = computed(() => foldCompanionUnits(kinds))
 const saving = ref(false)
 

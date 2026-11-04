@@ -1,4 +1,5 @@
 import {
+  approvalPolicyOf,
   catalogGatedSteps,
   stepOccurrenceKeys,
   type ApprovalPolicy,
@@ -151,14 +152,4 @@ export function carriedApprovals(
     if (stored.has(key) && !kept.has(key)) dropped.push(existing.agentKinds[i]!)
   })
   return { pipeline, dropped }
-}
-
-/** The approval half of a step's stored gate configuration, or null when it takes the defaults. */
-function approvalPolicyOf(options: StepOptions | null | undefined): ApprovalPolicy | null {
-  const config = options?.gateConfig
-  if (!config) return null
-  const policy: ApprovalPolicy = {}
-  if (config.approvers) policy.approvers = config.approvers
-  if (config.minApprovals !== undefined) policy.minApprovals = config.minApprovals
-  return Object.keys(policy).length ? policy : null
 }

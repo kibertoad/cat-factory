@@ -34,7 +34,8 @@ import { noopLogger } from '@cat-factory/kernel'
  * The row a workspace's copy of a catalog pipeline is: the catalog definition, carrying over the
  * organizational metadata a workspace owns (`labels` / `archived`, written by `organize`) when it
  * already holds a copy. Shared by `PipelineService.reseed` and adoption so "adopting" and
- * "reseeding" cannot produce different rows for the same catalog entry.
+ * "reseeding" cannot produce different rows for the same catalog entry; a reseed then carries the
+ * stored copy's approval checkpoints on top (`carriedApprovals`), which adoption has none of.
  *
  * The two DEFAULT claims state what the STORE holds, never what the catalog declares, because
  * `setDefault` owns those columns and `update` deliberately does not write them: a reseed of a rung

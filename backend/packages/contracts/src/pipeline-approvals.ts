@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import type { StepOptions } from './entities.js'
 import { stepGateConfigSchema } from './gate-config.js'
 
 /**
@@ -70,4 +71,14 @@ export function catalogGatedSteps(
     stepOccurrenceKeys(catalog.agentKinds).filter((_, i) => catalog.gates[i] === true),
   )
   return stepOccurrenceKeys(agentKinds).map((key) => shipped.has(key))
+}
+
+/** The approval half of a step's stored gate configuration, or null when it takes the defaults. */
+export function approvalPolicyOf(options: StepOptions | null | undefined): ApprovalPolicy | null {
+  const config = options?.gateConfig
+  if (!config) return null
+  const policy: ApprovalPolicy = {}
+  if (config.approvers) policy.approvers = config.approvers
+  if (config.minApprovals !== undefined) policy.minApprovals = config.minApprovals
+  return Object.keys(policy).length ? policy : null
 }
