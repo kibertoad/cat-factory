@@ -1,5 +1,12 @@
 # @cat-factory/storybook
 
+## 0.0.23
+
+### Patch Changes
+
+- Updated dependencies [525796a]
+  - @cat-factory/app@0.327.2
+
 ## 0.0.22
 
 ### Patch Changes
