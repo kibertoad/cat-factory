@@ -182,8 +182,9 @@ uses:
 - **Code**: a `ResearchDefinitionRegistry` a deployment registers on, injected by reference on both
   `start()` and `startLocal()` like every app-owned registry.
 - **Data**: `PUT /api/v1/research-definitions/{key}/versions/{version}` stores an account-scoped
-  definition. A published version is immutable (`409 research_definition_version_exists`), so a
-  project pinned to it never changes meaning underneath. Listing and reading are `GET` siblings.
+  definition. A published version is immutable (`409`, reason
+  `research_definition_version_exists`), so a project pinned to it never changes meaning
+  underneath. Listing and reading are `GET` siblings.
 
 The API lets an org's integration team publish a definition from its own CI without a deployment
 build; the registry lets a deployment ship definitions with its code. The two key spaces never
@@ -262,10 +263,13 @@ The hand-off:
 2. **Mid-run**: `request_credential` ends the step with `needsCredential: { key, reason, observed }`.
 3. **Park**: `CredentialWaitController` generalizes from the personal-subscription lease to a
    discriminated wait. `stepCredentialWaitSchema` is `{ raisedAt }` today and persisted on steps,
-   so it becomes a union on `subject`: `{ subject: 'capability', key, onboarding }` beside the
-   personal variant, with a stored row that has no `subject` read as `personal` and every `switch`
-   over it routed through a `never` default. The run goes `blocked` through the same decision park
-   every other wait uses.
+   so it becomes a union on `subject`: `{ subject: 'capability', key, onboarding }` beside
+   `{ subject: 'personal', raisedAt }`, with every `switch` over it routed through a `never`
+   default. The personal variant is written with its `subject` from then on, and a stored row
+   without one is NOT read as `personal`: that is the legacy fallback AGENTS.md rules out for
+   internal state. A step parked across the upgrade is a break flagged in the slice's changeset;
+   its resume refuses with a named reason and the run is restarted. The run goes `blocked` through
+   the same decision park every other wait uses.
 4. **Notify**: a new `credential_required` notification type routed through the existing channels
    (in-app, email, Slack, webhook). It names the key and its label, carries the definition's
    onboarding instructions and the agent's `observed` notes (what it saw on the vendor's onboarding
@@ -320,8 +324,9 @@ loud refusals instead of silent truncation:
 A new linked-context kind beside documents and tracker tasks:
 
 - `POST /api/v1/tasks/{taskId}/projects` and the create-time `projects: [projectId]` field link a
-  project to any task, in any service or project. A research project may be linked once it has at
-  least one revision (`422 project_has_no_result`).
+  project to any task, in any service or project; `POST /api/v1/tasks/{taskId}/projects/detach`
+  unlinks it, the shape `documents/detach` already has. A research project may be linked once it
+  has at least one revision (`422`, reason `project_has_no_result`).
 - `resolveLinkedContext` folds the project's current findings at dispatch: the summary and the
   coverage line go into the prompt's linked-context index, the full findings into
   `.cat-context/projects/<project>.md`. The revision used is recorded on the step, so a reader can
@@ -340,9 +345,19 @@ A new linked-context kind beside documents and tracker tasks:
   starting research and answering its credential request is everyday work; findings-storage
   overrides are `advanced`. Every string goes through i18n in all locales.
 - **Public API**: projects (create, list, get, link and unlink services, mount), definitions (above),
-  research tasks (create with mode and ad-hoc questions, start), findings (current fold, revision by
-  id), credential resume. Each endpoint gets a `scripts/sdk/surface.mjs` entry; all additive,
-  OpenAPI minor bump.
+  project tasks (below), findings (current fold, revision by id), credential resume. Each endpoint
+  gets a `scripts/sdk/surface.mjs` entry; all additive, OpenAPI minor bump.
+- **Project tasks get their own public resource.** `PublicTask.serviceId` is a required string,
+  and eight `/api/v1` operations return `PublicTask` (`GET`/`PATCH /tasks/{taskId}`, `start`,
+  `stop`, `retry`, the two dependency calls, `POST /services/{serviceId}/tasks`). A project task
+  has no service to put there, and making the field nullable retypes it in place, which ADR 0034
+  forbids. So project tasks live under `/api/v1/projects/{projectId}/tasks` (create with mode and
+  ad-hoc questions, list, get, start, stop, retry), returning a `PublicProjectTask` that carries
+  `projectId`. Those `/api/v1/tasks/{taskId}` operations refuse a project task with `422`, reason
+  `task_owned_by_project`, rather than answering with an invented `serviceId`. The operations that
+  return no `PublicTask` (`events`, `run`, document and project linking) serve both owners. One
+  task shape with an `owner` field is a v2 change, made only when a `/api/v2` exists for its own
+  reasons.
 - **Website**: a catfactory.ai page for projects, authoring research definitions and the credential
   hand-off, merged before the slice that exposes the API.
 
@@ -373,8 +388,8 @@ Still open:
 | 4   | Harness: `research` mode with optional repos (linked repos as `referenceRepos`), the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                   | todo   |       |
 | 5   | Engine: the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                                                                                                                                  | todo   |       |
 | 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance. | todo   |       |
-| 7   | Public API + SDK surface + website page.                                                                                                                                                                                                                                                                 | todo   |       |
-| 8   | SPA: project frames, findings reader, follow-ups, credential park; i18n; e2e spec.                                                                                                                                                                                                                       | todo   |       |
+| 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                            | todo   |       |
+| 8   | SPA: project frames, findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                        | todo   |       |
 | 9   | Task linking: the `projects` linked-context kind, `.cat-context/projects/`, recorded revision.                                                                                                                                                                                                           | todo   |       |
 
 Slices 1, 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4 and 6: the
@@ -399,6 +414,9 @@ run has written a revision.
 - **A missing capability secret degrades silently today** (`toolServers.ts` drops the server,
   `capabilitySecrets.ts` leaves the variable unset). The research path must not inherit that: a
   declared credential the run needs either resolves or parks.
+- **`PublicTask.serviceId` is required.** Every public task today belongs to a service, so a
+  project task cannot ride the existing `/api/v1/tasks` shapes without a breaking retype. Hence
+  the separate project-task resource in concern 6.
 - **The resume re-dispatches; it never continues a live container.** The follow-ups channel is
   outbound-only by design. Progress across a park therefore exists only in what the agent
   checkpointed, which is why `request_credential` requires a findings checkpoint first.
