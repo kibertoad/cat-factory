@@ -476,7 +476,7 @@ export class WorkspaceService {
     const visibleBlocks = localBlocks.filter((b) => !localHidden.has(b.id))
     const composed = await this.composeBoard(visibleBlocks, mounts)
     // Pass 2 (composed): a FOREIGN service archived on its home board reaches this board only via
-    // its mount, so `composeBoard` re-fetches its (archived) subtree via `listByServices`. Seed the
+    // its mount, so `composeBoard` re-fetches its (archived) subtree via `listByOwners`. Seed the
     // final hide-set with pass 1's ids and grow it over the composed board so that frame + subtree
     // are dropped here too. A local frame re-pulled as "foreign" is already in `localHidden`, so it
     // is not double-counted as a fresh foreign archive.
@@ -582,6 +582,14 @@ export class WorkspaceService {
     }
   }
 
+  /** The service and project reads that resolve a mounted subject to its root block. */
+  private subjectReaders(): MountSubjectReaders {
+    return {
+      ...(this.serviceRepository ? { serviceRepository: this.serviceRepository } : {}),
+      ...(this.projectRepository ? { projectRepository: this.projectRepository } : {}),
+    }
+  }
+
   /**
    * Compose a workspace's board from the services it mounts: its own (locally created)
    * blocks plus the full subtree of any service mounted from another workspace in the
@@ -592,14 +600,6 @@ export class WorkspaceService {
    * carried on the mount (that is what `moveBlock` writes). When the service repositories
    * aren't wired (or nothing is mounted) this is a no-op and the local blocks stand.
    */
-  /** The service and project reads that resolve a mounted subject to its root block. */
-  private subjectReaders(): MountSubjectReaders {
-    return {
-      ...(this.serviceRepository ? { serviceRepository: this.serviceRepository } : {}),
-      ...(this.projectRepository ? { projectRepository: this.projectRepository } : {}),
-    }
-  }
-
   private async composeBoard(localBlocks: Block[], mounts: WorkspaceMount[]): Promise<Block[]> {
     if (!this.serviceRepository || mounts.length === 0) return localBlocks
 
@@ -841,19 +841,19 @@ export class WorkspaceService {
   private async planSharedServiceRehome(id: string): Promise<MountRehome[]> {
     if (!this.serviceRepository || !this.workspaceMountRepository) return []
     const blocks = await this.blockRepository.listByWorkspace(id)
-    const rootIds = blocks
-      .filter((b) => (b.level === 'frame' || b.level === 'project') && b.parentId === null)
-      .map((b) => b.id)
-    if (rootIds.length === 0) return []
-    // Root block ids are not unique across boards (every seeded board carries `blk_auth`), so a
-    // subject owning a matching id on ANOTHER board is not homed here, and re-homing it would move
-    // that board's blocks. A subject's home board always mounts it, and in its own account.
-    const accountId = (await this.workspaceRepository.accountOf(id)) ?? null
-    const mountedHere = new Set(
-      (await this.workspaceMountRepository.listByWorkspace(id)).map((m) => m.subjectId),
+    const roots = blocks.filter(
+      (b) => (b.level === 'frame' || b.level === 'project') && b.parentId === null,
     )
-    const homed = (await subjectsOwningRoots(rootIds, this.subjectReaders()))
-      .filter((s) => s.accountId === accountId && mountedHere.has(s.subjectId))
+    if (roots.length === 0) return []
+    // Root block ids are not unique across boards (every seeded board carries `blk_auth`), so a
+    // subject is homed here only when THIS board's root row carries its owner stamp. That stamp is
+    // also what the re-home moves, and it holds whether or not this board still mounts the subject.
+    const homedHere = new Set<string>()
+    for (const row of await this.blockRepository.findByIds(roots.map((b) => b.id))) {
+      if (row.workspaceId === id && row.ownerId) homedHere.add(row.ownerId)
+    }
+    const homed = (await subjectsOwningRoots(roots, this.subjectReaders()))
+      .filter((s) => homedHere.has(s.subjectId))
       .map((s) => ({ id: s.subjectId }))
     if (homed.length === 0) return []
     // One batched mount read for every homed subject (not one per subject).

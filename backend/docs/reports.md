@@ -53,7 +53,7 @@ both runtimes (the long windows read the rollup in the next section instead):
 | Source         | Supplies                                                                                      |
 | -------------- | --------------------------------------------------------------------------------------------- |
 | `token_usage`  | the metered ledger: workspace, agent kind, provider/model, tokens, cost, `billing`, timestamp |
-| `agent_runs`   | run outcomes and wall-clock duration, plus the run's `service_id` / `block_id`                |
+| `agent_runs`   | run outcomes and wall-clock duration, plus the run's `owner_id` / `block_id`                  |
 | `blocks`       | a task's `task_type`, and a service frame's `title` (its display name)                        |
 | `services`     | the service → frame-block link, and its `repo_github_id` (the `repo` dimension's key)         |
 | `github_repos` | the repo projection: `owner/name`, the `repo` dimension's label                               |

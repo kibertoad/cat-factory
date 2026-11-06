@@ -707,7 +707,12 @@
         "tool_server_without_oauth": "Este servidor de herramientas ya no usa OAuth, así que no hay ninguna conexión que completar.",
         "gate_config_fields_invalid": "Los ajustes de la compuerta de un paso están incompletos o tienen un valor que la compuerta no acepta, normalmente un ajuste obligatorio sin valor. Completa los ajustes de la compuerta del paso en el pipeline y vuelve a intentarlo.",
         "approvals_chain_stale": "Este pipeline cambió después de que abrieras sus puntos de aprobación, así que ya no coinciden con sus pasos. Vuelve a cargar el pipeline y configúralos de nuevo.",
-        "approvals_builtin_checkpoint_locked": "Un pipeline integrado conserva los puntos de aprobación que incluye su definición del catálogo. Clona el pipeline para quitar uno."
+        "approvals_builtin_checkpoint_locked": "Un pipeline integrado conserva los puntos de aprobación que incluye su definición del catálogo. Clona el pipeline para quitar uno.",
+        "project_kind_unregistered": "Esta implementación ya no ofrece el tipo de este proyecto, así que no puede aceptar trabajo nuevo. Pide al operador de tu implementación que vuelva a registrar el tipo.",
+        "task_type_not_offered_by_project": "El tipo de este proyecto no acepta tareas de este tipo. Elige uno de los tipos que el formulario ofrece para él.",
+        "project_has_no_writable_repo": "Un paso de esta ejecución necesita un repositorio en el que escribir, y un proyecto no tiene ninguno: los repositorios de sus servicios vinculados son contexto de solo lectura. Elige un pipeline que solo lea e informe.",
+        "project_service_link_invalid": "Uno de los servicios vinculados ya no existe o pertenece a otra organización. Recarga el tablero y vuelve a elegir los servicios vinculados.",
+        "project_has_unfinished_tasks": "Este proyecto aún tiene tareas sin terminar. Termínalas o elimínalas primero."
       }
     },
     "action": {
