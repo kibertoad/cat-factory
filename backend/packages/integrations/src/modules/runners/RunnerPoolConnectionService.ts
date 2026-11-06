@@ -24,7 +24,11 @@ import {
   type WorkspaceRepository,
   type WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import type { RegisterRunnerPoolInput } from '@cat-factory/contracts'
+import type {
+  AccountRunnerPoolSummary,
+  RegisterRunnerPoolInput,
+  RunnerPoolSource,
+} from '@cat-factory/contracts'
 import { missingRequiredConfigKeys } from '../environments/environments.logic.js'
 import type { RunnerBackendRegistry } from './runner-backends.js'
 
@@ -231,17 +235,47 @@ export class RunnerPoolConnectionService {
    * `updateSecrets`, `unregister`) address the board's own row directly.
    */
   private async effective(workspaceId: string): Promise<RunnerPoolConnectionRecord | null> {
+    return (await this.effectiveWithSource(workspaceId))?.record ?? null
+  }
+
+  /** {@link effective}, naming the tier that answered. */
+  private async effectiveWithSource(
+    workspaceId: string,
+  ): Promise<{ record: RunnerPoolConnectionRecord; source: RunnerPoolSource } | null> {
     const own = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
-    if (own) return own
+    if (own) return { record: own, source: 'workspace' }
+    const account = await this.accountTier(workspaceId)
+    if (!account) return null
+    const settings = await account.workspaceSettingsRepository.get(workspaceId)
+    const inherit = (settings ?? DEFAULT_WORKSPACE_SETTINGS).inheritAccountRunnerPool
+    if (!inherit) return null
+    const row = await account.repository.getByAccount(account.accountId)
+    return row ? { record: { ...row, workspaceId, deletedAt: null }, source: 'account' } : null
+  }
+
+  /**
+   * The account tier as it applies to this board: wired, and the board belongs to an account (a
+   * legacy board has none). Null otherwise.
+   */
+  private async accountTier(workspaceId: string) {
     const accountPool = this.deps.accountRunnerPool
     if (!accountPool) return null
     const accountId = await this.deps.workspaceRepository.accountOf(workspaceId)
-    if (!accountId) return null
-    const settings = await accountPool.workspaceSettingsRepository.get(workspaceId)
-    const inherit = (settings ?? DEFAULT_WORKSPACE_SETTINGS).inheritAccountRunnerPool
-    if (!inherit) return null
-    const row = await accountPool.repository.getByAccount(accountId)
-    return row ? { ...row, workspaceId, deletedAt: null } : null
+    return accountId ? { ...accountPool, accountId } : null
+  }
+
+  /**
+   * The board's ACCOUNT's pool as safe metadata, whether or not the board uses it (it may have its
+   * own, or may have opted out), so an admin can see what removing the board's pool or opting back
+   * in would route to. Null when the board has no account tier or its account has no pool.
+   */
+  async getAccountPool(workspaceId: string): Promise<AccountRunnerPoolSummary | null> {
+    const account = await this.accountTier(workspaceId)
+    if (!account) return null
+    const row = await account.repository.getByAccount(account.accountId)
+    return row
+      ? { kind: row.kind, providerId: row.providerId, label: row.label, baseUrl: row.baseUrl }
+      : null
   }
 
   /** Register (or replace) a workspace's runner backend. */
@@ -282,7 +316,7 @@ export class RunnerPoolConnectionService {
         warning: warning.code,
       })
     }
-    return this.toConnection(record, Object.keys(input.secrets))
+    return this.toConnection(record, Object.keys(input.secrets), 'workspace')
   }
 
   /** Rotate/replace the secret bundle without re-sending the config. */
@@ -299,7 +333,7 @@ export class RunnerPoolConnectionService {
     const secretsCipher = await this.deps.secretCipher.encrypt(JSON.stringify(secrets))
     const updated: RunnerPoolConnectionRecord = { ...record, secretsCipher }
     await this.deps.runnerPoolConnectionRepository.upsert(updated)
-    return this.toConnection(updated, Object.keys(secrets))
+    return this.toConnection(updated, Object.keys(secrets), 'workspace')
   }
 
   /**
@@ -408,10 +442,10 @@ export class RunnerPoolConnectionService {
 
   /** The workspace's current connection (safe metadata), or null. */
   async getConnection(workspaceId: string): Promise<RunnerPoolConnection | null> {
-    const record = await this.effective(workspaceId)
-    if (!record) return null
-    const keys = Object.keys(await this.decryptSecrets(record))
-    return this.toConnection(record, keys)
+    const effective = await this.effectiveWithSource(workspaceId)
+    if (!effective) return null
+    const keys = Object.keys(await this.decryptSecrets(effective.record))
+    return this.toConnection(effective.record, keys, effective.source)
   }
 
   /**
@@ -515,6 +549,7 @@ export class RunnerPoolConnectionService {
   private toConnection(
     record: RunnerPoolConnectionRecord,
     secretKeys: string[],
+    source: RunnerPoolSource,
   ): RunnerPoolConnection {
     // The stored config holds NO secrets (those live in the separate encrypted bundle),
     // so it is safe to expose so the connect form can prefill the non-secret fields on
@@ -528,6 +563,7 @@ export class RunnerPoolConnectionService {
       connectedAt: record.createdAt,
       secretKeys,
       ...(config ? { config } : {}),
+      source,
     }
   }
 
