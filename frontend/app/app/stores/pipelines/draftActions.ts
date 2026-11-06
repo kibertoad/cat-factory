@@ -1,6 +1,8 @@
 import { computed } from 'vue'
 import type { AgentKind, Pipeline } from '~/types/domain'
 import { companionForProducer } from '~/utils/catalog'
+import { approvalPolicyOf, patchedGateConfig } from '@cat-factory/contracts'
+import { foldCompanionUnits, unreachableCheckpoints } from '~/utils/pipelineCheckpoints'
 import type { PipelinesContext } from './context'
 import { createPipelineGateConfigActions } from './draftGateConfig'
 import { createPipelineStepConfigActions } from './draftStepConfig'
@@ -98,8 +100,23 @@ export function createPipelineDraftActions(ctx: PipelinesContext) {
   function toggleCompanion(index: number) {
     const companion = companionForProducer(draft.value[index] ?? '')
     if (!companion) return
-    if (draft.value[index + 1] === companion) removeFromDraft(index + 1)
+    if (draft.value[index + 1] === companion) removeCompanion(index)
     else insertAt(index + 1, companion)
+  }
+
+  /**
+   * Remove the companion after the producer at `index`, moving a checkpoint it carried (and its
+   * approver policy) onto the producer. Dropping the review must not silently drop the human
+   * checkpoint that sat after it: the person still wanted to see the design before the Coder ran.
+   */
+  function removeCompanion(index: number) {
+    if (draftGates.value[index + 1] && !draftGates.value[index]) {
+      draftGates.value[index] = true
+      const policy = approvalPolicyOf(draftStepOptions.value[index + 1])
+      if (policy)
+        draftStepOptions.value[index] = patchedGateConfig(draftStepOptions.value[index], policy)
+    }
+    removeFromDraft(index + 1)
   }
 
   /**
@@ -115,19 +132,17 @@ export function createPipelineDraftActions(ctx: PipelinesContext) {
    * reorder by unit boundaries without ever dropping a step.
    * `index`/`companionIndex` are positions in the raw `draft` arrays.
    */
-  const units = computed(() => {
-    const out: { index: number; kind: AgentKind; companionIndex: number | null }[] = []
-    let folded = -1 // draft index already consumed as the previous unit's adjacent companion
-    for (let i = 0; i < draft.value.length; i++) {
-      const kind = draft.value[i]
-      if (kind === undefined || i === folded) continue
-      const companion = companionForProducer(kind)
-      const companionIndex = companion && draft.value[i + 1] === companion ? i + 1 : null
-      if (companionIndex !== null) folded = companionIndex
-      out.push({ index: i, kind, companionIndex })
-    }
-    return out
-  })
+  const units = computed(() => foldCompanionUnits(draft.value))
+
+  /** Per draft step, whether a new checkpoint there would be refused as unreachable. */
+  const draftUnreachableCheckpoints = computed(() =>
+    unreachableCheckpoints({
+      agentKinds: draft.value,
+      enabled: draftEnabled.value,
+      gating: draftGating.value,
+      stepOptions: draftStepOptions.value,
+    }),
+  )
 
   /**
    * Move the unit at visible position `from` to `to`, carrying its attached companion. Rebuilds
@@ -202,6 +217,7 @@ export function createPipelineDraftActions(ctx: PipelinesContext) {
     hasCompanion,
     toggleCompanion,
     units,
+    draftUnreachableCheckpoints,
     moveUnit,
     clearDraft,
     loadForEdit,

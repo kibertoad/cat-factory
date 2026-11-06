@@ -2,6 +2,7 @@ import type {
   ClonePipelineInput,
   CreatePipelineInput,
   OrganizePipelineInput,
+  SetPipelineApprovalsInput,
   UpdatePipelineInput,
 } from '@cat-factory/contracts'
 import type {
@@ -12,11 +13,12 @@ import type {
   StepOptions,
   TesterQualityConfig,
 } from '@cat-factory/kernel'
-import type { GateRegistry, PipelineRegistry } from '@cat-factory/kernel'
+import type { GateRegistry, Logger, PipelineRegistry } from '@cat-factory/kernel'
 import {
   assertFound,
   ConflictError,
   declaredDefaultPipelineId,
+  noopLogger,
   noopOperationalMetrics,
   retiredPipelines,
   offeredPipelines,
@@ -41,8 +43,10 @@ import {
 import {
   assertPipelineLaunchable,
   pipelineHasEnabledBugIntake,
+  validateCheckpointShape,
   validatePipelineShape,
 } from './pipelineShape.js'
+import { approvalsApplied, carriedApprovals, catalogApprovalsOf } from './pipelineApprovals.js'
 import { validatePipelineAuthoring } from './pipelineAuthoring.js'
 
 /**
@@ -93,6 +97,8 @@ export interface PipelineServiceDependencies {
    * skipped.
    */
   pipelineScheduleRepository?: PipelineScheduleRepository
+  /** Where a reseed reports the checkpoints it could not carry onto the new definition. */
+  logger?: Logger
 }
 
 /**
@@ -129,6 +135,7 @@ export class PipelineService {
   private readonly pipelineRegistry?: PipelineRegistry
   private readonly agentKindRegistry?: AgentKindRegistry
   private readonly gateRegistry?: GateRegistry
+  private readonly logger: Logger
   private readonly adoption: PipelineAdoption
 
   constructor({
@@ -140,6 +147,7 @@ export class PipelineService {
     pipelineRegistry,
     agentKindRegistry,
     gateRegistry,
+    logger,
   }: PipelineServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.pipelineRepository = pipelineRepository
@@ -149,6 +157,7 @@ export class PipelineService {
     this.pipelineRegistry = pipelineRegistry
     this.agentKindRegistry = agentKindRegistry
     this.gateRegistry = gateRegistry
+    this.logger = logger ?? noopLogger
     // The same collaborator the engine resolves runs through, so an admission read and the run it
     // admits can never disagree about what a pipeline id means. `noopOperationalMetrics` rather
     // than a threaded sink because this instance only ever answers the READ half: adoption's
@@ -358,14 +367,15 @@ export class PipelineService {
   /**
    * Edit a custom pipeline in place. Only the supplied fields change; passing
    * `agentKinds` replaces the whole chain and re-aligns the parallel arrays. Built-in
-   * catalog templates are read-only and reject this — clone them first.
+   * catalog templates reject this: their checkpoints change through {@link setApprovals}, and
+   * anything else needs a clone.
    */
   async update(workspaceId: string, id: string, input: UpdatePipelineInput): Promise<Pipeline> {
     await this.requireWorkspace(workspaceId)
     const existing = assertFound(await this.pipelineRepository.get(workspaceId, id), 'Pipeline', id)
     if (existing.builtin) {
       throw new ValidationError(
-        'Built-in pipelines are read-only. Clone it to make an editable copy.',
+        'Built-in pipelines are read-only apart from their approval checkpoints. Clone it to make an editable copy.',
       )
     }
     const {
@@ -517,7 +527,9 @@ export class PipelineService {
         'Only built-in pipelines can be reseeded. Delete a custom pipeline instead.',
       )
     }
-    const pipeline = existing ? adoptedCatalogRow(seed, existing) : insertedCatalogRow(seed, stored)
+    const pipeline = existing
+      ? this.withCarriedApprovals(workspaceId, adoptedCatalogRow(seed, existing), existing)
+      : insertedCatalogRow(seed, stored)
     // The absent branch goes through `insertIfAbsent` because it races the run path's adopt-on-
     // start (and a second reseed): both write this same catalog row, so losing is a no-op rather
     // than a duplicate-key 500 on whichever caller arrives second.
@@ -571,10 +583,75 @@ export class PipelineService {
   }
 
   /**
-   * Set a pipeline's organizational metadata (labels and/or archive state). This is the
-   * ONLY mutation allowed on a BUILT-IN pipeline — it touches the library view, not the
-   * pipeline's structure, so a built-in can be tagged or archived while staying read-only
-   * for its steps. Only the supplied fields change.
+   * Replace a pipeline's human approval checkpoints (the `gates` flags and each step's approver
+   * policy) and nothing else. Accepted on a BUILT-IN, which refuses every other structural edit:
+   * see `pipelineApprovals.ts` for why a checkpoint is the workspace's to choose, and why a built-in
+   * may gain checkpoints but never lose one its catalog definition ships.
+   *
+   * The composed row is held to the checkpoint rules (`validateCheckpointShape`) only. The request
+   * changes nothing else, and a row that breaks a structural rule on its own (a built-in older than
+   * the rule) must still take a checkpoint; run start applies the full validation either way.
+   */
+  async setApprovals(
+    workspaceId: string,
+    id: string,
+    input: SetPipelineApprovalsInput,
+  ): Promise<Pipeline> {
+    await this.requireWorkspace(workspaceId)
+    const existing = assertFound(await this.pipelineRepository.get(workspaceId, id), 'Pipeline', id)
+    const seed = existing.builtin
+      ? seedPipelines(this.pipelineRegistry).find((p) => p.id === id)
+      : undefined
+    const pipeline: Pipeline = {
+      ...existing,
+      ...approvalsApplied(existing, input, catalogApprovalsOf(seed)),
+    }
+    validateCheckpointShape({ ...pipeline, ...this.shapeRegistries() })
+    await this.pipelineRepository.update(workspaceId, pipeline)
+    return pipeline
+  }
+
+  /**
+   * The reseeded row with the workspace's checkpoints carried across (`carriedApprovals`). A
+   * checkpoint or approver policy the new definition refuses is dropped and logged; the SPA, which
+   * holds the row from before the reseed, tells the person which ones.
+   */
+  private withCarriedApprovals(workspaceId: string, seeded: Pipeline, existing: Pipeline) {
+    const { pipeline, dropped, droppedPolicies } = carriedApprovals(seeded, existing, (candidate) =>
+      this.admitsCheckpoints(candidate),
+    )
+    if (dropped.length || droppedPolicies.length) {
+      this.logger.warn('Reseed dropped approval checkpoints the new definition does not admit', {
+        workspaceId,
+        pipelineId: seeded.id,
+        version: seeded.version,
+        dropped,
+        droppedPolicies,
+      })
+    }
+    return pipeline
+  }
+
+  /** Whether the checkpoint rules admit `candidate`; any other validation failure propagates. */
+  private admitsCheckpoints(candidate: Pipeline): boolean {
+    try {
+      validateCheckpointShape({ ...candidate, ...this.shapeRegistries() })
+      return true
+    } catch (error) {
+      if (error instanceof ValidationError) return false
+      throw error
+    }
+  }
+
+  private shapeRegistries() {
+    return { agentKindRegistry: this.agentKindRegistry, gateRegistry: this.gateRegistry }
+  }
+
+  /**
+   * Set a pipeline's organizational metadata (labels and/or archive state). Allowed on a BUILT-IN
+   * pipeline, like {@link setApprovals}: it touches the library view, not the pipeline's
+   * structure, so a built-in can be tagged or archived while staying read-only for its steps.
+   * Only the supplied fields change.
    */
   async organize(workspaceId: string, id: string, input: OrganizePipelineInput): Promise<Pipeline> {
     await this.requireWorkspace(workspaceId)

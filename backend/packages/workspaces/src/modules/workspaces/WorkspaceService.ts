@@ -523,6 +523,13 @@ export class WorkspaceService {
     // an internal pipeline needs its name on the card that offers to start it. Narrowing this to
     // the offered set would leave that card naming an id.
     const pipelineCatalogNames = Object.fromEntries(catalog.map((p) => [p.id, p.name]))
+    // The checkpoints each catalog entry SHIPS, so the builder can tell them from the ones a
+    // workspace added to its copy (a stored built-in row holds both).
+    const pipelineCatalogApprovals = Object.fromEntries(
+      catalog
+        .filter((p) => p.gates?.some(Boolean))
+        .map((p) => [p.id, { agentKinds: [...p.agentKinds], gates: [...(p.gates ?? [])] }]),
+    )
     // The complement: built-ins WITHDRAWN from the catalog, so the SPA can offer to remove a stored
     // copy this board was seeded with before the withdrawal. `seedPipelines` already excludes these,
     // so a retired id reaches the SPA through this channel alone — which is what keeps the "new
@@ -557,6 +564,7 @@ export class WorkspaceService {
       executions,
       pipelineCatalogVersions,
       pipelineCatalogNames,
+      pipelineCatalogApprovals,
       ...(retired.length ? { retiredPipelines: retired } : {}),
       riskPolicyCatalogVersions,
       modelPresetCatalogVersions,

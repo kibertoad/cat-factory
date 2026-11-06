@@ -9,6 +9,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { BinaryOutputConfig } from '@cat-factory/contracts'
 import {
+  checkpointSkippedBy,
   conflictingOutputSizeOptions,
   producesTaskEstimate,
   effectiveGateConfigFields,
@@ -75,6 +76,8 @@ export function pipelineHasEnabledBugIntake(agentKinds: string[], enabled?: bool
  *  - {@link assertValidRunConditions}: a step carrying a RUN CONDITION must satisfy the two
  *    structural rules an estimate gate satisfies — a gatable kind, and no human approval gate on
  *    the same step — because a skip is a skip whichever of the two axes caused it.
+ *  - {@link assertCompanionCheckpointsReachable}: a human approval gate on a companion whose
+ *    producer can be skipped is refused too, because the companion cascades with its producer.
  *  - {@link assertValidAgentVariants}: a step selecting a registered agent-kind VARIANT must name
  *    one that exists and that varies THIS step's kind — an unknown id would silently fall back to
  *    the shipped prompt, and a mismatched one would run the step under another role's prompt.
@@ -131,6 +134,7 @@ export function validatePipelineShape(pipeline: PipelineShape): void {
   assertValidCompanionPlacement(pipeline)
   assertValidGating(pipeline)
   assertValidRunConditions(pipeline)
+  assertCompanionCheckpointsReachable(pipeline)
   assertValidTesterQualityGating(pipeline)
   assertValidSkillSteps(pipeline)
   assertValidAgentVariants(pipeline)
@@ -224,30 +228,16 @@ export function assertValidPullRequestReaders({
  * Skipped when no registry is supplied (the kernel seed test's built-in catalog, which has no
  * deployment registrations in view); both real boundaries pass one.
  */
-function assertValidGateConfig({
-  agentKinds,
-  enabled,
-  gates,
-  stepOptions,
-  gateRegistry,
-}: PipelineShape): void {
+function assertValidGateConfig(pipeline: PipelineShape): void {
+  assertValidApprovalPolicies(pipeline)
+  const { agentKinds, enabled, stepOptions, gateRegistry } = pipeline
+  // The gate-declared half needs the registry to judge it: with none in view the caller is
+  // validating a catalog it cannot resolve registrations for, so it checks the platform half only.
+  if (!gateRegistry) return
   for (let i = 0; i < agentKinds.length; i++) {
     const config = stepOptions?.[i]?.gateConfig
     const kind = agentKinds[i]
     if (kind === undefined || enabled?.[i] === false) continue
-    if (config) {
-      const configuresApproval =
-        hasApproverPolicy(config.approvers) || config.minApprovals !== undefined
-      if (configuresApproval && gates?.[i] !== true) {
-        throw new ValidationError(
-          `Step '${kind}' configures an approval gate (approvers / required approvals) but carries no approval gate. Turn the step's approval gate on, or drop the configuration.`,
-        )
-      }
-      assertSatisfiableQuorum(kind, config)
-    }
-    // The gate-declared half needs the registry to judge it: with none in view the caller is
-    // validating a catalog it cannot resolve registrations for, so it checks the platform half only.
-    if (!gateRegistry) continue
     const supplied = config?.fields ?? {}
     if (!gateRegistry.has(kind)) {
       if (Object.keys(supplied).length === 0) continue
@@ -267,6 +257,28 @@ function assertValidGateConfig({
         { reason, problems },
       )
     }
+  }
+}
+
+/** Rules 1 and 2 of {@link assertValidGateConfig}: the approval half of each step's gate config. */
+function assertValidApprovalPolicies({
+  agentKinds,
+  enabled,
+  gates,
+  stepOptions,
+}: PipelineShape): void {
+  for (let i = 0; i < agentKinds.length; i++) {
+    const config = stepOptions?.[i]?.gateConfig
+    const kind = agentKinds[i]
+    if (!config || kind === undefined || enabled?.[i] === false) continue
+    const configuresApproval =
+      hasApproverPolicy(config.approvers) || config.minApprovals !== undefined
+    if (configuresApproval && gates?.[i] !== true) {
+      throw new ValidationError(
+        `Step '${kind}' configures an approval gate (approvers / required approvals) but carries no approval gate. Turn the step's approval gate on, or drop the configuration.`,
+      )
+    }
+    assertSatisfiableQuorum(kind, config)
   }
 }
 
@@ -570,11 +582,7 @@ export function assertValidGating({
         `Step '${kind}' cannot be estimate-gated — its output is required by the rest of the run. Only a step whose result later steps read as context (a design, a review, an extra verification pass) may be skipped on the estimate.`,
       )
     }
-    if (gates?.[i] === true) {
-      throw new ValidationError(
-        `Step '${kind}' carries a human approval gate, so it cannot also be estimate-gated — the estimate may add a human checkpoint but never remove one. Drop the approval gate to make the step conditional, or drop the estimate gate to keep it unconditional.`,
-      )
-    }
+    if (gates?.[i] === true) throw checkpointOnEstimateGatedStep(kind)
     if (g.minComplexity === undefined && g.minRisk === undefined && g.minImpact === undefined) {
       throw new ValidationError(
         `Step '${kind}' is estimate-gated but sets no threshold — set at least one of complexity / risk / impact, or it would always be skipped.`,
@@ -630,11 +638,80 @@ export function assertValidRunConditions({
         `Step '${kind}' cannot carry a run condition — its output is required by the rest of the run, so a run outside the condition's scope would silently finish without it. Only a step whose result later steps read as context (a design, a review, an extra verification pass) may be skipped.`,
       )
     }
-    if (gates?.[i] === true) {
-      throw new ValidationError(
-        `Step '${kind}' carries a human approval gate, so it cannot also carry a run condition — a condition may leave a checkpoint un-reached but never remove one the pipeline author asked for. Drop the approval gate to make the step conditional, or drop the condition to keep it unconditional.`,
-      )
-    }
+    if (gates?.[i] === true) throw checkpointOnConditionalStep(kind)
+  }
+}
+
+/**
+ * The rules {@link validatePipelineShape} applies to a pipeline's human approval CHECKPOINTS, for a
+ * caller that changes only those and must not be held to the rest: `setApprovals`, and a reseed
+ * carrying a workspace's checkpoints onto a new catalog definition. A structural rule the row breaks
+ * on its own is not the checkpoint's fault, and run start still applies the full validation.
+ */
+export function validateCheckpointShape(pipeline: PipelineShape): void {
+  assertCheckpointsNotOnSkippableSteps(pipeline)
+  assertCompanionCheckpointsReachable(pipeline)
+  assertValidApprovalPolicies(pipeline)
+}
+
+/**
+ * The checkpoint half of {@link assertValidGating} and {@link assertValidRunConditions}: no human
+ * approval gate on a step the estimate or a run condition may skip. The rest of those two rules (a
+ * gatable kind, a threshold, an estimate producer) judges the skip, not the checkpoint.
+ */
+function assertCheckpointsNotOnSkippableSteps({
+  agentKinds,
+  enabled,
+  gates,
+  gating,
+  stepOptions,
+}: PipelineShape): void {
+  if (!gates) return
+  for (let i = 0; i < agentKinds.length; i++) {
+    const kind = agentKinds[i]
+    if (kind === undefined || gates[i] !== true || enabled?.[i] === false) continue
+    if (gating?.[i]?.enabled) throw checkpointOnEstimateGatedStep(kind)
+    if (stepOptions?.[i]?.condition) throw checkpointOnConditionalStep(kind)
+  }
+}
+
+function checkpointOnEstimateGatedStep(kind: string): ValidationError {
+  return new ValidationError(
+    `Step '${kind}' carries a human approval gate, so it cannot also be estimate-gated: the estimate may add a human checkpoint but never remove one. Drop the approval gate to make the step conditional, or drop the estimate gate to keep it unconditional.`,
+  )
+}
+
+function checkpointOnConditionalStep(kind: string): ValidationError {
+  return new ValidationError(
+    `Step '${kind}' carries a human approval gate, so it cannot also carry a run condition: a condition may leave a checkpoint un-reached but never remove one the pipeline author asked for. Drop the approval gate to make the step conditional, or drop the condition to keep it unconditional.`,
+  )
+}
+
+/**
+ * A human approval gate on a COMPANION whose producer can be skipped is refused, for the reason a
+ * gate on the skippable step itself is (see {@link assertValidGating}).
+ *
+ * A companion carries no skip of its own: it cascades, skipped whenever its producer was
+ * (`producerWasSkipped`). So a checkpoint after the Architect Reviewer of an estimate-gated
+ * Architect is a checkpoint the estimate cancels on every task it scores below the bar, which is
+ * the one thing a model's own triage may never decide. The same holds for a producer carrying a
+ * run condition. The producer is the nearest preceding ENABLED step, the step the companion
+ * reviews, which {@link assertValidCompanionPlacement} guarantees is one of its targets.
+ */
+export function assertCompanionCheckpointsReachable(pipeline: PipelineShape): void {
+  const { agentKinds, enabled, gates, agentKindRegistry } = pipeline
+  if (!gates) return
+  const isCompanion = (kind: string) => isCompanionKind(kind, agentKindRegistry)
+  for (let i = 0; i < agentKinds.length; i++) {
+    const kind = agentKinds[i]
+    if (kind === undefined || gates[i] !== true || enabled?.[i] === false) continue
+    if (!isCompanion(kind)) continue
+    const producer = checkpointSkippedBy(pipeline, i, isCompanion)
+    // A skip on the companion's own step is refused by the gating and run-condition rules.
+    if (producer === null || producer === i) continue
+    throw new ValidationError(
+      `Step '${kind}' carries a human approval gate, but it reviews '${agentKinds[producer]}', which the task estimate or a run condition may skip, and the review is skipped with it. The checkpoint would then never be reached. Make '${agentKinds[producer]}' unconditional to keep the checkpoint, or drop it.`,
+    )
   }
 }
 

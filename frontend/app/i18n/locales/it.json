@@ -5202,7 +5202,9 @@
       "toast": {
         "reseedFailed": "Impossibile ripristinare la pipeline",
         "deleteFailed": "Impossibile eliminare la pipeline",
-        "removeFailed": "Impossibile rimuovere la pipeline"
+        "removeFailed": "Impossibile rimuovere la pipeline",
+        "checkpointsDropped": "Il ripristino di {name} ha rimosso punti di approvazione che la nuova definizione non consente",
+        "approverPoliciesDropped": "Il ripristino di {name} ha riportato ai valori predefiniti le regole sugli approvatori che la nuova definizione non consente"
       }
     },
     "outputBudget": {
@@ -5223,6 +5225,33 @@
       "requiredApprovalsHint": "Ciascuna da una persona diversa prima che l'esecuzione prosegua.",
       "anyoneHint": "Chiunque possa modificare questa board può approvare questo passo.",
       "gateParametersLabel": "Impostazioni del gate"
+    },
+    "checkpoint": {
+      "placement": {
+        "none": "Nessun punto di approvazione",
+        "producer": "Dopo ogni bozza di {producer}, prima che {companion} la revisioni",
+        "companion": "Quando {companion} approva la bozza di {producer}",
+        "both": "Entrambi: dopo ogni bozza di {producer} e di nuovo quando {companion} la approva"
+      },
+      "summary": {
+        "none": "Aggiungi un punto di approvazione",
+        "producer": "Punto di approvazione dopo ogni bozza di {producer}. Fai clic per modificare.",
+        "companion": "Punto di approvazione quando {companion} approva la bozza di {producer}. Fai clic per modificare.",
+        "both": "Punti di approvazione dopo ogni bozza di {producer} e quando {companion} la approva. Fai clic per modificare."
+      },
+      "locked": "Questo punto di approvazione è incluso nella pipeline predefinita. Clona la pipeline per rimuoverlo.",
+      "unreachable": "La stima dell'attività o una condizione di esecuzione possono saltare questo passaggio, quindi un punto di approvazione qui non verrebbe sempre raggiunto."
+    },
+    "approvals": {
+      "open": "Punti di approvazione",
+      "title": "Punti di approvazione: {name}",
+      "description": "Scegli dove questa pipeline predefinita si ferma perché una persona revisioni e approvi. I suoi passaggi restano come li definisce il catalogo.",
+      "reviewedBy": "revisionato da {companion}",
+      "lockedHint": "I punti di approvazione inclusi nella pipeline predefinita restano attivi. Clona la pipeline per rimuoverne uno.",
+      "toast": {
+        "saved": "Punti di approvazione di {name} salvati",
+        "saveFailed": "Impossibile salvare i punti di approvazione"
+      }
     }
   },
   "agentPrompt": {
@@ -6553,7 +6582,9 @@
         "oauth_exchange_refused": "Il server di autorizzazione del server degli strumenti ha rifiutato la concessione. Chiedi a chi gestisce il deployment di controllare le impostazioni del client OAuth del server degli strumenti.",
         "oauth_client_secret_unavailable": "Il segreto del client OAuth del server degli strumenti non è disponibile su questa board. Aggiungilo dalla finestra Infrastruttura.",
         "tool_server_without_oauth": "Questo server degli strumenti non usa più OAuth, quindi non c’è nessuna connessione da completare.",
-        "gate_config_fields_invalid": "Le impostazioni del gate di un passo sono incomplete o contengono un valore che il gate non accetta, di solito un'impostazione obbligatoria senza valore. Compila le impostazioni del gate del passo nella pipeline e riprova."
+        "gate_config_fields_invalid": "Le impostazioni del gate di un passo sono incomplete o contengono un valore che il gate non accetta, di solito un'impostazione obbligatoria senza valore. Compila le impostazioni del gate del passo nella pipeline e riprova.",
+        "approvals_chain_stale": "Questa pipeline è cambiata dopo che ne hai aperto i punti di approvazione, quindi non corrispondono più ai suoi passaggi. Ricarica la pipeline e impostali di nuovo.",
+        "approvals_builtin_checkpoint_locked": "Una pipeline integrata mantiene i punti di approvazione previsti dalla sua definizione nel catalogo. Clona la pipeline per rimuoverne uno."
       }
     },
     "action": {

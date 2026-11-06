@@ -703,7 +703,9 @@
         "oauth_exchange_refused": "Araç sunucusunun yetkilendirme sunucusu izni reddetti. Dağıtım operatörünüzden araç sunucusunun OAuth istemci ayarlarını kontrol etmesini isteyin.",
         "oauth_client_secret_unavailable": "Araç sunucusunun OAuth istemci gizli anahtarı bu panoda kullanılamıyor. Altyapı penceresinden ekleyin.",
         "tool_server_without_oauth": "Bu araç sunucusu artık OAuth kullanmıyor, bu yüzden tamamlanacak bir bağlantı yok.",
-        "gate_config_fields_invalid": "Bir adımın kapı ayarları eksik ya da kapının kabul etmediği bir değer içeriyor, genellikle değeri olmayan zorunlu bir ayar. Pipeline'da adımın kapı ayarlarını doldurup yeniden deneyin."
+        "gate_config_fields_invalid": "Bir adımın kapı ayarları eksik ya da kapının kabul etmediği bir değer içeriyor, genellikle değeri olmayan zorunlu bir ayar. Pipeline'da adımın kapı ayarlarını doldurup yeniden deneyin.",
+        "approvals_chain_stale": "Bu pipeline, onay kontrol noktalarını açtıktan sonra değişti, bu yüzden kontrol noktaları artık adımlarıyla eşleşmiyor. Pipeline'ı yeniden yükleyin ve onları tekrar ayarlayın.",
+        "approvals_builtin_checkpoint_locked": "Yerleşik bir pipeline, katalog tanımının içerdiği onay kontrol noktalarını korur. Birini kaldırmak için pipeline'ı klonlayın."
       }
     },
     "action": {
@@ -5754,7 +5756,9 @@
       "toast": {
         "reseedFailed": "Pipeline yeniden tohumlanamadı",
         "deleteFailed": "Pipeline silinemedi",
-        "removeFailed": "Pipeline kaldırılamadı"
+        "removeFailed": "Pipeline kaldırılamadı",
+        "checkpointsDropped": "{name} yeniden yüklenirken yeni tanımın izin vermediği onay kontrol noktaları kaldırıldı",
+        "approverPoliciesDropped": "{name} yeniden yüklenirken yeni tanımın izin vermediği onaylayıcı kuralları varsayılana döndürüldü"
       }
     },
     "outputBudget": {
@@ -5775,6 +5779,33 @@
       "requiredApprovalsHint": "Çalışma devam etmeden önce her biri farklı bir kişiden.",
       "anyoneHint": "Bu panoyu düzenleyebilen herkes bu adımı onaylayabilir.",
       "gateParametersLabel": "Kapı ayarları"
+    },
+    "checkpoint": {
+      "placement": {
+        "none": "Onay kontrol noktası yok",
+        "producer": "{producer} her taslağından sonra, {companion} incelemeden önce",
+        "companion": "{companion}, {producer} taslağını onayladığında",
+        "both": "İkisi de: {producer} her taslağından sonra ve {companion} onayladığında yeniden"
+      },
+      "summary": {
+        "none": "Onay kontrol noktası ekle",
+        "producer": "{producer} her taslağından sonra onay kontrol noktası. Değiştirmek için tıklayın.",
+        "companion": "{companion}, {producer} taslağını onayladığında onay kontrol noktası. Değiştirmek için tıklayın.",
+        "both": "{producer} her taslağından sonra ve {companion} onayladığında onay kontrol noktaları. Değiştirmek için tıklayın."
+      },
+      "locked": "Bu kontrol noktası yerleşik pipeline ile birlikte gelir. Kaldırmak için pipeline'ı kopyalayın.",
+      "unreachable": "Görev tahmini veya bir çalıştırma koşulu bu adımı atlayabilir, bu nedenle buradaki bir kontrol noktasına her zaman ulaşılamaz."
+    },
+    "approvals": {
+      "open": "Onay kontrol noktaları",
+      "title": "Onay kontrol noktaları: {name}",
+      "description": "Bu yerleşik pipeline'ın bir kişinin inceleyip onaylaması için nerede duracağını seçin. Adımları kataloğun tanımladığı gibi kalır.",
+      "reviewedBy": "{companion} tarafından incelenir",
+      "lockedHint": "Yerleşik pipeline ile gelen kontrol noktaları açık kalır. Birini kaldırmak için pipeline'ı kopyalayın.",
+      "toast": {
+        "saved": "{name} onay kontrol noktaları kaydedildi",
+        "saveFailed": "Onay kontrol noktaları kaydedilemedi"
+      }
     }
   },
   "agentPrompt": {

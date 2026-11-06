@@ -703,7 +703,9 @@
         "oauth_exchange_refused": "El servidor de autorización del servidor de herramientas rechazó la concesión. Pide a quien opera tu despliegue que revise la configuración del cliente OAuth del servidor de herramientas.",
         "oauth_client_secret_unavailable": "El secreto del cliente OAuth del servidor de herramientas no está disponible en este tablero. Añádelo en la ventana de Infraestructura.",
         "tool_server_without_oauth": "Este servidor de herramientas ya no usa OAuth, así que no hay ninguna conexión que completar.",
-        "gate_config_fields_invalid": "Los ajustes de la compuerta de un paso están incompletos o tienen un valor que la compuerta no acepta, normalmente un ajuste obligatorio sin valor. Completa los ajustes de la compuerta del paso en el pipeline y vuelve a intentarlo."
+        "gate_config_fields_invalid": "Los ajustes de la compuerta de un paso están incompletos o tienen un valor que la compuerta no acepta, normalmente un ajuste obligatorio sin valor. Completa los ajustes de la compuerta del paso en el pipeline y vuelve a intentarlo.",
+        "approvals_chain_stale": "Este pipeline cambió después de que abrieras sus puntos de aprobación, así que ya no coinciden con sus pasos. Vuelve a cargar el pipeline y configúralos de nuevo.",
+        "approvals_builtin_checkpoint_locked": "Un pipeline integrado conserva los puntos de aprobación que incluye su definición del catálogo. Clona el pipeline para quitar uno."
       }
     },
     "action": {
@@ -5754,7 +5756,9 @@
       "toast": {
         "reseedFailed": "No se pudo regenerar el pipeline",
         "deleteFailed": "No se pudo eliminar el pipeline",
-        "removeFailed": "No se pudo quitar el pipeline"
+        "removeFailed": "No se pudo quitar el pipeline",
+        "checkpointsDropped": "Al restablecer {name} se quitaron puntos de aprobación que la nueva definición no admite",
+        "approverPoliciesDropped": "Al restablecer {name} se devolvieron a los valores predeterminados las reglas de aprobadores que la nueva definición no admite"
       }
     },
     "outputBudget": {
@@ -5775,6 +5779,33 @@
       "requiredApprovalsHint": "Cada una de una persona distinta antes de que la ejecución continúe.",
       "anyoneHint": "Cualquiera que pueda editar este tablero puede aprobar este paso.",
       "gateParametersLabel": "Ajustes de la compuerta"
+    },
+    "checkpoint": {
+      "placement": {
+        "none": "Sin punto de aprobación",
+        "producer": "Tras cada borrador de {producer}, antes de que {companion} lo revise",
+        "companion": "Cuando {companion} aprueba el borrador de {producer}",
+        "both": "Ambos: tras cada borrador de {producer} y de nuevo cuando {companion} lo aprueba"
+      },
+      "summary": {
+        "none": "Añadir un punto de aprobación",
+        "producer": "Punto de aprobación tras cada borrador de {producer}. Haz clic para cambiarlo.",
+        "companion": "Punto de aprobación cuando {companion} aprueba el borrador de {producer}. Haz clic para cambiarlo.",
+        "both": "Puntos de aprobación tras cada borrador de {producer} y cuando {companion} lo aprueba. Haz clic para cambiarlo."
+      },
+      "locked": "Este punto de aprobación viene con el pipeline integrado. Clona el pipeline para quitarlo.",
+      "unreachable": "La estimación de la tarea o una condición de ejecución pueden omitir este paso, así que un punto de aprobación aquí no siempre se alcanzaría."
+    },
+    "approvals": {
+      "open": "Puntos de aprobación",
+      "title": "Puntos de aprobación: {name}",
+      "description": "Elige dónde se detiene este pipeline integrado para que una persona revise y apruebe. Sus pasos se mantienen tal como los define el catálogo.",
+      "reviewedBy": "revisado por {companion}",
+      "lockedHint": "Los puntos de aprobación que trae el pipeline integrado siguen activos. Clona el pipeline para quitar uno.",
+      "toast": {
+        "saved": "Se guardaron los puntos de aprobación de {name}",
+        "saveFailed": "No se pudieron guardar los puntos de aprobación"
+      }
     }
   },
   "agentPrompt": {

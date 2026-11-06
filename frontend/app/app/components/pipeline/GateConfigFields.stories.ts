@@ -43,21 +43,17 @@ const roster = apiResponse(listWorkspaceMembersContract, {
   body: workspaceMembers,
 })
 
-function withGate(setup: (pipelines: ReturnType<typeof usePipelinesStore>) => void = () => {}) {
-  return withSeed(() => {
-    seedWorkspace()
-    const pipelines = usePipelinesStore()
-    pipelines.gateConfigForms = [smokeGate]
-    setup(pipelines)
-  })
-}
+const withGate = withSeed(() => {
+  seedWorkspace()
+  usePipelinesStore().gateConfigForms = [smokeGate]
+})
 
 const meta = {
   title: 'Pipeline/Components/GateConfigFields',
   component: GateConfigFields,
-  args: { index: 0, gated: true, kind: 'architect' },
+  args: { config: {}, gated: true, kind: 'architect' },
   parameters: { width: 'panel', api: [roster] },
-  decorators: [withGate()],
+  decorators: [withGate],
 } satisfies Meta<typeof GateConfigFields>
 export default meta
 
@@ -65,14 +61,9 @@ type Story = StoryObj<typeof meta>
 
 /** The architect's approval gate, limited to admins and Priya, with two approvals. */
 export const Default: Story = {
-  decorators: [
-    withGate((pipelines) =>
-      pipelines.patchDraftGateConfig(0, {
-        approvers: { roles: ['admin'], userIds: ['usr_priya'] },
-        minApprovals: 2,
-      }),
-    ),
-  ],
+  args: {
+    config: { approvers: { roles: ['admin'], userIds: ['usr_priya'] }, minApprovals: 2 },
+  },
 }
 
 /** No rule: the line that says anyone who may write can approve. */
@@ -83,12 +74,13 @@ export const GateParameters: Story = { args: { gated: false, kind: 'staging-smok
 
 /** The smoke gate with an approval gate too, and a health URL filled in. */
 export const GatedWithParameters: Story = {
-  args: { kind: 'staging-smoke' },
-  decorators: [
-    withGate((pipelines) =>
-      pipelines.patchDraftGateConfig(0, {
-        fields: { url: 'https://staging.acme.dev/health' },
-      }),
-    ),
-  ],
+  args: { kind: 'staging-smoke', config: { fields: { url: 'https://staging.acme.dev/health' } } },
+}
+
+/**
+ * The same gated smoke step in the built-in approvals dialog, which offers the approval policy
+ * only: a gate's own parameters are part of the built-in's structure.
+ */
+export const ApprovalPolicyOnly: Story = {
+  args: { kind: 'staging-smoke', showParameters: false },
 }

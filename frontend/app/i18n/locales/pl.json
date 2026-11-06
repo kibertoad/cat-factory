@@ -703,7 +703,9 @@
         "oauth_exchange_refused": "Serwer autoryzacji serwera narzędzi odrzucił zgodę. Poproś operatora wdrożenia o sprawdzenie ustawień klienta OAuth serwera narzędzi.",
         "oauth_client_secret_unavailable": "Sekret klienta OAuth serwera narzędzi nie jest dostępny na tej tablicy. Dodaj go w oknie Infrastruktura.",
         "tool_server_without_oauth": "Ten serwer narzędzi nie używa już OAuth, więc nie ma połączenia do dokończenia.",
-        "gate_config_fields_invalid": "Ustawienia bramki kroku są niekompletne lub zawierają wartość, której bramka nie akceptuje, zwykle wymagane ustawienie bez wartości. Uzupełnij ustawienia bramki kroku w pipeline'ie i spróbuj ponownie."
+        "gate_config_fields_invalid": "Ustawienia bramki kroku są niekompletne lub zawierają wartość, której bramka nie akceptuje, zwykle wymagane ustawienie bez wartości. Uzupełnij ustawienia bramki kroku w pipeline'ie i spróbuj ponownie.",
+        "approvals_chain_stale": "Ten pipeline zmienił się po otwarciu jego punktów zatwierdzania, więc nie pasują już do jego kroków. Wczytaj pipeline ponownie i ustaw je jeszcze raz.",
+        "approvals_builtin_checkpoint_locked": "Wbudowany pipeline zachowuje punkty zatwierdzania, które zawiera jego definicja z katalogu. Sklonuj pipeline, aby usunąć któryś z nich."
       }
     },
     "action": {
@@ -5754,7 +5756,9 @@
       "toast": {
         "reseedFailed": "Nie udało się zregenerować pipeline'u",
         "deleteFailed": "Nie udało się usunąć pipeline'u",
-        "removeFailed": "Nie udało się usunąć pipeline’u"
+        "removeFailed": "Nie udało się usunąć pipeline’u",
+        "checkpointsDropped": "Ponowne zasianie {name} usunęło punkty zatwierdzenia, na które nowa definicja nie pozwala",
+        "approverPoliciesDropped": "Ponowne zasianie {name} przywróciło domyślne reguły zatwierdzających, na które nowa definicja nie pozwala"
       }
     },
     "outputBudget": {
@@ -5775,6 +5779,33 @@
       "requiredApprovalsHint": "Każde od innej osoby, zanim przebieg ruszy dalej.",
       "anyoneHint": "Każdy, kto może edytować tę tablicę, może zatwierdzić ten krok.",
       "gateParametersLabel": "Ustawienia bramki"
+    },
+    "checkpoint": {
+      "placement": {
+        "none": "Bez punktu zatwierdzenia",
+        "producer": "Po każdym szkicu {producer}, zanim {companion} go sprawdzi",
+        "companion": "Gdy {companion} zaakceptuje szkic {producer}",
+        "both": "Oba: po każdym szkicu {producer} i ponownie, gdy {companion} go zaakceptuje"
+      },
+      "summary": {
+        "none": "Dodaj punkt zatwierdzenia",
+        "producer": "Punkt zatwierdzenia po każdym szkicu {producer}. Kliknij, aby zmienić.",
+        "companion": "Punkt zatwierdzenia, gdy {companion} zaakceptuje szkic {producer}. Kliknij, aby zmienić.",
+        "both": "Punkty zatwierdzenia po każdym szkicu {producer} i gdy {companion} go zaakceptuje. Kliknij, aby zmienić."
+      },
+      "locked": "Ten punkt zatwierdzenia jest częścią wbudowanego pipeline'u. Sklonuj pipeline, aby go usunąć.",
+      "unreachable": "Szacunek zadania lub warunek uruchomienia może pominąć ten krok, więc punkt zatwierdzenia tutaj nie zawsze zostałby osiągnięty."
+    },
+    "approvals": {
+      "open": "Punkty zatwierdzenia",
+      "title": "Punkty zatwierdzenia: {name}",
+      "description": "Wybierz, gdzie ten wbudowany pipeline zatrzymuje się, aby osoba mogła sprawdzić i zatwierdzić. Jego kroki pozostają takie, jak definiuje je katalog.",
+      "reviewedBy": "sprawdzany przez {companion}",
+      "lockedHint": "Punkty zatwierdzenia dostarczone z wbudowanym pipeline'em pozostają włączone. Sklonuj pipeline, aby usunąć któryś z nich.",
+      "toast": {
+        "saved": "Zapisano punkty zatwierdzenia pipeline'u {name}",
+        "saveFailed": "Nie udało się zapisać punktów zatwierdzenia"
+      }
     }
   },
   "agentPrompt": {

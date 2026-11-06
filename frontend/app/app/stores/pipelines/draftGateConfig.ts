@@ -1,5 +1,5 @@
-import type { StepGateConfig, StepOptions } from '@cat-factory/contracts'
-import { hasApproverPolicy } from '@cat-factory/contracts'
+import type { StepGateConfig } from '@cat-factory/contracts'
+import { patchedGateConfig } from '@cat-factory/contracts'
 import type { PipelinesContext } from './context'
 
 /**
@@ -39,16 +39,7 @@ export function createPipelineGateConfigActions(ctx: PipelinesContext) {
    * the run forever. "No rule" has to persist as an ABSENT rule.
    */
   function patchDraftGateConfig(index: number, patch: Partial<StepGateConfig>) {
-    const gateConfig: StepGateConfig = { ...draftGateConfig(index), ...patch }
-    if (!hasApproverPolicy(gateConfig.approvers)) delete gateConfig.approvers
-    if (gateConfig.minApprovals !== undefined && gateConfig.minApprovals <= 1) {
-      delete gateConfig.minApprovals
-    }
-    if (gateConfig.fields && Object.keys(gateConfig.fields).length === 0) delete gateConfig.fields
-    const next: StepOptions = { ...draftStepOptions.value[index] }
-    if (Object.keys(gateConfig).length) next.gateConfig = gateConfig
-    else delete next.gateConfig
-    draftStepOptions.value[index] = Object.keys(next).length ? next : null
+    draftStepOptions.value[index] = patchedGateConfig(draftStepOptions.value[index], patch)
   }
 
   return { draftGateConfig, patchDraftGateConfig }
