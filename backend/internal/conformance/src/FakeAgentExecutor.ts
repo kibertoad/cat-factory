@@ -310,6 +310,13 @@ export interface FakeAgentOptions {
    */
   effortReport?: AgentRunResult['effortReport']
   /**
+   * The credential a `project-researcher` step's FIRST dispatch in each run asks a person for,
+   * answering only its first question beside the request (the analogue of the harness's
+   * `request_credential` with a checkpoint). Later dispatches answer every question. Omitted: the
+   * first dispatch answers every question.
+   */
+  researchCredentialRequest?: AgentRunResult['credentialRequest']
+  /**
    * The tool-server record every dispatch's job handle carries (the deterministic analogue of
    * `ContainerAgentExecutor` resolving a kind's declared MCP servers against the run's harness and
    * the workspace's credentials). Set it to assert the engine FOLDS the record onto the step and
@@ -386,6 +393,36 @@ export class FakeAgentExecutor implements AgentExecutor {
 
   /** Count of Tester calls so far, to walk `testReports` in order. */
   private testerCalls = 0
+
+  /** The runs whose research step already asked for its credential once. */
+  private readonly researchAsked = new Set<string>()
+
+  /**
+   * A research run's findings: every asked question answered, or (on the first dispatch of a run
+   * scripted to ask) the first one answered beside a credential request.
+   */
+  private runResearcher(context: AgentRunContext): AgentRunResult {
+    const questions = context.research?.questions ?? []
+    const runKey = context.executionId ?? 'noexec'
+    const ask = this.options.researchCredentialRequest
+    const asking = !!ask && !this.researchAsked.has(runKey)
+    if (asking) this.researchAsked.add(runKey)
+    const answered = asking ? questions.slice(0, 1) : questions
+    return {
+      output: '[project-researcher] researched',
+      model: 'fake',
+      custom: {
+        summary: asking ? 'Stopped for a credential.' : 'Researched every question.',
+        findings: answered.map((q) => ({
+          questionId: q.id,
+          status: 'answered',
+          answer: `[fake] ${q.question}`,
+          confidence: 'high',
+        })),
+      },
+      ...(asking ? { credentialRequest: ask } : {}),
+    }
+  }
 
   // Matches the `model: 'fake'` every result carries, so the engine's up-front
   // model preview (shown on the first "spinning up container" / querying emit)
@@ -638,6 +675,8 @@ export class FakeAgentExecutor implements AgentExecutor {
     if (context.agentKind === 'fixer') {
       return { output: `[fixer] applied fixes for "${context.block.title}"`, model: 'fake' }
     }
+
+    if (context.agentKind === 'project-researcher') return this.runResearcher(context)
 
     // The `task-estimator` step emits a JSON triage the engine parses + persists onto
     // `block.estimate` (the new column on both stores). Deterministic so the conformance

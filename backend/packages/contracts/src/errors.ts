@@ -607,6 +607,19 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *                                       can pin. `details` names both.
  *  - `research_inputs_invalid`          the values for the definition's `inputs` do not satisfy
  *                                       them. `details.problems` lists why.
+ *  - `task_type_requires_project`       a `research` task was created under a service; it
+ *                                       belongs under a research project.
+ *  - `research_project_not_pinned`      a research task's project pins no research definition.
+ *  - `research_definition_changed`      a registered definition no longer hashes to what the
+ *                                       project pinned, so the run refuses rather than asking a
+ *                                       question list the project never agreed to.
+ *  - `research_task_already_recorded`   the task already wrote its findings revision; a
+ *                                       follow-up is a new task.
+ *  - `research_nothing_to_ask`          the task's mode selects no question: an `extend` with no
+ *                                       new question, or a `clarify` with nothing partial or
+ *                                       blocked.
+ *  - `findings_too_large_for_inline`    the findings body is over the runtime's own row ceiling
+ *                                       and cannot be offloaded.
  */
 export const PROJECT_REASONS = [
   'project_kind_unregistered',
@@ -618,6 +631,12 @@ export const PROJECT_REASONS = [
   'research_pin_not_accepted',
   'research_definition_not_found',
   'research_inputs_invalid',
+  'task_type_requires_project',
+  'research_project_not_pinned',
+  'research_definition_changed',
+  'research_task_already_recorded',
+  'research_nothing_to_ask',
+  'findings_too_large_for_inline',
 ] as const
 
 export type ProjectReason = (typeof PROJECT_REASONS)[number]

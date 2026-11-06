@@ -467,6 +467,7 @@ const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
   review: 'pl_review',
   media: 'pl_media',
   'bug-fishing': 'pl_bug_fishing',
+  research: 'pl_research',
 }
 /**
  * The pipeline a task type opens with: a custom type's registered `defaultPipelineId`, else the

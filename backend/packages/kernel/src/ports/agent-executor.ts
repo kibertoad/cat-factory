@@ -1,4 +1,10 @@
 import type {
+  FindingsRevisionBody,
+  QuestionStatus,
+  ResearchDefinition,
+  ResearchMode,
+} from '@cat-factory/contracts'
+import type {
   AgentConfigValues,
   AgentKind,
   BlockType,
@@ -960,6 +966,12 @@ export interface AgentRunContext {
       phaseTemplate?: InitiativePresetPhaseTemplate
     }
   }
+  /**
+   * A research task's brief: the project's pinned definition, the questions this task answers,
+   * what earlier revisions established for them, and a checkpoint the step recorded before it
+   * parked for a credential. Set by the engine's research step handler; absent on every other run.
+   */
+  research?: ResearchRunContext
 }
 
 /** A point at which the agent needs a human to choose before continuing. */
@@ -991,6 +1003,30 @@ export interface AgentTokenUsage {
    * which would assert that nothing was cached.
    */
   inputClasses?: InputTokenClassCounts
+}
+
+/** What a research run is asked, resolved by the engine when the task's step starts. */
+export interface ResearchRunContext {
+  projectId: string
+  mode: ResearchMode
+  definition: ResearchDefinition
+  /** The project's values for the definition's `inputs`. */
+  inputs: Record<string, unknown>
+  /** The questions this task answers, each with its topic, ad-hoc ones included. */
+  questions: Array<{ id: string; topic: string; question: string; answerHint?: string }>
+  /** What earlier revisions established for those questions, so a follow-up starts from it. */
+  priorFindings: Array<{ questionId: string; status: QuestionStatus; answer: string }>
+  /** Partial findings the step recorded before it stopped to wait for a credential. */
+  checkpoint?: FindingsRevisionBody
+  /** The frame blocks of the services the project links, whose repos are read-only context. */
+  linkedFrameBlockIds: string[]
+}
+
+/** A credential the agent stopped to ask a person for. */
+export interface ResearchCredentialRequest {
+  key: string
+  reason: string
+  observed: string
 }
 
 export interface AgentRunResult {
@@ -1066,6 +1102,13 @@ export interface AgentRunResult {
    * it before use. Absent for every non-`ralph` kind.
    */
   ralphVerdict?: unknown
+  /**
+   * A research run that stopped to ask a person for a credential. The engine checkpoints the
+   * partial findings in `custom` and parks the step on the credential instead of completing it.
+   */
+  credentialRequest?: ResearchCredentialRequest
+  /** The scrubbed HTTP exchanges a research run's `http_request` tool recorded, by evidence ref. */
+  httpExchanges?: Array<{ ref: string; exchange: unknown }>
   /**
    * A coding step's PRE-PR validation report: which of the service's configured check commands
    * passed against the checkout, their exit codes and bounded/secret-scrubbed output tails, and

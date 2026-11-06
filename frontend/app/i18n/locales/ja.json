@@ -236,7 +236,8 @@
         "review": "レビュー",
         "ralph": "Ralph ループ",
         "bugFishing": "バグ探索",
-        "resolveConflicts": "コンフリクト解消"
+        "resolveConflicts": "コンフリクト解消",
+        "research": "リサーチ"
       },
       "recurringWithFrame": "繰り返しタスクは一定の周期でパイプラインを実行します。続行してスケジュールとプロンプトを設定してください。",
       "recurringNoFrame": "繰り返しタスクはサービス上に配置する必要があります。サービスフレーム（またはその中のモジュール）から追加してください。",
@@ -5489,7 +5490,8 @@
         "research": "調査",
         "planning": "計画",
         "media": "メディア",
-        "maintenance": "PR メンテナンス"
+        "maintenance": "PR メンテナンス",
+        "projectResearch": "プロジェクトリサーチ"
       },
       "strategyOption": {
         "specialist-panel": "専門家パネル",

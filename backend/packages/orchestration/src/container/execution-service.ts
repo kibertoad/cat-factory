@@ -1,6 +1,7 @@
 import type { AppCaches } from '@cat-factory/kernel'
 import { SpendService } from '@cat-factory/spend'
 import type { CoreDependencies } from './dependencies.js'
+import { createResearchStepController } from '../modules/research/createResearchStepController.js'
 import { ExecutionService } from '../modules/execution/ExecutionService.js'
 import { createTesterQualityReviewer } from './modules.js'
 import { makeDocumentUrlResolver } from '../modules/execution/linked-context.js'
@@ -77,6 +78,7 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     // workspace was never seeded with, and it must read the instance `PipelineService` seeds and
     // reseeds from, or a deployment's own registered pipeline is adoptable by one of them only.
     pipelineRegistry: runtime.pipelineRegistry,
+    researchStep: createResearchStepController(dependencies, runtime.researchDefinitions),
     gateRegistry: runtime.gateRegistry,
     judgeRegistry: runtime.judgeRegistry,
     delegatedExecutorRegistry: runtime.delegatedExecutorRegistry,

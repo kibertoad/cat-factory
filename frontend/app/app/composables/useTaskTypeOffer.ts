@@ -1,5 +1,6 @@
 import { computed, watch, type Ref } from 'vue'
 import type { Block, CreateTaskType } from '~/types/domain'
+import { taskTypeRequiresProject } from '@cat-factory/contracts'
 
 /** A task type the add-task picker offers; `recurring` is created through the schedule flow. */
 export type TaskTypeChoice = CreateTaskType | 'recurring'
@@ -9,7 +10,8 @@ export type TaskTypeChoice = CreateTaskType | 'recurring'
  * kept valid as the container changes. Each rule mirrors a server-side refusal:
  *
  *  - a document repository only authors documents and spikes;
- *  - under a project root, the project's kind decides which task types it takes.
+ *  - under a project root, the project's kind decides which task types it takes;
+ *  - a research task belongs under a project, so a service never offers one.
  */
 export function useTaskTypeOffer(container: Ref<Block | undefined>, taskType: Ref<TaskTypeChoice>) {
   const { t } = useI18n()
@@ -42,11 +44,16 @@ export function useTaskTypeOffer(container: Ref<Block | undefined>, taskType: Re
       { value: 'review', label: t('board.addTask.types.review'), icon: 'i-lucide-clipboard-check' },
       { value: 'ralph', label: t('board.addTask.types.ralph'), icon: 'i-lucide-infinity' },
       { value: 'media', label: t('board.addTask.types.media'), icon: 'i-lucide-image-plus' },
+      { value: 'research', label: t('board.addTask.types.research'), icon: 'i-lucide-telescope' },
       { value: 'recurring', label: t('board.addTask.types.recurring'), icon: 'i-lucide-repeat' },
     ]
     const offered = projectOffered.value
     if (offered) return all.filter((k) => offered.has(k.value))
-    return isDocRepo.value ? all.filter((k) => k.value === 'document' || k.value === 'spike') : all
+    // A research task belongs under a project, so a service never offers one.
+    const underService = all.filter((k) => !taskTypeRequiresProject(k.value))
+    return isDocRepo.value
+      ? underService.filter((k) => k.value === 'document' || k.value === 'spike')
+      : underService
   })
 
   /** Deployment-registered task types, filtered by the same rules as the built-ins. */

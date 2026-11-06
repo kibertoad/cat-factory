@@ -602,3 +602,9 @@ Additive. A consumer built against 1.93.0 keeps parsing; before this, the same r
 `PublicUnanswerableWait.reason` gains `capability_credential_missing`: a step needs a capability credential (a vendor login a research definition declared, say) that is not stored for the workspace. A person who can manage the workspace's secrets stores it, then any member resumes the run in the app. It also gains `credential_wait_unrecorded`, a credential wait recorded before waits named what they wait on, which cannot be resumed; the run is restarted. The error vocabulary gains the `capability_credential_still_missing` and `credential_wait_unrecorded` conflict reasons, answered by the app's resume route.
 
 Additive. A consumer built against 1.94.0 keeps parsing.
+
+## 1.96.0
+
+The task-type vocabulary gains `research`: a task that answers a research project's pinned research definition and records a findings revision on the project. It belongs under a project, so creating one under a service is refused (`422`, reason `task_type_requires_project`); the public surface for project tasks follows in a later version. A `research` task type's public fields carry `researchMode` (`initial`, `extend`, `clarify` or `refresh`).
+
+Additive. A consumer built against 1.95.0 keeps parsing.

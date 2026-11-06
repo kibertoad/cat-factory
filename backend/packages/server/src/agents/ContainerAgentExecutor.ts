@@ -55,6 +55,7 @@ import {
   settledRunResult,
 } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
+import { buildResearchJobBody } from './researchJobBody.js'
 import { resolveTestCredentials, type ResolvedTestCredentials } from './testCredentials.js'
 import { buildDispatchPromptContext } from './dispatchPromptContext.js'
 import { buildDispatchOptions } from './dispatchOptions.js'
@@ -391,17 +392,13 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
     const { workspaceId, executionId } = this.requireIds(context)
-    const {
-      body,
-      model,
-      provider,
-      kind,
-      subscriptionTokenId,
-      subscriptionVendor,
-      search,
-      repoSummary,
-      toolServers,
-    } = await this.buildJobBody(context)
+    // A research kind's job carries no checkout, so its body is the repo-less research one.
+    const built =
+      this.agentKindRegistry.agentStep(context.agentKind)?.surface === 'container-research'
+        ? await this.buildResearchBody(context)
+        : await this.buildJobBody(context)
+    const { body, model, provider, kind, subscriptionTokenId, subscriptionVendor } = built
+    const { search, repoSummary, toolServers } = built
     // The job's id is per-STEP (run id + agent kind), so sibling steps that share this
     // run's container never collide in the harness's per-kind job registries; the run
     // itself is addressed by the execution id, so its container is reclaimed as a unit.
@@ -518,7 +515,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     }
     // Completed: a structured `error` (e.g. "no file changes") is still a failure. The harness
     // carries the cause on the view even for these clean-exit failures, so forward it too.
-    if (result.error) {
+    // A research job that stopped to ask for a credential is a park, not a failure, even when its
+    // reply was unreadable: the engine checkpoints what came back and waits for the credential.
+    if (result.error && !result.needsCredential) {
       jobLog.settled('failed', { failureCause: view.failureCause, cleanExit: true })
       return { state: 'failed', error: `Implementation failed: ${result.error}`, ...failureMeta }
     }
@@ -658,6 +657,52 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           create: !isReadOnlyAgentKind(context.agentKind),
         })
       : false
+  }
+
+  /** The repo-less research job body, through the same model, auth and tool-server resolution. */
+  private async buildResearchBody(context: AgentRunContext) {
+    const { workspaceId, executionId, blockId } = this.requireIds(context)
+    const jobId = stepJobId(executionId, context.agentKind, context.dispatchEpoch)
+    const routed = this.modelRouter.resolveDispatchRef(context, workspaceId)
+    const built = await buildResearchJobBody(
+      context,
+      { workspaceId, executionId, jobId },
+      {
+        agentKindRegistry: this.agentKindRegistry,
+        ...(this.deps.resolveToolSecrets
+          ? { resolveToolSecrets: this.deps.resolveToolSecrets }
+          : {}),
+        ...(this.deps.resolveRepoTargets
+          ? { resolveRepoTargets: this.deps.resolveRepoTargets }
+          : {}),
+        mintInstallationToken: this.deps.mintInstallationToken,
+        resolveRepoOrigin: this.deps.resolveRepoOrigin ?? githubRepoOrigin,
+        resolveModel: async () => (await routed).ref,
+        resolveAuth: async () => {
+          const { ref, harness, subscriptionVendor } = await routed
+          return this.resolveAuth(context, {
+            harness,
+            ref,
+            subscriptionVendor,
+            workspaceId,
+            executionId,
+          })
+        },
+        resolveToolServers: async (ambientAuth) =>
+          resolveDispatchToolServers(
+            dispatchToolServerDeps(this.deps, this.agentKindRegistry),
+            context,
+            {
+              harness: (await routed).harness,
+              ambientAuth,
+              workspaceId,
+              blockId,
+            },
+          ),
+      },
+    )
+    const search: WebSearchAvailability = { available: false, provider: null }
+    return { ...built, search, subscriptionVendor: undefined, repoSummary: undefined }
   }
 
   /** Resolve tokens/prompts/target and assemble the harness job body for `context`. */
