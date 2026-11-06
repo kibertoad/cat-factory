@@ -86,7 +86,8 @@ interface Project {
 - **Its repo resolution is its own.** `resolveRepoTarget` stops at a project root and refuses with
   `project_has_no_writable_repo`: a project has no repository to write to. Its linked services'
   repos are read-only context, resolved by their own read (slice 5), never a guessed checkout. A
-  kind offers only task types that write to no repo (`repoAccess: 'none' | 'linked-read-only'`).
+  kind can declare no writing access (`repoAccess: 'none' | 'linked-read-only'`), and a run step
+  that needs a checkout to push to is refused when it dispatches.
 - **A kind is registered**, through a `ProjectKindRegistry` beside `TaskTypeRegistry`, injected by
   reference on both `start()` and `startLocal()`. A kind declares the task types its project
   offers, their default pipelines, the project-level data it keeps, and its result view. A run
