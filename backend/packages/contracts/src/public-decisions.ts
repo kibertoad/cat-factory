@@ -1129,6 +1129,11 @@ export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
  * - `credential_lapsed`: the run's personal-subscription credential lapsed before a step could
  *   dispatch, so the step parked. Only the run's initiator can answer it, by entering their
  *   personal password in the app, which re-mints the credential and resumes the step.
+ * - `capability_credential_missing`: a step needs a capability credential (a vendor login a
+ *   research definition declared, say) that is not stored for the workspace. A person who can
+ *   manage the workspace's secrets stores it, and any member resumes the step in the app.
+ * - `credential_wait_unrecorded`: a credential wait recorded before waits named what they wait
+ *   on. It cannot be resumed; the run is restarted.
  *
  * Every member is a wait that is BOTH live and beyond this surface, and both halves are load-
  * bearing. A run that has finished (`done` / `failed`, the stop included) lists nothing at all: its
@@ -1144,6 +1149,8 @@ export const publicUnanswerableReasonSchema = v.picklist([
   'unwired_interview_gate',
   'curation_gate',
   'credential_lapsed',
+  'capability_credential_missing',
+  'credential_wait_unrecorded',
 ])
 export type PublicUnanswerableReason = v.InferOutput<typeof publicUnanswerableReasonSchema>
 

@@ -279,6 +279,7 @@ export type {
   ToolSecretResolver,
   ToolSecretSubject,
 } from './agent-tools.js'
+export { toolSecretSubjectOf } from './agent-tools.js'
 export { type WorkRunner, NoopWorkRunner } from './work-runner.js'
 export { type ExecutionEventPublisher, NoopEventPublisher } from './execution-events.js'
 export type {

@@ -796,7 +796,9 @@
         "session_stale": "La pull request a évolué",
         "cursor_expired": "Le flux de modifications a dépassé ce curseur",
         "refined_requirements_unavailable": "Pas encore d’exigences affinées",
-        "no_linked_issues": "Aucun ticket lié"
+        "no_linked_issues": "Aucun ticket lié",
+        "capability_credential_still_missing": "Identifiant toujours manquant",
+        "credential_wait_unrecorded": "Impossible de reprendre cette attente"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -834,7 +836,7 @@
         "binary_output_generator_invalid": "Une étape qui génère des sorties binaires sélectionne une intégration générative que ce déploiement n’enregistre pas, aucune des intégrations sélectionnées ne produit un type de contenu que l’étape doit livrer, ou l’une d’elles est générée par une CLI d’agent sur laquelle le modèle de cette étape ne s’exécute pas. Les intégrations génératives sont enregistrées dans le code du déploiement, pas dans cet espace de travail : enregistrez-la, corrigez la sélection de l’étape, ou fixez pour l’étape un modèle exécutant la CLI requise, puis relancez.",
         "foundational_service_not_inherited": "L'écartement s'applique à un service hérité du compte. Cet identifiant est enregistré par ce tableau : il n'y a donc rien à écarter - supprimez plutôt l'entrée propre au tableau.",
         "input_gate_not_parked": "Cette exécution n'attend plus sa vérification d'entrée. Quelqu'un y a peut-être déjà répondu, ou l'exécution a avancé.",
-        "credential_wait_not_parked": "Cette exécution n'attend plus les identifiants de votre abonnement personnel. Elle a peut-être déjà été reprise, ou l'exécution a avancé.",
+        "credential_wait_not_parked": "Cette exécution n'attend plus d'identifiant. Elle a peut-être déjà été reprise, ou l'exécution a avancé.",
         "input_gate_parked": "Cette exécution est en attente de sa vérification d'entrée, à laquelle la validation ne peut pas répondre. Utilisez l'avis sur l'exécution : corrigez la tâche et relancez la vérification, ou exécutez-la quand même.",
         "ticket_already_linked": "Un ticket ne peut alimenter qu'une seule tâche : le relier à nouveau priverait la tâche existante du contexte avec lequel elle a été créée. Ouvrez plutôt cette tâche, ou dissociez d'abord le ticket.",
         "document_already_linked": "Ce document est joint à une autre tâche. Détachez-le d'abord, ou joignez-en une copie distincte.",
@@ -860,7 +862,9 @@
         "session_stale": "De nouveaux commits sont arrivés après la préparation de cette revue, donc ses brouillons peuvent viser les mauvaises lignes. Actualise la revue, vérifie les brouillons, puis publie.",
         "cursor_expired": "Les modifications après ce curseur ne sont plus conservées. Prenez un nouvel instantané de l’annuaire, puis suivez le flux à partir de la position qu’il indique.",
         "refined_requirements_unavailable": "La revue n’a pas encore produit de document révisé, ou le réécrit en ce moment. Attendez la fin de l’intégration, puis mettez à jour à nouveau.",
-        "no_linked_issues": "Aucun ticket n’est lié à cette tâche. Liez le ticket dont elle provient, puis mettez à jour à nouveau."
+        "no_linked_issues": "Aucun ticket n’est lié à cette tâche. Liez le ticket dont elle provient, puis mettez à jour à nouveau.",
+        "capability_credential_still_missing": "L'identifiant dont cette étape a besoin n'est toujours pas enregistré pour cet espace de travail. Enregistrez-le dans les paramètres des identifiants de capacités, puis reprenez l'exécution.",
+        "credential_wait_unrecorded": "Cette attente a été enregistrée avant que la plateforme ne note ce qu'une attente attend, elle ne peut donc pas être reprise. Relancez plutôt l'exécution."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -6034,7 +6038,14 @@
     "body": "Les identifiants de l'abonnement personnel de cette exécution ont expiré avant le démarrage de l'étape suivante : l'exécution est donc en pause. Saisissez votre mot de passe personnel pour les renouveler et reprendre à cette étape.",
     "resume": "Saisir le mot de passe et continuer",
     "othersTitle": "Les identifiants d’abonnement personnel de cette exécution ont expiré",
-    "othersRun": "Seule la personne qui a lancé cette exécution peut les renouveler avec son mot de passe personnel. Demandez-lui de la poursuivre."
+    "othersRun": "Seule la personne qui a lancé cette exécution peut les renouveler avec son mot de passe personnel. Demandez-lui de la poursuivre.",
+    "capabilityTitle": "Cette étape a besoin de l'identifiant {name}",
+    "capabilityBody": "Il n'est pas enregistré pour cet espace de travail. Une personne qui peut gérer ses secrets l'enregistre, puis n'importe qui sur le tableau reprend l'exécution.",
+    "observed": "Ce que l'agent a vu : {observed}",
+    "store": "Enregistrer l'identifiant",
+    "resumeCapability": "Reprendre l'exécution",
+    "unrecordedTitle": "Impossible de reprendre cette attente",
+    "unrecordedBody": "Elle a été enregistrée avant que la plateforme ne note ce qu'une attente attend. Relancez plutôt l'exécution."
   },
   "requirements": {
     "title": "Revue des exigences",

@@ -796,7 +796,9 @@
         "session_stale": "La pull request ha avanzado",
         "cursor_expired": "El registro de cambios ya superó este cursor",
         "refined_requirements_unavailable": "Todavía no hay requisitos refinados",
-        "no_linked_issues": "No hay ninguna incidencia vinculada"
+        "no_linked_issues": "No hay ninguna incidencia vinculada",
+        "capability_credential_still_missing": "Sigue faltando la credencial",
+        "credential_wait_unrecorded": "No se puede reanudar esta espera"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -834,7 +836,7 @@
         "binary_output_generator_invalid": "Un paso que genera salidas binarias selecciona una integración generativa que esta instalación no registra, ninguna de las integraciones seleccionadas produce un tipo de contenido que el paso debe entregar, o una de ellas la genera una CLI de agente en la que no se ejecuta el modelo de este paso. Las integraciones generativas se registran en el código de la instalación, no en este espacio de trabajo: regístrala, corrige la selección del paso o fija en el paso un modelo que ejecute la CLI necesaria, y vuelve a iniciar.",
         "foundational_service_not_inherited": "La exclusión se aplica a un servicio heredado de la cuenta. Este id está registrado por este tablero, así que no hay nada que excluir: elimina la entrada propia del tablero.",
         "input_gate_not_parked": "Esta ejecución ya no espera su comprobación de entrada. Puede que alguien la haya respondido o que la ejecución haya avanzado.",
-        "credential_wait_not_parked": "Esta ejecución ya no está esperando la credencial de tu suscripción personal. Puede que ya se haya reanudado o que la ejecución haya avanzado.",
+        "credential_wait_not_parked": "Esta ejecución ya no está esperando una credencial. Puede que ya se haya reanudado o que la ejecución haya avanzado.",
         "input_gate_parked": "Esta ejecución está detenida en su comprobación de entrada, que la vía de aprobación no puede resolver. Usa el aviso de la ejecución: corrige la tarea y vuelve a comprobar, o ejecútala de todos modos.",
         "ticket_already_linked": "Una incidencia solo puede respaldar una tarea, así que volver a vincularla dejaría a la tarea existente sin el contexto con el que se creó. Abre esa tarea o desvincula antes la incidencia.",
         "document_already_linked": "Ese documento está adjunto a otra tarea. Sepáralo allí primero o adjunta una copia aparte.",
@@ -860,7 +862,9 @@
         "session_stale": "Llegaron commits nuevos después de preparar esta revisión, así que sus borradores pueden apuntar a líneas equivocadas. Actualiza la revisión, revisa los borradores y luego publica.",
         "cursor_expired": "Los cambios posteriores a este cursor ya no se conservan. Toma una instantánea nueva del directorio y sigue el registro desde la posición que indique.",
         "refined_requirements_unavailable": "La revisión aún no ha producido un documento revisado o lo está reescribiendo ahora. Espera a que termine la incorporación y vuelve a actualizar.",
-        "no_linked_issues": "Esta tarea no tiene ninguna incidencia del gestor vinculada. Vincula la incidencia de la que proviene y vuelve a actualizar."
+        "no_linked_issues": "Esta tarea no tiene ninguna incidencia del gestor vinculada. Vincula la incidencia de la que proviene y vuelve a actualizar.",
+        "capability_credential_still_missing": "La credencial que necesita este paso aún no está guardada para este espacio de trabajo. Guárdala en los ajustes de credenciales de capacidades y después reanuda la ejecución.",
+        "credential_wait_unrecorded": "Esta espera se registró antes de que la plataforma guardara a qué espera cada una, así que no se puede reanudar. Reinicia la ejecución en su lugar."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -6034,7 +6038,14 @@
     "body": "La credencial de la suscripción personal de esta ejecución caducó antes de que pudiera empezar el siguiente paso, así que la ejecución está en pausa. Introduce tu contraseña personal para renovarla y continuar desde este paso.",
     "resume": "Introducir contraseña y continuar",
     "othersTitle": "La credencial de suscripción personal de esta ejecución caducó",
-    "othersRun": "Solo la persona que inició esta ejecución puede renovarla con su contraseña personal. Pídele que la continúe."
+    "othersRun": "Solo la persona que inició esta ejecución puede renovarla con su contraseña personal. Pídele que la continúe.",
+    "capabilityTitle": "Este paso necesita la credencial {name}",
+    "capabilityBody": "No está guardada para este espacio de trabajo. Una persona que pueda gestionar sus secretos la guarda y después cualquiera del tablero reanuda la ejecución.",
+    "observed": "Lo que vio el agente: {observed}",
+    "store": "Guardar la credencial",
+    "resumeCapability": "Reanudar la ejecución",
+    "unrecordedTitle": "Esta espera no se puede reanudar",
+    "unrecordedBody": "Se registró antes de que la plataforma guardara a qué espera cada una. Reinicia la ejecución en su lugar."
   },
   "requirements": {
     "title": "Revisión de requisitos",

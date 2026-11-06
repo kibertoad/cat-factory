@@ -17,6 +17,39 @@ export function defineExecutionFailureConformance(harness: ConformanceHarness): 
 
 /** Registered from the suite above; the tests are unchanged by the move. */
 function registerAgentFailureTests(harness: ConformanceHarness): void {
+  it('parks a step on a missing capability credential, and refuses a resume until it resolves', async () => {
+    // Not a failure: the step parks on what it needs (the key, who declared it, how to obtain
+    // it), the run goes `blocked`, and the wait round-trips through the store intact. A resume
+    // before the key is stored is refused with a reason rather than re-dispatched into the park.
+    const app = harness.makeApp({ asyncKinds: ['coder'], missingCredentialKinds: ['coder'] })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Build only',
+      purpose: 'build',
+      agentKinds: ['coder'],
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(exec.status).toBe('blocked')
+    expect(exec.steps[exec.currentStep]?.credentialWait).toMatchObject({
+      subject: 'capability',
+      key: 'VENDOR_TOKEN',
+      declaredBy: { kind: 'research-definition', id: 'acme:vendor' },
+      onboarding: { instructions: 'Create a token under Settings, API.' },
+    })
+    const resumed = await app.call(
+      'POST',
+      `/workspaces/${wsId}/executions/${exec.id}/credential/resume`,
+    )
+    expect(resumed.status).toBe(409)
+    expect(
+      (resumed.body as { error?: { details?: { reason?: string } } }).error?.details?.reason,
+    ).toBe('capability_credential_still_missing')
+  })
+
   it('classifies a container-start (dispatch) failure as `dispatch`, not a generic run failure', async () => {
     // When the container/runner never accepts the job (startJob throws), the engine
     // must classify it as a `dispatch` failure ("Container failed to start") and carry

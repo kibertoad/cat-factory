@@ -8,6 +8,8 @@ export {
   ValidationError,
   ConflictError,
   CredentialRequiredError,
+  CapabilityCredentialMissingError,
+  type MissingCapabilityCredential,
   ForbiddenError,
   UnavailableError,
   UnauthorizedError,
