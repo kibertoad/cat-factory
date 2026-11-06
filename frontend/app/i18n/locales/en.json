@@ -9600,5 +9600,127 @@
       "added": "Project {title} added to this board",
       "failed": "Could not add the project"
     }
+  },
+  "research": {
+    "open": "Research findings",
+    "title": "Findings: {title}",
+    "pin": "{title}, version {version}",
+    "refresh": "Refresh",
+    "loading": "Loading the findings",
+    "unavailable": "The findings could not be loaded",
+    "loadFailed": "Could not load the findings",
+    "definitionChanged": "The registered definition no longer matches the version this project pinned, so new research runs are refused until it is published as a new version.",
+    "definitionMissing": "The definition this project pinned is no longer available to this organization.",
+    "unreadableRevisions": "Some revisions are stored in content storage that cannot serve them now. Their answers are left out until it can.",
+    "adhoc": "Questions added by tasks",
+    "retired": "Answers to questions this version no longer asks",
+    "learnings": "Learnings",
+    "topicCoverage": "{answered} of {total} answered",
+    "blockedOn": "Waiting for the credential {key}",
+    "notes": "Later attempts kept beside this answer: {count}",
+    "tabs": {
+      "findings": "Findings",
+      "revisions": "History",
+      "credentials": "Credentials",
+      "storage": "Storage"
+    },
+    "status": {
+      "answered": "Answered",
+      "partial": "Partial",
+      "unanswered": "Unanswered",
+      "blocked": "Blocked"
+    },
+    "coverage": {
+      "answered": "Answered: {count}",
+      "partial": "Partial: {count}",
+      "unanswered": "Unanswered: {count}",
+      "blocked": "Blocked: {count}"
+    },
+    "confidence": {
+      "high": "High confidence",
+      "medium": "Medium confidence",
+      "low": "Low confidence"
+    },
+    "evidence": {
+      "httpExchange": "Recorded request {ref}",
+      "screenshot": "Screenshot {id}",
+      "repoPath": "Repository file {path}"
+    },
+    "mode": {
+      "initial": "Initial",
+      "extend": "Extend",
+      "clarify": "Clarify",
+      "refresh": "Refresh"
+    },
+    "modeHelp": {
+      "initial": "Answer every question in the pinned definition.",
+      "extend": "Answer questions not asked before, including the ones you add below.",
+      "clarify": "Look again at answers that are partial or blocked.",
+      "refresh": "Check every existing answer against the vendor as it is now."
+    },
+    "revisions": {
+      "empty": "No research task has recorded findings yet",
+      "seq": "Revision {seq}",
+      "task": "Written by {task}, definition version {version}",
+      "show": "Show",
+      "hide": "Hide",
+      "answers": "Answers in this revision: {count}",
+      "openFailed": "Could not open the revision",
+      "storage": {
+        "inline": "Stored inline, {size}",
+        "offloaded": "In content storage, {size}",
+        "unavailable": "Unavailable, {size}"
+      }
+    },
+    "credentials": {
+      "none": "The pinned definition declares no credentials",
+      "requiredAtStart": "A research run needs it before it starts.",
+      "askedWhenNeeded": "The agent asks for it when it reaches the point that needs it.",
+      "store": "Manage capability credentials",
+      "status": {
+        "stored": "Stored",
+        "missing": "Missing",
+        "reserved": "Reserved name, never sent"
+      }
+    },
+    "storage": {
+      "effective": "New revisions are stored inline up to {size}; above that, offload is {offload}.",
+      "accountHint": "Set by the organization.",
+      "inherit": "Inherit",
+      "inherits": "Inherits from the wider tier",
+      "inlineUpTo": "inline up to {size}",
+      "inlineKb": "Inline limit (KB)",
+      "offloadLabel": "Offload",
+      "save": "Save",
+      "loadFailed": "Could not load the findings storage settings",
+      "saveFailed": "Could not save the findings storage settings",
+      "tier": {
+        "account": "Organization",
+        "workspace": "This board",
+        "project": "This project"
+      },
+      "offload": {
+        "enabled": "enabled",
+        "disabled": "disabled"
+      }
+    },
+    "followUp": {
+      "open": "Start follow-up",
+      "title": "Start a follow-up",
+      "modeLabel": "Mode",
+      "titleLabel": "Task title",
+      "questionsLabel": "Questions to add",
+      "questionsHelp": "One question per line. Each is answered and kept with the project's findings.",
+      "revisitLabel": "Questions to revisit",
+      "revisitHelp": "Leave empty to revisit every question this mode covers.",
+      "submit": "Start research",
+      "failed": "Could not start the follow-up",
+      "defaultTitle": {
+        "initial": "Research the vendor",
+        "extend": "Extend the research",
+        "clarify": "Clarify open answers",
+        "refresh": "Refresh the findings"
+      }
+    }
   }
 }

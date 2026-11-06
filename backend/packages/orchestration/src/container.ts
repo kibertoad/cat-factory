@@ -40,6 +40,8 @@ import { ServiceMountService } from './modules/services/ServiceMountService.js'
 import { ProjectService } from './modules/projects/ProjectService.js'
 import type { ResearchDefinitionPublisher } from './modules/research/ResearchDefinitionPublisher.js'
 import type { ResearchFindingsStore } from './modules/research/ResearchFindingsStore.js'
+import type { ResearchProjectViews } from './modules/research/ResearchProjectViews.js'
+import type { FindingsStoragePolicyService } from './modules/research/FindingsStoragePolicyService.js'
 import { createInlineUseCaseService } from './container/use-case-service.js'
 import type { InlineUseCaseService } from './modules/useCases/InlineUseCaseService.js'
 
@@ -761,6 +763,10 @@ export interface ProjectsModule {
     publisher?: ResearchDefinitionPublisher
     /** Absent when the facade wires no findings store. */
     findings?: ResearchFindingsStore
+    /** The app's project view and revision read. Absent with `findings`. */
+    views?: ResearchProjectViews
+    /** The findings-storage policy tiers. Absent when the facade wires no policy store. */
+    storagePolicy?: FindingsStoragePolicyService
   }
 }
 

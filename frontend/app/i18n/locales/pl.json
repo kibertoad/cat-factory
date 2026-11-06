@@ -9266,5 +9266,127 @@
       "added": "Dodano projekt {title} do tej tablicy",
       "failed": "Nie udało się dodać projektu"
     }
+  },
+  "research": {
+    "open": "Wyniki badania",
+    "title": "Wyniki: {title}",
+    "pin": "{title}, wersja {version}",
+    "refresh": "Odśwież",
+    "loading": "Wczytywanie wyników",
+    "unavailable": "Nie udało się wczytać wyników",
+    "loadFailed": "Nie udało się wczytać wyników",
+    "definitionChanged": "Zarejestrowana definicja nie zgadza się już z wersją ustaloną dla tego projektu, więc nowe badania są odrzucane, dopóki nie zostanie opublikowana jako nowa wersja.",
+    "definitionMissing": "Definicja ustalona dla tego projektu nie jest już dostępna dla tej organizacji.",
+    "unreadableRevisions": "Niektóre rewizje są w magazynie treści, który nie może ich teraz udostępnić. Ich odpowiedzi są pominięte, dopóki nie będzie mógł.",
+    "adhoc": "Pytania dodane przez zadania",
+    "retired": "Odpowiedzi na pytania, których ta wersja już nie zadaje",
+    "learnings": "Wnioski",
+    "topicCoverage": "{answered} z {total} z odpowiedzią",
+    "blockedOn": "Czeka na poświadczenie {key}",
+    "notes": "Późniejsze próby zachowane obok tej odpowiedzi: {count}",
+    "tabs": {
+      "findings": "Wyniki",
+      "revisions": "Historia",
+      "credentials": "Poświadczenia",
+      "storage": "Przechowywanie"
+    },
+    "status": {
+      "answered": "Z odpowiedzią",
+      "partial": "Częściowa",
+      "unanswered": "Bez odpowiedzi",
+      "blocked": "Zablokowana"
+    },
+    "coverage": {
+      "answered": "Z odpowiedzią: {count}",
+      "partial": "Częściowe: {count}",
+      "unanswered": "Bez odpowiedzi: {count}",
+      "blocked": "Zablokowane: {count}"
+    },
+    "confidence": {
+      "high": "Wysoka pewność",
+      "medium": "Średnia pewność",
+      "low": "Niska pewność"
+    },
+    "evidence": {
+      "httpExchange": "Zapisane żądanie {ref}",
+      "screenshot": "Zrzut ekranu {id}",
+      "repoPath": "Plik w repozytorium {path}"
+    },
+    "mode": {
+      "initial": "Początkowe",
+      "extend": "Rozszerz",
+      "clarify": "Doprecyzuj",
+      "refresh": "Odśwież"
+    },
+    "modeHelp": {
+      "initial": "Odpowiedzieć na każde pytanie ustalonej definicji.",
+      "extend": "Odpowiedzieć na pytania wcześniej niezadane, w tym te, które dodasz poniżej.",
+      "clarify": "Ponownie sprawdzić odpowiedzi częściowe lub zablokowane.",
+      "refresh": "Sprawdzić każdą istniejącą odpowiedź u dostawcy w obecnym stanie."
+    },
+    "revisions": {
+      "empty": "Żadne zadanie badawcze nie zapisało jeszcze wyników",
+      "seq": "Rewizja {seq}",
+      "task": "Zapisana przez {task}, wersja definicji {version}",
+      "show": "Pokaż",
+      "hide": "Ukryj",
+      "answers": "Odpowiedzi w tej rewizji: {count}",
+      "openFailed": "Nie udało się otworzyć rewizji",
+      "storage": {
+        "inline": "Zapisana bezpośrednio, {size}",
+        "offloaded": "W magazynie treści, {size}",
+        "unavailable": "Niedostępna, {size}"
+      }
+    },
+    "credentials": {
+      "none": "Ustalona definicja nie deklaruje poświadczeń",
+      "requiredAtStart": "Badanie potrzebuje go przed rozpoczęciem.",
+      "askedWhenNeeded": "Agent prosi o nie, gdy dotrze do miejsca, które go wymaga.",
+      "store": "Zarządzaj poświadczeniami możliwości",
+      "status": {
+        "stored": "Zapisane",
+        "missing": "Brak",
+        "reserved": "Zarezerwowana nazwa, nigdy nie jest wysyłana"
+      }
+    },
+    "storage": {
+      "effective": "Nowe rewizje są zapisywane bezpośrednio do {size}; powyżej przenoszenie jest {offload}.",
+      "accountHint": "Ustawiane przez organizację.",
+      "inherit": "Dziedzicz",
+      "inherits": "Dziedziczy z szerszego poziomu",
+      "inlineUpTo": "bezpośrednio do {size}",
+      "inlineKb": "Limit zapisu bezpośredniego (KB)",
+      "offloadLabel": "Przenoszenie",
+      "save": "Zapisz",
+      "loadFailed": "Nie udało się wczytać ustawień przechowywania wyników",
+      "saveFailed": "Nie udało się zapisać ustawień przechowywania wyników",
+      "tier": {
+        "account": "Organizacja",
+        "workspace": "Ta tablica",
+        "project": "Ten projekt"
+      },
+      "offload": {
+        "enabled": "włączone",
+        "disabled": "wyłączone"
+      }
+    },
+    "followUp": {
+      "open": "Rozpocznij kontynuację",
+      "title": "Rozpocznij badanie uzupełniające",
+      "modeLabel": "Tryb",
+      "titleLabel": "Tytuł zadania",
+      "questionsLabel": "Pytania do dodania",
+      "questionsHelp": "Jedno pytanie w wierszu. Każde otrzymuje odpowiedź zapisaną z wynikami projektu.",
+      "revisitLabel": "Pytania do ponownego sprawdzenia",
+      "revisitHelp": "Zostaw puste, aby sprawdzić każde pytanie objęte tym trybem.",
+      "submit": "Rozpocznij badanie",
+      "failed": "Nie udało się rozpocząć kontynuacji",
+      "defaultTitle": {
+        "initial": "Zbadaj dostawcę",
+        "extend": "Rozszerz badanie",
+        "clarify": "Doprecyzuj otwarte odpowiedzi",
+        "refresh": "Odśwież wyniki"
+      }
+    }
   }
 }

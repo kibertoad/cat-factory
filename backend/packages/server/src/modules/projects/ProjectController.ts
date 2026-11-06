@@ -1,5 +1,7 @@
 import {
   createProjectContract,
+  getResearchProjectViewContract,
+  getResearchRevisionContract,
   listPinnableResearchDefinitionsContract,
   listProjectCatalogContract,
   mountProjectContract,
@@ -14,10 +16,19 @@ import type { ProjectsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
+import { researchCredentialReadiness } from '../research/researchCredentialReadiness.js'
 
 /** Resolve the projects module, or refuse with a 503 naming what isn't wired. */
 function requireProjects<E extends AppEnv>(c: Context<E>): ProjectsModule {
   return requireCapability(c.get('container').projects, 'Projects are not configured')
+}
+
+/** The research project reader, a capability behind the projects module. */
+function requireResearchViews<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(
+    requireProjects(c).research.views,
+    'Research findings are not configured',
+  )
 }
 
 /**
@@ -51,6 +62,26 @@ export function projectController(): Hono<AppEnv> {
       })),
       200,
     )
+  })
+
+  buildHonoRoute(app, getResearchProjectViewContract, async (c) => {
+    const views = requireResearchViews(c)
+    const workspaceId = param(c, 'workspaceId')
+    const resolver = c.get('container').toolSecretResolver
+    const view = await views.read(workspaceId, c.req.valid('param').projectId, (definition) =>
+      researchCredentialReadiness(definition, workspaceId, resolver),
+    )
+    return c.json(view, 200)
+  })
+
+  buildHonoRoute(app, getResearchRevisionContract, async (c) => {
+    const { projectId, revisionId } = c.req.valid('param')
+    const detail = await requireResearchViews(c).revision(
+      param(c, 'workspaceId'),
+      projectId,
+      revisionId,
+    )
+    return c.json(detail, 200)
   })
 
   buildHonoRoute(app, createProjectContract, async (c) => {

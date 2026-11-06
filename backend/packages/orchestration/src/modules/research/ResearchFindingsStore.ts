@@ -3,6 +3,7 @@ import {
   type FindingsRevision,
   type FindingsRevisionBody,
   type FindingsRevisionMeta,
+  type FindingsRevisionStorage,
   type Project,
   parseFindingsRevisionBody,
 } from '@cat-factory/contracts'
@@ -22,6 +23,7 @@ import {
   resolveFindingsStoragePolicy,
   runBestEffort,
 } from '@cat-factory/kernel'
+import { readFindingsStorageTiers } from './FindingsStoragePolicyService.js'
 
 export interface ResearchFindingsStoreDeps {
   blockRepository: Pick<BlockRepository, 'findById'>
@@ -30,6 +32,13 @@ export interface ResearchFindingsStoreDeps {
   findingsStoragePolicyRepository?: FindingsStoragePolicyRepository
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   logger?: Logger
+}
+
+/** A revision as {@link ResearchFindingsStore.readRevisions} returns it. */
+export interface ReadRevision {
+  meta: FindingsRevisionMeta
+  storage: FindingsRevisionStorage
+  body: FindingsRevisionBody | null
 }
 
 /** The project fields the store reads: an offloaded body is anchored on the project's root. */
@@ -50,6 +59,46 @@ export class ResearchFindingsStore {
 
   constructor(private readonly deps: ResearchFindingsStoreDeps) {
     this.log = deps.logger ?? noopLogger
+  }
+
+  /**
+   * Every revision with where its body lives, `seq` ascending. An offloaded body that cannot be
+   * read comes back as `body: null` with `readable: false` rather than failing the read, so a
+   * reader states what is missing beside what it can show.
+   */
+  async readRevisions(project: FindingsProject): Promise<ReadRevision[]> {
+    const rows = await this.deps.findingsRevisionRepository.listByProject(project.id)
+    const home = rows.some((row) => row.body.kind === 'offloaded')
+      ? await this.homeStore(project)
+      : null
+    return Promise.all(rows.map((row) => this.readRow(row, home)))
+  }
+
+  /** One revision with where its body lives, or null when the project has no such revision. */
+  async readRevision(project: FindingsProject, revisionId: string): Promise<ReadRevision | null> {
+    const row = await this.deps.findingsRevisionRepository.get(project.id, revisionId)
+    if (!row) return null
+    const home = row.body.kind === 'offloaded' ? await this.homeStore(project) : null
+    return this.readRow(row, home)
+  }
+
+  private async readRow(
+    row: FindingsRevisionRow,
+    home: { workspaceId: string; store: BinaryArtifactStore | null } | null,
+  ): Promise<ReadRevision> {
+    const { body: ref, bodyBytes, ...meta } = row
+    const placement = ref.kind === 'inline' ? ('inline' as const) : ('offloaded' as const)
+    let body: FindingsRevisionBody | null = null
+    if (ref.kind === 'inline') {
+      body = parseStoredBody(ref.json)
+    } else if (home?.store) {
+      const store = home.store
+      const bytes = await runBestEffort(this.log, 'findings read: offloaded body', () =>
+        store.getBlob(home.workspaceId, ref.artifactId),
+      )
+      body = bytes ? parseStoredBody(new globalThis.TextDecoder().decode(bytes)) : null
+    }
+    return { meta, storage: { placement, bytes: bodyBytes, readable: body !== null }, body }
   }
 
   /** Every revision of the project with its body, `seq` ascending. */
@@ -152,19 +201,8 @@ export class ResearchFindingsStore {
 
   /** The account, run-workspace and project tiers folded into one policy. */
   private async policyFor(workspaceId: string, projectId: string) {
-    const policies = this.deps.findingsStoragePolicyRepository
-    const accountId = (await this.deps.workspaceRepository.accountOf(workspaceId)) ?? null
-    const [account, workspace, project] = policies
-      ? await Promise.all([
-          accountId ? policies.get('account', accountId) : null,
-          policies.get('workspace', workspaceId),
-          policies.get('project', projectId),
-        ])
-      : [null, null, null]
     return resolveFindingsStoragePolicy({
-      account,
-      workspace,
-      project,
+      ...(await readFindingsStorageTiers(this.deps, workspaceId, projectId)),
       facadeInlineCeilingBytes: FINDINGS_INLINE_MAX_BYTES_CEILING,
     })
   }
@@ -178,6 +216,15 @@ function inlineRevision(row: FindingsRevisionRow): FindingsRevision {
 function withBody(row: FindingsRevisionRow, body: FindingsRevisionBody): FindingsRevision {
   const { body: _ref, bodyBytes: _bytes, ...meta } = row
   return { ...meta, body }
+}
+
+/** A stored body that does not parse is reported as unreadable, never as an empty revision. */
+function parseStoredBody(json: string): FindingsRevisionBody | null {
+  try {
+    return parseFindingsRevisionBody(JSON.parse(json)) ?? null
+  } catch {
+    return null
+  }
 }
 
 function decodeBody(revisionId: string, json: string): FindingsRevisionBody {

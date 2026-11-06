@@ -9266,5 +9266,127 @@
       "added": "Proyecto {title} añadido a este tablero",
       "failed": "No se ha podido añadir el proyecto"
     }
+  },
+  "research": {
+    "open": "Resultados de la investigación",
+    "title": "Resultados: {title}",
+    "pin": "{title}, versión {version}",
+    "refresh": "Actualizar",
+    "loading": "Cargando los resultados",
+    "unavailable": "No se han podido cargar los resultados",
+    "loadFailed": "No se han podido cargar los resultados",
+    "definitionChanged": "La definición registrada ya no coincide con la versión que fijó este proyecto, así que se rechazan nuevas investigaciones hasta que se publique como una versión nueva.",
+    "definitionMissing": "La definición que fijó este proyecto ya no está disponible para esta organización.",
+    "unreadableRevisions": "Algunas revisiones están en un almacenamiento de contenido que ahora no puede servirlas. Sus respuestas se omiten hasta que pueda.",
+    "adhoc": "Preguntas añadidas por tareas",
+    "retired": "Respuestas a preguntas que esta versión ya no hace",
+    "learnings": "Aprendizajes",
+    "topicCoverage": "{answered} de {total} respondidas",
+    "blockedOn": "Esperando la credencial {key}",
+    "notes": "Intentos posteriores guardados junto a esta respuesta: {count}",
+    "tabs": {
+      "findings": "Resultados",
+      "revisions": "Historial",
+      "credentials": "Credenciales",
+      "storage": "Almacenamiento"
+    },
+    "status": {
+      "answered": "Respondida",
+      "partial": "Parcial",
+      "unanswered": "Sin responder",
+      "blocked": "Bloqueada"
+    },
+    "coverage": {
+      "answered": "Respondidas: {count}",
+      "partial": "Parciales: {count}",
+      "unanswered": "Sin responder: {count}",
+      "blocked": "Bloqueadas: {count}"
+    },
+    "confidence": {
+      "high": "Confianza alta",
+      "medium": "Confianza media",
+      "low": "Confianza baja"
+    },
+    "evidence": {
+      "httpExchange": "Petición grabada {ref}",
+      "screenshot": "Captura {id}",
+      "repoPath": "Archivo del repositorio {path}"
+    },
+    "mode": {
+      "initial": "Inicial",
+      "extend": "Ampliar",
+      "clarify": "Aclarar",
+      "refresh": "Actualizar"
+    },
+    "modeHelp": {
+      "initial": "Responder todas las preguntas de la definición fijada.",
+      "extend": "Responder preguntas que no se hicieron antes, incluidas las que añadas abajo.",
+      "clarify": "Volver a revisar las respuestas parciales o bloqueadas.",
+      "refresh": "Comprobar cada respuesta existente con el proveedor tal como está ahora."
+    },
+    "revisions": {
+      "empty": "Ninguna tarea de investigación ha registrado resultados todavía",
+      "seq": "Revisión {seq}",
+      "task": "Escrita por {task}, versión de la definición {version}",
+      "show": "Mostrar",
+      "hide": "Ocultar",
+      "answers": "Respuestas en esta revisión: {count}",
+      "openFailed": "No se ha podido abrir la revisión",
+      "storage": {
+        "inline": "Guardada en línea, {size}",
+        "offloaded": "En el almacenamiento de contenido, {size}",
+        "unavailable": "No disponible, {size}"
+      }
+    },
+    "credentials": {
+      "none": "La definición fijada no declara credenciales",
+      "requiredAtStart": "Una investigación la necesita antes de empezar.",
+      "askedWhenNeeded": "El agente la pide cuando llega al punto que la necesita.",
+      "store": "Gestionar credenciales de capacidades",
+      "status": {
+        "stored": "Guardada",
+        "missing": "Falta",
+        "reserved": "Nombre reservado, nunca se envía"
+      }
+    },
+    "storage": {
+      "effective": "Las revisiones nuevas se guardan en línea hasta {size}; por encima, la descarga está {offload}.",
+      "accountHint": "La define la organización.",
+      "inherit": "Heredar",
+      "inherits": "Hereda del nivel superior",
+      "inlineUpTo": "en línea hasta {size}",
+      "inlineKb": "Límite en línea (KB)",
+      "offloadLabel": "Descarga",
+      "save": "Guardar",
+      "loadFailed": "No se han podido cargar los ajustes de almacenamiento de resultados",
+      "saveFailed": "No se han podido guardar los ajustes de almacenamiento de resultados",
+      "tier": {
+        "account": "Organización",
+        "workspace": "Este tablero",
+        "project": "Este proyecto"
+      },
+      "offload": {
+        "enabled": "activada",
+        "disabled": "desactivada"
+      }
+    },
+    "followUp": {
+      "open": "Iniciar seguimiento",
+      "title": "Iniciar un seguimiento",
+      "modeLabel": "Modo",
+      "titleLabel": "Título de la tarea",
+      "questionsLabel": "Preguntas que añadir",
+      "questionsHelp": "Una pregunta por línea. Cada una se responde y se guarda con los resultados del proyecto.",
+      "revisitLabel": "Preguntas que revisar",
+      "revisitHelp": "Déjalo vacío para revisar todas las preguntas que cubre este modo.",
+      "submit": "Iniciar investigación",
+      "failed": "No se ha podido iniciar el seguimiento",
+      "defaultTitle": {
+        "initial": "Investigar al proveedor",
+        "extend": "Ampliar la investigación",
+        "clarify": "Aclarar las respuestas abiertas",
+        "refresh": "Actualizar los resultados"
+      }
+    }
   }
 }
