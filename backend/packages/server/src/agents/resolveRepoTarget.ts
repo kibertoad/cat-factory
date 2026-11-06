@@ -219,7 +219,7 @@ export function buildListWorkspaceRunRepos(
   return async (workspaceId) => {
     const mounts = await deps.workspaceMountRepository.listByWorkspace(workspaceId)
     if (mounts.length === 0) return []
-    const services = await deps.serviceRepository.listByIds(mounts.map((m) => m.serviceId))
+    const services = await deps.serviceRepository.listByIds(mounts.map((m) => m.subjectId))
     const targeted = new Set(
       services.map((service) => service.repoGithubId).filter((id): id is number => id != null),
     )

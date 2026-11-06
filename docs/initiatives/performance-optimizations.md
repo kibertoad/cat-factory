@@ -31,7 +31,7 @@ symmetric" (AGENTS.md).
 ## Target patterns (copy these, don't invent)
 
 - **Projected/batched port method** instead of `SELECT *` + JS filter: copy
-  `ServiceRepository.listByIds` / `WorkspaceMountRepository.countByServiceIds`. Add the
+  `ServiceRepository.listByIds` / `WorkspaceMountRepository.countBySubjectIds`. Add the
   narrow method to the kernel port, implement in BOTH `D1*Repository` and the Drizzle
   repo, assert in the conformance suite.
 - **AppCaches slice** for slow-moving reads: copy `repoProjection` / `accountModelPolicy`

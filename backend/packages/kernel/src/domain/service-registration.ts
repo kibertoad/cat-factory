@@ -64,7 +64,7 @@ export async function registerServiceForFrame(
   await serviceRepository.insert(service)
   await workspaceMountRepository.upsert({
     workspaceId,
-    serviceId: service.id,
+    subjectId: service.id,
     position: frame.position,
     size: frame.size ?? null,
     createdAt: now,

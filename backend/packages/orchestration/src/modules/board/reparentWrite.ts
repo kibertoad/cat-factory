@@ -120,7 +120,7 @@ export function createBoardReparentWrite(deps: BoardReparentDeps) {
       })
       if (deps.serviceRepository) {
         const destService = await deps.serviceForContainer(destBlocks, parent)
-        await deps.blockRepository.setService(
+        await deps.blockRepository.setOwner(
           blockHome,
           [...descendantIds(destBlocks, id)],
           destService ?? null,

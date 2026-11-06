@@ -126,7 +126,7 @@ function spendKeyAndLabel(
       }
     case 'service':
       return {
-        key: sql<string>`coalesce(${agentRuns.service_id}, '')`,
+        key: sql<string>`coalesce(${agentRuns.owner_id}, '')`,
         label: sql<string | null>`max(${labels.title})`,
       }
     case 'taskType':
@@ -174,7 +174,7 @@ function activityKeyAndLabel(
       }
     case 'service':
       return {
-        key: sql<string>`coalesce(${agentRuns.service_id}, '')`,
+        key: sql<string>`coalesce(${agentRuns.owner_id}, '')`,
         label: sql<string | null>`max(${labels.title})`,
       }
     case 'repo':
@@ -260,7 +260,7 @@ export class DrizzleReportsRepository implements ReportsRepository {
             eq(agentRuns.id, tokenUsage.execution_id),
           ),
         )
-        .leftJoin(labels, eq(labels.serviceId, agentRuns.service_id))
+        .leftJoin(labels, eq(labels.serviceId, agentRuns.owner_id))
     } else if (dimension === 'taskType' || dimension === 'run') {
       query = query
         .leftJoin(
@@ -285,7 +285,7 @@ export class DrizzleReportsRepository implements ReportsRepository {
             eq(agentRuns.id, tokenUsage.execution_id),
           ),
         )
-        .leftJoin(services, eq(services.id, agentRuns.service_id))
+        .leftJoin(services, eq(services.id, agentRuns.owner_id))
         .leftJoin(
           githubRepos,
           and(
@@ -354,12 +354,12 @@ export class DrizzleReportsRepository implements ReportsRepository {
     if (dimension === 'workspace') {
       query = query.leftJoin(workspaces, eq(workspaces.id, agentRuns.workspace_id))
     } else if (dimension === 'service') {
-      query = query.leftJoin(labels, eq(labels.serviceId, agentRuns.service_id))
+      query = query.leftJoin(labels, eq(labels.serviceId, agentRuns.owner_id))
     } else if (dimension === 'repo') {
       // Both joins are on primary keys (`services.id`, `(workspace_id, github_id)`), so
       // neither can fan the aggregate out and multiply a repository's run count.
       query = query
-        .leftJoin(services, eq(services.id, agentRuns.service_id))
+        .leftJoin(services, eq(services.id, agentRuns.owner_id))
         .leftJoin(
           githubRepos,
           and(

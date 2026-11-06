@@ -124,7 +124,7 @@ resolved/dismissed rows only, never open ones), and add a conformance prune asse
 
 #### 2. Workspace-delete cascade incomplete → permanent orphans: P1
 
-Both facades' workspace delete clears the same 7 tables (`workspace_services`,
+Both facades' workspace delete clears the same 7 tables (`workspace_mounts`,
 `services`, `environments`, `agent_runs`, `blocks`, `pipelines`, `workspaces`):
 symmetric, good (`D1WorkspaceRepository.ts:94-142`,
 `node/src/repositories/drizzle.ts:345-357`). But there are **zero `ON DELETE CASCADE`

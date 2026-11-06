@@ -204,10 +204,10 @@ export async function linkRepo(options: LinkRepoOptions): Promise<LinkedRepo> {
         created_at: now,
       })
       await db
-        .insert(schema.workspaceServices)
+        .insert(schema.workspaceMounts)
         .values({
           workspace_id: options.workspaceId,
-          service_id: serviceId,
+          subject_id: serviceId,
           pos_x: 0,
           pos_y: 0,
           width: null,

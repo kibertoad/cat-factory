@@ -24,7 +24,7 @@ export const useServicesStore = defineStore('services', () => {
   /** Mount row keyed by service id. */
   const byServiceId = computed<Record<string, WorkspaceMount>>(() => {
     const map: Record<string, WorkspaceMount> = {}
-    for (const m of mounts.value) map[m.serviceId] = m
+    for (const m of mounts.value) map[m.subjectId] = m
     return map
   })
 
@@ -37,7 +37,7 @@ export const useServicesStore = defineStore('services', () => {
 
   /** Org services NOT yet mounted on this board (the "add existing service" picker's options). */
   const mountable = computed<Service[]>(() => {
-    const mounted = new Set(mounts.value.map((m) => m.serviceId))
+    const mounted = new Set(mounts.value.map((m) => m.subjectId))
     return catalog.value.filter((s) => !mounted.has(s.id))
   })
 
@@ -60,7 +60,7 @@ export const useServicesStore = defineStore('services', () => {
     const service = catalog.value.find((s) => s.frameBlockId === frameBlockId)
     if (!service) return
     catalog.value = catalog.value.filter((s) => s.id !== service.id)
-    mounts.value = mounts.value.filter((m) => m.serviceId !== service.id)
+    mounts.value = mounts.value.filter((m) => m.subjectId !== service.id)
   }
 
   async function mount(serviceId: string, position?: { x: number; y: number }) {
@@ -84,7 +84,7 @@ export const useServicesStore = defineStore('services', () => {
   ) {
     const ws = useWorkspaceStore()
     const updated = await api.updateMountLayout(ws.requireId(), serviceId, { position, size })
-    const local = mounts.value.find((m) => m.serviceId === serviceId)
+    const local = mounts.value.find((m) => m.subjectId === serviceId)
     if (local) Object.assign(local, updated)
     return updated
   }

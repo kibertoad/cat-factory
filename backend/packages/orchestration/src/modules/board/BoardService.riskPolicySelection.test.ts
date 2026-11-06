@@ -76,7 +76,7 @@ describe('BoardService: merge-preset selection is judged against the editor', ()
       blockRepository: {
         findById: async (id: string) => {
           const block = find(id)
-          return block ? { workspaceId: WS, serviceId: null, block } : null
+          return block ? { workspaceId: WS, ownerId: null, block } : null
         },
         get: async (_ws: string, id: string) => find(id) ?? null,
         listByWorkspace: async () => blocks,

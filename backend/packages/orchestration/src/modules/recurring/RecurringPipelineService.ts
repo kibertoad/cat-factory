@@ -255,7 +255,7 @@ export class RecurringPipelineService {
     if (this.workspaceMountRepository) {
       const mounts = await this.workspaceMountRepository.listByWorkspace(workspaceId)
       // One batched query for every mounted service's schedules (not one round-trip per mount).
-      for (const schedule of await this.schedules.listByServices(mounts.map((m) => m.serviceId))) {
+      for (const schedule of await this.schedules.listByServices(mounts.map((m) => m.subjectId))) {
         add(schedule)
       }
     }

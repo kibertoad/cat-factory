@@ -149,7 +149,7 @@ export async function checkServiceMountScope(
       ? (record as { workspaceId?: unknown }).workspaceId
       : undefined
   const serviceId =
-    record && typeof record === 'object' ? (record as { serviceId?: unknown }).serviceId : undefined
+    record && typeof record === 'object' ? (record as { subjectId?: unknown }).subjectId : undefined
   if (typeof workspaceId !== 'string' || typeof serviceId !== 'string') return denied
   if (!opts.resolveServiceAccountIds) return denied
   const workspaceAccount = await opts.resolveAccountId(workspaceId)

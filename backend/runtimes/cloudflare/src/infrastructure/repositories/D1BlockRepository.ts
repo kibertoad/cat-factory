@@ -29,14 +29,14 @@ export class D1BlockRepository implements BlockRepository {
     return tryDecodeRows(results, rowToBlock, blockContext)
   }
 
-  async listByServices(serviceIds: string[]): Promise<Block[]> {
-    if (serviceIds.length === 0) return []
+  async listByOwners(ownerIds: string[]): Promise<Block[]> {
+    if (ownerIds.length === 0) return []
     const out: Block[] = []
     // Chunk the IN list to stay under D1's bound-parameter limit.
-    for (const chunk of chunkForIn(serviceIds)) {
+    for (const chunk of chunkForIn(ownerIds)) {
       const placeholders = chunk.map(() => '?').join(', ')
       const { results } = await this.db
-        .prepare(`SELECT * FROM blocks WHERE service_id IN (${placeholders}) ORDER BY rowid`)
+        .prepare(`SELECT * FROM blocks WHERE owner_id IN (${placeholders}) ORDER BY rowid`)
         .bind(...chunk)
         .all<BlockRow>()
       out.push(...tryDecodeRows(results, rowToBlock, blockContext))
@@ -62,35 +62,35 @@ export class D1BlockRepository implements BlockRepository {
 
   async findById(
     blockId: string,
-  ): Promise<{ workspaceId: string; serviceId: string | null; block: Block } | null> {
+  ): Promise<{ workspaceId: string; ownerId: string | null; block: Block } | null> {
     const row = await this.db
       .prepare('SELECT * FROM blocks WHERE id = ? LIMIT 1')
       .bind(blockId)
-      .first<BlockRow & { workspace_id: string; service_id: string | null }>()
+      .first<BlockRow & { workspace_id: string; owner_id: string | null }>()
     if (!row) return null
     return {
       workspaceId: row.workspace_id,
-      serviceId: row.service_id ?? null,
+      ownerId: row.owner_id ?? null,
       block: rowToBlock(row),
     }
   }
 
   async findByIds(
     blockIds: string[],
-  ): Promise<Array<{ workspaceId: string; serviceId: string | null; block: Block }>> {
+  ): Promise<Array<{ workspaceId: string; ownerId: string | null; block: Block }>> {
     if (blockIds.length === 0) return []
-    const out: Array<{ workspaceId: string; serviceId: string | null; block: Block }> = []
+    const out: Array<{ workspaceId: string; ownerId: string | null; block: Block }> = []
     // Chunk the IN list to stay under D1's bound-parameter limit.
     for (const chunk of chunkForIn(blockIds)) {
       const placeholders = chunk.map(() => '?').join(', ')
       const { results } = await this.db
         .prepare(`SELECT * FROM blocks WHERE id IN (${placeholders})`)
         .bind(...chunk)
-        .all<BlockRow & { workspace_id: string; service_id: string | null }>()
+        .all<BlockRow & { workspace_id: string; owner_id: string | null }>()
       for (const row of results ?? []) {
         out.push({
           workspaceId: row.workspace_id,
-          serviceId: row.service_id ?? null,
+          ownerId: row.owner_id ?? null,
           block: rowToBlock(row),
         })
       }
@@ -98,10 +98,10 @@ export class D1BlockRepository implements BlockRepository {
     return out
   }
 
-  async insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void> {
+  async insert(workspaceId: string, block: Block, ownerId?: string | null): Promise<void> {
     const values = {
       workspace_id: workspaceId,
-      service_id: serviceId ?? null,
+      owner_id: ownerId ?? null,
       ...blockInsertValues(block),
     }
     const columns = Object.keys(values)
@@ -136,14 +136,12 @@ export class D1BlockRepository implements BlockRepository {
       .run()
   }
 
-  async setService(workspaceId: string, ids: string[], serviceId: string | null): Promise<void> {
+  async setOwner(workspaceId: string, ids: string[], ownerId: string | null): Promise<void> {
     if (ids.length === 0) return
     const placeholders = ids.map(() => '?').join(', ')
     await this.db
-      .prepare(
-        `UPDATE blocks SET service_id = ? WHERE workspace_id = ? AND id IN (${placeholders})`,
-      )
-      .bind(serviceId, workspaceId, ...ids)
+      .prepare(`UPDATE blocks SET owner_id = ? WHERE workspace_id = ? AND id IN (${placeholders})`)
+      .bind(ownerId, workspaceId, ...ids)
       .run()
   }
 

@@ -57,7 +57,7 @@ export class ServiceMountService {
   async listForAccount(accountId: string | null): Promise<Service[]> {
     const services = await this.serviceRepository.listByAccount(accountId)
     // One grouped count for the whole catalog (not an N+1 listByService per service).
-    const counts = await this.workspaceMountRepository.countByServiceIds(services.map((s) => s.id))
+    const counts = await this.workspaceMountRepository.countBySubjectIds(services.map((s) => s.id))
     return services.map((service) => ({ ...service, mountCount: counts[service.id] ?? 0 }))
   }
 
@@ -89,7 +89,7 @@ export class ServiceMountService {
     if (existing) return existing
     const mount: WorkspaceMount = {
       workspaceId,
-      serviceId,
+      subjectId: serviceId,
       position: input.position ?? this.defaultPosition(await this.listMounts(workspaceId)),
       size: null,
       createdAt: this.clock.now(),

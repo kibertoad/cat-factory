@@ -52,8 +52,8 @@ const TICKET_BY_BLOCK = `SELECT workspace_id, linked_block_id,
 const ROLLUP_JOINS = `LEFT JOIN workspaces w ON w.id = tu.workspace_id
    LEFT JOIN agent_runs ar ON ar.workspace_id = tu.workspace_id AND ar.id = tu.execution_id
    LEFT JOIN blocks b ON b.workspace_id = ar.workspace_id AND b.id = ar.block_id
-   LEFT JOIN services s ON s.id = ar.service_id
-   LEFT JOIN (${SERVICE_LABELS}) sl ON sl.service_id = ar.service_id
+   LEFT JOIN services s ON s.id = ar.owner_id
+   LEFT JOIN (${SERVICE_LABELS}) sl ON sl.service_id = ar.owner_id
    LEFT JOIN github_repos gr ON gr.workspace_id = tu.workspace_id
                             AND gr.github_id = s.repo_github_id
    LEFT JOIN (${TICKET_BY_BLOCK}) tk ON tk.workspace_id = ar.workspace_id
@@ -88,7 +88,7 @@ function foldSql(scoped: boolean): string {
           MAX(w.name) AS workspace_name,
           MAX(COALESCE(ar.block_id, '')) AS block_id,
           MAX(b.title) AS block_title,
-          MAX(COALESCE(ar.service_id, '')) AS service_id,
+          MAX(COALESCE(ar.owner_id, '')) AS service_id,
           MAX(sl.title) AS service_name,
           MAX(COALESCE(CAST(s.repo_github_id AS TEXT), '')) AS repo_id,
           MAX(gr.owner || '/' || gr.name) AS repo_name,

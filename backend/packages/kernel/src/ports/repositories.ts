@@ -103,18 +103,19 @@ export interface WorkspaceRepository {
   /** Update a board's description (null clears it). */
   setDescription(id: string, description: string | null): Promise<void>
   /**
-   * Delete a board and cascade its owned rows. `rehome` re-homes SHARED services this board homes
-   * that another board still mounts: each entry moves a service's blocks (and their run history)
-   * to a surviving mounting workspace BEFORE the cascade, so a shared service outlives its home
-   * board's deletion instead of being destroyed for every team that mounts it. A service with no
-   * surviving mount is omitted (the cascade reclaims it). Empty/absent ⇒ the plain cascade.
+   * Delete a board and cascade its owned rows. `rehome` re-homes SHARED mounted subjects this
+   * board homes that another board still mounts: each entry moves a subject's blocks (and their
+   * run history) to a surviving mounting workspace BEFORE the cascade, so a shared subject
+   * outlives its home board's deletion instead of being destroyed for every team that mounts it.
+   * A subject with no surviving mount is omitted (the cascade reclaims it). Empty/absent means
+   * the plain cascade.
    */
-  delete(id: string, rehome?: ServiceRehome[]): Promise<void>
+  delete(id: string, rehome?: MountRehome[]): Promise<void>
 }
 
-/** Move a homed service's content to a surviving mounting board on its home-board deletion. */
-export interface ServiceRehome {
-  serviceId: string
+/** Move a homed mounted subject's content to a surviving mounting board on its home board's deletion. */
+export interface MountRehome {
+  subjectId: string
   toWorkspaceId: string
 }
 
@@ -133,12 +134,12 @@ export type BlockPatch = Partial<Omit<Block, 'id' | 'completedAt'>>
 export interface BlockRepository {
   listByWorkspace(workspaceId: string): Promise<Block[]>
   /**
-   * Every block belonging to ANY of the given services (its frame + modules + tasks), in a
-   * single (chunked) query — the board composition that renders every service a workspace
-   * mounts, without one round-trip per service. Matches the `service_id` column stamped at
-   * insert time. Empty input → empty result.
+   * Every block belonging to ANY of the given owners (a mounted subject's root frame plus its
+   * modules and tasks), in a single (chunked) query: the board composition that renders every
+   * subject a workspace mounts, without one round-trip per subject. Matches the `owner_id`
+   * column stamped at insert time. Empty input gives an empty result.
    */
-  listByServices(serviceIds: string[]): Promise<Block[]>
+  listByOwners(ownerIds: string[]): Promise<Block[]>
   get(workspaceId: string, id: string): Promise<Block | null>
   /**
    * The block currently running `executionId`, read off the `execution_id` REVERSE LINK a run
@@ -156,14 +157,14 @@ export interface BlockRepository {
   getByExecution(workspaceId: string, executionId: string): Promise<Block | null>
   /**
    * Resolve a block by its (globally unique) id, regardless of which workspace homes it,
-   * returning the block plus its home `workspaceId` and its `serviceId` (or null). Backs
-   * the shared-board mutation path: a block belonging to a service mounted from another
-   * workspace is acted on at its home workspace (after the caller authorizes that the
-   * requester mounts the service). Returns null when no block has that id.
+   * returning the block plus its home `workspaceId` and its `ownerId` (or null). Backs the
+   * shared-board mutation path: a block belonging to a subject mounted from another workspace
+   * is acted on at its home workspace (after the caller authorizes that the requester mounts
+   * the subject). Returns null when no block has that id.
    */
   findById(
     blockId: string,
-  ): Promise<{ workspaceId: string; serviceId: string | null; block: Block } | null>
+  ): Promise<{ workspaceId: string; ownerId: string | null; block: Block } | null>
   /**
    * The batched form of {@link BlockRepository.findById}: resolve every id that exists, in a
    * single (chunked) query — used to augment a board's block list with cross-workspace
@@ -172,21 +173,21 @@ export interface BlockRepository {
    */
   findByIds(
     blockIds: string[],
-  ): Promise<Array<{ workspaceId: string; serviceId: string | null; block: Block }>>
+  ): Promise<Array<{ workspaceId: string; ownerId: string | null; block: Block }>>
   /**
-   * Insert a block. `serviceId` stamps the account-owned service the block belongs to
-   * (so it can be rendered on every workspace that mounts the service); omit/undefined
-   * for legacy, workspace-local blocks.
+   * Insert a block. `ownerId` stamps the account-owned mounted subject the block belongs to,
+   * so it renders on every workspace that mounts that subject; omit it for workspace-local
+   * blocks.
    */
-  insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void>
+  insert(workspaceId: string, block: Block, ownerId?: string | null): Promise<void>
   update(workspaceId: string, id: string, patch: BlockPatch): Promise<void>
   /**
-   * Re-stamp the `service_id` of one or more blocks. Used when a block is reparented into a
-   * different service's frame (`service_id` is not part of {@link BlockPatch}, since it is the
-   * physical scope key, not a domain field): the moved subtree must follow its new owning
-   * service so it renders on — and fans out to — the right boards.
+   * Re-stamp the `owner_id` of one or more blocks. Used when a block is reparented under a
+   * different owner's root (`owner_id` is not part of {@link BlockPatch}, since it is the
+   * physical scope key, not a domain field): the moved subtree must follow its new owner so it
+   * renders on, and fans out to, the right boards.
    */
-  setService(workspaceId: string, ids: string[], serviceId: string | null): Promise<void>
+  setOwner(workspaceId: string, ids: string[], ownerId: string | null): Promise<void>
   /**
    * Translate every DIRECT child of `parentId` by `(dx, dy)`, in ONE statement.
    *
@@ -368,11 +369,11 @@ export interface ExecutionRepository {
    */
   countActiveByWorkspace(workspaceId: string): Promise<number>
   /**
-   * Every execution belonging to ANY of the given services, in a single (chunked) query, so a
-   * shared service's run progress renders identically on every board that mounts it. Matches
-   * the `service_id` column stamped at insert time. Empty input → empty.
+   * Every execution belonging to ANY of the given owners, in a single (chunked) query, so a
+   * shared subject's run progress renders identically on every board that mounts it. Matches
+   * the `owner_id` column stamped at insert time. Empty input gives an empty result.
    */
-  listByServices(serviceIds: string[]): Promise<ExecutionInstance[]>
+  listByOwners(ownerIds: string[]): Promise<ExecutionInstance[]>
   /**
    * One BOUNDED page of the workspace's HEADLESS initiative runs — executions whose anchor block
    * is `internal` — newest first (`created_at DESC, id DESC`). This is the list form of the

@@ -52,7 +52,7 @@ describe('workspace-delete cascade completeness (Cloudflare/D1 schema)', () => {
       (t) => !existing.has(t),
     )
     // WORKSPACE_CASCADE_SPECIAL_TABLES is intentionally excluded: `binary_artifacts` carries a
-    // workspace_id and exists, while `workspace_services` is the mount join — both are asserted by
+    // workspace_id and exists, while `workspace_mounts` is the mount join. Both are asserted by
     // the Node schema guard. Here we only guard tables the D1 delete actually issues `DELETE`s for.
     expect(stale).toEqual([])
   })

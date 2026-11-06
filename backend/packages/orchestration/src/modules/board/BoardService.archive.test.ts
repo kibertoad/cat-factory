@@ -30,8 +30,8 @@ describe('BoardService — service delete cleanup, delete guard, archive/restore
   function build(initialBlocks: Block[], services: Service[] = []) {
     const blocksMap = new Map(initialBlocks.map((b) => [b.id, b]))
     const servicesMap = new Map(services.map((s) => [s.id, s]))
-    const mounts = new Map<string, { workspaceId: string; serviceId: string }>()
-    for (const s of services) mounts.set(`${WS}:${s.id}`, { workspaceId: WS, serviceId: s.id })
+    const mounts = new Map<string, { workspaceId: string; subjectId: string }>()
+    for (const s of services) mounts.set(`${WS}:${s.id}`, { workspaceId: WS, subjectId: s.id })
 
     const deps = {
       workspaceRepository: { get: async (id: string) => ({ id }), accountOf: async () => ACC },
@@ -39,7 +39,7 @@ describe('BoardService — service delete cleanup, delete guard, archive/restore
         get: async (ws: string, id: string) => (ws === WS ? (blocksMap.get(id) ?? null) : null),
         findById: async (id: string) => {
           const b = blocksMap.get(id)
-          return b ? { workspaceId: WS, serviceId: null, block: b } : null
+          return b ? { workspaceId: WS, ownerId: null, block: b } : null
         },
         listByWorkspace: async (ws: string) => (ws === WS ? [...blocksMap.values()] : []),
         update: async (_ws: string, id: string, patch: Partial<Block>) => {
@@ -68,8 +68,8 @@ describe('BoardService — service delete cleanup, delete guard, archive/restore
         listByWorkspace: async (ws: string) =>
           [...mounts.values()].filter((m) => m.workspaceId === ws),
         listWorkspaceIdsMountingBlock: async () => [],
-        removeByServices: async (ids: string[]) => {
-          for (const [k, m] of mounts) if (ids.includes(m.serviceId)) mounts.delete(k)
+        removeBySubjects: async (ids: string[]) => {
+          for (const [k, m] of mounts) if (ids.includes(m.subjectId)) mounts.delete(k)
         },
       },
       executionRepository: { deleteByBlock: async () => {}, getByBlock: async () => null },

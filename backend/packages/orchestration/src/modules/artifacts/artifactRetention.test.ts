@@ -18,7 +18,7 @@ function storeAnchoring(anchors: string[]) {
 }
 
 function found(id: string, workspaceId: string) {
-  return { workspaceId, serviceId: null, block: { id } as Block }
+  return { workspaceId, ownerId: null, block: { id } as Block }
 }
 
 describe('sweepBinaryArtifactRetention: block-anchored rows', () => {
