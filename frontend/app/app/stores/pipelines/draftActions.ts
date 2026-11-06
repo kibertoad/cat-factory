@@ -1,12 +1,8 @@
 import { computed } from 'vue'
 import type { AgentKind, Pipeline } from '~/types/domain'
 import { companionForProducer } from '~/utils/catalog'
-import { approvalPolicyOf } from '@cat-factory/contracts'
-import {
-  foldCompanionUnits,
-  patchedGateConfig,
-  unreachableCheckpoints,
-} from '~/utils/pipelineCheckpoints'
+import { approvalPolicyOf, patchedGateConfig } from '@cat-factory/contracts'
+import { foldCompanionUnits, unreachableCheckpoints } from '~/utils/pipelineCheckpoints'
 import type { PipelinesContext } from './context'
 import { createPipelineGateConfigActions } from './draftGateConfig'
 import { createPipelineStepConfigActions } from './draftStepConfig'

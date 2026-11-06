@@ -104,7 +104,7 @@ function buildDraft() {
   }
   store.toggleCompanion(1)
   store.toggleDraftGating(2)
-  store.toggleDraftGate(store.draft.length - 1)
+  store.setDraftCheckpoints(store.draft.length - 1, null, { producer: true, companion: false })
 }
 
 const meta = {

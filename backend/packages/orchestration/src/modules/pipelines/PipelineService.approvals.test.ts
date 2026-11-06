@@ -51,6 +51,7 @@ describe('PipelineService.setApprovals', () => {
     const complex = seed('pl_complex')
     const { svc, store } = service([complex])
     const saved = await svc.setApprovals(WS, complex.id, {
+      agentKinds: complex.agentKinds,
       gates: gatesAfter(complex, 'architect-companion'),
     })
     expect(gatedKinds(saved)).toEqual(['architect-companion'])
@@ -68,6 +69,7 @@ describe('PipelineService.setApprovals', () => {
       i === architect ? { approvers: { roles: ['admin' as const] }, minApprovals: 1 } : null,
     )
     const gated = await svc.setApprovals(WS, complex.id, {
+      agentKinds: complex.agentKinds,
       gates: gatesAfter(complex, 'architect'),
       policies,
     })
@@ -75,7 +77,10 @@ describe('PipelineService.setApprovals', () => {
     expect(gated.stepOptions?.[architect]).toEqual({
       gateConfig: { approvers: { roles: ['admin'] } },
     })
-    const cleared = await svc.setApprovals(WS, complex.id, { gates: gatesAfter(complex) })
+    const cleared = await svc.setApprovals(WS, complex.id, {
+      agentKinds: complex.agentKinds,
+      gates: gatesAfter(complex),
+    })
     expect(cleared.gates).toBeUndefined()
     // The other steps' options (the tester pair's run conditions) are untouched.
     expect(cleared.stepOptions?.[architect]).toBeNull()
@@ -86,16 +91,19 @@ describe('PipelineService.setApprovals', () => {
     const bugfix = seed('pl_bugfix')
     expect(gatedKinds(bugfix)).toContain('clarity-review')
     const { svc } = service([bugfix])
-    await expect(svc.setApprovals(WS, bugfix.id, { gates: gatesAfter(bugfix) })).rejects.toThrow(
-      /part of the built-in pipeline/,
-    )
+    await expect(
+      svc.setApprovals(WS, bugfix.id, { agentKinds: bugfix.agentKinds, gates: gatesAfter(bugfix) }),
+    ).rejects.toThrow(/part of the built-in pipeline/)
   })
 
   it('lets a copy older than the catalog leave off a shipped checkpoint it never carried', async () => {
     const bugfix = seed('pl_bugfix')
     const stale: Pipeline = { ...bugfix, gates: undefined }
     const { svc } = service([stale])
-    const saved = await svc.setApprovals(WS, bugfix.id, { gates: gatesAfter(bugfix, 'coder') })
+    const saved = await svc.setApprovals(WS, bugfix.id, {
+      agentKinds: bugfix.agentKinds,
+      gates: gatesAfter(bugfix, 'coder'),
+    })
     expect(gatedKinds(saved)).toEqual(['coder'])
   })
 
@@ -106,23 +114,58 @@ describe('PipelineService.setApprovals', () => {
     const broken: Pipeline = { ...complex, agentKinds, gates: undefined, stepOptions: undefined }
     expect(() => validatePipelineShape(broken)).toThrow(ValidationError)
     const { svc } = service([broken])
-    const saved = await svc.setApprovals(WS, broken.id, { gates: gatesAfter(broken, 'architect') })
+    const saved = await svc.setApprovals(WS, broken.id, {
+      agentKinds: broken.agentKinds,
+      gates: gatesAfter(broken, 'architect'),
+    })
     expect(gatedKinds(saved)).toEqual(['architect'])
   })
 
   it('removes any checkpoint from a custom pipeline', async () => {
     const custom: Pipeline = { ...seed('pl_bugfix'), id: 'pl_7', builtin: undefined }
     const { svc } = service([custom])
-    const saved = await svc.setApprovals(WS, custom.id, { gates: gatesAfter(custom) })
+    const saved = await svc.setApprovals(WS, custom.id, {
+      agentKinds: custom.agentKinds,
+      gates: gatesAfter(custom),
+    })
     expect(saved.gates).toBeUndefined()
   })
 
   it('refuses arrays that do not match the chain', async () => {
     const complex = seed('pl_complex')
     const { svc } = service([complex])
-    await expect(svc.setApprovals(WS, complex.id, { gates: [true] })).rejects.toBeInstanceOf(
-      ValidationError,
+    await expect(
+      svc.setApprovals(WS, complex.id, { agentKinds: complex.agentKinds, gates: [true] }),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('refuses a request composed against a different chain of the same length', async () => {
+    const complex = seed('pl_complex')
+    const { svc } = service([complex])
+    const reordered = [...complex.agentKinds].reverse()
+    await expect(
+      svc.setApprovals(WS, complex.id, {
+        agentKinds: reordered,
+        gates: gatesAfter(complex, 'architect'),
+      }),
+    ).rejects.toThrow(/different version/)
+  })
+
+  it('takes a checkpoint on a row whose estimate gate breaks a rule of its own', async () => {
+    // An estimate gate with no threshold is a refusal of the skip, not of any checkpoint.
+    const full = seed('pl_full')
+    const architect = full.agentKinds.indexOf('architect')
+    const gating = full.agentKinds.map((_, i) =>
+      i === architect ? { enabled: true, onMissingEstimate: 'run' as const } : null,
     )
+    const broken: Pipeline = { ...full, gating }
+    expect(() => validatePipelineShape(broken)).toThrow(/sets no threshold/)
+    const { svc } = service([broken])
+    const saved = await svc.setApprovals(WS, broken.id, {
+      agentKinds: broken.agentKinds,
+      gates: gatesAfter(broken, 'coder'),
+    })
+    expect(gatedKinds(saved)).toEqual(['coder'])
   })
 
   it('refuses a checkpoint after a companion whose producer the estimate may skip', async () => {
@@ -131,7 +174,10 @@ describe('PipelineService.setApprovals', () => {
     const full = seed('pl_full')
     const { svc } = service([full])
     await expect(
-      svc.setApprovals(WS, full.id, { gates: gatesAfter(full, 'architect-companion') }),
+      svc.setApprovals(WS, full.id, {
+        agentKinds: full.agentKinds,
+        gates: gatesAfter(full, 'architect-companion'),
+      }),
     ).rejects.toThrow(/may skip/)
   })
 })
@@ -168,6 +214,7 @@ describe('PipelineService.reseed carries the workspace checkpoints', () => {
     const bugfix = seed('pl_bugfix')
     const { svc } = service([bugfix])
     await svc.setApprovals(WS, bugfix.id, {
+      agentKinds: bugfix.agentKinds,
       gates: bugfix.agentKinds.map((kind, i) => bugfix.gates?.[i] === true || kind === 'coder'),
     })
     const reseeded = await svc.reseed(WS, bugfix.id)

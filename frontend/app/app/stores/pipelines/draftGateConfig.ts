@@ -1,5 +1,5 @@
 import type { StepGateConfig } from '@cat-factory/contracts'
-import { patchedGateConfig } from '~/utils/pipelineCheckpoints'
+import { patchedGateConfig } from '@cat-factory/contracts'
 import type { PipelinesContext } from './context'
 
 /**

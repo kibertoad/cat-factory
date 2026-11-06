@@ -3,6 +3,7 @@ import {
   catalogGatedSteps,
   checkpointSkippedBy,
   lockedCheckpoints,
+  patchedGateConfig,
   stepOccurrenceKeys,
 } from './pipeline-approvals.js'
 
@@ -79,5 +80,26 @@ describe('checkpointSkippedBy', () => {
       ),
     ).toBe(0)
     expect(checkpointSkippedBy({ agentKinds }, 2, isCompanion)).toBeNull()
+  })
+})
+
+describe('patchedGateConfig', () => {
+  it('keeps the other options and drops what returned to its default', () => {
+    expect(
+      patchedGateConfig(
+        { retainEnvironment: true, gateConfig: { minApprovals: 2 } },
+        { minApprovals: 1 },
+      ),
+    ).toEqual({ retainEnvironment: true })
+    expect(patchedGateConfig(null, { approvers: { roles: [] } })).toBeNull()
+  })
+
+  it('treats a field patched to undefined as cleared', () => {
+    expect(
+      patchedGateConfig(
+        { gateConfig: { minApprovals: 2, approvers: { roles: ['admin'] } } },
+        { minApprovals: undefined, approvers: undefined },
+      ),
+    ).toBeNull()
   })
 })

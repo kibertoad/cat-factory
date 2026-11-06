@@ -24,6 +24,7 @@ export function registerPipelineApprovalTests(harness: ConformanceHarness): void
         'PUT',
         `/workspaces/${wsId}/pipelines/pl_complex/approvals`,
         {
+          agentKinds: complex.agentKinds,
           gates,
           policies,
         },
@@ -52,6 +53,7 @@ export function registerPipelineApprovalTests(harness: ConformanceHarness): void
         gates: bugfix.gates,
       })
       const removal = await call('PUT', `/workspaces/${wsId}/pipelines/pl_bugfix/approvals`, {
+        agentKinds: bugfix.agentKinds,
         gates: bugfix.agentKinds.map(() => false),
       })
       expect(removal.status).toBe(422)

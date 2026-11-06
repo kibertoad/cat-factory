@@ -62,11 +62,6 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
     else delete config.groupIds
   }
 
-  /** Toggle the approval gate on the draft step at `index`. */
-  function toggleDraftGate(index: number) {
-    draftGates.value[index] = !draftGates.value[index]
-  }
-
   /** Set the approval gates of a producer and, when it has one, the companion after it. */
   function setDraftCheckpoints(
     index: number,
@@ -120,7 +115,6 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
     toggleDraftConsensus,
     setDraftConsensus,
     toggleDraftConsensusGroup,
-    toggleDraftGate,
     setDraftCheckpoints,
     toggleDraftFollowUps,
     toggleDraftTesterQuality,

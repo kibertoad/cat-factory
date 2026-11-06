@@ -1,11 +1,8 @@
 import {
   approvalPolicyOf,
   checkpointSkippedBy,
-  hasApproverPolicy,
   stepOccurrenceKeys,
   type SkippableStepsShape,
-  type StepGateConfig,
-  type StepOptions,
 } from '@cat-factory/contracts'
 import type { AgentKind, Pipeline } from '~/types/domain'
 import { companionForProducer, isProducerCompanion } from '~/utils/catalog'
@@ -69,31 +66,6 @@ export function placementGates(placement: CheckpointPlacement): {
     producer: placement === 'producer' || placement === 'both',
     companion: placement === 'companion' || placement === 'both',
   }
-}
-
-/**
- * Merge a patch into a step's gate configuration and return the step's new options bag.
- *
- * Normalizes downward at every level: a field set back to its default is deleted, an emptied
- * `gateConfig` is dropped, and an emptied options bag becomes `null`, so a step returned to the
- * defaults persists nothing. An empty approver policy is dropped rather than stored, and that one
- * is not just tidiness: `{ roles: [] }` names nobody, and a policy naming nobody would refuse every
- * approver and park the run forever.
- */
-export function patchedGateConfig(
-  options: StepOptions | null | undefined,
-  patch: Partial<StepGateConfig>,
-): StepOptions | null {
-  const gateConfig: StepGateConfig = { ...options?.gateConfig, ...patch }
-  if (!hasApproverPolicy(gateConfig.approvers)) delete gateConfig.approvers
-  if (gateConfig.minApprovals !== undefined && gateConfig.minApprovals <= 1) {
-    delete gateConfig.minApprovals
-  }
-  if (gateConfig.fields && Object.keys(gateConfig.fields).length === 0) delete gateConfig.fields
-  const next: StepOptions = { ...options }
-  if (Object.keys(gateConfig).length) next.gateConfig = gateConfig
-  else delete next.gateConfig
-  return Object.keys(next).length ? next : null
 }
 
 /**

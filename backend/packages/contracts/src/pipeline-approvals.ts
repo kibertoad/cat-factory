@@ -1,7 +1,8 @@
 import * as v from 'valibot'
 import type { StepGating } from './consensus.js'
 import type { StepOptions } from './entities.js'
-import { stepGateConfigSchema } from './gate-config.js'
+import { hasApproverPolicy } from './gate-approval.js'
+import { stepGateConfigSchema, type StepGateConfig } from './gate-config.js'
 
 /**
  * The APPROVAL half of a step's gate configuration: who may clear its human approval gate and how
@@ -18,12 +19,14 @@ export type ApprovalPolicy = v.InferOutput<typeof approvalPolicySchema>
  * the chain the catalog defines, so a board can add one without cloning the built-in off its
  * catalog updates.
  *
- * Both arrays are parallel to the pipeline's `agentKinds` and must match its length, so a request
- * composed against a stale copy of the chain is refused rather than landing on the wrong steps.
- * `policies` absent leaves every step's stored approver policy as it is; an entry of `null` clears
- * that step's policy back to the default (one approval from anyone entitled to write).
+ * `agentKinds` is the chain the request was composed against and must equal the stored one, so a
+ * request built from a stale copy (a reseed that reordered or swapped steps since) is refused
+ * rather than landing on the wrong steps. Both arrays are parallel to it. `policies` absent leaves
+ * every step's stored approver policy as it is; an entry of `null` clears that step's policy back
+ * to the default (one approval from anyone entitled to write).
  */
 export const setPipelineApprovalsSchema = v.object({
+  agentKinds: v.array(v.string()),
   gates: v.array(v.boolean()),
   policies: v.optional(v.array(v.nullable(approvalPolicySchema))),
 })
@@ -97,6 +100,31 @@ export function approvalPolicyOf(options: StepOptions | null | undefined): Appro
   if (config.approvers) policy.approvers = config.approvers
   if (config.minApprovals !== undefined) policy.minApprovals = config.minApprovals
   return Object.keys(policy).length ? policy : null
+}
+
+/**
+ * Merge a patch into a step's gate configuration and return the step's new options bag.
+ *
+ * Normalizes downward at every level: a field set back to its default (or to `undefined`) is
+ * deleted, an emptied `gateConfig` is dropped, and an emptied options bag becomes `null`, so a step
+ * returned to the defaults persists nothing. An empty approver policy is dropped rather than
+ * stored, and that one is not just tidiness: `{ roles: [] }` names nobody, and a policy naming
+ * nobody would refuse every approver and park the run forever.
+ */
+export function patchedGateConfig(
+  options: StepOptions | null | undefined,
+  patch: Partial<StepGateConfig>,
+): StepOptions | null {
+  const gateConfig: StepGateConfig = { ...options?.gateConfig, ...patch }
+  if (!hasApproverPolicy(gateConfig.approvers)) delete gateConfig.approvers
+  if (gateConfig.minApprovals === undefined || gateConfig.minApprovals <= 1) {
+    delete gateConfig.minApprovals
+  }
+  if (!gateConfig.fields || Object.keys(gateConfig.fields).length === 0) delete gateConfig.fields
+  const next: StepOptions = { ...options }
+  if (Object.keys(gateConfig).length) next.gateConfig = gateConfig
+  else delete next.gateConfig
+  return Object.keys(next).length ? next : null
 }
 
 /** The parts of a pipeline that decide whether a step may be skipped on a run. */

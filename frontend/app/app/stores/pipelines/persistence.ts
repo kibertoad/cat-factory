@@ -1,4 +1,4 @@
-import type { ApprovalPolicy } from '@cat-factory/contracts'
+import type { ApprovalPolicy, SetPipelineApprovalsInput } from '@cat-factory/contracts'
 import type { Pipeline } from '~/types/domain'
 import { droppedApproverPolicies, droppedCheckpoints } from '~/utils/pipelineCheckpoints'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -128,11 +128,11 @@ export function createPipelinePersistence(
 
   /**
    * Replace a pipeline's human approval checkpoints, the one change a built-in accepts. Both
-   * arrays are aligned to the pipeline's steps.
+   * arrays are aligned to `agentKinds`, the chain they were composed against.
    */
   async function saveApprovals(
     id: string,
-    body: { gates: boolean[]; policies: (ApprovalPolicy | null)[] },
+    body: SetPipelineApprovalsInput & { policies: (ApprovalPolicy | null)[] },
   ): Promise<Pipeline> {
     const updated = await api.setPipelineApprovals(useWorkspaceStore().requireId(), id, body)
     upsertPipeline(updated)

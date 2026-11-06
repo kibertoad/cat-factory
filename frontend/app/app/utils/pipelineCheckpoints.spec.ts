@@ -4,7 +4,6 @@ import {
   droppedApproverPolicies,
   droppedCheckpoints,
   foldCompanionUnits,
-  patchedGateConfig,
   placementGates,
   unreachableCheckpoints,
 } from '~/utils/pipelineCheckpoints'
@@ -31,20 +30,6 @@ describe('checkpoint placement', () => {
       const { producer, companion } = placementGates(placement)
       expect(checkpointPlacement(producer, companion)).toBe(placement)
     }
-  })
-})
-
-describe('patchedGateConfig', () => {
-  it('keeps the other options and drops what returned to its default', () => {
-    expect(
-      patchedGateConfig(
-        { retainEnvironment: true, gateConfig: { minApprovals: 2 } },
-        {
-          minApprovals: 1,
-        },
-      ),
-    ).toEqual({ retainEnvironment: true })
-    expect(patchedGateConfig(null, { approvers: { roles: [] } })).toBeNull()
   })
 })
 

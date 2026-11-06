@@ -3,11 +3,12 @@ import {
   stepOccurrenceKeys,
   type ApprovalPolicy,
   lockedCheckpoints,
+  patchedGateConfig,
   type CatalogApprovals,
   type SetPipelineApprovalsInput,
 } from '@cat-factory/contracts'
-import { hasApproverPolicy, ValidationError } from '@cat-factory/kernel'
-import type { Pipeline, StepGateConfig, StepOptions } from '@cat-factory/kernel'
+import { ValidationError } from '@cat-factory/kernel'
+import type { Pipeline, StepOptions } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // A pipeline's human approval CHECKPOINTS as their own write: the `gates[i]` flags plus the
@@ -42,9 +43,18 @@ export function approvalsApplied(
   catalog: CatalogApprovals | undefined,
 ): Pick<Pipeline, 'gates' | 'stepOptions'> {
   const steps = existing.agentKinds.length
-  if (input.gates.length !== steps || (input.policies && input.policies.length !== steps)) {
+  const sameChain =
+    input.agentKinds.length === steps &&
+    input.agentKinds.every((kind, i) => kind === existing.agentKinds[i])
+  if (!sameChain) {
     throw new ValidationError(
-      `The approval checkpoints name ${input.gates.length} steps, but this pipeline has ${steps}. Reload the pipeline and try again.`,
+      `The approval checkpoints were set against a different version of '${existing.name}' than the one stored. Reload the pipeline and try again.`,
+    )
+  }
+  const mismatched = [input.gates, input.policies].find((a) => a && a.length !== steps)
+  if (mismatched) {
+    throw new ValidationError(
+      `The approval checkpoints name ${mismatched.length} steps, but this pipeline has ${steps}. Reload the pipeline and try again.`,
     )
   }
   if (existing.builtin) {
@@ -69,30 +79,16 @@ export function approvalsApplied(
 
 /**
  * Replace the approval half of a step's gate configuration, keeping its gate parameters and every
- * other option. Normalizes downward the way the builder does, so a step returned to the defaults
- * persists nothing: an empty approver policy is dropped (one naming nobody would refuse every
- * approver and park the run forever), and so is a quorum of 1, which is the default.
+ * other option, through the same normalization the builder applies (`patchedGateConfig`).
  */
 function withApprovalPolicy(
   options: StepOptions | null,
   policy: ApprovalPolicy | null,
 ): StepOptions | null {
-  const {
-    approvers: _approvers,
-    minApprovals: _minApprovals,
-    ...parameters
-  } = options?.gateConfig ?? {}
-  const gateConfig: StepGateConfig = { ...parameters }
-  if (policy?.approvers && hasApproverPolicy(policy.approvers)) {
-    gateConfig.approvers = policy.approvers
-  }
-  if (policy?.minApprovals !== undefined && policy.minApprovals > 1) {
-    gateConfig.minApprovals = policy.minApprovals
-  }
-  const next: StepOptions = { ...options }
-  if (Object.keys(gateConfig).length) next.gateConfig = gateConfig
-  else delete next.gateConfig
-  return Object.keys(next).length ? next : null
+  return patchedGateConfig(options, {
+    approvers: policy?.approvers,
+    minApprovals: policy?.minApprovals,
+  })
 }
 
 /** What a reseed kept of the workspace's checkpoints, and which ones the new definition refused. */
@@ -139,6 +135,7 @@ export function carriedApprovals(
     ...approvalsApplied(
       { ...pipeline, builtin: false },
       {
+        agentKinds: pipeline.agentKinds,
         gates: pipeline.agentKinds.map((_, j) => j === i || pipeline.gates?.[j] === true),
         policies: pipeline.agentKinds.map((_, j) =>
           j === i ? policy : approvalPolicyOf(pipeline.stepOptions?.[j]),
@@ -150,7 +147,8 @@ export function carriedApprovals(
   const seedKeys = stepOccurrenceKeys(seed.agentKinds)
   seedKeys.forEach((key, i) => {
     if (!stored.has(key)) return
-    const policy = stored.get(key) ?? null
+    // A stored checkpoint with no policy of its own keeps one the catalog ships on that step.
+    const policy = stored.get(key) ?? approvalPolicyOf(seed.stepOptions?.[i])
     const candidate = withCheckpoint(i, policy)
     if (admits(candidate)) {
       pipeline = candidate

@@ -6,7 +6,7 @@
 // because only a clone may drop one. Holds its own copy of the gates and approver policies rather
 // than the builder's draft, so opening it never clobbers a pipeline someone is composing.
 import { computed, ref } from 'vue'
-import { approvalPolicyOf, type StepGateConfig } from '@cat-factory/contracts'
+import { approvalPolicyOf, patchedGateConfig, type StepGateConfig } from '@cat-factory/contracts'
 import type { Pipeline } from '~/types/domain'
 import AppModal from '~/components/common/AppModal.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
@@ -16,7 +16,6 @@ import { agentKindMeta } from '~/utils/catalog'
 import { showOverrideField } from '~/utils/uiMode'
 import {
   foldCompanionUnits,
-  patchedGateConfig,
   unreachableCheckpoints,
   type PipelineUnit,
 } from '~/utils/pipelineCheckpoints'
@@ -66,6 +65,7 @@ async function save() {
   saving.value = true
   try {
     await pipelines.saveApprovals(props.pipeline.id, {
+      agentKinds: kinds,
       gates: gates.value,
       policies: policies.value.map((policy, i) => (gates.value[i] ? policy : null)),
     })
