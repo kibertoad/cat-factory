@@ -1,22 +1,33 @@
 import type { QuestionFinding, ResearchDefinition } from '@cat-factory/contracts'
 import type {
+  Block,
+  BlockRepository,
   FindingsRevisionRepository,
   FindingsRevisionRow,
   FindingsStoragePolicyRepository,
+  ProjectRepository,
   ResearchDefinitionRepository,
   ResearchProjectRepository,
+  WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 
 // Cross-runtime parity for research persistence: account-published definitions (immutable per
 // version), what a research project pins and its findings sequence, findings revisions (first
-// write wins), and the findings-storage policy tiers. Run against D1 and Postgres.
+// write wins), the findings-storage policy tiers, and the board delete that reclaims them. Run
+// against D1 and Postgres.
 
 export interface ResearchPersistenceRepos {
   definitions: ResearchDefinitionRepository
   projects: ResearchProjectRepository
   revisions: FindingsRevisionRepository
   policies: FindingsStoragePolicyRepository
+  /** The board a project is homed on, whose delete reclaims the project's research rows. */
+  board: {
+    workspaces: WorkspaceRepository
+    blocks: BlockRepository
+    projects: ProjectRepository
+  }
 }
 
 function definition(version: number, question = 'Which auth scheme?'): ResearchDefinition {
@@ -189,6 +200,57 @@ export function defineResearchPersistenceSuite(
       expect(await repos.revisions.listByProject(projectId)).toEqual([])
       expect(await repos.policies.get('project', projectId)).toBeNull()
       await repos.projects.deleteMany([])
+    })
+
+    it("reclaims a homed project's research rows and the board's own tier with the board", async () => {
+      const repos = makeRepos()
+      const workspaceId = unique('ws')
+      const survivor = unique('ws')
+      for (const id of [workspaceId, survivor]) {
+        await repos.board.workspaces.create(
+          { id, name: id, description: null, createdAt: 0, accountId: null },
+          null,
+          null,
+        )
+      }
+      const rootBlockId = unique('blk')
+      const root: Block = {
+        id: rootBlockId,
+        title: 'Vendor research',
+        type: 'project',
+        description: '',
+        position: { x: 0, y: 0 },
+        status: 'ready',
+        progress: 0,
+        dependsOn: [],
+        executionId: null,
+        level: 'project',
+        parentId: null,
+      }
+      const projectId = await project(repos)
+      await repos.board.blocks.insert(workspaceId, root, projectId)
+      await repos.board.projects.insert({
+        id: projectId,
+        accountId: null,
+        kind: 'research',
+        rootBlockId,
+        serviceIds: [],
+        createdAt: 0,
+      })
+      await repos.revisions.insert(revision(projectId, unique('rev'), 1, 'x'))
+      await repos.policies.set('project', projectId, { offload: 'disabled' })
+      await repos.policies.set('workspace', workspaceId, { inlineMaxBytes: 1000 })
+      await repos.policies.set('workspace', survivor, { inlineMaxBytes: 2000 })
+
+      await repos.board.workspaces.delete(workspaceId)
+
+      expect(await repos.board.projects.get(projectId)).toBeNull()
+      expect(await repos.projects.get(projectId)).toBeNull()
+      expect(await repos.revisions.listByProject(projectId)).toEqual([])
+      expect(await repos.policies.get('project', projectId)).toBeNull()
+      expect(await repos.policies.get('workspace', workspaceId)).toBeNull()
+      // Another board's tier is not this board's to reclaim.
+      expect(await repos.policies.get('workspace', survivor)).toEqual({ inlineMaxBytes: 2000 })
     })
   })
 }
