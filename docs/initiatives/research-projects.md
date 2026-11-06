@@ -370,6 +370,22 @@ A new linked-context kind beside documents and tracker tasks:
 - **Credentials use the existing capability credential store**; research definitions declare their
   keys into it.
 - **No egress restriction for research runs**, matching every other container kind.
+- **A project is not an initiative, and research is not an initiative preset.** An initiative
+  ([ADR 0013](../../backend/docs/adr/0013-initiatives-feature.md)) is a plan-then-execute machine
+  anchored inside one service frame: its loop spawns tasks under that frame, its entity is one
+  rev-CAS blob, and it commits a mirror into the service's repo. A research project is
+  repo-less, account-owned, has no plan or phases, and stores immutable revisions folded by
+  question id. Making initiatives frame-less and repo-less would rewrite their core, and research
+  would carry a planning pipeline with nothing to plan. The two connect through linking instead
+  (slice 9): an initiative CONSUMES a research project's findings, as the connector initiative in
+  [custom initiative definitions](./custom-initiative-definitions.md) does with its research
+  phase.
+- **What projects reuse from initiatives**: the descriptor form vocabulary and its renderer
+  (`descriptorFieldEntries`, `DescriptorFields.vue`) for definition `inputs`; the app-owned
+  registry shape of `InitiativePresetRegistry` for `ProjectKindRegistry`; per-agent-kind
+  `promptAdditions` on a research definition for org steering of the `researcher`, rather than
+  folding it into `brief`; and the `followUps` shape (open, promoted, dismissed) for run
+  `learnings`, so a learning can later be promoted into an ad-hoc question.
 
 Still open:
 
@@ -390,7 +406,7 @@ Still open:
 | 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance. | todo   |       |
 | 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                            | todo   |       |
 | 8   | SPA: project frames, findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                        | todo   |       |
-| 9   | Task linking: the `projects` linked-context kind, `.cat-context/projects/`, recorded revision.                                                                                                                                                                                                           | todo   |       |
+| 9   | Task linking: the `projects` linked-context kind, `.cat-context/projects/`, recorded revision. An optional `projects` field on `InitiativeItemSpawn`, so tasks an initiative spawns carry a research project as linked context.                                                                          | todo   |       |
 
 Slices 1, 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4 and 6: the
 `researcher` kind ships after the park, so a research run never meets a missing credential with
@@ -402,6 +418,13 @@ run has written a revision.
 - **Repo resolution has deliberately no fallback** ("NO first repo"). A project frame resolving to
   its linked services' repos is a new, explicit rule, and a project task whose type needs a
   writable repo must be refused at admission, never pointed at a guessed one.
+- **A project frame is the host cross-service initiatives lack.** An initiative spans one service
+  frame today because its loop spawns tasks under the initiative block's `parentId`
+  (`InitiativeLoopService`). That lookup is generic, so an initiative block under a project frame
+  would spawn there; the open rule is `resolveRepoTarget`, where a project frame resolves to its
+  linked services' repos as read-only context. Slice 1 keeps that resolution a single, explicit
+  rule, so a later initiative under a project can name which linked service an item writes to
+  instead of gaining a second resolution path. Supporting it is out of scope here.
 - **The mount carries layout for a shared frame.** Generalizing it to projects keeps
   `applyMountLayout` on every frame-returning read; a project frame read that skips it jumps on
   the board.
