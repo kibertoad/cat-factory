@@ -65,7 +65,12 @@ interface Project {
 
 - **It owns its tasks.** Tasks are ordinary blocks under the project's frame, so the engine's
   block-keyed machinery works unchanged: executions, one live run per block, notifications, the
-  inspector, live events, RBAC and the workspace-delete cascade.
+  inspector, live events and RBAC.
+- **It survives its home board's deletion, as a shared service does.** Its frame block lives in
+  one workspace, and the workspace-delete cascade handles services specially: `ServiceRehome`
+  moves a shared service's blocks to a surviving mounting board before the cascade runs. That
+  re-home generalizes to the mounted subject; without it, deleting the board that homes a project
+  destroys it for every team that mounts it.
 - **It is account-owned and mounted onto boards**, as a service is. The mount generalizes from
   `(workspaceId, serviceId)` to a mounted subject (`service` or `project`), keeping the rule that a
   frame's position lives on the mount and every frame read projects through `applyMountLayout`.
@@ -76,10 +81,12 @@ interface Project {
   a service frame, and a project frame resolves to its linked services' repos as read-only
   context, possibly none. It never falls back to a guessed repo; a project-kind task type that
   needs a writable repo says so and is refused at admission when the project has none.
-- **A kind is registered**, through a `ProjectKindRegistry` beside `TaskTypeRegistry`. A kind
-  declares the task types its project offers, their default pipelines, the project-level data it
-  keeps, and its result view. Research is the only kind this initiative ships; requirements
-  definition is the next candidate and is out of scope here.
+- **A kind is registered**, through a `ProjectKindRegistry` beside `TaskTypeRegistry`, injected by
+  reference on both `start()` and `startLocal()`. A kind declares the task types its project
+  offers, their default pipelines, the project-level data it keeps, and its result view. A run
+  resolves it, so in mothership mode it is org state read over its own `/internal/*` route.
+  Research is the only kind this initiative ships; requirements definition is the next candidate
+  and is out of scope here.
 
 ### Research definition
 
@@ -128,14 +135,21 @@ Each research run is a task in the project, of the `research` task type, carryin
 
 A follow-up is a new task in the same project, so the project's task list is its research history.
 The task's prompt carries the project's current findings, so a follow-up starts from what is
-known. A task that parks for a credential and resumes is the SAME run re-dispatching its step; the
-agent checkpoints partial findings before it parks, so the resumed dispatch starts from them.
+known. A task that parks for a credential and resumes is the SAME run re-dispatching its step. The
+agent checkpoints partial findings on the step before it parks, so the resumed dispatch starts
+from them; a checkpoint is step state and never a revision, which keeps one revision per task.
+Ad-hoc question ids are namespaced to their task (`adhoc:<taskId>:<n>`), so a later definition
+version can never reuse one.
 
 ### Findings
 
 Each research task writes one immutable **findings revision** on the project, and the project's
-current findings are the fold over its revisions by question id, newest answer winning per
-question. Per question:
+current findings are the fold over its revisions by question id. Revisions are ordered by a
+per-project sequence taken when the TASK starts, so two follow-ups that run at once fold in the
+order they were asked, whatever order they finish in. Per question, a newer `answered` or
+`partial` answer replaces an older one; a newer `unanswered` or `blocked` never replaces an
+`answered` one and is kept beside it as a note, so a `refresh` that ran out of budget or lost a
+login cannot erase what an earlier run established. Per question:
 
 ```ts
 interface QuestionFinding {
@@ -172,7 +186,12 @@ uses:
   project pinned to it never changes meaning underneath. Listing and reading are `GET` siblings.
 
 The API lets an org's integration team publish a definition from its own CI without a deployment
-build; the registry lets a deployment ship definitions with its code. Both are read through a
+build; the registry lets a deployment ship definitions with its code. The two key spaces never
+overlap: a stored key must carry the account's own namespace, and a `PUT` naming a key the
+registry holds is refused (`409`, reason `research_definition_key_registered`). Code cannot be
+held immutable by a store, so a project pinned to a registered definition also records the
+definition's content hash, and a dispatch whose registered body no longer matches it refuses
+rather than running a question list the project never agreed to. Both are read through a
 port, because in mothership mode definitions are org state the node must fetch rather than hold a
 stale copy of.
 
@@ -191,24 +210,31 @@ are already there), with structured output for the findings shape above.
   which would put a password into the model context and the telemetry store. The harness adds a
   small MCP server of its own with tools that take a credential KEY and inject the value
   harness-side:
-  - `fill_secret(ref, key)`: types a stored login field into an element through the same browser
-    session.
+  - `fill_secret(ref, key, field)`: types one field of a stored login (`username` or `password`)
+    into an element through the same browser session.
   - `http_request(method, url, headers, body, auth: { key, scheme })`: sends the request with the
-    credential attached, records the redacted exchange as evidence, and returns the response to
-    the model.
+    credential attached, records the redacted exchange as evidence, and returns the scrubbed
+    response to the model. For an `oauth-client` credential the harness performs the token
+    exchange itself and attaches the access token, so a minted token never reaches the model.
+- **A credential is sent only to its vendor.** Both tools refuse when the page or URL origin is
+  not one of the definition's `targets`. The agent reads untrusted vendor pages, and a prompt
+  injected there could otherwise point `http_request` at a host of its choosing with the
+  credential attached. The refusal is reported to the agent, never silent.
 - **`request_credential(key, reason, observed)`**: the agent calls this when it reaches a point
   that needs a credential that does not resolve. The harness records it, the agent checkpoints its
   findings and ends the step. See concern 3.
 - **The agent cannot store a credential.** Nothing on the job reaches the credential store's write
-  path, and the prompt says not to mint tokens. A value the agent nonetheless meets in the browser
-  (a token shown once on a vendor page) is scrubbed from findings with `redactSecrets`, extended to
-  the job's known secret values plus a token-shape pass over the evidence.
-- **Repo-less dispatch**: a new harness mode `research` whose `repo` is optional and which clones
-  each of the project's linked repos read-only under `/work/context/<name>`.
+  path, and the prompt says not to mint tokens. Every `http_request` response, and every value the
+  agent meets in the browser (a token shown once on a vendor page), is scrubbed with
+  `redactSecrets`, extended to the job's known secret values plus a token-shape pass, before it
+  reaches the model or the findings.
+- **Repo-less dispatch**: a new harness mode `research` whose `repo` is optional. The project's
+  linked repos ride the existing `referenceRepos` job field, which already clones a repo
+  read-only with no branch or PR.
 - **Egress is not restricted.** Run containers reach any host the hosting network allows, as every
-  other kind does today. The definition's `targets` tell the agent where the vendor lives; they are
-  guidance, not a boundary. `security-model.md` states this for research runs in the slice that
-  ships the kind.
+  other kind does today. The definition's `targets` tell the agent where to browse and bound where
+  a credential may be sent (above); they do not bound the container's network.
+  `security-model.md` states this for research runs in the slice that ships the kind.
 
 ### 3. Credentials and the hand-off
 
@@ -219,6 +245,13 @@ resolved through `ToolSecretResolver` for the workspace the run was started on. 
   credential producer: `ToolSecretSubject` gains `research-definition`, and
   `collectDeclaredCapabilityCredentials` enumerates the definitions in use, so the existing
   checklist panel lists each key with its label and onboarding instructions.
+- **A stored definition's keys resolve from the store only.** Today only code-registered producers
+  declare credentials (a stored foundational-service row may not, because the resolver reads a
+  declared key off the deployment's environment). A definition published through the API is the
+  first stored declarer, so the `research-definition` subject resolves with `environmentFallback`
+  off, and a key in the reserved set `docs/environment-variables.md` lists is refused at publish.
+  Otherwise an account admin could name one of the deployment's own environment variables and have
+  `http_request` send it to a target they chose.
 - **"Configured for this project"** means every key the project's pinned definition declares
   resolves for the run's workspace. The project view states it per key.
 
@@ -228,9 +261,11 @@ The hand-off:
    dispatch. Admission is the cheap place to catch it.
 2. **Mid-run**: `request_credential` ends the step with `needsCredential: { key, reason, observed }`.
 3. **Park**: `CredentialWaitController` generalizes from the personal-subscription lease to a
-   discriminated wait: `step.credentialWait` gains `{ subject: 'capability', key, onboarding }`
-   beside the existing personal variant, so its `switch` stays total. The run goes `blocked`
-   through the same decision park every other wait uses.
+   discriminated wait. `stepCredentialWaitSchema` is `{ raisedAt }` today and persisted on steps,
+   so it becomes a union on `subject`: `{ subject: 'capability', key, onboarding }` beside the
+   personal variant, with a stored row that has no `subject` read as `personal` and every `switch`
+   over it routed through a `never` default. The run goes `blocked` through the same decision park
+   every other wait uses.
 4. **Notify**: a new `credential_required` notification type routed through the existing channels
    (in-app, email, Slack, webhook). It names the key and its label, carries the definition's
    onboarding instructions and the agent's `observed` notes (what it saw on the vendor's onboarding
@@ -238,9 +273,14 @@ The hand-off:
 5. **Store**: the human completes the vendor's onboarding flow and saves the value through the
    existing `PUT /capability-credentials/:key`, which needs `secrets.manage`. A person who is
    notified but lacks it is shown who can store it, never an error.
-6. **Confirm**: `POST .../credential/resume` re-checks that the key now resolves and refuses with
-   `428 capability_credential_missing` if it does not, so a premature confirm costs a toast and
-   never a wasted dispatch. Then the step re-dispatches with the checkpointed findings.
+6. **Confirm**: `POST .../credential/resume` re-checks that the key now resolves and refuses if it
+   does not, so a premature confirm costs a toast and never a wasted dispatch. Then the step
+   re-dispatches with the checkpointed findings. Two existing rules are personal-only and split by
+   subject: `mayResumeCredentialWait` admits only the run's initiator, which is right for a
+   personal lease and wrong here (the person who stored the key must be able to resume, so a
+   capability wait admits any `member`); and `CredentialRequiredError` carries a personal
+   `{ vendor, reason }` shape, so the refusal takes a new `CredentialRequiredReason` member,
+   `capability_credential_missing`, with `key` in its details.
 
 The generalized park is not research-specific: any kind declaring a required capability credential
 can use it, which closes the silent `missing_secret` degradation for kinds that opt in.
@@ -324,21 +364,23 @@ Still open:
 
 ## Slices (each about one PR)
 
-| #   | Slice                                                                                                                                                                                               | Status | PR    |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----- |
-| 0   | This tracker.                                                                                                                                                                                       | done   | #2501 |
-| 1   | Projects, both facades + conformance: `Project` entity, `ProjectKindRegistry`, the generalized mount, project frames on the board snapshot, service links, repo resolution through a project frame. | todo   |       |
-| 2   | Contracts + kernel for research: definition schema, `ResearchDefinitionRegistry` + port, findings schema, the fold, the storage-policy resolver. Pure, unit-tested.                                 | todo   |       |
-| 3   | Research persistence, both facades + conformance: definitions table, findings revisions (first write wins), the policy tiers. Mothership buckets.                                                   | todo   |       |
-| 4   | Harness: `research` mode with optional repos, the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`), Playwright MCP in `Dockerfile.ui`. Image bump.                 | todo   |       |
-| 5   | Engine: the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                             | todo   |       |
-| 6   | Credential hand-off: the `research-definition` credential subject, the generalized `credentialWait`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.      | todo   |       |
-| 7   | Public API + SDK surface + website page.                                                                                                                                                            | todo   |       |
-| 8   | SPA: project frames, findings reader, follow-ups, credential park; i18n; e2e spec.                                                                                                                  | todo   |       |
-| 9   | Task linking: the `projects` linked-context kind, `.cat-context/projects/`, recorded revision.                                                                                                      | todo   |       |
+| #   | Slice                                                                                                                                                                                                                                                                                                    | Status | PR    |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----- |
+| 0   | This tracker.                                                                                                                                                                                                                                                                                            | done   | #2501 |
+| 1   | Projects, both facades + conformance: `Project` entity, `ProjectKindRegistry`, the generalized mount and workspace-delete re-home, project frames on the board snapshot, service links, repo resolution through a project frame. Mothership buckets.                                                     | todo   |       |
+| 2   | Contracts + kernel for research: definition schema, `ResearchDefinitionRegistry` + port, findings schema, the fold, the storage-policy resolver. Pure, unit-tested.                                                                                                                                      | todo   |       |
+| 3   | Research persistence, both facades + conformance: definitions table, findings revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                        | todo   |       |
+| 4   | Harness: `research` mode with optional repos (linked repos as `referenceRepos`), the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                   | todo   |       |
+| 5   | Engine: the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                                                                                                                                  | todo   |       |
+| 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance. | todo   |       |
+| 7   | Public API + SDK surface + website page.                                                                                                                                                                                                                                                                 | todo   |       |
+| 8   | SPA: project frames, findings reader, follow-ups, credential park; i18n; e2e spec.                                                                                                                                                                                                                       | todo   |       |
+| 9   | Task linking: the `projects` linked-context kind, `.cat-context/projects/`, recorded revision.                                                                                                                                                                                                           | todo   |       |
 
-Slices 1, 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4. Slice 9 needs 1
-and 3.
+Slices 1, 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4 and 6: the
+`researcher` kind ships after the park, so a research run never meets a missing credential with
+nowhere to wait. Slice 9 needs 1, 2, 3 and 5, since a project is linkable only once a research
+run has written a revision.
 
 ## Gotchas found during design
 
