@@ -114,6 +114,7 @@ interface ResearchDefinition {
   }>
   targets: Array<{ baseUrl: string; surface: 'ui' | 'api' }> // where the vendor lives
   inputs?: TaskTypeFieldDescriptor[] // per-project parameters, the reusable-operation form vocabulary
+  promptAdditions?: Record<string, string> // org steering per agent kind, as initiative presets carry
 }
 ```
 
@@ -148,7 +149,7 @@ current findings are the fold over its revisions by question id. Revisions are o
 per-project sequence taken when the TASK starts, so two follow-ups that run at once fold in the
 order they were asked, whatever order they finish in. Per question, a newer `answered` or
 `partial` answer replaces an older one; a newer `unanswered` or `blocked` never replaces an
-`answered` one and is kept beside it as a note, so a `refresh` that ran out of budget or lost a
+answer with content (`answered` or `partial`) and is kept beside it as a note, so a `refresh` that ran out of budget or lost a
 login cannot erase what an earlier run established. Per question:
 
 ```ts
@@ -169,7 +170,8 @@ interface QuestionFinding {
 ```
 
 Plus run-level `learnings` (things the agent found that no question asked about) and a prose
-`summary`. A revision is written once and never upserted, so a replayed write cannot recompute
+`summary`. The fold and the coverage count live in `@cat-factory/contracts` (`foldFindings`,
+`researchCoverage`), because the SPA's findings reader and the backend must agree on them. A revision is written once and never upserted, so a replayed write cannot recompute
 against a moved fold.
 
 ## Design by concern
@@ -395,18 +397,18 @@ Still open:
 
 ## Slices (each about one PR)
 
-| #   | Slice                                                                                                                                                                                                                                                                                                    | Status | PR    |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----- |
-| 0   | This tracker.                                                                                                                                                                                                                                                                                            | done   | #2501 |
-| 1   | Projects, both facades + conformance: `Project` entity, `ProjectKindRegistry`, the generalized mount and workspace-delete re-home, project frames on the board snapshot, service links, repo resolution through a project frame. Mothership buckets.                                                     | todo   |       |
-| 2   | Contracts + kernel for research: definition schema, `ResearchDefinitionRegistry` + port, findings schema, the fold, the storage-policy resolver. Pure, unit-tested.                                                                                                                                      | todo   |       |
-| 3   | Research persistence, both facades + conformance: definitions table, findings revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                        | todo   |       |
-| 4   | Harness: `research` mode with optional repos (linked repos as `referenceRepos`), the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                   | todo   |       |
-| 5   | Engine: the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                                                                                                                                  | todo   |       |
-| 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance. | todo   |       |
-| 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                            | todo   |       |
-| 8   | SPA: project frames, findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                        | todo   |       |
-| 9   | Task linking: the `projects` linked-context kind, `.cat-context/projects/`, recorded revision. An optional `projects` field on `InitiativeItemSpawn`, so tasks an initiative spawns carry a research project as linked context.                                                                          | todo   |       |
+| #   | Slice                                                                                                                                                                                                                                                                                                                                        | Status | PR    |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----- |
+| 0   | This tracker.                                                                                                                                                                                                                                                                                                                                | done   | #2501 |
+| 1   | Projects, both facades + conformance: `Project` entity, `ProjectKindRegistry`, the generalized mount and workspace-delete re-home, project frames on the board snapshot, service links, repo resolution through a project frame. Mothership buckets.                                                                                         | todo   |       |
+| 2   | Contracts + kernel for research: definition schema, `ResearchDefinitionRegistry` + content hash, findings schema, the fold, the storage-policy resolver. Pure, unit-tested. The definition read port lands with its implementation in slice 3, and the registry is wired on `start()`/`startLocal()` in slice 5, where a run first reads it. | done   | #2503 |
+| 3   | Research persistence, both facades + conformance: definitions table, findings revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                                                            | todo   |       |
+| 4   | Harness: `research` mode with optional repos (linked repos as `referenceRepos`), the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                                                       | todo   |       |
+| 5   | Engine: the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                                                                                                                                                                      | todo   |       |
+| 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                     | todo   |       |
+| 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                                                                | todo   |       |
+| 8   | SPA: project frames, findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                                                            | todo   |       |
+| 9   | Task linking: the `projects` linked-context kind, `.cat-context/projects/`, recorded revision. An optional `projects` field on `InitiativeItemSpawn`, so tasks an initiative spawns carry a research project as linked context.                                                                                                              | todo   |       |
 
 Slices 1, 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4 and 6: the
 `researcher` kind ships after the park, so a research run never meets a missing credential with
