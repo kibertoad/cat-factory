@@ -435,10 +435,11 @@ run has written a revision.
   linked services' repos as read-only context. Slice 1 keeps that resolution a single, explicit
   rule, so a later initiative under a project can name which linked service an item writes to
   instead of gaining a second resolution path. Supporting it is out of scope here.
-- **A root block id names a subject only among the board's own mounts.** Seeded boards share
-  frame ids (`blk_auth`), so the workspace-delete re-home plan keeps a candidate only when it is
-  in the board's account AND mounted on the board. Before projects, the plan matched by frame id
-  alone and could re-home another board's service.
+- **A root block id alone does not name a subject.** Seeded boards share frame ids (`blk_auth`),
+  so a reader narrows the candidates: the layout projection by the board's own mounts, and the
+  workspace-delete re-home plan by the owner stamp on the board's own root row, which is what the
+  re-home moves. The plan never re-homes another board's service, and still re-homes a shared
+  subject its home board has unmounted.
 - **The mount carries layout for a shared frame.** Generalizing it to projects keeps
   `applyMountLayout` on every frame-returning read; a project frame read that skips it jumps on
   the board.
