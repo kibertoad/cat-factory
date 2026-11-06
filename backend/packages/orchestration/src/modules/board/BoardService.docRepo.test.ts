@@ -32,7 +32,7 @@ describe('BoardService document-repository task gating', () => {
         get: async (ws: string, id: string) => (ws === WS ? (byId.get(id) ?? null) : null),
         findById: async (id: string) => {
           const block = byId.get(id)
-          return block ? { workspaceId: WS, serviceId: null, block } : null
+          return block ? { workspaceId: WS, ownerId: null, block } : null
         },
         listByWorkspace: async (ws: string) => (ws === WS ? [...byId.values()] : []),
         insert: async () => {},
@@ -213,7 +213,7 @@ describe('BoardService document-repository reparent gating', () => {
         update: async (_ws: string, id: string, patch: Partial<Block>) => {
           patches.push({ id, patch })
         },
-        setService: async () => {},
+        setOwner: async () => {},
       },
       serviceRepository: { getByFrameBlock: async () => null },
       idGenerator: { next: (prefix: string) => `${prefix}_new` },

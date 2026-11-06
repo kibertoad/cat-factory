@@ -68,7 +68,7 @@ function makeBlockStore() {
       ids
         .map((id) => rows.get(id))
         .filter((r): r is { ws: string; block: Block } => !!r)
-        .map((r) => ({ workspaceId: r.ws, serviceId: null, block: r.block })),
+        .map((r) => ({ workspaceId: r.ws, ownerId: null, block: r.block })),
     get: async (ws: string, id: string) => rows.get(id)?.block ?? null,
     insert: async (ws: string, block: Block) => {
       rows.set(block.id, { ws, block })

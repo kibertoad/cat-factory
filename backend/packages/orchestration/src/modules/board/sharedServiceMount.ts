@@ -107,7 +107,7 @@ export function createSharedServiceMount(deps: SharedServiceMountDeps) {
       const n = existingMounts.length
       mount = {
         workspaceId,
-        serviceId: service.id,
+        subjectId: service.id,
         position: position ?? { x: 80 + (n % 5) * 48, y: 80 + Math.floor(n / 5) * 48 },
         size: null,
         createdAt: deps.clock.now(),

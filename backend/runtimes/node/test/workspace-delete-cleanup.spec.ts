@@ -61,7 +61,7 @@ describe('DrizzleWorkspaceRepository.delete reclaims the workspace services', ()
     await repos.serviceRepository.insert(service)
     await repos.workspaceMountRepository.upsert({
       workspaceId: wsId,
-      serviceId: service.id,
+      subjectId: service.id,
       position: { x: 0, y: 0 },
       size: null,
       createdAt: 0,
@@ -75,7 +75,7 @@ describe('DrizzleWorkspaceRepository.delete reclaims the workspace services', ()
     // The service + its mount are gone, so the repo is re-addable elsewhere in the account.
     expect(await repos.serviceRepository.getByFrameBlock(frameId)).toBeNull()
     expect(await repos.serviceRepository.listByIds([service.id])).toEqual([])
-    expect(await repos.workspaceMountRepository.listByServiceIds([service.id])).toEqual([])
+    expect(await repos.workspaceMountRepository.listBySubjectIds([service.id])).toEqual([])
   })
 
   it('re-homes a shared service to a surviving board instead of deleting it', async () => {
@@ -117,21 +117,21 @@ describe('DrizzleWorkspaceRepository.delete reclaims the workspace services', ()
     await repos.serviceRepository.insert(service)
     await repos.workspaceMountRepository.upsert({
       workspaceId: home,
-      serviceId: service.id,
+      subjectId: service.id,
       position: { x: 0, y: 0 },
       size: null,
       createdAt: 0,
     })
     await repos.workspaceMountRepository.upsert({
       workspaceId: other,
-      serviceId: service.id,
+      subjectId: service.id,
       position: { x: 0, y: 0 },
       size: null,
       createdAt: 1,
     })
 
     // Delete home, re-homing the shared service to `other`.
-    await repos.workspaceRepository.delete(home, [{ serviceId: service.id, toWorkspaceId: other }])
+    await repos.workspaceRepository.delete(home, [{ subjectId: service.id, toWorkspaceId: other }])
 
     // The service survives, its whole subtree moved to `other`, and `other`'s mount is intact.
     expect(await repos.serviceRepository.getByFrameBlock(frameId)).not.toBeNull()
@@ -139,7 +139,7 @@ describe('DrizzleWorkspaceRepository.delete reclaims the workspace services', ()
     expect(moved.map((b) => b.id).sort()).toEqual([frameId, taskId].sort())
     expect(await repos.blockRepository.listByWorkspace(home)).toEqual([])
     expect(
-      (await repos.workspaceMountRepository.listByServiceIds([service.id])).map(
+      (await repos.workspaceMountRepository.listBySubjectIds([service.id])).map(
         (m) => m.workspaceId,
       ),
     ).toEqual([other])

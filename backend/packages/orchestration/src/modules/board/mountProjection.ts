@@ -51,7 +51,7 @@ export function createMountProjection(deps: MountProjectionDeps) {
     // such a call CLOSED: every frame edit on the board would 404 rather than degrade. Keyed on
     // the acting workspace, this read is scoped by construction and bounded by this board.
     const mounted = await mounts.listByWorkspace(workspaceId)
-    return mounted.find((m) => candidateIds.has(m.serviceId)) ?? null
+    return mounted.find((m) => candidateIds.has(m.subjectId)) ?? null
   }
 
   /**

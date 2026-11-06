@@ -66,7 +66,7 @@ describe('BoardService.addServiceFromRepo — shared-service mount', () => {
       blockRepository: {
         findById: async (id: string) =>
           existing && id === existing.frameBlockId
-            ? { workspaceId: homeWorkspaceId, serviceId: existing.id, block: homeFrame() }
+            ? { workspaceId: homeWorkspaceId, ownerId: existing.id, block: homeFrame() }
             : null,
         listByWorkspace: async () => [],
       },
@@ -75,7 +75,7 @@ describe('BoardService.addServiceFromRepo — shared-service mount', () => {
           alreadyMountedHere
             ? {
                 workspaceId: WS,
-                serviceId: 'svc_shared',
+                subjectId: 'svc_shared',
                 position: { x: 0, y: 0 },
                 size: null,
                 createdAt: 0,
@@ -102,7 +102,7 @@ describe('BoardService.addServiceFromRepo — shared-service mount', () => {
     // the mount as a fresh import (the assistant's `created` flag rides on exactly this).
     expect(disposition).toBe('mounted')
     expect(upserts).toHaveLength(1)
-    expect(upserts[0]).toMatchObject({ workspaceId: WS, serviceId: 'svc_shared' })
+    expect(upserts[0]).toMatchObject({ workspaceId: WS, subjectId: 'svc_shared' })
   })
 
   it('is idempotent when the service is already mounted here (no second mount)', async () => {

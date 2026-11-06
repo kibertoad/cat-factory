@@ -40,7 +40,7 @@ import type {
   PipelineRepository,
   ResolveBinaryArtifactStore,
   RiskPolicyRepository,
-  ServiceRehome,
+  MountRehome,
   ServiceRepository,
   SpendRollupRepository,
   WorkspaceAccessCacheValue,
@@ -467,7 +467,7 @@ export class WorkspaceService {
     const visibleBlocks = localBlocks.filter((b) => !localHidden.has(b.id))
     const composed = await this.composeBoard(visibleBlocks, mounts)
     // Pass 2 (composed): a FOREIGN service archived on its home board reaches this board only via
-    // its mount, so `composeBoard` re-fetches its (archived) subtree via `listByServices`. Seed the
+    // its mount, so `composeBoard` re-fetches its (archived) subtree via `listByOwners`. Seed the
     // final hide-set with pass 1's ids and grow it over the composed board so that frame + subtree
     // are dropped here too. A local frame re-pulled as "foreign" is already in `localHidden`, so it
     // is not double-counted as a fresh foreign archive.
@@ -591,19 +591,19 @@ export class WorkspaceService {
     // The per-workspace layout override for each mounted service's frame.
     const frameLayout = new Map<string, WorkspaceMount>()
     // Resolve every mounted service in one batched query (not a `get` per mount).
-    const services = await this.serviceRepository.listByIds(mounts.map((m) => m.serviceId))
+    const services = await this.serviceRepository.listByIds(mounts.map((m) => m.subjectId))
     const frameOf = new Map(services.map((s) => [s.id, s.frameBlockId]))
     const foreignServiceIds: string[] = []
     for (const mount of mounts) {
-      const frameBlockId = frameOf.get(mount.serviceId)
+      const frameBlockId = frameOf.get(mount.subjectId)
       if (!frameBlockId) continue
       frameLayout.set(frameBlockId, mount)
       // Pull in the subtree only for services homed in ANOTHER workspace — a local service's
       // blocks are already in `localBlocks`.
-      if (!localIds.has(frameBlockId)) foreignServiceIds.push(mount.serviceId)
+      if (!localIds.has(frameBlockId)) foreignServiceIds.push(mount.subjectId)
     }
     // One batched query for all foreign subtrees (not one per service).
-    for (const b of await this.blockRepository.listByServices(foreignServiceIds)) {
+    for (const b of await this.blockRepository.listByOwners(foreignServiceIds)) {
       if (!byId.has(b.id)) byId.set(b.id, b)
     }
 
@@ -626,7 +626,7 @@ export class WorkspaceService {
     if (mounts.length === 0) return localExecutions
     const byId = new Map(localExecutions.map((e) => [e.id, e]))
     // One batched query for every mounted service's runs (not one round-trip per mount).
-    for (const e of await this.executionRepository.listByServices(mounts.map((m) => m.serviceId))) {
+    for (const e of await this.executionRepository.listByOwners(mounts.map((m) => m.subjectId))) {
       if (!byId.has(e.id)) byId.set(e.id, e)
     }
     return [...byId.values()]
@@ -822,7 +822,7 @@ export class WorkspaceService {
    * the choice is deterministic). A service mounted by no other board is omitted — the delete
    * cascade reclaims it as before. No-op (empty) when the service repos aren't wired.
    */
-  private async planSharedServiceRehome(id: string): Promise<ServiceRehome[]> {
+  private async planSharedServiceRehome(id: string): Promise<MountRehome[]> {
     if (!this.serviceRepository || !this.workspaceMountRepository) return []
     const blocks = await this.blockRepository.listByWorkspace(id)
     const frameIds = blocks
@@ -832,20 +832,20 @@ export class WorkspaceService {
     const homed = await this.serviceRepository.listByFrameBlocks(frameIds)
     if (homed.length === 0) return []
     // One batched mount read for every homed service (not a listByService per service).
-    const mounts = await this.workspaceMountRepository.listByServiceIds(homed.map((s) => s.id))
+    const mounts = await this.workspaceMountRepository.listBySubjectIds(homed.map((s) => s.id))
     const externalByService = new Map<string, WorkspaceMount[]>()
     for (const m of mounts) {
       if (m.workspaceId === id) continue // the home board's own mount is going away with it
-      const list = externalByService.get(m.serviceId)
+      const list = externalByService.get(m.subjectId)
       if (list) list.push(m)
-      else externalByService.set(m.serviceId, [m])
+      else externalByService.set(m.subjectId, [m])
     }
-    const rehome: ServiceRehome[] = []
+    const rehome: MountRehome[] = []
     for (const service of homed) {
       const external = externalByService.get(service.id)
       if (!external || external.length === 0) continue
       const target = external.reduce((a, b) => (a.createdAt <= b.createdAt ? a : b))
-      rehome.push({ serviceId: service.id, toWorkspaceId: target.workspaceId })
+      rehome.push({ subjectId: service.id, toWorkspaceId: target.workspaceId })
     }
     return rehome
   }

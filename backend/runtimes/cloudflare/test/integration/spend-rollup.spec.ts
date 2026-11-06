@@ -55,7 +55,7 @@ const seed: SpendRollupSeed = {
   async run(row) {
     await env.DB.prepare(
       `INSERT INTO agent_runs
-         (workspace_id, id, kind, status, detail, created_at, updated_at, service_id, block_id)
+         (workspace_id, id, kind, status, detail, created_at, updated_at, owner_id, block_id)
        VALUES (?, ?, ?, ?, '{}', ?, ?, ?, ?)`,
     )
       .bind(

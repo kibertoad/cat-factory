@@ -130,7 +130,7 @@ export async function checkServiceUpdateScope(
 
 /**
  * The `serviceMount` record-based mount `upsert`. Bind on the mount's `workspaceId` FIELD (must be
- * in scope) AND enforce the cross-org mount invariant server-side: the mounted `serviceId` must be
+ * in scope) AND enforce the cross-org mount invariant server-side: the mounted `subjectId` must be
  * owned by the SAME account as the target workspace, so a raw upsert can never plant a cross-org
  * mount — even for a token that spans several accounts (both would be in scope, so a workspace-only
  * check would let one org's service be mounted onto another's board). A non-object arg, a
@@ -149,7 +149,7 @@ export async function checkServiceMountScope(
       ? (record as { workspaceId?: unknown }).workspaceId
       : undefined
   const serviceId =
-    record && typeof record === 'object' ? (record as { serviceId?: unknown }).serviceId : undefined
+    record && typeof record === 'object' ? (record as { subjectId?: unknown }).subjectId : undefined
   if (typeof workspaceId !== 'string' || typeof serviceId !== 'string') return denied
   if (!opts.resolveServiceAccountIds) return denied
   const workspaceAccount = await opts.resolveAccountId(workspaceId)

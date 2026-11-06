@@ -72,7 +72,7 @@ async function reclaimServices(
   // Batched: clear every board's mount of the doomed services, then delete the services
   // (two queries, not a listByService + per-mount remove + per-service delete loop).
   const ids = [...doomedServiceIds]
-  await workspaceMountRepository.removeByServices(ids)
+  await workspaceMountRepository.removeBySubjects(ids)
   await serviceRepository.deleteMany(ids)
 }
 

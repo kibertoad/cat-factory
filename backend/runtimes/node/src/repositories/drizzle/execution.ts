@@ -357,15 +357,15 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
     )
   }
 
-  async listByServices(serviceIds: string[]): Promise<ExecutionInstance[]> {
-    if (serviceIds.length === 0) return []
+  async listByOwners(ownerIds: string[]): Promise<ExecutionInstance[]> {
+    if (ownerIds.length === 0) return []
     const out: ExecutionInstance[] = []
     // Chunk the IN list to stay well under the bind-parameter limit.
-    for (let i = 0; i < serviceIds.length; i += 500) {
+    for (let i = 0; i < ownerIds.length; i += 500) {
       const rows = await this.db
         .select()
         .from(agentRuns)
-        .where(and(inArray(agentRuns.service_id, serviceIds.slice(i, i + 500)), this.isExecution))
+        .where(and(inArray(agentRuns.owner_id, ownerIds.slice(i, i + 500)), this.isExecution))
         .orderBy(agentRuns.created_at)
       out.push(
         ...tryDecodeRows(
@@ -414,10 +414,10 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
     const now = this.clock.now()
     const createdAt = adoptCreatedAt(execution, now)
     const detail = executionToDetail(execution)
-    // Stamp `service_id` from the run's block (subquery) so a shared service's runs surface on
-    // every board that mounts it via `listByService`; refreshed on every write so it follows a
+    // Stamp `owner_id` from the run's block (subquery) so a shared service's runs surface on
+    // every board that mounts it via `listByOwners`; refreshed on every write so it follows a
     // reparent that re-homes the block. Mirrors the D1 repo.
-    const serviceIdSub = sql`(SELECT ${blocks.service_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
+    const ownerIdSub = sql`(SELECT ${blocks.owner_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
     // `rev` is bumped on every write (and read back onto the instance) so a concurrent
     // compareAndSwap can detect the row moved. A fresh insert starts at 0.
     const rows = await this.db
@@ -432,7 +432,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
         created_at: createdAt,
         updated_at: now,
         workflow_instance_id: execution.id,
-        service_id: serviceIdSub,
+        owner_id: ownerIdSub,
         rev: 0,
       })
       // error/failure/workflow_instance_id are left out of the update so they survive
@@ -444,7 +444,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
           status: execution.status,
           detail,
           updated_at: now,
-          service_id: serviceIdSub,
+          owner_id: ownerIdSub,
           rev: sql`${agentRuns.rev} + 1`,
         },
       })
@@ -464,12 +464,12 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
     // own `replaceId` (the run it is knowingly superseding) — NEVER another writer's fresh live
     // row — and the index then rejects a second live insert via DO NOTHING (empty returning).
     // Callers therefore MUST NOT `deleteByBlock` first. The conflict target mirrors the D1 repo
-    // and the index predicate exactly; the insert columns mirror upsert (service_id subquery,
+    // and the index predicate exactly; the insert columns mirror upsert (owner_id subquery,
     // rev 0).
     const now = this.clock.now()
     const createdAt = adoptCreatedAt(execution, now)
     const detail = executionToDetail(execution)
-    const serviceIdSub = sql`(SELECT ${blocks.service_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
+    const ownerIdSub = sql`(SELECT ${blocks.owner_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
     const terminalOrReplaced = opts?.replaceId
       ? or(
           notInArray(agentRuns.status, ['running', 'blocked', 'paused']),
@@ -499,7 +499,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
           created_at: createdAt,
           updated_at: now,
           workflow_instance_id: execution.id,
-          service_id: serviceIdSub,
+          owner_id: ownerIdSub,
           rev: 0,
         })
         .onConflictDoNothing({
@@ -521,7 +521,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
     const expected = execution.rev ?? 0
     const now = this.clock.now()
     const detail = executionToDetail(execution)
-    const serviceIdSub = sql`(SELECT ${blocks.service_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
+    const ownerIdSub = sql`(SELECT ${blocks.owner_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
     const rows = await this.db
       .update(agentRuns)
       .set({
@@ -529,7 +529,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
         status: execution.status,
         detail,
         updated_at: now,
-        service_id: serviceIdSub,
+        owner_id: ownerIdSub,
         rev: sql`${agentRuns.rev} + 1`,
       })
       .where(
