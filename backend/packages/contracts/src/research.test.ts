@@ -1,6 +1,8 @@
+import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import {
   adhocQuestionId,
+  findingsRevisionBodySchema,
   foldFindings,
   isAdhocQuestionId,
   parseResearchDefinition,
@@ -123,6 +125,30 @@ describe('research definition schema', () => {
     expect(parsed.ok).toBe(false)
   })
 
+  it('refuses a link a human would follow unless it is http or https', () => {
+    const credential = (url: string) =>
+      definition({
+        credentials: [
+          {
+            key: 'VENDOR_TOKEN',
+            kind: 'api-token',
+            label: 'Vendor token',
+            onboarding: { url, instructions: 'Create a token.' },
+            requiredAtStart: true,
+          },
+        ],
+      })
+    expect(parseResearchDefinition(credential('https://vendor.example/tokens')).ok).toBe(true)
+    expect(parseResearchDefinition(credential('javascript:alert(1)')).ok).toBe(false)
+    const evidence = (url: string) =>
+      v.safeParse(findingsRevisionBodySchema, {
+        findings: [{ ...finding('list', 'answered', 'Paged'), evidence: [{ kind: 'url', url }] }],
+      }).success
+    expect(evidence('http://docs.vendor.example/list')).toBe(true)
+    expect(evidence('javascript:alert(1)')).toBe(false)
+    expect(evidence('data:text/html,<script>alert(1)</script>')).toBe(false)
+  })
+
   it('reads the namespace off a key', () => {
     expect(researchDefinitionNamespace('acme:content-integration')).toBe('acme')
   })
@@ -177,6 +203,16 @@ describe('foldFindings', () => {
     expect(folded.byQuestion['token-ttl']?.notes[0]?.status).toBe('blocked')
   })
 
+  it('keeps every other attempt as a note, oldest first, across a re-check and a replacement', () => {
+    const folded = foldFindings([
+      revision('r1', 1, [finding('auth-scheme', 'answered', 'API key')]),
+      revision('r2', 2, [finding('auth-scheme', 'blocked')]),
+      revision('r3', 3, [finding('auth-scheme', 'answered', 'OAuth 2')]),
+    ])
+    expect(folded.byQuestion['auth-scheme']?.finding.answer).toBe('OAuth 2')
+    expect(folded.byQuestion['auth-scheme']?.notes.map((n) => n.seq)).toEqual([1, 2])
+  })
+
   it('takes the newest summary and keeps every learning tagged with its revision', () => {
     const first = revision('r1', 1, [], 'first')
     first.body.learnings = [{ title: 'Rate limit is 10/s', detail: '' }]
@@ -199,7 +235,7 @@ describe('foldFindings', () => {
 })
 
 describe('researchCoverage', () => {
-  it('counts every asked question once, treating a never-answered one as unanswered', () => {
+  it('counts every asked question once, even a repeated ad-hoc id, treating a never-answered one as unanswered', () => {
     const parsed = parseResearchDefinition(definition())
     if (!parsed.ok) throw new Error('fixture invalid')
     const adhoc = adhocQuestionId('blk_1', 1)
@@ -211,7 +247,7 @@ describe('researchCoverage', () => {
         finding('retired-question', 'answered', 'old'),
       ]),
     ])
-    const coverage = researchCoverage(parsed.definition.topics, [adhoc], folded)
+    const coverage = researchCoverage(parsed.definition.topics, [adhoc, adhoc], folded)
     const asked = parsed.definition.topics.flatMap((t) => t.questions).length + 1
     const counted = Object.values(coverage.total).reduce((sum, n) => sum + n, 0)
     expect(counted).toBe(asked)

@@ -9,6 +9,7 @@ describe('resolveFindingsStoragePolicy', () => {
     expect(resolveFindingsStoragePolicy({ facadeInlineCeilingBytes: CEILING })).toEqual({
       inlineMaxBytes: DEFAULT_FINDINGS_INLINE_MAX_BYTES,
       offload: 'enabled',
+      facadeInlineCeilingBytes: CEILING,
     })
   })
 
@@ -20,7 +21,7 @@ describe('resolveFindingsStoragePolicy', () => {
         project: { offload: 'enabled' },
         facadeInlineCeilingBytes: CEILING,
       }),
-    ).toEqual({ inlineMaxBytes: 2000, offload: 'enabled' })
+    ).toEqual({ inlineMaxBytes: 2000, offload: 'enabled', facadeInlineCeilingBytes: CEILING })
   })
 
   it('never raises the threshold past the facade ceiling', () => {
@@ -34,14 +35,16 @@ describe('resolveFindingsStoragePolicy', () => {
 })
 
 describe('placeFindingsBody', () => {
-  const policy = { inlineMaxBytes: 100, offload: 'enabled' as const }
+  const policy = resolveFindingsStoragePolicy({
+    account: { inlineMaxBytes: 100 },
+    facadeInlineCeilingBytes: 1000,
+  })
 
   it('keeps a body at or under the threshold inline', () => {
     expect(
       placeFindingsBody({
         bytes: 100,
         policy,
-        facadeInlineCeilingBytes: 1000,
         blobStoreAvailable: true,
       }),
     ).toEqual({ placement: 'inline' })
@@ -52,7 +55,6 @@ describe('placeFindingsBody', () => {
       placeFindingsBody({
         bytes: 101,
         policy,
-        facadeInlineCeilingBytes: 1000,
         blobStoreAvailable: true,
       }),
     ).toEqual({ placement: 'offload' })
@@ -63,7 +65,6 @@ describe('placeFindingsBody', () => {
       placeFindingsBody({
         bytes: 500,
         policy,
-        facadeInlineCeilingBytes: 1000,
         blobStoreAvailable: false,
       }),
     ).toEqual({ placement: 'inline' })
@@ -71,7 +72,6 @@ describe('placeFindingsBody', () => {
       placeFindingsBody({
         bytes: 500,
         policy: { ...policy, offload: 'disabled' },
-        facadeInlineCeilingBytes: 1000,
         blobStoreAvailable: true,
       }),
     ).toEqual({ placement: 'inline' })
@@ -82,7 +82,6 @@ describe('placeFindingsBody', () => {
       placeFindingsBody({
         bytes: 1001,
         policy,
-        facadeInlineCeilingBytes: 1000,
         blobStoreAvailable: false,
       }),
     ).toEqual({ placement: 'refused', reason: 'findings_too_large_for_inline' })
