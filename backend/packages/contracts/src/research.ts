@@ -24,6 +24,12 @@ const stableId = v.pipe(v.string(), v.regex(idPattern, 'must be a lowercase slug
 const title = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(RESEARCH_TITLE_MAX))
 const shortProse = v.pipe(v.string(), v.trim(), v.maxLength(RESEARCH_SHORT_MAX))
 const prose = v.pipe(v.string(), v.maxLength(RESEARCH_PROSE_MAX))
+/** A link a human follows from the SPA, so a `javascript:` or `data:` URL can never pass. */
+const webUrl = v.pipe(
+  v.string(),
+  v.url(),
+  v.regex(/^https?:\/\//i, 'must be an http:// or https:// URL'),
+)
 
 /**
  * A definition key is namespaced, `<namespace>:<name>`. A stored definition's namespace must be
@@ -78,7 +84,7 @@ export const researchCredentialSchema = v.object({
   /** What the human does to obtain the credential from the vendor. */
   onboarding: v.optional(
     v.object({
-      url: v.optional(v.pipe(v.string(), v.url())),
+      url: v.optional(webUrl),
       instructions: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(RESEARCH_SHORT_MAX)),
     }),
   ),
@@ -173,7 +179,7 @@ export const findingEvidenceSchema = v.variant('kind', [
   /** A recorded, redacted request/response pair. */
   v.object({ kind: v.literal('http-exchange'), ref: v.pipe(v.string(), v.minLength(1)) }),
   v.object({ kind: v.literal('screenshot'), artifactId: v.pipe(v.string(), v.minLength(1)) }),
-  v.object({ kind: v.literal('url'), url: v.pipe(v.string(), v.url()) }),
+  v.object({ kind: v.literal('url'), url: webUrl }),
   v.object({
     kind: v.literal('repo-path'),
     repoId: v.pipe(v.string(), v.minLength(1)),
@@ -262,7 +268,10 @@ export interface FoldedFinding {
   /** The revision the current answer came from. */
   revisionId: string
   seq: number
-  /** Later attempts that did not replace the answer (an `unanswered` or `blocked` re-check). */
+  /**
+   * Every other attempt at the question, oldest first: answers this one superseded, and later
+   * `unanswered` or `blocked` re-checks that did not replace it.
+   */
   notes: FindingNote[]
 }
 
@@ -301,7 +310,7 @@ export function foldFindings(revisions: readonly FindingsRevision[]): FoldedFind
           finding,
           revisionId: revision.id,
           seq: revision.seq,
-          notes: current ? [...current.notes, noteOf(current)] : [],
+          notes: current ? [...current.notes, noteOf(current)].sort((a, b) => a.seq - b.seq) : [],
         }
         continue
       }
@@ -372,7 +381,7 @@ export function researchCoverage(
     return { topicId: topic.id, counts }
   })
   const adhoc = emptyCounts()
-  for (const questionId of adhocQuestionIds) {
+  for (const questionId of new Set(adhocQuestionIds)) {
     const status = statusOf(questionId)
     adhoc[status] += 1
     total[status] += 1
