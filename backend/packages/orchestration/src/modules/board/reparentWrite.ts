@@ -13,7 +13,7 @@ import type {
 } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import type { BoardChangeReason } from './board.logic.js'
-import { canReparent, descendantIds, rootOf, serviceOf } from './board.logic.js'
+import { canReparent, descendantIds, rootOf } from './board.logic.js'
 import { pruneDanglingEdges } from './removal-cascade.js'
 import { moveBlockArtifacts } from './blockArtifacts.js'
 import type { RiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
@@ -92,8 +92,8 @@ export function createBoardReparentWrite(deps: BoardReparentDeps) {
     // the moved task's inherited `type`, which is behavioural for the frame repo roles. Load
     // the parent's workspace blocks once here; the branches below reuse this list.
     const destBlocks = await deps.blockRepository.listByWorkspace(parentHome)
-    const destFrame = serviceOf(destBlocks, parent)
     const destRoot = rootOf(destBlocks, parent)
+    const destFrame = destRoot?.level === 'frame' ? destRoot : undefined
     if (block.level === 'task') {
       deps.assertTaskTypeAllowed(destFrame, block.taskType)
       if (destRoot?.level === 'project') {
