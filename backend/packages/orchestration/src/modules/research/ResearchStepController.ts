@@ -1,5 +1,5 @@
 import {
-  FINDINGS_INLINE_MAX_BYTES_CEILING,
+  type AdhocQuestion,
   type FindingsRevision,
   type FindingsRevisionBody,
   type ResearchDefinition,
@@ -14,16 +14,11 @@ import {
 import {
   CapabilityCredentialMissingError,
   ValidationError,
-  placeFindingsBody,
   redactSecrets,
-  resolveFindingsStoragePolicy,
   type AgentRunResult,
   type Block,
   type BlockRepository,
   type Clock,
-  type FindingsRevisionRepository,
-  type FindingsRevisionRow,
-  type FindingsStoragePolicyRepository,
   type PipelineStep,
   type ProjectRepository,
   type ResearchDefinitionSource,
@@ -31,8 +26,8 @@ import {
   type ResearchRunContext,
   type ResolvedResearchDefinition,
   type ServiceRepository,
-  type WorkspaceRepository,
 } from '@cat-factory/kernel'
+import type { ResearchFindingsStore } from './ResearchFindingsStore.js'
 
 // ---------------------------------------------------------------------------
 // The engine half of a research task's run: what the `project-researcher` step is asked when it
@@ -44,11 +39,9 @@ export interface ResearchStepControllerDeps {
   blockRepository: Pick<BlockRepository, 'findById'>
   projectRepository: Pick<ProjectRepository, 'get'>
   serviceRepository?: Pick<ServiceRepository, 'listByIds'>
-  workspaceRepository: Pick<WorkspaceRepository, 'accountOf'>
   researchDefinitions: ResearchDefinitionSource
   researchProjectRepository: ResearchProjectRepository
-  findingsRevisionRepository: FindingsRevisionRepository
-  findingsStoragePolicyRepository?: FindingsStoragePolicyRepository
+  findings: ResearchFindingsStore
   clock: Clock
 }
 
@@ -83,14 +76,21 @@ export class ResearchStepController {
     if (!step.research) {
       const mode =
         block.taskTypeFields?.researchMode ?? (task.revisions.length ? 'extend' : 'initial')
-      const adhoc = (block.taskTypeFields?.researchQuestions ?? []).map((question, i) => ({
+      const own = (block.taskTypeFields?.researchQuestions ?? []).map((question, i) => ({
         id: adhocQuestionId(block.id, i + 1),
         question,
       }))
-      const questionIds = [
-        ...selectQuestionIds(definition, mode, folded, block.taskTypeFields?.researchQuestionIds),
-        ...adhoc.map((q) => q.id),
-      ]
+      const earlier = earlierAdhocQuestions(task.revisions)
+      const selected = selectQuestionIds(
+        definition,
+        mode,
+        folded,
+        block.taskTypeFields?.researchQuestionIds,
+        earlier.map((q) => q.id),
+      )
+      const reasked = earlier.filter((q) => selected.includes(q.id))
+      const adhoc = [...reasked, ...own]
+      const questionIds = [...selected, ...own.map((q) => q.id)]
       if (questionIds.length === 0) {
         throw new ValidationError(`A '${mode}' research task has no question left to ask`, {
           reason: 'research_nothing_to_ask',
@@ -168,24 +168,27 @@ export class ResearchStepController {
     const body: FindingsRevisionBody = {
       ...merged,
       findings: merged.findings.filter((f) => asked.has(f.questionId)),
+      adhocQuestions: state.adhocQuestions ?? [],
     }
-    const json = JSON.stringify(body)
-    const bytes = new globalThis.TextEncoder().encode(json).byteLength
-    await this.assertFitsInline(workspaceId, state.projectId, bytes)
-    const row: FindingsRevisionRow = {
-      id: revisionIdFor(taskId),
-      projectId: state.projectId,
-      taskId,
-      seq: state.seq,
-      mode: state.mode,
-      definitionKey: state.definitionKey,
-      definitionVersion: state.definitionVersion,
-      createdAt: this.deps.clock.now(),
-      body: { kind: 'inline', json },
-      bodyBytes: bytes,
-    }
-    await this.deps.findingsRevisionRepository.insert(row)
-    step.research = { ...state, revisionId: row.id }
+    const project = await this.deps.projectRepository.get(state.projectId)
+    if (!project) throw new Error(`research project '${state.projectId}' no longer exists`)
+    const id = revisionIdFor(taskId)
+    await this.deps.findings.write({
+      runWorkspaceId: workspaceId,
+      project,
+      meta: {
+        id,
+        projectId: state.projectId,
+        taskId,
+        seq: state.seq,
+        mode: state.mode,
+        definitionKey: state.definitionKey,
+        definitionVersion: state.definitionVersion,
+        createdAt: this.deps.clock.now(),
+      },
+      body,
+    })
+    step.research = { ...state, revisionId: id }
     return { output: renderRevision(body, state, dropped), outputIsRendered: true }
   }
 
@@ -217,13 +220,12 @@ export class ResearchStepController {
         { reason: 'research_definition_changed', definitionKey: pin.definitionKey },
       )
     }
-    const rows = await this.deps.findingsRevisionRepository.listByProject(project.id)
     return {
       project,
       accountId,
       definition: resolved,
       inputs: pin.inputs,
-      revisions: rows.map(decodeRevision),
+      revisions: await this.deps.findings.listRevisions(project),
     }
   }
 
@@ -285,39 +287,6 @@ export class ResearchStepController {
     )
     return resolved?.definition
   }
-
-  /**
-   * Where the body is stored under the account, workspace and project policy tiers. Only inline
-   * storage is implemented, so a body over the runtime's own row ceiling is refused loudly rather
-   * than truncated; one over the policy threshold but under the ceiling stays inline.
-   */
-  private async assertFitsInline(workspaceId: string, projectId: string, bytes: number) {
-    const policies = this.deps.findingsStoragePolicyRepository
-    const accountId = (await this.deps.workspaceRepository.accountOf(workspaceId)) ?? null
-    const [account, workspace, project] = await Promise.all([
-      accountId && policies ? policies.get('account', accountId) : null,
-      policies ? policies.get('workspace', workspaceId) : null,
-      policies ? policies.get('project', projectId) : null,
-    ])
-    const policy = resolveFindingsStoragePolicy({
-      account,
-      workspace,
-      project,
-      facadeInlineCeilingBytes: FINDINGS_INLINE_MAX_BYTES_CEILING,
-    })
-    const placement = placeFindingsBody({
-      bytes,
-      policy,
-      facadeInlineCeilingBytes: FINDINGS_INLINE_MAX_BYTES_CEILING,
-      blobStoreAvailable: false,
-    })
-    if (placement.placement === 'refused') {
-      throw new ValidationError('The findings are too large to store inline', {
-        reason: placement.reason,
-        bytes,
-      })
-    }
-  }
 }
 
 /** The revision id a task writes: one per task, so a replayed write is a no-op. */
@@ -326,21 +295,24 @@ export function revisionIdFor(taskId: string): string {
 }
 
 /**
- * The definition questions a task of `mode` asks: every one (`initial`), the ones no revision
- * has touched (`extend`), the partial or blocked ones (`clarify`), or the answered ones
- * (`refresh`). `named` narrows `clarify` and `refresh` to the questions a person picked.
+ * The questions a task of `mode` asks: every definition question (`initial`), the ones no
+ * revision has touched (`extend`), the partial or blocked ones (`clarify`), or the answered ones
+ * (`refresh`). Past `initial`, the ad-hoc questions earlier tasks added are candidates beside the
+ * definition's. `named` narrows `clarify` and `refresh` to the questions a person picked.
  */
 export function selectQuestionIds(
   definition: ResearchDefinition,
   mode: ResearchMode,
   folded: FoldedFindings,
   named?: readonly string[],
+  earlierAdhoc: readonly string[] = [],
 ): string[] {
-  const all = definition.topics.flatMap((topic) => topic.questions.map((q) => q.id))
+  const fromDefinition = definition.topics.flatMap((topic) => topic.questions.map((q) => q.id))
+  const all = [...fromDefinition, ...earlierAdhoc]
   const status = (id: string) => folded.byQuestion[id]?.finding.status
   switch (mode) {
     case 'initial':
-      return all
+      return fromDefinition
     case 'extend':
       return all.filter((id) => status(id) === undefined)
     case 'clarify':
@@ -372,7 +344,17 @@ export function mergeBodies(
     summary: later.summary || earlier.summary,
     findings: [...byId.values()],
     learnings: [...earlier.learnings.filter((l) => !titles.has(l.title)), ...later.learnings],
+    adhocQuestions: later.adhocQuestions,
   }
+}
+
+/** The ad-hoc questions earlier revisions answered, the latest text for each id winning. */
+function earlierAdhocQuestions(revisions: readonly FindingsRevision[]): AdhocQuestion[] {
+  const byId = new Map<string, AdhocQuestion>()
+  for (const revision of [...revisions].sort((a, b) => a.seq - b.seq)) {
+    for (const question of revision.body.adhocQuestions) byId.set(question.id, question)
+  }
+  return [...byId.values()]
 }
 
 function parseBody(value: unknown): FindingsRevisionBody | undefined {
@@ -384,17 +366,6 @@ function requireState(step: PipelineStep): ResearchStepState {
     throw new Error('A research step completed without the state its dispatch recorded')
   }
   return step.research
-}
-
-function decodeRevision(row: FindingsRevisionRow): FindingsRevision {
-  const ref = row.body
-  if (ref.kind !== 'inline') {
-    throw new Error(`Findings revision '${row.id}' is offloaded, which this build cannot read yet`)
-  }
-  const body = parseFindingsRevisionBody(JSON.parse(ref.json))
-  if (!body) throw new Error(`Findings revision '${row.id}' holds an unreadable body`)
-  const { body: _ref, bodyBytes: _bytes, ...meta } = row
-  return { ...meta, body }
 }
 
 function scrub(text: string): string {

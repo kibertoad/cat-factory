@@ -694,7 +694,8 @@
         "delegated_executor_failed": "Zewnętrzny executor nie zdołał uruchomić tego kroku. Problem leży w systemie wykonującym pracę, a nie w tej instalacji: sprawdź jego własne logi i spróbuj ponownie.",
         "delegated_work_branch_unprepared": "Platforma nie mogła przygotować gałęzi roboczej, na którą wysyłany jest executor tego kroku, więc nic nie zostało uruchomione. Albo połączenie z repozytorium nie ma prawa zapisu, albo zadanie wskazuje gałąź, która jeszcze nie istnieje: szczegóły mówią, co z tego.",
         "attached_pr_provider_unreachable": "Dostawca repozytorium nie odpowiedział, więc nie udało się sprawdzić pull requesta i nie utworzono zadania. Nie trzeba tu niczego konfigurować: spróbuj ponownie za chwilę.",
-        "research_definitions_unreachable": "Nie udało się teraz odczytać definicji badań tego wdrożenia, więc żądanie nie zostało wykonane. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci."
+        "research_definitions_unreachable": "Nie udało się teraz odczytać definicji badań tego wdrożenia, więc żądanie nie zostało wykonane. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
+        "findings_body_unavailable": "Te ustalenia są przechowywane w magazynie treści, który nie może ich teraz udostępnić. Z żądaniem wszystko w porządku: spróbuj ponownie, gdy magazyn będzie dostępny."
       }
     },
     "reason": {
@@ -709,7 +710,22 @@
         "tool_server_without_oauth": "Ten serwer narzędzi nie używa już OAuth, więc nie ma połączenia do dokończenia.",
         "gate_config_fields_invalid": "Ustawienia bramki kroku są niekompletne lub zawierają wartość, której bramka nie akceptuje, zwykle wymagane ustawienie bez wartości. Uzupełnij ustawienia bramki kroku w pipeline'ie i spróbuj ponownie.",
         "approvals_chain_stale": "Ten pipeline zmienił się po otwarciu jego punktów zatwierdzania, więc nie pasują już do jego kroków. Wczytaj pipeline ponownie i ustaw je jeszcze raz.",
-        "approvals_builtin_checkpoint_locked": "Wbudowany pipeline zachowuje punkty zatwierdzania, które zawiera jego definicja z katalogu. Sklonuj pipeline, aby usunąć któryś z nich."
+        "approvals_builtin_checkpoint_locked": "Wbudowany pipeline zachowuje punkty zatwierdzania, które zawiera jego definicja z katalogu. Sklonuj pipeline, aby usunąć któryś z nich.",
+        "project_kind_unregistered": "To wdrożenie nie oferuje już tego rodzaju projektu. Zapytaj administratora, jakie rodzaje projektów są dostępne.",
+        "task_type_not_offered_by_project": "Ten projekt nie oferuje tego typu zadania. Wybierz jeden z typów zadań, które oferuje projekt.",
+        "project_has_no_writable_repo": "Krok w potoku tego zadania potrzebuje repozytorium do zapisu, a projekt go nie ma. Wybierz potok, który tylko czyta repozytoria powiązanych usług.",
+        "project_service_link_invalid": "Powiązana usługa nie istnieje lub należy do innej organizacji. Wybierz usługi tej organizacji.",
+        "project_has_unfinished_tasks": "Ten projekt ma jeszcze niezakończone zadania. Zakończ je lub usuń, a potem usuń projekt.",
+        "research_pin_required": "Projekt badawczy potrzebuje definicji badania. Wybierz ją przed utworzeniem projektu.",
+        "research_pin_not_accepted": "Ten rodzaj projektu nie używa definicji badania. Utwórz go bez niej.",
+        "research_definition_not_found": "Ta definicja badania lub wersja nie istnieje w tej organizacji. Wybierz jedną z listy.",
+        "research_inputs_invalid": "Wartości wpisane dla definicji badania są nieprawidłowe. Sprawdź wyróżnione pola.",
+        "task_type_requires_project": "Zadanie badawcze należy do projektu badawczego, a nie do usługi. Dodaj je do projektu.",
+        "research_project_not_pinned": "Projekt tego zadania nie ma przypiętej definicji badania, więc nie może prowadzić badania.",
+        "research_definition_changed": "Definicja badania zmieniła się, odkąd ten projekt ją przypiął. Utwórz nowy projekt, aby użyć nowej wersji.",
+        "research_task_already_recorded": "To zadanie badawcze zapisało już swoje ustalenia. Rozpocznij zadanie uzupełniające, aby badać dalej.",
+        "research_nothing_to_ask": "W wybranym trybie to zadanie uzupełniające nie ma już pytań do zadania. Wybierz inny tryb lub dodaj pytania.",
+        "findings_too_large_for_inline": "Ustalenia są zbyt duże, aby je zapisać, a przeniesienie ich do magazynu treści jest niedostępne. Włącz magazyn treści lub zezwól na przenoszenie i spróbuj ponownie."
       }
     },
     "action": {
@@ -9221,7 +9237,12 @@
       "servicesHelp": "Jego zadania mogą czytać repozytoria tych usług jako kontekst.",
       "submit": "Utwórz projekt",
       "created": "Utworzono projekt {title}",
-      "failed": "Nie udało się utworzyć projektu"
+      "failed": "Nie udało się utworzyć projektu",
+      "definitionLabel": "Definicja badania",
+      "definitionHelp": "Co badanie ma ustalić. Jej wersja zostaje przypięta do tego projektu.",
+      "definitionOption": "{title} (wersja {version})",
+      "noDefinitions": "Ta organizacja nie ma jeszcze żadnej definicji badania. Najpierw musi ją opublikować administrator.",
+      "definitionsFailed": "Nie udało się wczytać definicji badań"
     },
     "linkServices": {
       "title": "Powiązane usługi",

@@ -6574,7 +6574,8 @@
         "delegated_executor_failed": "L’esecutore esterno non è riuscito ad avviare questo passaggio. Il problema è nel sistema che svolge il lavoro, non in questa installazione: controlla i suoi log e riprova.",
         "delegated_work_branch_unprepared": "La piattaforma non è riuscita a preparare il branch di lavoro su cui viene inviato l'executor di questo passo, quindi non è stato avviato nulla. O la connessione al repository non può scriverci, oppure l'attività indica un branch che non esiste ancora: i dettagli dicono quale dei due.",
         "attached_pr_provider_unreachable": "Il provider del repository non ha risposto, quindi non è stato possibile verificare la pull request e non è stata creata alcuna attività. Non c'è nulla da configurare qui: riprova tra un momento.",
-        "research_definitions_unreachable": "Non è stato possibile leggere le definizioni di ricerca di questa installazione in questo momento, quindi la richiesta non è stata completata. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata."
+        "research_definitions_unreachable": "Non è stato possibile leggere le definizioni di ricerca di questa installazione in questo momento, quindi la richiesta non è stata completata. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
+        "findings_body_unavailable": "Questi risultati sono conservati nell'archiviazione dei contenuti, che ora non può fornirli. La richiesta è corretta: riprova quando l'archiviazione sarà disponibile."
       }
     },
     "reason": {
@@ -6589,7 +6590,22 @@
         "tool_server_without_oauth": "Questo server degli strumenti non usa più OAuth, quindi non c’è nessuna connessione da completare.",
         "gate_config_fields_invalid": "Le impostazioni del gate di un passo sono incomplete o contengono un valore che il gate non accetta, di solito un'impostazione obbligatoria senza valore. Compila le impostazioni del gate del passo nella pipeline e riprova.",
         "approvals_chain_stale": "Questa pipeline è cambiata dopo che ne hai aperto i punti di approvazione, quindi non corrispondono più ai suoi passaggi. Ricarica la pipeline e impostali di nuovo.",
-        "approvals_builtin_checkpoint_locked": "Una pipeline integrata mantiene i punti di approvazione previsti dalla sua definizione nel catalogo. Clona la pipeline per rimuoverne uno."
+        "approvals_builtin_checkpoint_locked": "Una pipeline integrata mantiene i punti di approvazione previsti dalla sua definizione nel catalogo. Clona la pipeline per rimuoverne uno.",
+        "project_kind_unregistered": "Questo tipo di progetto non è più offerto da questa installazione. Chiedi a un amministratore quali tipi di progetto sono disponibili.",
+        "task_type_not_offered_by_project": "Questo progetto non offre quel tipo di attività. Scegli uno dei tipi di attività che il progetto offre.",
+        "project_has_no_writable_repo": "Un passaggio della pipeline di questa attività ha bisogno di un repository in cui scrivere, e un progetto non ne ha. Scegli una pipeline che legge soltanto i repository dei servizi collegati.",
+        "project_service_link_invalid": "Un servizio collegato non esiste o appartiene a un'altra organizzazione. Scegli servizi di questa organizzazione.",
+        "project_has_unfinished_tasks": "Questo progetto ha ancora attività non concluse. Concludile o eliminale, poi elimina il progetto.",
+        "research_pin_required": "Un progetto di ricerca ha bisogno di una definizione di ricerca. Scegline una prima di creare il progetto.",
+        "research_pin_not_accepted": "Questo tipo di progetto non usa una definizione di ricerca. Crealo senza.",
+        "research_definition_not_found": "Quella definizione di ricerca o versione non esiste per questa organizzazione. Scegline una dall'elenco.",
+        "research_inputs_invalid": "I valori inseriti per la definizione di ricerca non sono validi. Controlla i campi evidenziati.",
+        "task_type_requires_project": "Un'attività di ricerca appartiene a un progetto di ricerca, non a un servizio. Aggiungila invece a un progetto.",
+        "research_project_not_pinned": "Il progetto di questa attività non ha una definizione di ricerca fissata, quindi non può fare ricerca.",
+        "research_definition_changed": "La definizione di ricerca è cambiata da quando questo progetto l'ha fissata. Crea un nuovo progetto per usare la nuova versione.",
+        "research_task_already_recorded": "Questa attività di ricerca ha già registrato i suoi risultati. Avvia un'attività di approfondimento per continuare la ricerca.",
+        "research_nothing_to_ask": "Per questo approfondimento non resta alcuna domanda nella modalità scelta. Scegli un'altra modalità o aggiungi domande.",
+        "findings_too_large_for_inline": "I risultati sono troppo grandi da salvare, e spostarli nell'archiviazione dei contenuti non è possibile. Attiva l'archiviazione dei contenuti o consenti lo spostamento, poi riprova."
       }
     },
     "action": {
@@ -9221,7 +9237,12 @@
       "servicesHelp": "Le sue attività possono leggere i repository di questi servizi come contesto.",
       "submit": "Crea progetto",
       "created": "Progetto {title} creato",
-      "failed": "Non è stato possibile creare il progetto"
+      "failed": "Non è stato possibile creare il progetto",
+      "definitionLabel": "Definizione di ricerca",
+      "definitionHelp": "Che cosa la ricerca vuole scoprire. La sua versione viene fissata per questo progetto.",
+      "definitionOption": "{title} (versione {version})",
+      "noDefinitions": "Per questa organizzazione non è ancora disponibile alcuna definizione di ricerca. Prima un amministratore deve pubblicarne una.",
+      "definitionsFailed": "Impossibile caricare le definizioni di ricerca"
     },
     "linkServices": {
       "title": "Servizi collegati",

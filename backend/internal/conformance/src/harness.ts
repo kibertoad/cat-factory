@@ -51,6 +51,7 @@ import type {
   ProjectKindRegistry,
   ResearchDefinitionRegistry,
   ResearchProjectRepository,
+  FindingsStoragePolicyRepository,
   InlineUseCaseRegistry,
   InlineUseCaseGenerator,
   WorkspaceMemberRepository,
@@ -321,6 +322,8 @@ export interface ConformanceApp {
   blockRepository(): BlockRepository
   /** The facade's research-project repository, so the projects suite can read what a create pinned. */
   researchProjectRepository(): ResearchProjectRepository
+  /** The facade's findings-storage policy tiers, so a suite can lower a project's threshold. */
+  findingsStoragePolicyRepository(): FindingsStoragePolicyRepository
   /**
    * The facade's workspace repository over its real store, so the workspace-RBAC suite can
    * assert the `accessRowOf` / `setAccessMode` access-mode round-trip identically on D1 and

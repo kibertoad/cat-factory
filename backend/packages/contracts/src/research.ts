@@ -150,6 +150,21 @@ export const researchDefinitionSchema = v.pipe(
 export type ResearchDefinition = v.InferOutput<typeof researchDefinitionSchema>
 export type ResearchDefinitionInput = v.InferInput<typeof researchDefinitionSchema>
 
+/**
+ * A definition version an account can pin, as the create-project form lists it: what it is for
+ * and the inputs a project fills, without its question list. `origin` says whether the deployment
+ * ships it in code or the account published it.
+ */
+export const pinnableResearchDefinitionSchema = v.object({
+  key: researchDefinitionKeySchema,
+  version: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  title: v.string(),
+  brief: v.string(),
+  inputs: v.array(taskTypeFieldDescriptorSchema),
+  origin: v.picklist(['registered', 'stored']),
+})
+export type PinnableResearchDefinition = v.InferOutput<typeof pinnableResearchDefinitionSchema>
+
 // ---------------------------------------------------------------------------
 // Findings
 // ---------------------------------------------------------------------------
@@ -204,6 +219,10 @@ export const questionFindingSchema = v.pipe(
 )
 export type QuestionFinding = v.InferOutput<typeof questionFindingSchema>
 
+/** An ad-hoc question a task added, under the `adhoc:` id it is answered by. */
+export const adhocQuestionSchema = v.object({ id: v.string(), question: v.string() })
+export type AdhocQuestion = v.InferOutput<typeof adhocQuestionSchema>
+
 /** Something the agent found that no question asked about. */
 export const researchLearningSchema = v.object({
   title,
@@ -220,6 +239,12 @@ export const findingsRevisionBodySchema = v.pipe(
       v.pipe(v.array(researchLearningSchema), v.maxLength(RESEARCH_LEARNINGS_MAX)),
       [],
     ),
+    /**
+     * The text of the ad-hoc questions this revision answers, by their `adhoc:` id. A definition
+     * question's text lives on the definition; an ad-hoc one lives only here, so a later `clarify`
+     * or `refresh` task can ask it again.
+     */
+    adhocQuestions: v.optional(v.array(adhocQuestionSchema), []),
   }),
   v.check(
     (body) => duplicates(body.findings.map((f) => f.questionId)).length === 0,
@@ -249,7 +274,7 @@ export const researchStepStateSchema = v.object({
   /** Every question id this task answers, definition and ad-hoc alike. */
   questionIds: v.array(v.string()),
   /** The questions this task added, by the `adhoc:` id each is answered under. */
-  adhocQuestions: v.optional(v.array(v.object({ id: v.string(), question: v.string() })), []),
+  adhocQuestions: v.optional(v.array(adhocQuestionSchema), []),
   /**
    * Partial findings the agent recorded before it stopped to wait for a credential. Step state,
    * never a revision: the resumed dispatch starts from it and the task still writes one revision.

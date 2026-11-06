@@ -36,6 +36,7 @@ import type {
   ApiErrorCode,
   BootstrapReferenceReason,
   CredentialWaitReason,
+  ProjectReason,
   GateConfigRefusalReason,
   PipelineApprovalsRefusalReason,
   ToolServerOAuthReason,
@@ -132,6 +133,10 @@ const GENERIC_DESCRIPTION_KEYS: Record<Exclude<ApiErrorCode, 'conflict'>, string
  *
  * `CredentialWaitReason` joins it because its 403 is not a missing permission: it names the one
  * person (the run's initiator) whose password can resume the run.
+ *
+ * `ProjectReason` joins it because each of its 422s names what to change about a project or a
+ * research task (pick a definition, a mode, a project instead of a service), which the generic
+ * validation wording does not say.
  */
 const REASON_DESCRIPTION_KEYS: Record<
   | UnavailableReason
@@ -139,9 +144,25 @@ const REASON_DESCRIPTION_KEYS: Record<
   | ToolServerOAuthReason
   | GateConfigRefusalReason
   | PipelineApprovalsRefusalReason
-  | CredentialWaitReason,
+  | CredentialWaitReason
+  | ProjectReason,
   string
 > = {
+  project_kind_unregistered: 'errors.reason.description.project_kind_unregistered',
+  task_type_not_offered_by_project: 'errors.reason.description.task_type_not_offered_by_project',
+  project_has_no_writable_repo: 'errors.reason.description.project_has_no_writable_repo',
+  project_service_link_invalid: 'errors.reason.description.project_service_link_invalid',
+  project_has_unfinished_tasks: 'errors.reason.description.project_has_unfinished_tasks',
+  research_pin_required: 'errors.reason.description.research_pin_required',
+  research_pin_not_accepted: 'errors.reason.description.research_pin_not_accepted',
+  research_definition_not_found: 'errors.reason.description.research_definition_not_found',
+  research_inputs_invalid: 'errors.reason.description.research_inputs_invalid',
+  task_type_requires_project: 'errors.reason.description.task_type_requires_project',
+  research_project_not_pinned: 'errors.reason.description.research_project_not_pinned',
+  research_definition_changed: 'errors.reason.description.research_definition_changed',
+  research_task_already_recorded: 'errors.reason.description.research_task_already_recorded',
+  research_nothing_to_ask: 'errors.reason.description.research_nothing_to_ask',
+  findings_too_large_for_inline: 'errors.reason.description.findings_too_large_for_inline',
   credential_wait_not_initiator: 'errors.reason.description.credential_wait_not_initiator',
   gate_config_fields_invalid: 'errors.reason.description.gate_config_fields_invalid',
   approvals_chain_stale: 'errors.reason.description.approvals_chain_stale',
@@ -175,6 +196,7 @@ const REASON_DESCRIPTION_KEYS: Record<
     'errors.unavailable.description.delegated_work_branch_unprepared',
   attached_pr_provider_unreachable:
     'errors.unavailable.description.attached_pr_provider_unreachable',
+  findings_body_unavailable: 'errors.unavailable.description.findings_body_unavailable',
 }
 
 /**

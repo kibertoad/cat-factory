@@ -769,7 +769,8 @@
         "delegated_executor_failed": "The external executor could not start this step. The problem is in the system that runs the work, not in this deployment: check its own logs and try again.",
         "delegated_work_branch_unprepared": "The platform could not prepare the work branch this step's executor is dispatched onto, so nothing was started. Either the repository connection cannot write to it, or the task names a branch that does not exist yet: the details say which.",
         "attached_pr_provider_unreachable": "The repository provider did not answer, so the pull request could not be checked and no task was created. Nothing needs setting up here: try again in a moment.",
-        "research_definitions_unreachable": "This deployment's research definitions could not be read just now, so the request was not completed. Nothing is misconfigured and no change is needed: try again once the connection recovers."
+        "research_definitions_unreachable": "This deployment's research definitions could not be read just now, so the request was not completed. Nothing is misconfigured and no change is needed: try again once the connection recovers.",
+        "findings_body_unavailable": "These findings are kept in content storage, which cannot serve them right now. Nothing is wrong with the request: try again once storage is available."
       }
     },
     "reason": {
@@ -784,7 +785,22 @@
         "tool_server_without_oauth": "This tool server no longer uses OAuth, so there is no connection to finish.",
         "gate_config_fields_invalid": "A gate step's settings are incomplete or hold a value the gate does not accept, usually a required setting with no value. Fill in the step's gate settings in the pipeline, then try again.",
         "approvals_chain_stale": "This pipeline changed after you opened its approval checkpoints, so they no longer line up with its steps. Reload the pipeline and set them again.",
-        "approvals_builtin_checkpoint_locked": "A built-in pipeline keeps the approval checkpoints its catalog definition ships. Clone the pipeline to remove one."
+        "approvals_builtin_checkpoint_locked": "A built-in pipeline keeps the approval checkpoints its catalog definition ships. Clone the pipeline to remove one.",
+        "project_kind_unregistered": "This project's kind is not offered by this deployment any more. Ask an administrator which project kinds are available.",
+        "task_type_not_offered_by_project": "This project does not offer that task type. Pick one of the task types the project lists.",
+        "project_has_no_writable_repo": "A step in this task's pipeline needs a repository to write to, and a project has none. Pick a pipeline that only reads the linked services' repositories.",
+        "project_service_link_invalid": "A linked service does not exist or belongs to another organization. Pick services of this organization.",
+        "project_has_unfinished_tasks": "This project still has tasks that have not finished. Finish or delete them, then delete the project.",
+        "research_pin_required": "A research project needs a research definition. Pick one before creating the project.",
+        "research_pin_not_accepted": "This kind of project does not use a research definition. Create it without one.",
+        "research_definition_not_found": "That research definition or version does not exist for this organization. Pick one from the list.",
+        "research_inputs_invalid": "The values entered for the research definition are not valid. Check the highlighted fields.",
+        "task_type_requires_project": "A research task belongs to a research project, not to a service. Add it to a project instead.",
+        "research_project_not_pinned": "This task's project has no research definition pinned, so it cannot run research.",
+        "research_definition_changed": "The research definition changed since this project pinned it. Create a new project to use the new version.",
+        "research_task_already_recorded": "This research task has already recorded its findings. Start a follow-up task to research further.",
+        "research_nothing_to_ask": "This follow-up has no question left to ask in the chosen mode. Pick another mode or add questions.",
+        "findings_too_large_for_inline": "The findings are too large to store, and offloading them to content storage is not available. Enable content storage or allow offloading, then retry."
       }
     },
     "action": {
@@ -9555,7 +9571,12 @@
       "servicesHelp": "Its tasks can read these services' repositories as context.",
       "submit": "Create project",
       "created": "Project {title} created",
-      "failed": "Could not create the project"
+      "failed": "Could not create the project",
+      "definitionLabel": "Research definition",
+      "definitionHelp": "What the research sets out to find. Its version is fixed for this project.",
+      "definitionOption": "{title} (version {version})",
+      "noDefinitions": "No research definition is available to this organization yet. An administrator publishes one first.",
+      "definitionsFailed": "Could not load the research definitions"
     },
     "linkServices": {
       "title": "Linked services",

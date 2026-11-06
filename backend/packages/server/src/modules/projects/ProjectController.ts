@@ -1,5 +1,6 @@
 import {
   createProjectContract,
+  listPinnableResearchDefinitionsContract,
   listProjectCatalogContract,
   mountProjectContract,
   setProjectServicesContract,
@@ -33,6 +34,23 @@ export function projectController(): Hono<AppEnv> {
     const accountId = await c.get('container').workspaceService.accountOf(param(c, 'workspaceId'))
     if (accountId === undefined) return c.json([], 200)
     return c.json(await projects.service.listForAccount(accountId), 200)
+  })
+
+  buildHonoRoute(app, listPinnableResearchDefinitionsContract, async (c) => {
+    const container = c.get('container')
+    const accountId = await container.workspaceService.accountOf(param(c, 'workspaceId'))
+    const resolved = await container.researchDefinitions.list(accountId ?? '')
+    return c.json(
+      resolved.map(({ definition, origin }) => ({
+        key: definition.key,
+        version: definition.version,
+        title: definition.title,
+        brief: definition.brief,
+        inputs: definition.inputs,
+        origin,
+      })),
+      200,
+    )
   })
 
   buildHonoRoute(app, createProjectContract, async (c) => {

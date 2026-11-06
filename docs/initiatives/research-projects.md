@@ -302,7 +302,10 @@ can use it, which closes the silent `missing_secret` degradation for kinds that 
 A revision's body is stored inline in `research_findings_revisions` while it is at or under the
 effective threshold, and in the account's blob store above it, the row then holding the
 `BinaryArtifactStore` id. A new `findings` artifact kind, exempt from the age-based retention sweep
-and reclaimed with its project.
+and reclaimed with its project. The artifact is anchored on the project's root block in the
+root's home workspace, so the row needs only the artifact id: a reader resolves the home
+workspace from the root, and deleting the home board carries the artifact to the board the
+project is re-homed to.
 
 The policy cascades account → workspace → project, narrowest set value winning, with absence (never
 a stored null) meaning inherit:
@@ -415,7 +418,7 @@ Still open:
 | 4   | Harness: `research` mode with optional repos (linked repos as `referenceRepos`), the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                                                       | in review | #2508 |
 | 5a  | Engine groundwork: the `ResearchDefinitionSource` read port (registry plus store, `/internal/research-definitions` for a mothership node), the registry option on every entry point, a research kind pinning its definition at project creation, the per-task findings sequence claim. Conformance.                                          | in review | #2510 |
 | 5b  | Engine: the `project-researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                                                                                                                                                              | in review | #2511 |
-| 5c  | Findings offload to the blob store (the revision row records which store and workspace hold the body), and the definition picker on the create-project form with the definitions read it lists from.                                                                                                                                         | todo      |       |
+| 5c  | Findings offload to the blob store, anchored on the project root in its home workspace and carried when the project is re-homed; one reader for a body wherever it lives. The definition picker on the create-project form. Translated copy for every project refusal. Ad-hoc questions carried to later `clarify` and `refresh` tasks.      | in review |       |
 | 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                     | in review | #2509 |
 | 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                                                                | todo      |       |
 | 8   | SPA: project frames, findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                                                            | todo      |       |

@@ -694,7 +694,8 @@
         "delegated_executor_failed": "L’exécuteur externe n’a pas pu démarrer cette étape. Le problème vient du système qui effectue le travail, pas de ce déploiement : consultez ses propres journaux, puis réessayez.",
         "delegated_work_branch_unprepared": "La plateforme n'a pas pu préparer la branche de travail vers laquelle l'exécuteur de cette étape est envoyé, donc rien n'a démarré. Soit la connexion au dépôt ne peut pas y écrire, soit la tâche nomme une branche qui n'existe pas encore : les détails indiquent laquelle des deux.",
         "attached_pr_provider_unreachable": "Le fournisseur du dépôt n'a pas répondu, la pull request n'a donc pas pu être vérifiée et aucune tâche n'a été créée. Il n'y a rien à configurer ici : réessayez dans un instant.",
-        "research_definitions_unreachable": "Les définitions de recherche de ce déploiement n'ont pas pu être lues pour l'instant, la demande n'a donc pas abouti. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie."
+        "research_definitions_unreachable": "Les définitions de recherche de ce déploiement n'ont pas pu être lues pour l'instant, la demande n'a donc pas abouti. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
+        "findings_body_unavailable": "Ces résultats sont conservés dans le stockage de contenu, qui ne peut pas les fournir pour l'instant. La demande est correcte : réessayez une fois le stockage disponible."
       }
     },
     "reason": {
@@ -709,7 +710,22 @@
         "tool_server_without_oauth": "Ce serveur d’outils n’utilise plus OAuth, il n’y a donc aucune connexion à finaliser.",
         "gate_config_fields_invalid": "Les paramètres du contrôle d'une étape sont incomplets ou contiennent une valeur que le contrôle n'accepte pas, le plus souvent un paramètre obligatoire sans valeur. Renseignez les paramètres du contrôle de l'étape dans le pipeline, puis réessayez.",
         "approvals_chain_stale": "Ce pipeline a changé après l’ouverture de ses points d’approbation, qui ne correspondent donc plus à ses étapes. Rechargez le pipeline et définissez-les à nouveau.",
-        "approvals_builtin_checkpoint_locked": "Un pipeline intégré conserve les points d’approbation fournis par sa définition du catalogue. Clonez le pipeline pour en retirer un."
+        "approvals_builtin_checkpoint_locked": "Un pipeline intégré conserve les points d’approbation fournis par sa définition du catalogue. Clonez le pipeline pour en retirer un.",
+        "project_kind_unregistered": "Ce type de projet n'est plus proposé par ce déploiement. Demandez à un administrateur quels types de projet sont disponibles.",
+        "task_type_not_offered_by_project": "Ce projet ne propose pas ce type de tâche. Choisissez l'un des types de tâche que propose le projet.",
+        "project_has_no_writable_repo": "Une étape du pipeline de cette tâche a besoin d'un dépôt où écrire, et un projet n'en a pas. Choisissez un pipeline qui se contente de lire les dépôts des services liés.",
+        "project_service_link_invalid": "Un service lié n'existe pas ou appartient à une autre organisation. Choisissez des services de cette organisation.",
+        "project_has_unfinished_tasks": "Ce projet a encore des tâches non terminées. Terminez-les ou supprimez-les, puis supprimez le projet.",
+        "research_pin_required": "Un projet de recherche a besoin d'une définition de recherche. Choisissez-en une avant de créer le projet.",
+        "research_pin_not_accepted": "Ce type de projet n'utilise pas de définition de recherche. Créez-le sans.",
+        "research_definition_not_found": "Cette définition de recherche ou cette version n'existe pas pour cette organisation. Choisissez-en une dans la liste.",
+        "research_inputs_invalid": "Les valeurs saisies pour la définition de recherche ne sont pas valides. Vérifiez les champs signalés.",
+        "task_type_requires_project": "Une tâche de recherche appartient à un projet de recherche, pas à un service. Ajoutez-la plutôt à un projet.",
+        "research_project_not_pinned": "Le projet de cette tâche n'a aucune définition de recherche fixée, elle ne peut donc pas lancer de recherche.",
+        "research_definition_changed": "La définition de recherche a changé depuis que ce projet l'a fixée. Créez un nouveau projet pour utiliser la nouvelle version.",
+        "research_task_already_recorded": "Cette tâche de recherche a déjà enregistré ses résultats. Lancez une tâche de suivi pour poursuivre la recherche.",
+        "research_nothing_to_ask": "Ce suivi n'a plus aucune question à poser dans le mode choisi. Choisissez un autre mode ou ajoutez des questions.",
+        "findings_too_large_for_inline": "Les résultats sont trop volumineux pour être stockés, et leur déport vers le stockage de contenu n'est pas disponible. Activez le stockage de contenu ou autorisez le déport, puis réessayez."
       }
     },
     "action": {
@@ -9221,7 +9237,12 @@
       "servicesHelp": "Ses tâches peuvent lire les dépôts de ces services comme contexte.",
       "submit": "Créer le projet",
       "created": "Projet {title} créé",
-      "failed": "Impossible de créer le projet"
+      "failed": "Impossible de créer le projet",
+      "definitionLabel": "Définition de recherche",
+      "definitionHelp": "Ce que la recherche cherche à établir. Sa version est fixée pour ce projet.",
+      "definitionOption": "{title} (version {version})",
+      "noDefinitions": "Aucune définition de recherche n'est encore disponible pour cette organisation. Un administrateur doit d'abord en publier une.",
+      "definitionsFailed": "Impossible de charger les définitions de recherche"
     },
     "linkServices": {
       "title": "Services liés",

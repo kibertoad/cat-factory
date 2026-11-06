@@ -1,6 +1,7 @@
 import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { blockSchema } from '../entities.js'
+import { pinnableResearchDefinitionSchema } from '../research.js'
 import {
   createProjectInputSchema,
   projectSchema,
@@ -31,6 +32,13 @@ export const listProjectCatalogContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/projects/catalog',
   responsesByStatusCode: { 200: v.array(projectSchema), ...errorResponses },
+})
+
+/** The research definition versions the board's account can pin on a new research project. */
+export const listPinnableResearchDefinitionsContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/research-definitions',
+  responsesByStatusCode: { 200: v.array(pinnableResearchDefinitionSchema), ...errorResponses },
 })
 
 export const createProjectContract = defineApiContract({

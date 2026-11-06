@@ -3,7 +3,8 @@ import type { Block, ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/k
 import { RESEARCH_PIPELINE_ID, ResearchDefinitionRegistry } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { FakeAgentOptions } from '../FakeAgentExecutor.js'
-import type { ConformanceHarness } from '../harness.js'
+import type { ConformanceHarness, ConformanceAppOptions } from '../harness.js'
+import { memoryBinaryArtifactStore } from './shared.js'
 
 // Research runs: a `research` task under a research project dispatches the `project-researcher`
 // step with its brief, claims one findings sequence number per task, records one findings
@@ -47,10 +48,13 @@ function reasonOf(body: unknown): unknown {
 
 export function defineCoreResearchRunsConformance(harness: ConformanceHarness): void {
   describe('research runs', () => {
-    async function setup(agentOptions: FakeAgentOptions = {}) {
+    async function setup(
+      agentOptions: FakeAgentOptions = {},
+      appOptions: ConformanceAppOptions = {},
+    ) {
       const app = harness.makeApp(
         { asyncKinds: ['project-researcher'], ...agentOptions },
-        { researchDefinitionRegistry: definitions() },
+        { researchDefinitionRegistry: definitions(), ...appOptions },
       )
       const home = await app.createOrgWorkspace({ seed: true })
       const wsId = home.workspace.id
@@ -133,6 +137,88 @@ export function defineCoreResearchRunsConformance(harness: ConformanceHarness): 
       const checkpoint = step.research?.checkpoint as { findings: { questionId: string }[] }
       expect(checkpoint.findings.map((f) => f.questionId)).toEqual(['scheme'])
       expect(step.research?.revisionId).toBeUndefined()
+    })
+
+    it('resumes a parked run once the credential is stored, keeping the checkpointed answers', async () => {
+      const { app, wsId, project } = await setup({
+        researchCredentialRequest: {
+          key: 'VENDOR_LOGIN',
+          reason: 'The admin pages need a login',
+          observed: 'Redirected to the sign-in page',
+        },
+      })
+      const { task, exec } = await runTask(app, wsId, project)
+      expect(exec.status).toBe('blocked')
+      const resume = `/workspaces/${wsId}/executions/${exec.id}/credential/resume`
+      const early = await app.call('POST', resume)
+      expect(early.status).toBe(409)
+      expect(reasonOf(early.body)).toBe('capability_credential_still_missing')
+
+      const stored = await app.call(
+        'PUT',
+        `/workspaces/${wsId}/capability-credentials/VENDOR_LOGIN`,
+        { value: 'vendor-login-secret' },
+      )
+      expect(stored.status).toBe(200)
+      expect((await app.call('POST', resume)).status).toBe(200)
+      const done = (await app.drive(wsId)).find((e) => e.blockId === task.id)!
+      expect(done.status).toBe('done')
+      const step = done.steps.find((s) => s.agentKind === 'project-researcher')!
+      // Still one revision for the task, under the sequence number its first dispatch claimed.
+      expect(step.research).toMatchObject({ seq: 1, revisionId: `frv_${task.id}` })
+      expect(step.output).toContain('2 answered')
+    })
+
+    it('offloads a body over the threshold and reads it back for the next task', async () => {
+      const store = memoryBinaryArtifactStore()
+      const { app, wsId, project } = await setup(
+        {},
+        { resolveBinaryArtifactStore: () => Promise.resolve(store) },
+      )
+      await app
+        .findingsStoragePolicyRepository()
+        .set('project', project.id, { inlineMaxBytes: 16, offload: 'enabled' })
+      const first = await runTask(app, wsId, project)
+      expect(first.exec.status).toBe('done')
+      const offloaded = await store.listByBlock(wsId, project.rootBlockId)
+      expect(offloaded.map((a) => a.kind)).toEqual(['findings'])
+      // A refresh asks the questions the offloaded revision answered, so its body was read back.
+      const second = await runTask(app, wsId, project, { researchMode: 'refresh' })
+      expect(second.exec.status).toBe('done')
+      expect(
+        second.exec.steps.find((s) => s.agentKind === 'project-researcher')?.research?.questionIds,
+      ).toEqual(['scheme', 'scopes'])
+    })
+
+    it('carries an offloaded body to the board that inherits the project', async () => {
+      const store = memoryBinaryArtifactStore()
+      const { app, wsId, project } = await setup(
+        {},
+        { resolveBinaryArtifactStore: () => Promise.resolve(store) },
+      )
+      await app
+        .findingsStoragePolicyRepository()
+        .set('project', project.id, { inlineMaxBytes: 16, offload: 'enabled' })
+      expect((await runTask(app, wsId, project)).exec.status).toBe('done')
+      const accountId = (await app.workspaceRepository().accountOf(wsId))!
+      const other = await app.createWorkspaceInAccount(accountId, null, { name: 'Other board' })
+      const otherId = other.workspace.id
+      await app.call('POST', `/workspaces/${otherId}/projects/${project.id}/mount`, {})
+      expect((await app.call('DELETE', `/workspaces/${wsId}`)).status).toBe(204)
+      expect((await store.listByBlock(otherId, project.rootBlockId)).map((a) => a.kind)).toEqual([
+        'findings',
+      ])
+      const refresh = await runTask(app, otherId, project, { researchMode: 'refresh' })
+      expect(refresh.exec.status).toBe('done')
+    })
+
+    it('keeps a small body inline when no content storage is configured', async () => {
+      const { app, wsId, project } = await setup()
+      await app
+        .findingsStoragePolicyRepository()
+        .set('project', project.id, { inlineMaxBytes: 16, offload: 'enabled' })
+      const { exec } = await runTask(app, wsId, project)
+      expect(exec.status).toBe('done')
     })
 
     it('refuses a research task under a service', async () => {

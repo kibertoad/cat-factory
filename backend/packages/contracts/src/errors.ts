@@ -463,6 +463,10 @@ export const UNAVAILABLE_REASONS = [
   // repository provider failed to answer (an outage, a rate limit, a revoked token). Its own
   // reason because nothing is unconfigured: the same request succeeds once the provider answers.
   'attached_pr_provider_unreachable',
+  // A research project's findings revision body is offloaded to the account's blob store, and the
+  // store cannot serve it now (storage switched off, or the blob gone). `details.revisionId` names
+  // it. Nothing about the request is wrong; the findings cannot be read until storage answers.
+  'findings_body_unavailable',
 ] as const
 
 export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]
@@ -619,7 +623,8 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *                                       new question, or a `clarify` with nothing partial or
  *                                       blocked.
  *  - `findings_too_large_for_inline`    the findings body is over the runtime's own row ceiling
- *                                       and cannot be offloaded.
+ *                                       and cannot be offloaded: offload is disabled by the
+ *                                       storage policy, or the account stores no content.
  */
 export const PROJECT_REASONS = [
   'project_kind_unregistered',

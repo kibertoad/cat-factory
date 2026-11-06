@@ -41,6 +41,7 @@ function revision(statuses: Record<string, 'answered' | 'partial' | 'blocked'>):
     body: {
       summary: '',
       learnings: [],
+      adhocQuestions: [],
       findings: Object.entries(statuses).map(([questionId, status]) => ({
         questionId,
         status,
@@ -69,6 +70,21 @@ describe('selectQuestionIds', () => {
 
   it('narrows clarify and refresh to the named questions', () => {
     expect(selectQuestionIds(definition, 'refresh', folded, ['scheme'])).toEqual(['scheme'])
+  })
+
+  it('offers the ad-hoc questions earlier tasks added to every mode but initial', () => {
+    const adhoc = 'adhoc:task_0:1'
+    const withAdhoc = foldFindings([revision({ scheme: 'answered', [adhoc]: 'partial' })])
+    expect(selectQuestionIds(definition, 'initial', withAdhoc, undefined, [adhoc])).toEqual([
+      'scheme',
+      'scopes',
+      'expiry',
+    ])
+    expect(selectQuestionIds(definition, 'clarify', withAdhoc, undefined, [adhoc])).toEqual([adhoc])
+    expect(selectQuestionIds(definition, 'refresh', withAdhoc, undefined, [adhoc])).toEqual([
+      'scheme',
+      adhoc,
+    ])
   })
 })
 

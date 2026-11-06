@@ -1,5 +1,6 @@
 import type { ResearchDefinitionSource } from '@cat-factory/kernel'
 import type { CoreDependencies } from '../../container/dependencies.js'
+import { ResearchFindingsStore } from './ResearchFindingsStore.js'
 import { ResearchStepController } from './ResearchStepController.js'
 
 /**
@@ -14,17 +15,25 @@ export function createResearchStepController(
   if (!projectRepository || !researchProjectRepository || !findingsRevisionRepository) {
     return undefined
   }
-  return new ResearchStepController({
+  const findings = new ResearchFindingsStore({
     blockRepository: deps.blockRepository,
-    projectRepository,
-    ...(deps.serviceRepository ? { serviceRepository: deps.serviceRepository } : {}),
     workspaceRepository: deps.workspaceRepository,
-    researchDefinitions,
-    researchProjectRepository,
     findingsRevisionRepository,
     ...(deps.findingsStoragePolicyRepository
       ? { findingsStoragePolicyRepository: deps.findingsStoragePolicyRepository }
       : {}),
+    ...(deps.resolveBinaryArtifactStore
+      ? { resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore }
+      : {}),
+    logger: deps.logger,
+  })
+  return new ResearchStepController({
+    blockRepository: deps.blockRepository,
+    projectRepository,
+    ...(deps.serviceRepository ? { serviceRepository: deps.serviceRepository } : {}),
+    researchDefinitions,
+    researchProjectRepository,
+    findings,
     clock: deps.clock,
   })
 }
