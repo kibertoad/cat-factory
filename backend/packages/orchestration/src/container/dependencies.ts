@@ -184,6 +184,10 @@ import type {
   WorkspaceMountRepository,
   ProjectRepository,
   ProjectKindRegistry,
+  FindingsRevisionRepository,
+  FindingsStoragePolicyRepository,
+  ResearchDefinitionRepository,
+  ResearchProjectRepository,
   ProjectKindSource,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
@@ -329,6 +333,11 @@ export interface CoreDependencies extends ContentLibraryDependencies {
   workspaceMountRepository?: WorkspaceMountRepository
   /** Account-owned projects, mounted through the same mounts. Optional like the two above. */
   projectRepository?: ProjectRepository
+  /** Research persistence: published definitions, research projects, findings and policy tiers. */
+  researchDefinitionRepository?: ResearchDefinitionRepository
+  researchProjectRepository?: ResearchProjectRepository
+  findingsRevisionRepository?: FindingsRevisionRepository
+  findingsStoragePolicyRepository?: FindingsStoragePolicyRepository
   idGenerator: IdGenerator
   clock: Clock
   /**

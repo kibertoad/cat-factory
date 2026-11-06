@@ -69,6 +69,10 @@ import type {
   WorkspaceMemberRepository,
   WorkspaceMountRepository,
   ProjectRepository,
+  FindingsRevisionRepository,
+  FindingsStoragePolicyRepository,
+  ResearchDefinitionRepository,
+  ResearchProjectRepository,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
   WritebackPostRepository,
@@ -87,6 +91,12 @@ import {
   DrizzleWorkspaceRepository,
 } from './drizzle/board.js'
 import { DrizzleProjectRepository } from './drizzle/projects.js'
+import {
+  DrizzleFindingsRevisionRepository,
+  DrizzleFindingsStoragePolicyRepository,
+  DrizzleResearchDefinitionRepository,
+  DrizzleResearchProjectRepository,
+} from './drizzle/research.js'
 
 import {
   DrizzleAgentRunRepository,
@@ -214,6 +224,10 @@ export interface CoreRepositories {
   serviceRepository: ServiceRepository
   workspaceMountRepository: WorkspaceMountRepository
   projectRepository: ProjectRepository
+  researchDefinitionRepository: ResearchDefinitionRepository
+  researchProjectRepository: ResearchProjectRepository
+  findingsRevisionRepository: FindingsRevisionRepository
+  findingsStoragePolicyRepository: FindingsStoragePolicyRepository
   requirementReviewRepository: RequirementReviewRepository
   docInterviewRepository: DocInterviewRepository
   guidedReviewRepository: GuidedReviewRepository
@@ -286,6 +300,10 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     serviceRepository: new DrizzleServiceRepository(db),
     workspaceMountRepository: new DrizzleWorkspaceMountRepository(db),
     projectRepository: new DrizzleProjectRepository(db),
+    researchDefinitionRepository: new DrizzleResearchDefinitionRepository(db),
+    researchProjectRepository: new DrizzleResearchProjectRepository(db),
+    findingsRevisionRepository: new DrizzleFindingsRevisionRepository(db),
+    findingsStoragePolicyRepository: new DrizzleFindingsStoragePolicyRepository(db),
     requirementReviewRepository: new DrizzleRequirementReviewRepository(db),
     docInterviewRepository: new DrizzleDocInterviewRepository(db),
     guidedReviewRepository: new DrizzleGuidedReviewRepository(db),

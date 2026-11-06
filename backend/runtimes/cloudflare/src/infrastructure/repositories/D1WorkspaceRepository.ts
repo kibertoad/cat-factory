@@ -246,6 +246,25 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
       this.db
         .prepare(`DELETE FROM project_service_links WHERE project_id IN (${HOMED_PROJECTS})`)
         .bind(id, id),
+      // A homed research project's findings, pinned definition and policy tier.
+      this.db
+        .prepare(`DELETE FROM findings_revisions WHERE project_id IN (${HOMED_PROJECTS})`)
+        .bind(id, id),
+      this.db
+        .prepare(
+          `DELETE FROM findings_storage_policies
+           WHERE owner_kind = 'project' AND owner_id IN (${HOMED_PROJECTS})`,
+        )
+        .bind(id, id),
+      this.db
+        .prepare(`DELETE FROM research_projects WHERE project_id IN (${HOMED_PROJECTS})`)
+        .bind(id, id),
+      // This board's own findings-storage policy tier.
+      this.db
+        .prepare(
+          `DELETE FROM findings_storage_policies WHERE owner_kind = 'workspace' AND owner_id = ?`,
+        )
+        .bind(id),
       this.db.prepare(`DELETE FROM projects WHERE id IN (${HOMED_PROJECTS})`).bind(id, id),
       // Links from surviving projects to the services this workspace homes, which go below.
       this.db
