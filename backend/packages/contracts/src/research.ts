@@ -416,3 +416,25 @@ export function parseResearchDefinition(
     }),
   }
 }
+
+/** The tiers a findings-storage policy is set at, narrowest last. */
+export const findingsStorageOwnerKindSchema = v.picklist(['account', 'workspace', 'project'])
+export type FindingsStorageOwnerKind = v.InferOutput<typeof findingsStorageOwnerKindSchema>
+
+/** What a research project pins: one definition version (and its content hash) and its inputs. */
+export const researchProjectSchema = v.object({
+  projectId: v.string(),
+  definitionKey: researchDefinitionKeySchema,
+  definitionVersion: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  /** The pinned definition's content hash, so a registered definition edited in place refuses. */
+  definitionHash: v.string(),
+  inputs: v.optional(v.record(v.string(), v.unknown()), {}),
+})
+export type ResearchProject = v.InferOutput<typeof researchProjectSchema>
+
+/** Read a persisted research mode, refusing a value no current mode names rather than guessing. */
+export function decodeResearchMode(value: string): ResearchMode {
+  const parsed = v.safeParse(researchModeSchema, value)
+  if (!parsed.success) throw new Error(`unknown research mode '${value}'`)
+  return parsed.output
+}

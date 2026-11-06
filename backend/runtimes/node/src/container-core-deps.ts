@@ -438,6 +438,10 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     serviceRepository: repos.serviceRepository,
     workspaceMountRepository: repos.workspaceMountRepository,
     projectRepository: repos.projectRepository,
+    researchDefinitionRepository: repos.researchDefinitionRepository,
+    researchProjectRepository: repos.researchProjectRepository,
+    findingsRevisionRepository: repos.findingsRevisionRepository,
+    findingsStoragePolicyRepository: repos.findingsStoragePolicyRepository,
     tokenUsageRepository: repos.tokenUsageRepository,
     ...selectNodeObservabilityDeps({
       config,

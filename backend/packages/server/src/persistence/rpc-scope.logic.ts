@@ -226,6 +226,10 @@ export async function checkOwnerPairScope(
     if (!inScope(await opts.resolveAccountId(ownerId))) return denied
   } else if (ownerKind === 'account') {
     if (!inScope(ownerId)) return denied
+  } else if (ownerKind === 'project') {
+    // The findings-storage policy's narrowest tier: bound through the project's own account.
+    if (!opts.resolveProjectAccountIds) return denied
+    if (!inScope((await opts.resolveProjectAccountIds([ownerId])).get(ownerId))) return denied
   } else {
     return denied
   }
@@ -406,7 +410,7 @@ async function checkLinkedServicesShareAccount(
 export async function checkProjectCallScope(
   rule: Extract<
     ScopeRule,
-    { kind: 'project' | 'projectList' | 'projectInsert' | 'projectServiceLinks' }
+    { kind: 'project' | 'projectList' | 'projectField' | 'projectInsert' | 'projectServiceLinks' }
   >,
   args: unknown[],
   opts: DispatchOptions,
@@ -426,7 +430,12 @@ export async function checkProjectCallScope(
     )
   }
   const raw = args[rule.arg]
-  const ids = rule.kind === 'project' ? [raw] : raw
+  const ids =
+    rule.kind === 'projectList'
+      ? raw
+      : rule.kind === 'projectField'
+        ? [raw && typeof raw === 'object' ? (raw as { projectId?: unknown }).projectId : undefined]
+        : [raw]
   if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
   if (ids.length === 0) return undefined
   if (!opts.resolveProjectAccountIds) return denied

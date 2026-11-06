@@ -314,8 +314,9 @@ interface FindingsStoragePolicy {
 }
 ```
 
-The account tier lives in `account_settings.config.research`; workspace and project tiers are
-nullable columns; one pure resolver lives in kernel (the `risk-policy-tiers.ts` shape). A project is
+All three tiers live in one `findings_storage_policies` table keyed by `(owner_kind, owner_id)`, so
+one repository and one RPC rule serve them; one pure resolver lives in kernel
+(`resolveFindingsStoragePolicy`). A project is
 account-owned and mounted on several boards, so the workspace tier read is the workspace that
 started the run. The BACKEND is not overridable below the account: it is the account's
 `contentStorage` choice, because a workspace cannot name a store its account never configured. Two
@@ -410,7 +411,7 @@ Still open:
 | 1b  | Projects, both facades + conformance: `Project` entity, the `project` block level and type, `subjectKind` on the mount, `ProjectKindRegistry`, project creation, task admission, re-home, service links, repo resolution through a project root. Mothership buckets.                                                                         | todo        |       |
 | 1c  | SPA: project roots on the board, create a project, link services, mount; i18n.                                                                                                                                                                                                                                                               | todo        |       |
 | 2   | Contracts + kernel for research: definition schema, `ResearchDefinitionRegistry` + content hash, findings schema, the fold, the storage-policy resolver. Pure, unit-tested. The definition read port lands with its implementation in slice 3, and the registry is wired on `start()`/`startLocal()` in slice 5, where a run first reads it. | in review   | #2503 |
-| 3   | Research persistence, both facades + conformance: definitions table, findings revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                                                            | todo        |       |
+| 3   | Research persistence, both facades + conformance: definitions table, findings revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                                                            | in progress |       |
 | 4   | Harness: `research` mode with optional repos (linked repos as `referenceRepos`), the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                                                       | todo        |       |
 | 5   | Engine: the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                                                                                                                                                                      | todo        |       |
 | 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                     | todo        |       |

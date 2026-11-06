@@ -309,6 +309,8 @@ export type ScopeRule =
   | { kind: 'serviceUpdate'; arg: number; patchArg: number }
   | { kind: 'project'; arg: number }
   | { kind: 'projectList'; arg: number }
+  /** `args[arg]` is a record whose `projectId` FIELD names the project it is written under. */
+  | { kind: 'projectField'; arg: number }
   | { kind: 'projectInsert'; arg: number }
   | { kind: 'projectServiceLinks'; arg: number; servicesArg: number }
   | { kind: 'installation'; arg: number }
@@ -913,11 +915,12 @@ async function checkAccountFieldUpsertScope(
  */
 type ProjectScopeRule = Extract<
   ScopeRule,
-  { kind: 'project' | 'projectList' | 'projectInsert' | 'projectServiceLinks' }
+  { kind: 'project' | 'projectList' | 'projectField' | 'projectInsert' | 'projectServiceLinks' }
 >
 const PROJECT_SCOPE_KINDS: ReadonlySet<ScopeRule['kind']> = new Set<ProjectScopeRule['kind']>([
   'project',
   'projectList',
+  'projectField',
   'projectInsert',
   'projectServiceLinks',
 ])
@@ -943,6 +946,7 @@ async function checkEntityCallScope(
         | 'serviceUpdate'
         | 'project'
         | 'projectList'
+        | 'projectField'
         | 'projectInsert'
         | 'projectServiceLinks'
         | 'installation'
