@@ -217,7 +217,7 @@ export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise
  * spawns) WITHOUT mutating the harness's own `process.env` — which is shared by every concurrent
  * job when the harness runs as a native host process. Empty `env` ⇒ `opts` unchanged.
  */
-function withAgentEnv(opts: RunOptions, env: Record<string, string>): RunOptions {
+export function withAgentEnv(opts: RunOptions, env: Record<string, string>): RunOptions {
   if (Object.keys(env).length === 0) return opts
   return { ...opts, agentEnv: { ...opts.agentEnv, ...env } }
 }
