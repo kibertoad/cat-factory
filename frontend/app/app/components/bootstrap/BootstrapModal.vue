@@ -603,11 +603,11 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
 
 // Exhaustive status→label map of literal `t(...)` keys (keeps the typed-key drift guard live).
 const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
-  pending: t('bootstrap.status.pending'),
-  running: t('bootstrap.status.running'),
-  awaiting_review: t('bootstrap.status.awaitingReview'),
-  succeeded: t('bootstrap.status.succeeded'),
-  failed: t('bootstrap.status.failed'),
+  pending: t('bootstrap.statusChip.pending'),
+  running: t('bootstrap.statusChip.running'),
+  awaiting_review: t('bootstrap.statusChip.awaitingReview'),
+  succeeded: t('bootstrap.statusChip.succeeded'),
+  failed: t('bootstrap.statusChip.failed'),
 }))
 </script>
 

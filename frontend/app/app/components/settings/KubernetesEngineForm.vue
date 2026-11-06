@@ -19,6 +19,7 @@ import { isKubernetesUrlSource } from '@cat-factory/contracts'
 import type { K3sSetupPrefill } from '~/stores/ui'
 import type { DescribedFailure } from '~/composables/pipelineErrorToast/describeFailure'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
 
 // The kube branch of the discriminated handler config this form produces (the `local-k3s` /
 // `remote-kubernetes` engines share `kubernetesEngineConfigSchema`). Emitting this typed
@@ -379,12 +380,11 @@ async function copyAutoSetupCommand() {
       }}
     </SectionLabel>
 
-    <p
+    <MarkdownProse
       v-if="engine === 'local-k3s'"
       class="rounded-md border border-app-info-500/30 bg-app-info-500/10 p-2 text-2xs text-app-info-200"
-    >
-      {{ t('settings.infrastructure.kubernetesEngine.localK3sHint') }}
-    </p>
+      :text="t('settings.infrastructure.kubernetesEngine.localK3sHint')"
+    />
 
     <!-- Auto-setup: point the user at the `cat-factory k3s` CLI, which probes/provisions a local
          cluster, mints the ServiceAccount token, and deep-links back here to pre-fill this form

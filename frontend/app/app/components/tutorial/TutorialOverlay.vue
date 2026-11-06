@@ -406,6 +406,8 @@ function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') tutorial.stopTour()
 }
 
+const ENDS_IN_PUNCTUATION = /[.!?。！？…]$/u
+
 /**
  * What a screen reader should be told about the current step.
  *
@@ -417,16 +419,19 @@ function onKeydown(event: KeyboardEvent) {
  * This is also the SOLE announcement of the step — the card carries no `aria-describedby`,
  * which would have the body read a second time on every focus move.
  */
-const announcementText = computed(() =>
-  step.value
-    ? t('tutorial.overlay.announcement', {
-        current: tutorial.stepIndex + 1,
-        total: total.value,
-        title: t(step.value.titleKey),
-        body: t(step.value.bodyKey, step.value.bodyParams ?? {}),
-      })
-    : '',
-)
+const announcementText = computed(() => {
+  if (!step.value) return ''
+  const params = {
+    current: tutorial.stepIndex + 1,
+    total: total.value,
+    title: t(step.value.titleKey),
+    body: t(step.value.bodyKey, step.value.bodyParams ?? {}),
+  }
+  // A title that ends in its own punctuation ("Welcome!") takes no added full stop.
+  return ENDS_IN_PUNCTUATION.test(params.title)
+    ? t('tutorial.overlay.announcementPunctuated', params)
+    : t('tutorial.overlay.announcement', params)
+})
 
 /**
  * What the live region actually holds, lagging {@link announcementText} by a tick.

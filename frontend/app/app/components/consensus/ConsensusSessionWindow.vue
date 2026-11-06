@@ -39,7 +39,7 @@ const headerTitle = computed(() => {
   const base = session.value
     ? `${t('consensus.titlePrefix')} · ${strategyLabel(session.value.strategy)}`
     : t('consensus.titlePrefix')
-  return block.value ? `${base} — ${block.value.title}` : base
+  return block.value ? `${base} · ${block.value.title}` : base
 })
 const headerSubtitle = computed(() =>
   session.value
@@ -104,7 +104,7 @@ function roleFor(participantId: string): string {
 }
 
 function pct(value: number | null | undefined): string {
-  return value == null ? '—' : n(value, 'percent')
+  return value == null ? t('consensus.notScored') : n(value, 'percent')
 }
 
 function topScore(c: ConsensusContribution): { label: string; value: number } | null {
@@ -208,7 +208,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
               }}</span>
               <span class="text-muted"> · {{ p.role }}</span>
               <span v-if="p.modelId" class="ms-1 text-dimmed"
-                >({{ models.labelForRef(p.modelId) ?? p.modelId }})</span
+                >({{ models.labelForId(p.modelId) }})</span
               >
             </div>
           </div>

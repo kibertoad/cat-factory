@@ -57,6 +57,7 @@ const { t, d, n } = useI18n()
 const ui = useUiStore()
 const tasks = useTasksStore()
 const hunt = useBugHuntStore()
+const models = useModelsStore()
 const board = useBoardStore()
 const github = useGitHubStore()
 const actionToast = useActionToast()
@@ -506,7 +507,7 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
             </span>
             {{ t(STATUS_KEYS[hunt.result!.analysisStatus]) }}
             <span v-if="hunt.result!.model" class="text-dimmed">
-              {{ t('bugHunt.viaModel', { model: hunt.result!.model }) }}
+              {{ t('bugHunt.viaModel', { model: models.labelForRef(hunt.result!.model) }) }}
             </span>
           </p>
           <p v-if="hunt.result!.truncated" class="text-xs text-app-warning-400">

@@ -40,8 +40,11 @@ const palette = computed(() => narrowed.value.offered)
 // whatever none of them claimed. `groupAgentPalette` owns the placement rule for the same reason
 // `narrowAgentPalette` owns the counting one: it decides what is VISIBLE, and the version living
 // here as an inline computed dropped a kind whose category had no section outright.
+const categories = computed(() =>
+  AGENT_CATEGORIES.map(({ id, labelKey }) => ({ id, label: t(labelKey) })),
+)
 const groups = computed(() =>
-  groupAgentPalette(palette.value, AGENT_CATEGORIES, t('palette.customAgents')),
+  groupAgentPalette(palette.value, categories.value, t('palette.customAgents')),
 )
 
 // Persist which category sections are collapsed across builder opens.

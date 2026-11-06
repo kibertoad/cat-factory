@@ -11,6 +11,7 @@ import type {
   WebSearchProvider,
 } from '~/types/execution'
 import { agentKindMeta } from '~/utils/catalog'
+import { WEB_SEARCH_PROVIDER_LABEL } from '~/utils/webSearch'
 import type { CallOutcomeFilter, ToolOutcomeFilter } from '~/utils/observability'
 import {
   countCallOutcomes,
@@ -299,10 +300,8 @@ function callRowId(callId: string): string {
   return `obs-call-${callId}`
 }
 
-// Brand names, kept verbatim across locales (not translatable prose).
-const PROVIDER_LABEL: Record<WebSearchProvider, string> = { brave: 'Brave', searxng: 'SearXNG' }
 function providerLabel(provider: WebSearchProvider | null): string {
-  return provider ? PROVIDER_LABEL[provider] : ''
+  return provider ? WEB_SEARCH_PROVIDER_LABEL[provider] : ''
 }
 
 // Whether web search was available to this run's container agents, and which provider(s)

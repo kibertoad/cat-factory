@@ -70,12 +70,17 @@ export function contextLabel(tokens: number | undefined): string | undefined {
   return tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : `${tokens}`
 }
 
+/** Translate a key with interpolation params. The caller owns the i18n instance. */
+type Translate = (key: string, params?: Record<string, unknown>) => string
+
 /** One-line cost/quota suffix for the picker. */
-export function costLabel(flavor: DisplayFlavor): string | undefined {
+export function costLabel(flavor: DisplayFlavor, t: Translate): string | undefined {
   if (!flavor.cost) return undefined
   const { inputPerMillion, outputPerMillion, currency } = flavor.cost
-  const body = `${inputPerMillion}/${outputPerMillion} ${currency} per Mtok`
-  return flavor.quotaBased ? `quota burn ~${body}` : body
+  const params = { input: inputPerMillion, output: outputPerMillion, currency }
+  return flavor.quotaBased
+    ? t('settings.modelConfiguration.quotaCost', params)
+    : t('settings.modelConfiguration.cost', params)
 }
 
 /**
@@ -87,9 +92,11 @@ export function costLabel(flavor: DisplayFlavor): string | undefined {
  * picker is a text-only dropdown-menu item list, so this is a label token in the option
  * suffix rather than a styled badge.
  */
-export function cachingLabel(flavor: DisplayFlavor): string | null {
+export function cachingLabel(flavor: DisplayFlavor, t: Translate): string | null {
   if (flavor.cachesPrompts === undefined) return null
-  return flavor.cachesPrompts ? 'Prompt caching' : 'No prompt caching'
+  return flavor.cachesPrompts
+    ? t('settings.modelConfiguration.promptCaching')
+    : t('settings.modelConfiguration.noPromptCaching')
 }
 
 /**
@@ -189,10 +196,22 @@ export const useModelsStore = defineStore('models', () => {
   function labelForRef(ref: string | undefined): string | undefined {
     if (!ref) return undefined
     const idx = ref.indexOf(':')
+    const model = idx === -1 ? '' : ref.slice(idx + 1)
+    return catalogLabelForRef(ref) ?? (model || ref)
+  }
+
+  /**
+   * The catalog's label for a `provider:model` ref, or undefined when the catalog does not hold
+   * it. For a caller that must keep two uncatalogued refs apart (a report over refs from other
+   * workspaces or removed models), where {@link labelForRef}'s bare-model fallback would merge
+   * `openrouter:foo` and `together:foo` into one "foo".
+   */
+  function catalogLabelForRef(ref: string): string | undefined {
+    const idx = ref.indexOf(':')
     const provider = idx === -1 ? ref : ref.slice(0, idx)
     const model = idx === -1 ? '' : ref.slice(idx + 1)
     const hit = models.value.find((m) => m.provider === provider && m.model === model)
-    return hit ? `${hit.label} · ${hit.providerLabel}` : model || ref
+    return hit ? `${hit.label} · ${hit.providerLabel}` : undefined
   }
 
   return {
@@ -208,5 +227,6 @@ export const useModelsStore = defineStore('models', () => {
     hasUsableModel,
     isUsableId,
     labelForRef,
+    catalogLabelForRef,
   }
 })

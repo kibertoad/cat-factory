@@ -1,5 +1,38 @@
 # @cat-factory/app
 
+## 0.327.2
+
+### Patch Changes
+
+- 525796a: Copy fixes across the SPA. Model, role, provider, severity, document kind, block type and report
+  row ids now show as their labels, and the integrations hub names the connected source-control
+  provider instead of always saying GitHub. Markdown in the backend misconfiguration screen, the
+  local k3s hint, guided review rationales, preflight remediations and agent config descriptions
+  renders as Markdown. Count copy has real plural forms in every locale. A few English strings built
+  in code moved to the catalog, em-dashes are gone from the named SPA copy, and the fragments intro,
+  the tour announcement and the checkpoint banner now say the right thing.
+
+## 0.327.1
+
+### Patch Changes
+
+- ad0dcbf: Stop the pipeline and risk-policy pickers from jumping while the pointer moves over their options. The popover panel now has a fixed height, so hovering a row with a longer preview no longer resizes and repositions it.
+
+## 0.327.0
+
+### Minor Changes
+
+- 71dd42a: A run whose personal subscription credential lapses now parks instead of failing.
+  
+  - When a step's dispatch cannot lease the run's personal-subscription activation (it expired, typically because a requirements review or another park ran past its 12h lifetime), the step parks on a credential wait (`PipelineStep.credentialWait`) and the run goes `blocked`. The run panel and the step detail show a notice whose button rides the cached personal password, or prompts for it, re-mints the activation through `POST /executions/:executionId/credential/resume`, and re-dispatches the same step.
+  - The engine recognises the refused lease in one place, around every call that can dispatch a step, so it covers every path that advances a run. The approve, request-changes, resolve-decision and resolve-exceeded routes no longer re-mint the activation themselves, and the SPA no longer sends the personal password on those calls.
+  - Public API: `credential_lapsed` joins the unanswerable-wait reasons a run's decision list reports (OpenAPI 1.93.0, SDKs regenerated). `credential_wait_not_parked` joins the conflict reasons.
+
+### Patch Changes
+
+- Updated dependencies [71dd42a]
+  - @cat-factory/contracts@0.382.0
+
 ## 0.326.0
 
 ### Minor Changes

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { CloudProvider } from '~/types/domain'
+import { CLOUD_PROVIDERS, cloudProviderLabel } from '~/utils/cloudProviders'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import AppModal from '~/components/common/AppModal.vue'
 import { currentMenuItem } from '~/utils/currentMenuItem'
@@ -38,17 +39,11 @@ const { confirm } = useConfirm()
 const busy = ref(false)
 
 // The cloud provider new services in the active account default to (a service may
-// override it per-frame). `docker` is the local Docker/Podman backend. The brand
-// names (Cloudflare/AWS/GCP/Azure) are proper nouns kept verbatim; only the
-// `docker`/`custom` labels carry prose, so those are translated.
-const PROVIDERS = computed<{ value: CloudProvider; label: string }[]>(() => [
-  { value: 'cloudflare', label: 'Cloudflare' },
-  { value: 'docker', label: t('layout.boardSwitcher.providers.docker') },
-  { value: 'aws', label: 'AWS' },
-  { value: 'gcp', label: 'GCP' },
-  { value: 'azure', label: 'Azure' },
-  { value: 'custom', label: t('layout.boardSwitcher.providers.custom') },
-])
+// override it per-frame). `docker` is the local Docker/Podman backend. Labels come from
+// `~/utils/cloudProviders`, which the audit log shares.
+const PROVIDERS = computed<{ value: CloudProvider; label: string }[]>(() =>
+  CLOUD_PROVIDERS.map((value) => ({ value, label: cloudProviderLabel(value, t) })),
+)
 
 async function setDefaultProvider(provider: CloudProvider) {
   const id = accounts.activeAccountId

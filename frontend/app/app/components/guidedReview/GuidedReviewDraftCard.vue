@@ -127,7 +127,11 @@ async function discard(): Promise<void> {
     </div>
     <template v-else>
       <MarkdownProse class="mt-1" :text="draft.body" />
-      <p v-if="draft.rationale" class="mt-1 text-xs text-muted">{{ draft.rationale }}</p>
+      <MarkdownProse
+        v-if="draft.rationale"
+        class="mt-1 text-xs text-muted"
+        :text="draft.rationale"
+      />
       <p v-if="draft.status === 'failed' && draft.postError" class="mt-1 text-xs text-error">
         {{ t('guidedReview.drafts.postFailed') }}: {{ draft.postError }}
       </p>

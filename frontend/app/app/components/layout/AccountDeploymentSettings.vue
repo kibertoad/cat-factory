@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { WEB_SEARCH_PROVIDER_LABEL } from '~/utils/webSearch'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import type {
   ContentStorageBackend,
@@ -569,7 +570,9 @@ async function clearWeb() {
         <UBadge :color="summary?.webSearch ? 'success' : 'neutral'" variant="subtle" size="xs">
           {{
             summary?.webSearch
-              ? t('layout.accountDeployment.web.configured', { provider: summary.webSearch })
+              ? t('layout.accountDeployment.web.configured', {
+                  provider: WEB_SEARCH_PROVIDER_LABEL[summary.webSearch],
+                })
               : t('layout.accountDeployment.notSet')
           }}
         </UBadge>

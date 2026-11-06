@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { isDesignSource } from '@cat-factory/contracts'
 import type { DocumentBoardPlan } from '~/types/domain'
+import { blockTypeMeta } from '~/utils/catalog'
 import Spinner from '~/components/common/Spinner.vue'
 import AppModal from '~/components/common/AppModal.vue'
 
@@ -180,7 +181,9 @@ async function spawn() {
             <div class="flex items-center gap-2">
               <UIcon name="i-lucide-box" class="h-4 w-4 text-primary" />
               <span class="text-sm font-semibold text-highlighted">{{ frame.title }}</span>
-              <UBadge variant="subtle" size="sm" color="neutral">{{ frame.type }}</UBadge>
+              <UBadge variant="subtle" size="sm" color="neutral">{{
+                t(blockTypeMeta(frame.type).labelKey)
+              }}</UBadge>
             </div>
 
             <ul v-if="frame.tasks.length" class="mt-2 space-y-1 ps-6">
