@@ -22,3 +22,8 @@ ahead of projects. Internal break, with no behaviour change:
   `findById(s)`'s `ownerId`, `ExecutionRepository.listByOwners`,
   `BootstrapJobRepository.listByOwners`, `WorkspaceMountRepository.listBySubjectIds`/
   `countBySubjectIds`/`removeBySubjects`, and `MountRehome` (was `ServiceRehome`).
+- Mothership mode: these port methods are the `/internal/persistence` method names, and the mount
+  record's `subjectId` is what the `serviceMount` scope rule reads, so a node and its mothership
+  must run the same build. A node one build behind gets `unknown_method` on every board that
+  mounts a service, and its mount writes are refused. Update the nodes together with the
+  mothership.

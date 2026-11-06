@@ -157,6 +157,38 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
       expect(snap.projectCatalog?.map((p) => p.id)).toContain(project.id)
     })
 
+    it('re-homes a shared service its home board has unmounted', async () => {
+      const { app, wsId, accountId } = await setup()
+      const frame = (
+        await app.call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+          type: 'service',
+          title: 'Shared service',
+        })
+      ).body
+      const before = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+      const service = before.serviceCatalog?.find((s) => s.frameBlockId === frame.id)
+      expect(service).toBeTruthy()
+      const other = await app.createWorkspaceInAccount(accountId, null, { name: 'Other board' })
+      await app.call('POST', `/workspaces/${other.workspace.id}/services/${service!.id}`, {})
+      expect((await app.call('DELETE', `/workspaces/${wsId}/services/${service!.id}`)).status).toBe(
+        204,
+      )
+      expect((await app.call('DELETE', `/workspaces/${wsId}`)).status).toBe(204)
+      const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${other.workspace.id}`))
+        .body
+      expect(snap.blocks.some((b) => b.id === frame.id)).toBe(true)
+      expect(snap.serviceCatalog?.map((s) => s.id)).toContain(service!.id)
+    })
+
+    it("refuses to unmount a project through the service route, keeping its home board's mount", async () => {
+      const { app, wsId } = await setup()
+      const { project } = (await createProject(app, wsId)).body
+      const refused = await app.call('DELETE', `/workspaces/${wsId}/services/${project.id}`)
+      expect(refused.status).toBe(404)
+      const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+      expect(snap.mounts?.some((m) => m.subjectId === project.id)).toBe(true)
+    })
+
     it('reclaims an unshared project with its home board', async () => {
       const { app, wsId, accountId } = await setup()
       const { project } = (await createProject(app, wsId)).body

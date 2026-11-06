@@ -904,13 +904,6 @@ async function checkAccountFieldUpsertScope(
   return undefined
 }
 
-/**
- * The entity-resolver half of {@link checkCallScope}: the scope kinds that bind a call via a
- * server-side account resolver (co-membership for users, block/service/skill-source ownership,
- * tenant-library owner pairs). Same contract — a `DispatchResult` (404 `denied`) when out of scope,
- * `undefined` when it passes. Split from the core kinds purely to keep each function under the
- * complexity ceiling; the `never` default keeps the switches jointly exhaustive over `ScopeRule`.
- */
 type ProjectScopeRule = Extract<
   ScopeRule,
   { kind: 'project' | 'projectList' | 'projectInsert' | 'projectServiceLinks' }
@@ -925,6 +918,13 @@ function isProjectScopeRule(rule: ScopeRule): rule is ProjectScopeRule {
   return PROJECT_SCOPE_KINDS.has(rule.kind)
 }
 
+/**
+ * The entity-resolver half of {@link checkCallScope}: the scope kinds that bind a call via a
+ * server-side account resolver (co-membership for users, block/service/skill-source ownership,
+ * tenant-library owner pairs). Same contract: a `DispatchResult` (404 `denied`) when out of scope,
+ * `undefined` when it passes. Split from the core kinds purely to keep each function under the
+ * complexity ceiling; the `never` default keeps the switches jointly exhaustive over `ScopeRule`.
+ */
 async function checkEntityCallScope(
   rule: Extract<
     ScopeRule,

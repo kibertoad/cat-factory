@@ -1,5 +1,5 @@
 import type { MountSubjectKind } from '@cat-factory/contracts'
-import type { WorkspaceMount } from './types.js'
+import type { Block, WorkspaceMount } from './types.js'
 import type { ProjectRepository } from '../ports/project-repositories.js'
 import type { ServiceRepository } from '../ports/service-repositories.js'
 
@@ -41,18 +41,23 @@ export async function rootBlocksOfMounts(
 }
 
 /**
- * The subjects owning the given root block ids. A root id need not identify one subject: seeded
- * boards share block ids, so a caller narrows the answer by the mounts it holds.
+ * The subjects owning the given root blocks. A `frame` root can only be a service's and a `project`
+ * root only a project's, so each kind is read for its own roots alone. A root id need not identify
+ * one subject: seeded boards share block ids, so a caller narrows the answer further.
  */
 export async function subjectsOwningRoots(
-  rootBlockIds: readonly string[],
+  roots: readonly Pick<Block, 'id' | 'level'>[],
   readers: MountSubjectReaders,
 ): Promise<MountSubjectRoot[]> {
-  if (rootBlockIds.length === 0) return []
-  const ids = [...rootBlockIds]
+  const frameIds = roots.filter((b) => b.level === 'frame').map((b) => b.id)
+  const projectRootIds = roots.filter((b) => b.level === 'project').map((b) => b.id)
   const [services, projects] = await Promise.all([
-    readers.serviceRepository ? readers.serviceRepository.listByFrameBlocks(ids) : [],
-    readers.projectRepository ? readers.projectRepository.listByRootBlocks(ids) : [],
+    frameIds.length && readers.serviceRepository
+      ? readers.serviceRepository.listByFrameBlocks(frameIds)
+      : [],
+    projectRootIds.length && readers.projectRepository
+      ? readers.projectRepository.listByRootBlocks(projectRootIds)
+      : [],
   ])
   return [
     ...services.map((s) => ({
