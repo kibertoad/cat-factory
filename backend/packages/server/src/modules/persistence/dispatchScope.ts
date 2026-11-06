@@ -20,6 +20,7 @@ function buildRequestReaders(registry: PersistenceRegistry, request: Persistence
   const workspaceRepository = registry.workspaceRepository
   const blockRepository = registry.blockRepository
   const serviceRepository = registry.serviceRepository
+  const projectRepository = registry.projectRepository
   const skillSourceRepository = registry.skillSourceRepository
   // The owner-pair content-library source tables, keyed by the `LibrarySourceEntity` the rule
   // names, so one resolver answers for both (and a new library is one row here). Keyed by the
@@ -78,6 +79,7 @@ function buildRequestReaders(registry: PersistenceRegistry, request: Persistence
     installationRepository?.listByInstallationIds?.(ids as number[]),
   )
   const serviceListByIds = memoizeRead((ids) => serviceRepository?.listByIds?.(ids as string[]))
+  const projectListByIds = memoizeRead((ids) => projectRepository?.listByIds?.(ids as string[]))
   const skillSourceGet = memoizeRead((id) => skillSourceRepository?.get?.(id as string))
   // One memo per source TABLE, keyed by entity: the resolver and the dispatched `get` of the same
   // library then share a read, exactly as `skillSourceGet` does for skills. A table whose `get`
@@ -169,6 +171,7 @@ function buildRequestReaders(registry: PersistenceRegistry, request: Persistence
     blockFindById,
     blockFindByIds,
     serviceListByIds,
+    projectListByIds,
     skillSourceGet,
     librarySourceGets,
     installationGet,
@@ -200,6 +203,7 @@ export function buildDispatchScope(
     blockFindById,
     blockFindByIds,
     serviceListByIds,
+    projectListByIds,
     skillSourceGet,
     librarySourceGets,
     installationGet,
@@ -247,6 +251,15 @@ export function buildDispatchScope(
         | undefined
       const map = new Map<string, string | null | undefined>()
       for (const service of services ?? []) map.set(service.id, service.accountId)
+      return map
+    },
+    // Projects are account-owned too; the same projection over the project rows.
+    resolveProjectAccountIds: async (projectIds) => {
+      const projects = (await projectListByIds(projectIds)) as
+        | Array<{ id: string; accountId: string | null }>
+        | undefined
+      const map = new Map<string, string | null | undefined>()
+      for (const project of projects ?? []) map.set(project.id, project.accountId)
       return map
     },
     // Skill sources are account-owned; the sync surface's methods carry only a source id, so

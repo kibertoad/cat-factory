@@ -83,10 +83,10 @@ interface Project {
 - **It links to services without being inside one.** A link is context: the project's tasks may
   read the linked services' repos and see their descriptions, and the board draws the link. A
   project with no links is valid.
-- **Its repo resolution is its own.** `resolveRepoTarget` meets a project frame where it would meet
-  a service frame, and a project frame resolves to its linked services' repos as read-only
-  context, possibly none. It never falls back to a guessed repo; a project-kind task type that
-  needs a writable repo says so and is refused at admission when the project has none.
+- **Its repo resolution is its own.** `resolveRepoTarget` stops at a project root and refuses with
+  `project_has_no_writable_repo`: a project has no repository to write to. Its linked services'
+  repos are read-only context, resolved by their own read (slice 5), never a guessed checkout. A
+  kind offers only task types that write to no repo (`repoAccess: 'none' | 'linked-read-only'`).
 - **A kind is registered**, through a `ProjectKindRegistry` beside `TaskTypeRegistry`, injected by
   reference on both `start()` and `startLocal()`. A kind declares the task types its project
   offers, their default pipelines, the project-level data it keeps, and its result view. A run
@@ -435,6 +435,10 @@ run has written a revision.
   linked services' repos as read-only context. Slice 1 keeps that resolution a single, explicit
   rule, so a later initiative under a project can name which linked service an item writes to
   instead of gaining a second resolution path. Supporting it is out of scope here.
+- **A root block id names a subject only among the board's own mounts.** Seeded boards share
+  frame ids (`blk_auth`), so the workspace-delete re-home plan keeps a candidate only when it is
+  in the board's account AND mounted on the board. Before projects, the plan matched by frame id
+  alone and could re-home another board's service.
 - **The mount carries layout for a shared frame.** Generalizing it to projects keeps
   `applyMountLayout` on every frame-returning read; a project frame read that skips it jumps on
   the board.

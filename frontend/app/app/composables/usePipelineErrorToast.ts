@@ -155,6 +155,7 @@ const REASON_DESCRIPTION_KEYS: Record<
   oauth_client_secret_unavailable: 'errors.reason.description.oauth_client_secret_unavailable',
   tool_server_without_oauth: 'errors.reason.description.tool_server_without_oauth',
   binary_generators_unreachable: 'errors.unavailable.description.binary_generators_unreachable',
+  project_kinds_unreachable: 'errors.unavailable.description.project_kinds_unreachable',
   foundational_builtins_unreachable:
     'errors.unavailable.description.foundational_builtins_unreachable',
   connection_credentials_unreadable:

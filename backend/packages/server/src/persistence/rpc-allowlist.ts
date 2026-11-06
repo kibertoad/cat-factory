@@ -91,7 +91,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // The batched form (the cross-workspace dependency resolution on the run-start path).
     findByIds: { scope: { kind: 'blockList', arg: 0 } },
     // Cross-service: compose a board's blocks from every service it mounts.
-    listByOwners: { scope: { kind: 'serviceList', arg: 0 } },
+    listByOwners: { scope: { kind: 'subjectList', arg: 0 } },
     // One bounded page of a service frame's task subtree (the public API's paginated task list).
     listServiceTasks: { scope: { kind: 'workspace', arg: 0 } },
     // The public API's in-flight concurrency backstop (`BoardService.countActiveInternalTasks`),
@@ -141,7 +141,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
     markFailed: { scope: { kind: 'workspace', arg: 0 } },
     // Cross-service: compose a board's runs from every service it mounts.
-    listByOwners: { scope: { kind: 'serviceList', arg: 0 } },
+    listByOwners: { scope: { kind: 'subjectList', arg: 0 } },
     // One bounded page of the workspace's headless (`internal`-anchored) runs — the public API's
     // job list. Workspace-scoped like every other list read here.
     listInternal: { scope: { kind: 'workspace', arg: 0 } },
@@ -304,7 +304,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // second line of defence, but it is no longer the sole guard for the mount invariant.
   workspaceMountRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-    countBySubjectIds: { scope: { kind: 'serviceList', arg: 0 } },
+    countBySubjectIds: { scope: { kind: 'subjectList', arg: 0 } },
     // The real-time fan-out's hot read, and the one method on this table that is NOT a management
     // surface: `FanOutEventPublisher.targets` calls it on EVERY engine event publish to expand the
     // changed block to the set of boards mounting its service. It is therefore load-bearing for
@@ -327,9 +327,23 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // They were held back only because the flows around them (service CRUD, workspace delete) were
     // themselves mothership-internal; service CRUD is now remote, so the cascade that finishes it
     // must be too, or a node deletes a frame and leaves its mounts pointing at a doomed service on
-    // every OTHER board in the org. Both take `serviceIds[]` (the `serviceList` rule).
-    listBySubjectIds: { scope: { kind: 'serviceList', arg: 0 } },
-    removeBySubjects: { scope: { kind: 'serviceList', arg: 0 } },
+    // every OTHER board in the org. Both take subject ids (the `subjectList` rule), services and
+    // projects alike.
+    listBySubjectIds: { scope: { kind: 'subjectList', arg: 0 } },
+    removeBySubjects: { scope: { kind: 'subjectList', arg: 0 } },
+  },
+  // Account-owned projects, the peers of services. Every read and write binds the project's own
+  // account; an insert or a link change also binds every linked service to that same account,
+  // since a linked service's repos become read-only context for the project's tasks.
+  projectRepository: {
+    get: { scope: { kind: 'project', arg: 0 } },
+    listByIds: { scope: { kind: 'projectList', arg: 0 } },
+    listByAccount: { scope: { kind: 'account', arg: 0 } },
+    listByRootBlocks: { scope: { kind: 'blockList', arg: 0 } },
+    insert: { scope: { kind: 'projectInsert', arg: 0 } },
+    setServiceLinks: { scope: { kind: 'projectServiceLinks', arg: 0, servicesArg: 1 } },
+    unlinkServices: { scope: { kind: 'serviceList', arg: 0 } },
+    deleteMany: { scope: { kind: 'projectList', arg: 0 } },
   },
   workspaceSettingsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
@@ -824,7 +838,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // workspace-scoped `referenceArchitectureRepository.get` below, which 404s a cross-workspace id.
   bootstrapJobRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-    listByOwners: { scope: { kind: 'serviceList', arg: 0 } },
+    listByOwners: { scope: { kind: 'subjectList', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
     insert: { scope: { kind: 'workspaceField', arg: 0 } },
     update: { scope: { kind: 'workspace', arg: 0 } },

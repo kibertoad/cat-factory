@@ -22,6 +22,7 @@ import {
   blockLevelSchema,
   blockStatusSchema,
   blockTypeSchema,
+  serviceFrameTypeSchema,
   positionSchema,
   sizeSchema,
   taskTypeFieldsSchema,
@@ -588,7 +589,7 @@ export const promptFragmentSchema = v.object({
   /** Optional hints for filtering which blocks/agents a fragment suits. */
   appliesTo: v.optional(
     v.object({
-      blockTypes: v.optional(v.array(blockTypeSchema)),
+      blockTypes: v.optional(v.array(serviceFrameTypeSchema)),
       agentKinds: v.optional(v.array(agentKindSchema)),
     }),
   ),

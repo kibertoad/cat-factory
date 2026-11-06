@@ -80,6 +80,14 @@ async function walkToRepo(
     }
     seen.add(cursor)
     const block = await deps.blockRepository.get(workspaceId, cursor)
+    // A project root ends the walk: a project has no repository of its own to write to, and its
+    // linked services' repos are read-only context, never a checkout to push to.
+    if (block?.level === 'project') {
+      throw new ValidationError(
+        `Block '${blockId}' belongs to a project, which has no repository to write to`,
+        { reason: 'project_has_no_writable_repo' },
+      )
+    }
     cursor = block?.parentId ?? null
   }
   return undefined

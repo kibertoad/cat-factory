@@ -88,6 +88,16 @@ function service(frameBlockId: string, repoGithubId: number, directory: string |
 }
 
 describe('buildResolveRepoTarget — monorepo service directories', () => {
+  it('refuses a block under a project, naming why, rather than walking past its root', async () => {
+    const resolve = harness({
+      repos: [repo({ githubId: 1, owner: 'acme', name: 'api' })],
+      blocks: [block('prj_root', null, 'project'), block('task', 'prj_root', 'task')],
+    })
+    await expect(resolve('ws', 'task')).rejects.toMatchObject({
+      details: { reason: 'project_has_no_writable_repo' },
+    })
+  })
+
   it('returns the service subdirectory when the repo is a monorepo', async () => {
     const resolve = harness({
       repos: [repo({ githubId: 1, owner: 'acme', name: 'platform', isMonorepo: true })],

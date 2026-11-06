@@ -1,5 +1,6 @@
 import {
   publicKubernetesRendererSchema,
+  requireServiceFrameType,
   type Block,
   type KubernetesManifestSource,
   type PublicKubernetesManifestSource,
@@ -68,7 +69,7 @@ export function toPublicService(frame: Block): PublicService {
     serviceId: frame.id,
     title: frame.title,
     description: frame.description,
-    type: frame.type,
+    type: requireServiceFrameType(frame.type),
     status: frame.status,
     ...toPublicProvisioning(frame.provisioning),
   }

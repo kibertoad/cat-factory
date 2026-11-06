@@ -68,6 +68,7 @@ import type {
   WorkspaceAgentSettingsRepository,
   WorkspaceMemberRepository,
   WorkspaceMountRepository,
+  ProjectRepository,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
   WritebackPostRepository,
@@ -85,6 +86,7 @@ import {
   DrizzleWorkspaceMountRepository,
   DrizzleWorkspaceRepository,
 } from './drizzle/board.js'
+import { DrizzleProjectRepository } from './drizzle/projects.js'
 
 import {
   DrizzleAgentRunRepository,
@@ -211,6 +213,7 @@ export interface CoreRepositories {
   trackerSettingsRepository: TrackerSettingsRepository
   serviceRepository: ServiceRepository
   workspaceMountRepository: WorkspaceMountRepository
+  projectRepository: ProjectRepository
   requirementReviewRepository: RequirementReviewRepository
   docInterviewRepository: DocInterviewRepository
   guidedReviewRepository: GuidedReviewRepository
@@ -282,6 +285,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     trackerSettingsRepository: new DrizzleTrackerSettingsRepository(db),
     serviceRepository: new DrizzleServiceRepository(db),
     workspaceMountRepository: new DrizzleWorkspaceMountRepository(db),
+    projectRepository: new DrizzleProjectRepository(db),
     requirementReviewRepository: new DrizzleRequirementReviewRepository(db),
     docInterviewRepository: new DrizzleDocInterviewRepository(db),
     guidedReviewRepository: new DrizzleGuidedReviewRepository(db),

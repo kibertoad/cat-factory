@@ -295,6 +295,11 @@ export interface StartOptions {
    */
   taskTypeRegistry?: NodeContainerOptions['taskTypeRegistry']
   /**
+   * App-owned DI seam for project kinds: a deployment news a `defaultProjectKindRegistry()`,
+   * registers its kinds on it by reference, and passes it here. Absent means no project kinds.
+   */
+  projectKindRegistry?: NodeContainerOptions['projectKindRegistry']
+  /**
    * App-owned DI seam for the deployment's INLINE USE CASES (mirroring `taskTypeRegistry`): a
    * deployment news a `defaultInlineUseCaseRegistry()`, registers its non-container model
    * operations on it by reference, and passes it here. `/api/v1/use-cases` then publishes and runs
@@ -904,6 +909,7 @@ async function bootServer(
     agentKindRegistry: options.agentKindRegistry,
     initiativePresetRegistry: options.initiativePresetRegistry,
     taskTypeRegistry: options.taskTypeRegistry,
+    projectKindRegistry: options.projectKindRegistry,
     inlineUseCaseRegistry: options.inlineUseCaseRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,

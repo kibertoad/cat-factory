@@ -53,6 +53,7 @@ const GEOMETRY_IS_PER_BOARD: Record<BlockLevel, boolean> = {
   task: false,
   epic: false,
   initiative: false,
+  project: true,
 }
 
 /**

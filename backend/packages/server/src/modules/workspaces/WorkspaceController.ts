@@ -29,6 +29,7 @@ import type {
   InitiativePresetDescriptor,
   RegisteredBinaryGenerator,
   SkillSummary,
+  ProjectKindDescriptor,
   SpendStatus,
   TutorialProgress,
   UserSettings,
@@ -492,6 +493,24 @@ async function snapshotSkills(
 }
 
 /**
+ * The project kinds this deployment offers, read through the resolved source. On a mothership-mode
+ * node the read crosses the machine API and can fail; the board load must not, and the failure is
+ * stated (`ok: false` becomes `projectKindsUnavailable`) rather than shown as "no kinds".
+ */
+async function snapshotProjectKinds(
+  container: ServerContainer,
+): Promise<{ ok: true; kinds: ProjectKindDescriptor[] } | { ok: false }> {
+  try {
+    return { ok: true, kinds: await container.projectKinds.all() }
+  } catch (err) {
+    sharedLogger.warn('project kinds read failed; the snapshot states them unavailable', {
+      err: getErrorMessage(err),
+    })
+    return { ok: false }
+  }
+}
+
+/**
  * The registered ephemeral-environment / runner-pool backend kinds (built-in + any a
  * deployment registered into the app-owned registries), as the `{ kind, label }` options the
  * SPA drives its provider-connect backend selector from. Read off the request container's
@@ -652,6 +671,9 @@ async function loadSnapshotSlices(
     // from (each catalog service annotated with its mount count for the "Shared" badge).
     mounts,
     serviceCatalog,
+    // The account's projects (each with its mount count) and the kinds a board can create.
+    projectCatalog,
+    projectKindsRead,
     // The per-area SETUP states. `unreachable` is folded on below, off the notifications read that
     // is already in flight here, rather than probed on this hot path.
     infraSetup,
@@ -682,6 +704,10 @@ async function loadSnapshotSlices(
     container.services && budgetAccountId !== undefined
       ? container.services.service.listForAccount(budgetAccountId)
       : undefined,
+    container.projects && budgetAccountId !== undefined
+      ? container.projects.service.listForAccount(budgetAccountId)
+      : undefined,
+    container.projects ? snapshotProjectKinds(container) : undefined,
     snapshotInfraSetup(container, workspaceId),
     container.github ? container.github.service.listRepos(workspaceId) : undefined,
     snapshotSkills(container, budgetAccountId),
@@ -704,6 +730,9 @@ async function loadSnapshotSlices(
     settings,
     mounts,
     serviceCatalog,
+    projectCatalog,
+    projectKinds: projectKindsRead?.ok ? projectKindsRead.kinds : undefined,
+    projectKindsUnavailable: projectKindsRead && !projectKindsRead.ok ? true : undefined,
     // Fold the reachability watcher's recorded outage into the setup projection, so a reload
     // mid-outage still renders the banner. The record lives on the workspace's open
     // `infra_unreachable` card, which the `notifications` read above already fetched — so this
@@ -720,45 +749,48 @@ async function loadSnapshotSlices(
 }
 
 /** Board (workspace) lifecycle and full-snapshot retrieval. */
+/**
+ * Boards visible to the signed-in user (see WorkspaceVisibility): unrestricted boards in accounts
+ * they belong to, ANY board in accounts they admin (escape hatch), boards they hold an explicit
+ * member row on, and legacy boards they personally own. With auth disabled (`user` unset) the
+ * scope is null, so every board is listed. Each board is annotated with the caller's EFFECTIVE
+ * workspace role (`viewerRole`) via one batched member-row read.
+ */
+async function visibleBoards<E extends AppEnv>(c: Context<E>) {
+  const container: ServerContainer = c.get('container')
+  const user = optionalAccountUser(c)
+  if (!user) return container.workspaceService.list(null)
+  await container.accountService.ensurePersonalAccount(user)
+  const { accountIds, adminAccountIds } = await container.accountService.accessibleAccountScopes(
+    user.id,
+  )
+  const boards = await container.workspaceService.list({
+    accountIds,
+    adminAccountIds,
+    ownerUserId: user.id,
+    userId: user.id,
+  })
+  const memberRoles = await container.workspaceService.rolesForUserInWorkspaces(
+    user.id,
+    boards.map((w) => w.id),
+  )
+  const accountSet = new Set(accountIds)
+  const adminSet = new Set(adminAccountIds)
+  const annotated = boards.map((w) => {
+    const role = effectiveWorkspaceRole(user.id, w, {
+      accountSet,
+      adminSet,
+      memberRole: memberRoles.get(w.id) ?? null,
+    })
+    return role ? { ...w, viewerRole: role } : w
+  })
+  return annotated
+}
+
 export function workspaceController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  // Boards visible to the signed-in user (see WorkspaceVisibility): unrestricted boards in
-  // accounts they belong to, ANY board in accounts they admin (escape hatch), boards they
-  // hold an explicit member row on, and legacy boards they personally own. When auth is
-  // disabled (`user` unset) the scope is null → no scoping (every board, dev behaviour). Each
-  // returned board is annotated with the caller's EFFECTIVE workspace role (`viewerRole`) via
-  // one batched member-row read combined with the in-memory account-scope map.
-  buildHonoRoute(app, listWorkspacesContract, async (c) => {
-    const container = c.get('container')
-    const user = optionalAccountUser(c)
-    if (!user) return c.json(await container.workspaceService.list(null), 200)
-    await container.accountService.ensurePersonalAccount(user)
-    const { accountIds, adminAccountIds } = await container.accountService.accessibleAccountScopes(
-      user.id,
-    )
-    const boards = await container.workspaceService.list({
-      accountIds,
-      adminAccountIds,
-      ownerUserId: user.id,
-      userId: user.id,
-    })
-    const memberRoles = await container.workspaceService.rolesForUserInWorkspaces(
-      user.id,
-      boards.map((w) => w.id),
-    )
-    const accountSet = new Set(accountIds)
-    const adminSet = new Set(adminAccountIds)
-    const annotated = boards.map((w) => {
-      const role = effectiveWorkspaceRole(user.id, w, {
-        accountSet,
-        adminSet,
-        memberRole: memberRoles.get(w.id) ?? null,
-      })
-      return role ? { ...w, viewerRole: role } : w
-    })
-    return c.json(annotated, 200)
-  })
+  buildHonoRoute(app, listWorkspacesContract, async (c) => c.json(await visibleBoards(c), 200))
 
   buildHonoRoute(app, createWorkspaceContract, async (c) => {
     const container = c.get('container')
@@ -860,6 +892,9 @@ export function workspaceController(): Hono<AppEnv> {
       settings,
       mounts,
       serviceCatalog,
+      projectCatalog,
+      projectKinds,
+      projectKindsUnavailable,
       infraSetup,
       repoProjections,
       skills,
@@ -940,6 +975,9 @@ export function workspaceController(): Hono<AppEnv> {
           settings,
           mounts,
           serviceCatalog: redacted.services,
+          projectCatalog,
+          projectKinds,
+          projectKindsUnavailable,
           ...registryProjections,
           skills,
         }),

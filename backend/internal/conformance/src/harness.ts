@@ -48,6 +48,7 @@ import type {
   TaskRepository,
   TaskSourceProvider,
   TaskTypeRegistry,
+  ProjectKindRegistry,
   InlineUseCaseRegistry,
   InlineUseCaseGenerator,
   WorkspaceMemberRepository,
@@ -846,6 +847,12 @@ export interface ConformanceAppOptions {
    * build. Absent → the facade's default (empty) task-type registry.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * Inject the app-owned project-kind registry, pre-loaded with a kind, so the projects suite can
+   * create a project and admit tasks under it identically on EVERY runtime. Absent: the facade's
+   * default (empty) registry.
+   */
+  projectKindRegistry?: ProjectKindRegistry
   /**
    * Inject the app-owned INLINE USE-CASE registry, pre-loaded with a deployment's use case, so the
    * suite can assert the public `/api/v1/use-cases` surface resolves identically on EVERY runtime

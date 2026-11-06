@@ -89,6 +89,7 @@ export class ServiceMountService {
     if (existing) return existing
     const mount: WorkspaceMount = {
       workspaceId,
+      subjectKind: 'service',
       subjectId: serviceId,
       position: input.position ?? this.defaultPosition(await this.listMounts(workspaceId)),
       size: null,

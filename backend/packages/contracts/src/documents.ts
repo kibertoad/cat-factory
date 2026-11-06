@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { blockTypeSchema, DOC_KINDS } from './primitives.js'
+import { serviceFrameTypeSchema, DOC_KINDS } from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Document-source integration wire contracts. A workspace can connect to one or
@@ -481,7 +481,7 @@ export type PlanModule = v.InferOutput<typeof planModuleSchema>
 
 /** A proposed top-level frame (service/api/…) with its modules and loose tasks. */
 export const planFrameSchema = v.object({
-  type: blockTypeSchema,
+  type: serviceFrameTypeSchema,
   title: v.string(),
   description: v.optional(v.string()),
   modules: v.array(planModuleSchema),

@@ -28,14 +28,14 @@ import type {
   UpdateBlockInput,
   UpdatePipelineInput,
 } from '@cat-factory/contracts'
-import type { BlockType, CreateTaskType, TaskTypeFields } from '~/types/domain'
+import type { CreateTaskType, ServiceFrameType, TaskTypeFields } from '~/types/domain'
 import type { ApiContext, Position, Size } from './context'
 
 /** Board structure: block (frame/module/task) mutations + the pipeline library. */
 export function boardApi({ send, ws }: ApiContext) {
   return {
     // ---- blocks -----------------------------------------------------------
-    addFrame: (workspaceId: string, body: { type: BlockType; position: Position }) =>
+    addFrame: (workspaceId: string, body: { type: ServiceFrameType; position: Position }) =>
       send(addFrameContract, { pathPrefix: ws(workspaceId), body }),
 
     // Import an existing GitHub repo as a service frame (no bootstrap run).
