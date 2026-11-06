@@ -10,6 +10,20 @@ import { makeConformanceApp, setupTestDb } from './harness.js'
 // handler maps to a 500 with the message suppressed, so the guard checks pool existence
 // itself and throws a ConflictError instead.)
 
+// The pool a deployment declares for every account: the `{ config, secrets }` an admin submits.
+const SEED = {
+  config: {
+    kind: 'kubernetes' as const,
+    kubernetes: {
+      label: 'Seeded pool',
+      apiServerUrl: 'https://k8s.example:6443',
+      namespace: 'cat-factory',
+      image: 'ghcr.io/acme/executor:1',
+    },
+  },
+  secrets: { apiToken: 'seeded-token' },
+}
+
 describe('[local] delegate-agents-to-runner-pool start gate', () => {
   let db: DrizzleDb
 
@@ -47,5 +61,45 @@ describe('[local] delegate-agents-to-runner-pool start gate', () => {
 
     expect(res.status).toBe(409)
     expect(res.body.error?.details?.reason).toBe('agent_backend_unconfigured')
+  })
+
+  // The start gate reads the board's EFFECTIVE pool, the one dispatch would use: an account pool
+  // from `startLocal({ seedAccountRunnerPool })` counts for a board that inherits it, and a board
+  // that declined it is refused with a cause naming that, since its fix is not "register a pool".
+  async function startDelegatedRun(settings: Record<string, unknown>) {
+    const app = makeConformanceApp(db, undefined, { seedAccountRunnerPool: () => SEED })
+    const snapshot = await app.createOrgWorkspace({ seed: true })
+    const wsId = snapshot.workspace.id
+    await app.call('PUT', `/workspaces/${wsId}/settings`, {
+      delegateAgentsToRunnerPool: true,
+      ...settings,
+    })
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Code only',
+      purpose: 'build',
+      agentKinds: ['coder'],
+    })
+    return app.call<{ error?: { details?: { reason?: string; runnerPool?: string } } }>(
+      'POST',
+      `/workspaces/${wsId}/blocks/task_login/executions`,
+      { pipelineId: pipeline.body.id },
+    )
+  }
+
+  it('admits a delegated run on a board that inherits its account pool', async () => {
+    const res = await startDelegatedRun({})
+
+    expect(res.body.error?.details?.reason).toBeUndefined()
+    expect(res.status).toBe(201)
+  })
+
+  it('refuses a board that opted out of its account pool, naming the opt-out', async () => {
+    const res = await startDelegatedRun({ inheritAccountRunnerPool: false })
+
+    expect(res.status).toBe(409)
+    expect(res.body.error?.details).toMatchObject({
+      reason: 'agent_backend_unconfigured',
+      runnerPool: 'inheritance_off',
+    })
   })
 })

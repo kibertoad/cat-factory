@@ -131,8 +131,8 @@ export interface NodeContainerOptions {
    * account that has no pool, and `WorkspaceService.create` seeds the account of a new board.
    * Personal and org accounts both inherit; a legacy board with no account gets nothing; an
    * account that already has a pool keeps it. On stock Node a pool is the only executor, so this
-   * is what lets a new board run an agent with no manual step. Absent ⇒ no seeding. Node only:
-   * the local facade does not take it, and mothership mode does not seed.
+   * is what lets a new board run an agent with no manual step. Absent ⇒ no seeding. The local
+   * facade takes it on its Postgres path; its mothership mode drops it with a warning.
    */
   seedAccountRunnerPool?: RunnerPoolSeedSource
   /**

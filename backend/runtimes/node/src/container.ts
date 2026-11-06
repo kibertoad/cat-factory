@@ -84,6 +84,8 @@ export { pickRepoSource } from './container-foundation.js'
 // Re-export the public seams the local facade + tests still import from `./container.js`.
 export {
   buildNodeResolveTransport,
+  buildNodeRunnerPoolService,
+  runnerPoolResolveTransport,
   missingContainerExecutorPrereqs,
   withProvisioningLog,
 } from './container-executor-deps.js'

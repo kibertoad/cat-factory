@@ -205,6 +205,8 @@ type ConformanceAppOpts = {
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   taskSourceProviders?: CoreDependencies['taskSourceProviders']
   detectionConventions?: CoreDependencies['detectionConventions']
+  /** The declared account runner pool, forwarded to `buildLocalContainer` as `startLocal` does. */
+  seedAccountRunnerPool?: CoreDependencies['seedAccountRunnerPool']
   /**
    * Env entries layered over {@link TEST_ENV}, for a spec that needs a different DEPLOYMENT
    * SHAPE rather than a different dependency — a GitLab PAT instead of the default GitHub one,
@@ -408,6 +410,7 @@ export function makeConformanceApp(
     cloudflareModelsEnabled: opts?.cloudflareModelsEnabled ?? true,
     // Re-wire any faked gate providers after the build's reset (the suite drives the CI gate).
     gateProviders: opts?.gateProviders,
+    seedAccountRunnerPool: opts?.seedAccountRunnerPool,
     // Inject the app-owned registries (pre-loaded with custom kinds/preset/task-type in the
     // matching suites) so buildLocalContainer forwards each into buildNodeContainer by reference.
     ...buildContainerRegistryOptions(opts),

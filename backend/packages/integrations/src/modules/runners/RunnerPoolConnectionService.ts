@@ -75,6 +75,18 @@ export interface RunnerPoolConnectionServiceDependencies {
 /** A deployment- or admin-supplied runner pool: what {@link RunnerPoolConnectionService.validate} checks. */
 export type RunnerPoolInput = RegisterRunnerPoolInput
 
+/**
+ * Whether dispatch can use a board's pool, answered without decrypting anything. Each state needs a
+ * different fix: `none` registers a pool, `inheritance_off` turns the board's
+ * `inheritAccountRunnerPool` back on (its account has a pool the board declined), and
+ * `unknown_kind` registers the backend kind the stored pool names (or replaces the pool).
+ */
+export type RunnerPoolReadiness =
+  | { state: 'ready' }
+  | { state: 'none' }
+  | { state: 'inheritance_off' }
+  | { state: 'unknown_kind'; kind: string }
+
 /** A resolved runner backend: the live transport + its identity (for provisioning logs). */
 export interface ResolvedRunnerBackend {
   transport: RunnerTransport
@@ -437,6 +449,29 @@ export class RunnerPoolConnectionService {
     }
     const config = JSON.parse(record.configJson) as RunnerBackendConfig
     return { record, config }
+  }
+
+  /**
+   * Whether {@link resolve} would find a backend for the workspace, and if not, why. It reads the
+   * same effective pool and checks the same registry `resolve` does, but decrypts nothing and
+   * builds no transport, so a start-time check can afford it.
+   */
+  async dispatchReadiness(workspaceId: string): Promise<RunnerPoolReadiness> {
+    const record = await this.effective(workspaceId)
+    if (record) {
+      return this.deps.runnerBackendRegistry.get(record.kind)
+        ? { state: 'ready' }
+        : { state: 'unknown_kind', kind: record.kind }
+    }
+    // No effective pool while the account has one: the board opted out of inheriting it.
+    const accountPool = this.deps.accountRunnerPool
+    const accountId = accountPool
+      ? await this.deps.workspaceRepository.accountOf(workspaceId)
+      : null
+    if (accountPool && accountId && (await accountPool.repository.getByAccount(accountId))) {
+      return { state: 'inheritance_off' }
+    }
+    return { state: 'none' }
   }
 
   /**
