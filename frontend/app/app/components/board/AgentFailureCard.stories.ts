@@ -11,10 +11,11 @@ import {
 } from '~/stories/board.stories.mocks'
 import { execution } from '~/stories/snapshot.stories.mocks'
 import { failure } from '~/stories/pipelineStep.stories.mocks'
-import { seedBoard, seedViewer, withSeed } from '~/stories/withStores'
+import { seedBoard, seedMember, seedViewer, withSeed } from '~/stories/withStores'
 import { useAgentRunsStore, type AgentRunSummary } from '~/stores/agentRuns'
 import { useAuthStore } from '~/stores/auth'
 import { useExecutionStore } from '~/stores/execution'
+import { useUiRoleStore } from '~/stores/uiRole'
 import AgentFailureCard from './AgentFailureCard.vue'
 
 // The one failure block of a task view (board card, queue card, inspector, focus view) and of a
@@ -378,16 +379,68 @@ export const ProvidersUnconfigured: Story = {
 }
 
 /**
- * A board viewer on a failure a setting fixes: the setup button stays usable, and the Retry in
- * Details is disabled, as the main Retry is.
+ * A board viewer on a failure a setting fixes: they cannot save the setting, so the block names who
+ * can in place of the setup button, and the Retry in Details is disabled, as the main Retry is.
  */
 export const ReadOnlySetupAction: Story = {
   args: GithubNotConnected.args,
   decorators: [withSeed(() => seedViewer())],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await expect(canvas.getByTestId('agent-failure-setup')).toBeEnabled()
+    await expect(canvas.queryByTestId('agent-failure-setup')).toBeNull()
+    await expect(canvas.getByTestId('agent-failure-setup-remedy')).toHaveTextContent(
+      'A board admin can fix this.',
+    )
     await userEvent.click(canvas.getByRole('button', { name: 'Details' }))
     await expect(await canvas.findByTestId('agent-failure-retry')).toBeDisabled()
+  },
+}
+
+/**
+ * A board member on a run refused for want of an AI provider: the AI setup is a board admin's, so
+ * the member gets the line naming them, and Retry stays usable in Details.
+ */
+export const MemberSetupAction: Story = {
+  args: ProvidersUnconfigured.args,
+  decorators: [withSeed(() => seedMember())],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.queryByTestId('agent-failure-setup')).toBeNull()
+    await expect(canvas.getByTestId('agent-failure-setup-remedy')).toHaveTextContent(
+      'A board admin can fix this.',
+    )
+    await userEvent.click(canvas.getByRole('button', { name: 'Details' }))
+    await expect(await canvas.findByTestId('agent-failure-retry')).toBeEnabled()
+  },
+}
+
+/**
+ * The designer surface never configures the platform, whatever the grant: a board admin there is
+ * told to switch role rather than handed the AI setup.
+ */
+export const DesignerSetupAction: Story = {
+  args: ProvidersUnconfigured.args,
+  decorators: [withSeed(() => useUiRoleStore().setRole('designer'))],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.queryByTestId('agent-failure-setup')).toBeNull()
+    await expect(canvas.getByTestId('agent-failure-setup-remedy')).toHaveTextContent(
+      'switch your role',
+    )
+  },
+}
+
+/**
+ * A board member on an environment failure: Retry leads and the environment settings, which only
+ * a board admin saves, are left out rather than named, because the setting is only a guess here.
+ */
+export const MemberEnvironmentFailure: Story = {
+  args: EnvironmentFailure.args,
+  decorators: [withSeed(() => seedMember())],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByTestId('agent-failure-retry')).toBeEnabled()
+    await expect(canvas.queryByTestId('agent-failure-setup')).toBeNull()
+    await expect(canvas.queryByTestId('agent-failure-setup-remedy')).toBeNull()
   },
 }
