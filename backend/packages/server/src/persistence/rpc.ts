@@ -205,8 +205,10 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *   - `owner`         — `args[kindArg]`/`args[idArg]` are a tenant-library `(ownerKind, ownerId)`
  *                       PAIR (the prompt-fragment library, `ownerKind` ∈ `workspace` | `account`):
  *                       `workspace` → resolve the workspace's owning account (like `workspace`);
- *                       `account` → the ownerId IS an accountId (like `account`). Any other kind, a
- *                       non-string ownerId, or an unresolvable / out-of-scope owner fails closed (404).
+ *                       `account` → the ownerId IS an accountId (like `account`). With `projectTier`
+ *                       (the findings-storage policy tiers), `project` → the project's account too.
+ *                       Any other kind, a non-string ownerId, or an unresolvable / out-of-scope owner
+ *                       fails closed (404).
  *   - `ownerField`    — `args[arg]` is a library record whose `(ownerKind, ownerId)` are FIELDS (an
  *                       `upsert(record)` whose owner is a property, not positional args). Binds on
  *                       those fields exactly like `owner`; a non-object arg / missing fields fail closed.
@@ -322,7 +324,8 @@ export type ScopeRule =
   // handled.
   | { kind: 'accountFieldUpsert'; arg: number; entity: 'skillSource' }
   | { kind: 'usageRecord'; arg: number }
-  | { kind: 'owner'; kindArg: number; idArg: number }
+  /** `projectTier` also admits a `project` owner, bound through the project's account. */
+  | { kind: 'owner'; kindArg: number; idArg: number; projectTier?: true }
   | { kind: 'ownerField'; arg: number }
   /**
    * `ownerField` over a BATCH write: EVERY record in the list must declare an in-scope owner.
@@ -1015,7 +1018,9 @@ async function checkEntityCallScope(
       return checkServiceUpdateScope(args[rule.arg], args[rule.patchArg], opts, inScope, denied)
     case 'owner':
       // A tenant-library row keyed by an (ownerKind, ownerId) PAIR, positionally.
-      return checkOwnerPairScope(args[rule.kindArg], args[rule.idArg], opts, inScope, denied)
+      return checkOwnerPairScope(args[rule.kindArg], args[rule.idArg], opts, inScope, denied, {
+        projectTier: rule.projectTier === true,
+      })
     case 'ownerField': {
       // The same pair as FIELDS of a record `upsert(record)`, so the row can only ever be
       // persisted under the caller's own in-scope owner.
