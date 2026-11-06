@@ -203,7 +203,7 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
       workBranch: record.workBranch,
     }
     // Stamp `owner_id` from the materialised service frame (when known) so a shared
-    // service's in-flight bootstrap surfaces on every board that mounts it via `listByService`.
+    // service's in-flight bootstrap surfaces on every board that mounts it via `listByOwners`.
     await this.db
       .prepare(
         `INSERT INTO agent_runs

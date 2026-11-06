@@ -107,7 +107,7 @@ export function createBoardReparentWrite(deps: BoardReparentDeps) {
       block.level === 'task' ? moduleNameInContainer(parent) : (block.moduleName ?? '')
 
     // Same physical home (the common case, incl. two of the workspace's own services): move in
-    // place and re-stamp `service_id`, the physical scope key that decides which boards render
+    // place and re-stamp `owner_id`, the physical scope key that decides which boards render
     // the subtree and where its events fan out. No-op re-stamp when sharing isn't wired or the
     // destination frame isn't a registered service. No preset guard here: the home decides which
     // library a `riskPolicyId` resolves against, so a move that keeps it re-decides nothing.
