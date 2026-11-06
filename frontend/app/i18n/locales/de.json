@@ -6582,7 +6582,9 @@
         "oauth_exchange_refused": "Der Autorisierungsserver des Werkzeugservers hat die Freigabe abgelehnt. Bitten Sie Ihren Deployment-Betreiber, die OAuth-Client-Einstellungen des Werkzeugservers zu prüfen.",
         "oauth_client_secret_unavailable": "Das OAuth-Client-Secret des Werkzeugservers ist auf diesem Board nicht verfügbar. Fügen Sie es im Infrastruktur-Fenster hinzu.",
         "tool_server_without_oauth": "Dieser Werkzeugserver verwendet kein OAuth mehr, daher gibt es keine Verbindung abzuschließen.",
-        "gate_config_fields_invalid": "Die Gate-Einstellungen eines Schritts sind unvollständig oder enthalten einen Wert, den das Gate nicht akzeptiert, meist eine Pflichteinstellung ohne Wert. Füllen Sie die Gate-Einstellungen des Schritts in der Pipeline aus und versuchen Sie es erneut."
+        "gate_config_fields_invalid": "Die Gate-Einstellungen eines Schritts sind unvollständig oder enthalten einen Wert, den das Gate nicht akzeptiert, meist eine Pflichteinstellung ohne Wert. Füllen Sie die Gate-Einstellungen des Schritts in der Pipeline aus und versuchen Sie es erneut.",
+        "approvals_chain_stale": "Diese Pipeline hat sich geändert, nachdem Sie ihre Freigabe-Checkpoints geöffnet haben, daher passen sie nicht mehr zu ihren Schritten. Laden Sie die Pipeline neu und legen Sie sie erneut fest.",
+        "approvals_builtin_checkpoint_locked": "Eine integrierte Pipeline behält die Freigabe-Checkpoints, die ihre Katalogdefinition mitbringt. Klonen Sie die Pipeline, um einen davon zu entfernen."
       }
     },
     "action": {

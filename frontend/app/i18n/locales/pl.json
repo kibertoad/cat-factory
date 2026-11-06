@@ -703,7 +703,9 @@
         "oauth_exchange_refused": "Serwer autoryzacji serwera narzędzi odrzucił zgodę. Poproś operatora wdrożenia o sprawdzenie ustawień klienta OAuth serwera narzędzi.",
         "oauth_client_secret_unavailable": "Sekret klienta OAuth serwera narzędzi nie jest dostępny na tej tablicy. Dodaj go w oknie Infrastruktura.",
         "tool_server_without_oauth": "Ten serwer narzędzi nie używa już OAuth, więc nie ma połączenia do dokończenia.",
-        "gate_config_fields_invalid": "Ustawienia bramki kroku są niekompletne lub zawierają wartość, której bramka nie akceptuje, zwykle wymagane ustawienie bez wartości. Uzupełnij ustawienia bramki kroku w pipeline'ie i spróbuj ponownie."
+        "gate_config_fields_invalid": "Ustawienia bramki kroku są niekompletne lub zawierają wartość, której bramka nie akceptuje, zwykle wymagane ustawienie bez wartości. Uzupełnij ustawienia bramki kroku w pipeline'ie i spróbuj ponownie.",
+        "approvals_chain_stale": "Ten pipeline zmienił się po otwarciu jego punktów zatwierdzania, więc nie pasują już do jego kroków. Wczytaj pipeline ponownie i ustaw je jeszcze raz.",
+        "approvals_builtin_checkpoint_locked": "Wbudowany pipeline zachowuje punkty zatwierdzania, które zawiera jego definicja z katalogu. Sklonuj pipeline, aby usunąć któryś z nich."
       }
     },
     "action": {

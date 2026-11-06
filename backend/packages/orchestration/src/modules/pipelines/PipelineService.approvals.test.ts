@@ -93,7 +93,10 @@ describe('PipelineService.setApprovals', () => {
     const { svc } = service([bugfix])
     await expect(
       svc.setApprovals(WS, bugfix.id, { agentKinds: bugfix.agentKinds, gates: gatesAfter(bugfix) }),
-    ).rejects.toThrow(/part of the built-in pipeline/)
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/part of the built-in pipeline/),
+      details: { reason: 'approvals_builtin_checkpoint_locked', steps: ['clarity-review'] },
+    })
   })
 
   it('lets a copy older than the catalog leave off a shipped checkpoint it never carried', async () => {
@@ -148,7 +151,10 @@ describe('PipelineService.setApprovals', () => {
         agentKinds: reordered,
         gates: gatesAfter(complex, 'architect'),
       }),
-    ).rejects.toThrow(/different version/)
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/different version/),
+      details: { reason: 'approvals_chain_stale' },
+    })
   })
 
   it('takes a checkpoint on a row whose estimate gate breaks a rule of its own', async () => {

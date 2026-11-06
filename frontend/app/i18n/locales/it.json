@@ -6582,7 +6582,9 @@
         "oauth_exchange_refused": "Il server di autorizzazione del server degli strumenti ha rifiutato la concessione. Chiedi a chi gestisce il deployment di controllare le impostazioni del client OAuth del server degli strumenti.",
         "oauth_client_secret_unavailable": "Il segreto del client OAuth del server degli strumenti non è disponibile su questa board. Aggiungilo dalla finestra Infrastruttura.",
         "tool_server_without_oauth": "Questo server degli strumenti non usa più OAuth, quindi non c’è nessuna connessione da completare.",
-        "gate_config_fields_invalid": "Le impostazioni del gate di un passo sono incomplete o contengono un valore che il gate non accetta, di solito un'impostazione obbligatoria senza valore. Compila le impostazioni del gate del passo nella pipeline e riprova."
+        "gate_config_fields_invalid": "Le impostazioni del gate di un passo sono incomplete o contengono un valore che il gate non accetta, di solito un'impostazione obbligatoria senza valore. Compila le impostazioni del gate del passo nella pipeline e riprova.",
+        "approvals_chain_stale": "Questa pipeline è cambiata dopo che ne hai aperto i punti di approvazione, quindi non corrispondono più ai suoi passaggi. Ricarica la pipeline e impostali di nuovo.",
+        "approvals_builtin_checkpoint_locked": "Una pipeline integrata mantiene i punti di approvazione previsti dalla sua definizione nel catalogo. Clona la pipeline per rimuoverne uno."
       }
     },
     "action": {

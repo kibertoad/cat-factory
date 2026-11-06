@@ -5,6 +5,7 @@ import {
   lockedCheckpoints,
   patchedGateConfig,
   type CatalogApprovals,
+  type PipelineApprovalsRefusalReason,
   type SetPipelineApprovalsInput,
 } from '@cat-factory/contracts'
 import { ValidationError } from '@cat-factory/kernel'
@@ -47,8 +48,10 @@ export function approvalsApplied(
     input.agentKinds.length === steps &&
     input.agentKinds.every((kind, i) => kind === existing.agentKinds[i])
   if (!sameChain) {
+    const reason: PipelineApprovalsRefusalReason = 'approvals_chain_stale'
     throw new ValidationError(
       `The approval checkpoints were set against a different version of '${existing.name}' than the one stored. Reload the pipeline and try again.`,
+      { reason },
     )
   }
   const mismatched = [input.gates, input.policies].find((a) => a && a.length !== steps)
@@ -61,8 +64,10 @@ export function approvalsApplied(
     const locked = lockedCheckpoints(existing, catalog)
     const removed = existing.agentKinds.filter((_, i) => locked[i] && !input.gates[i])
     if (removed.length) {
+      const reason: PipelineApprovalsRefusalReason = 'approvals_builtin_checkpoint_locked'
       throw new ValidationError(
         `The checkpoint after ${removed.map((kind) => `'${kind}'`).join(', ')} is part of the built-in pipeline '${existing.name}'. Clone the pipeline to remove it.`,
+        { reason, steps: removed },
       )
     }
   }

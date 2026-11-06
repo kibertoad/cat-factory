@@ -703,7 +703,9 @@
         "oauth_exchange_refused": "Araç sunucusunun yetkilendirme sunucusu izni reddetti. Dağıtım operatörünüzden araç sunucusunun OAuth istemci ayarlarını kontrol etmesini isteyin.",
         "oauth_client_secret_unavailable": "Araç sunucusunun OAuth istemci gizli anahtarı bu panoda kullanılamıyor. Altyapı penceresinden ekleyin.",
         "tool_server_without_oauth": "Bu araç sunucusu artık OAuth kullanmıyor, bu yüzden tamamlanacak bir bağlantı yok.",
-        "gate_config_fields_invalid": "Bir adımın kapı ayarları eksik ya da kapının kabul etmediği bir değer içeriyor, genellikle değeri olmayan zorunlu bir ayar. Pipeline'da adımın kapı ayarlarını doldurup yeniden deneyin."
+        "gate_config_fields_invalid": "Bir adımın kapı ayarları eksik ya da kapının kabul etmediği bir değer içeriyor, genellikle değeri olmayan zorunlu bir ayar. Pipeline'da adımın kapı ayarlarını doldurup yeniden deneyin.",
+        "approvals_chain_stale": "Bu pipeline, onay kontrol noktalarını açtıktan sonra değişti, bu yüzden kontrol noktaları artık adımlarıyla eşleşmiyor. Pipeline'ı yeniden yükleyin ve onları tekrar ayarlayın.",
+        "approvals_builtin_checkpoint_locked": "Yerleşik bir pipeline, katalog tanımının içerdiği onay kontrol noktalarını korur. Birini kaldırmak için pipeline'ı klonlayın."
       }
     },
     "action": {

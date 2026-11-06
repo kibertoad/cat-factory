@@ -37,6 +37,7 @@ import type {
   BootstrapReferenceReason,
   CredentialWaitReason,
   GateConfigRefusalReason,
+  PipelineApprovalsRefusalReason,
   ToolServerOAuthReason,
   UnavailableReason,
 } from '@cat-factory/contracts'
@@ -125,6 +126,10 @@ const GENERIC_DESCRIPTION_KEYS: Record<Exclude<ApiErrorCode, 'conflict'>, string
  * `GateConfigRefusalReason` joins it because the 422 it names points at one place to fix (a gate
  * step's parameters in the pipeline), which the generic validation wording does not say.
  *
+ * `PipelineApprovalsRefusalReason` joins it because its 422 is not a malformed request: it says the
+ * dialog was composed against a chain that has since changed, or tried to drop a checkpoint only a
+ * clone can drop, and each has its own remedy.
+ *
  * `CredentialWaitReason` joins it because its 403 is not a missing permission: it names the one
  * person (the run's initiator) whose password can resume the run.
  */
@@ -133,11 +138,15 @@ const REASON_DESCRIPTION_KEYS: Record<
   | BootstrapReferenceReason
   | ToolServerOAuthReason
   | GateConfigRefusalReason
+  | PipelineApprovalsRefusalReason
   | CredentialWaitReason,
   string
 > = {
   credential_wait_not_initiator: 'errors.reason.description.credential_wait_not_initiator',
   gate_config_fields_invalid: 'errors.reason.description.gate_config_fields_invalid',
+  approvals_chain_stale: 'errors.reason.description.approvals_chain_stale',
+  approvals_builtin_checkpoint_locked:
+    'errors.reason.description.approvals_builtin_checkpoint_locked',
   reference_repo_not_found: 'errors.reason.description.reference_repo_not_found',
   reference_repo_unreadable: 'errors.reason.description.reference_repo_unreadable',
   oauth_state_invalid: 'errors.reason.description.oauth_state_invalid',

@@ -33,6 +33,25 @@ export const setPipelineApprovalsSchema = v.object({
 export type SetPipelineApprovalsInput = v.InferOutput<typeof setPipelineApprovalsSchema>
 
 /**
+ * Machine-readable reasons a set-approvals request is refused (a 422), carried on
+ * `error.details.reason`.
+ *
+ *  - `approvals_chain_stale`: the request's `agentKinds` is not the stored chain, so it was
+ *    composed against a copy a reseed or an edit has since changed.
+ *  - `approvals_builtin_checkpoint_locked`: the request switches off a checkpoint the built-in's
+ *    catalog definition ships. `details.steps` names the step kinds.
+ *
+ * The SPA keys its translated description off this list, so a reason added here without wording
+ * trips the frontend typecheck.
+ */
+export const PIPELINE_APPROVALS_REFUSAL_REASONS = [
+  'approvals_chain_stale',
+  'approvals_builtin_checkpoint_locked',
+] as const
+
+export type PipelineApprovalsRefusalReason = (typeof PIPELINE_APPROVALS_REFUSAL_REASONS)[number]
+
+/**
  * The checkpoints a built-in's CATALOG definition ships: its chain and the gate flags aligned to
  * it. Served on the workspace snapshot (`pipelineCatalogApprovals`) so the builder can show those
  * checkpoints as part of the built-in rather than as ones the workspace may switch off.
