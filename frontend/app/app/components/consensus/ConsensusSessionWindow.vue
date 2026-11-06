@@ -14,6 +14,7 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import { agentKindMeta } from '~/utils/catalog'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 
 const { t, n } = useI18n()
 
@@ -32,6 +33,11 @@ const session = computed<ConsensusSession | null>(() =>
   blockId.value ? consensus.sessionFor(blockId.value) : null,
 )
 const loading = computed(() => (blockId.value ? consensus.isLoading(blockId.value) : false))
+const loadFailed = computed(() => (blockId.value ? consensus.loadFailed(blockId.value) : false))
+
+function retry() {
+  if (blockId.value) void consensus.load(blockId.value)
+}
 
 // Composed header: "Consensus · <strategy>" as the dialog title (with the block appended when
 // present), and the agent kind + participant count as the subtitle line.
@@ -150,6 +156,11 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
         <USkeleton class="h-32 w-full rounded-lg" />
         <USkeleton v-for="n in 3" :key="n" class="h-16 w-full rounded-lg" />
       </div>
+      <LoadFailedState
+        v-else-if="loadFailed && !session"
+        :title="t('consensus.loadFailed')"
+        @retry="retry"
+      />
       <EmptyState v-else-if="!session" icon="i-lucide-users" :title="t('consensus.empty')" />
       <template v-else>
         <!-- failure -->
