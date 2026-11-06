@@ -6,6 +6,7 @@ import FrameSwimlanes from './FrameSwimlanes.vue'
 import InitiativeCard from './InitiativeCard.vue'
 import ResizeGrips from './ResizeGrips.vue'
 import ProjectServicesModal from '~/components/projects/ProjectServicesModal.vue'
+import { defineAsyncView } from '~/utils/asyncView'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import AdoptionReviewModal from '~/components/bootstrap/AdoptionReviewModal.vue'
@@ -56,6 +57,13 @@ const linkedServiceTitles = computed(() =>
   }),
 )
 const servicesModalOpen = ref(false)
+// A project whose kind keeps research data opens its findings reader from the frame.
+const keepsResearch = computed(() => projects.kindOf(project.value)?.data === 'research')
+const findingsOpen = ref(false)
+// Code-split: the reader opens on a deliberate click, and most boards hold no research project.
+const ResearchFindingsTakeover = defineAsyncView(
+  () => import('~/components/research/ResearchFindingsTakeover.vue'),
+)
 const isShared = computed(() =>
   isProject.value ? projects.isSharedRoot(props.id) : services.isSharedFrame(props.id),
 )
@@ -540,6 +548,17 @@ const ITEM_ICON: Record<string, string | undefined> = {
                   @click.stop="servicesModalOpen = true"
                 />
                 <IconButton
+                  v-if="keepsResearch"
+                  class="nodrag"
+                  data-testid="project-open-findings"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-telescope"
+                  :label="t('research.open')"
+                  @click.stop="findingsOpen = true"
+                />
+                <IconButton
                   v-if="tasks.anyOffered && uiRole.fullSurface && !isProject"
                   class="nodrag"
                   data-testid="frame-hunt-bugs"
@@ -635,6 +654,12 @@ const ITEM_ICON: Record<string, string | undefined> = {
     <!-- Teleported by UModal, so it renders outside the canvas transform; kept inside the node's
          single root element so the board node stays a one-root component. -->
     <ProjectServicesModal v-if="project" v-model:open="servicesModalOpen" :project="project" />
+    <ResearchFindingsTakeover
+      v-if="project && keepsResearch && findingsOpen"
+      v-model:open="findingsOpen"
+      :project="project"
+      :title="block?.title ?? ''"
+    />
     <AdoptionReviewModal
       v-if="reviewOpen && awaitingReview"
       :job="awaitingReview"

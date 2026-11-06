@@ -9266,5 +9266,127 @@
       "added": "Projet {title} ajouté à ce tableau",
       "failed": "Impossible d'ajouter le projet"
     }
+  },
+  "research": {
+    "open": "Résultats de la recherche",
+    "title": "Résultats : {title}",
+    "pin": "{title}, version {version}",
+    "refresh": "Actualiser",
+    "loading": "Chargement des résultats",
+    "unavailable": "Les résultats n'ont pas pu être chargés",
+    "loadFailed": "Impossible de charger les résultats",
+    "definitionChanged": "La définition enregistrée ne correspond plus à la version que ce projet a fixée, les nouvelles recherches sont donc refusées jusqu'à sa publication en tant que nouvelle version.",
+    "definitionMissing": "La définition fixée par ce projet n'est plus disponible pour cette organisation.",
+    "unreadableRevisions": "Certaines révisions sont dans un stockage de contenu qui ne peut pas les fournir pour l'instant. Leurs réponses sont omises jusqu'à ce qu'il le puisse.",
+    "adhoc": "Questions ajoutées par des tâches",
+    "retired": "Réponses à des questions que cette version ne pose plus",
+    "learnings": "Enseignements",
+    "topicCoverage": "{answered} sur {total} répondues",
+    "blockedOn": "En attente de l'identifiant {key}",
+    "notes": "Tentatives ultérieures conservées à côté de cette réponse : {count}",
+    "tabs": {
+      "findings": "Résultats",
+      "revisions": "Historique",
+      "credentials": "Identifiants",
+      "storage": "Stockage"
+    },
+    "status": {
+      "answered": "Répondue",
+      "partial": "Partielle",
+      "unanswered": "Sans réponse",
+      "blocked": "Bloquée"
+    },
+    "coverage": {
+      "answered": "Répondues : {count}",
+      "partial": "Partielles : {count}",
+      "unanswered": "Sans réponse : {count}",
+      "blocked": "Bloquées : {count}"
+    },
+    "confidence": {
+      "high": "Confiance élevée",
+      "medium": "Confiance moyenne",
+      "low": "Confiance faible"
+    },
+    "evidence": {
+      "httpExchange": "Requête enregistrée {ref}",
+      "screenshot": "Capture d'écran {id}",
+      "repoPath": "Fichier du dépôt {path}"
+    },
+    "mode": {
+      "initial": "Initiale",
+      "extend": "Étendre",
+      "clarify": "Clarifier",
+      "refresh": "Rafraîchir"
+    },
+    "modeHelp": {
+      "initial": "Répondre à chaque question de la définition fixée.",
+      "extend": "Répondre aux questions jamais posées, y compris celles que vous ajoutez ci-dessous.",
+      "clarify": "Réexaminer les réponses partielles ou bloquées.",
+      "refresh": "Vérifier chaque réponse existante auprès du fournisseur tel qu'il est aujourd'hui."
+    },
+    "revisions": {
+      "empty": "Aucune tâche de recherche n'a encore enregistré de résultats",
+      "seq": "Révision {seq}",
+      "task": "Écrite par {task}, version de la définition {version}",
+      "show": "Afficher",
+      "hide": "Masquer",
+      "answers": "Réponses dans cette révision : {count}",
+      "openFailed": "Impossible d'ouvrir la révision",
+      "storage": {
+        "inline": "Stockée en ligne, {size}",
+        "offloaded": "Dans le stockage de contenu, {size}",
+        "unavailable": "Indisponible, {size}"
+      }
+    },
+    "credentials": {
+      "none": "La définition fixée ne déclare aucun identifiant",
+      "requiredAtStart": "Une recherche en a besoin avant de démarrer.",
+      "askedWhenNeeded": "L'agent le demande quand il atteint l'étape qui en a besoin.",
+      "store": "Gérer les identifiants de capacités",
+      "status": {
+        "stored": "Enregistré",
+        "missing": "Manquant",
+        "reserved": "Nom réservé, jamais envoyé"
+      }
+    },
+    "storage": {
+      "effective": "Les nouvelles révisions sont stockées en ligne jusqu'à {size} ; au-delà, le déport est {offload}.",
+      "accountHint": "Défini par l'organisation.",
+      "inherit": "Hériter",
+      "inherits": "Hérite du niveau supérieur",
+      "inlineUpTo": "en ligne jusqu'à {size}",
+      "inlineKb": "Limite en ligne (Ko)",
+      "offloadLabel": "Déport",
+      "save": "Enregistrer",
+      "loadFailed": "Impossible de charger les paramètres de stockage des résultats",
+      "saveFailed": "Impossible d'enregistrer les paramètres de stockage des résultats",
+      "tier": {
+        "account": "Organisation",
+        "workspace": "Ce tableau",
+        "project": "Ce projet"
+      },
+      "offload": {
+        "enabled": "activé",
+        "disabled": "désactivé"
+      }
+    },
+    "followUp": {
+      "open": "Lancer un suivi",
+      "title": "Lancer un suivi",
+      "modeLabel": "Mode",
+      "titleLabel": "Titre de la tâche",
+      "questionsLabel": "Questions à ajouter",
+      "questionsHelp": "Une question par ligne. Chacune reçoit une réponse conservée avec les résultats du projet.",
+      "revisitLabel": "Questions à réexaminer",
+      "revisitHelp": "Laissez vide pour réexaminer toutes les questions couvertes par ce mode.",
+      "submit": "Lancer la recherche",
+      "failed": "Impossible de lancer le suivi",
+      "defaultTitle": {
+        "initial": "Étudier le fournisseur",
+        "extend": "Étendre la recherche",
+        "clarify": "Clarifier les réponses ouvertes",
+        "refresh": "Rafraîchir les résultats"
+      }
+    }
   }
 }

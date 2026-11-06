@@ -9266,5 +9266,127 @@
       "added": "{title} projesi bu panoya eklendi",
       "failed": "Proje eklenemedi"
     }
+  },
+  "research": {
+    "open": "Araştırma bulguları",
+    "title": "Bulgular: {title}",
+    "pin": "{title}, sürüm {version}",
+    "refresh": "Yenile",
+    "loading": "Bulgular yükleniyor",
+    "unavailable": "Bulgular yüklenemedi",
+    "loadFailed": "Bulgular yüklenemedi",
+    "definitionChanged": "Kayıtlı tanım, bu projenin sabitlediği sürümle artık eşleşmiyor, bu yüzden yeni bir sürüm olarak yayımlanana kadar yeni araştırma çalıştırmaları reddedilir.",
+    "definitionMissing": "Bu projenin sabitlediği tanım artık bu kuruluş için kullanılamıyor.",
+    "unreadableRevisions": "Bazı revizyonlar şu anda onları sunamayan bir içerik deposunda duruyor. Sunabilene kadar yanıtları dışarıda bırakılır.",
+    "adhoc": "Görevlerin eklediği sorular",
+    "retired": "Bu sürümün artık sormadığı sorulara verilen yanıtlar",
+    "learnings": "Öğrenilenler",
+    "topicCoverage": "{total} sorudan {answered} yanıtlandı",
+    "blockedOn": "{key} kimlik bilgisi bekleniyor",
+    "notes": "Bu yanıtın yanında tutulan sonraki denemeler: {count}",
+    "tabs": {
+      "findings": "Bulgular",
+      "revisions": "Geçmiş",
+      "credentials": "Kimlik bilgileri",
+      "storage": "Depolama"
+    },
+    "status": {
+      "answered": "Yanıtlandı",
+      "partial": "Kısmi",
+      "unanswered": "Yanıtlanmadı",
+      "blocked": "Engellendi"
+    },
+    "coverage": {
+      "answered": "Yanıtlanan: {count}",
+      "partial": "Kısmi: {count}",
+      "unanswered": "Yanıtlanmayan: {count}",
+      "blocked": "Engellenen: {count}"
+    },
+    "confidence": {
+      "high": "Yüksek güven",
+      "medium": "Orta güven",
+      "low": "Düşük güven"
+    },
+    "evidence": {
+      "httpExchange": "Kaydedilen istek {ref}",
+      "screenshot": "Ekran görüntüsü {id}",
+      "repoPath": "Depodaki dosya {path}"
+    },
+    "mode": {
+      "initial": "İlk",
+      "extend": "Genişlet",
+      "clarify": "Netleştir",
+      "refresh": "Yenile"
+    },
+    "modeHelp": {
+      "initial": "Sabitlenen tanımdaki her soruyu yanıtlar.",
+      "extend": "Aşağıda ekledikleriniz dahil, daha önce sorulmamış soruları yanıtlar.",
+      "clarify": "Kısmi ya da engellenmiş yanıtlara yeniden bakar.",
+      "refresh": "Var olan her yanıtı sağlayıcının şimdiki hâline göre doğrular."
+    },
+    "revisions": {
+      "empty": "Henüz hiçbir araştırma görevi bulgu kaydetmedi",
+      "seq": "Revizyon {seq}",
+      "task": "{task} tarafından yazıldı, tanım sürümü {version}",
+      "show": "Göster",
+      "hide": "Gizle",
+      "answers": "Bu revizyondaki yanıtlar: {count}",
+      "openFailed": "Revizyon açılamadı",
+      "storage": {
+        "inline": "Satır içi saklandı, {size}",
+        "offloaded": "İçerik deposunda, {size}",
+        "unavailable": "Kullanılamıyor, {size}"
+      }
+    },
+    "credentials": {
+      "none": "Sabitlenen tanım hiçbir kimlik bilgisi bildirmiyor",
+      "requiredAtStart": "Bir araştırma çalıştırması başlamadan önce buna ihtiyaç duyar.",
+      "askedWhenNeeded": "Ajan, buna ihtiyaç duyan noktaya geldiğinde ister.",
+      "store": "Yetenek kimlik bilgilerini yönet",
+      "status": {
+        "stored": "Kayıtlı",
+        "missing": "Eksik",
+        "reserved": "Ayrılmış ad, asla gönderilmez"
+      }
+    },
+    "storage": {
+      "effective": "Yeni revizyonlar {size} boyutuna kadar satır içi saklanır; üstünde aktarma {offload}.",
+      "accountHint": "Kuruluş tarafından belirlenir.",
+      "inherit": "Devral",
+      "inherits": "Daha geniş katmandan devralır",
+      "inlineUpTo": "{size} boyutuna kadar satır içi",
+      "inlineKb": "Satır içi sınır (KB)",
+      "offloadLabel": "Aktarma",
+      "save": "Kaydet",
+      "loadFailed": "Bulgu depolama ayarları yüklenemedi",
+      "saveFailed": "Bulgu depolama ayarları kaydedilemedi",
+      "tier": {
+        "account": "Kuruluş",
+        "workspace": "Bu pano",
+        "project": "Bu proje"
+      },
+      "offload": {
+        "enabled": "açık",
+        "disabled": "kapalı"
+      }
+    },
+    "followUp": {
+      "open": "Devam araştırması başlat",
+      "title": "Devam araştırması başlat",
+      "modeLabel": "Mod",
+      "titleLabel": "Görev başlığı",
+      "questionsLabel": "Eklenecek sorular",
+      "questionsHelp": "Her satıra bir soru. Her biri yanıtlanır ve projenin bulgularıyla birlikte saklanır.",
+      "revisitLabel": "Yeniden bakılacak sorular",
+      "revisitHelp": "Bu modun kapsadığı her soruya yeniden bakmak için boş bırakın.",
+      "submit": "Araştırmayı başlat",
+      "failed": "Devam araştırması başlatılamadı",
+      "defaultTitle": {
+        "initial": "Sağlayıcıyı araştır",
+        "extend": "Araştırmayı genişlet",
+        "clarify": "Açık yanıtları netleştir",
+        "refresh": "Bulguları yenile"
+      }
+    }
   }
 }

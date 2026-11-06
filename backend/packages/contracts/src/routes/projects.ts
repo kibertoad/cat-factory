@@ -1,7 +1,8 @@
-import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { blockSchema } from '../entities.js'
 import { pinnableResearchDefinitionSchema } from '../research.js'
+import { researchProjectViewSchema, researchRevisionDetailSchema } from '../research-view.js'
 import {
   createProjectInputSchema,
   projectSchema,
@@ -39,6 +40,24 @@ export const listPinnableResearchDefinitionsContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/research-definitions',
   responsesByStatusCode: { 200: v.array(pinnableResearchDefinitionSchema), ...errorResponses },
+})
+
+/** A research project's pin, current findings, revisions and credential readiness. */
+export const getResearchProjectViewContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: projectIdParams,
+  pathResolver: ({ projectId }) => `/projects/${projectId}/research`,
+  responsesByStatusCode: { 200: researchProjectViewSchema, ...errorResponses },
+})
+
+export const getResearchRevisionContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: withObjectKeys(
+    v.object({ projectId: v.string(), revisionId: v.string() }),
+  ),
+  pathResolver: ({ projectId, revisionId }) =>
+    `/projects/${projectId}/research/revisions/${revisionId}`,
+  responsesByStatusCode: { 200: researchRevisionDetailSchema, ...errorResponses },
 })
 
 export const createProjectContract = defineApiContract({

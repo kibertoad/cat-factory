@@ -33,6 +33,7 @@ import { taskWebhookController } from './modules/tasks/TaskWebhookController.js'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 import { mergeTrackRecordController } from './modules/merge/MergeTrackRecordController.js'
 import { riskPolicyController } from './modules/merge/RiskPolicyController.js'
+import { findingsStoragePolicyController } from './modules/research/FindingsStoragePolicyController.js'
 import { sharedStackController } from './modules/sharedStack/SharedStackController.js'
 import { preflightController } from './modules/preflight/PreflightController.js'
 import { sandboxController } from './modules/sandbox/SandboxController.js'
@@ -558,6 +559,12 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   { name: 'trackerSettings', mount: WORKSPACE_MOUNT, build: () => trackerSettingsController() },
   { name: 'serviceMount', mount: WORKSPACE_MOUNT, build: () => serviceMountController() },
   { name: 'project', mount: WORKSPACE_MOUNT, build: () => projectController() },
+  // The board's findings-storage tiers (its own and its projects'): `settings.manage`.
+  {
+    name: 'findingsStoragePolicy',
+    mount: WORKSPACE_MOUNT,
+    build: () => findingsStoragePolicyController('workspace'),
+  },
   { name: 'serviceSpec', mount: WORKSPACE_MOUNT, build: () => serviceSpecController() },
   {
     name: 'fragmentLibrary',
@@ -587,6 +594,11 @@ export const ACCOUNT_CONTROLLERS: readonly ControllerEntry[] = [
     build: () => fragmentLibraryController('account'),
   },
   { name: 'riskPolicy', mount: ACCOUNT_MOUNT, build: () => riskPolicyController('account') },
+  {
+    name: 'findingsStoragePolicy',
+    mount: ACCOUNT_MOUNT,
+    build: () => findingsStoragePolicyController('account'),
+  },
   { name: 'skillLibrary', mount: ACCOUNT_MOUNT, build: () => skillLibraryController() },
   {
     name: 'foundationalService',
