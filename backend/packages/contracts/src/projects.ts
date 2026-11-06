@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { descriptorFieldValuesSchema } from './form-fields.js'
 import { positionSchema, taskTypeSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,17 @@ const serviceIdsSchema = v.pipe(
   v.check((ids) => new Set(ids).size === ids.length, 'service ids must be unique'),
 )
 
+/**
+ * The research definition a research project pins at creation, and the values for its `inputs`.
+ * No version pins the highest one the account can see.
+ */
+export const researchPinInputSchema = v.object({
+  definitionKey: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+  definitionVersion: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
+  inputs: v.optional(descriptorFieldValuesSchema, {}),
+})
+export type ResearchPinInput = v.InferOutput<typeof researchPinInputSchema>
+
 export const createProjectInputSchema = v.object({
   kind: projectKindIdSchema,
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(PROJECT_TITLE_MAX)),
@@ -47,6 +59,8 @@ export const createProjectInputSchema = v.object({
   serviceIds: v.optional(serviceIdsSchema, []),
   /** Where to drop the root on the creating board; laid out on the board's grid when absent. */
   position: v.optional(positionSchema),
+  /** Required by, and only accepted for, a kind that keeps `research` data. */
+  research: v.optional(researchPinInputSchema),
 })
 export type CreateProjectInput = v.InferOutput<typeof createProjectInputSchema>
 
@@ -64,6 +78,10 @@ export type SetProjectServicesInput = v.InferOutput<typeof setProjectServicesInp
 export const projectRepoAccessSchema = v.picklist(['none', 'linked-read-only'])
 export type ProjectRepoAccess = v.InferOutput<typeof projectRepoAccessSchema>
 
+/** The project-level data a kind keeps, a closed vocabulary the platform implements. */
+export const projectKindDataSchema = v.picklist(['research'])
+export type ProjectKindData = v.InferOutput<typeof projectKindDataSchema>
+
 /** One task type a project kind offers. */
 export const projectKindTaskTypeSchema = v.object({
   taskType: taskTypeSchema,
@@ -80,6 +98,11 @@ export const projectKindDescriptorSchema = v.object({
   description: v.optional(v.pipe(v.string(), v.maxLength(PROJECT_DESCRIPTION_MAX))),
   /** At least one, so a project of this kind can hold work. */
   taskTypes: v.pipe(v.array(projectKindTaskTypeSchema), v.minLength(1)),
+  /**
+   * The project-level data the kind keeps. `research` pins a research definition at creation;
+   * absent means the project keeps nothing beyond its tasks.
+   */
+  data: v.optional(projectKindDataSchema),
 })
 export type ProjectKindDescriptor = v.InferOutput<typeof projectKindDescriptorSchema>
 

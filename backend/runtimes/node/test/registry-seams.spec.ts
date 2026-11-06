@@ -90,6 +90,7 @@ const SEAM_ROUTES = {
   binaryStoreRegistry: 'option',
   promptFragmentRegistry: 'option',
   projectKindRegistry: 'option',
+  researchDefinitionRegistry: 'option',
   // The three SOURCES. Each is `option` for the same reason its registry is, and each is set by
   // exactly one caller, the local facade booting in mothership mode, which reads what the
   // deployment registered from the mothership rather than from this node's own (stale-by-
@@ -99,6 +100,7 @@ const SEAM_ROUTES = {
   promptFragmentSource: 'option',
   agentKindSource: 'option',
   projectKindSource: 'option',
+  registeredResearchDefinitionSource: 'option',
   // Registered together on one `createBackendRegistries()` bundle and injected as
   // `backendRegistries`, because an environment backend and its runner backend are two halves of
   // one deployment's infrastructure and splitting them into two options would let a deployment
@@ -168,6 +170,7 @@ const BOOT_ROUTES = {
   binaryStoreRegistry: 'entry-point',
   promptFragmentRegistry: 'entry-point',
   projectKindRegistry: 'entry-point',
+  researchDefinitionRegistry: 'entry-point',
   // The mothership SOURCES. Deliberately NOT entry-point options: each is the answer to "where is
   // this code-registered org state READ from", which is a property of the deployment TOPOLOGY, and
   // the local mothership boot is the one caller that knows it. A deployment that could set them
@@ -177,6 +180,7 @@ const BOOT_ROUTES = {
   promptFragmentSource: 'facade-internal',
   agentKindSource: 'facade-internal',
   projectKindSource: 'facade-internal',
+  registeredResearchDefinitionSource: 'facade-internal',
   environmentBackendRegistry: 'bundled',
   runnerBackendRegistry: 'bundled',
   providerRegistry: 'internal',
@@ -242,6 +246,7 @@ const SEAM_CONSTRUCTORS = {
   pipelineRegistry: ['PipelineRegistry', 'defaultPipelineRegistry'],
   taskTypeRegistry: ['TaskTypeRegistry', 'defaultTaskTypeRegistry'],
   projectKindRegistry: ['ProjectKindRegistry', 'defaultProjectKindRegistry'],
+  researchDefinitionRegistry: ['ResearchDefinitionRegistry'],
   inlineUseCaseRegistry: ['InlineUseCaseRegistry', 'defaultInlineUseCaseRegistry'],
   initiativePresetRegistry: ['InitiativePresetRegistry', 'defaultInitiativePresetRegistry'],
   vcsRegistry: ['VcsProviderRegistry', 'defaultVcsRegistry'],

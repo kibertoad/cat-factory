@@ -692,7 +692,8 @@
         "assistant_reply_unreadable": "El modelo del asistente respondió con algo que esta plataforma no puede ejecutar como decisión. Reformular rara vez ayuda: elige otro modelo para el asistente en la configuración de modelos.",
         "delegated_executor_failed": "El ejecutor externo no pudo iniciar este paso. El problema está en el sistema que realiza el trabajo, no en esta instalación: revisa sus propios registros e inténtalo de nuevo.",
         "delegated_work_branch_unprepared": "La plataforma no pudo preparar la rama de trabajo a la que se envía el ejecutor de este paso, así que no se inició nada. O la conexión al repositorio no puede escribir en ella, o la tarea indica una rama que aún no existe: los detalles dicen cuál de las dos.",
-        "attached_pr_provider_unreachable": "El proveedor del repositorio no respondió, así que no se pudo comprobar la pull request y no se creó ninguna tarea. No hay nada que configurar aquí: vuelve a intentarlo en un momento."
+        "attached_pr_provider_unreachable": "El proveedor del repositorio no respondió, así que no se pudo comprobar la pull request y no se creó ninguna tarea. No hay nada que configurar aquí: vuelve a intentarlo en un momento.",
+        "research_definitions_unreachable": "No se han podido leer las definiciones de investigación de esta instalación en este momento, así que no se ha completado la solicitud. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión."
       }
     },
     "reason": {

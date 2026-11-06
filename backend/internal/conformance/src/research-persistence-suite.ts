@@ -110,18 +110,36 @@ export function defineResearchPersistenceSuite(
       expect(await repos.definitions.listByAccount(unique('other'))).toEqual([])
     })
 
-    it('pins a research project and hands out its findings sequence atomically', async () => {
+    it('pins a research project and gives each task one findings sequence number', async () => {
       const repos = makeRepos()
       const projectId = await project(repos)
       expect(await repos.projects.get(projectId)).toMatchObject({
         definitionKey: 'acme:vendor',
         inputs: { vendor: 'Example' },
       })
-      const taken = await Promise.all(
-        [1, 2, 3, 4, 5].map(() => repos.projects.reserveSeq(projectId)),
+      const tasks = [1, 2, 3, 4].map(() => unique('task'))
+      const taken = await Promise.all(tasks.map((t) => repos.projects.reserveTaskSeq(projectId, t)))
+      expect(new Set(taken).size).toBe(tasks.length)
+      // A replayed start keeps its place, even when the replays race each other.
+      const replayed = await Promise.all(
+        [...tasks, ...tasks].map((t) => repos.projects.reserveTaskSeq(projectId, t)),
       )
-      expect([...taken].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5])
-      await expect(repos.projects.reserveSeq(unique('missing'))).rejects.toThrow()
+      expect(replayed).toEqual([...taken, ...taken])
+      const late = await repos.projects.reserveTaskSeq(projectId, unique('task'))
+      expect(late).toBeGreaterThan(Math.max(...taken))
+      await expect(
+        repos.projects.reserveTaskSeq(unique('missing'), unique('task')),
+      ).rejects.toThrow()
+    })
+
+    it('agrees on one sequence number when first claims for a task race', async () => {
+      const repos = makeRepos()
+      const projectId = await project(repos)
+      const task = unique('task')
+      const claims = await Promise.all(
+        [1, 2, 3, 4, 5].map(() => repos.projects.reserveTaskSeq(projectId, task)),
+      )
+      expect(new Set(claims).size).toBe(1)
     })
 
     it('keeps the first write of a revision and lists revisions in sequence order', async () => {

@@ -651,6 +651,7 @@ export {
 export { HttpFoundationalBuiltinSource } from './persistence/foundationalBuiltins.js'
 export { HttpPromptFragmentSource } from './persistence/promptFragments.js'
 export { HttpProjectKindSource } from './persistence/projectKinds.js'
+export { HttpRegisteredResearchDefinitionSource } from './persistence/researchDefinitions.js'
 // The mothership-mode reader for DEPLOYMENT-scoped documents: the credentials stay on the
 // mothership, so a node reads the resolved BODY.
 export { HttpDeploymentDocumentResolver } from './persistence/deploymentDocuments.js'

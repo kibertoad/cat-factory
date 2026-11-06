@@ -6571,7 +6571,8 @@
         "assistant_reply_unreadable": "Das Modell des Assistenten hat etwas geantwortet, das diese Plattform nicht als Entscheidung ausführen kann. Eine Umformulierung hilft selten: Wählen Sie in den Modelleinstellungen ein anderes Modell für den Assistenten.",
         "delegated_executor_failed": "Der externe Executor konnte diesen Schritt nicht starten. Das Problem liegt im System, das die Arbeit ausführt, nicht in dieser Installation: prüfe dessen Logs und versuche es erneut.",
         "delegated_work_branch_unprepared": "Die Plattform konnte den Arbeitsbranch nicht bereitstellen, auf den der Executor dieses Schritts geschickt wird, daher wurde nichts gestartet. Entweder darf die Repository-Verbindung nicht darauf schreiben, oder die Aufgabe nennt einen Branch, den es noch nicht gibt: die Details sagen, was davon.",
-        "attached_pr_provider_unreachable": "Der Repository-Anbieter hat nicht geantwortet, daher konnte der Pull Request nicht geprüft werden und es wurde keine Aufgabe angelegt. Hier muss nichts eingerichtet werden: versuche es gleich noch einmal."
+        "attached_pr_provider_unreachable": "Der Repository-Anbieter hat nicht geantwortet, daher konnte der Pull Request nicht geprüft werden und es wurde keine Aufgabe angelegt. Hier muss nichts eingerichtet werden: versuche es gleich noch einmal.",
+        "research_definitions_unreachable": "Die Recherche-Definitionen dieser Installation konnten gerade nicht gelesen werden, deshalb wurde die Anfrage nicht ausgeführt. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht."
       }
     },
     "reason": {

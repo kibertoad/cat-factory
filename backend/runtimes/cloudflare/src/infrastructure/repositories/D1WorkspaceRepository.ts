@@ -251,6 +251,9 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
         .prepare(`DELETE FROM findings_revisions WHERE project_id IN (${HOMED_PROJECTS})`)
         .bind(id, id),
       this.db
+        .prepare(`DELETE FROM research_task_seqs WHERE project_id IN (${HOMED_PROJECTS})`)
+        .bind(id, id),
+      this.db
         .prepare(
           `DELETE FROM findings_storage_policies
            WHERE owner_kind = 'project' AND owner_id IN (${HOMED_PROJECTS})`,

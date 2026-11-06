@@ -481,6 +481,8 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // Fully remote, like the service and mount tables beside it. `withLinks` is the row mapper
   // that attaches each project's service links in one batched read.
   projectRepository: { withLinks: 'helper' },
+  // Fully remote. `taskSeq` is the private read `reserveTaskSeq` uses before and after its claim.
+  researchProjectRepository: { taskSeq: 'helper' },
   // The whole requirement-review repo is remote (getByBlock/get/upsert were exposed earlier; the
   // rev-guarded compareAndSwap — which every review edit now rides — and the atomic
   // replaceForBlock that starts a fresh review run complete it).

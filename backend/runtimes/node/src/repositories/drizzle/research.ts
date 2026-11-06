@@ -18,6 +18,7 @@ import type { DrizzleDb } from '../../db/client.js'
 import {
   findingsRevisions,
   findingsStoragePolicies,
+  researchTaskSeqs,
   researchDefinitions,
   researchProjects,
 } from '../../db/schema.js'
@@ -116,14 +117,30 @@ export class DrizzleResearchProjectRepository implements ResearchProjectReposito
     })
   }
 
-  async reserveSeq(projectId: string): Promise<number> {
+  async reserveTaskSeq(projectId: string, taskId: string): Promise<number> {
+    const existing = await this.taskSeq(taskId)
+    if (existing !== null) return existing
     const [row] = await this.db
       .update(researchProjects)
       .set({ next_seq: sql`${researchProjects.next_seq} + 1` })
       .where(eq(researchProjects.project_id, projectId))
       .returning({ next: researchProjects.next_seq })
     if (!row) throw new Error(`research project '${projectId}' not found`)
-    return row.next - 1
+    await this.db
+      .insert(researchTaskSeqs)
+      .values({ task_id: taskId, project_id: projectId, seq: row.next - 1 })
+      .onConflictDoNothing({ target: researchTaskSeqs.task_id })
+    const claimed = await this.taskSeq(taskId)
+    if (claimed === null) throw new Error(`research task '${taskId}' lost its sequence claim`)
+    return claimed
+  }
+
+  private async taskSeq(taskId: string): Promise<number | null> {
+    const [row] = await this.db
+      .select({ seq: researchTaskSeqs.seq })
+      .from(researchTaskSeqs)
+      .where(eq(researchTaskSeqs.task_id, taskId))
+    return row?.seq ?? null
   }
 
   async deleteMany(projectIds: string[]): Promise<void> {
@@ -131,6 +148,7 @@ export class DrizzleResearchProjectRepository implements ResearchProjectReposito
       const chunk = projectIds.slice(i, i + CHUNK)
       await this.db.transaction(async (tx) => {
         await tx.delete(findingsRevisions).where(inArray(findingsRevisions.project_id, chunk))
+        await tx.delete(researchTaskSeqs).where(inArray(researchTaskSeqs.project_id, chunk))
         await tx
           .delete(findingsStoragePolicies)
           .where(

@@ -1,8 +1,12 @@
-import type {
-  CreateProjectInput,
-  MountServiceInput,
-  Project,
-  UpdateMountInput,
+import {
+  type CreateProjectInput,
+  type MountServiceInput,
+  type Project,
+  type ProjectKindDescriptor,
+  type ResearchPinInput,
+  type ResearchProject,
+  type UpdateMountInput,
+  validateDescriptorFields,
 } from '@cat-factory/contracts'
 import {
   type Block,
@@ -13,6 +17,8 @@ import {
   type Logger,
   type ProjectKindSource,
   type ProjectRepository,
+  type ResearchDefinitionSource,
+  type ResearchProjectRepository,
   type ServiceRepository,
   type WorkspaceMount,
   type WorkspaceMountRepository,
@@ -32,6 +38,8 @@ export interface ProjectServiceDependencies {
   workspaceRepository: WorkspaceRepository
   blockRepository: BlockRepository
   projectKinds: ProjectKindSource
+  /** What a kind keeping `research` data pins at creation, and where. */
+  research: { definitions: ResearchDefinitionSource; projects: ResearchProjectRepository }
   idGenerator: IdGenerator
   clock: Clock
   events?: ExecutionEventPublisher
@@ -76,12 +84,14 @@ export class ProjectService {
       })
     }
     await this.assertLinkableServices(accountId, input.serviceIds)
+    const projectId = this.deps.idGenerator.next('prj')
+    const researchPin = await this.resolveResearchPin(accountId, kind, input.research, projectId)
     const now = this.deps.clock.now()
     const position =
       input.position ??
       this.defaultPosition(await this.deps.workspaceMountRepository.listByWorkspace(workspaceId))
     const project: Project = {
-      id: this.deps.idGenerator.next('prj'),
+      id: projectId,
       accountId,
       kind: kind.id,
       rootBlockId: this.deps.idGenerator.next('blk'),
@@ -110,6 +120,7 @@ export class ProjectService {
       createdAt: now,
     }
     await this.deps.projectRepository.insert(project)
+    if (researchPin) await this.deps.research.projects.insert(researchPin)
     await this.deps.blockRepository.insert(workspaceId, rootBlock, project.id)
     await this.deps.workspaceMountRepository.upsert(mount)
     await this.emitAdded(workspaceId, rootBlock.id)
@@ -194,6 +205,61 @@ export class ProjectService {
     const project =
       mount?.subjectKind === 'project' ? await this.deps.projectRepository.get(projectId) : null
     return assertFound(project, 'Project', projectId)
+  }
+
+  /**
+   * The research definition a kind keeping `research` data pins, resolved and checked before any
+   * row is written. A kind keeping none refuses a pin rather than dropping it.
+   */
+  private async resolveResearchPin(
+    accountId: string | null,
+    kind: ProjectKindDescriptor,
+    pin: ResearchPinInput | undefined,
+    projectId: string,
+  ): Promise<ResearchProject | null> {
+    if (kind.data !== 'research') {
+      if (!pin) return null
+      throw new ValidationError(`A '${kind.id}' project keeps no research definition`, {
+        reason: 'research_pin_not_accepted',
+        kind: kind.id,
+      })
+    }
+    if (!pin) {
+      throw new ValidationError('A research project needs a research definition to pin', {
+        reason: 'research_pin_required',
+        kind: kind.id,
+      })
+    }
+    const account = accountId ?? ''
+    const resolved =
+      pin.definitionVersion === undefined
+        ? await this.deps.research.definitions.latest(account, pin.definitionKey)
+        : await this.deps.research.definitions.get(
+            account,
+            pin.definitionKey,
+            pin.definitionVersion,
+          )
+    if (!resolved) {
+      throw new ValidationError('No research definition matches that key and version', {
+        reason: 'research_definition_not_found',
+        definitionKey: pin.definitionKey,
+        definitionVersion: pin.definitionVersion ?? null,
+      })
+    }
+    const problems = validateDescriptorFields(resolved.definition.inputs, pin.inputs)
+    if (problems.length) {
+      throw new ValidationError('The research inputs do not satisfy the definition', {
+        reason: 'research_inputs_invalid',
+        problems,
+      })
+    }
+    return {
+      projectId,
+      definitionKey: resolved.definition.key,
+      definitionVersion: resolved.definition.version,
+      definitionHash: resolved.contentHash,
+      inputs: pin.inputs,
+    }
   }
 
   /** Every linked service must exist and belong to the project's own account. */

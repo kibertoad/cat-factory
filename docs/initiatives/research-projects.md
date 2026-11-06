@@ -152,7 +152,8 @@ version can never reuse one.
 
 Each research task writes one immutable **findings revision** on the project, and the project's
 current findings are the fold over its revisions by question id. Revisions are ordered by a
-per-project sequence taken when the TASK starts, so two follow-ups that run at once fold in the
+per-project sequence each TASK claims the first time it starts (a replayed or retried start
+reads back the same number), so two follow-ups that run at once fold in the
 order they were asked, whatever order they finish in. Per question, a newer `answered` or
 `partial` answer replaces an older one; a newer `unanswered` or `blocked` never replaces an
 answer with content (`answered` or `partial`) and is kept beside it as a note, so a `refresh` that ran out of budget or lost a
@@ -206,7 +207,7 @@ stale copy of.
 
 ### 2. The research agent and its tools
 
-A built-in `researcher` agent kind, `container-explore` on the `ui` image (Playwright and Chromium
+A built-in `project-researcher` agent kind, `container-explore` on the `ui` image (Playwright and Chromium
 are already there), with structured output for the findings shape above.
 
 - **Browser**: the Playwright MCP server (`@playwright/mcp`), preinstalled in `Dockerfile.ui` and
@@ -391,7 +392,7 @@ A new linked-context kind beside documents and tracker tasks:
 - **What projects reuse from initiatives**: the descriptor form vocabulary and its renderer
   (`descriptorFieldEntries`, `DescriptorFields.vue`) for definition `inputs`; the app-owned
   registry shape of `InitiativePresetRegistry` for `ProjectKindRegistry`; per-agent-kind
-  `promptAdditions` on a research definition for org steering of the `researcher`, rather than
+  `promptAdditions` on a research definition for org steering of the `project-researcher`, rather than
   folding it into `brief`; and the `followUps` shape (open, promoted, dismissed) for run
   `learnings`, so a learning can later be promoted into an ad-hoc question.
 
@@ -406,24 +407,33 @@ Still open:
 | #   | Slice                                                                                                                                                                                                                                                                                                                                        | Status      | PR    |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----- |
 | 0   | This tracker.                                                                                                                                                                                                                                                                                                                                | done        | #2501 |
-| 1a  | Generalize the owner stamp and the mount: `blocks`/`agent_runs` `owner_id`, `workspace_mounts` (`subject_id`), `MountRehome`, owner- and subject-keyed port methods. A refactor with no behaviour change, both facades.                                                                                                                      | in progress |       |
-| 1b  | Projects, both facades + conformance: `Project` entity, the `project` block level and type, `subjectKind` on the mount, `ProjectKindRegistry`, project creation, task admission, re-home, service links, repo resolution through a project root. Mothership buckets.                                                                         | todo        |       |
-| 1c  | SPA: project roots on the board, create a project, link services, mount; i18n.                                                                                                                                                                                                                                                               | todo        |       |
+| 1a  | Generalize the owner stamp and the mount: `blocks`/`agent_runs` `owner_id`, `workspace_mounts` (`subject_id`), `MountRehome`, owner- and subject-keyed port methods. A refactor with no behaviour change, both facades.                                                                                                                      | in review   | #2504 |
+| 1b  | Projects, both facades + conformance: `Project` entity, the `project` block level and type, `subjectKind` on the mount, `ProjectKindRegistry`, project creation, task admission, re-home, service links, repo resolution through a project root. Mothership buckets.                                                                         | in review   | #2505 |
+| 1c  | SPA: project roots on the board, create a project, link services, mount; i18n.                                                                                                                                                                                                                                                               | in review   | #2506 |
 | 2   | Contracts + kernel for research: definition schema, `ResearchDefinitionRegistry` + content hash, findings schema, the fold, the storage-policy resolver. Pure, unit-tested. The definition read port lands with its implementation in slice 3, and the registry is wired on `start()`/`startLocal()` in slice 5, where a run first reads it. | in review   | #2503 |
 | 3   | Research persistence, both facades + conformance: definitions table, findings revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                                                            | in review   | #2507 |
 | 4   | Harness: `research` mode with optional repos (linked repos as `referenceRepos`), the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                                                       | in review   | #2508 |
-| 5   | Engine: the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                                                                                                                                                                      | todo        |       |
-| 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                     | in progress |       |
+| 5a  | Engine groundwork: the `ResearchDefinitionSource` read port (registry plus store, `/internal/research-definitions` for a mothership node), the registry option on every entry point, a research kind pinning its definition at project creation, the per-task findings sequence claim. Conformance.                                          | in progress |       |
+| 5b  | Engine: the `project-researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                                                                                                                                                              | todo        |       |
+| 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                     | in review   | #2509 |
 | 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                                                                | todo        |       |
 | 8   | SPA: project frames, findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                                                            | todo        |       |
 | 9   | Task linking: the `projects` linked-context kind, `.cat-context/projects/`, recorded revision. An optional `projects` field on `InitiativeItemSpawn`, so tasks an initiative spawns carry a research project as linked context.                                                                                                              | todo        |       |
 
 Slices 1, 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4 and 6: the
-`researcher` kind ships after the park, so a research run never meets a missing credential with
+`project-researcher` kind ships after the park, so a research run never meets a missing credential with
 nowhere to wait. Slice 9 needs 1, 2, 3 and 5, since a project is linkable only once a research
 run has written a revision.
 
 ## Gotchas found during design
+
+- **The agent kind is `project-researcher`.** A `researcher` kind already exists: the repo-reading
+  investigator the `pl_complex` pipeline runs before design. Reusing the name would collide in the
+  agent-kind registry, so the research-project kind takes its own.
+- **A project kind declares the data it keeps** (`data: 'research'`), a closed vocabulary the
+  platform implements, rather than a switch on the kind id in `ProjectService`. A kind keeping
+  research data refuses a create without a definition to pin, and a kind keeping none refuses one
+  that names a definition.
 
 - **Repo resolution has deliberately no fallback** ("NO first repo"). A project frame resolving to
   its linked services' repos is a new, explicit rule, and a project task whose type needs a
