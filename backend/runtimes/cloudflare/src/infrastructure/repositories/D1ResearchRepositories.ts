@@ -1,4 +1,5 @@
 import {
+  decodeFindingsStoragePolicy,
   decodeResearchMode,
   parseResearchDefinition,
   type FindingsStorageOwnerKind,
@@ -249,7 +250,7 @@ export class D1FindingsStoragePolicyRepository implements FindingsStoragePolicyR
       .prepare(`SELECT policy FROM findings_storage_policies WHERE owner_kind = ? AND owner_id = ?`)
       .bind(ownerKind, ownerId)
       .first<{ policy: string }>()
-    return row ? (JSON.parse(row.policy) as FindingsStoragePolicy) : null
+    return row ? decodeFindingsStoragePolicy(row.policy) : null
   }
 
   async set(
