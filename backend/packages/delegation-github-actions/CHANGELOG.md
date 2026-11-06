@@ -1,5 +1,11 @@
 # @cat-factory/delegation-github-actions
 
+## 0.2.21
+
+### Patch Changes
+
+- @cat-factory/kernel@0.367.3
+
 ## 0.2.20
 
 ### Patch Changes
