@@ -97,14 +97,20 @@ export class D1ResearchProjectRepository implements ResearchProjectRepository {
       .prepare(`SELECT * FROM research_projects WHERE project_id = ?`)
       .bind(projectId)
       .first<ResearchProjectRow>()
-    if (!row) return null
-    return {
-      projectId: row.project_id,
-      definitionKey: row.definition_key,
-      definitionVersion: row.definition_version,
-      definitionHash: row.definition_hash,
-      inputs: JSON.parse(row.inputs) as Record<string, unknown>,
+    return row ? rowToResearchProject(row) : null
+  }
+
+  async listByProjectIds(projectIds: string[]): Promise<ResearchProject[]> {
+    const pins: ResearchProject[] = []
+    for (const chunk of chunkForIn(projectIds)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.deps.db
+        .prepare(`SELECT * FROM research_projects WHERE project_id IN (${placeholders})`)
+        .bind(...chunk)
+        .all<ResearchProjectRow>()
+      pins.push(...results.map(rowToResearchProject))
     }
+    return pins
   }
 
   async insert(project: ResearchProject): Promise<void> {
@@ -176,6 +182,16 @@ export class D1ResearchProjectRepository implements ResearchProjectRepository {
           .bind(...chunk),
       ])
     }
+  }
+}
+
+function rowToResearchProject(row: ResearchProjectRow): ResearchProject {
+  return {
+    projectId: row.project_id,
+    definitionKey: row.definition_key,
+    definitionVersion: row.definition_version,
+    definitionHash: row.definition_hash,
+    inputs: JSON.parse(row.inputs) as Record<string, unknown>,
   }
 }
 

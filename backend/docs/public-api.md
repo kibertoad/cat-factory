@@ -2783,6 +2783,27 @@ curl -s -X POST -H "$AUTH" -H 'content-type: application/json' \
 curl -s -H "$AUTH" "$BASE/api/v1/kaizen/entries?agentKind=coder&since=$LAST_SWEEP_MS"
 ```
 
+### Projects and research (`/api/v1/projects`, `/api/v1/research-definitions`)
+
+Projects are account-owned peers of services, mounted onto boards; a research project pins a
+research definition and records one findings revision per research task. Design:
+[`research-projects.md`](../../docs/initiatives/research-projects.md).
+
+| Method / path                                                       | Scope           | Behaviour                                                                                                              |
+| ------------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/research-definitions`, `GET .../{key}`                 | `read`          | Definitions the key's account can pin: the deployment's, then its own, with content hashes.                            |
+| `PUT /api/v1/research-definitions/{key}/versions/{version}`         | `admin`         | Publish an immutable version. `409` `research_definition_version_exists` / `_key_registered`.                          |
+| `GET`, `POST /api/v1/projects`, `GET .../{projectId}`               | `read`, `write` | The projects the key's board mounts; create one homed there, with its research pin.                                    |
+| `POST .../{projectId}/services`, `.../services/unlink`, `.../mount` | `write`         | Link and unlink services (by the `serviceId` `/api/v1/services` serves); mount on the key's board.                     |
+| `GET`, `POST .../{projectId}/tasks`, `GET .../tasks/{taskId}`       | `read`, `write` | Project tasks, as `PublicProjectTask`. Writes need the board that homes the project (`409` `project_homed_elsewhere`). |
+| `POST .../tasks/{taskId}/start`, `/stop`, `/retry`                  | `write`         | The same admission as the service-task routes, shared through `taskRunActions.ts`.                                     |
+| `GET .../{projectId}/findings`, `.../findings/revisions/{id}`       | `read`          | The fold over every revision with coverage, and one revision with its body.                                            |
+| `POST /api/v1/runs/{runId}/credential/resume`                       | `decide`        | Resume a run parked on a missing capability credential once it resolves.                                               |
+
+The `/api/v1/tasks/{taskId}` operations answering a `PublicTask` refuse a project task with `422`
+`task_owned_by_project` (it has no `serviceId` to report); the run projection and the event stream
+serve both owners.
+
 ### Guided PR review (`/api/v1/guided-reviews`)
 
 The sessions the app's guided review window drives, so another UI can offer the same experience.

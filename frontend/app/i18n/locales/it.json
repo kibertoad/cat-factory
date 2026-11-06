@@ -6605,7 +6605,9 @@
         "research_definition_changed": "La definizione di ricerca è cambiata da quando questo progetto l'ha fissata. Crea un nuovo progetto per usare la nuova versione.",
         "research_task_already_recorded": "Questa attività di ricerca ha già registrato i suoi risultati. Avvia un'attività di approfondimento per continuare la ricerca.",
         "research_nothing_to_ask": "Per questo approfondimento non resta alcuna domanda nella modalità scelta. Scegli un'altra modalità o aggiungi domande.",
-        "findings_too_large_for_inline": "I risultati sono troppo grandi da salvare, e spostarli nell'archiviazione dei contenuti non è possibile. Attiva l'archiviazione dei contenuti o consenti lo spostamento, poi riprova."
+        "findings_too_large_for_inline": "I risultati sono troppo grandi da salvare, e spostarli nell'archiviazione dei contenuti non è possibile. Attiva l'archiviazione dei contenuti o consenti lo spostamento, poi riprova.",
+        "task_owned_by_project": "Questa attività appartiene a un progetto, che non ha un servizio. Usa invece l'indirizzo delle attività del progetto.",
+        "research_definition_invalid": "La definizione di ricerca viola una regola: verifica che gli id di argomenti, domande, credenziali e input siano univoci."
       }
     },
     "action": {
@@ -6696,7 +6698,11 @@
         "refined_requirements_unavailable": "Nessun requisito raffinato per ora",
         "no_linked_issues": "Nessuna issue collegata",
         "capability_credential_still_missing": "Credenziale ancora mancante",
-        "credential_wait_unrecorded": "Impossibile riprendere questa attesa"
+        "credential_wait_unrecorded": "Impossibile riprendere questa attesa",
+        "research_definition_version_exists": "Versione già pubblicata",
+        "research_definition_key_registered": "Spazio dei nomi occupato",
+        "project_homed_elsewhere": "Progetto ospitato su un'altra bacheca",
+        "credential_wait_personal_in_app": "Rinnova nell'app"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6762,7 +6768,11 @@
         "refined_requirements_unavailable": "La revisione non ha ancora prodotto un documento rivisto, oppure lo sta riscrivendo ora. Attendi la fine dell’incorporazione, poi aggiorna di nuovo.",
         "no_linked_issues": "Questa attività non ha issue del tracker collegate. Collega la issue da cui proviene, poi aggiorna di nuovo.",
         "capability_credential_still_missing": "La credenziale di cui ha bisogno questo passaggio non è ancora salvata per questo spazio di lavoro. Salvala nelle impostazioni delle credenziali delle capacità, poi riprendi l'esecuzione.",
-        "credential_wait_unrecorded": "Questa attesa è stata registrata prima che la piattaforma annotasse che cosa attende ogni attesa, quindi non si può riprendere. Riavvia invece l'esecuzione."
+        "credential_wait_unrecorded": "Questa attesa è stata registrata prima che la piattaforma annotasse che cosa attende ogni attesa, quindi non si può riprendere. Riavvia invece l'esecuzione.",
+        "research_definition_version_exists": "Questa versione della definizione di ricerca è già pubblicata e non può cambiare. Pubblica invece una nuova versione.",
+        "research_definition_key_registered": "Questo spazio dei nomi appartiene alle definizioni di ricerca fornite dall'installazione. Pubblica nello spazio dei nomi della tua organizzazione.",
+        "project_homed_elsewhere": "Le attività di un progetto vengono create ed eseguite sulla bacheca che lo ospita. Apri quella bacheca per lavorarci.",
+        "credential_wait_personal_in_app": "Una credenziale personale scaduta la rinnova chi ha avviato l'esecuzione, con la propria password, nell'app."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

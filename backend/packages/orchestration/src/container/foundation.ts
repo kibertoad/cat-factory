@@ -59,6 +59,7 @@ export interface CoreFoundationParams {
   promptFragments: CoreRuntime['promptFragments']
   projectKinds: CoreRuntime['projectKinds']
   researchDefinitions: CoreRuntime['researchDefinitions']
+  registeredResearchDefinitions: CoreRuntime['registeredResearchDefinitions']
   /** Late-bound spend-service accessor (built after the foundation) for the account-budget cache. */
   getSpendService: () => SpendService | undefined
   /**
@@ -103,6 +104,7 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     promptFragments,
     projectKinds,
     researchDefinitions,
+    registeredResearchDefinitions,
     getSpendService,
     getEnvironmentHandlerSeeder,
     getSharedStackSeeder,
@@ -119,7 +121,7 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
   modules.build('projects', () =>
     createProjectsModule(
       dependencies,
-      { projectKinds, researchDefinitions },
+      { projectKinds, researchDefinitions, registeredResearchDefinitions },
       executionEventPublisher,
     ),
   )

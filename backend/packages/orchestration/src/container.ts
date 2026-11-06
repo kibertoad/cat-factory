@@ -38,6 +38,8 @@ import type {} from '@cat-factory/kernel'
 
 import { ServiceMountService } from './modules/services/ServiceMountService.js'
 import { ProjectService } from './modules/projects/ProjectService.js'
+import type { ResearchDefinitionPublisher } from './modules/research/ResearchDefinitionPublisher.js'
+import type { ResearchFindingsStore } from './modules/research/ResearchFindingsStore.js'
 import { createInlineUseCaseService } from './container/use-case-service.js'
 import type { InlineUseCaseService } from './modules/useCases/InlineUseCaseService.js'
 
@@ -144,6 +146,7 @@ import type {
   ProjectKindSource,
   ResearchDefinitionRegistry,
   ResearchDefinitionSource,
+  ResearchProjectRepository,
   VcsWebUrls,
 } from '@cat-factory/kernel'
 
@@ -750,6 +753,15 @@ export interface ServicesModule {
 
 export interface ProjectsModule {
   service: ProjectService
+  /** A research project's pin, the definitions it can pin, publishing and the findings reader. */
+  research: {
+    projects: ResearchProjectRepository
+    definitions: ResearchDefinitionSource
+    /** Absent when the facade wires no definition store. */
+    publisher?: ResearchDefinitionPublisher
+    /** Absent when the facade wires no findings store. */
+    findings?: ResearchFindingsStore
+  }
 }
 
 /** Assemble the in-org service-sharing module when its repositories are wired. */
@@ -785,6 +797,7 @@ export function createCore(injected: CoreDependencies): Core {
     projectKinds,
     researchDefinitionRegistry,
     researchDefinitions,
+    registeredResearchDefinitions,
     inlineUseCaseRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
@@ -848,6 +861,7 @@ export function createCore(injected: CoreDependencies): Core {
       promptFragments,
       projectKinds,
       researchDefinitions,
+      registeredResearchDefinitions,
       getSpendService: () => spendServiceRef,
       getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
       getSharedStackSeeder: () => sharedStackSeederRef,

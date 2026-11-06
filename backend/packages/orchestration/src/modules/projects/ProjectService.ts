@@ -46,6 +46,13 @@ export interface ProjectServiceDependencies {
   logger?: Logger
 }
 
+/** A project a board mounts, with its root block and the board that homes it. */
+export interface MountedProject {
+  project: Project
+  rootBlock: Block
+  homeWorkspaceId: string
+}
+
 export interface CreatedProject {
   project: Project
   rootBlock: Block
@@ -125,6 +132,64 @@ export class ProjectService {
     await this.deps.workspaceMountRepository.upsert(mount)
     await this.emitAdded(workspaceId, rootBlock.id)
     return { project, rootBlock: applyMountLayout(rootBlock, mount), mount }
+  }
+
+  /** Every project the board mounts, with its root block and home, in batched reads. */
+  async listMounted(workspaceId: string): Promise<MountedProject[]> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const mounts = await this.deps.workspaceMountRepository.listByWorkspace(workspaceId)
+    const ids = mounts.filter((m) => m.subjectKind === 'project').map((m) => m.subjectId)
+    if (ids.length === 0) return []
+    const projects = await this.deps.projectRepository.listByIds(ids)
+    const roots = new Map(
+      (await this.deps.blockRepository.findByIds(projects.map((p) => p.rootBlockId))).map((r) => [
+        r.block.id,
+        r,
+      ]),
+    )
+    return projects.flatMap((project) => {
+      const root = roots.get(project.rootBlockId)
+      return root ? [{ project, rootBlock: root.block, homeWorkspaceId: root.workspaceId }] : []
+    })
+  }
+
+  /** One project the board mounts, with its root block and home. 404s otherwise. */
+  async getMounted(workspaceId: string, projectId: string): Promise<MountedProject> {
+    const project = await this.requireMountedProject(workspaceId, projectId)
+    const root = assertFound(
+      await this.deps.blockRepository.findById(project.rootBlockId),
+      'Project',
+      projectId,
+    )
+    return { project, rootBlock: root.block, homeWorkspaceId: root.workspaceId }
+  }
+
+  /**
+   * The service ids of the given service FRAME block ids, among the services the board mounts.
+   * The public API names a service by its frame block, a project's links by the service. Frame ids
+   * are only unique per board, so the lookup is the board's own. A frame naming no service the
+   * board mounts is kept as given, so the link refuses it the way it refuses any unknown id.
+   */
+  async serviceIdsOfFrames(workspaceId: string, frameBlockIds: string[]): Promise<string[]> {
+    if (frameBlockIds.length === 0) return []
+    const mounts = await this.deps.workspaceMountRepository.listByWorkspace(workspaceId)
+    const mounted = mounts.filter((m) => m.subjectKind === 'service').map((m) => m.subjectId)
+    const services = await this.deps.serviceRepository.listByIds(mounted)
+    const byFrame = new Map(services.map((s) => [s.frameBlockId, s.id]))
+    return frameBlockIds.map((frame) => byFrame.get(frame) ?? frame)
+  }
+
+  /** The frame block id of each of the given services, in one query; the inverse of the above. */
+  async frameIdsByService(serviceIds: string[]): Promise<Map<string, string>> {
+    if (serviceIds.length === 0) return new Map()
+    const services = await this.deps.serviceRepository.listByIds([...new Set(serviceIds)])
+    return new Map(services.map((s) => [s.id, s.frameBlockId]))
+  }
+
+  /** The board-visible tasks under a project, read at its home in one query. */
+  async listTasks(project: Project): Promise<Block[]> {
+    const owned = await this.deps.blockRepository.listByOwners([project.id])
+    return owned.filter((b) => b.level === 'task' && !b.internal)
   }
 
   /** Replace a project's service links. The board must mount the project. */

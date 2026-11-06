@@ -68,6 +68,20 @@ export class ResearchFindingsStore {
     )
   }
 
+  /** One revision of the project with its body, or null when the project has no such revision. */
+  async getRevision(
+    project: FindingsProject,
+    revisionId: string,
+  ): Promise<FindingsRevision | null> {
+    const row = await this.deps.findingsRevisionRepository.get(project.id, revisionId)
+    if (!row) return null
+    if (row.body.kind === 'inline') return inlineRevision(row)
+    const { workspaceId, store } = await this.homeStore(project)
+    const bytes = store ? await store.getBlob(workspaceId, row.body.artifactId) : null
+    if (!bytes) throw bodyUnavailable(row.id)
+    return withBody(row, decodeBody(row.id, new globalThis.TextDecoder().decode(bytes)))
+  }
+
   /**
    * Write a task's revision once. A revision already written under `meta.id` is kept as it is,
    * so a replayed completion stores nothing twice; when two completions race past that check,

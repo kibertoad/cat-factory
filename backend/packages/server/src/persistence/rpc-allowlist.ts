@@ -341,6 +341,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   researchProjectRepository: {
     get: { scope: { kind: 'project', arg: 0 } },
+    listByProjectIds: { scope: { kind: 'projectList', arg: 0 } },
     insert: { scope: { kind: 'projectField', arg: 0 } },
     reserveTaskSeq: { scope: { kind: 'project', arg: 0 } },
     deleteMany: { scope: { kind: 'projectList', arg: 0 } },

@@ -132,6 +132,15 @@ export function defineResearchPersistenceSuite(
       ).rejects.toThrow()
     })
 
+    it('reads the pins of several projects in one call', async () => {
+      const repos = makeRepos()
+      const first = await project(repos)
+      const second = await project(repos)
+      const pins = await repos.projects.listByProjectIds([first, second, unique('missing')])
+      expect(pins.map((pin) => pin.projectId).sort()).toEqual([first, second].sort())
+      expect(await repos.projects.listByProjectIds([])).toEqual([])
+    })
+
     it('agrees on one sequence number when first claims for a task race', async () => {
       const repos = makeRepos()
       const projectId = await project(repos)

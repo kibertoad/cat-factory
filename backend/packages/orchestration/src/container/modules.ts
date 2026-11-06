@@ -13,13 +13,7 @@
  */
 
 import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
-import type {
-  AppCaches,
-  ExecutionEventPublisher,
-  ProjectKindSource,
-  ResearchDefinitionSource,
-  TrackerIssueEvent,
-} from '@cat-factory/kernel'
+import type { AppCaches, ExecutionEventPublisher, TrackerIssueEvent } from '@cat-factory/kernel'
 import { DEFAULT_SPEND_PRICING, SpendService } from '@cat-factory/spend'
 import { TutorialProgressService } from '../modules/tutorial/TutorialProgressService.js'
 import { UserSettingsService } from '../modules/settings/UserSettingsService.js'
@@ -58,7 +52,6 @@ import {
   defaultRunnerBackendRegistry,
 } from '@cat-factory/integrations'
 import { ServiceMountService } from '../modules/services/ServiceMountService.js'
-import { ProjectService } from '../modules/projects/ProjectService.js'
 import { BoardService } from '../modules/board/BoardService.js'
 import { ExecutionService } from '../modules/execution/ExecutionService.js'
 import { BootstrapService } from '../modules/bootstrap/BootstrapService.js'
@@ -105,7 +98,6 @@ import type {
   GitHubModule,
   RunnersModule,
   ServicesModule,
-  ProjectsModule,
   TasksModule,
 } from '../container.js'
 import type {
@@ -137,41 +129,7 @@ import type {
   WorkspaceSettingsModule,
 } from './module-shapes.js'
 
-/** Assemble the projects module when the project, service and mount repositories are wired. */
-export function createProjectsModule(
-  deps: CoreDependencies,
-  sources: { projectKinds: ProjectKindSource; researchDefinitions: ResearchDefinitionSource },
-  events: ExecutionEventPublisher,
-): ProjectsModule | undefined {
-  const {
-    projectRepository,
-    serviceRepository,
-    workspaceMountRepository,
-    researchProjectRepository,
-  } = deps
-  if (
-    !projectRepository ||
-    !serviceRepository ||
-    !workspaceMountRepository ||
-    !researchProjectRepository
-  ) {
-    return undefined
-  }
-  const service = new ProjectService({
-    projectRepository,
-    serviceRepository,
-    workspaceMountRepository,
-    workspaceRepository: deps.workspaceRepository,
-    blockRepository: deps.blockRepository,
-    projectKinds: sources.projectKinds,
-    research: { definitions: sources.researchDefinitions, projects: researchProjectRepository },
-    idGenerator: deps.idGenerator,
-    clock: deps.clock,
-    events,
-    logger: deps.logger,
-  })
-  return { service }
-}
+export { createProjectsModule } from './projects-module.js'
 
 export function createServicesModule(deps: CoreDependencies): ServicesModule | undefined {
   const { serviceRepository, workspaceMountRepository } = deps
