@@ -415,7 +415,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
     const createdAt = adoptCreatedAt(execution, now)
     const detail = executionToDetail(execution)
     // Stamp `owner_id` from the run's block (subquery) so a shared service's runs surface on
-    // every board that mounts it via `listByService`; refreshed on every write so it follows a
+    // every board that mounts it via `listByOwners`; refreshed on every write so it follows a
     // reparent that re-homes the block. Mirrors the D1 repo.
     const ownerIdSub = sql`(SELECT ${blocks.owner_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
     // `rev` is bumped on every write (and read back onto the instance) so a concurrent

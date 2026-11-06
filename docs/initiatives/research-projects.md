@@ -57,22 +57,22 @@ interface Project {
   accountId: string
   kind: string // 'research' today; a registered project kind
   title: string
-  frameBlockId: string // the root frame block it owns; its tasks are blocks beneath it
+  rootBlockId: string // the root block it owns; its tasks are blocks beneath it
   serviceIds: string[] // linked services, zero or more
   createdAt: number
 }
 ```
 
-- **It owns its tasks.** Tasks are ordinary blocks under the project's frame, so the engine's
+- **It owns its tasks.** Tasks are ordinary blocks under the project's root block, so the engine's
   block-keyed machinery works unchanged: executions, one live run per block, notifications, the
   inspector, live events and RBAC.
-- **It survives its home board's deletion, as a shared service does.** Its frame block lives in
+- **It survives its home board's deletion, as a shared service does.** Its root block lives in
   one workspace, and the workspace-delete cascade re-homes a shared mounted subject
   (`MountRehome`) to a surviving mounting board before it runs. Without that, deleting the board
   that homes a project destroys it for every team that mounts it.
 - **It is account-owned and mounted onto boards**, as a service is. A mount names a subject
-  (`subjectKind` of `service` or `project`, plus `subjectId`), keeping the rule that a frame's
-  position lives on the mount and every frame read projects through `applyMountLayout`. Blocks
+  (`subjectKind` of `service` or `project`, plus `subjectId`), keeping the rule that a root block's
+  position lives on the mount and every root read projects through `applyMountLayout`. Blocks
   and runs carry an `owner_id`: the id of the mounted subject they belong to. Subject ids are
   globally unique (`svc_…`, `prj_…`), so the owner stamp needs no kind of its own.
 - **Its root block is a `project`-level block of type `project`, not a `frame`.** Roughly fifty
@@ -346,8 +346,8 @@ A new linked-context kind beside documents and tracker tasks:
 
 ### 6. Surfaces
 
-- **SPA**: a project frame on the board beside service frames, with its task swimlanes and its
-  links to services drawn. The research project's frame opens a findings reader (coverage per
+- **SPA**: a project root on the board beside service frames, with its task swimlanes and its
+  links to services drawn. The research project's root opens a findings reader (coverage per
   topic, answers with evidence, revision history), and offers "start follow-up" with a mode. The
   credential park reuses `CredentialWaitNotice`. Tier: projects and research are `basic`, since
   starting research and answering its credential request is everyday work; findings-storage
@@ -371,8 +371,8 @@ A new linked-context kind beside documents and tracker tasks:
 
 ## Decisions
 
-- **Projects are a peer of services, not a block level and not a block-less run.** A project owns
-  a frame and its tasks, so the engine stays block-keyed, and it links to zero or more services
+- **Projects are a peer of services, not a service and not a block-less run.** A project owns
+  a root block and its tasks, so the engine stays block-keyed, and it links to zero or more services
   rather than living inside one.
 - **Definitions come from code and from the public API**, read through one port.
 - **Credentials use the existing capability credential store**; research definitions declare their
@@ -415,23 +415,23 @@ Still open:
 | 5   | Engine: the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                                                                                                                                                                      | todo        |       |
 | 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                     | todo        |       |
 | 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                                                                | todo        |       |
-| 8   | SPA: project frames, findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                                                            | todo        |       |
+| 8   | SPA: findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                                                                            | todo        |       |
 | 9   | Task linking: the `projects` linked-context kind, `.cat-context/projects/`, recorded revision. An optional `projects` field on `InitiativeItemSpawn`, so tasks an initiative spawns carry a research project as linked context.                                                                                                              | todo        |       |
 
-Slices 1, 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4 and 6: the
+Slices 1 (1a to 1c, in order), 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4 and 6: the
 `researcher` kind ships after the park, so a research run never meets a missing credential with
 nowhere to wait. Slice 9 needs 1, 2, 3 and 5, since a project is linkable only once a research
 run has written a revision.
 
 ## Gotchas found during design
 
-- **Repo resolution has deliberately no fallback** ("NO first repo"). A project frame resolving to
+- **Repo resolution has deliberately no fallback** ("NO first repo"). A project root resolving to
   its linked services' repos is a new, explicit rule, and a project task whose type needs a
   writable repo must be refused at admission, never pointed at a guessed one.
-- **A project frame is the host cross-service initiatives lack.** An initiative spans one service
+- **A project root is the host cross-service initiatives lack.** An initiative spans one service
   frame today because its loop spawns tasks under the initiative block's `parentId`
-  (`InitiativeLoopService`). That lookup is generic, so an initiative block under a project frame
-  would spawn there; the open rule is `resolveRepoTarget`, where a project frame resolves to its
+  (`InitiativeLoopService`). That lookup is generic, so an initiative block under a project root
+  would spawn there; the open rule is `resolveRepoTarget`, where a project root resolves to its
   linked services' repos as read-only context. Slice 1 keeps that resolution a single, explicit
   rule, so a later initiative under a project can name which linked service an item writes to
   instead of gaining a second resolution path. Supporting it is out of scope here.
@@ -440,8 +440,8 @@ run has written a revision.
   workspace-delete re-home plan by the owner stamp on the board's own root row, which is what the
   re-home moves. The plan never re-homes another board's service, and still re-homes a shared
   subject its home board has unmounted.
-- **The mount carries layout for a shared frame.** Generalizing it to projects keeps
-  `applyMountLayout` on every frame-returning read; a project frame read that skips it jumps on
+- **The mount carries layout for a shared root.** Generalizing it to projects keeps
+  `applyMountLayout` on every root-returning read; a project root read that skips it jumps on
   the board.
 - **Capability credentials are workspace-scoped, projects are account-scoped.** A project mounted
   on two boards resolves credentials from whichever workspace started the run, so the project view

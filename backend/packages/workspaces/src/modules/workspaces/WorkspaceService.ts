@@ -476,7 +476,7 @@ export class WorkspaceService {
     const visibleBlocks = localBlocks.filter((b) => !localHidden.has(b.id))
     const composed = await this.composeBoard(visibleBlocks, mounts)
     // Pass 2 (composed): a FOREIGN service archived on its home board reaches this board only via
-    // its mount, so `composeBoard` re-fetches its (archived) subtree via `listByServices`. Seed the
+    // its mount, so `composeBoard` re-fetches its (archived) subtree via `listByOwners`. Seed the
     // final hide-set with pass 1's ids and grow it over the composed board so that frame + subtree
     // are dropped here too. A local frame re-pulled as "foreign" is already in `localHidden`, so it
     // is not double-counted as a fresh foreign archive.
