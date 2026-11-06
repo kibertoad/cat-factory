@@ -9186,5 +9186,40 @@
       "xhigh": "非常に高",
       "max": "最大"
     }
+  },
+  "projects": {
+    "common": {
+      "cancel": "キャンセル"
+    },
+    "toolbar": {
+      "menu": "プロジェクト",
+      "newProject": "新しいプロジェクト…",
+      "kindsUnavailable": "プロジェクト種別を読み込めませんでした"
+    },
+    "create": {
+      "title": "新しいプロジェクト",
+      "description": "プロジェクトは、特定のサービスに属さない作業をまとめます。このボードに置かれ、組織内の他のボードにも追加できます。",
+      "kindLabel": "種別",
+      "titleLabel": "タイトル",
+      "titlePlaceholder": "例: ベンダー API の調査",
+      "descriptionLabel": "説明",
+      "servicesLabel": "リンクしたサービス",
+      "servicesHelp": "このプロジェクトのタスクは、これらのサービスのリポジトリをコンテキストとして読めます。",
+      "submit": "プロジェクトを作成",
+      "created": "プロジェクト {title} を作成しました",
+      "failed": "プロジェクトを作成できませんでした"
+    },
+    "linkServices": {
+      "title": "リンクしたサービス",
+      "description": "このプロジェクトのタスクがコンテキストとしてリポジトリを読めるサービスです。",
+      "servicesLabel": "サービス",
+      "save": "保存",
+      "saved": "リンクしたサービスを更新しました",
+      "failed": "リンクしたサービスを更新できませんでした"
+    },
+    "mount": {
+      "added": "プロジェクト {title} をこのボードに追加しました",
+      "failed": "プロジェクトを追加できませんでした"
+    }
   }
 }

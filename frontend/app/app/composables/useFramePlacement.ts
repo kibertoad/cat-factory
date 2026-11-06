@@ -37,7 +37,7 @@ export function useFramePlacement() {
    * clears epics as well as frames (both are drawn as Vue Flow nodes; see `BoardCanvas`).
    */
   function existingNodeRects(exclude?: string): FrameRect[] {
-    const frames = board.frames
+    const frames = board.canvasRoots
       .filter((f) => f.id !== exclude)
       .map((f) => {
         const s = board.containerSize(f.id)

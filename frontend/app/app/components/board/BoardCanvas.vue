@@ -83,7 +83,7 @@ useTaskExpansion(boardEl, boardActivity)
 // the dependency-edge overlay.
 const projectNodes = createBoardNodeProjection()
 const nodes = computed(() =>
-  projectNodes(board.frames, board.epics, {
+  projectNodes(board.canvasRoots, board.epics, {
     draggingId: draggingId.value,
     hoveredFrameId: hoveredFrameId.value,
   }),
@@ -162,7 +162,7 @@ function onPaneClick() {
          overlay lets pointer events through (so the pane still pans) except on
          the buttons themselves. -->
     <div
-      v-if="board.frames.length === 0"
+      v-if="board.canvasRoots.length === 0"
       class="pointer-events-none absolute inset-0 flex items-center justify-center"
     >
       <EmptyState

@@ -9186,5 +9186,40 @@
       "xhigh": "Muy alto",
       "max": "Máximo"
     }
+  },
+  "projects": {
+    "common": {
+      "cancel": "Cancelar"
+    },
+    "toolbar": {
+      "menu": "Proyectos",
+      "newProject": "Nuevo proyecto…",
+      "kindsUnavailable": "No se han podido cargar los tipos de proyecto"
+    },
+    "create": {
+      "title": "Nuevo proyecto",
+      "description": "Un proyecto agrupa trabajo que no pertenece a ningún servicio concreto. Vive en este tablero y se puede añadir a otros tableros de tu organización.",
+      "kindLabel": "Tipo",
+      "titleLabel": "Título",
+      "titlePlaceholder": "Por ejemplo: investigación de la API del proveedor",
+      "descriptionLabel": "Descripción",
+      "servicesLabel": "Servicios vinculados",
+      "servicesHelp": "Sus tareas pueden leer los repositorios de estos servicios como contexto.",
+      "submit": "Crear proyecto",
+      "created": "Proyecto {title} creado",
+      "failed": "No se ha podido crear el proyecto"
+    },
+    "linkServices": {
+      "title": "Servicios vinculados",
+      "description": "Los servicios cuyos repositorios pueden leer como contexto las tareas de este proyecto.",
+      "servicesLabel": "Servicios",
+      "save": "Guardar",
+      "saved": "Servicios vinculados actualizados",
+      "failed": "No se han podido actualizar los servicios vinculados"
+    },
+    "mount": {
+      "added": "Proyecto {title} añadido a este tablero",
+      "failed": "No se ha podido añadir el proyecto"
+    }
   }
 }

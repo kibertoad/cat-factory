@@ -47,6 +47,7 @@ import { sharedStacksApi } from './api/sharedStacks'
 import { providerConnectionsApi } from './api/providerConnections'
 import { provisioningLogsApi } from './api/provisioningLogs'
 import { recurringApi } from './api/recurring'
+import { projectsApi } from './api/projects'
 import { previewApi } from './api/preview'
 import { environmentsApi } from './api/environments'
 import { releaseHealthApi } from './api/releaseHealth'
@@ -175,6 +176,7 @@ export function useApi() {
     ...previewApi(ctx),
     ...environmentsApi(ctx),
     ...recurringApi(ctx),
+    ...projectsApi(ctx),
     ...sandboxApi(ctx),
     ...foundationalServicesApi(ctx),
     ...githubApi(ctx),

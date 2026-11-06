@@ -9186,5 +9186,40 @@
       "xhigh": "Très élevé",
       "max": "Maximal"
     }
+  },
+  "projects": {
+    "common": {
+      "cancel": "Annuler"
+    },
+    "toolbar": {
+      "menu": "Projets",
+      "newProject": "Nouveau projet…",
+      "kindsUnavailable": "Les types de projet n'ont pas pu être chargés"
+    },
+    "create": {
+      "title": "Nouveau projet",
+      "description": "Un projet regroupe un travail qui n'appartient à aucun service en particulier. Il vit sur ce tableau et peut être ajouté à d'autres tableaux de votre organisation.",
+      "kindLabel": "Type",
+      "titleLabel": "Titre",
+      "titlePlaceholder": "Par exemple : étude de l'API du fournisseur",
+      "descriptionLabel": "Description",
+      "servicesLabel": "Services liés",
+      "servicesHelp": "Ses tâches peuvent lire les dépôts de ces services comme contexte.",
+      "submit": "Créer le projet",
+      "created": "Projet {title} créé",
+      "failed": "Impossible de créer le projet"
+    },
+    "linkServices": {
+      "title": "Services liés",
+      "description": "Les services dont les tâches de ce projet peuvent lire les dépôts comme contexte.",
+      "servicesLabel": "Services",
+      "save": "Enregistrer",
+      "saved": "Services liés mis à jour",
+      "failed": "Impossible de mettre à jour les services liés"
+    },
+    "mount": {
+      "added": "Projet {title} ajouté à ce tableau",
+      "failed": "Impossible d'ajouter le projet"
+    }
   }
 }

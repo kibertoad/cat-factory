@@ -9186,5 +9186,40 @@
       "xhigh": "Bardzo wysoki",
       "max": "Maksymalny"
     }
+  },
+  "projects": {
+    "common": {
+      "cancel": "Anuluj"
+    },
+    "toolbar": {
+      "menu": "Projekty",
+      "newProject": "Nowy projekt…",
+      "kindsUnavailable": "Nie udało się wczytać rodzajów projektów"
+    },
+    "create": {
+      "title": "Nowy projekt",
+      "description": "Projekt grupuje pracę, która nie należy do żadnej pojedynczej usługi. Znajduje się na tej tablicy i można go dodać do innych tablic w Twojej organizacji.",
+      "kindLabel": "Rodzaj",
+      "titleLabel": "Tytuł",
+      "titlePlaceholder": "Na przykład: analiza API dostawcy",
+      "descriptionLabel": "Opis",
+      "servicesLabel": "Powiązane usługi",
+      "servicesHelp": "Jego zadania mogą czytać repozytoria tych usług jako kontekst.",
+      "submit": "Utwórz projekt",
+      "created": "Utworzono projekt {title}",
+      "failed": "Nie udało się utworzyć projektu"
+    },
+    "linkServices": {
+      "title": "Powiązane usługi",
+      "description": "Usługi, których repozytoria zadania tego projektu mogą czytać jako kontekst.",
+      "servicesLabel": "Usługi",
+      "save": "Zapisz",
+      "saved": "Zaktualizowano powiązane usługi",
+      "failed": "Nie udało się zaktualizować powiązanych usług"
+    },
+    "mount": {
+      "added": "Dodano projekt {title} do tej tablicy",
+      "failed": "Nie udało się dodać projektu"
+    }
   }
 }

@@ -9186,5 +9186,40 @@
       "xhigh": "Molto alto",
       "max": "Massimo"
     }
+  },
+  "projects": {
+    "common": {
+      "cancel": "Annulla"
+    },
+    "toolbar": {
+      "menu": "Progetti",
+      "newProject": "Nuovo progetto…",
+      "kindsUnavailable": "Non è stato possibile caricare i tipi di progetto"
+    },
+    "create": {
+      "title": "Nuovo progetto",
+      "description": "Un progetto raccoglie lavoro che non appartiene a un singolo servizio. Vive su questa bacheca e può essere aggiunto ad altre bacheche della tua organizzazione.",
+      "kindLabel": "Tipo",
+      "titleLabel": "Titolo",
+      "titlePlaceholder": "Per esempio: ricerca sull'API del fornitore",
+      "descriptionLabel": "Descrizione",
+      "servicesLabel": "Servizi collegati",
+      "servicesHelp": "Le sue attività possono leggere i repository di questi servizi come contesto.",
+      "submit": "Crea progetto",
+      "created": "Progetto {title} creato",
+      "failed": "Non è stato possibile creare il progetto"
+    },
+    "linkServices": {
+      "title": "Servizi collegati",
+      "description": "I servizi i cui repository le attività di questo progetto possono leggere come contesto.",
+      "servicesLabel": "Servizi",
+      "save": "Salva",
+      "saved": "Servizi collegati aggiornati",
+      "failed": "Non è stato possibile aggiornare i servizi collegati"
+    },
+    "mount": {
+      "added": "Progetto {title} aggiunto a questa bacheca",
+      "failed": "Non è stato possibile aggiungere il progetto"
+    }
   }
 }

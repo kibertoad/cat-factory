@@ -9186,5 +9186,40 @@
       "xhigh": "Sehr hoch",
       "max": "Maximal"
     }
+  },
+  "projects": {
+    "common": {
+      "cancel": "Abbrechen"
+    },
+    "toolbar": {
+      "menu": "Projekte",
+      "newProject": "Neues Projekt…",
+      "kindsUnavailable": "Projektarten konnten nicht geladen werden"
+    },
+    "create": {
+      "title": "Neues Projekt",
+      "description": "Ein Projekt bündelt Arbeit, die zu keinem einzelnen Service gehört. Es liegt auf diesem Board und kann anderen Boards Ihrer Organisation hinzugefügt werden.",
+      "kindLabel": "Art",
+      "titleLabel": "Titel",
+      "titlePlaceholder": "Zum Beispiel: Recherche zur Anbieter-API",
+      "descriptionLabel": "Beschreibung",
+      "servicesLabel": "Verknüpfte Services",
+      "servicesHelp": "Seine Aufgaben können die Repositorys dieser Services als Kontext lesen.",
+      "submit": "Projekt anlegen",
+      "created": "Projekt {title} angelegt",
+      "failed": "Das Projekt konnte nicht angelegt werden"
+    },
+    "linkServices": {
+      "title": "Verknüpfte Services",
+      "description": "Die Services, deren Repositorys die Aufgaben dieses Projekts als Kontext lesen können.",
+      "servicesLabel": "Services",
+      "save": "Speichern",
+      "saved": "Verknüpfte Services aktualisiert",
+      "failed": "Die verknüpften Services konnten nicht aktualisiert werden"
+    },
+    "mount": {
+      "added": "Projekt {title} zu diesem Board hinzugefügt",
+      "failed": "Das Projekt konnte nicht hinzugefügt werden"
+    }
   }
 }

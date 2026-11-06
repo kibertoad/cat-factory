@@ -9186,5 +9186,40 @@
       "xhigh": "Çok yüksek",
       "max": "Maksimum"
     }
+  },
+  "projects": {
+    "common": {
+      "cancel": "İptal"
+    },
+    "toolbar": {
+      "menu": "Projeler",
+      "newProject": "Yeni proje…",
+      "kindsUnavailable": "Proje türleri yüklenemedi"
+    },
+    "create": {
+      "title": "Yeni proje",
+      "description": "Proje, tek bir servise ait olmayan işleri bir araya getirir. Bu panoda yer alır ve kuruluşunuzdaki diğer panolara eklenebilir.",
+      "kindLabel": "Tür",
+      "titleLabel": "Başlık",
+      "titlePlaceholder": "Örneğin: tedarikçi API araştırması",
+      "descriptionLabel": "Açıklama",
+      "servicesLabel": "Bağlı servisler",
+      "servicesHelp": "Görevleri bu servislerin depolarını bağlam olarak okuyabilir.",
+      "submit": "Proje oluştur",
+      "created": "{title} projesi oluşturuldu",
+      "failed": "Proje oluşturulamadı"
+    },
+    "linkServices": {
+      "title": "Bağlı servisler",
+      "description": "Bu projenin görevlerinin depolarını bağlam olarak okuyabildiği servisler.",
+      "servicesLabel": "Servisler",
+      "save": "Kaydet",
+      "saved": "Bağlı servisler güncellendi",
+      "failed": "Bağlı servisler güncellenemedi"
+    },
+    "mount": {
+      "added": "{title} projesi bu panoya eklendi",
+      "failed": "Proje eklenemedi"
+    }
   }
 }

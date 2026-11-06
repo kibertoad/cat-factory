@@ -42,8 +42,17 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     return index.value.byId.get(id)
   }
 
-  /** Top-level architecture blocks (the only ones drawn as Vue Flow nodes). */
+  /** Service frames: the top-level architecture blocks. */
   const frames = computed(() => blocks.value.filter((b) => (b.level ?? 'frame') === 'frame'))
+
+  /** Project roots: the account-owned projects' top-level blocks. */
+  const projectRoots = computed(() => blocks.value.filter((b) => b.level === 'project'))
+
+  /**
+   * Every top-level root the canvas draws as a node and lays tasks out under: service frames and
+   * project roots. Service-only surfaces keep reading {@link frames}.
+   */
+  const canvasRoots = computed(() => [...frames.value, ...projectRoots.value])
 
   /** Direct children of a block, in insertion order. */
   function childrenOf(parentId: string) {
@@ -211,6 +220,8 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     byId,
     getBlock,
     frames,
+    projectRoots,
+    canvasRoots,
     allTasks,
     epics,
     epicMembers,

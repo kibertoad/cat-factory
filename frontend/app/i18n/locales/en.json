@@ -9520,5 +9520,40 @@
       "xhigh": "Extra high",
       "max": "Max"
     }
+  },
+  "projects": {
+    "common": {
+      "cancel": "Cancel"
+    },
+    "toolbar": {
+      "menu": "Projects",
+      "newProject": "New project…",
+      "kindsUnavailable": "Project kinds could not be loaded"
+    },
+    "create": {
+      "title": "New project",
+      "description": "A project groups work that belongs to no single service. It lives on this board and can be added to other boards in your organization.",
+      "kindLabel": "Kind",
+      "titleLabel": "Title",
+      "titlePlaceholder": "For example: Vendor API research",
+      "descriptionLabel": "Description",
+      "servicesLabel": "Linked services",
+      "servicesHelp": "Its tasks can read these services' repositories as context.",
+      "submit": "Create project",
+      "created": "Project {title} created",
+      "failed": "Could not create the project"
+    },
+    "linkServices": {
+      "title": "Linked services",
+      "description": "The services whose repositories this project's tasks can read as context.",
+      "servicesLabel": "Services",
+      "save": "Save",
+      "saved": "Linked services updated",
+      "failed": "Could not update the linked services"
+    },
+    "mount": {
+      "added": "Project {title} added to this board",
+      "failed": "Could not add the project"
+    }
   }
 }
