@@ -305,9 +305,6 @@ effective threshold, and in the account's blob store above it, the row then hold
 and reclaimed with its project. The artifact is anchored on the project's root block in the
 root's home workspace, so the row needs only the artifact id: a reader resolves the home
 workspace from the root, and deleting the home board carries the artifact to the board the
-project is re-homed to. The artifact is anchored on the project's root block in the
-root's home workspace, so the row needs only the artifact id: a reader resolves the home
-workspace from the root, and deleting the home board carries the artifact to the board the
 project is re-homed to.
 
 The policy cascades account → workspace → project, narrowest set value winning, with absence (never
