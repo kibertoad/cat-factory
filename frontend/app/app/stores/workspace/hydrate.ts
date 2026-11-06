@@ -115,6 +115,7 @@ export function applySnapshotToStores(snapshot: WorkspaceSnapshot, baselines?: L
   useInitiativesStore().hydratePresets(snapshot.initiativePresets)
   useTrackerStore().hydrate(snapshot.trackerSettings)
   useServicesStore().hydrate(snapshot.mounts ?? [], snapshot.serviceCatalog ?? [])
+  useProjectsStore().hydrate(snapshot)
   // Hydrate the deployment's backend-registered capabilities from ONE shared per-workspace
   // remote capability manifest carrying BOTH custom agent kinds AND custom task types (its
   // version covers both, so an unchanged snapshot no-ops both stores). Each store reads its

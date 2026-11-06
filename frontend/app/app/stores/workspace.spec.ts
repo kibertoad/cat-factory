@@ -26,6 +26,7 @@ const INERT_STORES = [
   'useRiskPoliciesStore',
   'useModelPresetsStore',
   'usePipelinesStore',
+  'useProjectsStore',
   'useProviderConnectionsStore',
   'useRecurringPipelinesStore',
   'useRequirementsStore',
