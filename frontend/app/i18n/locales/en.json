@@ -800,7 +800,9 @@
         "research_definition_changed": "The research definition changed since this project pinned it. Create a new project to use the new version.",
         "research_task_already_recorded": "This research task has already recorded its findings. Start a follow-up task to research further.",
         "research_nothing_to_ask": "This follow-up has no question left to ask in the chosen mode. Pick another mode or add questions.",
-        "findings_too_large_for_inline": "The findings are too large to store, and offloading them to content storage is not available. Enable content storage or allow offloading, then retry."
+        "findings_too_large_for_inline": "The findings are too large to store, and offloading them to content storage is not available. Enable content storage or allow offloading, then retry.",
+        "task_owned_by_project": "This task belongs to a project, which has no service. Use the project's task address instead.",
+        "research_definition_invalid": "The research definition breaks a rule: check that its topic, question, credential and input ids are unique."
       }
     },
     "action": {
@@ -897,7 +899,11 @@
         "refined_requirements_unavailable": "No refined requirements yet",
         "no_linked_issues": "No linked tracker issue",
         "capability_credential_still_missing": "Credential still missing",
-        "credential_wait_unrecorded": "Cannot resume this wait"
+        "credential_wait_unrecorded": "Cannot resume this wait",
+        "research_definition_version_exists": "Version already published",
+        "research_definition_key_registered": "Namespace taken",
+        "project_homed_elsewhere": "Project homed on another board",
+        "credential_wait_personal_in_app": "Renew in the app"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -966,7 +972,11 @@
         "refined_requirements_unavailable": "The review has not produced a revised document yet, or is rewriting it now. Wait for the incorporation to finish, then update again.",
         "no_linked_issues": "This task has no tracker issue linked to it. Link the issue it came from, then update again.",
         "capability_credential_still_missing": "The credential this step needs is still not stored for this workspace. Store it in the capability credentials settings, then resume the run.",
-        "credential_wait_unrecorded": "This wait was recorded before the platform tracked what a wait is for, so it cannot be resumed. Restart the run instead."
+        "credential_wait_unrecorded": "This wait was recorded before the platform tracked what a wait is for, so it cannot be resumed. Restart the run instead.",
+        "research_definition_version_exists": "This research definition version is already published and cannot change. Publish a new version instead.",
+        "research_definition_key_registered": "This namespace belongs to research definitions the deployment ships. Publish under your organization's own namespace.",
+        "project_homed_elsewhere": "A project's tasks are created and run on the board that homes it. Open that board to work on them.",
+        "credential_wait_personal_in_app": "A lapsed personal credential is renewed by the run's initiator, with their password, in the app."
       },
       "action": {
         "connectGitHub": "Connect GitHub",

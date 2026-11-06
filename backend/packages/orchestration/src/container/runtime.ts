@@ -39,6 +39,9 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
   const projectKindRegistry = dependencies.projectKindRegistry ?? defaultProjectKindRegistry()
   const researchDefinitionRegistry =
     dependencies.researchDefinitionRegistry ?? new ResearchDefinitionRegistry()
+  const registeredResearchDefinitions =
+    dependencies.registeredResearchDefinitionSource ??
+    registryResearchDefinitionSource(researchDefinitionRegistry)
   // Resolved ONCE and shared by the two entries below: the registry itself (which the boot
   // validation and the snapshot read) and the default `builtin`-tier source that wraps it. A
   // second `defaultFoundationalServiceRegistry()` call would hand the catalog a different
@@ -76,10 +79,9 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     researchDefinitionRegistry,
     // The one read of research definitions: the registered ones (this process's registry, or a
     // mothership node's remote source) composed with the account's stored ones.
+    registeredResearchDefinitions,
     researchDefinitions: composeResearchDefinitionSource({
-      registered:
-        dependencies.registeredResearchDefinitionSource ??
-        registryResearchDefinitionSource(researchDefinitionRegistry),
+      registered: registeredResearchDefinitions,
       stored: dependencies.researchDefinitionRepository,
     }),
     // The deployment's non-container model operations. Empty by default for the same reason the

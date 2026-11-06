@@ -2926,6 +2926,25 @@ func (s *DecisionsService) ResolveStepExceeded(ctx context.Context, runID string
 	return &out, nil
 }
 
+// ResumeCredential resume a run parked on a missing credential
+// Resume a run parked because a step needs a capability credential (a vendor login, say) that was
+// not stored. Store it first through the capability-credentials settings; a resume while the key
+// still does not resolve is `409` with `details.reason: "capability_credential_still_missing"`. A
+// wait on a lapsed personal credential is `409` with `credential_wait_personal_in_app`: only the
+// run's initiator renews it, in the app. Requires a `decide` key.
+// POST /api/v1/runs/{runId}/credential/resume (operation resumePublicRunCredential).
+func (s *DecisionsService) ResumeCredential(ctx context.Context, runID string) (*PublicCredentialResume, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/credential/resume", pathEscape(runID)),
+	}
+	var out PublicCredentialResume
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ResumePrReview resume a stalled PR deep review
 // Re-dispatch the reviewer for only the slices that never reported, re-aggregating the findings
 // from the slice reports already captured, so a review whose final aggregation turn wedged is
@@ -4085,6 +4104,315 @@ func (s *KaizenService) ListEntriesAll(ctx context.Context, query *KaizenListEnt
 			page.Cursor = result.NextCursor
 		}
 	}
+}
+
+// ResearchDefinitionsService the research definitions a research project can pin: the ones the deployment ships in code and
+// the ones the account published, each version immutable. A definition says what to find out,
+// which credentials the research needs by name, and the vendor origins a credential may be sent
+// to. Reading takes a `read` key; publishing a version takes an `admin` key.
+type ResearchDefinitionsService struct {
+	client *Client
+}
+
+// Get get every version of one research definition
+// Every version of one definition key the account can pin, ascending. An unknown key is `404`
+// with `details.reason: "research_definition_not_found"`.
+// GET /api/v1/research-definitions/{key} (operation getPublicResearchDefinition).
+func (s *ResearchDefinitionsService) Get(ctx context.Context, key string) (*PublicResearchDefinitionList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/research-definitions/%s", pathEscape(key)),
+	}
+	var out PublicResearchDefinitionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// List list the research definitions the account can pin
+// Every research definition a research project of the key's account can pin: the ones the
+// deployment ships in code (`origin: registered`) and the ones the account published (`origin:
+// stored`), each with its content hash. A definition says what to find out (topics and
+// questions), which credentials the research needs by name, and the vendor origins a credential
+// may be sent to.
+// GET /api/v1/research-definitions (operation listPublicResearchDefinitions).
+func (s *ResearchDefinitionsService) List(ctx context.Context) (*PublicResearchDefinitionList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/research-definitions",
+	}
+	var out PublicResearchDefinitionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Publish publish a research definition version
+// Publish one immutable version of an account-owned research definition; the key and version are
+// the path's. A version already published is `409` with `details.reason:
+// "research_definition_version_exists"`, so a project pinned to it never changes meaning. A key
+// in a namespace the deployment's own definitions use is `409` with
+// `research_definition_key_registered`. A credential key the deployment reserves for its own
+// configuration is refused `400` by the body schema. Requires an `admin` key: a definition names
+// the credentials a run sends and the origins it may send them to.
+// PUT /api/v1/research-definitions/{key}/versions/{version} (operation
+// publishPublicResearchDefinition).
+func (s *ResearchDefinitionsService) Publish(ctx context.Context, key string, version string, body PublishResearchDefinition) (*PublicResearchDefinition, error) {
+	req := requestSpec{
+		Method: "PUT",
+		Path:   fmt.Sprintf("/api/v1/research-definitions/%s/versions/%s", pathEscape(key), pathEscape(version)),
+		Body:   body,
+	}
+	var out PublicResearchDefinition
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ProjectsService projects, the account-owned peers of services: list the ones the key's workspace mounts, create
+// one (a research project pins a research definition), link and unlink services, mount one,
+// create and run the tasks under it on the board that homes it, and read a research project's
+// findings and their revisions.
+type ProjectsService struct {
+	client *Client
+}
+
+// Create create a project
+// Create a project homed on the key's workspace. A kind keeping research data (the built-in
+// `research` kind) takes `research` naming the definition key, an optional version (the highest
+// by default) and the values for its `inputs`; the project pins that version and its content
+// hash. Refusals are `422` with `details.reason`: `project_kind_unregistered`,
+// `research_pin_required`, `research_pin_not_accepted`, `research_definition_not_found`,
+// `research_inputs_invalid`, `project_service_link_invalid`.
+// POST /api/v1/projects (operation createPublicProject).
+func (s *ProjectsService) Create(ctx context.Context, body CreatePublicProject) (*PublicProject, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   "/api/v1/projects",
+		Body:   body,
+	}
+	var out PublicProject
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CreateTask create a task under a project
+// A project task has its own resource, `PublicProjectTask`, carrying `projectId` where a service
+// task carries `serviceId`. `taskType` defaults to the first type the project's kind offers. A
+// `research` task takes its mode (`initial`, `extend`, `clarify`, `refresh`) and ad-hoc questions
+// through `fields`. A project's tasks are created and run on the board that homes it; any other
+// board is refused with `409` and `details.reason: "project_homed_elsewhere"`.
+// POST /api/v1/projects/{projectId}/tasks (operation createPublicProjectTask).
+func (s *ProjectsService) CreateTask(ctx context.Context, projectID string, body CreatePublicProjectTask) (*PublicProjectTask, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/tasks", pathEscape(projectID)),
+		Body:   body,
+	}
+	var out PublicProjectTask
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Get get a project
+// GET /api/v1/projects/{projectId} (operation getPublicProject).
+func (s *ProjectsService) Get(ctx context.Context, projectID string) (*PublicProject, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/projects/%s", pathEscape(projectID)),
+	}
+	var out PublicProject
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetFindings get a research project's findings
+// The project's current findings: every revision folded by question id in the order the tasks
+// started. A newer answered or partial answer replaces an older one; a newer unanswered or
+// blocked attempt is kept beside it as a note and never erases it. Coverage is computed by the
+// platform from the agent's per-question judgements. A project pinning no definition is `422`
+// with `research_project_not_pinned`.
+// GET /api/v1/projects/{projectId}/findings (operation getPublicProjectFindings).
+func (s *ProjectsService) GetFindings(ctx context.Context, projectID string) (*PublicProjectFindings, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/findings", pathEscape(projectID)),
+	}
+	var out PublicProjectFindings
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetFindingsRevision get one findings revision
+// One revision with the body its task recorded, wherever it is stored. An offloaded body that
+// cannot be read is `503` with `details.reason: "findings_body_unavailable"` rather than an empty
+// revision.
+// GET /api/v1/projects/{projectId}/findings/revisions/{revisionId} (operation
+// getPublicFindingsRevision).
+func (s *ProjectsService) GetFindingsRevision(ctx context.Context, projectID string, revisionID string) (*PublicFindingsRevision, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/findings/revisions/%s", pathEscape(projectID), pathEscape(revisionID)),
+	}
+	var out PublicFindingsRevision
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetTask get a project task
+// GET /api/v1/projects/{projectId}/tasks/{taskId} (operation getPublicProjectTask).
+func (s *ProjectsService) GetTask(ctx context.Context, projectID string, taskID string) (*PublicProjectTask, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/tasks/%s", pathEscape(projectID), pathEscape(taskID)),
+	}
+	var out PublicProjectTask
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// LinkServices link services to a project
+// Link services of the project's own account as read-only context for its tasks. Services already
+// linked stay linked.
+// POST /api/v1/projects/{projectId}/services (operation linkPublicProjectServices).
+func (s *ProjectsService) LinkServices(ctx context.Context, projectID string, body PublicProjectServices) (*PublicProject, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/services", pathEscape(projectID)),
+		Body:   body,
+	}
+	var out PublicProject
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// List list the projects the key's workspace mounts
+// Projects are account-owned peers of services, mounted onto boards. Each entry carries its
+// linked services, whether the key's workspace is the board that homes it (`homedHere`, the board
+// that creates and runs its tasks) and, for a research project, the definition version it pinned.
+// GET /api/v1/projects (operation listPublicProjects).
+func (s *ProjectsService) List(ctx context.Context) (*PublicProjectList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/projects",
+	}
+	var out PublicProjectList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListTasks list a project's tasks
+// GET /api/v1/projects/{projectId}/tasks (operation listPublicProjectTasks).
+func (s *ProjectsService) ListTasks(ctx context.Context, projectID string) (*PublicProjectTaskList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/tasks", pathEscape(projectID)),
+	}
+	var out PublicProjectTaskList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Mount mount a project on the key's workspace
+// Mount a project of the key's account onto the key's workspace, so its reads are served there.
+// Idempotent.
+// POST /api/v1/projects/{projectId}/mount (operation mountPublicProject).
+func (s *ProjectsService) Mount(ctx context.Context, projectID string) (*PublicProject, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/mount", pathEscape(projectID)),
+	}
+	var out PublicProject
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RetryTask retry a project task
+// POST /api/v1/projects/{projectId}/tasks/{taskId}/retry (operation retryPublicProjectTask).
+func (s *ProjectsService) RetryTask(ctx context.Context, projectID string, taskID string) (*PublicProjectTask, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/tasks/%s/retry", pathEscape(projectID), pathEscape(taskID)),
+	}
+	var out PublicProjectTask
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// StartTask start a project task
+// Start the task's run under the same admission as `POST /api/v1/tasks/{taskId}/start`: a
+// pipeline that can park on a person needs a `decide` key, and an individual-usage model needs
+// the personal-unlock headers.
+// POST /api/v1/projects/{projectId}/tasks/{taskId}/start (operation startPublicProjectTask).
+func (s *ProjectsService) StartTask(ctx context.Context, projectID string, taskID string, body *StartPublicTask) (*PublicProjectTask, error) {
+	if body == nil {
+		body = &StartPublicTask{}
+	}
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/tasks/%s/start", pathEscape(projectID), pathEscape(taskID)),
+		Body:   body,
+	}
+	var out PublicProjectTask
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// StopTask stop a project task
+// POST /api/v1/projects/{projectId}/tasks/{taskId}/stop (operation stopPublicProjectTask).
+func (s *ProjectsService) StopTask(ctx context.Context, projectID string, taskID string) (*PublicProjectTask, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/tasks/%s/stop", pathEscape(projectID), pathEscape(taskID)),
+	}
+	var out PublicProjectTask
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// UnlinkServices unlink services from a project
+// A service the project does not link is ignored.
+// POST /api/v1/projects/{projectId}/services/unlink (operation unlinkPublicProjectServices).
+func (s *ProjectsService) UnlinkServices(ctx context.Context, projectID string, body PublicProjectServices) (*PublicProject, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/services/unlink", pathEscape(projectID)),
+		Body:   body,
+	}
+	var out PublicProject
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // GuidedReviewsService guided pull request review: a structured explanation of a PR (what it does, meaningful changes,

@@ -252,6 +252,17 @@ export const CONFLICT_REASONS = [
   // A wait persisted before waits recorded what they wait on. It cannot be resumed against a
   // guess; the run is restarted.
   'credential_wait_unrecorded',
+  // A research definition version is immutable: this key and version are already published.
+  'research_definition_version_exists',
+  // A stored definition may not take a namespace the deployment's registered definitions use, so
+  // the two key spaces never meet. `details.namespace` names it.
+  'research_definition_key_registered',
+  // A project's tasks are created and run on the board that homes it; this key's board only
+  // mounts it.
+  'project_homed_elsewhere',
+  // A key resumed a wait on a lapsed PERSONAL credential, which only the run's initiator renews,
+  // with their password, in the app.
+  'credential_wait_personal_in_app',
   // The OPPOSITE fact, and deliberately its own reason rather than a second use of the one above.
   // The run IS parked on the input gate and the caller tried to answer it through the GENERIC
   // approval rail. The gate parks whatever step 0 happens to be, so a generic approve would mark
@@ -625,6 +636,12 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *  - `findings_too_large_for_inline`    the findings body is over the runtime's own row ceiling
  *                                       and cannot be offloaded: offload is disabled by the
  *                                       storage policy, or the account stores no content.
+ *  - `task_owned_by_project`            a public `/api/v1/tasks/{taskId}` operation answering a
+ *                                       `PublicTask` named a project task, which has no service;
+ *                                       it lives under `/api/v1/projects/{projectId}/tasks`.
+ *  - `research_definition_invalid`      a published definition breaks a rule its schema alone
+ *                                       cannot state (a duplicate question id, say).
+ *                                       `details.problems` lists them.
  */
 export const PROJECT_REASONS = [
   'project_kind_unregistered',
@@ -642,6 +659,8 @@ export const PROJECT_REASONS = [
   'research_task_already_recorded',
   'research_nothing_to_ask',
   'findings_too_large_for_inline',
+  'task_owned_by_project',
+  'research_definition_invalid',
 ] as const
 
 export type ProjectReason = (typeof PROJECT_REASONS)[number]

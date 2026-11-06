@@ -725,7 +725,9 @@
         "research_definition_changed": "このプロジェクトが固定してから、リサーチ定義が変更されました。新しいバージョンを使うには新しいプロジェクトを作成してください。",
         "research_task_already_recorded": "このリサーチタスクはすでに調査結果を記録しています。さらに調べるにはフォローアップタスクを開始してください。",
         "research_nothing_to_ask": "このフォローアップには、選んだモードで尋ねる質問が残っていません。別のモードを選ぶか、質問を追加してください。",
-        "findings_too_large_for_inline": "調査結果が大きすぎて保存できず、コンテンツストレージへの退避も利用できません。コンテンツストレージを有効にするか退避を許可してから、もう一度お試しください。"
+        "findings_too_large_for_inline": "調査結果が大きすぎて保存できず、コンテンツストレージへの退避も利用できません。コンテンツストレージを有効にするか退避を許可してから、もう一度お試しください。",
+        "task_owned_by_project": "このタスクはサービスを持たないプロジェクトに属しています。代わりにプロジェクトのタスクのアドレスを使ってください。",
+        "research_definition_invalid": "リサーチ定義がルールに違反しています。トピック、質問、認証情報、入力の ID が一意か確認してください。"
       }
     },
     "action": {
@@ -816,7 +818,11 @@
         "refined_requirements_unavailable": "まだ改訂された要件がありません",
         "no_linked_issues": "リンクされたトラッカーイシューがありません",
         "capability_credential_still_missing": "認証情報がまだありません",
-        "credential_wait_unrecorded": "この待機は再開できません"
+        "credential_wait_unrecorded": "この待機は再開できません",
+        "research_definition_version_exists": "バージョンは公開済みです",
+        "research_definition_key_registered": "名前空間は使用されています",
+        "project_homed_elsewhere": "プロジェクトは別のボードにあります",
+        "credential_wait_personal_in_app": "アプリで更新してください"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -882,7 +888,11 @@
         "refined_requirements_unavailable": "レビューはまだ改訂版のドキュメントを作成していないか、現在書き直しています。取り込みが終わるのを待ってから、もう一度更新してください。",
         "no_linked_issues": "このタスクにはトラッカーイシューがリンクされていません。元のイシューをリンクしてから、もう一度更新してください。",
         "capability_credential_still_missing": "このステップに必要な認証情報が、このワークスペースにまだ保存されていません。ケイパビリティ認証情報の設定で保存してから、実行を再開してください。",
-        "credential_wait_unrecorded": "この待機は、プラットフォームが待機の対象を記録するようになる前に記録されたため、再開できません。代わりに実行をやり直してください。"
+        "credential_wait_unrecorded": "この待機は、プラットフォームが待機の対象を記録するようになる前に記録されたため、再開できません。代わりに実行をやり直してください。",
+        "research_definition_version_exists": "このリサーチ定義のバージョンは公開済みで、変更できません。代わりに新しいバージョンを公開してください。",
+        "research_definition_key_registered": "この名前空間は、デプロイメントに含まれるリサーチ定義のものです。組織自身の名前空間で公開してください。",
+        "project_homed_elsewhere": "プロジェクトのタスクは、そのプロジェクトがあるボードで作成・実行されます。作業するにはそのボードを開いてください。",
+        "credential_wait_personal_in_app": "期限切れの個人用認証情報は、実行を開始した人がアプリで自分のパスワードを使って更新します。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",

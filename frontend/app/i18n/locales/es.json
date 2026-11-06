@@ -725,7 +725,9 @@
         "research_definition_changed": "La definición de investigación cambió desde que este proyecto la fijó. Crea un proyecto nuevo para usar la nueva versión.",
         "research_task_already_recorded": "Esta tarea de investigación ya registró sus hallazgos. Inicia una tarea de seguimiento para seguir investigando.",
         "research_nothing_to_ask": "A este seguimiento no le queda ninguna pregunta en el modo elegido. Elige otro modo o añade preguntas.",
-        "findings_too_large_for_inline": "Los hallazgos son demasiado grandes para guardarlos, y no se pueden trasladar al almacenamiento de contenido. Activa el almacenamiento de contenido o permite el traslado y vuelve a intentarlo."
+        "findings_too_large_for_inline": "Los hallazgos son demasiado grandes para guardarlos, y no se pueden trasladar al almacenamiento de contenido. Activa el almacenamiento de contenido o permite el traslado y vuelve a intentarlo.",
+        "task_owned_by_project": "Esta tarea pertenece a un proyecto, que no tiene servicio. Usa en su lugar la dirección de tareas del proyecto.",
+        "research_definition_invalid": "La definición de investigación incumple una regla: comprueba que los ids de sus temas, preguntas, credenciales y entradas sean únicos."
       }
     },
     "action": {
@@ -816,7 +818,11 @@
         "refined_requirements_unavailable": "Todavía no hay requisitos refinados",
         "no_linked_issues": "No hay ninguna incidencia vinculada",
         "capability_credential_still_missing": "Sigue faltando la credencial",
-        "credential_wait_unrecorded": "No se puede reanudar esta espera"
+        "credential_wait_unrecorded": "No se puede reanudar esta espera",
+        "research_definition_version_exists": "Versión ya publicada",
+        "research_definition_key_registered": "Espacio de nombres ocupado",
+        "project_homed_elsewhere": "Proyecto alojado en otro tablero",
+        "credential_wait_personal_in_app": "Renuévala en la aplicación"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -882,7 +888,11 @@
         "refined_requirements_unavailable": "La revisión aún no ha producido un documento revisado o lo está reescribiendo ahora. Espera a que termine la incorporación y vuelve a actualizar.",
         "no_linked_issues": "Esta tarea no tiene ninguna incidencia del gestor vinculada. Vincula la incidencia de la que proviene y vuelve a actualizar.",
         "capability_credential_still_missing": "La credencial que necesita este paso aún no está guardada para este espacio de trabajo. Guárdala en los ajustes de credenciales de capacidades y después reanuda la ejecución.",
-        "credential_wait_unrecorded": "Esta espera se registró antes de que la plataforma guardara a qué espera cada una, así que no se puede reanudar. Reinicia la ejecución en su lugar."
+        "credential_wait_unrecorded": "Esta espera se registró antes de que la plataforma guardara a qué espera cada una, así que no se puede reanudar. Reinicia la ejecución en su lugar.",
+        "research_definition_version_exists": "Esta versión de la definición de investigación ya está publicada y no puede cambiar. Publica una versión nueva.",
+        "research_definition_key_registered": "Este espacio de nombres pertenece a definiciones de investigación que incluye la instalación. Publica en el espacio de nombres propio de tu organización.",
+        "project_homed_elsewhere": "Las tareas de un proyecto se crean y ejecutan en el tablero que lo aloja. Abre ese tablero para trabajar en ellas.",
+        "credential_wait_personal_in_app": "Una credencial personal caducada la renueva quien inició la ejecución, con su contraseña, en la aplicación."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",

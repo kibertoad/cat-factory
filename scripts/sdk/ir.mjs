@@ -52,6 +52,11 @@ const INLINE_TYPE_NAMES = {
   'detail,hint,kind,lastSubtasks,message,occurredAt,reason,stepIndex': 'DebugRunFailure',
   'branch,url': 'RunPullRequest',
   'code,message': 'RunError',
+  // A descriptor field's option and visibility rule, first published by the task-type catalog.
+  // Research definitions carry the same descriptors, and their hoisted component would otherwise
+  // take these shapes' names and rename two types in four released SDKs.
+  'label,value': 'ListPublicTaskTypesResponseTaskTypeFieldOption',
+  'equals,includes,key': 'ListPublicTaskTypesResponseTaskTypeFieldShowWhen',
   // The judge park is the one `PublicDecision` variant the spec inlines rather than hoisting,
   // so positional naming would ship it as `PublicDecisionVariant2` — a name that renumbers if
   // a variant is ever added ahead of it.
@@ -95,6 +100,18 @@ const INLINE_TYPE_NAMES = {
   'calls,failureRate,failures': 'DebugToolCallTotals',
   'calls,failureRate,failures,tool': 'DebugToolRollup',
   'agentKind,calls,failureRate,failures': 'DebugToolCallKindRollup',
+}
+
+/**
+ * Unions that deserve a chosen name rather than a positional one, keyed by their members
+ * ({@link unionMemberSignature}), sorted and comma-joined. A union collapses by
+ * structure like an object does, so the first position the walk reaches names it; a union a
+ * released SDK already exposes is pinned here so a later surface reusing the shape cannot rename it.
+ */
+const INLINE_UNION_NAMES = {
+  // A descriptor form's filled values, first published on the task create body. Research projects
+  // carry the same values for a definition's inputs, and their component sorts ahead of it.
+  'array[string<=2000],boolean,number,string<=2000': 'CreatePublicTaskFieldsValue',
 }
 
 /**
@@ -230,6 +247,14 @@ export function snake(text) {
     .replace(/^_+|_+$/g, '')
 }
 
+/** One union member as a pin key: its `$ref` name, or its type with any length bound and item type. */
+function unionMemberSignature(variant) {
+  if (variant.$ref) return variant.$ref.replace('#/components/schemas/', '')
+  const bound = variant.maxLength === undefined ? '' : `<=${variant.maxLength}`
+  const items = variant.items ? `[${unionMemberSignature(variant.items)}]` : ''
+  return `${variant.type}${bound}${items}`
+}
+
 /** A stable, order-independent signature for an object shape (its property names). */
 function objectSignature(schema) {
   return Object.keys(schema.properties ?? {})
@@ -299,6 +324,7 @@ class TypeRegistry {
     /** Explicit-name tables, consumed as they are hit so a stale entry is detectable. */
     this.unusedObjectNames = new Set(Object.keys(INLINE_TYPE_NAMES))
     this.unusedEnumNames = new Set(Object.keys(INLINE_ENUM_NAMES))
+    this.unusedUnionNames = new Set(Object.keys(INLINE_UNION_NAMES))
     this.unusedDistinctEnums = new Set(Object.keys(DISTINCT_ENUM_TYPES))
     /** Names minted by {@link DISTINCT_ENUM_TYPES}, excluded from the signature collapse below. */
     this.distinctEnumNames = new Set()
@@ -381,7 +407,10 @@ class TypeRegistry {
     const fp = fingerprint({ union: variants })
     const collapsed = this.byFingerprint.get(fp)
     if (collapsed) return { kind: 'ref', name: collapsed }
-    const name = pascal(hint)
+    const signature = variants.map(unionMemberSignature).sort().join(',')
+    const pinned = INLINE_UNION_NAMES[signature]
+    if (pinned) this.unusedUnionNames.delete(signature)
+    const name = pinned ?? pascal(hint)
     return {
       kind: 'ref',
       name: this.define(
@@ -648,11 +677,12 @@ export async function buildIr(doc) {
   if (
     registry.unusedObjectNames.size > 0 ||
     registry.unusedEnumNames.size > 0 ||
+    registry.unusedUnionNames.size > 0 ||
     registry.unusedDistinctEnums.size > 0
   ) {
     throw new Error(
       'SDK IR: stale explicit names in scripts/sdk/ir.mjs — no schema in the spec has the ' +
-        `signature(s): ${[...registry.unusedObjectNames, ...registry.unusedEnumNames].join(' | ')}` +
+        `signature(s): ${[...registry.unusedObjectNames, ...registry.unusedEnumNames, ...registry.unusedUnionNames].join(' | ')}` +
         `${registry.unusedDistinctEnums.size > 0 ? ` | hint(s): ${[...registry.unusedDistinctEnums].join(' | ')}` : ''}`,
     )
   }

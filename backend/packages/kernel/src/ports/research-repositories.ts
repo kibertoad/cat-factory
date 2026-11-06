@@ -30,6 +30,8 @@ export interface ResearchDefinitionRepository {
 
 export interface ResearchProjectRepository {
   get(projectId: string): Promise<ResearchProject | null>
+  /** The pins of the given projects, in a single (chunked) query. A project pinning none is absent. */
+  listByProjectIds(projectIds: string[]): Promise<ResearchProject[]>
   insert(project: ResearchProject): Promise<void>
   /**
    * The findings sequence number of a research task, taken the first time the task starts and

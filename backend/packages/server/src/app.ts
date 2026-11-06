@@ -130,6 +130,8 @@ import { publicEvidenceController } from './modules/publicApi/PublicEvidenceCont
 import { publicSpecController } from './modules/publicApi/PublicSpecController.js'
 import { publicMergeEvidenceController } from './modules/publicApi/PublicMergeEvidenceController.js'
 import { publicKaizenController } from './modules/publicApi/PublicKaizenController.js'
+import { publicProjectController } from './modules/publicApi/PublicProjectController.js'
+import { publicCredentialWaitController } from './modules/publicApi/PublicCredentialWaitController.js'
 import { publicGuidedReviewController } from './modules/publicApi/PublicGuidedReviewController.js'
 import { publicPrAssessmentController } from './modules/publicApi/PublicPrAssessmentController.js'
 import { publicDiscoveryController } from './modules/publicApi/PublicDiscoveryController.js'
@@ -209,6 +211,8 @@ function registerPublicApiControllers<E extends AppEnv>(app: Hono<E>): void {
   // takes one off the backlog. Reads are `read`; acknowledging is `write`, since recording that a
   // recommendation was triaged starts nothing. See backend/docs/public-api.md.
   app.route('/', publicKaizenController())
+  app.route('/', publicProjectController())
+  app.route('/', publicCredentialWaitController())
   app.route('/', publicGuidedReviewController())
   // The public PR ASSESSMENT (`POST /api/v1/pr-assessments`): a pull request's merger-style scores
   // and whether a risk policy would land it, from one synchronous model call. `write` scope.

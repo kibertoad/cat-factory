@@ -21,6 +21,8 @@ import type {
   ConnectPublicEnvironmentResponse,
   CreateHeadlessPublicApiKey,
   CreatePublicJob,
+  CreatePublicProject,
+  CreatePublicProjectTask,
   CreatePublicServiceRequest,
   CreatePublicTask,
   CreatedPublicApiKey,
@@ -93,8 +95,10 @@ import type {
   PublicApproveStep,
   PublicChallengePrReviewFinding,
   PublicChooseFork,
+  PublicCredentialResume,
   PublicDecisionList,
   PublicDeployment,
+  PublicFindingsRevision,
   PublicGuidedReviewList,
   PublicIdentity,
   PublicIncorporate,
@@ -109,11 +113,19 @@ import type {
   PublicNotificationWebhookList,
   PublicPipelineList,
   PublicPrAssessment,
+  PublicProject,
+  PublicProjectFindings,
+  PublicProjectList,
+  PublicProjectServices,
+  PublicProjectTask,
+  PublicProjectTaskList,
   PublicPromptFragmentList,
   PublicRejectStep,
   PublicReplyFinding,
   PublicRequestGateFix,
   PublicRequestStepChanges,
+  PublicResearchDefinition,
+  PublicResearchDefinitionList,
   PublicResolveAgentDecision,
   PublicResolveExceeded,
   PublicResolveInputGate,
@@ -132,6 +144,7 @@ import type {
   PublicTask,
   PublicTaskList,
   PublicUsage,
+  PublishResearchDefinition,
   PutDirectoryWebhook,
   PutNotificationWebhook,
   RequestGuidedReviewDrafts,
@@ -1907,6 +1920,19 @@ export class DecisionsResource {
   }
 
   /**
+   * Resume a run parked on a missing credential
+   * Resume a run parked because a step needs a capability credential (a vendor login, say) that was not stored. Store it first through the capability-credentials settings; a resume while the key still does not resolve is `409` with `details.reason: "capability_credential_still_missing"`. A wait on a lapsed personal credential is `409` with `credential_wait_personal_in_app`: only the run's initiator renews it, in the app. Requires a `decide` key.
+   * `POST /api/v1/runs/{runId}/credential/resume` — operation `resumePublicRunCredential`.
+   */
+  resumeCredential(runId: string, options: RequestOptions = {}): Promise<PublicCredentialResume> {
+    return this.#transport.request<PublicCredentialResume>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/credential/resume`,
+      options,
+    })
+  }
+
+  /**
    * Resume a stalled PR deep review
    * Re-dispatch the reviewer for only the slices that never reported, re-aggregating the findings from the slice reports already captured, so a review whose final aggregation turn wedged is recovered without throwing away the work that finished. Refused with 409 unless the review is still in progress. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/pr-review/resume` — operation `resumePublicRunPrReview`.
@@ -2647,6 +2673,246 @@ export class KaizenResource {
   }
 }
 
+/** The research definitions a research project can pin: the ones the deployment ships in code and the ones the account published, each version immutable. A definition says what to find out, which credentials the research needs by name, and the vendor origins a credential may be sent to. Reading takes a `read` key; publishing a version takes an `admin` key. */
+export class ResearchDefinitionsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Get every version of one research definition
+   * Every version of one definition key the account can pin, ascending. An unknown key is `404` with `details.reason: "research_definition_not_found"`.
+   * `GET /api/v1/research-definitions/{key}` — operation `getPublicResearchDefinition`.
+   */
+  get(key: string, options: RequestOptions = {}): Promise<PublicResearchDefinitionList> {
+    return this.#transport.request<PublicResearchDefinitionList>({
+      method: 'GET',
+      path: `/api/v1/research-definitions/${encodePathSegment(key)}`,
+      options,
+    })
+  }
+
+  /**
+   * List the research definitions the account can pin
+   * Every research definition a research project of the key's account can pin: the ones the deployment ships in code (`origin: registered`) and the ones the account published (`origin: stored`), each with its content hash. A definition says what to find out (topics and questions), which credentials the research needs by name, and the vendor origins a credential may be sent to.
+   * `GET /api/v1/research-definitions` — operation `listPublicResearchDefinitions`.
+   */
+  list(options: RequestOptions = {}): Promise<PublicResearchDefinitionList> {
+    return this.#transport.request<PublicResearchDefinitionList>({
+      method: 'GET',
+      path: `/api/v1/research-definitions`,
+      options,
+    })
+  }
+
+  /**
+   * Publish a research definition version
+   * Publish one immutable version of an account-owned research definition; the key and version are the path's. A version already published is `409` with `details.reason: "research_definition_version_exists"`, so a project pinned to it never changes meaning. A key in a namespace the deployment's own definitions use is `409` with `research_definition_key_registered`. A credential key the deployment reserves for its own configuration is refused `400` by the body schema. Requires an `admin` key: a definition names the credentials a run sends and the origins it may send them to.
+   * `PUT /api/v1/research-definitions/{key}/versions/{version}` — operation `publishPublicResearchDefinition`.
+   */
+  publish(key: string, version: string, body: PublishResearchDefinition, options: RequestOptions = {}): Promise<PublicResearchDefinition> {
+    return this.#transport.request<PublicResearchDefinition>({
+      method: 'PUT',
+      path: `/api/v1/research-definitions/${encodePathSegment(key)}/versions/${encodePathSegment(version)}`,
+      body,
+      options,
+    })
+  }
+}
+
+/** Projects, the account-owned peers of services: list the ones the key's workspace mounts, create one (a research project pins a research definition), link and unlink services, mount one, create and run the tasks under it on the board that homes it, and read a research project's findings and their revisions. */
+export class ProjectsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Create a project
+   * Create a project homed on the key's workspace. A kind keeping research data (the built-in `research` kind) takes `research` naming the definition key, an optional version (the highest by default) and the values for its `inputs`; the project pins that version and its content hash. Refusals are `422` with `details.reason`: `project_kind_unregistered`, `research_pin_required`, `research_pin_not_accepted`, `research_definition_not_found`, `research_inputs_invalid`, `project_service_link_invalid`.
+   * `POST /api/v1/projects` — operation `createPublicProject`.
+   */
+  create(body: CreatePublicProject, options: RequestOptions = {}): Promise<PublicProject> {
+    return this.#transport.request<PublicProject>({
+      method: 'POST',
+      path: `/api/v1/projects`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Create a task under a project
+   * A project task has its own resource, `PublicProjectTask`, carrying `projectId` where a service task carries `serviceId`. `taskType` defaults to the first type the project's kind offers. A `research` task takes its mode (`initial`, `extend`, `clarify`, `refresh`) and ad-hoc questions through `fields`. A project's tasks are created and run on the board that homes it; any other board is refused with `409` and `details.reason: "project_homed_elsewhere"`.
+   * `POST /api/v1/projects/{projectId}/tasks` — operation `createPublicProjectTask`.
+   */
+  createTask(projectId: string, body: CreatePublicProjectTask, options: RequestOptions = {}): Promise<PublicProjectTask> {
+    return this.#transport.request<PublicProjectTask>({
+      method: 'POST',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}/tasks`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Get a project
+   * `GET /api/v1/projects/{projectId}` — operation `getPublicProject`.
+   */
+  get(projectId: string, options: RequestOptions = {}): Promise<PublicProject> {
+    return this.#transport.request<PublicProject>({
+      method: 'GET',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}`,
+      options,
+    })
+  }
+
+  /**
+   * Get a research project's findings
+   * The project's current findings: every revision folded by question id in the order the tasks started. A newer answered or partial answer replaces an older one; a newer unanswered or blocked attempt is kept beside it as a note and never erases it. Coverage is computed by the platform from the agent's per-question judgements. A project pinning no definition is `422` with `research_project_not_pinned`.
+   * `GET /api/v1/projects/{projectId}/findings` — operation `getPublicProjectFindings`.
+   */
+  getFindings(projectId: string, options: RequestOptions = {}): Promise<PublicProjectFindings> {
+    return this.#transport.request<PublicProjectFindings>({
+      method: 'GET',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}/findings`,
+      options,
+    })
+  }
+
+  /**
+   * Get one findings revision
+   * One revision with the body its task recorded, wherever it is stored. An offloaded body that cannot be read is `503` with `details.reason: "findings_body_unavailable"` rather than an empty revision.
+   * `GET /api/v1/projects/{projectId}/findings/revisions/{revisionId}` — operation `getPublicFindingsRevision`.
+   */
+  getFindingsRevision(projectId: string, revisionId: string, options: RequestOptions = {}): Promise<PublicFindingsRevision> {
+    return this.#transport.request<PublicFindingsRevision>({
+      method: 'GET',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}/findings/revisions/${encodePathSegment(revisionId)}`,
+      options,
+    })
+  }
+
+  /**
+   * Get a project task
+   * `GET /api/v1/projects/{projectId}/tasks/{taskId}` — operation `getPublicProjectTask`.
+   */
+  getTask(projectId: string, taskId: string, options: RequestOptions = {}): Promise<PublicProjectTask> {
+    return this.#transport.request<PublicProjectTask>({
+      method: 'GET',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}/tasks/${encodePathSegment(taskId)}`,
+      options,
+    })
+  }
+
+  /**
+   * Link services to a project
+   * Link services of the project's own account as read-only context for its tasks. Services already linked stay linked.
+   * `POST /api/v1/projects/{projectId}/services` — operation `linkPublicProjectServices`.
+   */
+  linkServices(projectId: string, body: PublicProjectServices, options: RequestOptions = {}): Promise<PublicProject> {
+    return this.#transport.request<PublicProject>({
+      method: 'POST',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}/services`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * List the projects the key's workspace mounts
+   * Projects are account-owned peers of services, mounted onto boards. Each entry carries its linked services, whether the key's workspace is the board that homes it (`homedHere`, the board that creates and runs its tasks) and, for a research project, the definition version it pinned.
+   * `GET /api/v1/projects` — operation `listPublicProjects`.
+   */
+  list(options: RequestOptions = {}): Promise<PublicProjectList> {
+    return this.#transport.request<PublicProjectList>({
+      method: 'GET',
+      path: `/api/v1/projects`,
+      options,
+    })
+  }
+
+  /**
+   * List a project's tasks
+   * `GET /api/v1/projects/{projectId}/tasks` — operation `listPublicProjectTasks`.
+   */
+  listTasks(projectId: string, options: RequestOptions = {}): Promise<PublicProjectTaskList> {
+    return this.#transport.request<PublicProjectTaskList>({
+      method: 'GET',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}/tasks`,
+      options,
+    })
+  }
+
+  /**
+   * Mount a project on the key's workspace
+   * Mount a project of the key's account onto the key's workspace, so its reads are served there. Idempotent.
+   * `POST /api/v1/projects/{projectId}/mount` — operation `mountPublicProject`.
+   */
+  mount(projectId: string, options: RequestOptions = {}): Promise<PublicProject> {
+    return this.#transport.request<PublicProject>({
+      method: 'POST',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}/mount`,
+      options,
+    })
+  }
+
+  /**
+   * Retry a project task
+   * `POST /api/v1/projects/{projectId}/tasks/{taskId}/retry` — operation `retryPublicProjectTask`.
+   */
+  retryTask(projectId: string, taskId: string, options: RequestOptions = {}): Promise<PublicProjectTask> {
+    return this.#transport.request<PublicProjectTask>({
+      method: 'POST',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}/tasks/${encodePathSegment(taskId)}/retry`,
+      options,
+    })
+  }
+
+  /**
+   * Start a project task
+   * Start the task's run under the same admission as `POST /api/v1/tasks/{taskId}/start`: a pipeline that can park on a person needs a `decide` key, and an individual-usage model needs the personal-unlock headers.
+   * `POST /api/v1/projects/{projectId}/tasks/{taskId}/start` — operation `startPublicProjectTask`.
+   */
+  startTask(projectId: string, taskId: string, body: StartPublicTask = {}, options: RequestOptions = {}): Promise<PublicProjectTask> {
+    return this.#transport.request<PublicProjectTask>({
+      method: 'POST',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}/tasks/${encodePathSegment(taskId)}/start`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Stop a project task
+   * `POST /api/v1/projects/{projectId}/tasks/{taskId}/stop` — operation `stopPublicProjectTask`.
+   */
+  stopTask(projectId: string, taskId: string, options: RequestOptions = {}): Promise<PublicProjectTask> {
+    return this.#transport.request<PublicProjectTask>({
+      method: 'POST',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}/tasks/${encodePathSegment(taskId)}/stop`,
+      options,
+    })
+  }
+
+  /**
+   * Unlink services from a project
+   * A service the project does not link is ignored.
+   * `POST /api/v1/projects/{projectId}/services/unlink` — operation `unlinkPublicProjectServices`.
+   */
+  unlinkServices(projectId: string, body: PublicProjectServices, options: RequestOptions = {}): Promise<PublicProject> {
+    return this.#transport.request<PublicProject>({
+      method: 'POST',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}/services/unlink`,
+      body,
+      options,
+    })
+  }
+}
+
 /** Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking, drafting and posting drafts take a `write` key. Posting publishes plain comments on the pull request and never approves or requests changes. */
 export class GuidedReviewsResource {
   readonly #transport: Transport
@@ -2968,6 +3234,10 @@ export abstract class CatFactoryResources {
   readonly directory: DirectoryResource
   /** The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything. */
   readonly kaizen: KaizenResource
+  /** The research definitions a research project can pin: the ones the deployment ships in code and the ones the account published, each version immutable. A definition says what to find out, which credentials the research needs by name, and the vendor origins a credential may be sent to. Reading takes a `read` key; publishing a version takes an `admin` key. */
+  readonly researchDefinitions: ResearchDefinitionsResource
+  /** Projects, the account-owned peers of services: list the ones the key's workspace mounts, create one (a research project pins a research definition), link and unlink services, mount one, create and run the tasks under it on the board that homes it, and read a research project's findings and their revisions. */
+  readonly projects: ProjectsResource
   /** Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking, drafting and posting drafts take a `write` key. Posting publishes plain comments on the pull request and never approves or requests changes. */
   readonly guidedReviews: GuidedReviewsResource
   /** Assess a pull request in a linked repository: the merger's complexity, risk and impact scores with a rationale, the change class its paths fall in, and whether a risk policy would let it land with no person. The verdict is given without publishing the policy's ceilings. Takes a `write` key: each assessment is one model call. Nothing is persisted and no run starts. */
@@ -3002,6 +3272,8 @@ export abstract class CatFactoryResources {
     this.mergeRecords = new MergeRecordsResource(transport)
     this.directory = new DirectoryResource(transport)
     this.kaizen = new KaizenResource(transport)
+    this.researchDefinitions = new ResearchDefinitionsResource(transport)
+    this.projects = new ProjectsResource(transport)
     this.guidedReviews = new GuidedReviewsResource(transport)
     this.prAssessments = new PrAssessmentsResource(transport)
     this.keys = new KeysResource(transport)

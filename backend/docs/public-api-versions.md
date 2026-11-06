@@ -608,3 +608,17 @@ Additive. A consumer built against 1.94.0 keeps parsing.
 The task-type vocabulary gains `research`: a task that answers a research project's pinned research definition and records a findings revision on the project. It belongs under a project, so creating one under a service is refused (`422`, reason `task_type_requires_project`); the public surface for project tasks follows in a later version. A `research` task type's public fields carry `researchMode` (`initial`, `extend`, `clarify` or `refresh`).
 
 Additive. A consumer built against 1.95.0 keeps parsing.
+
+## 1.97.0
+
+Projects and research reach the public API. New operations:
+
+- research definitions: list, get every version of one key, and `PUT /api/v1/research-definitions/{key}/versions/{version}` to publish an immutable account-owned version (`admin`);
+- projects: list the projects the key's workspace mounts, create, get, link and unlink services, mount;
+- project tasks under `/api/v1/projects/{projectId}/tasks`: create, list, get, start, stop, retry, answering a new `PublicProjectTask` that carries `projectId`;
+- a research project's current findings and one revision by id;
+- `POST /api/v1/runs/{runId}/credential/resume` (`decide`), which resumes a run parked on a missing capability credential once it is stored.
+
+A project task has no service, so the `/api/v1/tasks/{taskId}` operations that answer a `PublicTask` refuse it with `422`, reason `task_owned_by_project`, rather than invent a `serviceId`. That refusal can only be met by a task created after projects existed, under a project; every task a 1.96.0 consumer could address is a service task and answers as before. `GET /api/v1/tasks/{taskId}/run` and the task event stream answer for both. The error vocabulary gains `task_owned_by_project`, `research_definition_invalid`, and the conflict reasons `research_definition_version_exists`, `research_definition_key_registered`, `project_homed_elsewhere` and `credential_wait_personal_in_app`.
+
+Additive. A consumer built against 1.96.0 keeps parsing.

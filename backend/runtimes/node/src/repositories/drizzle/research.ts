@@ -97,14 +97,19 @@ export class DrizzleResearchProjectRepository implements ResearchProjectReposito
       .select()
       .from(researchProjects)
       .where(eq(researchProjects.project_id, projectId))
-    if (!row) return null
-    return {
-      projectId: row.project_id,
-      definitionKey: row.definition_key,
-      definitionVersion: row.definition_version,
-      definitionHash: row.definition_hash,
-      inputs: JSON.parse(row.inputs) as Record<string, unknown>,
+    return row ? rowToResearchProject(row) : null
+  }
+
+  async listByProjectIds(projectIds: string[]): Promise<ResearchProject[]> {
+    const pins: ResearchProject[] = []
+    for (let i = 0; i < projectIds.length; i += CHUNK) {
+      const rows = await this.db
+        .select()
+        .from(researchProjects)
+        .where(inArray(researchProjects.project_id, projectIds.slice(i, i + CHUNK)))
+      pins.push(...rows.map(rowToResearchProject))
     }
+    return pins
   }
 
   async insert(project: ResearchProject): Promise<void> {
@@ -160,6 +165,16 @@ export class DrizzleResearchProjectRepository implements ResearchProjectReposito
         await tx.delete(researchProjects).where(inArray(researchProjects.project_id, chunk))
       })
     }
+  }
+}
+
+function rowToResearchProject(row: typeof researchProjects.$inferSelect): ResearchProject {
+  return {
+    projectId: row.project_id,
+    definitionKey: row.definition_key,
+    definitionVersion: row.definition_version,
+    definitionHash: row.definition_hash,
+    inputs: JSON.parse(row.inputs) as Record<string, unknown>,
   }
 }
 

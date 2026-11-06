@@ -725,7 +725,9 @@
         "research_definition_changed": "Araştırma tanımı, bu proje onu sabitlediğinden beri değişti. Yeni sürümü kullanmak için yeni bir proje oluşturun.",
         "research_task_already_recorded": "Bu araştırma görevi bulgularını zaten kaydetti. Araştırmaya devam etmek için bir takip görevi başlatın.",
         "research_nothing_to_ask": "Bu takip görevinde seçilen modda sorulacak soru kalmadı. Başka bir mod seçin ya da soru ekleyin.",
-        "findings_too_large_for_inline": "Bulgular kaydedilemeyecek kadar büyük ve içerik depolamasına aktarılmaları kullanılamıyor. İçerik depolamasını etkinleştirin ya da aktarmaya izin verin, sonra yeniden deneyin."
+        "findings_too_large_for_inline": "Bulgular kaydedilemeyecek kadar büyük ve içerik depolamasına aktarılmaları kullanılamıyor. İçerik depolamasını etkinleştirin ya da aktarmaya izin verin, sonra yeniden deneyin.",
+        "task_owned_by_project": "Bu görev, hizmeti olmayan bir projeye ait. Bunun yerine projenin görev adresini kullanın.",
+        "research_definition_invalid": "Araştırma tanımı bir kuralı ihlal ediyor: konu, soru, kimlik bilgisi ve girdi kimliklerinin benzersiz olduğunu kontrol edin."
       }
     },
     "action": {
@@ -816,7 +818,11 @@
         "refined_requirements_unavailable": "Henüz iyileştirilmiş gereksinim yok",
         "no_linked_issues": "Bağlı takip kaydı yok",
         "capability_credential_still_missing": "Kimlik bilgisi hâlâ eksik",
-        "credential_wait_unrecorded": "Bu bekleme sürdürülemiyor"
+        "credential_wait_unrecorded": "Bu bekleme sürdürülemiyor",
+        "research_definition_version_exists": "Sürüm zaten yayımlandı",
+        "research_definition_key_registered": "Ad alanı kullanımda",
+        "project_homed_elsewhere": "Proje başka bir panoda",
+        "credential_wait_personal_in_app": "Uygulamada yenileyin"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -882,7 +888,11 @@
         "refined_requirements_unavailable": "İnceleme henüz gözden geçirilmiş bir belge üretmedi ya da şu anda yeniden yazıyor. Birleştirmenin bitmesini bekleyin, ardından tekrar güncelleyin.",
         "no_linked_issues": "Bu göreve bağlı bir takip kaydı yok. Görevin geldiği kaydı bağlayın, ardından tekrar güncelleyin.",
         "capability_credential_still_missing": "Bu adımın ihtiyaç duyduğu kimlik bilgisi bu çalışma alanı için hâlâ kaydedilmedi. Yetenek kimlik bilgileri ayarlarına kaydedin, ardından çalıştırmayı sürdürün.",
-        "credential_wait_unrecorded": "Bu bekleme, platform bir beklemenin neyi beklediğini kaydetmeye başlamadan önce kaydedildi, bu yüzden sürdürülemez. Bunun yerine çalıştırmayı yeniden başlatın."
+        "credential_wait_unrecorded": "Bu bekleme, platform bir beklemenin neyi beklediğini kaydetmeye başlamadan önce kaydedildi, bu yüzden sürdürülemez. Bunun yerine çalıştırmayı yeniden başlatın.",
+        "research_definition_version_exists": "Araştırma tanımının bu sürümü zaten yayımlandı ve değiştirilemez. Bunun yerine yeni bir sürüm yayımlayın.",
+        "research_definition_key_registered": "Bu ad alanı, dağıtımla gelen araştırma tanımlarına ait. Kuruluşunuzun kendi ad alanında yayımlayın.",
+        "project_homed_elsewhere": "Bir projenin görevleri, projenin bulunduğu panoda oluşturulur ve çalıştırılır. Üzerinde çalışmak için o panoyu açın.",
+        "credential_wait_personal_in_app": "Süresi dolan kişisel kimlik bilgisini, çalıştırmayı başlatan kişi kendi parolasıyla uygulamada yeniler."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
