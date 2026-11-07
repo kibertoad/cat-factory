@@ -38,6 +38,7 @@ import type {
   CredentialWaitReason,
   GateConfigRefusalReason,
   PipelineApprovalsRefusalReason,
+  ProjectReason,
   ToolServerOAuthReason,
   UnavailableReason,
 } from '@cat-factory/contracts'
@@ -132,6 +133,10 @@ const GENERIC_DESCRIPTION_KEYS: Record<Exclude<ApiErrorCode, 'conflict'>, string
  *
  * `CredentialWaitReason` joins it because its 403 is not a missing permission: it names the one
  * person (the run's initiator) whose password can resume the run.
+ *
+ * `ProjectReason` joins it because each of its 422s names a rule of projects (what a kind offers,
+ * that a project has no repository to write to) rather than a malformed request, and one of them
+ * surfaces from a run's dispatch, far from the form that could explain it.
  */
 const REASON_DESCRIPTION_KEYS: Record<
   | UnavailableReason
@@ -139,9 +144,15 @@ const REASON_DESCRIPTION_KEYS: Record<
   | ToolServerOAuthReason
   | GateConfigRefusalReason
   | PipelineApprovalsRefusalReason
-  | CredentialWaitReason,
+  | CredentialWaitReason
+  | ProjectReason,
   string
 > = {
+  project_kind_unregistered: 'errors.reason.description.project_kind_unregistered',
+  task_type_not_offered_by_project: 'errors.reason.description.task_type_not_offered_by_project',
+  project_has_no_writable_repo: 'errors.reason.description.project_has_no_writable_repo',
+  project_service_link_invalid: 'errors.reason.description.project_service_link_invalid',
+  project_has_unfinished_tasks: 'errors.reason.description.project_has_unfinished_tasks',
   credential_wait_not_initiator: 'errors.reason.description.credential_wait_not_initiator',
   gate_config_fields_invalid: 'errors.reason.description.gate_config_fields_invalid',
   approvals_chain_stale: 'errors.reason.description.approvals_chain_stale',

@@ -607,6 +607,8 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *                                       can pin. `details` names both.
  *  - `research_inputs_invalid`          the values for the definition's `inputs` do not satisfy
  *                                       them. `details.problems` lists why.
+ *
+ * The SPA keys an exhaustive `Record<ProjectReason, …>` of message keys off this.
  */
 export const PROJECT_REASONS = [
   'project_kind_unregistered',

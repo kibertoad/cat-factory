@@ -1,10 +1,8 @@
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { handleMcpMessage } from '../src/research/mcp-stdio.js'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { handleMcpMessage } from '../src/research/mcp-protocol.js'
 import { parseResearchJob } from '../src/research/research-job.js'
-import { researchTools } from '../src/research/research-tools-server.js'
+import { forwardMcpLine } from '../src/research/research-tools-proxy.js'
+import { researchTools, startResearchToolsHost } from '../src/research/research-tools-server.js'
 import {
   applyAuth,
   credentialSecrets,
@@ -69,7 +67,7 @@ describe('research tool rules', () => {
   })
 })
 
-describe('the MCP stdio loop', () => {
+describe('the MCP protocol', () => {
   const server = {
     name: 'test',
     version: '1',
@@ -103,28 +101,24 @@ describe('the MCP stdio loop', () => {
 })
 
 describe('the research tool server', () => {
-  let dir: string
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'research-tools-test-'))
-  })
-  afterEach(async () => {
+  afterEach(() => {
     vi.unstubAllGlobals()
-    await rm(dir, { recursive: true, force: true })
   })
 
   function tools() {
     return researchTools({
       targets: TARGETS,
-      credentials: [{ key: 'VENDOR_TOKEN', kind: 'api-token', value: 'sk-live-secret-123' }],
-      evidenceDir: dir,
-      credentialRequestFile: join(dir, 'request.json'),
+      credentials: [
+        { key: 'VENDOR_TOKEN', kind: 'api-token', value: 'sk-live-secret-123' },
+        { key: 'VENDOR_LOGIN', kind: 'login', value: '{"username":"me","password":"pass-word"}' },
+      ],
     })
   }
 
   it('refuses a request to an origin that is not a target, sending nothing', async () => {
     const fetchSpy = vi.fn()
     vi.stubGlobal('fetch', fetchSpy)
-    const result = await tools().call('http_request', {
+    const result = await tools().definition.call('http_request', {
       url: 'https://evil.example/collect',
       auth: { credentialKey: 'VENDOR_TOKEN', scheme: 'bearer' },
     })
@@ -138,7 +132,8 @@ describe('the research tool server', () => {
         new Response('{"echo":"sk-live-secret-123"}', { status: 200 }),
     )
     vi.stubGlobal('fetch', fetchSpy)
-    const result = await tools().call('http_request', {
+    const research = tools()
+    const result = await research.definition.call('http_request', {
       url: 'https://api.vendor.example/v2/items',
       auth: { credentialKey: 'VENDOR_TOKEN', scheme: 'bearer' },
     })
@@ -147,18 +142,54 @@ describe('the research tool server', () => {
     })
     expect(result.text).toContain('evidence ref: http-1')
     expect(result.text).not.toContain('sk-live-secret-123')
-    const recorded = await readFile(join(dir, 'http-1.json'), 'utf8')
-    expect(recorded).not.toContain('sk-live-secret-123')
-    expect(JSON.parse(recorded).request.headers.authorization).toBeUndefined()
+    const { httpExchanges } = research.recorded()
+    expect(httpExchanges.map((e) => e.ref)).toEqual(['http-1'])
+    expect(JSON.stringify(httpExchanges)).not.toContain('sk-live-secret-123')
+    expect(httpExchanges[0]?.exchange.request.headers.authorization).toBeUndefined()
+  })
+
+  it('hands a redirect back instead of following it with the credential attached', async () => {
+    const fetchSpy = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(null, { status: 302, headers: { location: 'https://evil.example/steal' } }),
+    )
+    vi.stubGlobal('fetch', fetchSpy)
+    const result = await tools().definition.call('http_request', {
+      url: 'https://api.vendor.example/v2/items',
+      auth: { credentialKey: 'VENDOR_TOKEN', scheme: 'header', name: 'x-api-key' },
+    })
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({ redirect: 'manual' })
+    expect(result.text).toContain('HTTP 302')
+    expect(result.text).toContain('location: https://evil.example/steal')
+  })
+
+  it('shows a session cookie by name only', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('ok', {
+            status: 200,
+            headers: { 'set-cookie': 'session=abc123opaque; Path=/; HttpOnly' },
+          }),
+      ),
+    )
+    const result = await tools().definition.call('http_request', {
+      url: 'https://app.vendor.example/login',
+    })
+    expect(result.text).toContain('set-cookie: session=***; Path=/; HttpOnly')
+    expect(result.text).not.toContain('abc123opaque')
   })
 
   it('records a credential request for the run to wait on', async () => {
-    await tools().call('request_credential', {
+    const research = tools()
+    await research.definition.call('request_credential', {
       credentialKey: 'VENDOR_OAUTH',
       reason: 'The partner API needs an OAuth client',
       observed: 'Created under Settings > API',
     })
-    expect(JSON.parse(await readFile(join(dir, 'request.json'), 'utf8'))).toEqual({
+    expect(research.recorded().needsCredential).toEqual({
       key: 'VENDOR_OAUTH',
       reason: 'The partner API needs an OAuth client',
       observed: 'Created under Settings > API',
@@ -166,13 +197,53 @@ describe('the research tool server', () => {
   })
 
   it('refuses to type a credential when no browser is available', async () => {
-    const result = await tools().call('fill_secret', {
+    const result = await tools().definition.call('fill_secret', {
       credentialKey: 'VENDOR_TOKEN',
       field: 'value',
       label: 'API key',
     })
+    expect(result).toEqual({ text: 'No browser is available to this run.', isError: true })
+  })
+
+  it("never types a login's stored document as a field value", async () => {
+    const result = await tools().definition.call('fill_secret', {
+      credentialKey: 'VENDOR_LOGIN',
+      field: 'value',
+      label: 'Password',
+    })
     expect(result.isError).toBe(true)
-    expect(await readdir(dir)).toEqual([])
+    expect(result.text).toContain('"username" or "password"')
+  })
+})
+
+describe('the research tool host and its stdio bridge', () => {
+  const definition = {
+    name: 'test',
+    version: '1',
+    tools: [{ name: 'echo', description: 'echo', inputSchema: { type: 'object' } }],
+    call: async (_name: string, args: Record<string, unknown>) => ({ text: String(args.text) }),
+  }
+
+  it('serves the tools over loopback to a bridge holding the token, and to nothing else', async () => {
+    const host = await startResearchToolsHost(definition)
+    try {
+      const call = JSON.stringify({
+        jsonrpc: '2.0',
+        id: 7,
+        method: 'tools/call',
+        params: { name: 'echo', arguments: { text: 'hi' } },
+      })
+      const reply = await forwardMcpLine(host, call)
+      expect(JSON.parse(reply!)).toMatchObject({ id: 7, result: { content: [{ text: 'hi' }] } })
+      expect(
+        await forwardMcpLine(host, JSON.stringify({ method: 'notifications/initialized' })),
+      ).toBeNull()
+
+      const refused = await forwardMcpLine({ url: host.url, token: 'wrong' }, call)
+      expect(JSON.parse(refused!)).toMatchObject({ id: 7, error: { code: -32603 } })
+    } finally {
+      await host.close()
+    }
   })
 })
 

@@ -157,7 +157,7 @@ mirrored D1 ⇄ Drizzle + conformance assertion; use it for the guard and `resum
 Add the supporting index in the SAME slice (both runtimes):
 `CREATE INDEX idx_agent_runs_ws_kind_status ON agent_runs (workspace_id, kind, status);`
 (the existing indexes `(workspace_id, created_at)`, `(status, updated_at)`,
-`(workspace_id, block_id)`, and `(service_id)` serve neither the guard nor `resumePaused`).
+`(workspace_id, block_id)`, and `(owner_id)` serve neither the guard nor `resumePaused`).
 Consider a `detail`-free projection for the snapshot list as a follow-up if the board
 cards prove not to need full steps (couples with item 5).
 
