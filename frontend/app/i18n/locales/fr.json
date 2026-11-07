@@ -707,7 +707,12 @@
         "tool_server_without_oauth": "Ce serveur d’outils n’utilise plus OAuth, il n’y a donc aucune connexion à finaliser.",
         "gate_config_fields_invalid": "Les paramètres du contrôle d'une étape sont incomplets ou contiennent une valeur que le contrôle n'accepte pas, le plus souvent un paramètre obligatoire sans valeur. Renseignez les paramètres du contrôle de l'étape dans le pipeline, puis réessayez.",
         "approvals_chain_stale": "Ce pipeline a changé après l’ouverture de ses points d’approbation, qui ne correspondent donc plus à ses étapes. Rechargez le pipeline et définissez-les à nouveau.",
-        "approvals_builtin_checkpoint_locked": "Un pipeline intégré conserve les points d’approbation fournis par sa définition du catalogue. Clonez le pipeline pour en retirer un."
+        "approvals_builtin_checkpoint_locked": "Un pipeline intégré conserve les points d’approbation fournis par sa définition du catalogue. Clonez le pipeline pour en retirer un.",
+        "project_kind_unregistered": "Ce déploiement ne propose plus le type de ce projet, qui ne peut donc plus recevoir de nouveau travail. Demandez à l'opérateur de votre déploiement d'enregistrer de nouveau ce type.",
+        "task_type_not_offered_by_project": "Le type de ce projet n'accepte pas les tâches de ce type. Choisissez l'un des types que le formulaire propose pour lui.",
+        "project_has_no_writable_repo": "Une étape de cette exécution a besoin d'un dépôt dans lequel écrire, et un projet n'en a aucun : les dépôts de ses services liés sont un contexte en lecture seule. Choisissez un pipeline qui se contente de lire et de rendre compte.",
+        "project_service_link_invalid": "L'un des services liés n'existe plus ou appartient à une autre organisation. Rechargez le tableau et choisissez de nouveau les services liés.",
+        "project_has_unfinished_tasks": "Ce projet a encore des tâches non terminées. Terminez-les ou supprimez-les d'abord."
       }
     },
     "action": {

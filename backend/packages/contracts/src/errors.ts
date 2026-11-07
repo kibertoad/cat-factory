@@ -596,6 +596,8 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *                                       account.
  *  - `project_has_unfinished_tasks`     deleting the project would discard tasks that have not
  *                                       finished; finish or delete them first.
+ *
+ * The SPA keys an exhaustive `Record<ProjectReason, …>` of message keys off this.
  */
 export const PROJECT_REASONS = [
   'project_kind_unregistered',
