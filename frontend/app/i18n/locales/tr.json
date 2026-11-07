@@ -9278,7 +9278,8 @@
       "linked": "Proje bağlandı",
       "loadFailed": "Bağlı projeler yüklenemedi",
       "linkFailed": "Proje bağlanamadı",
-      "unlinkFailed": "Proje bağlantısı kaldırılamadı"
+      "unlinkFailed": "Proje bağlantısı kaldırılamadı",
+      "stageHint": "Görev oluşturulduğunda bağlanır. Henüz sonucu olmayan bir proje o zaman reddedilir."
     }
   },
   "research": {

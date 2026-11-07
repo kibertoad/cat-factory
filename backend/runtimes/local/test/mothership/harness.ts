@@ -519,9 +519,11 @@ export function makeMothershipConformanceApp(
     return seedWorkspace(await freshAccount('WS'), options)
   }
 
-  async function createOrgWorkspace(options: { name?: string } = {}): Promise<WorkspaceSnapshot> {
+  async function createOrgWorkspace(
+    options: { name?: string; seed?: boolean } = {},
+  ): Promise<WorkspaceSnapshot> {
     const name = options.name ?? 'Org board'
-    return seedWorkspace(await freshAccount(`${name} org`), { name, seed: false })
+    return seedWorkspace(await freshAccount(`${name} org`), { name, seed: options.seed ?? false })
   }
 
   async function drive(workspaceId: string, maxRounds = 50): Promise<ExecutionInstance[]> {
@@ -592,12 +594,16 @@ export function makeMothershipConformanceApp(
     createWorkspace,
     createOrgWorkspace,
     ...AUTH_DISABLED,
-    createWorkspaceInAccount: (accountId, ownerUserId, options) =>
-      container.workspaceService.create(
+    // Created on the mothership, like every other board here: a node never creates a workspace
+    // over the persistence RPC.
+    createWorkspaceInAccount: (accountId, ownerUserId, options) => {
+      scopeAccountIds.add(accountId)
+      return ms.container.workspaceService.create(
         { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
         ownerUserId,
         accountId,
-      ),
+      )
+    },
     drive,
     startExecution: (workspaceId, blockId, pipelineId, opts) =>
       container.executionService.start(workspaceId, blockId, pipelineId, {

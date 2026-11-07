@@ -180,22 +180,6 @@ export function defineCoreResearchViewsConformance(harness: ConformanceHarness):
       expect(initial.body).toMatchObject({ account: null, workspace: null, project: null })
       expect(initial.body.effective.offload).toBe('enabled')
 
-      // The account tier is set under the account by one of its members.
-      const { accountId: ownAccount, ownerUserId } = await app
-        .onboarding()
-        .makeOrgOwner(`findings-${project.id}`)
-      const owner = { authorization: `Bearer ${await app.session({ id: ownerUserId })}` }
-      const accountPath = `/accounts/${ownAccount}/findings-storage-policy`
-      const account = await app.call(
-        'PUT',
-        accountPath,
-        { policy: { inlineMaxBytes: 4096 } },
-        owner,
-      )
-      expect(account.status).toBe(200)
-      expect((await app.call('GET', accountPath, undefined, owner)).body).toEqual({
-        policy: { inlineMaxBytes: 4096 },
-      })
       // The board's account reads the tier its own account set.
       await app
         .findingsStoragePolicyRepository()
@@ -232,5 +216,29 @@ export function defineCoreResearchViewsConformance(harness: ConformanceHarness):
       })
       expect(missing.status).toBe(404)
     })
+
+    // Account administration (signing in, account membership) runs on the mothership, which a
+    // node reaches only for the board-level reads and writes above.
+    it.skipIf(harness.name === 'mothership')(
+      'sets the account tier for a member of the account',
+      async () => {
+        const { app, project } = await setup()
+        const { accountId: ownAccount, ownerUserId } = await app
+          .onboarding()
+          .makeOrgOwner(`findings-${project.id}`)
+        const owner = { authorization: `Bearer ${await app.session({ id: ownerUserId })}` }
+        const accountPath = `/accounts/${ownAccount}/findings-storage-policy`
+        const account = await app.call(
+          'PUT',
+          accountPath,
+          { policy: { inlineMaxBytes: 4096 } },
+          owner,
+        )
+        expect(account.status).toBe(200)
+        expect((await app.call('GET', accountPath, undefined, owner)).body).toEqual({
+          policy: { inlineMaxBytes: 4096 },
+        })
+      },
+    )
   })
 }

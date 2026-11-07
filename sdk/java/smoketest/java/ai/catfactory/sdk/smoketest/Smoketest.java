@@ -27,6 +27,8 @@ import ai.catfactory.sdk.CatFactoryUnauthorizedException;
 import ai.catfactory.sdk.EventStream;
 import ai.catfactory.sdk.StreamEvent;
 import ai.catfactory.sdk.Transport;
+import ai.catfactory.sdk.model.CreatePublicProject;
+import ai.catfactory.sdk.model.CreatePublicProjectResearch;
 import ai.catfactory.sdk.model.CreatePublicTask;
 import ai.catfactory.sdk.model.ListPublicTaskTypesResponseTaskTypeField;
 import ai.catfactory.sdk.model.NotificationWebhook;
@@ -35,6 +37,8 @@ import ai.catfactory.sdk.model.NotificationWebhookRunEvent;
 import ai.catfactory.sdk.model.PublicNotificationWebhook;
 import ai.catfactory.sdk.model.PutNotificationWebhook;
 import ai.catfactory.sdk.model.PublicPipeline;
+import ai.catfactory.sdk.model.PublicProject;
+import ai.catfactory.sdk.model.PublicProjectFindings;
 import ai.catfactory.sdk.model.PublicRun;
 import ai.catfactory.sdk.model.PublicTask;
 import ai.catfactory.sdk.model.PublicUsage;
@@ -329,6 +333,67 @@ public final class Smoketest {
                 String message = exc.getMessage() == null ? "" : exc.getMessage();
                 observations.put("connectionFailureNamesTheCause", message.contains("nothing is listening"));
                 observations.put("connectionFailureStatesHistory", message.contains("has not completed a call"));
+            }
+        });
+
+        // A research project pins a definition the deployment registers in code (the test server
+        // ships `e2e:vendor`). The pin is a nullable object on the project and the findings carry a
+        // nullable latest revision, both null-versus-absent cases the four clients must decode alike.
+        String[] projectId = {""};
+
+        step("researchDefinitions.list", () -> {
+            var result = client.researchDefinitions().list();
+            observations.put(
+                    "researchDefinitionListed",
+                    result.definitions().stream()
+                            .anyMatch(
+                                    d -> "e2e:vendor".equals(d.definition().key())
+                                            && "registered".equals(d.origin().wireValue())));
+        });
+
+        step("projects.create", () -> {
+            PublicProject project =
+                    client.projects()
+                            .create(
+                                    CreatePublicProject.builder()
+                                            .kind("research")
+                                            .title("SDK smoketest research")
+                                            .research(
+                                                    CreatePublicProjectResearch.builder()
+                                                            .definitionKey("e2e:vendor")
+                                                            .build())
+                                            .build());
+            projectId[0] = project.projectId();
+            observations.put("projectKind", project.kind());
+            observations.put("projectHomedHere", project.homedHere());
+            observations.put(
+                    "projectPinnedVersion",
+                    project.research() != null ? project.research().definitionVersion() : null);
+            observations.put("projectServiceCount", project.serviceIds().size());
+        });
+
+        step("projects.get", () -> {
+            PublicProject project = client.projects().get(projectId[0]);
+            observations.put("projectFetchedTitle", project.title());
+            observations.put(
+                    "projectFetchedPinKey",
+                    project.research() != null ? project.research().definitionKey() : null);
+        });
+
+        step("projects.getFindings", () -> {
+            PublicProjectFindings findings = client.projects().getFindings(projectId[0]);
+            observations.put("findingsRevisionCount", findings.revisions().size());
+            observations.put("findingsLatestRevisionIsNull", findings.latestRevisionId() == null);
+            observations.put("findingsTopicCount", findings.coverage().byTopic().size());
+            observations.put("findingsUnansweredTotal", findings.coverage().total().unanswered());
+        });
+
+        step("error: project not found", () -> {
+            try {
+                client.projects().get("prj_definitely_not_a_real_project");
+                failures.add("error: project not found: expected a 404, got a success");
+            } catch (CatFactoryNotFoundException exc) {
+                observations.put("projectNotFoundIsTypedClass", true);
             }
         });
 

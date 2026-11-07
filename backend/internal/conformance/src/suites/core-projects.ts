@@ -230,27 +230,37 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
       expect(snap.projectCatalog?.find((p) => p.id === project.id)?.mountCount).toBe(2)
     })
 
-    it('survives its home board being deleted when another board mounts it', async () => {
-      const { app, wsId, accountId } = await setup()
-      const { project } = (await createProject(app, wsId)).body
-      const other = await app.createWorkspaceInAccount(accountId, null, { name: 'Other board' })
-      await app.call('POST', `/workspaces/${other.workspace.id}/projects/${project.id}/mount`, {})
-      expect((await app.call('DELETE', `/workspaces/${wsId}`)).status).toBe(204)
-      const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${other.workspace.id}`))
-        .body
-      expect(snap.blocks.some((b) => b.id === project.rootBlockId)).toBe(true)
-      expect(snap.projectCatalog?.map((p) => p.id)).toContain(project.id)
-    })
+    // Deleting a board is mothership-internal (a node never proxies `workspaceRepository.delete`),
+    // so a mothership node cannot serve it; the mothership's own facade runs this test.
+    it.skipIf(harness.name === 'mothership')(
+      'survives its home board being deleted when another board mounts it',
+      async () => {
+        const { app, wsId, accountId } = await setup()
+        const { project } = (await createProject(app, wsId)).body
+        const other = await app.createWorkspaceInAccount(accountId, null, { name: 'Other board' })
+        await app.call('POST', `/workspaces/${other.workspace.id}/projects/${project.id}/mount`, {})
+        expect((await app.call('DELETE', `/workspaces/${wsId}`)).status).toBe(204)
+        const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${other.workspace.id}`))
+          .body
+        expect(snap.blocks.some((b) => b.id === project.rootBlockId)).toBe(true)
+        expect(snap.projectCatalog?.map((p) => p.id)).toContain(project.id)
+      },
+    )
 
-    it('reclaims an unshared project with its home board', async () => {
-      const { app, wsId, accountId } = await setup()
-      const { project } = (await createProject(app, wsId)).body
-      const other = await app.createWorkspaceInAccount(accountId, null, { name: 'Other board' })
-      expect((await app.call('DELETE', `/workspaces/${wsId}`)).status).toBe(204)
-      const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${other.workspace.id}`))
-        .body
-      expect(snap.projectCatalog?.map((p) => p.id) ?? []).not.toContain(project.id)
-    })
+    // Deleting a board is mothership-internal (a node never proxies `workspaceRepository.delete`),
+    // so a mothership node cannot serve it; the mothership's own facade runs this test.
+    it.skipIf(harness.name === 'mothership')(
+      'reclaims an unshared project with its home board',
+      async () => {
+        const { app, wsId, accountId } = await setup()
+        const { project } = (await createProject(app, wsId)).body
+        const other = await app.createWorkspaceInAccount(accountId, null, { name: 'Other board' })
+        expect((await app.call('DELETE', `/workspaces/${wsId}`)).status).toBe(204)
+        const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${other.workspace.id}`))
+          .body
+        expect(snap.projectCatalog?.map((p) => p.id) ?? []).not.toContain(project.id)
+      },
+    )
 
     it('refuses deleting a project with unfinished tasks, and reclaims it once it has none', async () => {
       const { app, wsId } = await setup()

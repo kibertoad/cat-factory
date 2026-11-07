@@ -9278,7 +9278,8 @@
       "linked": "Projekt powiązany",
       "loadFailed": "Nie udało się wczytać powiązanych projektów",
       "linkFailed": "Nie udało się powiązać projektu",
-      "unlinkFailed": "Nie udało się usunąć powiązania projektu"
+      "unlinkFailed": "Nie udało się usunąć powiązania projektu",
+      "stageHint": "Zostanie połączony po utworzeniu zadania. Projekt bez wyniku zostanie wtedy odrzucony."
     }
   },
   "research": {

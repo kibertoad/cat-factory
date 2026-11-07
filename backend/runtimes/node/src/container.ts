@@ -625,6 +625,11 @@ function buildNodePersistenceRegistry(bundle: {
     // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
     // connections.
     testSecretsRepository: repos.testSecretsRepository,
+    // The capability-credential store is read through the tool-secret resolver and the
+    // credentials service, never as a `CoreDependencies` repository, so fold it in explicitly or a
+    // mothership-mode node's capability credential reads (a research run's vendor login, the
+    // checklist panel) come back `... is not wired`. Only the SEALED blob is proxied.
+    capabilityCredentialRepository: repos.capabilityCredentialRepository,
     // The writeback exactly-once marker is built inside the issue writeback, not the Core, so it is
     // folded in here for a mothership-mode node's parked-review question claims to reach.
     writebackPostRepository: repos.writebackPostRepository,

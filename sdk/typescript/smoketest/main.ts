@@ -235,6 +235,54 @@ await step('error: connection refused', async () => {
   }
 })
 
+// A research project pins a definition the deployment registers in code (the test server ships
+// `e2e:vendor`). The pin is a nullable object on the project and the findings carry a nullable
+// latest revision, both null-versus-absent cases the four clients must decode alike.
+let projectId = ''
+
+await step('researchDefinitions.list', async () => {
+  const result = await client.researchDefinitions.list()
+  observations.researchDefinitionListed = result.definitions.some(
+    (d) => d.definition.key === 'e2e:vendor' && d.origin === 'registered',
+  )
+})
+
+await step('projects.create', async () => {
+  const project = await client.projects.create({
+    kind: 'research',
+    title: 'SDK smoketest research',
+    research: { definitionKey: 'e2e:vendor' },
+  })
+  projectId = project.projectId
+  observations.projectKind = project.kind
+  observations.projectHomedHere = project.homedHere
+  observations.projectPinnedVersion = project.research?.definitionVersion ?? null
+  observations.projectServiceCount = project.serviceIds.length
+})
+
+await step('projects.get', async () => {
+  const project = await client.projects.get(projectId)
+  observations.projectFetchedTitle = project.title
+  observations.projectFetchedPinKey = project.research?.definitionKey ?? null
+})
+
+await step('projects.getFindings', async () => {
+  const findings = await client.projects.getFindings(projectId)
+  observations.findingsRevisionCount = findings.revisions.length
+  observations.findingsLatestRevisionIsNull = findings.latestRevisionId === null
+  observations.findingsTopicCount = findings.coverage.byTopic.length
+  observations.findingsUnansweredTotal = findings.coverage.total.unanswered
+})
+
+await step('error: project not found', async () => {
+  try {
+    await client.projects.get('prj_definitely_not_a_real_project')
+    failures.push('error: project not found: expected a 404, got a success')
+  } catch (error) {
+    observations.projectNotFoundIsTypedClass = error instanceof CatFactoryNotFoundError
+  }
+})
+
 await step('tasks.start', async () => {
   const task = await client.tasks.start(taskId, pipelineId ? { pipelineId } : {})
   observations.startedStatus = task.status
