@@ -105,9 +105,11 @@ const technical = ref(false)
 const taskType = ref<TaskTypeChoice>('feature')
 const {
   frame,
-  isDocRepo,
+  isProject,
   taskTypeChoices: TASK_TYPES,
   customTaskTypes,
+  defaultTaskType,
+  projectEntry,
 } = useTaskTypeOffer(container, taskType)
 const isRecurring = computed(() => taskType.value === 'recurring')
 
@@ -470,9 +472,10 @@ const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
   research: 'pl_research',
 }
 /**
- * The pipeline a task type opens with: a custom type's registered `defaultPipelineId`, else the
- * built-in map — and for an ordinary IMPLEMENTATION task (feature / bug / chore, which the map
- * deliberately does not name), the build rung this interface mode defaults to. Basic mode gets the
+ * The pipeline a task type opens with: under a project root its kind's entry for the type, else a
+ * custom type's registered `defaultPipelineId`, else the built-in map. Outside a project, an
+ * ordinary IMPLEMENTATION task (feature / bug / chore, which the map deliberately does not name)
+ * then falls to the build rung this interface mode defaults to. Basic mode gets the
  * fixed Standard build, advanced the Adaptive one; `defaultBuildPipelineId` owns that rule so the
  * create form and the task card's plain "Start" cannot disagree about it. Empty when the resolved
  * preset is not in this workspace's library (an older seed, or a retired rung) or when the picker
@@ -493,13 +496,18 @@ const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
  */
 function defaultPipelineIdFor(type: TaskTypeChoice): string {
   const custom = customTaskTypes.value.find((tt) => tt.taskType === type)
+  // Under a project root its kind's pipeline for the type leads, the one the server applies when
+  // the form sends none. A project gets no build fallback, having no repository to build in.
   const preset =
+    projectEntry(type)?.defaultPipelineId ??
     custom?.defaultPipelineId ??
     DEFAULT_PIPELINE_FOR_TYPE[type] ??
-    // The workspace's own declared in-app default, ahead of the interface-mode rung, so this form
-    // and the task card's plain Start still cannot disagree (see `declaredDefaultId`).
-    pipelines.declaredDefaultId('interactive') ??
-    defaultBuildPipelineId(uiMode.isAdvanced)
+    (isProject.value
+      ? undefined
+      : // The workspace's own declared in-app default, ahead of the interface-mode rung, so this
+        // form and the task card's plain Start still cannot disagree (see `declaredDefaultId`).
+        (pipelines.declaredDefaultId('interactive') ?? defaultBuildPipelineId(uiMode.isAdvanced)))
+  if (!preset) return ''
   const resolved = pipelines.pipelines.find((p) => p.id === preset)
   const offered =
     !!resolved && pipelineAllowedForManualStart(resolved, frame.value, board.blocks, type, 'task')
@@ -609,10 +617,10 @@ onModalOpen(open, () => {
   title.value = ''
   description.value = ''
   saving.value = false
-  // This reset runs after the `isDocRepo` watcher in the same open tick, so it must pick the
-  // doc-repo-aware default itself — a document frame only offers document/spike, so `feature`
-  // would leave the selector on a hidden, server-rejected value.
-  taskType.value = isDocRepo.value ? 'document' : 'feature'
+  // This reset runs after the offer's watcher in the same open tick, so it must pick the
+  // container-aware default itself: a document frame or a project root does not offer every type,
+  // so `feature` would leave the selector on a hidden, server-rejected value.
+  taskType.value = defaultTaskType.value
   technical.value = false
   severity.value = ''
   stepsToReproduce.value = ''

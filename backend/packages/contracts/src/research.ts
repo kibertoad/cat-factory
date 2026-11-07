@@ -466,6 +466,13 @@ export const researchProjectSchema = v.object({
 })
 export type ResearchProject = v.InferOutput<typeof researchProjectSchema>
 
+/** Read a persisted findings-storage policy, refusing one the schema no longer accepts. */
+export function decodeFindingsStoragePolicy(json: string): FindingsStoragePolicy {
+  const parsed = v.safeParse(findingsStoragePolicySchema, JSON.parse(json))
+  if (!parsed.success) throw new Error('stored findings-storage policy is unreadable')
+  return parsed.output
+}
+
 /** Read a persisted research mode, refusing a value no current mode names rather than guessing. */
 export function decodeResearchMode(value: string): ResearchMode {
   const parsed = v.safeParse(researchModeSchema, value)

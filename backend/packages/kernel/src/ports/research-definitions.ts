@@ -3,7 +3,10 @@ import {
   researchDefinitionContentHash,
   type ResearchDefinitionRegistry,
 } from '../domain/research-definition-registry.js'
-import type { ResearchDefinitionRepository } from './research-repositories.js'
+import type {
+  ResearchDefinitionRepository,
+  StoredResearchDefinition,
+} from './research-repositories.js'
 
 /** A definition as a project pins it: its body, its content hash, and where it came from. */
 export interface ResolvedResearchDefinition {
@@ -58,12 +61,13 @@ export function composeResearchDefinitionSource(deps: {
       })),
     )
   }
+  const fromStore = (row: StoredResearchDefinition): ResolvedResearchDefinition => ({
+    definition: row.definition,
+    contentHash: row.contentHash,
+    origin: 'stored',
+  })
   const stored = async (accountId: string): Promise<ResolvedResearchDefinition[]> =>
-    ((await deps.stored?.listByAccount(accountId)) ?? []).map((row) => ({
-      definition: row.definition,
-      contentHash: row.contentHash,
-      origin: 'stored' as const,
-    }))
+    ((await deps.stored?.listByAccount(accountId)) ?? []).map(fromStore)
   const versionsOf = async (accountId: string, key: string) => {
     const fromCode = await registered(key)
     if (fromCode.length > 0) return fromCode
@@ -71,8 +75,12 @@ export function composeResearchDefinitionSource(deps: {
   }
   return {
     async get(accountId, key, version) {
-      const versions = await versionsOf(accountId, key)
-      return versions.find((d) => d.definition.version === version) ?? null
+      const fromCode = await registered(key)
+      if (fromCode.length > 0) {
+        return fromCode.find((d) => d.definition.version === version) ?? null
+      }
+      const row = await deps.stored?.get(accountId, key, version)
+      return row ? fromStore(row) : null
     },
     async latest(accountId, key) {
       const versions = await versionsOf(accountId, key)

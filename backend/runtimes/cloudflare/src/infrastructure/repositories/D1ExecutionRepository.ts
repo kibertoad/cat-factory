@@ -217,7 +217,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
     const detail = executionToDetail(execution)
     // Stamp `owner_id` from the run's block so the run is discoverable by service (in-org
     // sharing): a shared service's runs surface on every board that mounts it via
-    // `listByService`. Derived here (not carried on ExecutionInstance) and refreshed on every
+    // `listByOwners`. Derived here (not carried on ExecutionInstance) and refreshed on every
     // write so it follows a reparent that re-homes the block to another service.
     // `rev` is bumped on every write (and read back via RETURNING onto the instance) so a
     // concurrent compareAndSwap can detect the row moved. A fresh insert starts at 0.
