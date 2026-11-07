@@ -130,6 +130,7 @@ import { D1DirectoryRepository } from './repositories/D1DirectoryRepository'
 import { D1WorkspaceMemberRepository } from './repositories/D1WorkspaceMemberRepository'
 import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepository'
 import { D1ProjectRepository } from './repositories/D1ProjectRepository'
+import { D1TaskProjectLinkRepository } from './repositories/D1TaskProjectLinkRepository'
 import {
   D1FindingsRevisionRepository,
   D1FindingsStoragePolicyRepository,
@@ -479,6 +480,7 @@ function selectWorkerCorePersistence(
   | 'projectRepository'
   | 'researchDefinitionRepository'
   | 'researchProjectRepository'
+  | 'taskProjectLinkRepository'
   | 'findingsRevisionRepository'
   | 'findingsStoragePolicyRepository'
   | 'tokenUsageRepository'
@@ -502,6 +504,7 @@ function selectWorkerCorePersistence(
     projectRepository: new D1ProjectRepository({ db }),
     researchDefinitionRepository: new D1ResearchDefinitionRepository({ db }),
     researchProjectRepository: new D1ResearchProjectRepository({ db }),
+    taskProjectLinkRepository: new D1TaskProjectLinkRepository({ db }),
     findingsRevisionRepository: new D1FindingsRevisionRepository({ db }),
     findingsStoragePolicyRepository: new D1FindingsStoragePolicyRepository({ db }),
     tokenUsageRepository: new D1TokenUsageRepository({ db }),

@@ -33,6 +33,28 @@ describe('buildContextFiles', () => {
     expect(out.files).toEqual([])
   })
 
+  it("materialises a linked project's result as a project file beside the docs", () => {
+    const out = buildContextFiles(
+      ctx({
+        contextDocs: [doc()],
+        contextProjects: [
+          {
+            projectId: 'prj_1',
+            title: 'Vendor research',
+            kind: 'research',
+            summary: 'The vendor uses OAuth.',
+            coverage: '1 of 1 questions answered',
+            body: '## Auth\n\nOAuth 2.0',
+            revision: { id: 'frv_1', seq: 1 },
+          },
+        ],
+      }),
+    )
+    expect(out.files.map((f) => f.path)).toEqual(['design-doc.md', 'project-vendor-research.md'])
+    expect(out.files[1]?.content).toContain('# Vendor research')
+    expect(out.files[1]?.content).toContain('OAuth 2.0')
+  })
+
   it('materialises a doc with a title + source header', () => {
     const out = buildContextFiles(ctx({ contextDocs: [doc()] }))
     expect(out.files).toHaveLength(1)

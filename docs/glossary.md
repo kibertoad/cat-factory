@@ -30,7 +30,7 @@ Both are in `backend/packages/contracts/src/primitives.ts`:
   modules are sub-frames; **tasks are the leaves**. A **project** is the account-owned peer of a
   service: its root is a block with `level: 'project'`, its tasks sit directly beneath it, and it
   links to services as read-only context rather than living inside one
-  ([tracker](./initiatives/research-projects.md)). Both are **mounted subjects**: a board's
+  ([ADR 0069](../backend/docs/adr/0069-projects-and-research-projects.md)). Both are **mounted subjects**: a board's
   `WorkspaceMount` names one by `subjectKind` and `subjectId`, and blocks and runs carry its id as
   `owner_id`. A module no longer renders as a box on the board: its
   tasks appear in the enclosing frame's status swimlanes, grouped by module name, so `module` is

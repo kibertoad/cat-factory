@@ -38,6 +38,7 @@ import type {} from '@cat-factory/kernel'
 
 import { ServiceMountService } from './modules/services/ServiceMountService.js'
 import { ProjectService } from './modules/projects/ProjectService.js'
+import type { TaskProjectLinkService } from './modules/projects/TaskProjectLinkService.js'
 import type { ResearchDefinitionPublisher } from './modules/research/ResearchDefinitionPublisher.js'
 import type { ResearchFindingsStore } from './modules/research/ResearchFindingsStore.js'
 import type { ResearchProjectViews } from './modules/research/ResearchProjectViews.js'
@@ -755,6 +756,8 @@ export interface ServicesModule {
 
 export interface ProjectsModule {
   service: ProjectService
+  /** Projects linked to tasks as context. Absent when the facade wires no link or findings store. */
+  taskLinks?: TaskProjectLinkService
   /** A research project's pin, the definitions it can pin, publishing and the findings reader. */
   research: {
     projects: ResearchProjectRepository
@@ -969,6 +972,7 @@ export function createCore(injected: CoreDependencies): Core {
     blueprintReconciler,
     platform,
     collaborators,
+    taskProjectLinks: modules.get('projects')?.taskLinks,
   })
 
   // The modules that depend on the assembled engine (they drive `executionService`, or feed the

@@ -322,7 +322,7 @@ function serviceWithLinkedContext(
       seen.workspaceId = workspaceId
       seen.blockId = blockId
       seen.description = description
-      return { docs, tasks }
+      return { docs, tasks, projects: [] }
     },
   })
 }

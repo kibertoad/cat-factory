@@ -410,7 +410,15 @@ async function checkLinkedServicesShareAccount(
 export async function checkProjectCallScope(
   rule: Extract<
     ScopeRule,
-    { kind: 'project' | 'projectList' | 'projectField' | 'projectInsert' | 'projectServiceLinks' }
+    {
+      kind:
+        | 'project'
+        | 'projectList'
+        | 'projectField'
+        | 'projectInsert'
+        | 'projectServiceLinks'
+        | 'workspaceProjects'
+    }
   >,
   args: unknown[],
   opts: DispatchOptions,
@@ -424,6 +432,18 @@ export async function checkProjectCallScope(
     return checkProjectServiceLinksScope(
       args[rule.arg],
       args[rule.servicesArg],
+      opts,
+      inScope,
+      denied,
+    )
+  }
+  if (rule.kind === 'workspaceProjects') {
+    const workspaceId = args[rule.arg]
+    if (typeof workspaceId !== 'string') return denied
+    if (!inScope(await opts.resolveAccountId(workspaceId))) return denied
+    return checkProjectCallScope(
+      { kind: 'projectList', arg: rule.projectsArg },
+      args,
       opts,
       inScope,
       denied,

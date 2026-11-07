@@ -231,3 +231,27 @@ export const detachPublicTaskDocumentSchema = v.object({
   externalId: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
 })
 export type DetachPublicTaskDocumentInput = v.InferOutput<typeof detachPublicTaskDocumentSchema>
+
+/**
+ * A project linked to a task as read-only context: the task's agents read the project's current
+ * result (a research project's findings) at every dispatch.
+ */
+export const publicLinkedProjectSchema = v.object({
+  projectId: v.string(),
+  kind: v.string(),
+  /** The project's title, or null when its root is not visible to this board. */
+  title: v.nullable(v.string()),
+  /** Epoch ms the link was made. */
+  linkedAt: v.number(),
+})
+export type PublicLinkedProject = v.InferOutput<typeof publicLinkedProjectSchema>
+
+export const publicLinkedProjectListSchema = v.object({
+  projects: v.array(publicLinkedProjectSchema),
+})
+
+/** Link one project to a task, or unlink it. */
+export const publicTaskProjectSchema = v.object({
+  projectId: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+})
+export type PublicTaskProjectInput = v.InferOutput<typeof publicTaskProjectSchema>

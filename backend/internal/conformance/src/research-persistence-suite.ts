@@ -151,6 +151,24 @@ export function defineResearchPersistenceSuite(
       expect(new Set(claims).size).toBe(1)
     })
 
+    it('reads the revisions of several projects in one call, and which projects hold one', async () => {
+      const repos = makeRepos()
+      const a = await project(repos)
+      const b = await project(repos)
+      const none = await project(repos)
+      await repos.revisions.insert(revision(a, unique('rev'), 2, 'a2'))
+      await repos.revisions.insert(revision(a, unique('rev'), 1, 'a1'))
+      await repos.revisions.insert(revision(b, unique('rev'), 1, 'b1'))
+      const rows = await repos.revisions.listByProjects([a, b, none])
+      expect(rows.filter((r) => r.projectId === a).map((r) => r.seq)).toEqual([1, 2])
+      expect(rows.filter((r) => r.projectId === b)).toHaveLength(1)
+      expect(rows.filter((r) => r.projectId === none)).toEqual([])
+      expect(new Set(await repos.revisions.projectsWithRevisions([a, b, none]))).toEqual(
+        new Set([a, b]),
+      )
+      expect(await repos.revisions.listByProjects([])).toEqual([])
+    })
+
     it('keeps the first write of a revision and lists revisions in sequence order', async () => {
       const repos = makeRepos()
       const projectId = await project(repos)

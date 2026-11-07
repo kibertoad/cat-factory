@@ -442,6 +442,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     projectRepository: repos.projectRepository,
     researchDefinitionRepository: repos.researchDefinitionRepository,
     researchProjectRepository: repos.researchProjectRepository,
+    taskProjectLinkRepository: repos.taskProjectLinkRepository,
     findingsRevisionRepository: repos.findingsRevisionRepository,
     findingsStoragePolicyRepository: repos.findingsStoragePolicyRepository,
     tokenUsageRepository: repos.tokenUsageRepository,

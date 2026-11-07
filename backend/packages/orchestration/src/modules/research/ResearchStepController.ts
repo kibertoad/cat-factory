@@ -32,7 +32,7 @@ import type { ResearchFindingsStore } from './ResearchFindingsStore.js'
 // ---------------------------------------------------------------------------
 // The engine half of a research task's run: what the `project-researcher` step is asked when it
 // starts, what it checkpoints when it stops for a credential, and the findings revision it
-// records when it completes. Design: `docs/initiatives/research-projects.md`.
+// records when it completes. Design: `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
 export interface ResearchStepControllerDeps {

@@ -6607,7 +6607,9 @@
         "research_nothing_to_ask": "Für diese Folgeaufgabe bleibt im gewählten Modus keine Frage offen. Wählen Sie einen anderen Modus oder fügen Sie Fragen hinzu.",
         "findings_too_large_for_inline": "Die Ergebnisse sind zu groß zum Speichern, und das Auslagern in den Inhaltsspeicher ist nicht verfügbar. Aktivieren Sie den Inhaltsspeicher oder erlauben Sie das Auslagern und versuchen Sie es erneut.",
         "task_owned_by_project": "Diese Aufgabe gehört zu einem Projekt, das keinen Service hat. Verwenden Sie stattdessen die Aufgabenadresse des Projekts.",
-        "research_definition_invalid": "Die Recherche-Definition verletzt eine Regel: Prüfen Sie, ob ihre Themen-, Fragen-, Zugangsdaten- und Eingabe-IDs eindeutig sind."
+        "research_definition_invalid": "Die Recherche-Definition verletzt eine Regel: Prüfen Sie, ob ihre Themen-, Fragen-, Zugangsdaten- und Eingabe-IDs eindeutig sind.",
+        "project_link_invalid": "Dieses Projekt existiert nicht oder gehört zu einer anderen Organisation. Verknüpfen Sie ein Projekt dieser Organisation.",
+        "project_has_no_result": "Dieses Projekt hat noch kein Ergebnis, das gelesen werden kann. Führen Sie zuerst eine Rechercheaufgabe darin aus und verknüpfen Sie es dann."
       }
     },
     "action": {
@@ -9265,6 +9267,18 @@
     "mount": {
       "added": "Projekt {title} zu diesem Board hinzugefügt",
       "failed": "Das Projekt konnte nicht hinzugefügt werden"
+    },
+    "taskLinks": {
+      "title": "Verknüpfte Projekte",
+      "hint": "Das aktuelle Ergebnis jedes verknüpften Projekts, etwa die Erkenntnisse eines Rechercheprojekts, lesen die Agenten, die an dieser Aufgabe arbeiten.",
+      "pick": "Projekt auswählen",
+      "link": "Verknüpfen",
+      "unlink": "Projektverknüpfung lösen",
+      "empty": "Kein Projekt ist verknüpft.",
+      "linked": "Projekt verknüpft",
+      "loadFailed": "Die verknüpften Projekte konnten nicht geladen werden",
+      "linkFailed": "Das Projekt konnte nicht verknüpft werden",
+      "unlinkFailed": "Die Projektverknüpfung konnte nicht gelöst werden"
     }
   },
   "research": {

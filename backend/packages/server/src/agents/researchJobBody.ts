@@ -23,7 +23,7 @@ import { toolServersSection } from '@cat-factory/agents'
 // here, once, into the `research` section the harness's research tool server holds (the values
 // never reach the model). A credential the definition needs at START that does not resolve
 // refuses the dispatch with `CapabilityCredentialMissingError`, so the step parks before any
-// container starts. Design: `docs/initiatives/research-projects.md`.
+// container starts. Design: `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
 /** What the research body reads, as bound callbacks so the executor stays the only owner. */

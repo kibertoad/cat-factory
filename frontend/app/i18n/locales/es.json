@@ -727,7 +727,9 @@
         "research_nothing_to_ask": "A este seguimiento no le queda ninguna pregunta en el modo elegido. Elige otro modo o añade preguntas.",
         "findings_too_large_for_inline": "Los hallazgos son demasiado grandes para guardarlos, y no se pueden trasladar al almacenamiento de contenido. Activa el almacenamiento de contenido o permite el traslado y vuelve a intentarlo.",
         "task_owned_by_project": "Esta tarea pertenece a un proyecto, que no tiene servicio. Usa en su lugar la dirección de tareas del proyecto.",
-        "research_definition_invalid": "La definición de investigación incumple una regla: comprueba que los ids de sus temas, preguntas, credenciales y entradas sean únicos."
+        "research_definition_invalid": "La definición de investigación incumple una regla: comprueba que los ids de sus temas, preguntas, credenciales y entradas sean únicos.",
+        "project_link_invalid": "Ese proyecto no existe o pertenece a otra organización. Vincula un proyecto de esta organización.",
+        "project_has_no_result": "Ese proyecto aún no tiene ningún resultado que leer. Ejecuta primero una tarea de investigación en él y luego vincúlalo."
       }
     },
     "action": {
@@ -9265,6 +9267,18 @@
     "mount": {
       "added": "Proyecto {title} añadido a este tablero",
       "failed": "No se ha podido añadir el proyecto"
+    },
+    "taskLinks": {
+      "title": "Proyectos vinculados",
+      "hint": "Los agentes que trabajan en esta tarea leen el resultado actual de cada proyecto vinculado, como los hallazgos de un proyecto de investigación.",
+      "pick": "Elige un proyecto",
+      "link": "Vincular",
+      "unlink": "Desvincular el proyecto",
+      "empty": "No hay ningún proyecto vinculado.",
+      "linked": "Proyecto vinculado",
+      "loadFailed": "No se pudieron cargar los proyectos vinculados",
+      "linkFailed": "No se pudo vincular el proyecto",
+      "unlinkFailed": "No se pudo desvincular el proyecto"
     }
   },
   "research": {

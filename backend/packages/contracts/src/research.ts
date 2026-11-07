@@ -6,7 +6,7 @@ import { taskTypeFieldDescriptorSchema } from './task-types.js'
 // ---------------------------------------------------------------------------
 // Research definitions and findings: the contract between an org-authored description of what
 // to find out about a vendor and the structured answers a research run records. Design:
-// `docs/initiatives/research-projects.md`.
+// `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
 export const RESEARCH_TITLE_MAX = 200

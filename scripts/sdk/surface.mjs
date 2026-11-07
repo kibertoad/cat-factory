@@ -73,6 +73,9 @@ const SURFACE = {
   listPublicTaskDocuments: { group: 'tasks', method: 'listDocuments' },
   attachPublicTaskDocument: { group: 'tasks', method: 'attachDocument' },
   detachPublicTaskDocument: { group: 'tasks', method: 'detachDocument' },
+  listPublicTaskProjects: { group: 'tasks', method: 'listProjects' },
+  attachPublicTaskProject: { group: 'tasks', method: 'attachProject' },
+  detachPublicTaskProject: { group: 'tasks', method: 'detachProject' },
 
   // ---- Pipelines ------------------------------------------------------------------------
   listPublicPipelines: { group: 'pipelines', method: 'list' },

@@ -802,7 +802,9 @@
         "research_nothing_to_ask": "This follow-up has no question left to ask in the chosen mode. Pick another mode or add questions.",
         "findings_too_large_for_inline": "The findings are too large to store, and offloading them to content storage is not available. Enable content storage or allow offloading, then retry.",
         "task_owned_by_project": "This task belongs to a project, which has no service. Use the project's task address instead.",
-        "research_definition_invalid": "The research definition breaks a rule: check that its topic, question, credential and input ids are unique."
+        "research_definition_invalid": "The research definition breaks a rule: check that its topic, question, credential and input ids are unique.",
+        "project_link_invalid": "That project does not exist or belongs to another organization. Link a project of this organization.",
+        "project_has_no_result": "That project has no result to read yet. Run a research task in it first, then link it."
       }
     },
     "action": {
@@ -9599,6 +9601,18 @@
     "mount": {
       "added": "Project {title} added to this board",
       "failed": "Could not add the project"
+    },
+    "taskLinks": {
+      "title": "Linked projects",
+      "hint": "The current result of each linked project, such as a research project's findings, is read by the agents that work this task.",
+      "pick": "Pick a project",
+      "link": "Link",
+      "unlink": "Unlink project",
+      "empty": "No project is linked.",
+      "linked": "Project linked",
+      "loadFailed": "Could not load the linked projects",
+      "linkFailed": "Could not link the project",
+      "unlinkFailed": "Could not unlink the project"
     }
   },
   "research": {

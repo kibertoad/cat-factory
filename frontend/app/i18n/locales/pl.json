@@ -727,7 +727,9 @@
         "research_nothing_to_ask": "W wybranym trybie to zadanie uzupełniające nie ma już pytań do zadania. Wybierz inny tryb lub dodaj pytania.",
         "findings_too_large_for_inline": "Ustalenia są zbyt duże, aby je zapisać, a przeniesienie ich do magazynu treści jest niedostępne. Włącz magazyn treści lub zezwól na przenoszenie i spróbuj ponownie.",
         "task_owned_by_project": "To zadanie należy do projektu, który nie ma usługi. Zamiast tego użyj adresu zadań projektu.",
-        "research_definition_invalid": "Definicja badania łamie regułę: sprawdź, czy identyfikatory jej tematów, pytań, poświadczeń i danych wejściowych są unikalne."
+        "research_definition_invalid": "Definicja badania łamie regułę: sprawdź, czy identyfikatory jej tematów, pytań, poświadczeń i danych wejściowych są unikalne.",
+        "project_link_invalid": "Ten projekt nie istnieje albo należy do innej organizacji. Powiąż projekt tej organizacji.",
+        "project_has_no_result": "Ten projekt nie ma jeszcze wyniku do odczytania. Najpierw uruchom w nim zadanie badawcze, a potem go powiąż."
       }
     },
     "action": {
@@ -9265,6 +9267,18 @@
     "mount": {
       "added": "Dodano projekt {title} do tej tablicy",
       "failed": "Nie udało się dodać projektu"
+    },
+    "taskLinks": {
+      "title": "Powiązane projekty",
+      "hint": "Agenci pracujący nad tym zadaniem czytają bieżący wynik każdego powiązanego projektu, na przykład ustalenia projektu badawczego.",
+      "pick": "Wybierz projekt",
+      "link": "Powiąż",
+      "unlink": "Usuń powiązanie projektu",
+      "empty": "Żaden projekt nie jest powiązany.",
+      "linked": "Projekt powiązany",
+      "loadFailed": "Nie udało się wczytać powiązanych projektów",
+      "linkFailed": "Nie udało się powiązać projektu",
+      "unlinkFailed": "Nie udało się usunąć powiązania projektu"
     }
   },
   "research": {

@@ -350,6 +350,18 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     insert: { scope: { kind: 'projectField', arg: 0 } },
     get: { scope: { kind: 'project', arg: 0 } },
     listByProject: { scope: { kind: 'project', arg: 0 } },
+    listByProjects: { scope: { kind: 'projectList', arg: 0 } },
+    projectsWithRevisions: { scope: { kind: 'projectList', arg: 0 } },
+  },
+  // Projects linked to tasks as context. A link binds the task's board AND every project it names,
+  // so a node can never link another account's project; an unlink or a block cascade binds the
+  // board alone, and a project reclaim binds the projects.
+  taskProjectLinkRepository: {
+    listByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    link: { scope: { kind: 'workspaceProjects', arg: 0, projectsArg: 2 } },
+    unlink: { scope: { kind: 'workspace', arg: 0 } },
+    deleteByBlocks: { scope: { kind: 'workspace', arg: 0 } },
+    deleteByProjects: { scope: { kind: 'projectList', arg: 0 } },
   },
   findingsStoragePolicyRepository: {
     get: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },

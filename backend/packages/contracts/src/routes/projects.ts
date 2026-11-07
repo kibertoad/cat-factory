@@ -5,8 +5,10 @@ import { pinnableResearchDefinitionSchema } from '../research.js'
 import { researchProjectViewSchema, researchRevisionDetailSchema } from '../research-view.js'
 import {
   createProjectInputSchema,
+  linkTaskProjectsInputSchema,
   projectSchema,
   setProjectServicesInputSchema,
+  taskLinkedProjectSchema,
 } from '../projects.js'
 import {
   mountServiceInputSchema,
@@ -95,5 +97,32 @@ export const unmountProjectContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: projectIdParams,
   pathResolver: ({ projectId }) => `/projects/${projectId}/mount`,
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
+})
+
+const taskProjectsResponse = v.object({ projects: v.array(taskLinkedProjectSchema) })
+
+/** The projects a task links as read-only context. */
+export const listTaskProjectsContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: singleStringParam('blockId'),
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/projects`,
+  responsesByStatusCode: { 200: taskProjectsResponse, ...errorResponses },
+})
+
+/** Link projects to a task as read-only context. Linking a project already linked is a no-op. */
+export const linkTaskProjectsContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: singleStringParam('blockId'),
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/projects`,
+  requestBodySchema: linkTaskProjectsInputSchema,
+  responsesByStatusCode: { 200: taskProjectsResponse, ...errorResponses },
+})
+
+/** Unlink a project from a task. Idempotent; the project itself is untouched. */
+export const unlinkTaskProjectContract = defineApiContract({
+  method: 'delete',
+  requestPathParamsSchema: withObjectKeys(v.object({ blockId: v.string(), projectId: v.string() })),
+  pathResolver: ({ blockId, projectId }) => `/blocks/${blockId}/projects/${projectId}`,
   responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

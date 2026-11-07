@@ -17,6 +17,13 @@ run-adjacent path is the smell, since every start gate resolves the pipeline and
 an AUTHORING rule (`validatePipelineAuthoring`) binds create/update, the run door refusing only the
 subset that dead-ends ANY run, or every stored pipeline predating it stops running. Doc: [`pipeline-catalog-lifecycle.md`](../backend/docs/pipeline-catalog-lifecycle.md).
 
+**Research run**: a `research` task under a research project dispatches the `project-researcher`
+step as a repo-less harness job, claims its findings sequence number once per TASK, and writes one
+immutable revision folded by question id; a credential it lacks parks the step with its partial
+findings, and a task linking the project reads the current fold at every dispatch. Traps: the claim
+is per task, so a replayed start must read it back rather than take another; and a linked project
+that cannot be read must break the run, never reach the agent as nothing. [ADR 0069](../backend/docs/adr/0069-projects-and-research-projects.md).
+
 **Repo bootstrap** mirrors the execution pattern: `BootstrapService` → `bootstrap_jobs` →
 `BootstrapWorkflow` polling the idempotent `pollBootstrapJob()`, then links the repo and flips the frame
 `ready`; pre-flights an EMPTY target, its prompt riding Pi's global `AGENTS.md` so it never lands there.

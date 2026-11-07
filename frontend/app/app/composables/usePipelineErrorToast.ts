@@ -152,6 +152,8 @@ const REASON_DESCRIPTION_KEYS: Record<
   task_type_not_offered_by_project: 'errors.reason.description.task_type_not_offered_by_project',
   project_has_no_writable_repo: 'errors.reason.description.project_has_no_writable_repo',
   project_service_link_invalid: 'errors.reason.description.project_service_link_invalid',
+  project_link_invalid: 'errors.reason.description.project_link_invalid',
+  project_has_no_result: 'errors.reason.description.project_has_no_result',
   project_has_unfinished_tasks: 'errors.reason.description.project_has_unfinished_tasks',
   research_pin_required: 'errors.reason.description.research_pin_required',
   research_pin_not_accepted: 'errors.reason.description.research_pin_not_accepted',

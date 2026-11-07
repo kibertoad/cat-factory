@@ -178,6 +178,7 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
           notificationService: notifications?.service,
           resolveRunRepoContext: dependencies.resolveRunRepoContext,
           serviceRepository: dependencies.serviceRepository,
+          taskProjectLinks: modules.get('projects')?.taskLinks,
           // Every tick is isolated and swallowed, so without this a permanently-failing
           // initiative is indistinguishable from an idle one.
           logger: dependencies.logger,

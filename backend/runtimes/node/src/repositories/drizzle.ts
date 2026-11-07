@@ -73,6 +73,7 @@ import type {
   FindingsStoragePolicyRepository,
   ResearchDefinitionRepository,
   ResearchProjectRepository,
+  TaskProjectLinkRepository,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
   WritebackPostRepository,
@@ -91,6 +92,7 @@ import {
   DrizzleWorkspaceRepository,
 } from './drizzle/board.js'
 import { DrizzleProjectRepository } from './drizzle/projects.js'
+import { DrizzleTaskProjectLinkRepository } from './drizzle/taskProjectLinks.js'
 import {
   DrizzleFindingsRevisionRepository,
   DrizzleFindingsStoragePolicyRepository,
@@ -226,6 +228,7 @@ export interface CoreRepositories {
   projectRepository: ProjectRepository
   researchDefinitionRepository: ResearchDefinitionRepository
   researchProjectRepository: ResearchProjectRepository
+  taskProjectLinkRepository: TaskProjectLinkRepository
   findingsRevisionRepository: FindingsRevisionRepository
   findingsStoragePolicyRepository: FindingsStoragePolicyRepository
   requirementReviewRepository: RequirementReviewRepository
@@ -302,6 +305,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     projectRepository: new DrizzleProjectRepository(db),
     researchDefinitionRepository: new DrizzleResearchDefinitionRepository(db),
     researchProjectRepository: new DrizzleResearchProjectRepository(db),
+    taskProjectLinkRepository: new DrizzleTaskProjectLinkRepository(db),
     findingsRevisionRepository: new DrizzleFindingsRevisionRepository(db),
     findingsStoragePolicyRepository: new DrizzleFindingsStoragePolicyRepository(db),
     requirementReviewRepository: new DrizzleRequirementReviewRepository(db),
