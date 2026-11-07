@@ -52,6 +52,16 @@ export const serviceSchema = v.object({
 })
 export type Service = v.InferOutput<typeof serviceSchema>
 
+/** The kinds of account-owned subject a board can mount. */
+export const mountSubjectKindSchema = v.picklist(['service', 'project'])
+export type MountSubjectKind = v.InferOutput<typeof mountSubjectKindSchema>
+
+/** Read a persisted subject kind, refusing a value no current kind names rather than guessing. */
+export function decodeMountSubjectKind(value: string): MountSubjectKind {
+  if (value === 'service' || value === 'project') return value
+  throw new Error(`unknown mount subject kind '${value}'`)
+}
+
 /**
  * A *mount*: an account-owned subject (today a service) placed onto a workspace's board. The
  * primary key is `(workspaceId, subjectId)`. The position/size are the per-workspace LAYOUT
@@ -60,6 +70,8 @@ export type Service = v.InferOutput<typeof serviceSchema>
  */
 export const workspaceMountSchema = v.object({
   workspaceId: v.string(),
+  /** What is mounted: a service, or a project. */
+  subjectKind: mountSubjectKindSchema,
   /** The mounted subject's id; subject ids are globally unique across subject kinds. */
   subjectId: v.string(),
   /** Per-workspace board position of the subject's root frame. */

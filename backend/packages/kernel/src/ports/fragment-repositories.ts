@@ -1,6 +1,6 @@
+import type { ServiceFrameType } from '@cat-factory/contracts'
 import type {
   AgentKind,
-  BlockType,
   DocumentSourceKind,
   FragmentOwnerKind,
   FragmentTier,
@@ -16,7 +16,7 @@ import type {
 
 /** The `appliesTo` hints, retained as the deterministic-selection fallback. */
 export interface FragmentAppliesTo {
-  blockTypes?: BlockType[]
+  blockTypes?: ServiceFrameType[]
   agentKinds?: AgentKind[]
 }
 

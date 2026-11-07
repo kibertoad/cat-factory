@@ -99,6 +99,7 @@ import {
   workspaceApiKeyController,
 } from './modules/providers/ApiKeyController.js'
 import { serviceMountController } from './modules/services/ServiceMountController.js'
+import { projectController } from './modules/projects/ProjectController.js'
 import { serviceSpecController } from './modules/serviceSpec/ServiceSpecController.js'
 import {
   linearOAuthController,
@@ -115,6 +116,7 @@ import { secretDelegationController } from './modules/persistence/SecretDelegati
 import { foundationalBuiltinsController } from './modules/foundationalServices/FoundationalBuiltinsController.js'
 import { binaryGeneratorsController } from './modules/binaryGenerators/BinaryGeneratorsController.js'
 import { promptFragmentsInternalController } from './modules/promptFragments/PromptFragmentsInternalController.js'
+import { projectKindsInternalController } from './modules/projects/ProjectKindsInternalController.js'
 import { agentKindsController } from './modules/agentKinds/AgentKindsController.js'
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicBoardController } from './modules/publicApi/PublicBoardController.js'
@@ -325,6 +327,9 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // gated; never 503s (a deployment registering none is legitimately empty). Mounted on both
   // facades so either can be a mothership.
   app.route('/', promptFragmentsInternalController())
+  // Mothership-mode PROJECT KINDS (`GET /internal/project-kinds`), read by a node's
+  // `HttpProjectKindSource` when it creates a project or admits a task under one.
+  app.route('/', projectKindsInternalController())
   // Mothership-mode AGENT-KIND CAPABILITIES (`GET /internal/agent-kinds`): the fourth of the same
   // family, and the one that serves a SLICE of its registry rather than all of it. A kind's
   // executable half (prompts as functions, `preOps`/`postOps`, its output parser) cannot cross a
@@ -544,6 +549,7 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   { name: 'recurringPipeline', mount: WORKSPACE_MOUNT, build: () => recurringPipelineController() },
   { name: 'trackerSettings', mount: WORKSPACE_MOUNT, build: () => trackerSettingsController() },
   { name: 'serviceMount', mount: WORKSPACE_MOUNT, build: () => serviceMountController() },
+  { name: 'project', mount: WORKSPACE_MOUNT, build: () => projectController() },
   { name: 'serviceSpec', mount: WORKSPACE_MOUNT, build: () => serviceSpecController() },
   {
     name: 'fragmentLibrary',

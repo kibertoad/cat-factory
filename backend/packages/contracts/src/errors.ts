@@ -425,6 +425,9 @@ export type ConflictReason = (typeof CONFLICT_REASONS)[number]
  */
 export const UNAVAILABLE_REASONS = [
   'binary_generators_unreachable',
+  // A mothership-mode node could not read the project kinds from the mothership, so a project
+  // write or a task under a project was refused rather than judged against no kinds at all.
+  'project_kinds_unreachable',
   'foundational_builtins_unreachable',
   'connection_credentials_unreadable',
   'vcs_capability_unsupported',
@@ -571,3 +574,29 @@ export type ToolServerOAuthReason = (typeof TOOL_SERVER_OAUTH_REASONS)[number]
 export const CREDENTIAL_WAIT_REASONS = ['credential_wait_not_initiator'] as const
 
 export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
+
+/**
+ * Machine-readable reasons a project write, or a task under a project, is refused (the 422's
+ * `error.details.reason`).
+ *
+ *  - `project_kind_unregistered`        the project names a kind the deployment does not
+ *                                       register (an unknown kind at create, or a retired one on a
+ *                                       project created before it was removed).
+ *  - `task_type_not_offered_by_project` the project's kind does not offer that task type.
+ *  - `project_has_no_writable_repo`     a step of the task's run needs a repository to write to,
+ *                                       and a project has none: its linked services' repos are
+ *                                       read-only context. Refused when the run dispatches.
+ *  - `project_service_link_invalid`     a linked service does not exist, or belongs to another
+ *                                       account.
+ *  - `project_has_unfinished_tasks`     deleting the project would discard tasks that have not
+ *                                       finished; finish or delete them first.
+ */
+export const PROJECT_REASONS = [
+  'project_kind_unregistered',
+  'task_type_not_offered_by_project',
+  'project_has_no_writable_repo',
+  'project_service_link_invalid',
+  'project_has_unfinished_tasks',
+] as const
+
+export type ProjectReason = (typeof PROJECT_REASONS)[number]

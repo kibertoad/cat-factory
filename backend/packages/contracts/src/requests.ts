@@ -17,7 +17,7 @@ import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.
 import { serviceConnectionsSchema } from './service-connections.js'
 import {
   agentKindSchema,
-  blockTypeSchema,
+  serviceFrameTypeSchema,
   builtinTaskTypeFieldsSchema,
   createTaskTypeSchema,
   frameRepoTypeSchema,
@@ -58,7 +58,7 @@ export const renameWorkspaceSchema = v.object({
 export type RenameWorkspaceInput = v.InferOutput<typeof renameWorkspaceSchema>
 
 export const addFrameSchema = v.object({
-  type: blockTypeSchema,
+  type: serviceFrameTypeSchema,
   /**
    * Where to drop the frame. OPTIONAL: the board lays one out on its own grid when omitted, the
    * same fallback {@link addServiceFromRepoSchema} has always had. The app's drag-drop always sends

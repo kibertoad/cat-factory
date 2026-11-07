@@ -4,10 +4,12 @@ import type {
   WorkspaceMountRepository,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { decodeMountSubjectKind } from '@cat-factory/contracts'
 import { chunkForIn } from './chunk'
 
 interface MountRow {
   workspace_id: string
+  subject_kind: string
   subject_id: string
   pos_x: number
   pos_y: number
@@ -19,6 +21,7 @@ interface MountRow {
 function rowToMount(row: MountRow): WorkspaceMount {
   return {
     workspaceId: row.workspace_id,
+    subjectKind: decodeMountSubjectKind(row.subject_kind),
     subjectId: row.subject_id,
     position: { x: row.pos_x, y: row.pos_y },
     size: row.width !== null && row.height !== null ? { w: row.width, h: row.height } : null,
@@ -104,8 +107,8 @@ export class D1WorkspaceMountRepository implements WorkspaceMountRepository {
   async upsert(mount: WorkspaceMount): Promise<void> {
     await this.db
       .prepare(
-        `INSERT INTO workspace_mounts (workspace_id, subject_id, pos_x, pos_y, width, height, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO workspace_mounts (workspace_id, subject_kind, subject_id, pos_x, pos_y, width, height, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, subject_id) DO UPDATE SET
            pos_x = excluded.pos_x,
            pos_y = excluded.pos_y,
@@ -114,6 +117,7 @@ export class D1WorkspaceMountRepository implements WorkspaceMountRepository {
       )
       .bind(
         mount.workspaceId,
+        mount.subjectKind,
         mount.subjectId,
         mount.position.x,
         mount.position.y,

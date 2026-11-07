@@ -74,6 +74,7 @@ interface RegistryFixtures {
   executions: Map<string, ExecutionInstance>
   blocks: Map<string, { workspaceId: string }>
   services: Map<string, { id: string; accountId: string | null }>
+  projects: Map<string, { id: string; accountId: string | null }>
   accountMembers: Map<string, string[]>
   /** VCS installation bindings, keyed by installation id (the `installation` scope's anchor). */
   installations: Map<
@@ -99,6 +100,11 @@ function makeFixtures(): RegistryFixtures {
     services: new Map([
       ['svc_in', { id: 'svc_in', accountId: ACCOUNT }],
       ['svc_out', { id: 'svc_out', accountId: OTHER_ACCOUNT }],
+    ]),
+    // Projects are account-owned like services, with the same in/out-of-scope split.
+    projects: new Map([
+      ['prj_in', { id: 'prj_in', accountId: ACCOUNT }],
+      ['prj_out', { id: 'prj_out', accountId: OTHER_ACCOUNT }],
     ]),
     // Account rosters, for the member-display scope (`user`/`userList`): USER + a co-member live
     // under ACCOUNT; a distinct user lives under OTHER_ACCOUNT — the in/out-of-scope split the
@@ -221,6 +227,18 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
         dx,
         dy,
       }),
+    },
+    projectRepository: {
+      listByIds: async (ids: string[]) => ids.map((id) => fx.projects.get(id)).filter(Boolean),
+      get: async (id: string) => fx.projects.get(id) ?? null,
+      listByAccount: async (accountId: string) => [{ accountId }],
+      listByRootBlocks: async (ids: string[]) => ids.map((rootBlockId) => ({ rootBlockId })),
+      insert: async (project: { id: string; accountId: string | null }) => {
+        fx.projects.set(project.id, { id: project.id, accountId: project.accountId })
+      },
+      setServiceLinks: async () => undefined,
+      unlinkServices: async () => undefined,
+      deleteMany: async () => undefined,
     },
     serviceRepository: {
       // Mirror the real repo: a missing id is simply absent from the result (NOT an error row).

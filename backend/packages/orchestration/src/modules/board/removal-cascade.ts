@@ -3,6 +3,7 @@ import type {
   BlockRepository,
   DocumentRepository,
   InitiativeRepository,
+  ProjectRepository,
   ServiceConnection,
   ServiceRepository,
   TaskRepository,
@@ -26,6 +27,7 @@ import type {
  */
 export interface RemovalCascadeDeps {
   serviceRepository?: ServiceRepository
+  projectRepository?: ProjectRepository
   workspaceMountRepository?: WorkspaceMountRepository
   initiativeRepository?: InitiativeRepository
   documentRepository?: DocumentRepository
@@ -73,7 +75,31 @@ async function reclaimServices(
   // (two queries, not a listByService + per-mount remove + per-service delete loop).
   const ids = [...doomedServiceIds]
   await workspaceMountRepository.removeBySubjects(ids)
+  // A project linking a doomed service keeps its other links; this one goes.
+  await deps.projectRepository?.unlinkServices(ids)
   await serviceRepository.deleteMany(ids)
+}
+
+/**
+ * Drop the project (its service links and every board's mount of it) for a doomed project root,
+ * the project counterpart of {@link reclaimServices}, dangling root included.
+ */
+async function reclaimProjects(
+  deps: RemovalCascadeDeps,
+  { deletedId, blocks, doomed }: RemovalCascadeInput,
+): Promise<void> {
+  const { projectRepository, workspaceMountRepository } = deps
+  if (!projectRepository || !workspaceMountRepository) return
+  const rootIds = new Set(
+    blocks.filter((b) => doomed.has(b.id) && b.level === 'project').map((b) => b.id),
+  )
+  // The deleted id is looked up directly only when it is dangling (already gone from `blocks`).
+  if (!blocks.some((b) => b.id === deletedId)) rootIds.add(deletedId)
+  if (rootIds.size === 0) return
+  const ids = (await projectRepository.listByRootBlocks([...rootIds])).map((p) => p.id)
+  if (ids.length === 0) return
+  await workspaceMountRepository.removeBySubjects(ids)
+  await projectRepository.deleteMany(ids)
 }
 
 /**
@@ -162,6 +188,7 @@ export async function reclaimDoomedEntities(
   input: RemovalCascadeInput,
 ): Promise<void> {
   await reclaimServices(deps, input)
+  await reclaimProjects(deps, input)
   await reclaimInitiatives(deps, input)
   await detachDoomedDocuments(deps, input)
   await detachDoomedIssues(deps, input)

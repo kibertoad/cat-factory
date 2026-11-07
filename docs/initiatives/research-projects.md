@@ -83,10 +83,11 @@ interface Project {
 - **It links to services without being inside one.** A link is context: the project's tasks may
   read the linked services' repos and see their descriptions, and the board draws the link. A
   project with no links is valid.
-- **Its repo resolution is its own.** `resolveRepoTarget` meets a project root where it would meet
-  a service frame, and a project root resolves to its linked services' repos as read-only
-  context, possibly none. It never falls back to a guessed repo; a project-kind task type that
-  needs a writable repo says so and is refused at admission when the project has none.
+- **Its repo resolution is its own.** `resolveRepoTarget` stops at a project root and refuses with
+  `project_has_no_writable_repo`: a project has no repository to write to. Its linked services'
+  repos are read-only context, resolved by their own read (slice 5), never a guessed checkout. A
+  kind can declare no writing access (`repoAccess: 'none' | 'linked-read-only'`), and a run step
+  that needs a checkout to push to is refused when it dispatches.
 - **A kind is registered**, through a `ProjectKindRegistry` beside `TaskTypeRegistry`, injected by
   reference on both `start()` and `startLocal()`. A kind declares the task types its project
   offers, their default pipelines, the project-level data it keeps, and its result view. A run
@@ -435,6 +436,11 @@ run has written a revision.
   linked services' repos as read-only context. Slice 1 keeps that resolution a single, explicit
   rule, so a later initiative under a project can name which linked service an item writes to
   instead of gaining a second resolution path. Supporting it is out of scope here.
+- **A root block id alone does not name a subject.** Seeded boards share frame ids (`blk_auth`),
+  so a reader narrows the candidates: the layout projection by the board's own mounts, and the
+  workspace-delete re-home plan by the owner stamp on the board's own root row, which is what the
+  re-home moves. The plan never re-homes another board's service, and still re-homes a shared
+  subject its home board has unmounted.
 - **The mount carries layout for a shared root.** Generalizing it to projects keeps
   `applyMountLayout` on every root-returning read; a project root read that skips it jumps on
   the board.

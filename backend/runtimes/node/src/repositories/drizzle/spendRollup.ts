@@ -101,7 +101,8 @@ function foldSelect(from: number, to: number, workspaceId?: string) {
            max(w.name) AS workspace_name,
            max(coalesce(ar.block_id, '')) AS block_id,
            max(b.title) AS block_title,
-           max(coalesce(ar.owner_id, '')) AS service_id,
+           -- A project owner is not a service: its spend is frozen with no service at all.
+           max(case when p.id is null then coalesce(ar.owner_id, '') else '' end) AS service_id,
            max(sl.title) AS service_name,
            max(coalesce(s.repo_github_id::text, '')) AS repo_id,
            max(gr.owner || '/' || gr.name) AS repo_name,
@@ -120,6 +121,7 @@ function foldSelect(from: number, to: number, workspaceId?: string) {
     LEFT JOIN agent_runs ar ON ar.workspace_id = tu.workspace_id AND ar.id = tu.execution_id
     LEFT JOIN blocks b ON b.workspace_id = ar.workspace_id AND b.id = ar.block_id
     LEFT JOIN services s ON s.id = ar.owner_id
+    LEFT JOIN projects p ON p.id = ar.owner_id
     LEFT JOIN (SELECT s2.id AS service_id, min(b2.title) AS title
                FROM services s2
                LEFT JOIN blocks b2 ON b2.id = s2.frame_block_id

@@ -46,10 +46,12 @@ describe('deliverableBoardBlock', () => {
     // Derived from the picklist `BlockLevel` itself comes from rather than a hand-written list, so
     // a level added to the vocabulary is exercised here the moment it exists. The compile-time
     // half of the same guard is `GEOMETRY_IS_PER_BOARD` being a total `Record<BlockLevel, …>`.
+    // A service frame and a project root are both mounted subjects' roots, laid out per board.
+    const perBoard = new Set<BlockLevel>(['frame', 'project'])
     for (const level of blockLevelSchema.options) {
-      const candidate = block({ level, parentId: level === 'frame' ? null : 'frame_1' })
+      const candidate = block({ level, parentId: perBoard.has(level) ? null : 'frame_1' })
       const carried = deliverableBoardBlock(candidate)
-      if (level === 'frame') expect(carried, 'a frame is per-board').toBeNull()
+      if (perBoard.has(level)) expect(carried, `a ${level} root is per-board`).toBeNull()
       else expect(carried, `${level} geometry lives on the shared row`).toBe(candidate)
     }
   })

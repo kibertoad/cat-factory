@@ -225,10 +225,43 @@ export const services = pgTable(
   ],
 )
 
+// Account-owned projects: peers of services, mounted onto boards through `workspace_mounts`.
+export const projects = pgTable(
+  'projects',
+  {
+    id: text('id').primaryKey(),
+    account_id: text('account_id'),
+    kind: text('kind').notNull(),
+    root_block_id: text('root_block_id').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('idx_projects_account').on(t.account_id),
+    uniqueIndex('idx_projects_root').on(t.account_id, t.root_block_id),
+    index('idx_projects_root_block').on(t.root_block_id),
+  ],
+)
+
+// A project's links to services, as read-only context. `position` keeps the authored order.
+export const projectServiceLinks = pgTable(
+  'project_service_links',
+  {
+    project_id: text('project_id').notNull(),
+    service_id: text('service_id').notNull(),
+    position: integer('position').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.project_id, t.service_id] }),
+    index('idx_project_service_links_service').on(t.service_id),
+  ],
+)
+
 export const workspaceMounts = pgTable(
   'workspace_mounts',
   {
     workspace_id: text('workspace_id').notNull(),
+    // What the mount places: a service or a project.
+    subject_kind: text('subject_kind').notNull().default('service'),
     subject_id: text('subject_id').notNull(),
     pos_x: doublePrecision('pos_x').notNull().default(0),
     pos_y: doublePrecision('pos_y').notNull().default(0),

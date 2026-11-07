@@ -61,6 +61,7 @@ describe('DrizzleWorkspaceRepository.delete reclaims the workspace services', ()
     await repos.serviceRepository.insert(service)
     await repos.workspaceMountRepository.upsert({
       workspaceId: wsId,
+      subjectKind: 'service',
       subjectId: service.id,
       position: { x: 0, y: 0 },
       size: null,
@@ -117,6 +118,7 @@ describe('DrizzleWorkspaceRepository.delete reclaims the workspace services', ()
     await repos.serviceRepository.insert(service)
     await repos.workspaceMountRepository.upsert({
       workspaceId: home,
+      subjectKind: 'service',
       subjectId: service.id,
       position: { x: 0, y: 0 },
       size: null,
@@ -124,6 +126,7 @@ describe('DrizzleWorkspaceRepository.delete reclaims the workspace services', ()
     })
     await repos.workspaceMountRepository.upsert({
       workspaceId: other,
+      subjectKind: 'service',
       subjectId: service.id,
       position: { x: 0, y: 0 },
       size: null,
