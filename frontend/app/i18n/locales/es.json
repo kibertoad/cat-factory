@@ -694,7 +694,8 @@
         "delegated_executor_failed": "El ejecutor externo no pudo iniciar este paso. El problema está en el sistema que realiza el trabajo, no en esta instalación: revisa sus propios registros e inténtalo de nuevo.",
         "delegated_work_branch_unprepared": "La plataforma no pudo preparar la rama de trabajo a la que se envía el ejecutor de este paso, así que no se inició nada. O la conexión al repositorio no puede escribir en ella, o la tarea indica una rama que aún no existe: los detalles dicen cuál de las dos.",
         "attached_pr_provider_unreachable": "El proveedor del repositorio no respondió, así que no se pudo comprobar la pull request y no se creó ninguna tarea. No hay nada que configurar aquí: vuelve a intentarlo en un momento.",
-        "research_definitions_unreachable": "No se han podido leer las definiciones de investigación de esta instalación en este momento, así que no se ha completado la solicitud. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión."
+        "research_definitions_unreachable": "No se han podido leer las definiciones de investigación de esta instalación en este momento, así que no se ha completado la solicitud. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión.",
+        "findings_body_unavailable": "Estos hallazgos están en el almacenamiento de contenido, que ahora no puede servirlos. La solicitud es correcta: inténtalo de nuevo cuando el almacenamiento esté disponible."
       }
     },
     "reason": {
@@ -724,7 +725,7 @@
         "research_definition_changed": "La definición de investigación que fijó este proyecto ha cambiado desde entonces, así que la ejecución se detuvo en lugar de hacer preguntas que el proyecto nunca aceptó. Pide al operador del despliegue que publique el cambio como una nueva versión.",
         "research_task_already_recorded": "Esta tarea de investigación ya registró sus hallazgos. Crea una nueva tarea de investigación para dar seguimiento.",
         "research_nothing_to_ask": "El modo de esta tarea de investigación no deja ninguna pregunta por hacer: nada nuevo con lo que ampliar, o nada parcial o bloqueado que aclarar. Elige otro modo o añade una pregunta.",
-        "findings_too_large_for_inline": "Los hallazgos son demasiado grandes para guardarlos, así que la revisión no se registró. Acota la investigación y vuelve a ejecutarla."
+        "findings_too_large_for_inline": "Los hallazgos son demasiado grandes para guardarlos, y no se pueden trasladar al almacenamiento de contenido. Activa el almacenamiento de contenido o permite el traslado y vuelve a intentarlo."
       }
     },
     "action": {
@@ -9236,7 +9237,12 @@
       "servicesHelp": "Sus tareas pueden leer los repositorios de estos servicios como contexto.",
       "submit": "Crear proyecto",
       "created": "Proyecto {title} creado",
-      "failed": "No se ha podido crear el proyecto"
+      "failed": "No se ha podido crear el proyecto",
+      "definitionLabel": "Definición de investigación",
+      "definitionHelp": "Lo que la investigación quiere averiguar. Su versión queda fijada para este proyecto.",
+      "definitionOption": "{title} (versión {version})",
+      "noDefinitions": "Esta organización todavía no tiene ninguna definición de investigación. Primero debe publicarla una persona administradora.",
+      "definitionsFailed": "No se han podido cargar las definiciones de investigación"
     },
     "linkServices": {
       "title": "Servicios vinculados",

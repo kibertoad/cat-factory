@@ -70,7 +70,7 @@ function revision(
     definitionKey: 'acme:content-integration',
     definitionVersion: 1,
     createdAt: seq,
-    body: { summary, findings, learnings: [] },
+    body: { summary, findings, learnings: [], adhocQuestions: [] },
   }
 }
 

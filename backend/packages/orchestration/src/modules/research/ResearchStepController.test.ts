@@ -18,6 +18,7 @@ import {
   revisionIdFor,
   selectQuestionIds,
 } from './ResearchStepController.js'
+import { ResearchFindingsStore } from './ResearchFindingsStore.js'
 
 const definition: ResearchDefinition = {
   key: 'acme:vendor',
@@ -54,6 +55,7 @@ function revision(statuses: Record<string, 'answered' | 'partial' | 'blocked'>):
     body: {
       summary: '',
       learnings: [],
+      adhocQuestions: [],
       findings: Object.entries(statuses).map(([questionId, status]) => ({
         questionId,
         status,
@@ -82,6 +84,21 @@ describe('selectQuestionIds', () => {
 
   it('narrows clarify and refresh to the named questions', () => {
     expect(selectQuestionIds(definition, 'refresh', folded, ['scheme'])).toEqual(['scheme'])
+  })
+
+  it('offers the ad-hoc questions earlier tasks added to every mode but initial', () => {
+    const adhoc = 'adhoc:task_0:1'
+    const withAdhoc = foldFindings([revision({ scheme: 'answered', [adhoc]: 'partial' })])
+    expect(selectQuestionIds(definition, 'initial', withAdhoc, undefined, [adhoc])).toEqual([
+      'scheme',
+      'scopes',
+      'expiry',
+    ])
+    expect(selectQuestionIds(definition, 'clarify', withAdhoc, undefined, [adhoc])).toEqual([adhoc])
+    expect(selectQuestionIds(definition, 'refresh', withAdhoc, undefined, [adhoc])).toEqual([
+      'scheme',
+      adhoc,
+    ])
   })
 })
 
@@ -116,12 +133,12 @@ describe('ResearchStepController', () => {
       origin: 'registered',
     }
     const seqs = new Map<string, number>()
+    const blockRepository = {
+      findById: async () => ({ workspaceId: 'ws_1', ownerId: 'prj_1', block: task }),
+    }
     const ctrl = new ResearchStepController({
-      blockRepository: {
-        findById: async () => ({ workspaceId: 'ws_1', ownerId: 'prj_1', block: task }),
-      },
+      blockRepository,
       projectRepository: { get: async () => project },
-      workspaceRepository: { accountOf: async () => 'acc_1' },
       researchDefinitions: {
         get: async () => resolved,
         latest: async () => resolved,
@@ -142,15 +159,19 @@ describe('ResearchStepController', () => {
         },
         deleteMany: async () => {},
       },
-      findingsRevisionRepository: {
-        insert: async (row) => {
-          if (rows.some((r) => r.id === row.id)) return false
-          rows.push(row)
-          return true
+      findings: new ResearchFindingsStore({
+        blockRepository,
+        workspaceRepository: { accountOf: async () => 'acc_1' },
+        findingsRevisionRepository: {
+          insert: async (row) => {
+            if (rows.some((r) => r.id === row.id)) return false
+            rows.push(row)
+            return true
+          },
+          get: async (_projectId, id) => rows.find((r) => r.id === id) ?? null,
+          listByProject: async () => rows,
         },
-        get: async (_projectId, id) => rows.find((r) => r.id === id) ?? null,
-        listByProject: async () => rows,
-      },
+      }),
       clock: { now: () => 5 },
     })
     return { ctrl, rows }

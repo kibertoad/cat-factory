@@ -196,6 +196,7 @@ const REASON_DESCRIPTION_KEYS: Record<
     'errors.unavailable.description.delegated_work_branch_unprepared',
   attached_pr_provider_unreachable:
     'errors.unavailable.description.attached_pr_provider_unreachable',
+  findings_body_unavailable: 'errors.unavailable.description.findings_body_unavailable',
 }
 
 /**

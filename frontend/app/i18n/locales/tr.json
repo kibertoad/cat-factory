@@ -694,7 +694,8 @@
         "delegated_executor_failed": "Dış yürütücü bu adımı başlatamadı. Sorun bu kurulumda değil, işi yapan sistemde: onun kendi günlüklerine bakıp yeniden deneyin.",
         "delegated_work_branch_unprepared": "Platform, bu adımın yürütücüsünün gönderildiği çalışma dalını hazırlayamadı, bu yüzden hiçbir şey başlatılmadı. Ya depo bağlantısının bu dala yazma izni yok ya da görev henüz var olmayan bir dalı belirtiyor: ayrıntılar hangisi olduğunu söylüyor.",
         "attached_pr_provider_unreachable": "Depo sağlayıcısı yanıt vermedi, bu yüzden pull request denetlenemedi ve görev oluşturulmadı. Burada ayarlanacak bir şey yok: birazdan yeniden deneyin.",
-        "research_definitions_unreachable": "Bu dağıtımın araştırma tanımları şu anda okunamadı, bu yüzden istek tamamlanmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin."
+        "research_definitions_unreachable": "Bu dağıtımın araştırma tanımları şu anda okunamadı, bu yüzden istek tamamlanmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
+        "findings_body_unavailable": "Bu bulgular içerik depolamasında tutuluyor ve depolama şu anda bunları sunamıyor. İstekte bir sorun yok: depolama kullanılabilir olduğunda yeniden deneyin."
       }
     },
     "reason": {
@@ -724,7 +725,7 @@
         "research_definition_changed": "Bu projenin sabitlediği araştırma tanımı o zamandan beri değişti, bu yüzden çalışma projenin hiç onaylamadığı soruları sormak yerine durdu. Dağıtım operatörünüzden değişikliği yeni bir sürüm olarak yayımlamasını isteyin.",
         "research_task_already_recorded": "Bu araştırma görevi bulgularını zaten kaydetti. Devam etmek için yeni bir araştırma görevi oluşturun.",
         "research_nothing_to_ask": "Bu araştırma görevinin modu sorulacak bir soru bırakmıyor: genişletecek yeni bir şey ya da netleştirilecek kısmi veya engellenmiş bir şey yok. Başka bir mod seçin veya bir soru ekleyin.",
-        "findings_too_large_for_inline": "Bulgular saklanamayacak kadar büyük, bu yüzden revizyon kaydedilmedi. Araştırmayı daraltın ve yeniden çalıştırın."
+        "findings_too_large_for_inline": "Bulgular kaydedilemeyecek kadar büyük ve içerik depolamasına aktarılmaları kullanılamıyor. İçerik depolamasını etkinleştirin ya da aktarmaya izin verin, sonra yeniden deneyin."
       }
     },
     "action": {
@@ -9236,7 +9237,12 @@
       "servicesHelp": "Görevleri bu servislerin depolarını bağlam olarak okuyabilir.",
       "submit": "Proje oluştur",
       "created": "{title} projesi oluşturuldu",
-      "failed": "Proje oluşturulamadı"
+      "failed": "Proje oluşturulamadı",
+      "definitionLabel": "Araştırma tanımı",
+      "definitionHelp": "Araştırmanın ortaya çıkarmak istediği şey. Sürümü bu proje için sabitlenir.",
+      "definitionOption": "{title} (sürüm {version})",
+      "noDefinitions": "Bu kuruluş için henüz kullanılabilir bir araştırma tanımı yok. Önce bir yöneticinin yayımlaması gerekiyor.",
+      "definitionsFailed": "Araştırma tanımları yüklenemedi"
     },
     "linkServices": {
       "title": "Bağlı servisler",

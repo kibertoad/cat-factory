@@ -694,7 +694,8 @@
         "delegated_executor_failed": "Zewnętrzny executor nie zdołał uruchomić tego kroku. Problem leży w systemie wykonującym pracę, a nie w tej instalacji: sprawdź jego własne logi i spróbuj ponownie.",
         "delegated_work_branch_unprepared": "Platforma nie mogła przygotować gałęzi roboczej, na którą wysyłany jest executor tego kroku, więc nic nie zostało uruchomione. Albo połączenie z repozytorium nie ma prawa zapisu, albo zadanie wskazuje gałąź, która jeszcze nie istnieje: szczegóły mówią, co z tego.",
         "attached_pr_provider_unreachable": "Dostawca repozytorium nie odpowiedział, więc nie udało się sprawdzić pull requesta i nie utworzono zadania. Nie trzeba tu niczego konfigurować: spróbuj ponownie za chwilę.",
-        "research_definitions_unreachable": "Nie udało się teraz odczytać definicji badań tego wdrożenia, więc żądanie nie zostało wykonane. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci."
+        "research_definitions_unreachable": "Nie udało się teraz odczytać definicji badań tego wdrożenia, więc żądanie nie zostało wykonane. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
+        "findings_body_unavailable": "Te ustalenia są przechowywane w magazynie treści, który nie może ich teraz udostępnić. Z żądaniem wszystko w porządku: spróbuj ponownie, gdy magazyn będzie dostępny."
       }
     },
     "reason": {
@@ -724,7 +725,7 @@
         "research_definition_changed": "Definicja badania przypięta przez ten projekt zmieniła się od tego czasu, więc uruchomienie zatrzymało się zamiast zadawać pytania, na które projekt nigdy się nie zgodził. Poproś operatora wdrożenia o opublikowanie zmiany jako nowej wersji.",
         "research_task_already_recorded": "To zadanie badawcze już zapisało swoje ustalenia. Aby kontynuować, utwórz nowe zadanie badawcze.",
         "research_nothing_to_ask": "Tryb tego zadania badawczego nie pozostawia żadnego pytania: nie ma nic nowego do rozszerzenia ani nic częściowego lub zablokowanego do wyjaśnienia. Wybierz inny tryb lub dodaj pytanie.",
-        "findings_too_large_for_inline": "Ustalenia są zbyt duże, aby je zapisać, więc rewizja nie została zapisana. Zawęź badanie i uruchom je ponownie."
+        "findings_too_large_for_inline": "Ustalenia są zbyt duże, aby je zapisać, a przeniesienie ich do magazynu treści jest niedostępne. Włącz magazyn treści lub zezwól na przenoszenie i spróbuj ponownie."
       }
     },
     "action": {
@@ -9236,7 +9237,12 @@
       "servicesHelp": "Jego zadania mogą czytać repozytoria tych usług jako kontekst.",
       "submit": "Utwórz projekt",
       "created": "Utworzono projekt {title}",
-      "failed": "Nie udało się utworzyć projektu"
+      "failed": "Nie udało się utworzyć projektu",
+      "definitionLabel": "Definicja badania",
+      "definitionHelp": "Co badanie ma ustalić. Jej wersja zostaje przypięta do tego projektu.",
+      "definitionOption": "{title} (wersja {version})",
+      "noDefinitions": "Ta organizacja nie ma jeszcze żadnej definicji badania. Najpierw musi ją opublikować administrator.",
+      "definitionsFailed": "Nie udało się wczytać definicji badań"
     },
     "linkServices": {
       "title": "Powiązane usługi",

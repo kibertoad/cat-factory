@@ -769,7 +769,8 @@
         "delegated_executor_failed": "The external executor could not start this step. The problem is in the system that runs the work, not in this deployment: check its own logs and try again.",
         "delegated_work_branch_unprepared": "The platform could not prepare the work branch this step's executor is dispatched onto, so nothing was started. Either the repository connection cannot write to it, or the task names a branch that does not exist yet: the details say which.",
         "attached_pr_provider_unreachable": "The repository provider did not answer, so the pull request could not be checked and no task was created. Nothing needs setting up here: try again in a moment.",
-        "research_definitions_unreachable": "This deployment's research definitions could not be read just now, so the request was not completed. Nothing is misconfigured and no change is needed: try again once the connection recovers."
+        "research_definitions_unreachable": "This deployment's research definitions could not be read just now, so the request was not completed. Nothing is misconfigured and no change is needed: try again once the connection recovers.",
+        "findings_body_unavailable": "These findings are kept in content storage, which cannot serve them right now. Nothing is wrong with the request: try again once storage is available."
       }
     },
     "reason": {
@@ -799,7 +800,7 @@
         "research_definition_changed": "The research definition this project pinned has changed since, so the run stopped rather than ask questions the project never agreed to. Ask your deployment operator to publish the change as a new version.",
         "research_task_already_recorded": "This research task already recorded its findings. Create a new research task to follow up.",
         "research_nothing_to_ask": "This research task's mode leaves no question to ask: nothing new to extend with, or nothing partial or blocked to clarify. Pick another mode or add a question.",
-        "findings_too_large_for_inline": "The findings are too large to store, so the revision was not recorded. Narrow the research and run it again."
+        "findings_too_large_for_inline": "The findings are too large to store, and offloading them to content storage is not available. Enable content storage or allow offloading, then retry."
       }
     },
     "action": {
@@ -9570,7 +9571,12 @@
       "servicesHelp": "Its tasks can read these services' repositories as context.",
       "submit": "Create project",
       "created": "Project {title} created",
-      "failed": "Could not create the project"
+      "failed": "Could not create the project",
+      "definitionLabel": "Research definition",
+      "definitionHelp": "What the research sets out to find. Its version is fixed for this project.",
+      "definitionOption": "{title} (version {version})",
+      "noDefinitions": "No research definition is available to this organization yet. An administrator publishes one first.",
+      "definitionsFailed": "Could not load the research definitions"
     },
     "linkServices": {
       "title": "Linked services",

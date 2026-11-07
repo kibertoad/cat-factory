@@ -599,6 +599,8 @@ export function makeConformanceApp(
     blockRepository: () => createDrizzleRepositories(db, SEED_CLOCK).blockRepository,
     researchProjectRepository: () =>
       createDrizzleRepositories(db, SEED_CLOCK).researchProjectRepository,
+    findingsStoragePolicyRepository: () =>
+      createDrizzleRepositories(db, SEED_CLOCK).findingsStoragePolicyRepository,
     workspaceRepository: () => new DrizzleWorkspaceRepository(db),
     workspaceMemberRepository: () => new DrizzleWorkspaceMemberRepository(db),
     initiativeRepository: () => createDrizzleRepositories(db, SEED_CLOCK).initiativeRepository,

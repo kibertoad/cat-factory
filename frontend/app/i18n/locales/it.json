@@ -6574,7 +6574,8 @@
         "delegated_executor_failed": "L’esecutore esterno non è riuscito ad avviare questo passaggio. Il problema è nel sistema che svolge il lavoro, non in questa installazione: controlla i suoi log e riprova.",
         "delegated_work_branch_unprepared": "La piattaforma non è riuscita a preparare il branch di lavoro su cui viene inviato l'executor di questo passo, quindi non è stato avviato nulla. O la connessione al repository non può scriverci, oppure l'attività indica un branch che non esiste ancora: i dettagli dicono quale dei due.",
         "attached_pr_provider_unreachable": "Il provider del repository non ha risposto, quindi non è stato possibile verificare la pull request e non è stata creata alcuna attività. Non c'è nulla da configurare qui: riprova tra un momento.",
-        "research_definitions_unreachable": "Non è stato possibile leggere le definizioni di ricerca di questa installazione in questo momento, quindi la richiesta non è stata completata. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata."
+        "research_definitions_unreachable": "Non è stato possibile leggere le definizioni di ricerca di questa installazione in questo momento, quindi la richiesta non è stata completata. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
+        "findings_body_unavailable": "Questi risultati sono conservati nell'archiviazione dei contenuti, che ora non può fornirli. La richiesta è corretta: riprova quando l'archiviazione sarà disponibile."
       }
     },
     "reason": {
@@ -6604,7 +6605,7 @@
         "research_definition_changed": "La definizione di ricerca fissata da questo progetto è cambiata nel frattempo, quindi l'esecuzione si è fermata invece di porre domande che il progetto non ha mai accettato. Chiedi all'operatore del deployment di pubblicare la modifica come nuova versione.",
         "research_task_already_recorded": "Questa attività di ricerca ha già registrato i suoi risultati. Crea una nuova attività di ricerca per un approfondimento.",
         "research_nothing_to_ask": "La modalità di questa attività di ricerca non lascia alcuna domanda da porre: niente di nuovo da aggiungere, o niente di parziale o bloccato da chiarire. Scegli un'altra modalità o aggiungi una domanda.",
-        "findings_too_large_for_inline": "I risultati sono troppo grandi per essere salvati, quindi la revisione non è stata registrata. Restringi la ricerca ed eseguila di nuovo."
+        "findings_too_large_for_inline": "I risultati sono troppo grandi da salvare, e spostarli nell'archiviazione dei contenuti non è possibile. Attiva l'archiviazione dei contenuti o consenti lo spostamento, poi riprova."
       }
     },
     "action": {
@@ -9236,7 +9237,12 @@
       "servicesHelp": "Le sue attività possono leggere i repository di questi servizi come contesto.",
       "submit": "Crea progetto",
       "created": "Progetto {title} creato",
-      "failed": "Non è stato possibile creare il progetto"
+      "failed": "Non è stato possibile creare il progetto",
+      "definitionLabel": "Definizione di ricerca",
+      "definitionHelp": "Che cosa la ricerca vuole scoprire. La sua versione viene fissata per questo progetto.",
+      "definitionOption": "{title} (versione {version})",
+      "noDefinitions": "Per questa organizzazione non è ancora disponibile alcuna definizione di ricerca. Prima un amministratore deve pubblicarne una.",
+      "definitionsFailed": "Impossibile caricare le definizioni di ricerca"
     },
     "linkServices": {
       "title": "Servizi collegati",

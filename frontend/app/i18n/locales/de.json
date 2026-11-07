@@ -6574,7 +6574,8 @@
         "delegated_executor_failed": "Der externe Executor konnte diesen Schritt nicht starten. Das Problem liegt im System, das die Arbeit ausführt, nicht in dieser Installation: prüfe dessen Logs und versuche es erneut.",
         "delegated_work_branch_unprepared": "Die Plattform konnte den Arbeitsbranch nicht bereitstellen, auf den der Executor dieses Schritts geschickt wird, daher wurde nichts gestartet. Entweder darf die Repository-Verbindung nicht darauf schreiben, oder die Aufgabe nennt einen Branch, den es noch nicht gibt: die Details sagen, was davon.",
         "attached_pr_provider_unreachable": "Der Repository-Anbieter hat nicht geantwortet, daher konnte der Pull Request nicht geprüft werden und es wurde keine Aufgabe angelegt. Hier muss nichts eingerichtet werden: versuche es gleich noch einmal.",
-        "research_definitions_unreachable": "Die Recherche-Definitionen dieser Installation konnten gerade nicht gelesen werden, deshalb wurde die Anfrage nicht ausgeführt. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht."
+        "research_definitions_unreachable": "Die Recherche-Definitionen dieser Installation konnten gerade nicht gelesen werden, deshalb wurde die Anfrage nicht ausgeführt. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
+        "findings_body_unavailable": "Diese Ergebnisse liegen im Inhaltsspeicher, der sie gerade nicht ausliefern kann. Mit der Anfrage ist alles in Ordnung: versuchen Sie es erneut, sobald der Speicher verfügbar ist."
       }
     },
     "reason": {
@@ -6604,7 +6605,7 @@
         "research_definition_changed": "Die Recherchedefinition, die dieses Projekt festgelegt hat, hat sich seitdem geändert. Der Lauf wurde angehalten, statt Fragen zu stellen, denen das Projekt nie zugestimmt hat. Bitte deinen Deployment-Betreiber, die Änderung als neue Version zu veröffentlichen.",
         "research_task_already_recorded": "Diese Rechercheaufgabe hat ihre Ergebnisse bereits gespeichert. Erstelle für eine Folgefrage eine neue Rechercheaufgabe.",
         "research_nothing_to_ask": "Der Modus dieser Rechercheaufgabe lässt keine Frage übrig: nichts Neues zum Erweitern oder nichts Unvollständiges oder Blockiertes zum Klären. Wähle einen anderen Modus oder füge eine Frage hinzu.",
-        "findings_too_large_for_inline": "Die Ergebnisse sind zu groß zum Speichern, daher wurde die Revision nicht gespeichert. Grenze die Recherche ein und starte sie erneut."
+        "findings_too_large_for_inline": "Die Ergebnisse sind zu groß zum Speichern, und das Auslagern in den Inhaltsspeicher ist nicht verfügbar. Aktivieren Sie den Inhaltsspeicher oder erlauben Sie das Auslagern und versuchen Sie es erneut."
       }
     },
     "action": {
@@ -9236,7 +9237,12 @@
       "servicesHelp": "Seine Aufgaben können die Repositorys dieser Services als Kontext lesen.",
       "submit": "Projekt anlegen",
       "created": "Projekt {title} angelegt",
-      "failed": "Das Projekt konnte nicht angelegt werden"
+      "failed": "Das Projekt konnte nicht angelegt werden",
+      "definitionLabel": "Recherche-Definition",
+      "definitionHelp": "Was die Recherche herausfinden soll. Ihre Version wird für dieses Projekt festgelegt.",
+      "definitionOption": "{title} (Version {version})",
+      "noDefinitions": "Für diese Organisation ist noch keine Recherche-Definition verfügbar. Zuerst muss eine Administratorin oder ein Administrator eine veröffentlichen.",
+      "definitionsFailed": "Die Recherche-Definitionen konnten nicht geladen werden"
     },
     "linkServices": {
       "title": "Verknüpfte Services",

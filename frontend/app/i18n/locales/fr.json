@@ -694,7 +694,8 @@
         "delegated_executor_failed": "L’exécuteur externe n’a pas pu démarrer cette étape. Le problème vient du système qui effectue le travail, pas de ce déploiement : consultez ses propres journaux, puis réessayez.",
         "delegated_work_branch_unprepared": "La plateforme n'a pas pu préparer la branche de travail vers laquelle l'exécuteur de cette étape est envoyé, donc rien n'a démarré. Soit la connexion au dépôt ne peut pas y écrire, soit la tâche nomme une branche qui n'existe pas encore : les détails indiquent laquelle des deux.",
         "attached_pr_provider_unreachable": "Le fournisseur du dépôt n'a pas répondu, la pull request n'a donc pas pu être vérifiée et aucune tâche n'a été créée. Il n'y a rien à configurer ici : réessayez dans un instant.",
-        "research_definitions_unreachable": "Les définitions de recherche de ce déploiement n'ont pas pu être lues pour l'instant, la demande n'a donc pas abouti. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie."
+        "research_definitions_unreachable": "Les définitions de recherche de ce déploiement n'ont pas pu être lues pour l'instant, la demande n'a donc pas abouti. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
+        "findings_body_unavailable": "Ces résultats sont conservés dans le stockage de contenu, qui ne peut pas les fournir pour l'instant. La demande est correcte : réessayez une fois le stockage disponible."
       }
     },
     "reason": {
@@ -724,7 +725,7 @@
         "research_definition_changed": "La définition de recherche épinglée par ce projet a changé depuis, donc l'exécution s'est arrêtée plutôt que de poser des questions que le projet n'a jamais acceptées. Demandez à l'opérateur du déploiement de publier la modification sous une nouvelle version.",
         "research_task_already_recorded": "Cette tâche de recherche a déjà enregistré ses résultats. Créez une nouvelle tâche de recherche pour faire un suivi.",
         "research_nothing_to_ask": "Le mode de cette tâche de recherche ne laisse aucune question à poser : rien de nouveau à ajouter, ou rien de partiel ou de bloqué à clarifier. Choisissez un autre mode ou ajoutez une question.",
-        "findings_too_large_for_inline": "Les résultats sont trop volumineux pour être stockés, donc la révision n'a pas été enregistrée. Restreignez la recherche et relancez-la."
+        "findings_too_large_for_inline": "Les résultats sont trop volumineux pour être stockés, et leur déport vers le stockage de contenu n'est pas disponible. Activez le stockage de contenu ou autorisez le déport, puis réessayez."
       }
     },
     "action": {
@@ -9236,7 +9237,12 @@
       "servicesHelp": "Ses tâches peuvent lire les dépôts de ces services comme contexte.",
       "submit": "Créer le projet",
       "created": "Projet {title} créé",
-      "failed": "Impossible de créer le projet"
+      "failed": "Impossible de créer le projet",
+      "definitionLabel": "Définition de recherche",
+      "definitionHelp": "Ce que la recherche cherche à établir. Sa version est fixée pour ce projet.",
+      "definitionOption": "{title} (version {version})",
+      "noDefinitions": "Aucune définition de recherche n'est encore disponible pour cette organisation. Un administrateur doit d'abord en publier une.",
+      "definitionsFailed": "Impossible de charger les définitions de recherche"
     },
     "linkServices": {
       "title": "Services liés",
