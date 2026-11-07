@@ -1,9 +1,13 @@
-import type { Project } from '@cat-factory/contracts'
+import type { Project, ResearchProject } from '@cat-factory/contracts'
 import {
   ProjectKindRegistry,
+  ResearchDefinitionRegistry,
+  composeResearchDefinitionSource,
   registryProjectKindSource,
+  registryResearchDefinitionSource,
   type BlockRepository,
   type ProjectRepository,
+  type ResearchProjectRepository,
   type ServiceRepository,
   type WorkspaceMount,
   type WorkspaceMountRepository,
@@ -19,6 +23,25 @@ function kinds(): ProjectKindRegistry {
     label: 'Research',
     taskTypes: [{ taskType: 'spike', repoAccess: 'none' }],
   })
+  registry.register({
+    id: 'vendor-study',
+    label: 'Vendor study',
+    data: 'research',
+    taskTypes: [{ taskType: 'spike', repoAccess: 'none' }],
+  })
+  return registry
+}
+
+function definitions(): ResearchDefinitionRegistry {
+  const registry = new ResearchDefinitionRegistry()
+  registry.register({
+    key: 'acme:vendor',
+    version: 1,
+    title: 'Vendor',
+    brief: 'Learn how the vendor integrates.',
+    topics: [{ id: 'auth', title: 'Auth', questions: [{ id: 'scheme', question: 'Which?' }] }],
+    targets: [{ baseUrl: 'https://vendor.example', surface: 'api' }],
+  })
   return registry
 }
 
@@ -26,6 +49,7 @@ function harness(failing: 'block' | 'mount') {
   const projects = new Map<string, Project>()
   const blocks = new Set<string>()
   const mounts = new Map<string, WorkspaceMount>()
+  const pins = new Map<string, ResearchProject>()
   let next = 0
   const service = new ProjectService({
     projectRepository: {
@@ -53,10 +77,19 @@ function harness(failing: 'block' | 'mount') {
     } as unknown as WorkspaceRepository,
     serviceRepository: {} as ServiceRepository,
     projectKinds: registryProjectKindSource(kinds()),
+    research: {
+      definitions: composeResearchDefinitionSource({
+        registered: registryResearchDefinitionSource(definitions()),
+      }),
+      projects: {
+        insert: async (p: ResearchProject) => void pins.set(p.projectId, p),
+        deleteMany: async (ids: string[]) => ids.forEach((id) => pins.delete(id)),
+      } as unknown as ResearchProjectRepository,
+    },
     idGenerator: { next: (prefix: string) => `${prefix}_${++next}` },
     clock: { now: () => 1 },
   })
-  return { service, projects, blocks, mounts }
+  return { service, projects, blocks, mounts, pins }
 }
 
 describe('ProjectService.create', () => {
@@ -70,6 +103,23 @@ describe('ProjectService.create', () => {
       expect(projects.size).toBe(0)
       expect(blocks.size).toBe(0)
       expect(mounts.size).toBe(0)
+    },
+  )
+
+  it.each(['block', 'mount'] as const)(
+    'leaves no research pin behind when the %s write fails',
+    async (failing) => {
+      const { service, projects, pins } = harness(failing)
+      await expect(
+        service.create('ws', {
+          kind: 'vendor-study',
+          title: 'Q',
+          serviceIds: [],
+          research: { definitionKey: 'acme:vendor', inputs: {} },
+        }),
+      ).rejects.toThrow(/failed/)
+      expect(projects.size).toBe(0)
+      expect(pins.size).toBe(0)
     },
   )
 })
