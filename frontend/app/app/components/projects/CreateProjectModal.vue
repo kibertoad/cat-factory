@@ -87,13 +87,26 @@ async function loadDefinitions() {
   definitionsFailed.value = false
   try {
     definitions.value = await projects.listPinnableDefinitions()
-    definitionId.value = definitions.value[0] ? definitionKeyOf(definitions.value[0]) : ''
+    definitionId.value = defaultDefinitionId(definitions.value)
   } catch (e) {
     definitionsFailed.value = true
     present(e, 'projects.create.definitionsFailed')
   } finally {
     definitionsLoading.value = false
   }
+}
+
+/**
+ * The newest version of the first listed key: the list holds every pinnable version, and a
+ * project should not pin a superseded one unless someone picks it.
+ */
+function defaultDefinitionId(list: readonly PinnableResearchDefinition[]): string {
+  const first = list[0]
+  if (!first) return ''
+  const newest = list
+    .filter((d) => d.key === first.key)
+    .reduce((best, d) => (d.version > best.version ? d : best))
+  return definitionKeyOf(newest)
 }
 
 watch(definition, (picked) => {
