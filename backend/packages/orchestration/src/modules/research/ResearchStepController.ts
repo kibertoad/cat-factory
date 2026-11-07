@@ -184,9 +184,18 @@ export class ResearchStepController {
       body: { kind: 'inline', json },
       bodyBytes: bytes,
     }
-    await this.deps.findingsRevisionRepository.insert(row)
     step.research = { ...state, revisionId: row.id }
-    return { output: renderRevision(body, state, dropped), outputIsRendered: true }
+    if (await this.deps.findingsRevisionRepository.insert(row)) {
+      return { output: renderRevision(body, state, dropped), outputIsRendered: true }
+    }
+    // A replayed completion lost to the write that landed first: report the revision on record,
+    // not the replay's reply, whose answers may differ from it.
+    const stored = await this.deps.findingsRevisionRepository.get(state.projectId, row.id)
+    if (!stored) throw new Error(`Findings revision '${row.id}' was refused but is not on record`)
+    return {
+      output: renderRevision(decodeRevision(stored).body, state, []),
+      outputIsRendered: true,
+    }
   }
 
   private async resolveTask(block: Block): Promise<ResolvedTask> {
