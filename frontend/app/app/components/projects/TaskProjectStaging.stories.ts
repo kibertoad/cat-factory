@@ -53,7 +53,10 @@ const withProjects = withSeed(() => {
 export const Offered: Story = { decorators: [withProjects] }
 
 /** The project staged: it is linked once the task is created. */
-export const Staged: Story = { decorators: [withProjects], args: { modelValue: [vendorProject.id] } }
+export const Staged: Story = {
+  decorators: [withProjects],
+  args: { modelValue: [vendorProject.id] },
+}
 
 /** No project keeps a result on this board, so the field is withheld. */
 export const NoProjects: Story = {

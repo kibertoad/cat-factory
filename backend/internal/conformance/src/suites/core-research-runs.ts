@@ -195,25 +195,25 @@ export function defineCoreResearchRunsConformance(harness: ConformanceHarness): 
     it.skipIf(harness.name === 'mothership')(
       'carries an offloaded body to the board that inherits the project',
       async () => {
-      const store = memoryBinaryArtifactStore()
-      const { app, wsId, project } = await setup(
-        {},
-        { resolveBinaryArtifactStore: () => Promise.resolve(store) },
-      )
-      await app
-        .findingsStoragePolicyRepository()
-        .set('project', project.id, { inlineMaxBytes: 16, offload: 'enabled' })
-      expect((await runTask(app, wsId, project)).exec.status).toBe('done')
-      const accountId = (await app.workspaceRepository().accountOf(wsId))!
-      const other = await app.createWorkspaceInAccount(accountId, null, { name: 'Other board' })
-      const otherId = other.workspace.id
-      await app.call('POST', `/workspaces/${otherId}/projects/${project.id}/mount`, {})
-      expect((await app.call('DELETE', `/workspaces/${wsId}`)).status).toBe(204)
-      expect((await store.listByBlock(otherId, project.rootBlockId)).map((a) => a.kind)).toEqual([
-        'findings',
-      ])
-      const refresh = await runTask(app, otherId, project, { researchMode: 'refresh' })
-      expect(refresh.exec.status).toBe('done')
+        const store = memoryBinaryArtifactStore()
+        const { app, wsId, project } = await setup(
+          {},
+          { resolveBinaryArtifactStore: () => Promise.resolve(store) },
+        )
+        await app
+          .findingsStoragePolicyRepository()
+          .set('project', project.id, { inlineMaxBytes: 16, offload: 'enabled' })
+        expect((await runTask(app, wsId, project)).exec.status).toBe('done')
+        const accountId = (await app.workspaceRepository().accountOf(wsId))!
+        const other = await app.createWorkspaceInAccount(accountId, null, { name: 'Other board' })
+        const otherId = other.workspace.id
+        await app.call('POST', `/workspaces/${otherId}/projects/${project.id}/mount`, {})
+        expect((await app.call('DELETE', `/workspaces/${wsId}`)).status).toBe(204)
+        expect((await store.listByBlock(otherId, project.rootBlockId)).map((a) => a.kind)).toEqual([
+          'findings',
+        ])
+        const refresh = await runTask(app, otherId, project, { researchMode: 'refresh' })
+        expect(refresh.exec.status).toBe('done')
       },
     )
 
