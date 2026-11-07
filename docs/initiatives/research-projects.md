@@ -278,33 +278,29 @@ resolved through `ToolSecretResolver` for the workspace the run was started on. 
 
 The hand-off:
 
-1. **Pre-dispatch**: every `requiredAtStart` credential must resolve, or the run parks before
-   dispatch. Admission is the cheap place to catch it.
-2. **Mid-run**: `request_credential` ends the step with `needsCredential: { key, reason, observed }`.
-3. **Park**: `CredentialWaitController` generalizes from the personal-subscription lease to a
-   discriminated wait. `stepCredentialWaitSchema` is `{ raisedAt }` today and persisted on steps,
-   so it becomes a union on `subject`: `{ subject: 'capability', key, onboarding }` beside
-   `{ subject: 'personal', raisedAt }`, with every `switch` over it routed through a `never`
-   default. The personal variant is written with its `subject` from then on, and a stored row
-   without one is NOT read as `personal`: that is the legacy fallback AGENTS.md rules out for
-   internal state. A step parked across the upgrade is a break flagged in the slice's changeset;
-   its resume refuses with a named reason and the run is restarted. The run goes `blocked` through
-   the same decision park every other wait uses.
-4. **Notify**: a new `credential_required` notification type routed through the existing channels
-   (in-app, email, Slack, webhook). It names the key and its label, carries the definition's
-   onboarding instructions and the agent's `observed` notes (what it saw on the vendor's onboarding
-   page), and deep-links to the capability-credentials panel with the key preselected.
+1. **Pre-dispatch**: every `requiredAtStart` credential must resolve, or the dispatch throws
+   `CapabilityCredentialMissingError` and the step parks before any container starts.
+2. **Mid-run**: `request_credential` ends the step with `needsCredential: { key, reason, observed }`,
+   which the research executor raises as the same error after checkpointing its findings.
+3. **Park**: `CredentialWaitController` recognises both refusals in one place. The persisted wait is
+   a union on `subject`: `personal` (`{ raisedAt }`), and `capability` (`{ key, declaredBy, label,
+   onboarding, reason, observed }`), where `declaredBy` names the declaring subject so the resume
+   asks the resolver about the same one. A row stored before waits had a `subject` decodes as
+   `unrecorded`, never as `personal`; it cannot be resumed (`credential_wait_unrecorded`) and its run
+   is restarted. The run goes `blocked` through the same decision park every other wait uses, and
+   `async` dispatch sites rethrow the error rather than classify it as a dispatch failure.
+4. **Notify**: the park raises the run's existing waiting notification, through the existing
+   channels, with a message naming the key and its label. The run panel's credential notice shows
+   the definition's onboarding instructions and link, the agent's `observed` notes, and a button to
+   the capability-credentials panel.
 5. **Store**: the human completes the vendor's onboarding flow and saves the value through the
-   existing `PUT /capability-credentials/:key`, which needs `secrets.manage`. A person who is
-   notified but lacks it is shown who can store it, never an error.
-6. **Confirm**: `POST .../credential/resume` re-checks that the key now resolves and refuses if it
-   does not, so a premature confirm costs a toast and never a wasted dispatch. Then the step
-   re-dispatches with the checkpointed findings. Two existing rules are personal-only and split by
-   subject: `mayResumeCredentialWait` admits only the run's initiator, which is right for a
-   personal lease and wrong here (the person who stored the key must be able to resume, so a
-   capability wait admits any `member`); and `CredentialRequiredError` carries a personal
-   `{ vendor, reason }` shape, so the refusal takes a new `CredentialRequiredReason` member,
-   `capability_credential_missing`, with `key` in its details.
+   existing `PUT /capability-credentials/:key`, which needs `secrets.manage`.
+6. **Confirm**: `POST .../credential/resume` re-checks that the key now resolves, through the same
+   resolver a dispatch reads, and refuses with `capability_credential_still_missing` if it does not,
+   so a premature confirm costs a toast and never a wasted dispatch. Then the step re-dispatches.
+   A personal wait admits only the run's initiator (its lease reads that person's activation); a
+   capability wait admits any member, because the person who stored the key is rarely the initiator.
+   The public decisions surface reports a capability wait as `capability_credential_missing`.
 
 The generalized park is not research-specific: any kind declaring a required capability credential
 can use it, which closes the silent `missing_secret` degradation for kinds that opt in.
@@ -426,7 +422,7 @@ Still open:
 | 3   | Research persistence, both facades + conformance: definitions table, findings revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                                                            | in review   | #2507 |
 | 4   | Harness: `research` mode with optional repos (linked repos as `referenceRepos`), the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                                                       | in review   | #2508 |
 | 5   | Engine: the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                                                                                                                                                                      | todo        |       |
-| 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                     | todo        |       |
+| 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                     | in progress |       |
 | 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                                                                | todo        |       |
 | 8   | SPA: findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                                                                            | todo        |       |
 | 9   | Task linking: the `projects` linked-context kind, `.cat-context/projects/`, recorded revision. An optional `projects` field on `InitiativeItemSpawn`, so tasks an initiative spawns carry a research project as linked context.                                                                                                              | todo        |       |

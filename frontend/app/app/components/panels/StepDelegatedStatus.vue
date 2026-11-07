@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import {
-  delegatedUsageUnreported,
-  delegationStatusView,
-  externalRunHref,
-} from './StepDelegatedStatus.logic'
+import { delegatedUsageUnreported, delegationStatusView } from './StepDelegatedStatus.logic'
+import { externalHref } from '~/utils/externalHref'
 import type { PipelineStep } from '~/types/execution'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
@@ -60,9 +57,9 @@ const landedBranch = computed(() => record.value?.branch ?? null)
 
 /**
  * The run link, only when it is one this SPA may follow. The value comes from an external
- * system's API, and this is the card's primary affordance; see {@link externalRunHref}.
+ * system's API, and this is the card's primary affordance; see {@link externalHref}.
  */
-const runHref = computed(() => externalRunHref(record.value?.url))
+const runHref = computed(() => externalHref(record.value?.url))
 
 /** Whether to say the platform is not measuring this step's spend; see the logic sibling. */
 const usageUnreported = computed(() => delegatedUsageUnreported(props.step, props.executor))
@@ -170,8 +167,8 @@ const { copy: copyText } = useCopyToClipboard()
           }}</span>
           <ULink
             raw
-            v-if="externalRunHref(attempt.url)"
-            :to="externalRunHref(attempt.url)!"
+            v-if="externalHref(attempt.url)"
+            :to="externalHref(attempt.url)!"
             target="_blank"
             rel="noopener noreferrer"
             class="ms-auto shrink-0 font-mono hover:underline"

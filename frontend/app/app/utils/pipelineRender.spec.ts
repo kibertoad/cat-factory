@@ -135,7 +135,7 @@ describe('dedicatedParkView', () => {
   // its kind, so the credential wait has to win.
   it('owns a step parked on a lapsed personal credential, ahead of its kind-shaped park', () => {
     const lapsed = step({
-      credentialWait: { raisedAt: 1 },
+      credentialWait: { subject: 'personal', raisedAt: 1 },
       forkDecision: { status: 'awaiting_choice' } as never,
     })
     expect(dedicatedParkView(lapsed, run())).toBe('credential')

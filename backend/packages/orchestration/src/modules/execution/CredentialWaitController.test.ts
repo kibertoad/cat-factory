@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Clock, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
-import { ConflictError, CredentialRequiredError, ForbiddenError } from '@cat-factory/kernel'
+import {
+  CapabilityCredentialMissingError,
+  ConflictError,
+  CredentialRequiredError,
+  ForbiddenError,
+} from '@cat-factory/kernel'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import {
   CredentialWaitController,
@@ -57,6 +62,19 @@ function harness(initial: ExecutionInstance) {
   return { controller: new CredentialWaitController(deps), stored, stateMachine, workRunner }
 }
 
+/** Resume hooks for a personal wait; a capability check that should never be reached. */
+function hooks(renewPersonal: () => Promise<void>, capabilityResolves = vi.fn(async () => false)) {
+  return { renewPersonal, capabilityResolves }
+}
+
+const missing = () =>
+  new CapabilityCredentialMissingError('VENDOR_TOKEN is not stored', {
+    key: 'VENDOR_TOKEN',
+    declaredBy: { kind: 'research-definition', id: 'acme:vendor' },
+    label: 'Vendor API token',
+    onboarding: { instructions: 'Create one under Settings, API.' },
+  })
+
 const lapsed = () =>
   new CredentialRequiredError('No active claude credential', {
     vendor: 'claude',
@@ -72,7 +90,7 @@ describe('CredentialWaitController.guard', () => {
 
     expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
     const step = h.stored.instance.steps[1]!
-    expect(step.credentialWait).toEqual({ raisedAt: NOW })
+    expect(step.credentialWait).toEqual({ subject: 'personal', raisedAt: NOW })
     expect(step.approval).toMatchObject({ id: 'appr_1', status: 'pending' })
     expect(step.state).toBe('waiting_decision')
     expect(h.stored.instance.status).toBe('blocked')
@@ -135,7 +153,7 @@ describe('CredentialWaitController.resume', () => {
     })
 
     const renew = vi.fn(async () => {})
-    const resumed = await h.controller.resume('ws', 'exec_1', 'usr_initiator', renew)
+    const resumed = await h.controller.resume('ws', 'exec_1', 'usr_initiator', hooks(renew))
 
     expect(renew).toHaveBeenCalledOnce()
     const step = resumed.steps[1]!
@@ -151,7 +169,7 @@ describe('CredentialWaitController.resume', () => {
     const h = harness(run())
     const renew = vi.fn(async () => {})
     await expect(
-      h.controller.resume('ws', 'exec_1', 'usr_initiator', renew),
+      h.controller.resume('ws', 'exec_1', 'usr_initiator', hooks(renew)),
     ).rejects.toBeInstanceOf(ConflictError)
     expect(renew).not.toHaveBeenCalled()
     expect(h.workRunner.signalDecision).not.toHaveBeenCalled()
@@ -166,7 +184,7 @@ describe('CredentialWaitController.resume', () => {
 
     const renew = vi.fn(async () => {})
     await expect(
-      h.controller.resume('ws', 'exec_1', 'usr_initiator', renew),
+      h.controller.resume('ws', 'exec_1', 'usr_initiator', hooks(renew)),
     ).rejects.toBeInstanceOf(ConflictError)
     expect(renew).not.toHaveBeenCalled()
     expect(h.stateMachine.updateBlockProgress).toHaveBeenCalledTimes(1)
@@ -179,13 +197,16 @@ describe('CredentialWaitController.resume', () => {
     })
 
     const renew = vi.fn(async () => {})
-    const refusal = h.controller.resume('ws', 'exec_1', 'usr_teammate', renew)
+    const refusal = h.controller.resume('ws', 'exec_1', 'usr_teammate', hooks(renew))
     await expect(refusal).rejects.toBeInstanceOf(ForbiddenError)
     await expect(refusal).rejects.toMatchObject({
       details: { reason: 'credential_wait_not_initiator' },
     })
     expect(renew).not.toHaveBeenCalled()
-    expect(h.stored.instance.steps[1]!.credentialWait).toEqual({ raisedAt: NOW })
+    expect(h.stored.instance.steps[1]!.credentialWait).toEqual({
+      subject: 'personal',
+      raisedAt: NOW,
+    })
     expect(h.workRunner.signalDecision).not.toHaveBeenCalled()
   })
 
@@ -195,7 +216,79 @@ describe('CredentialWaitController.resume', () => {
       throw lapsed()
     })
 
-    const resumed = await h.controller.resume('ws', 'exec_1', null, async () => {})
+    const resumed = await h.controller.resume(
+      'ws',
+      'exec_1',
+      null,
+      hooks(async () => {}),
+    )
     expect(resumed.steps[1]!.credentialWait).toBeNull()
+  })
+})
+
+describe('CredentialWaitController with a capability credential', () => {
+  it('parks on a missing capability credential, recording what is needed and who declared it', async () => {
+    const h = harness(run())
+    const result = await h.controller.guard('ws', 'exec_1', async () => {
+      throw missing()
+    })
+    expect(result.kind).toBe('awaiting_decision')
+    expect(h.stored.instance.steps[1]!.credentialWait).toEqual({
+      subject: 'capability',
+      raisedAt: NOW,
+      key: 'VENDOR_TOKEN',
+      declaredBy: { kind: 'research-definition', id: 'acme:vendor' },
+      label: 'Vendor API token',
+      onboarding: { instructions: 'Create one under Settings, API.' },
+    })
+  })
+
+  it('lets any member resume once the key resolves, and refuses while it does not', async () => {
+    const h = harness(run())
+    await h.controller.guard('ws', 'exec_1', async () => {
+      throw missing()
+    })
+    const renew = vi.fn(async () => {})
+    await expect(
+      h.controller.resume(
+        'ws',
+        'exec_1',
+        'usr_teammate',
+        hooks(
+          renew,
+          vi.fn(async () => false),
+        ),
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'capability_credential_still_missing' } })
+    expect(h.workRunner.signalDecision).not.toHaveBeenCalled()
+
+    const resumed = await h.controller.resume(
+      'ws',
+      'exec_1',
+      'usr_teammate',
+      hooks(
+        renew,
+        vi.fn(async () => true),
+      ),
+    )
+    expect(renew).not.toHaveBeenCalled()
+    expect(resumed.steps[1]!.credentialWait).toBeNull()
+    expect(h.workRunner.signalDecision).toHaveBeenCalledWith('ws', 'exec_1', 'appr_1', 'approved')
+  })
+
+  it('refuses to resume a wait recorded before waits named their subject', async () => {
+    const h = harness(run())
+    await h.controller.guard('ws', 'exec_1', async () => {
+      throw lapsed()
+    })
+    h.stored.instance.steps[1]!.credentialWait = { subject: 'unrecorded', raisedAt: NOW }
+    await expect(
+      h.controller.resume(
+        'ws',
+        'exec_1',
+        'usr_initiator',
+        hooks(async () => {}),
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'credential_wait_unrecorded' } })
   })
 })

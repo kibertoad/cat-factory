@@ -801,7 +801,9 @@
         "session_stale": "Pull request poszedł dalej",
         "cursor_expired": "Kanał zmian wyszedł poza ten kursor",
         "refined_requirements_unavailable": "Brak jeszcze dopracowanych wymagań",
-        "no_linked_issues": "Brak powiązanego zgłoszenia"
+        "no_linked_issues": "Brak powiązanego zgłoszenia",
+        "capability_credential_still_missing": "Nadal brakuje poświadczenia",
+        "credential_wait_unrecorded": "Nie można wznowić tego oczekiwania"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -839,7 +841,7 @@
         "binary_output_generator_invalid": "Krok generujący dane binarne wybiera integrację generatywną, której to wdrożenie nie rejestruje, żadna z wybranych integracji nie tworzy typu treści, który krok ma dostarczyć, albo jedną z nich tworzy CLI agenta, na którym model tego kroku nie działa. Integracje generatywne rejestruje się w kodzie wdrożenia, a nie w tej przestrzeni roboczej: zarejestruj ją, popraw wybór kroku albo przypisz krokowi model działający w wymaganym CLI, a następnie uruchom ponownie.",
         "foundational_service_not_inherited": "Wyłączenie dotyczy usługi dziedziczonej z konta. Ten identyfikator jest zarejestrowany przez tę tablicę, więc nie ma czego wyłączać - usuń zamiast tego własny wpis tablicy.",
         "input_gate_not_parked": "Ten przebieg nie czeka już na kontrolę danych wejściowych. Ktoś mógł już na nią odpowiedzieć albo przebieg poszedł dalej.",
-        "credential_wait_not_parked": "To uruchomienie nie czeka już na dane uwierzytelniające Twojej osobistej subskrypcji. Mogło zostać już wznowione albo uruchomienie poszło dalej.",
+        "credential_wait_not_parked": "To uruchomienie nie czeka już na poświadczenie. Mogło zostać już wznowione albo uruchomienie poszło dalej.",
         "input_gate_parked": "To uruchomienie czeka na kontrolę danych wejściowych, której nie da się rozstrzygnąć przez zatwierdzenie. Skorzystaj z powiadomienia przy uruchomieniu: popraw zadanie i sprawdź ponownie albo uruchom mimo to.",
         "ticket_already_linked": "Zgłoszenie może stać za tylko jednym zadaniem, więc ponowne powiązanie pozbawiłoby istniejące zadanie kontekstu, z którym powstało. Otwórz to zadanie albo najpierw odłącz zgłoszenie.",
         "document_already_linked": "Ten dokument jest załączony do innego zadania. Najpierw odłącz go tam albo załącz osobną kopię.",
@@ -865,7 +867,9 @@
         "session_stale": "Po przygotowaniu tej recenzji pojawiły się nowe commity, więc szkice mogą wskazywać złe linie. Odśwież recenzję, sprawdź szkice i dopiero wtedy opublikuj.",
         "cursor_expired": "Zmiany po tym kursorze nie są już przechowywane. Pobierz nowy zrzut katalogu, a potem śledź kanał od pozycji, którą zwróci.",
         "refined_requirements_unavailable": "Przegląd nie przygotował jeszcze poprawionego dokumentu albo właśnie go przepisuje. Poczekaj na koniec włączania odpowiedzi, a potem zaktualizuj ponownie.",
-        "no_linked_issues": "To zadanie nie ma powiązanego zgłoszenia w trackerze. Powiąż zgłoszenie, z którego pochodzi, a potem zaktualizuj ponownie."
+        "no_linked_issues": "To zadanie nie ma powiązanego zgłoszenia w trackerze. Powiąż zgłoszenie, z którego pochodzi, a potem zaktualizuj ponownie.",
+        "capability_credential_still_missing": "Poświadczenie, którego potrzebuje ten krok, nadal nie jest zapisane dla tej przestrzeni roboczej. Zapisz je w ustawieniach poświadczeń możliwości, a potem wznów uruchomienie.",
+        "credential_wait_unrecorded": "To oczekiwanie zostało zapisane, zanim platforma zaczęła zapisywać, na co czeka każde oczekiwanie, więc nie można go wznowić. Zamiast tego uruchom je od nowa."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -6039,7 +6043,14 @@
     "body": "Dane uwierzytelniające osobistej subskrypcji tego uruchomienia wygasły, zanim mógł się rozpocząć kolejny krok, dlatego uruchomienie jest wstrzymane. Wpisz swoje osobiste hasło, aby je odnowić i kontynuować od tego kroku.",
     "resume": "Wpisz hasło i kontynuuj",
     "othersTitle": "Poświadczenie osobistej subskrypcji tego uruchomienia wygasło",
-    "othersRun": "Tylko osoba, która rozpoczęła to uruchomienie, może je odnowić swoim osobistym hasłem. Poproś ją o kontynuowanie."
+    "othersRun": "Tylko osoba, która rozpoczęła to uruchomienie, może je odnowić swoim osobistym hasłem. Poproś ją o kontynuowanie.",
+    "capabilityTitle": "Ten krok potrzebuje poświadczenia {name}",
+    "capabilityBody": "Nie jest zapisane dla tej przestrzeni roboczej. Osoba, która może zarządzać jej sekretami, zapisuje je, a potem każdy na tablicy może wznowić uruchomienie.",
+    "observed": "Co zobaczył agent: {observed}",
+    "store": "Zapisz poświadczenie",
+    "resumeCapability": "Wznów uruchomienie",
+    "unrecordedTitle": "Nie można wznowić tego oczekiwania",
+    "unrecordedBody": "Zostało zapisane, zanim platforma zaczęła zapisywać, na co czeka każde oczekiwanie. Zamiast tego uruchom je od nowa."
   },
   "requirements": {
     "title": "Przegląd wymagań",

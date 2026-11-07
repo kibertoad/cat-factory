@@ -6680,7 +6680,9 @@
         "session_stale": "Der Pull Request hat sich weiterentwickelt",
         "cursor_expired": "Der Änderungsfeed ist über diesen Cursor hinaus",
         "refined_requirements_unavailable": "Noch keine überarbeiteten Anforderungen",
-        "no_linked_issues": "Kein verknüpftes Tracker-Issue"
+        "no_linked_issues": "Kein verknüpftes Tracker-Issue",
+        "capability_credential_still_missing": "Zugangsdaten fehlen noch",
+        "credential_wait_unrecorded": "Diese Wartestellung lässt sich nicht fortsetzen"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -6718,7 +6720,7 @@
         "binary_output_generator_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt eine generative Integration aus, die diese Installation nicht registriert, keine der gewählten Integrationen erzeugt einen Inhaltstyp, den der Schritt liefern muss, oder eine davon wird von einer Agenten-CLI erzeugt, auf der das Modell dieses Schritts nicht läuft. Generative Integrationen werden im Code der Installation registriert, nicht in diesem Workspace: registrieren Sie sie, korrigieren Sie die Auswahl des Schritts oder legen Sie für den Schritt ein Modell fest, das die erforderliche CLI ausführt, und starten Sie erneut.",
         "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards.",
         "input_gate_not_parked": "Dieser Lauf wartet nicht mehr auf seine Eingabeprüfung. Möglicherweise hat sie jemand schon beantwortet oder der Lauf ist weitergelaufen.",
-        "credential_wait_not_parked": "Dieser Lauf wartet nicht mehr auf die Anmeldedaten Ihres persönlichen Abonnements. Er wurde möglicherweise bereits fortgesetzt, oder der Lauf ist weitergegangen.",
+        "credential_wait_not_parked": "Dieser Lauf wartet nicht mehr auf Zugangsdaten. Er wurde vielleicht schon fortgesetzt, oder der Lauf ist weitergegangen.",
         "input_gate_parked": "Dieser Lauf wartet auf seine Eingabeprüfung, die über die Freigabe nicht beantwortet werden kann. Nutzen Sie den Hinweis am Lauf: Aufgabe ergänzen und erneut prüfen, oder trotzdem ausführen.",
         "ticket_already_linked": "Ein Ticket kann nur eine Aufgabe stützen. Es erneut zu verknüpfen würde der bestehenden Aufgabe genau den Kontext entziehen, mit dem sie angelegt wurde. Öffne stattdessen diese Aufgabe oder hebe die Verknüpfung des Tickets zuerst auf.",
         "document_already_linked": "Dieses Dokument ist an eine andere Aufgabe angehängt. Lösen Sie es dort zuerst, oder hängen Sie eine separate Kopie an.",
@@ -6744,7 +6746,9 @@
         "session_stale": "Nach der Vorbereitung dieser Review kamen neue Commits hinzu, daher zeigen die Entwürfe möglicherweise auf falsche Zeilen. Aktualisiere die Review, prüfe die Entwürfe und poste dann.",
         "cursor_expired": "Die Änderungen nach diesem Cursor werden nicht mehr aufbewahrt. Erstelle einen neuen Snapshot des Verzeichnisses und folge dem Feed ab der Position, die er meldet.",
         "refined_requirements_unavailable": "Die Prüfung hat noch kein überarbeitetes Dokument erstellt oder schreibt es gerade neu. Warte, bis die Einarbeitung abgeschlossen ist, und aktualisiere dann erneut.",
-        "no_linked_issues": "Mit dieser Aufgabe ist kein Tracker-Issue verknüpft. Verknüpfe das Issue, aus dem sie stammt, und aktualisiere dann erneut."
+        "no_linked_issues": "Mit dieser Aufgabe ist kein Tracker-Issue verknüpft. Verknüpfe das Issue, aus dem sie stammt, und aktualisiere dann erneut.",
+        "capability_credential_still_missing": "Die Zugangsdaten, die dieser Schritt braucht, sind für diesen Workspace noch nicht hinterlegt. Hinterlegen Sie sie in den Einstellungen für Capability-Zugangsdaten und setzen Sie den Lauf dann fort.",
+        "credential_wait_unrecorded": "Diese Wartestellung wurde erfasst, bevor die Plattform festhielt, worauf eine Wartestellung wartet, deshalb lässt sie sich nicht fortsetzen. Starten Sie den Lauf stattdessen neu."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",
@@ -7107,7 +7111,14 @@
     "body": "Die Anmeldedaten des persönlichen Abonnements für diesen Lauf sind abgelaufen, bevor der nächste Schritt starten konnte. Der Lauf ist daher pausiert. Geben Sie Ihr persönliches Passwort ein, um sie zu erneuern und mit diesem Schritt fortzufahren.",
     "resume": "Passwort eingeben und fortfahren",
     "othersTitle": "Die Anmeldedaten des persönlichen Abonnements für diesen Lauf sind abgelaufen",
-    "othersRun": "Nur die Person, die diesen Lauf gestartet hat, kann sie mit ihrem persönlichen Passwort erneuern. Bitten Sie sie, den Lauf fortzusetzen."
+    "othersRun": "Nur die Person, die diesen Lauf gestartet hat, kann sie mit ihrem persönlichen Passwort erneuern. Bitten Sie sie, den Lauf fortzusetzen.",
+    "capabilityTitle": "Dieser Schritt braucht die Zugangsdaten {name}",
+    "capabilityBody": "Sie sind für diesen Workspace nicht hinterlegt. Eine Person, die seine Secrets verwalten darf, hinterlegt sie, danach kann jeder auf dem Board den Lauf fortsetzen.",
+    "observed": "Was der Agent gesehen hat: {observed}",
+    "store": "Zugangsdaten hinterlegen",
+    "resumeCapability": "Lauf fortsetzen",
+    "unrecordedTitle": "Diese Wartestellung lässt sich nicht fortsetzen",
+    "unrecordedBody": "Sie wurde erfasst, bevor die Plattform festhielt, worauf eine Wartestellung wartet. Starten Sie den Lauf stattdessen neu."
   },
   "consensus": {
     "titlePrefix": "Konsens",

@@ -12,6 +12,7 @@ import type {
   TestReport,
 } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
+import { CapabilityCredentialMissingError } from '@cat-factory/kernel'
 import {
   type AgentKindRegistry,
   defaultAgentKindRegistry,
@@ -41,6 +42,12 @@ export interface FakeAgentOptions {
   dispatchThrowKinds?: AgentKind[]
   /** The verbatim error a {@link dispatchThrowKinds} dispatch throws. Default a generic 503. */
   dispatchThrowMessage?: string
+  /**
+   * Agent kinds whose `startJob` refuses with a missing CAPABILITY credential (`VENDOR_TOKEN`,
+   * declared by a research definition), so the suite can assert the engine parks the step on it.
+   * Only meaningful for {@link asyncKinds}.
+   */
+  missingCredentialKinds?: AgentKind[]
   /**
    * Agent kinds whose async poll reports a FAILED job carrying the harness's STRUCTURED
    * `failureCause` (and `detail`), so the conformance suite can assert the engine maps the
@@ -837,6 +844,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
   private readonly pooledContainer: boolean
   private readonly asyncPolls: number
   private readonly dispatchThrowKinds: ReadonlySet<AgentKind>
+  private readonly missingCredentialKinds: ReadonlySet<AgentKind>
   private readonly dispatchThrowMessage: string
   private readonly pollFailKinds: ReadonlySet<AgentKind>
   private readonly pollFailCause: HarnessFailureCause
@@ -859,6 +867,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     this.pooledContainer = options.pooledContainer ?? false
     this.asyncPolls = Math.max(1, options.asyncPolls ?? 2)
     this.dispatchThrowKinds = new Set(options.dispatchThrowKinds ?? [])
+    this.missingCredentialKinds = new Set(options.missingCredentialKinds ?? [])
     this.dispatchThrowMessage =
       options.dispatchThrowMessage ?? 'Container dispatch failed (HTTP 503): no capacity'
     this.pollFailKinds = new Set(options.pollFailKinds ?? [])
@@ -894,6 +903,14 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     // dispatch-failure classification (failureKind 'dispatch') is exercised.
     if (this.dispatchThrowKinds.has(context.agentKind)) {
       throw new Error(this.dispatchThrowMessage)
+    }
+    if (this.missingCredentialKinds.has(context.agentKind)) {
+      throw new CapabilityCredentialMissingError('VENDOR_TOKEN is not stored', {
+        key: 'VENDOR_TOKEN',
+        declaredBy: { kind: 'research-definition', id: 'acme:vendor' },
+        label: 'Vendor API token',
+        onboarding: { instructions: 'Create a token under Settings, API.' },
+      })
     }
     const jobId = this.jobIdFor(context)
     if (!this.jobs.has(jobId)) this.jobs.set(jobId, { polled: 0, context })

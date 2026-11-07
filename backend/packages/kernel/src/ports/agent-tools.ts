@@ -35,6 +35,32 @@ export type ToolSecretSubject =
    * and a token frozen at dispatch would be dead long before the poll that needed it.
    */
   | { kind: 'delegated-executor'; id: string }
+  /**
+   * A RESEARCH DEFINITION's vendor credentials. Resolved from the credential store ONLY, never the
+   * deployment's environment: a stored definition is account-authored, so an environment read
+   * would let an account admin name one of the deployment's own variables and have it sent to a
+   * target they chose.
+   */
+  | { kind: 'research-definition'; id: string }
+
+/** Every subject kind, as a total `Record` so a new kind cannot be left out of the reader below. */
+const TOOL_SECRET_SUBJECT_KINDS: Record<ToolSecretSubject['kind'], true> = {
+  'tool-server': true,
+  'binary-generator': true,
+  'foundational-service': true,
+  'delegated-executor': true,
+  'research-definition': true,
+}
+
+/** Read a persisted `{ kind, id }` back as a subject, or undefined when no current kind names it. */
+export function toolSecretSubjectOf(value: {
+  kind: string
+  id: string
+}): ToolSecretSubject | undefined {
+  return Object.hasOwn(TOOL_SECRET_SUBJECT_KINDS, value.kind)
+    ? { kind: value.kind as ToolSecretSubject['kind'], id: value.id }
+    : undefined
+}
 
 /**
  * Resolves the credentials a declared CAPABILITY needs, per dispatch. The port exists so the
