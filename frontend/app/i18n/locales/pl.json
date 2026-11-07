@@ -713,7 +713,11 @@
         "task_type_not_offered_by_project": "Rodzaj tego projektu nie przyjmuje zadań tego typu. Wybierz jeden z typów, które formularz dla niego oferuje.",
         "project_has_no_writable_repo": "Krok tego uruchomienia potrzebuje repozytorium do zapisu, a projekt go nie ma: repozytoria powiązanych usług są kontekstem tylko do odczytu. Wybierz pipeline, który tylko czyta i raportuje.",
         "project_service_link_invalid": "Jedna z powiązanych usług już nie istnieje lub należy do innej organizacji. Odśwież tablicę i wybierz powiązane usługi ponownie.",
-        "project_has_unfinished_tasks": "Ten projekt ma jeszcze niezakończone zadania. Najpierw je zakończ lub usuń."
+        "project_has_unfinished_tasks": "Ten projekt ma jeszcze niezakończone zadania. Najpierw je zakończ lub usuń.",
+        "research_pin_required": "Ten rodzaj projektu przechowuje dane badawcze, więc wymaga definicji badania do przypięcia. Wybierz ją i spróbuj ponownie.",
+        "research_pin_not_accepted": "Ten rodzaj projektu nie przechowuje danych badawczych, więc nie może przypiąć definicji badania. Usuń definicję lub wybierz rodzaj badawczy.",
+        "research_definition_not_found": "Żadna definicja badania tej organizacji nie pasuje do tego klucza i wersji. Sprawdź klucz albo zostaw wersję pustą, aby przypiąć najnowszą.",
+        "research_inputs_invalid": "Wartości wejść definicji badania jej nie spełniają. Wypełnij każde wymagane wejście dozwoloną wartością i spróbuj ponownie."
       }
     },
     "action": {

@@ -6592,7 +6592,11 @@
         "task_type_not_offered_by_project": "Die Art dieses Projekts nimmt keine Aufgaben dieses Typs an. Wählen Sie einen der Typen, die das Formular dafür anbietet.",
         "project_has_no_writable_repo": "Ein Schritt dieses Laufs braucht ein Repository zum Schreiben, und ein Projekt hat keines: Die Repositories seiner verknüpften Dienste sind nur lesbarer Kontext. Wählen Sie eine Pipeline, die nur liest und berichtet.",
         "project_service_link_invalid": "Einer der verknüpften Dienste existiert nicht mehr oder gehört zu einer anderen Organisation. Laden Sie das Board neu und wählen Sie die verknüpften Dienste erneut.",
-        "project_has_unfinished_tasks": "Dieses Projekt hat noch Aufgaben, die nicht abgeschlossen sind. Schließen Sie sie zuerst ab oder löschen Sie sie."
+        "project_has_unfinished_tasks": "Dieses Projekt hat noch Aufgaben, die nicht abgeschlossen sind. Schließen Sie sie zuerst ab oder löschen Sie sie.",
+        "research_pin_required": "Diese Projektart speichert Recherchedaten und braucht daher eine Recherchedefinition zum Festlegen. Wähle eine aus und versuche es erneut.",
+        "research_pin_not_accepted": "Diese Projektart speichert keine Recherchedaten und kann daher keine Recherchedefinition festlegen. Entferne die Definition oder wähle eine Rechercheart.",
+        "research_definition_not_found": "Keine Recherchedefinition dieser Organisation passt zu diesem Schlüssel und dieser Version. Prüfe den Schlüssel oder lass die Version leer, um die neueste festzulegen.",
+        "research_inputs_invalid": "Die Werte für die Eingaben der Recherchedefinition erfüllen sie nicht. Fülle jede Pflichteingabe mit einem zulässigen Wert aus und versuche es erneut."
       }
     },
     "action": {

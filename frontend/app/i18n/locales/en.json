@@ -788,7 +788,11 @@
         "task_type_not_offered_by_project": "This project's kind does not take tasks of this type. Pick one of the types the form offers for it.",
         "project_has_no_writable_repo": "A step of this run needs a repository to write to, and a project has none: its linked services' repositories are read-only context. Pick a pipeline that only reads and reports.",
         "project_service_link_invalid": "One of the linked services no longer exists or belongs to another organization. Reload the board and pick the linked services again.",
-        "project_has_unfinished_tasks": "This project still has tasks that have not finished. Finish or delete them first."
+        "project_has_unfinished_tasks": "This project still has tasks that have not finished. Finish or delete them first.",
+        "research_pin_required": "This project kind keeps research data, so it needs a research definition to pin. Pick one and try again.",
+        "research_pin_not_accepted": "This project kind keeps no research data, so it cannot pin a research definition. Remove the definition, or pick a research kind.",
+        "research_definition_not_found": "No research definition matches that key and version for this organization. Check the key, or leave the version empty to pin the latest.",
+        "research_inputs_invalid": "The values for the research definition's inputs do not satisfy it. Fill in every required input with an accepted value, then try again."
       }
     },
     "action": {

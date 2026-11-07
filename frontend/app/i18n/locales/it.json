@@ -6592,7 +6592,11 @@
         "task_type_not_offered_by_project": "Il tipo di questo progetto non accetta attività di questo tipo. Scegli uno dei tipi che il modulo offre per esso.",
         "project_has_no_writable_repo": "Un passo di questa esecuzione ha bisogno di un repository in cui scrivere, e un progetto non ne ha: i repository dei suoi servizi collegati sono contesto in sola lettura. Scegli una pipeline che si limita a leggere e riferire.",
         "project_service_link_invalid": "Uno dei servizi collegati non esiste più o appartiene a un'altra organizzazione. Ricarica la board e scegli di nuovo i servizi collegati.",
-        "project_has_unfinished_tasks": "Questo progetto ha ancora attività non concluse. Concludile o eliminale prima."
+        "project_has_unfinished_tasks": "Questo progetto ha ancora attività non concluse. Concludile o eliminale prima.",
+        "research_pin_required": "Questo tipo di progetto conserva dati di ricerca, quindi serve una definizione di ricerca da fissare. Scegline una e riprova.",
+        "research_pin_not_accepted": "Questo tipo di progetto non conserva dati di ricerca, quindi non può fissare una definizione di ricerca. Rimuovi la definizione o scegli un tipo di ricerca.",
+        "research_definition_not_found": "Nessuna definizione di ricerca di questa organizzazione corrisponde a quella chiave e versione. Controlla la chiave, oppure lascia vuota la versione per fissare la più recente.",
+        "research_inputs_invalid": "I valori degli input della definizione di ricerca non la soddisfano. Compila ogni input obbligatorio con un valore accettato e riprova."
       }
     },
     "action": {

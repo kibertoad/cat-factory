@@ -713,7 +713,11 @@
         "task_type_not_offered_by_project": "Bu projenin türü bu tipte görev almıyor. Formun onun için sunduğu tiplerden birini seçin.",
         "project_has_no_writable_repo": "Bu çalıştırmanın bir adımı yazabileceği bir depoya ihtiyaç duyuyor ve projenin deposu yok: bağlı servislerin depoları salt okunur bağlamdır. Yalnızca okuyan ve raporlayan bir pipeline seçin.",
         "project_service_link_invalid": "Bağlı servislerden biri artık yok ya da başka bir kuruluşa ait. Panoyu yeniden yükleyip bağlı servisleri tekrar seçin.",
-        "project_has_unfinished_tasks": "Bu projenin hâlâ bitmemiş görevleri var. Önce onları bitirin ya da silin."
+        "project_has_unfinished_tasks": "Bu projenin hâlâ bitmemiş görevleri var. Önce onları bitirin ya da silin.",
+        "research_pin_required": "Bu proje türü araştırma verisi tutar, bu yüzden sabitlenecek bir araştırma tanımına ihtiyaç duyar. Bir tanım seçip yeniden deneyin.",
+        "research_pin_not_accepted": "Bu proje türü araştırma verisi tutmaz, bu yüzden bir araştırma tanımı sabitleyemez. Tanımı kaldırın veya bir araştırma türü seçin.",
+        "research_definition_not_found": "Bu kuruluşta o anahtar ve sürümle eşleşen bir araştırma tanımı yok. Anahtarı kontrol edin ya da en yenisini sabitlemek için sürümü boş bırakın.",
+        "research_inputs_invalid": "Araştırma tanımının girdileri için verilen değerler tanımı karşılamıyor. Her zorunlu girdiyi kabul edilen bir değerle doldurup yeniden deneyin."
       }
     },
     "action": {

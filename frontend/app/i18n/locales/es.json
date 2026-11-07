@@ -713,7 +713,11 @@
         "task_type_not_offered_by_project": "El tipo de este proyecto no acepta tareas de este tipo. Elige uno de los tipos que el formulario ofrece para él.",
         "project_has_no_writable_repo": "Un paso de esta ejecución necesita un repositorio en el que escribir, y un proyecto no tiene ninguno: los repositorios de sus servicios vinculados son contexto de solo lectura. Elige un pipeline que solo lea e informe.",
         "project_service_link_invalid": "Uno de los servicios vinculados ya no existe o pertenece a otra organización. Recarga el tablero y vuelve a elegir los servicios vinculados.",
-        "project_has_unfinished_tasks": "Este proyecto aún tiene tareas sin terminar. Termínalas o elimínalas primero."
+        "project_has_unfinished_tasks": "Este proyecto aún tiene tareas sin terminar. Termínalas o elimínalas primero.",
+        "research_pin_required": "Este tipo de proyecto guarda datos de investigación, así que necesita una definición de investigación que fijar. Elige una e inténtalo de nuevo.",
+        "research_pin_not_accepted": "Este tipo de proyecto no guarda datos de investigación, así que no puede fijar una definición de investigación. Quita la definición o elige un tipo de investigación.",
+        "research_definition_not_found": "Ninguna definición de investigación de esta organización coincide con esa clave y versión. Revisa la clave o deja la versión vacía para fijar la más reciente.",
+        "research_inputs_invalid": "Los valores de las entradas de la definición de investigación no la cumplen. Rellena cada entrada obligatoria con un valor aceptado e inténtalo de nuevo."
       }
     },
     "action": {
