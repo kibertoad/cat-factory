@@ -14,6 +14,7 @@ import {
   type ReferenceRepoSpec,
 } from '../job.js'
 import type { ResearchCredential, ResearchTarget } from './research-tools.logic.js'
+import type { CredentialRequest, HttpExchange } from './research-tools-server.js'
 
 /**
  * A research run: an agent over a browser and an HTTP client against a vendor, with NO checkout
@@ -50,9 +51,9 @@ export interface ResearchJob extends HarnessAuthFields {
 /** A research run's result: the agent's structured findings, plus what the tools recorded. */
 export interface ResearchResult extends AgentResult {
   /** The credential the agent asked a person for, when it stopped to wait for one. */
-  needsCredential?: { key: string; reason: string; observed: string }
+  needsCredential?: CredentialRequest
   /** The scrubbed HTTP exchanges `http_request` recorded, by the ref the agent cites. */
-  httpExchanges?: Array<{ ref: string; exchange: unknown }>
+  httpExchanges?: Array<{ ref: string; exchange: HttpExchange }>
 }
 
 const CREDENTIAL_KINDS = new Set(['login', 'api-token', 'oauth-client', 'secret'])
