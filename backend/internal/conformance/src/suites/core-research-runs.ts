@@ -133,6 +133,25 @@ export function defineCoreResearchRunsConformance(harness: ConformanceHarness): 
       const checkpoint = step.research?.checkpoint as { findings: { questionId: string }[] }
       expect(checkpoint.findings.map((f) => f.questionId)).toEqual(['scheme'])
       expect(step.research?.revisionId).toBeUndefined()
+
+      // Once the credential is stored the run resumes from its checkpoint: the resumed dispatch
+      // answers only what the checkpoint left open, and the one revision it records is the merge.
+      const stored = await app.call(
+        'PUT',
+        `/workspaces/${wsId}/capability-credentials/VENDOR_LOGIN`,
+        { value: 'vendor-login' },
+      )
+      expect(stored.status).toBe(200)
+      const resumed = await app.call(
+        'POST',
+        `/workspaces/${wsId}/executions/${exec.id}/credential/resume`,
+      )
+      expect(resumed.status).toBe(200)
+      const done = (await app.drive(wsId)).find((e) => e.id === exec.id)!
+      expect(done.status).toBe('done')
+      const finished = done.steps.find((s) => s.agentKind === 'project-researcher')!
+      expect(finished.research).toMatchObject({ seq: 1, revisionId: `frv_${exec.blockId}` })
+      expect(finished.output).toContain('2 answered')
     })
 
     it('refuses a research task under a service', async () => {

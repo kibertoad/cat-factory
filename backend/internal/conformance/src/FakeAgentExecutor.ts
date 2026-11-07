@@ -312,8 +312,9 @@ export interface FakeAgentOptions {
   /**
    * The credential a `project-researcher` step's FIRST dispatch in each run asks a person for,
    * answering only its first question beside the request (the analogue of the harness's
-   * `request_credential` with a checkpoint). Later dispatches answer every question. Omitted: the
-   * first dispatch answers every question.
+   * `request_credential` with a checkpoint). A later dispatch answers only the questions its
+   * checkpoint does not, as the prompt tells a resumed run to. Omitted: the first dispatch answers
+   * every question.
    */
   researchCredentialRequest?: AgentRunResult['credentialRequest']
   /**
@@ -398,8 +399,9 @@ export class FakeAgentExecutor implements AgentExecutor {
   private readonly researchAsked = new Set<string>()
 
   /**
-   * A research run's findings: every asked question answered, or (on the first dispatch of a run
-   * scripted to ask) the first one answered beside a credential request.
+   * A research run's findings: every asked question its checkpoint has not settled answered, or
+   * (on the first dispatch of a run scripted to ask) the first one answered beside a credential
+   * request.
    */
   private runResearcher(context: AgentRunContext): AgentRunResult {
     const questions = context.research?.questions ?? []
@@ -407,7 +409,9 @@ export class FakeAgentExecutor implements AgentExecutor {
     const ask = this.options.researchCredentialRequest
     const asking = !!ask && !this.researchAsked.has(runKey)
     if (asking) this.researchAsked.add(runKey)
-    const answered = asking ? questions.slice(0, 1) : questions
+    const settled = new Set((context.research?.checkpoint?.findings ?? []).map((f) => f.questionId))
+    const open = questions.filter((q) => !settled.has(q.id))
+    const answered = asking ? open.slice(0, 1) : open
     return {
       output: '[project-researcher] researched',
       model: 'fake',
