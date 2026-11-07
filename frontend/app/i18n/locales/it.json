@@ -9278,7 +9278,8 @@
       "linked": "Progetto collegato",
       "loadFailed": "Impossibile caricare i progetti collegati",
       "linkFailed": "Impossibile collegare il progetto",
-      "unlinkFailed": "Impossibile scollegare il progetto"
+      "unlinkFailed": "Impossibile scollegare il progetto",
+      "stageHint": "Collegato una volta creata l'attività. Un progetto ancora senza risultato viene allora rifiutato."
     }
   },
   "research": {

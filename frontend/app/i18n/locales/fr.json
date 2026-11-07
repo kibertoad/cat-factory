@@ -9278,7 +9278,8 @@
       "linked": "Projet lié",
       "loadFailed": "Impossible de charger les projets liés",
       "linkFailed": "Impossible de lier le projet",
-      "unlinkFailed": "Impossible de délier le projet"
+      "unlinkFailed": "Impossible de délier le projet",
+      "stageHint": "Lié une fois la tâche créée. Un projet sans résultat est alors refusé."
     }
   },
   "research": {

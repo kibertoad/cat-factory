@@ -9278,7 +9278,8 @@
       "linked": "Proyecto vinculado",
       "loadFailed": "No se pudieron cargar los proyectos vinculados",
       "linkFailed": "No se pudo vincular el proyecto",
-      "unlinkFailed": "No se pudo desvincular el proyecto"
+      "unlinkFailed": "No se pudo desvincular el proyecto",
+      "stageHint": "Se vincula al crear la tarea. Un proyecto que aún no tiene resultado se rechaza entonces."
     }
   },
   "research": {
