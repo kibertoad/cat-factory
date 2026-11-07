@@ -70,8 +70,8 @@ export class ResearchFindingsStore {
 
   /**
    * Write a task's revision once. A revision already written under `meta.id` is kept as it is,
-   * so a replayed completion stores nothing twice; when two completions race past that check,
-   * the loser's offloaded copy is deleted again.
+   * so a replayed completion stores nothing twice; when two completions race past that check, or
+   * the row insert fails, the offloaded copy no row names is deleted again.
    */
   async write(input: {
     runWorkspaceId: string
@@ -112,16 +112,24 @@ export class ResearchFindingsStore {
       },
       blob: bytes,
     })
-    const written = await this.deps.findingsRevisionRepository.insert({
-      ...row,
-      body: { kind: 'offloaded', artifactId: artifact.id },
-    })
-    if (!written) {
-      const store = home.store
-      await runBestEffort(this.log, 'findings write: drop the losing offloaded copy', () =>
+    // The copy is anchored on the project root, which outlives this write, so a copy no row
+    // names would be retained for as long as the project: drop it when the insert does not land.
+    const store = home.store
+    const dropCopy = () =>
+      runBestEffort(this.log, 'findings write: drop the unreferenced offloaded copy', () =>
         store.delete(home.workspaceId, artifact.id),
       )
+    let written: boolean
+    try {
+      written = await this.deps.findingsRevisionRepository.insert({
+        ...row,
+        body: { kind: 'offloaded', artifactId: artifact.id },
+      })
+    } catch (error) {
+      await dropCopy()
+      throw error
     }
+    if (!written) await dropCopy()
   }
 
   /** The project root's home workspace and the account's blob store, or null when unset. */

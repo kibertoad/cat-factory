@@ -122,6 +122,17 @@ describe('ResearchFindingsStore', () => {
     expect(blobs.spies.delete).toHaveBeenCalledWith('ws_home', 'art_1')
   })
 
+  it('deletes its offloaded copy when the row insert fails, and still fails the write', async () => {
+    const { repo } = revisions()
+    vi.mocked(repo.insert).mockRejectedValueOnce(new Error('db down'))
+    const blobs = blobStore()
+    const findings = findingsStore({ repo, store: blobs.store, inlineMaxBytes: 16 })
+    await expect(
+      findings.write({ runWorkspaceId: 'ws_run', project, meta, body: body('no row') }),
+    ).rejects.toThrow('db down')
+    expect(blobs.spies.delete).toHaveBeenCalledWith('ws_home', 'art_1')
+  })
+
   it('refuses a body over the row ceiling when offload is disabled', async () => {
     const { repo } = revisions()
     const findings = findingsStore({ repo, inlineMaxBytes: 16, offload: 'disabled' })
