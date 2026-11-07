@@ -56,31 +56,26 @@ export class ResearchFindingsStore {
   async listRevisions(project: FindingsProject): Promise<FindingsRevision[]> {
     const rows = await this.deps.findingsRevisionRepository.listByProject(project.id)
     if (!rows.some((row) => row.body.kind === 'offloaded')) return rows.map(inlineRevision)
-    const { workspaceId, store } = await this.homeStore(project)
+    const home = await this.homeStore(project)
     // Object storage has no batched GET, so each offloaded body is one read of its own.
-    return Promise.all(
-      rows.map(async (row) => {
-        if (row.body.kind === 'inline') return inlineRevision(row)
-        const bytes = store ? await store.getBlob(workspaceId, row.body.artifactId) : null
-        if (!bytes) throw bodyUnavailable(row.id)
-        return withBody(row, decodeBody(row.id, new globalThis.TextDecoder().decode(bytes)))
-      }),
-    )
+    return Promise.all(rows.map(async (row) => withBody(row, await readBody(row, home))))
   }
 
   /**
-   * Write a task's revision once. A revision already written under `meta.id` is kept as it is,
-   * so a replayed completion stores nothing twice; when two completions race past that check, or
-   * the row insert fails, the offloaded copy no row names is deleted again.
+   * Write a task's revision once and return the body on record. A revision already written
+   * under `meta.id` is kept as it is, so a replayed completion stores nothing twice and gets the
+   * recorded body back with `written: false`. When two completions race past that check, or the
+   * row insert fails, the offloaded copy no row names is deleted again.
    */
   async write(input: {
     runWorkspaceId: string
     project: FindingsProject
     meta: FindingsRevisionMeta
     body: FindingsRevisionBody
-  }): Promise<void> {
+  }): Promise<RecordedFindings> {
     const { project, meta } = input
-    if (await this.deps.findingsRevisionRepository.get(project.id, meta.id)) return
+    const existing = await this.deps.findingsRevisionRepository.get(project.id, meta.id)
+    if (existing) return { written: false, body: await this.bodyOf(project, existing) }
     const json = JSON.stringify(input.body)
     const bytes = new globalThis.TextEncoder().encode(json)
     const home = await this.homeStore(project)
@@ -97,9 +92,13 @@ export class ResearchFindingsStore {
       })
     }
     const row = { ...meta, bodyBytes: bytes.byteLength }
+    const written: RecordedFindings = { written: true, body: input.body }
     if (placement.placement === 'inline' || !home.store) {
-      await this.deps.findingsRevisionRepository.insert({ ...row, body: { kind: 'inline', json } })
-      return
+      const inserted = await this.deps.findingsRevisionRepository.insert({
+        ...row,
+        body: { kind: 'inline', json },
+      })
+      return inserted ? written : this.onRecord(project, meta.id)
     }
     const artifact = await home.store.store({
       meta: {
@@ -119,9 +118,9 @@ export class ResearchFindingsStore {
       runBestEffort(this.log, 'findings write: drop the unreferenced offloaded copy', () =>
         store.delete(home.workspaceId, artifact.id),
       )
-    let written: boolean
+    let inserted: boolean
     try {
-      written = await this.deps.findingsRevisionRepository.insert({
+      inserted = await this.deps.findingsRevisionRepository.insert({
         ...row,
         body: { kind: 'offloaded', artifactId: artifact.id },
       })
@@ -129,7 +128,24 @@ export class ResearchFindingsStore {
       await dropCopy()
       throw error
     }
-    if (!written) await dropCopy()
+    if (inserted) return written
+    await dropCopy()
+    return this.onRecord(project, meta.id)
+  }
+
+  /** The revision another write landed first under `id`. */
+  private async onRecord(project: FindingsProject, id: string): Promise<RecordedFindings> {
+    const stored = await this.deps.findingsRevisionRepository.get(project.id, id)
+    if (!stored) throw new Error(`Findings revision '${id}' was refused but is not on record`)
+    return { written: false, body: await this.bodyOf(project, stored) }
+  }
+
+  private async bodyOf(
+    project: FindingsProject,
+    row: FindingsRevisionRow,
+  ): Promise<FindingsRevisionBody> {
+    if (row.body.kind === 'inline') return decodeBody(row.id, row.body.json)
+    return readBody(row, await this.homeStore(project))
   }
 
   /** The project root's home workspace and the account's blob store, or null when unset. */
@@ -162,6 +178,24 @@ export class ResearchFindingsStore {
       facadeInlineCeilingBytes: FINDINGS_INLINE_MAX_BYTES_CEILING,
     })
   }
+}
+
+/** A revision body as {@link ResearchFindingsStore.write} left it on record. */
+export interface RecordedFindings {
+  /** False when an earlier write already recorded the revision, whose body this is. */
+  written: boolean
+  body: FindingsRevisionBody
+}
+
+/** A row's body, inline or read from the home workspace's blob store. */
+async function readBody(
+  row: FindingsRevisionRow,
+  home: { workspaceId: string; store: BinaryArtifactStore | null },
+): Promise<FindingsRevisionBody> {
+  if (row.body.kind === 'inline') return decodeBody(row.id, row.body.json)
+  const bytes = home.store ? await home.store.getBlob(home.workspaceId, row.body.artifactId) : null
+  if (!bytes) throw bodyUnavailable(row.id)
+  return decodeBody(row.id, new globalThis.TextDecoder().decode(bytes))
 }
 
 function inlineRevision(row: FindingsRevisionRow): FindingsRevision {

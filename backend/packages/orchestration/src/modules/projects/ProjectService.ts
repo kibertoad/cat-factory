@@ -6,7 +6,9 @@ import {
   type ResearchPinInput,
   type ResearchProject,
   type UpdateMountInput,
+  sanitizeDescriptorFields,
   validateDescriptorFields,
+  withDescriptorFieldDefaults,
 } from '@cat-factory/contracts'
 import {
   type Block,
@@ -119,10 +121,17 @@ export class ProjectService {
       size: null,
       createdAt: now,
     }
+    // The row goes first: the root block's owner stamp and the mount both name the project, and
+    // the persistence RPC scopes each of them through it.
     await this.deps.projectRepository.insert(project)
-    if (researchPin) await this.deps.research.projects.insert(researchPin)
-    await this.deps.blockRepository.insert(workspaceId, rootBlock, project.id)
-    await this.deps.workspaceMountRepository.upsert(mount)
+    try {
+      if (researchPin) await this.deps.research.projects.insert(researchPin)
+      await this.deps.blockRepository.insert(workspaceId, rootBlock, project.id)
+      await this.deps.workspaceMountRepository.upsert(mount)
+    } catch (error) {
+      await this.undoCreate(workspaceId, project)
+      throw error
+    }
     await this.emitAdded(workspaceId, rootBlock.id)
     return { project, rootBlock: applyMountLayout(rootBlock, mount), mount }
   }
@@ -246,7 +255,11 @@ export class ProjectService {
         definitionVersion: pin.definitionVersion ?? null,
       })
     }
-    const problems = validateDescriptorFields(resolved.definition.inputs, pin.inputs)
+    // Defaults first, then validate, then pin only the visible answers: the bag every other
+    // descriptor-form door freezes, so a hidden field can never pin an unvalidated value.
+    const fields = resolved.definition.inputs
+    const inputs = withDescriptorFieldDefaults(fields, pin.inputs)
+    const problems = validateDescriptorFields(fields, inputs)
     if (problems.length) {
       throw new ValidationError('The research inputs do not satisfy the definition', {
         reason: 'research_inputs_invalid',
@@ -258,7 +271,7 @@ export class ProjectService {
       definitionKey: resolved.definition.key,
       definitionVersion: resolved.definition.version,
       definitionHash: resolved.contentHash,
-      inputs: pin.inputs,
+      inputs: sanitizeDescriptorFields(fields, inputs),
     }
   }
 
@@ -279,6 +292,25 @@ export class ProjectService {
         serviceIds: invalid,
       })
     }
+  }
+
+  /**
+   * Remove whatever a failed create wrote. Nothing reclaims a project whose root never landed (the
+   * removal cascade starts from a deleted root), so without this it would stay in the catalog.
+   */
+  private async undoCreate(workspaceId: string, project: Project): Promise<void> {
+    const fields = { workspaceId, projectId: project.id }
+    await runBestEffort(
+      this.log,
+      'project create rollback',
+      async () => {
+        await this.deps.workspaceMountRepository.remove(workspaceId, project.id)
+        await this.deps.blockRepository.deleteMany(workspaceId, [project.rootBlockId])
+        await this.deps.research.projects.deleteMany([project.id])
+        await this.deps.projectRepository.deleteMany([project.id])
+      },
+      fields,
+    )
   }
 
   private defaultPosition(existing: readonly WorkspaceMount[]): { x: number; y: number } {

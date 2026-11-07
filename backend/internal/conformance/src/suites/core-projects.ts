@@ -47,7 +47,20 @@ function vendorDefinition(version: number) {
       { id: 'auth', title: 'Auth', questions: [{ id: 'scheme', question: 'Which auth scheme?' }] },
     ],
     targets: [{ baseUrl: 'https://vendor.example', surface: 'api' as const }],
-    inputs: [{ key: 'region', label: 'Region', type: 'text' as const, required: true }],
+    inputs: [
+      { key: 'region', label: 'Region', type: 'text' as const, required: true },
+      {
+        key: 'depth',
+        label: 'Depth',
+        type: 'select' as const,
+        default: 'shallow',
+        options: [
+          { value: 'shallow', label: 'Shallow' },
+          { value: 'deep', label: 'Deep' },
+        ],
+      },
+      { key: 'notes', label: 'Notes', type: 'text' as const },
+    ],
   }
 }
 
@@ -140,7 +153,7 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
       const { app, wsId } = await setup()
       const latest = await createProject(app, wsId, {
         kind: 'vendor-study',
-        research: { definitionKey: 'acme:vendor', inputs: { region: 'eu' } },
+        research: { definitionKey: 'acme:vendor', inputs: { region: 'eu', notes: '' } },
       })
       expect(latest.status).toBe(201)
       const pinned = await app.researchProjectRepository().get(latest.body.project.id)
@@ -148,8 +161,9 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
         definitionKey: 'acme:vendor',
         definitionVersion: 2,
         definitionHash: await researchDefinitionContentHash(definitions().get('acme:vendor', 2)!),
-        inputs: { region: 'eu' },
       })
+      // The declared default answers an omitted field, and an unfilled one is not pinned.
+      expect(pinned?.inputs).toEqual({ region: 'eu', depth: 'shallow' })
       const exact = await createProject(app, wsId, {
         kind: 'vendor-study',
         research: { definitionKey: 'acme:vendor', definitionVersion: 1, inputs: { region: 'us' } },
@@ -259,6 +273,38 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
         .body
       expect(snap.blocks.some((b) => b.id === project.rootBlockId)).toBe(true)
       expect(snap.projectCatalog?.map((p) => p.id)).toContain(project.id)
+    })
+
+    it('re-homes a shared service its home board has unmounted', async () => {
+      const { app, wsId, accountId } = await setup()
+      const frame = (
+        await app.call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+          type: 'service',
+          title: 'Shared service',
+        })
+      ).body
+      const before = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+      const service = before.serviceCatalog?.find((s) => s.frameBlockId === frame.id)
+      expect(service).toBeTruthy()
+      const other = await app.createWorkspaceInAccount(accountId, null, { name: 'Other board' })
+      await app.call('POST', `/workspaces/${other.workspace.id}/services/${service!.id}`, {})
+      expect((await app.call('DELETE', `/workspaces/${wsId}/services/${service!.id}`)).status).toBe(
+        204,
+      )
+      expect((await app.call('DELETE', `/workspaces/${wsId}`)).status).toBe(204)
+      const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${other.workspace.id}`))
+        .body
+      expect(snap.blocks.some((b) => b.id === frame.id)).toBe(true)
+      expect(snap.serviceCatalog?.map((s) => s.id)).toContain(service!.id)
+    })
+
+    it("refuses to unmount a project through the service route, keeping its home board's mount", async () => {
+      const { app, wsId } = await setup()
+      const { project } = (await createProject(app, wsId)).body
+      const refused = await app.call('DELETE', `/workspaces/${wsId}/services/${project.id}`)
+      expect(refused.status).toBe(404)
+      const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+      expect(snap.mounts?.some((m) => m.subjectId === project.id)).toBe(true)
     })
 
     it('reclaims an unshared project with its home board', async () => {

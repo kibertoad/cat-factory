@@ -114,6 +114,9 @@ export const PROJECT_RESEARCHER_AGENT_KINDS: AgentKindDefinition[] = [
     kind: PROJECT_RESEARCHER_KIND,
     systemPrompt: PROJECT_RESEARCHER_SYSTEM_PROMPT,
     userPrompt: (context) => projectResearcherUserPrompt(context),
+    // A task's best-practice fragments say how code is written or prose reads, and this kind
+    // writes neither: its product is findings about a vendor, steered by its definition.
+    standardsDelivery: 'none',
     // Our container on the `ui` image (Chromium and Playwright MCP are there), with no checkout.
     agent: {
       surface: 'container-research',

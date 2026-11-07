@@ -173,7 +173,7 @@ export class ResearchStepController {
     const project = await this.deps.projectRepository.get(state.projectId)
     if (!project) throw new Error(`research project '${state.projectId}' no longer exists`)
     const id = revisionIdFor(taskId)
-    await this.deps.findings.write({
+    const recorded = await this.deps.findings.write({
       runWorkspaceId: workspaceId,
       project,
       meta: {
@@ -189,7 +189,12 @@ export class ResearchStepController {
       body,
     })
     step.research = { ...state, revisionId: id }
-    return { output: renderRevision(body, state, dropped), outputIsRendered: true }
+    // A replayed completion that lost to the write that landed first reports the revision on
+    // record, not the replay's reply, whose answers may differ from it.
+    return {
+      output: renderRevision(recorded.body, state, recorded.written ? dropped : []),
+      outputIsRendered: true,
+    }
   }
 
   private async resolveTask(block: Block): Promise<ResolvedTask> {

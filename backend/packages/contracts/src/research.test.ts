@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   adhocQuestionId,
+  decodeFindingsStoragePolicy,
+  decodeResearchMode,
   foldFindings,
   isAdhocQuestionId,
   parseResearchDefinition,
@@ -221,5 +223,20 @@ describe('researchCoverage', () => {
     ])
     expect(coverage.adhoc.partial).toBe(1)
     expect(coverage.retiredQuestionIds).toEqual(['retired-question'])
+  })
+})
+
+describe('decoding persisted research values', () => {
+  it('reads a stored policy and refuses one outside the schema', () => {
+    expect(decodeFindingsStoragePolicy('{"inlineMaxBytes":1000,"offload":"disabled"}')).toEqual({
+      inlineMaxBytes: 1000,
+      offload: 'disabled',
+    })
+    expect(() => decodeFindingsStoragePolicy('{"inlineMaxBytes":-1}')).toThrow()
+    expect(() => decodeFindingsStoragePolicy('{"offload":"sometimes"}')).toThrow()
+  })
+
+  it('refuses a research mode no current mode names', () => {
+    expect(() => decodeResearchMode('rewrite')).toThrow()
   })
 })

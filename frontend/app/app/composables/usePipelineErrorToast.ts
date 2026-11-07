@@ -36,9 +36,9 @@ import type {
   ApiErrorCode,
   BootstrapReferenceReason,
   CredentialWaitReason,
-  ProjectReason,
   GateConfigRefusalReason,
   PipelineApprovalsRefusalReason,
+  ProjectReason,
   ToolServerOAuthReason,
   UnavailableReason,
 } from '@cat-factory/contracts'
@@ -134,9 +134,9 @@ const GENERIC_DESCRIPTION_KEYS: Record<Exclude<ApiErrorCode, 'conflict'>, string
  * `CredentialWaitReason` joins it because its 403 is not a missing permission: it names the one
  * person (the run's initiator) whose password can resume the run.
  *
- * `ProjectReason` joins it because each of its 422s names what to change about a project or a
- * research task (pick a definition, a mode, a project instead of a service), which the generic
- * validation wording does not say.
+ * `ProjectReason` joins it because each of its 422s names a rule of projects (what a kind offers,
+ * that a project has no repository to write to) rather than a malformed request, and one of them
+ * surfaces from a run's dispatch, far from the form that could explain it.
  */
 const REASON_DESCRIPTION_KEYS: Record<
   | UnavailableReason

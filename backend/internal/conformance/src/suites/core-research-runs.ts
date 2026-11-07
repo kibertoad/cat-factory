@@ -137,36 +137,32 @@ export function defineCoreResearchRunsConformance(harness: ConformanceHarness): 
       const checkpoint = step.research?.checkpoint as { findings: { questionId: string }[] }
       expect(checkpoint.findings.map((f) => f.questionId)).toEqual(['scheme'])
       expect(step.research?.revisionId).toBeUndefined()
-    })
 
-    it('resumes a parked run once the credential is stored, keeping the checkpointed answers', async () => {
-      const { app, wsId, project } = await setup({
-        researchCredentialRequest: {
-          key: 'VENDOR_LOGIN',
-          reason: 'The admin pages need a login',
-          observed: 'Redirected to the sign-in page',
-        },
-      })
-      const { task, exec } = await runTask(app, wsId, project)
-      expect(exec.status).toBe('blocked')
-      const resume = `/workspaces/${wsId}/executions/${exec.id}/credential/resume`
-      const early = await app.call('POST', resume)
+      const early = await app.call(
+        'POST',
+        `/workspaces/${wsId}/executions/${exec.id}/credential/resume`,
+      )
       expect(early.status).toBe(409)
       expect(reasonOf(early.body)).toBe('capability_credential_still_missing')
 
+      // Once the credential is stored the run resumes from its checkpoint: the resumed dispatch
+      // answers only what the checkpoint left open, and the one revision it records is the merge.
       const stored = await app.call(
         'PUT',
         `/workspaces/${wsId}/capability-credentials/VENDOR_LOGIN`,
-        { value: 'vendor-login-secret' },
+        { value: 'vendor-login' },
       )
       expect(stored.status).toBe(200)
-      expect((await app.call('POST', resume)).status).toBe(200)
-      const done = (await app.drive(wsId)).find((e) => e.blockId === task.id)!
+      const resumed = await app.call(
+        'POST',
+        `/workspaces/${wsId}/executions/${exec.id}/credential/resume`,
+      )
+      expect(resumed.status).toBe(200)
+      const done = (await app.drive(wsId)).find((e) => e.id === exec.id)!
       expect(done.status).toBe('done')
-      const step = done.steps.find((s) => s.agentKind === 'project-researcher')!
-      // Still one revision for the task, under the sequence number its first dispatch claimed.
-      expect(step.research).toMatchObject({ seq: 1, revisionId: `frv_${task.id}` })
-      expect(step.output).toContain('2 answered')
+      const finished = done.steps.find((s) => s.agentKind === 'project-researcher')!
+      expect(finished.research).toMatchObject({ seq: 1, revisionId: `frv_${exec.blockId}` })
+      expect(finished.output).toContain('2 answered')
     })
 
     it('offloads a body over the threshold and reads it back for the next task', async () => {

@@ -625,6 +625,8 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *  - `findings_too_large_for_inline`    the findings body is over the runtime's own row ceiling
  *                                       and cannot be offloaded: offload is disabled by the
  *                                       storage policy, or the account stores no content.
+ *
+ * The SPA keys an exhaustive `Record<ProjectReason, …>` of message keys off this.
  */
 export const PROJECT_REASONS = [
   'project_kind_unregistered',

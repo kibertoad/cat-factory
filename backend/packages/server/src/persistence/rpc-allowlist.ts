@@ -351,8 +351,8 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByProject: { scope: { kind: 'project', arg: 0 } },
   },
   findingsStoragePolicyRepository: {
-    get: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    set: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    get: { scope: { kind: 'owner', kindArg: 0, idArg: 1, projectTier: true } },
+    set: { scope: { kind: 'owner', kindArg: 0, idArg: 1, projectTier: true } },
   },
   // Account-owned projects, the peers of services. Every read and write binds the project's own
   // account; an insert or a link change also binds every linked service to that same account,

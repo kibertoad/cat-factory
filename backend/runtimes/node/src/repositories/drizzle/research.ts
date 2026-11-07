@@ -1,4 +1,5 @@
 import {
+  decodeFindingsStoragePolicy,
   decodeResearchMode,
   parseResearchDefinition,
   type FindingsStorageOwnerKind,
@@ -242,7 +243,7 @@ export class DrizzleFindingsStoragePolicyRepository implements FindingsStoragePo
           eq(findingsStoragePolicies.owner_id, ownerId),
         ),
       )
-    return row ? (JSON.parse(row.policy) as FindingsStoragePolicy) : null
+    return row ? decodeFindingsStoragePolicy(row.policy) : null
   }
 
   async set(

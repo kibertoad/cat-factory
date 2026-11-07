@@ -114,12 +114,24 @@ describe('ResearchFindingsStore', () => {
     expect(repo.insert).toHaveBeenCalledTimes(1)
   })
 
-  it('deletes its offloaded copy when another writer won the row', async () => {
-    const { repo } = revisions(false)
+  it('deletes its offloaded copy when another writer won the row, and returns the winner', async () => {
+    const { repo, rows } = revisions(false)
+    const winner = JSON.stringify(body('won race'))
+    vi.mocked(repo.insert).mockImplementationOnce(async () => {
+      rows.push({ ...meta, bodyBytes: winner.length, body: { kind: 'inline', json: winner } })
+      return false
+    })
     const blobs = blobStore()
     const findings = findingsStore({ repo, store: blobs.store, inlineMaxBytes: 16 })
-    await findings.write({ runWorkspaceId: 'ws_run', project, meta, body: body('lost race') })
+    const recorded = await findings.write({
+      runWorkspaceId: 'ws_run',
+      project,
+      meta,
+      body: body('lost race'),
+    })
     expect(blobs.spies.delete).toHaveBeenCalledWith('ws_home', 'art_1')
+    expect(recorded.written).toBe(false)
+    expect(recorded.body.findings[0]?.answer).toBe('won race')
   })
 
   it('deletes its offloaded copy when the row insert fails, and still fails the write', async () => {

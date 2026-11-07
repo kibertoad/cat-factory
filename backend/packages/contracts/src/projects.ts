@@ -72,8 +72,9 @@ export type SetProjectServicesInput = v.InferOutput<typeof setProjectServicesInp
 
 /**
  * What a project task does with repositories: `none` never touches one, `linked-read-only`
- * reads the linked services' repos as context. A project has no repository to write to, so no
- * kind can offer a task type that needs one.
+ * reads the linked services' repos as context. A project has no repository to write to, so there
+ * is no writing access to declare; a run step that needs a checkout to push to is refused when it
+ * dispatches (`project_has_no_writable_repo`).
  */
 export const projectRepoAccessSchema = v.picklist(['none', 'linked-read-only'])
 export type ProjectRepoAccess = v.InferOutput<typeof projectRepoAccessSchema>

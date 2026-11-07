@@ -153,6 +153,7 @@ describe("WorkspaceService.delete: carrying a re-homed subject's artifacts", () 
       } as unknown as WorkspaceRepository,
       blockRepository: {
         listByWorkspace: () => Promise.resolve([frame]),
+        findByIds: () => Promise.resolve([{ workspaceId: WS.id, ownerId: 'svc_1', block: frame }]),
         listByOwners: () =>
           Promise.resolve([frame, { id: 'blk_task', level: 'task', parentId: 'blk_frame' }]),
       } as never,

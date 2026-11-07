@@ -89,16 +89,18 @@ export interface CredentialWaitResumeHooks {
 }
 
 /**
- * Parks a run whose personal-subscription credential lapsed, and resumes it.
+ * Parks a run whose dispatch is missing a credential, and resumes it.
  *
- * A run on an individual-usage model leases its initiator's credential at every dispatch, from an
- * activation with a fixed lifetime. Whatever advanced the run to that dispatch (a human answering
- * a review, a background re-review converging, a timer) is irrelevant here: the lease is refused,
- * and the step parks on the generic approval with `credentialWait` set, instead of failing the run.
- * The person answers it with {@link resume}, which re-mints the activation from their personal
- * password before re-dispatching.
+ * Two refusals park. A run on an individual-usage model leases its initiator's credential at every
+ * dispatch, from an activation with a fixed lifetime, and that lease can be refused (`personal`).
+ * A step can declare a capability credential the workspace has not stored (`capability`). Whatever
+ * advanced the run to that dispatch (a human answering a review, a background re-review
+ * converging, a timer) is irrelevant here: the step parks on the generic approval with
+ * `credentialWait` set, instead of failing the run. {@link resume} answers it: a personal wait
+ * re-mints the activation from the initiator's personal password, a capability wait first checks
+ * the key now resolves, and both then re-dispatch.
  *
- * {@link guard} is the ONE place the refusal is recognised. The engine routes every call that can
+ * {@link guard} is the ONE place either refusal is recognised. The engine routes every call that can
  * dispatch (advance and the three poll entry points) through it, so no dispatch site and no
  * run-advancing route has to remember to check the credential itself.
  */
@@ -111,7 +113,8 @@ export class CredentialWaitController {
 
   /**
    * Run one engine call that may dispatch a step, parking the run when the dispatch's lease was
-   * refused. Anything else (a result or a throw) passes through untouched.
+   * refused or a capability credential it declared is missing. Anything else (a result or a
+   * throw) passes through untouched.
    */
   async guard(
     workspaceId: string,
