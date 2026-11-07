@@ -272,7 +272,8 @@
         "review": "Review",
         "ralph": "Ralph loop",
         "bugFishing": "Bug fishing",
-        "resolveConflicts": "Resolve conflicts"
+        "resolveConflicts": "Resolve conflicts",
+        "research": "Research"
       },
       "recurringWithFrame": "A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.",
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
@@ -792,7 +793,13 @@
         "research_pin_required": "This project kind keeps research data, so it needs a research definition to pin. Pick one and try again.",
         "research_pin_not_accepted": "This project kind keeps no research data, so it cannot pin a research definition. Remove the definition, or pick a research kind.",
         "research_definition_not_found": "No research definition matches that key and version for this organization. Check the key, or leave the version empty to pin the latest.",
-        "research_inputs_invalid": "The values for the research definition's inputs do not satisfy it. Fill in every required input with an accepted value, then try again."
+        "research_inputs_invalid": "The values for the research definition's inputs do not satisfy it. Fill in every required input with an accepted value, then try again.",
+        "task_type_requires_project": "A research task belongs under a research project, not under a service. Add it to a research project instead.",
+        "research_project_not_pinned": "A research task needs a research project that pins a research definition, and this one pins none. Add the task to a research project.",
+        "research_definition_changed": "The research definition this project pinned has changed since, so the run stopped rather than ask questions the project never agreed to. Ask your deployment operator to publish the change as a new version.",
+        "research_task_already_recorded": "This research task already recorded its findings. Create a new research task to follow up.",
+        "research_nothing_to_ask": "This research task's mode leaves no question to ask: nothing new to extend with, or nothing partial or blocked to clarify. Pick another mode or add a question.",
+        "findings_too_large_for_inline": "The findings are too large to store, so the revision was not recorded. Narrow the research and run it again."
       }
     },
     "action": {
@@ -5698,7 +5705,8 @@
         "research": "Research",
         "planning": "Planning",
         "media": "Media",
-        "maintenance": "PR maintenance"
+        "maintenance": "PR maintenance",
+        "projectResearch": "Project research"
       },
       "strategyOption": {
         "specialist-panel": "Specialist panel",

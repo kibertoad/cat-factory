@@ -236,7 +236,8 @@
         "review": "Revue",
         "ralph": "Boucle Ralph",
         "bugFishing": "Pêche aux bogues",
-        "resolveConflicts": "Résoudre les conflits"
+        "resolveConflicts": "Résoudre les conflits",
+        "research": "Recherche"
       },
       "recurringWithFrame": "Une tâche récurrente exécute une pipeline selon une cadence. Continuez pour définir le calendrier et le prompt.",
       "recurringNoFrame": "Une tâche récurrente doit appartenir à un service. Ajoutez-la depuis un cadre de service (ou un module à l’intérieur).",
@@ -717,7 +718,13 @@
         "research_pin_required": "Ce type de projet conserve des données de recherche : il lui faut une définition de recherche à épingler. Choisissez-en une et réessayez.",
         "research_pin_not_accepted": "Ce type de projet ne conserve aucune donnée de recherche : il ne peut pas épingler de définition de recherche. Retirez la définition ou choisissez un type de recherche.",
         "research_definition_not_found": "Aucune définition de recherche de cette organisation ne correspond à cette clé et à cette version. Vérifiez la clé, ou laissez la version vide pour épingler la plus récente.",
-        "research_inputs_invalid": "Les valeurs des entrées de la définition de recherche ne la satisfont pas. Renseignez chaque entrée obligatoire avec une valeur acceptée, puis réessayez."
+        "research_inputs_invalid": "Les valeurs des entrées de la définition de recherche ne la satisfont pas. Renseignez chaque entrée obligatoire avec une valeur acceptée, puis réessayez.",
+        "task_type_requires_project": "Une tâche de recherche appartient à un projet de recherche, pas à un service. Ajoutez-la plutôt à un projet de recherche.",
+        "research_project_not_pinned": "Une tâche de recherche nécessite un projet de recherche qui épingle une définition de recherche, et celui-ci n'en épingle aucune. Ajoutez la tâche à un projet de recherche.",
+        "research_definition_changed": "La définition de recherche épinglée par ce projet a changé depuis, donc l'exécution s'est arrêtée plutôt que de poser des questions que le projet n'a jamais acceptées. Demandez à l'opérateur du déploiement de publier la modification sous une nouvelle version.",
+        "research_task_already_recorded": "Cette tâche de recherche a déjà enregistré ses résultats. Créez une nouvelle tâche de recherche pour faire un suivi.",
+        "research_nothing_to_ask": "Le mode de cette tâche de recherche ne laisse aucune question à poser : rien de nouveau à ajouter, ou rien de partiel ou de bloqué à clarifier. Choisissez un autre mode ou ajoutez une question.",
+        "findings_too_large_for_inline": "Les résultats sont trop volumineux pour être stockés, donc la révision n'a pas été enregistrée. Restreignez la recherche et relancez-la."
       }
     },
     "action": {
@@ -5498,7 +5505,8 @@
         "research": "Recherche",
         "planning": "Planification",
         "media": "Média",
-        "maintenance": "Maintenance de PR"
+        "maintenance": "Maintenance de PR",
+        "projectResearch": "Recherche de projet"
       },
       "strategyOption": {
         "specialist-panel": "Panel de spécialistes",

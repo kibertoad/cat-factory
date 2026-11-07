@@ -156,6 +156,10 @@ describe('evaluateInputGate: blocks whose description is not authored task input
     expect(verdict).toEqual({ status: 'not_applicable', mode: 'standard', issues: [] })
   })
 
+  it('does not judge a research task, whose brief is the definition its project pinned', () => {
+    expect(codes(task({ taskType: 'research', description: '' }))).toEqual([])
+  })
+
   it('does not judge a resolve-conflicts task, whose input is the pull request it attached', () => {
     // Its subject was confirmed open and pushable at creation, so a blank description states no
     // absence, and parking it would stop a headless start that has nothing left to supply.

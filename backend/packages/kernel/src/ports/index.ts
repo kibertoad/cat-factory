@@ -273,6 +273,8 @@ export type {
   AgentJobUpdate,
   AgentRunContext,
   AgentRunResult,
+  ResearchCredentialRequest,
+  ResearchRunContext,
   AgentTokenUsage,
   AsyncAgentExecutor,
   ReviewedPoint,

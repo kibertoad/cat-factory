@@ -236,7 +236,8 @@
         "review": "Revisión",
         "ralph": "Bucle Ralph",
         "bugFishing": "Pesca de errores",
-        "resolveConflicts": "Resolver conflictos"
+        "resolveConflicts": "Resolver conflictos",
+        "research": "Investigación"
       },
       "recurringWithFrame": "Una tarea recurrente ejecuta una pipeline con cierta cadencia. Continúa para definir el horario y el prompt.",
       "recurringNoFrame": "Una tarea recurrente debe vivir en un servicio. Añádela desde un marco de servicio (o un módulo dentro de él).",
@@ -717,7 +718,13 @@
         "research_pin_required": "Este tipo de proyecto guarda datos de investigación, así que necesita una definición de investigación que fijar. Elige una e inténtalo de nuevo.",
         "research_pin_not_accepted": "Este tipo de proyecto no guarda datos de investigación, así que no puede fijar una definición de investigación. Quita la definición o elige un tipo de investigación.",
         "research_definition_not_found": "Ninguna definición de investigación de esta organización coincide con esa clave y versión. Revisa la clave o deja la versión vacía para fijar la más reciente.",
-        "research_inputs_invalid": "Los valores de las entradas de la definición de investigación no la cumplen. Rellena cada entrada obligatoria con un valor aceptado e inténtalo de nuevo."
+        "research_inputs_invalid": "Los valores de las entradas de la definición de investigación no la cumplen. Rellena cada entrada obligatoria con un valor aceptado e inténtalo de nuevo.",
+        "task_type_requires_project": "Una tarea de investigación pertenece a un proyecto de investigación, no a un servicio. Añádela a un proyecto de investigación.",
+        "research_project_not_pinned": "Una tarea de investigación necesita un proyecto de investigación que fije una definición de investigación, y este no fija ninguna. Añade la tarea a un proyecto de investigación.",
+        "research_definition_changed": "La definición de investigación que fijó este proyecto ha cambiado desde entonces, así que la ejecución se detuvo en lugar de hacer preguntas que el proyecto nunca aceptó. Pide al operador del despliegue que publique el cambio como una nueva versión.",
+        "research_task_already_recorded": "Esta tarea de investigación ya registró sus hallazgos. Crea una nueva tarea de investigación para dar seguimiento.",
+        "research_nothing_to_ask": "El modo de esta tarea de investigación no deja ninguna pregunta por hacer: nada nuevo con lo que ampliar, o nada parcial o bloqueado que aclarar. Elige otro modo o añade una pregunta.",
+        "findings_too_large_for_inline": "Los hallazgos son demasiado grandes para guardarlos, así que la revisión no se registró. Acota la investigación y vuelve a ejecutarla."
       }
     },
     "action": {
@@ -5498,7 +5505,8 @@
         "research": "Investigación",
         "planning": "Planificación",
         "media": "Medios",
-        "maintenance": "Mantenimiento de PR"
+        "maintenance": "Mantenimiento de PR",
+        "projectResearch": "Investigación de proyecto"
       },
       "strategyOption": {
         "specialist-panel": "Panel de especialistas",

@@ -254,6 +254,7 @@ export {
   BUGFIX_PIPELINE_ID,
   TEST_VERIFIED_BUGFIX_PIPELINE_ID,
   BUG_FISHING_PIPELINE_ID,
+  RESEARCH_PIPELINE_ID,
   CODE_COMMENTS_PIPELINE_ID,
   BUSINESS_DOCS_PIPELINE_ID,
   DOCUMENT_PIPELINE_ID,
@@ -1204,6 +1205,7 @@ export {
 // mounted service or project to its root block.
 export {
   ProjectKindRegistry,
+  RESEARCH_PROJECT_KIND,
   defaultProjectKindRegistry,
   projectKindTaskType,
 } from './domain/project-kind-registry.js'

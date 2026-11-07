@@ -173,6 +173,16 @@ const PURPOSE_SUGGESTED_CATEGORIES: Record<
   // runs a suite or authors a document, and a `review` kind judges a diff this purpose never
   // produces, so those four are off.
   media: { review: false, design: true, build: false, test: false, docs: false, gates: true },
+  // Researches a vendor for a project: the investigating kinds group under `design`, and a human
+  // checkpoint may review the findings. Nothing here writes, tests or documents a repository.
+  'project-research': {
+    review: false,
+    design: true,
+    build: false,
+    test: false,
+    docs: false,
+    gates: true,
+  },
 }
 
 /**
@@ -316,7 +326,11 @@ const EXACT_PURPOSE_FOR_TASK_TYPE: ReadonlyMap<string, PipelinePurpose> = new Ma
   ['media', 'media'],
   ['bug-fishing', 'research'],
   ['resolve-conflicts', 'maintenance'],
+  ['research', 'project-research'],
 ])
+
+/** The purposes offered only to the one task type mapped to them, and to no other. */
+const EXCLUSIVE_PURPOSES: readonly PipelinePurpose[] = ['maintenance', 'project-research']
 
 /**
  * Whether `pipeline` should be offered when starting a task of `taskType` — the pickers' gate.
@@ -336,6 +350,8 @@ const EXACT_PURPOSE_FOR_TASK_TYPE: ReadonlyMap<string, PipelinePurpose> = new Ma
  *    people use most.
  *  - `feature` → the same, minus `bugfix` ({@link FEATURE_PURPOSES}): a preset that investigates a
  *    defect report and reproduces it has neither input on a feature.
+ *  - `research` → only `project-research` pipelines, offered to no other type: the run answers the
+ *    project's research definition and writes no repository.
  *  - `resolve-conflicts` → only `maintenance` pipelines, and a `maintenance` pipeline is offered to
  *    no other type. It works on the pull request the task ATTACHED at creation, which no other
  *    type carries, so on any other task its gate would find nothing to resolve.
@@ -368,7 +384,10 @@ export function pipelineAllowedForTaskType(
     const offered = taskType === 'bug' ? BUG_PURPOSES : FEATURE_PURPOSES
     return own === null || offered.includes(own)
   }
-  return taskType === undefined || pipeline.purpose !== 'maintenance'
+  return (
+    taskType === undefined ||
+    !(EXCLUSIVE_PURPOSES as readonly string[]).includes(pipeline.purpose as string)
+  )
 }
 
 /**

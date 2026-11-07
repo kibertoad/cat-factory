@@ -236,7 +236,8 @@
         "review": "İnceleme",
         "ralph": "Ralph döngüsü",
         "bugFishing": "Hata avı",
-        "resolveConflicts": "Çakışmaları çöz"
+        "resolveConflicts": "Çakışmaları çöz",
+        "research": "Araştırma"
       },
       "recurringWithFrame": "Yinelenen bir görev, bir işlem hattını belirli bir aralıkta çalıştırır. Programı ve istemi ayarlamak için devam edin.",
       "recurringNoFrame": "Yinelenen bir görev bir serviste bulunmalıdır. Bir servis çerçevesinden (veya içindeki bir modülden) ekleyin.",
@@ -717,7 +718,13 @@
         "research_pin_required": "Bu proje türü araştırma verisi tutar, bu yüzden sabitlenecek bir araştırma tanımına ihtiyaç duyar. Bir tanım seçip yeniden deneyin.",
         "research_pin_not_accepted": "Bu proje türü araştırma verisi tutmaz, bu yüzden bir araştırma tanımı sabitleyemez. Tanımı kaldırın veya bir araştırma türü seçin.",
         "research_definition_not_found": "Bu kuruluşta o anahtar ve sürümle eşleşen bir araştırma tanımı yok. Anahtarı kontrol edin ya da en yenisini sabitlemek için sürümü boş bırakın.",
-        "research_inputs_invalid": "Araştırma tanımının girdileri için verilen değerler tanımı karşılamıyor. Her zorunlu girdiyi kabul edilen bir değerle doldurup yeniden deneyin."
+        "research_inputs_invalid": "Araştırma tanımının girdileri için verilen değerler tanımı karşılamıyor. Her zorunlu girdiyi kabul edilen bir değerle doldurup yeniden deneyin.",
+        "task_type_requires_project": "Bir araştırma görevi bir servise değil, bir araştırma projesine aittir. Bunun yerine bir araştırma projesine ekleyin.",
+        "research_project_not_pinned": "Bir araştırma görevi, bir araştırma tanımını sabitleyen bir araştırma projesi gerektirir ve bu proje hiçbirini sabitlemiyor. Görevi bir araştırma projesine ekleyin.",
+        "research_definition_changed": "Bu projenin sabitlediği araştırma tanımı o zamandan beri değişti, bu yüzden çalışma projenin hiç onaylamadığı soruları sormak yerine durdu. Dağıtım operatörünüzden değişikliği yeni bir sürüm olarak yayımlamasını isteyin.",
+        "research_task_already_recorded": "Bu araştırma görevi bulgularını zaten kaydetti. Devam etmek için yeni bir araştırma görevi oluşturun.",
+        "research_nothing_to_ask": "Bu araştırma görevinin modu sorulacak bir soru bırakmıyor: genişletecek yeni bir şey ya da netleştirilecek kısmi veya engellenmiş bir şey yok. Başka bir mod seçin veya bir soru ekleyin.",
+        "findings_too_large_for_inline": "Bulgular saklanamayacak kadar büyük, bu yüzden revizyon kaydedilmedi. Araştırmayı daraltın ve yeniden çalıştırın."
       }
     },
     "action": {
@@ -5498,7 +5505,8 @@
         "research": "Araştırma",
         "planning": "Planlama",
         "media": "Medya",
-        "maintenance": "PR bakımı"
+        "maintenance": "PR bakımı",
+        "projectResearch": "Proje araştırması"
       },
       "strategyOption": {
         "specialist-panel": "Uzman paneli",

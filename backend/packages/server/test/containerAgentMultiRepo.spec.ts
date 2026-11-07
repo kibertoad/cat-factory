@@ -129,7 +129,7 @@ describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
   // mirroring the real resolver (which resolves exactly the frames it is asked about).
   const resolveRepoTargets = async (
     _ws: string,
-    _blk: string,
+    _blk: string | null,
     frameIds: string[],
     primary: typeof OWN_TARGET = OWN_TARGET,
   ) => ({

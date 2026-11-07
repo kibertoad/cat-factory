@@ -3175,7 +3175,8 @@
         "review": "Revisione",
         "ralph": "Ciclo Ralph",
         "bugFishing": "Pesca di bug",
-        "resolveConflicts": "Risolvi conflitti"
+        "resolveConflicts": "Risolvi conflitti",
+        "research": "Ricerca"
       },
       "recurringWithFrame": "Un'attività ricorrente esegue una pipeline a cadenza regolare. Continua per impostare la pianificazione e il prompt.",
       "recurringNoFrame": "Un'attività ricorrente deve risiedere su un servizio. Aggiungila da un frame di servizio (o da un modulo al suo interno).",
@@ -4929,7 +4930,8 @@
         "research": "Ricerca",
         "planning": "Pianificazione",
         "media": "Media",
-        "maintenance": "Manutenzione PR"
+        "maintenance": "Manutenzione PR",
+        "projectResearch": "Ricerca di progetto"
       },
       "strategyOption": {
         "specialist-panel": "Panel di specialisti",
@@ -6596,7 +6598,13 @@
         "research_pin_required": "Questo tipo di progetto conserva dati di ricerca, quindi serve una definizione di ricerca da fissare. Scegline una e riprova.",
         "research_pin_not_accepted": "Questo tipo di progetto non conserva dati di ricerca, quindi non può fissare una definizione di ricerca. Rimuovi la definizione o scegli un tipo di ricerca.",
         "research_definition_not_found": "Nessuna definizione di ricerca di questa organizzazione corrisponde a quella chiave e versione. Controlla la chiave, oppure lascia vuota la versione per fissare la più recente.",
-        "research_inputs_invalid": "I valori degli input della definizione di ricerca non la soddisfano. Compila ogni input obbligatorio con un valore accettato e riprova."
+        "research_inputs_invalid": "I valori degli input della definizione di ricerca non la soddisfano. Compila ogni input obbligatorio con un valore accettato e riprova.",
+        "task_type_requires_project": "Un'attività di ricerca appartiene a un progetto di ricerca, non a un servizio. Aggiungila invece a un progetto di ricerca.",
+        "research_project_not_pinned": "Un'attività di ricerca richiede un progetto di ricerca che fissi una definizione di ricerca, e questo non ne fissa nessuna. Aggiungi l'attività a un progetto di ricerca.",
+        "research_definition_changed": "La definizione di ricerca fissata da questo progetto è cambiata nel frattempo, quindi l'esecuzione si è fermata invece di porre domande che il progetto non ha mai accettato. Chiedi all'operatore del deployment di pubblicare la modifica come nuova versione.",
+        "research_task_already_recorded": "Questa attività di ricerca ha già registrato i suoi risultati. Crea una nuova attività di ricerca per un approfondimento.",
+        "research_nothing_to_ask": "La modalità di questa attività di ricerca non lascia alcuna domanda da porre: niente di nuovo da aggiungere, o niente di parziale o bloccato da chiarire. Scegli un'altra modalità o aggiungi una domanda.",
+        "findings_too_large_for_inline": "I risultati sono troppo grandi per essere salvati, quindi la revisione non è stata registrata. Restringi la ricerca ed eseguila di nuovo."
       }
     },
     "action": {

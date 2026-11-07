@@ -9,6 +9,7 @@ import type {
   ResizeBlockInput,
   UpdateBlockInput,
 } from '@cat-factory/contracts'
+import { taskTypeRequiresProject } from '@cat-factory/contracts'
 import type {
   Block,
   BlockStatus,
@@ -815,6 +816,12 @@ export class BoardService {
   private assertTaskTypeAllowed(frame: Block | undefined, taskType: Block['taskType']): void {
     if (frame?.type === 'document' && taskType !== 'document' && taskType !== 'spike') {
       throw new ValidationError('A document repository only accepts document or spike tasks')
+    }
+    if (frame && taskTypeRequiresProject(taskType)) {
+      throw new ValidationError(`A '${taskType}' task belongs under a research project`, {
+        reason: 'task_type_requires_project',
+        taskType,
+      })
     }
   }
 

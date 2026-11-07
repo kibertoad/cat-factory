@@ -3175,7 +3175,8 @@
         "review": "Review",
         "ralph": "Ralph-Schleife",
         "bugFishing": "Fehlersuche",
-        "resolveConflicts": "Konflikte lösen"
+        "resolveConflicts": "Konflikte lösen",
+        "research": "Recherche"
       },
       "recurringWithFrame": "Eine wiederkehrende Aufgabe führt eine Pipeline in einem Takt aus. Fahren Sie fort, um Zeitplan + Prompt festzulegen.",
       "recurringNoFrame": "Eine wiederkehrende Aufgabe muss auf einem Service liegen. Fügen Sie sie aus einem Service-Frame (oder einem darin enthaltenen Modul) hinzu.",
@@ -4929,7 +4930,8 @@
         "research": "Recherche",
         "planning": "Planung",
         "media": "Medien",
-        "maintenance": "PR-Pflege"
+        "maintenance": "PR-Pflege",
+        "projectResearch": "Projektrecherche"
       },
       "strategyOption": {
         "specialist-panel": "Spezialisten-Panel",
@@ -6596,7 +6598,13 @@
         "research_pin_required": "Diese Projektart speichert Recherchedaten und braucht daher eine Recherchedefinition zum Festlegen. Wähle eine aus und versuche es erneut.",
         "research_pin_not_accepted": "Diese Projektart speichert keine Recherchedaten und kann daher keine Recherchedefinition festlegen. Entferne die Definition oder wähle eine Rechercheart.",
         "research_definition_not_found": "Keine Recherchedefinition dieser Organisation passt zu diesem Schlüssel und dieser Version. Prüfe den Schlüssel oder lass die Version leer, um die neueste festzulegen.",
-        "research_inputs_invalid": "Die Werte für die Eingaben der Recherchedefinition erfüllen sie nicht. Fülle jede Pflichteingabe mit einem zulässigen Wert aus und versuche es erneut."
+        "research_inputs_invalid": "Die Werte für die Eingaben der Recherchedefinition erfüllen sie nicht. Fülle jede Pflichteingabe mit einem zulässigen Wert aus und versuche es erneut.",
+        "task_type_requires_project": "Eine Rechercheaufgabe gehört in ein Rechercheprojekt, nicht zu einem Service. Füge sie stattdessen einem Rechercheprojekt hinzu.",
+        "research_project_not_pinned": "Eine Rechercheaufgabe braucht ein Rechercheprojekt, das eine Recherchedefinition festlegt, und dieses legt keine fest. Füge die Aufgabe einem Rechercheprojekt hinzu.",
+        "research_definition_changed": "Die Recherchedefinition, die dieses Projekt festgelegt hat, hat sich seitdem geändert. Der Lauf wurde angehalten, statt Fragen zu stellen, denen das Projekt nie zugestimmt hat. Bitte deinen Deployment-Betreiber, die Änderung als neue Version zu veröffentlichen.",
+        "research_task_already_recorded": "Diese Rechercheaufgabe hat ihre Ergebnisse bereits gespeichert. Erstelle für eine Folgefrage eine neue Rechercheaufgabe.",
+        "research_nothing_to_ask": "Der Modus dieser Rechercheaufgabe lässt keine Frage übrig: nichts Neues zum Erweitern oder nichts Unvollständiges oder Blockiertes zum Klären. Wähle einen anderen Modus oder füge eine Frage hinzu.",
+        "findings_too_large_for_inline": "Die Ergebnisse sind zu groß zum Speichern, daher wurde die Revision nicht gespeichert. Grenze die Recherche ein und starte sie erneut."
       }
     },
     "action": {

@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { capabilityCredentialKeySchema } from './capability-credentials.js'
+import { researchModeSchema, type ResearchMode } from './research-mode.js'
 import { taskTypeFieldDescriptorSchema } from './task-types.js'
 
 // ---------------------------------------------------------------------------
@@ -153,9 +154,7 @@ export type ResearchDefinitionInput = v.InferInput<typeof researchDefinitionSche
 // Findings
 // ---------------------------------------------------------------------------
 
-/** What a research task asks for. */
-export const researchModeSchema = v.picklist(['initial', 'extend', 'clarify', 'refresh'])
-export type ResearchMode = v.InferOutput<typeof researchModeSchema>
+export { RESEARCH_MODES, researchModeSchema, type ResearchMode } from './research-mode.js'
 
 /** The id an ad-hoc question carries: namespaced to its task, so no definition can reuse it. */
 export function adhocQuestionId(taskId: string, ordinal: number): string {
@@ -228,6 +227,41 @@ export const findingsRevisionBodySchema = v.pipe(
   ),
 )
 export type FindingsRevisionBody = v.InferOutput<typeof findingsRevisionBodySchema>
+
+/** Validate a findings body read off a step or a row, or undefined when it does not parse. */
+export function parseFindingsRevisionBody(value: unknown): FindingsRevisionBody | undefined {
+  if (value === undefined || value === null) return undefined
+  const parsed = v.safeParse(findingsRevisionBodySchema, value)
+  return parsed.success ? parsed.output : undefined
+}
+
+/**
+ * A research task's run state, recorded on its `project-researcher` step when the task starts.
+ * The sequence number and the question list are fixed then, so a replayed or resumed dispatch
+ * asks the same questions and the revision folds in the order the task was asked.
+ */
+export const researchStepStateSchema = v.object({
+  projectId: v.string(),
+  seq: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  mode: researchModeSchema,
+  definitionKey: researchDefinitionKeySchema,
+  definitionVersion: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  /** Every question id this task answers, definition and ad-hoc alike. */
+  questionIds: v.array(v.string()),
+  /** The questions this task added, by the `adhoc:` id each is answered under. */
+  adhocQuestions: v.optional(v.array(v.object({ id: v.string(), question: v.string() })), []),
+  /**
+   * Partial findings the agent recorded before it stopped to wait for a credential. Step state,
+   * never a revision: the resumed dispatch starts from it and the task still writes one revision.
+   * A {@link FindingsRevisionBody}, held as `unknown` here because typing it through the findings
+   * schema makes the workspace snapshot's type too deep to instantiate; the engine parses it with
+   * {@link findingsRevisionBodySchema} on read.
+   */
+  checkpoint: v.optional(v.unknown()),
+  /** The revision this task wrote, once written. */
+  revisionId: v.optional(v.string()),
+})
+export type ResearchStepState = v.InferOutput<typeof researchStepStateSchema>
 
 /** A findings revision's identity, without its body. */
 export const findingsRevisionMetaSchema = v.object({

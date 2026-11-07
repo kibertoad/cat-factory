@@ -91,9 +91,23 @@ export function toRunResult(
   const withReproduction = result.reproductionReport
     ? { ...withValidation, reproductionReport: result.reproductionReport }
     : withValidation
-  return result.effortReport
+  const withEffort = result.effortReport
     ? { ...withReproduction, effortReport: result.effortReport }
     : withReproduction
+  return withResearchChannels(withEffort, result)
+}
+
+/**
+ * A research job's two tool-recorded channels: the credential it stopped to ask for (the engine
+ * parks the step on it, checkpointing whatever `custom` findings came with it) and the HTTP
+ * exchanges its evidence cites. Orthogonal to the kind's own mapping, like the reports above.
+ */
+function withResearchChannels(mapped: AgentRunResult, result: RunnerJobResult): AgentRunResult {
+  return {
+    ...mapped,
+    ...(result.needsCredential ? { credentialRequest: result.needsCredential } : {}),
+    ...(result.httpExchanges?.length ? { httpExchanges: result.httpExchanges } : {}),
+  }
 }
 
 /**

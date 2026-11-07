@@ -69,7 +69,9 @@ export function dispatchDeliversCheckout(
   opts: { consensusEnabled?: boolean } = {},
 ): boolean {
   if (opts.consensusEnabled) return false
-  return runsInContainer(kind, registry) || runsDelegated(kind, registry)
+  const traits = surfaceTraits(registry.agentStep(kind)?.surface)
+  if (traits) return traits.checkout
+  return runsInContainer(kind, registry)
 }
 
 /**

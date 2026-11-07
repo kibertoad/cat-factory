@@ -469,6 +469,7 @@ const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
   review: 'pl_review',
   media: 'pl_media',
   'bug-fishing': 'pl_bug_fishing',
+  research: 'pl_research',
 }
 /**
  * The pipeline a task type opens with: under a project root its kind's entry for the type, else a
