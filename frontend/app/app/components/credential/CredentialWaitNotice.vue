@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { mayResumeCredentialWait, type StepCredentialWait } from '@cat-factory/contracts'
+import { externalHref } from '~/utils/externalHref'
 
 // A run parked because a credential a step needs is not there. Three cases:
 //  - a personal-subscription credential lapsed: the resume rides the cached personal password (the
@@ -38,6 +39,8 @@ const credentialName = computed(() => {
   if (!wait) return ''
   return wait.label ? `${wait.label} (${wait.key})` : wait.key
 })
+/** The onboarding URL comes from an account-authored definition, so only http(s) is linked. */
+const onboardingHref = computed(() => externalHref(capability.value?.onboarding?.url))
 
 async function resume() {
   resuming.value = true
@@ -72,13 +75,17 @@ async function resume() {
             {{ capability.onboarding.instructions }}
           </p>
           <ULink
-            v-if="capability.onboarding?.url"
-            :to="capability.onboarding.url"
+            v-if="onboardingHref"
+            :to="onboardingHref"
             target="_blank"
             class="mt-1 inline-block text-xs"
+            data-testid="credential-wait-onboarding-link"
           >
-            {{ capability.onboarding.url }}
+            {{ onboardingHref }}
           </ULink>
+          <p v-else-if="capability.onboarding?.url" class="text-muted mt-1 break-all text-xs">
+            {{ capability.onboarding.url }}
+          </p>
           <p v-if="capability.observed && !compact" class="text-muted mt-2 text-xs">
             {{ t('credentialWait.observed', { observed: capability.observed }) }}
           </p>
