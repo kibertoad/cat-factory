@@ -43,20 +43,23 @@ export type ToolSecretSubject =
    */
   | { kind: 'research-definition'; id: string }
 
-const TOOL_SECRET_SUBJECT_KINDS: ReadonlySet<string> = new Set<ToolSecretSubject['kind']>([
-  'tool-server',
-  'binary-generator',
-  'foundational-service',
-  'delegated-executor',
-  'research-definition',
-])
+/** Every subject kind, as a total `Record` so a new kind cannot be left out of the reader below. */
+const TOOL_SECRET_SUBJECT_KINDS: Record<ToolSecretSubject['kind'], true> = {
+  'tool-server': true,
+  'binary-generator': true,
+  'foundational-service': true,
+  'delegated-executor': true,
+  'research-definition': true,
+}
 
 /** Read a persisted `{ kind, id }` back as a subject, or undefined when no current kind names it. */
 export function toolSecretSubjectOf(value: {
   kind: string
   id: string
 }): ToolSecretSubject | undefined {
-  return TOOL_SECRET_SUBJECT_KINDS.has(value.kind) ? (value as ToolSecretSubject) : undefined
+  return Object.hasOwn(TOOL_SECRET_SUBJECT_KINDS, value.kind)
+    ? { kind: value.kind as ToolSecretSubject['kind'], id: value.id }
+    : undefined
 }
 
 /**
