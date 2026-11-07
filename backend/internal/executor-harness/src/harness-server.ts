@@ -2,6 +2,8 @@ import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { reportedBodyCapabilities } from './capability-report.js'
 import { parseAgentJob, parseInlineJob } from './job.js'
+import { parseResearchJob } from './research/research-job.js'
+import { handleResearch } from './research/research-mode.js'
 import { handleAgent } from './agent.js'
 import { handleInline } from './inline.js'
 import { redactSecrets } from './git.js'
@@ -109,6 +111,13 @@ const KINDS: Record<string, KindEntry> = {
   inline: defineKind(parseInlineJob, handleInline, (job) => ({
     harness: job.harness,
     model: job.model,
+  })),
+  // A research run: an agent over a browser and the research tool server against a vendor, with
+  // no checkout of its own. See research/research-mode.ts.
+  research: defineKind(parseResearchJob, handleResearch, (job) => ({
+    ...(job.workspaceId ? { workspaceId: job.workspaceId } : {}),
+    ...(job.executionId ? { executionId: job.executionId } : {}),
+    targets: job.research.targets.length,
   })),
 }
 

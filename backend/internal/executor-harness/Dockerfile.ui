@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1
 #
-# UI-tester image — the executor-harness image for the `tester-ui` agent kind ONLY.
+# Browser image: the executor-harness image for the kinds that drive a browser, the `tester-ui`
+# agent kind and the research run.
 #
-# It layers Playwright + a Chromium browser — plus the self-contained frontend UI-test
-# tooling (pnpm/yarn, the `serve` static server, a headless JRE + WireMock
-# standalone) — on top of the slim base executor image, so all of it is isolated to the one
-# kind that needs it and never bloats the cold-start / pull of every other agent (coder,
-# merger, ci-fixer, …). A transport routes a job to this image when the dispatch option
+# It layers Playwright and a Chromium browser, Playwright MCP, and the self-contained frontend
+# UI-test tooling (pnpm/yarn, the `serve` static server, a headless JRE and WireMock standalone)
+# on top of the slim base executor image, so all of it is isolated to the kinds that need it and
+# never bloats the cold start or pull of every other agent (coder, merger, ci-fixer and so on). A transport routes a job to this image when the dispatch option
 # `image: 'ui'` is set (see RunnerDispatchOptions); the base `Dockerfile` is unchanged.
 #
 # SECURITY: like the base image, this carries NO secrets — per-job GitHub / proxy / artifact
@@ -67,6 +67,12 @@ RUN npm install -g playwright@1.63.0 \
 # pnpm in `packageManager` still gets that one: pnpm honours the field itself.
 RUN npm install -g pnpm@12.5.1 @yarnpkg/cli-dist@4.18.0
 RUN npm install -g serve@14.2.6
+
+# Playwright MCP, the browser tool server a research run drives a vendor's UI through. It never
+# launches a browser of its own: the run starts one Chromium (installed above) with remote
+# debugging and points this at it with `--cdp-endpoint`, so the research tool server's
+# `fill_secret` types a login into the SAME session the agent navigates.
+RUN npm install -g @playwright/mcp@0.0.84
 ARG WIREMOCK_VERSION=3.13.1
 ENV WIREMOCK_JAR=/opt/wiremock/wiremock-standalone.jar
 RUN apt-get update \

@@ -211,23 +211,33 @@ A built-in `researcher` agent kind, `container-explore` on the `ui` image (Playw
 are already there), with structured output for the findings shape above.
 
 - **Browser**: the Playwright MCP server (`@playwright/mcp`), preinstalled in `Dockerfile.ui` and
-  attached as a stdio tool server. It drives the page through accessibility snapshots rather than
-  screenshots, which is cheaper and more reliable than a vision loop, and it keeps a per-job
-  storage-state directory so a login survives across the run. Being a tool-server assignment, a
-  deployment can swap in another browser driver without a code change. Preinstalling it is an
-  image change: it bumps `@cat-factory/executor-harness` and the pinned tag.
+  attached as a stdio tool server. The harness starts one headless Chromium per job, with a
+  per-job profile and remote debugging, and points Playwright MCP at it with `--cdp-endpoint`, so
+  the research tool server reaches the same session over CDP and a login made in one is seen by
+  the other. It drives the page through accessibility snapshots rather than screenshots.
+  Preinstalling it is an image change: it bumps `@cat-factory/executor-harness` and the pinned tag.
 - **Secrets never pass through the model.** Playwright MCP's `browser_type` takes the literal text,
   which would put a password into the model context and the telemetry store. The harness adds a
   small MCP server of its own with tools that take a credential KEY and inject the value
   harness-side:
-  - `fill_secret(ref, key, field)`: types one field of a stored login (`username` or `password`)
-    into an element through the same browser session.
+  - `fill_secret(credentialKey, field, label | selector)`: types one field of a stored credential
+    (a login's `username` or `password`, any other kind's `value`) into a field named by its label
+    or a CSS selector, through the same browser session. Playwright MCP's own `--secrets`
+    substitution is not used, because it binds a secret to no origin.
   - `http_request(method, url, headers, body, auth: { key, scheme })`: sends the request with the
     credential attached, records the redacted exchange as evidence, and returns the scrubbed
     response to the model. For an `oauth-client` credential the harness performs the token
     exchange itself and attaches the access token, so a minted token never reaches the model.
+- **The values stay in the harness process.** The agent has a shell, so a config file or a child
+  process the agent CLI spawns is readable by the model. The tool server is served on loopback
+  from the harness process with a per-job token, and the CLI spawns only a stdio bridge holding
+  that URL and token, which grant the tools and no value. A value typed into a page stays in that
+  page, which the agent can script (Playwright MCP's `browser_evaluate`, or CDP from its shell):
+  `fill_secret` keeps the stored value out of the model context and the telemetry store, and does
+  not hide a field the model can read back.
 - **A credential is sent only to its vendor.** Both tools refuse when the page or URL origin is
-  not one of the definition's `targets`. The agent reads untrusted vendor pages, and a prompt
+  not one of the definition's `targets`, and `http_request` hands a redirect back rather than
+  following it. The agent reads untrusted vendor pages, and a prompt
   injected there could otherwise point `http_request` at a host of its choosing with the
   credential attached. The refusal is reported to the agent, never silent.
 - **`request_credential(key, reason, observed)`**: the agent calls this when it reaches a point
@@ -238,7 +248,8 @@ are already there), with structured output for the findings shape above.
   agent meets in the browser (a token shown once on a vendor page), is scrubbed with
   `redactSecrets`, extended to the job's known secret values plus a token-shape pass, before it
   reaches the model or the findings.
-- **Repo-less dispatch**: a new harness mode `research` whose `repo` is optional. The project's
+- **Repo-less dispatch**: a harness job kind `research` of its own, beside `agent` and `inline`,
+  since every `agent` flow is built around a repository it clones and may push to. The project's
   linked repos ride the existing `referenceRepos` job field, which already clones a repo
   read-only with no branch or PR.
 - **Egress is not restricted.** Run containers reach any host the hosting network allows, as every
@@ -413,7 +424,7 @@ Still open:
 | 1c  | SPA: project roots on the board, create a project, link services, mount; i18n.                                                                                                                                                                                                                                                               | todo        |       |
 | 2   | Contracts + kernel for research: definition schema, `ResearchDefinitionRegistry` + content hash, findings schema, the fold, the storage-policy resolver. Pure, unit-tested. The definition read port lands with its implementation in slice 3, and the registry is wired on `start()`/`startLocal()` in slice 5, where a run first reads it. | in review   | #2503 |
 | 3   | Research persistence, both facades + conformance: definitions table, findings revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                                                            | in review   | #2507 |
-| 4   | Harness: `research` mode with optional repos (linked repos as `referenceRepos`), the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                                                       | todo        |       |
+| 4   | Harness: `research` mode with optional repos (linked repos as `referenceRepos`), the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                                                       | in review   | #2508 |
 | 5   | Engine: the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                                                                                                                                                                      | todo        |       |
 | 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                     | todo        |       |
 | 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                                                                | todo        |       |
