@@ -188,6 +188,7 @@ import type {
   FindingsStoragePolicyRepository,
   ResearchDefinitionRepository,
   ResearchProjectRepository,
+  TaskProjectLinkRepository,
   ProjectKindSource,
   RegisteredResearchDefinitionSource,
   ResearchDefinitionRegistry,
@@ -338,6 +339,8 @@ export interface CoreDependencies extends ContentLibraryDependencies {
   /** Research persistence: published definitions, research projects, findings and policy tiers. */
   researchDefinitionRepository?: ResearchDefinitionRepository
   researchProjectRepository?: ResearchProjectRepository
+  /** Projects linked to tasks as read-only context. */
+  taskProjectLinkRepository?: TaskProjectLinkRepository
   findingsRevisionRepository?: FindingsRevisionRepository
   findingsStoragePolicyRepository?: FindingsStoragePolicyRepository
   idGenerator: IdGenerator

@@ -3,11 +3,14 @@ import {
   getFindingsStoragePolicyContract,
   getResearchProjectViewContract,
   getResearchRevisionContract,
+  linkTaskProjectsContract,
   listPinnableResearchDefinitionsContract,
+  listTaskProjectsContract,
   listProjectCatalogContract,
   mountProjectContract,
   setProjectServicesContract,
   setFindingsStoragePolicyContract,
+  unlinkTaskProjectContract,
   unmountProjectContract,
 } from '@cat-factory/contracts'
 import type { SendParams } from './client'
@@ -26,6 +29,22 @@ export function projectsApi({ send, ws }: ApiContext) {
 
     listPinnableResearchDefinitions: (workspaceId: string) =>
       send(listPinnableResearchDefinitionsContract, { pathPrefix: ws(workspaceId) }),
+
+    listTaskProjects: (workspaceId: string, blockId: string) =>
+      send(listTaskProjectsContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
+
+    linkTaskProjects: (workspaceId: string, blockId: string, projectIds: string[]) =>
+      send(linkTaskProjectsContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+        body: { projectIds },
+      }),
+
+    unlinkTaskProject: (workspaceId: string, blockId: string, projectId: string) =>
+      send(unlinkTaskProjectContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId, projectId },
+      }),
 
     createProject: (workspaceId: string, body: CreateProjectBody) =>
       send(createProjectContract, { pathPrefix: ws(workspaceId), body }),

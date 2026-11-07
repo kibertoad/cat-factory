@@ -25,6 +25,7 @@ from .models import (
     AskGuidedReview,
     AssessPublicPullRequest,
     AttachPublicTaskDocumentRequest,
+    AttachPublicTaskProjectRequest,
     ConnectPublicEnvironmentRequest,
     ConnectPublicEnvironmentResponse,
     CreateHeadlessPublicApiKey,
@@ -86,6 +87,8 @@ from .models import (
     ListPublicRiskPoliciesResponse,
     ListPublicTaskDocumentsResponse,
     ListPublicTaskDocumentsResponseDocument,
+    ListPublicTaskProjectsResponse,
+    ListPublicTaskProjectsResponseProject,
     ListPublicTaskTypesResponse,
     ListPublicUseCasesResponse,
     ListPublicUseCasesResponseUseCase,
@@ -619,6 +622,19 @@ class TasksResource:
         )
         return ListPublicTaskDocumentsResponseDocument.from_dict(raw)
 
+    def attach_project(self, task_id: str, body: AttachPublicTaskProjectRequest, *, timeout: float | None = None) -> ListPublicTaskProjectsResponseProject:
+        """attachPublicTaskProject
+        `POST /api/v1/tasks/{taskId}/projects` (operation `attachPublicTaskProject`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/tasks/{_quote(task_id)}/projects",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return ListPublicTaskProjectsResponseProject.from_dict(raw)
+
     def create(self, service_id: str, body: CreatePublicTask, *, timeout: float | None = None) -> PublicTask:
         """Create a task under a service
         Create a task inside a service frame the key’s workspace owns. The task starts in
@@ -661,6 +677,18 @@ class TasksResource:
         self._transport.request_no_content(
             "POST",
             f"/api/v1/tasks/{_quote(task_id)}/documents/detach",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+
+    def detach_project(self, task_id: str, body: AttachPublicTaskProjectRequest, *, timeout: float | None = None) -> None:
+        """detachPublicTaskProject
+        `POST /api/v1/tasks/{taskId}/projects/detach` (operation `detachPublicTaskProject`).
+        """
+        self._transport.request_no_content(
+            "POST",
+            f"/api/v1/tasks/{_quote(task_id)}/projects/detach",
             body=_encode(body),
             query=None,
             timeout=timeout,
@@ -739,6 +767,18 @@ class TasksResource:
             timeout=timeout,
         )
         return ListPublicTaskDocumentsResponse.from_dict(raw)
+
+    def list_projects(self, task_id: str, *, timeout: float | None = None) -> ListPublicTaskProjectsResponse:
+        """listPublicTaskProjects
+        `GET /api/v1/tasks/{taskId}/projects` (operation `listPublicTaskProjects`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/tasks/{_quote(task_id)}/projects",
+            query=None,
+            timeout=timeout,
+        )
+        return ListPublicTaskProjectsResponse.from_dict(raw)
 
     def remove_dependency(self, task_id: str, body: AddPublicTaskDependencyRequest, *, timeout: float | None = None) -> PublicTask:
         """Drop a dependency edge

@@ -8,6 +8,7 @@ import { defineCoreWorkspacesConformance } from './core-workspaces.js'
 import { defineCoreRiskPolicyTiersConformance } from './core-risk-policy-tiers.js'
 import { defineCoreProjectsConformance } from './core-projects.js'
 import { defineCoreResearchRunsConformance } from './core-research-runs.js'
+import { defineCoreTaskProjectLinksConformance } from './core-task-project-links.js'
 import { defineCoreResearchViewsConformance } from './core-research-views.js'
 
 // The core backend conformance (workspaces, run persistence, planning, and the remaining
@@ -24,6 +25,7 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
     defineCoreRiskPolicyTiersConformance(harness)
     defineCoreProjectsConformance(harness)
     defineCoreResearchRunsConformance(harness)
+    defineCoreTaskProjectLinksConformance(harness)
     defineCoreResearchViewsConformance(harness)
   })
 }

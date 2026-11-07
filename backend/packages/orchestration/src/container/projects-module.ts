@@ -6,6 +6,8 @@ import type {
 } from '@cat-factory/kernel'
 import type { ProjectsModule } from '../container.js'
 import { ProjectService } from '../modules/projects/ProjectService.js'
+import { TaskProjectLinkService } from '../modules/projects/TaskProjectLinkService.js'
+import { researchProjectContext } from '../modules/research/researchProjectContext.js'
 import { FindingsStoragePolicyService } from '../modules/research/FindingsStoragePolicyService.js'
 import { ResearchDefinitionPublisher } from '../modules/research/ResearchDefinitionPublisher.js'
 import { ResearchProjectViews } from '../modules/research/ResearchProjectViews.js'
@@ -59,8 +61,29 @@ export function createProjectsModule(
     : undefined
   const getMounted = (workspaceId: string, projectId: string) =>
     service.getMounted(workspaceId, projectId)
+  const { taskProjectLinkRepository } = deps
   return {
     service,
+    ...(findings && findingsRevisionRepository && taskProjectLinkRepository
+      ? {
+          taskLinks: new TaskProjectLinkService({
+            links: taskProjectLinkRepository,
+            projectRepository,
+            blockRepository: deps.blockRepository,
+            workspaceRepository: deps.workspaceRepository,
+            projectKinds: sources.projectKinds,
+            contributors: {
+              research: researchProjectContext({
+                pins: researchProjectRepository,
+                revisions: findingsRevisionRepository,
+                definitions: sources.researchDefinitions,
+                findings,
+              }),
+            },
+            clock: deps.clock,
+          }),
+        }
+      : {}),
     research: {
       projects: researchProjectRepository,
       definitions: sources.researchDefinitions,

@@ -38,6 +38,7 @@ import type {
   ProjectKindSource,
   ProjectRepository,
   ResearchProjectRepository,
+  TaskProjectLinkRepository,
   ResolveBinaryArtifactStore,
   WorkspaceMount,
   WorkspaceMountRepository,
@@ -189,6 +190,8 @@ export interface BoardServiceDependencies {
   projectKinds?: ProjectKindSource
   /** A research project's rows, reclaimed with the project. */
   researchProjectRepository?: ResearchProjectRepository
+  /** Projects linked to tasks as context, unlinked when either side is deleted. */
+  taskProjectLinkRepository?: TaskProjectLinkRepository
   /**
    * The acting workspace's runtime settings, read by two collaborators:
    *  - the opt-in review-debt friction guard on task creation
@@ -361,6 +364,7 @@ export class BoardService {
     projectRepository,
     projectKinds,
     researchProjectRepository,
+    taskProjectLinkRepository,
     workspaceSettings,
     reviewFrictionNotifications,
     resolveRunRepoContext,
@@ -471,6 +475,7 @@ export class BoardService {
       serviceRepository,
       projectRepository,
       researchProjectRepository,
+      taskProjectLinkRepository,
       workspaceMountRepository,
       initiativeRepository,
       documentRepository,

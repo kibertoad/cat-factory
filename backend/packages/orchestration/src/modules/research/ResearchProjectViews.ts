@@ -117,7 +117,7 @@ export class ResearchProjectViews {
 }
 
 /** The text of every ad-hoc question the revisions answered, the newest wording winning. */
-function adhocQuestionsOf(revisions: readonly FindingsRevision[]): AdhocQuestion[] {
+export function adhocQuestionsOf(revisions: readonly FindingsRevision[]): AdhocQuestion[] {
   const byId = new Map<string, AdhocQuestion>()
   for (const revision of [...revisions].sort((a, b) => a.seq - b.seq)) {
     for (const question of revision.body.adhocQuestions) byId.set(question.id, question)

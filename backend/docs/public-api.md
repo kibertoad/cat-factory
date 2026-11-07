@@ -2787,7 +2787,7 @@ curl -s -H "$AUTH" "$BASE/api/v1/kaizen/entries?agentKind=coder&since=$LAST_SWEE
 
 Projects are account-owned peers of services, mounted onto boards; a research project pins a
 research definition and records one findings revision per research task. Design:
-[`research-projects.md`](../../docs/initiatives/research-projects.md).
+[ADR 0069](./adr/0069-projects-and-research-projects.md).
 
 | Method / path                                                       | Scope           | Behaviour                                                                                                              |
 | ------------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------- |

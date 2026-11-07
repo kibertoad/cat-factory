@@ -897,6 +897,8 @@ export {
   describeFreshnessGap,
   freshnessHeaderLines,
 } from './domain/document-freshness.js'
+// Which result of a linked project a dispatch read, recorded on the step.
+export type { StepContextProject } from '@cat-factory/contracts'
 
 // Tiered consensus selection: which of a step's candidate model groups a task's estimate earns.
 export {

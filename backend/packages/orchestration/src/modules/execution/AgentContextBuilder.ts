@@ -100,6 +100,7 @@ import {
   type DocumentUrlResolver,
   type LinkedContext,
   type LinkedContextOptions,
+  type LinkedProjectsResolver,
   resolveLinkedContext as resolveLinkedContextFor,
 } from './linked-context.js'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
@@ -243,6 +244,7 @@ export interface AgentContextBuilderDeps {
    * no refresh and no freshness note, byte-for-byte the prior behaviour.
    */
   documentRefresher?: LinkedDocumentRefresher
+  linkedProjects?: LinkedProjectsResolver
   tasks?: TaskRepository
   requirementReviews?: RequirementReviewRepository
   /**
@@ -433,7 +435,7 @@ export class AgentContextBuilder {
       // items the effective description names explicitly (a Jira key, a URL), resolved against
       // the already-imported corpus. Explicitly-named refs are included even in reworked mode —
       // the human may name an issue in the doc that was never attached.
-      { docs: contextDocs, tasks: contextTasks },
+      { docs: contextDocs, tasks: contextTasks, projects: contextProjects },
       environment,
       service,
       frontend,
@@ -579,6 +581,7 @@ export class AgentContextBuilder {
         agentConfig,
         contextDocs,
         contextTasks,
+        contextProjects,
         docAuthoring,
       }),
       ...(environment ? { environment } : {}),
@@ -1384,6 +1387,7 @@ export class AgentContextBuilder {
           ? { documentUrlResolver: this.deps.documentUrlResolver }
           : {}),
         ...(this.deps.documentRefresher ? { refresher: this.deps.documentRefresher } : {}),
+        ...(this.deps.linkedProjects ? { projects: this.deps.linkedProjects } : {}),
         ...(this.deps.logger ? { logger: this.deps.logger } : {}),
       },
       workspaceId,
@@ -1392,6 +1396,7 @@ export class AgentContextBuilder {
       opts,
     )
     observations.contextDocuments(context.docs)
+    observations.contextProjects(context.projects)
     return context
   }
 

@@ -50,6 +50,8 @@ function revisions(insertResult = true) {
     }),
     get: async (_projectId, id) => rows.find((r) => r.id === id) ?? null,
     listByProject: async () => rows,
+    listByProjects: async () => rows,
+    projectsWithRevisions: async () => [...new Set(rows.map((r) => r.projectId))],
   }
   return { repo, rows }
 }
@@ -78,6 +80,13 @@ function findingsStore(opts: {
   return new ResearchFindingsStore({
     blockRepository: {
       findById: async () => ({ workspaceId: 'ws_home', ownerId: project.id, block: {} as never }),
+      findByIds: async () => [
+        {
+          workspaceId: 'ws_home',
+          ownerId: project.id,
+          block: { id: project.rootBlockId } as never,
+        },
+      ],
     },
     workspaceRepository: { accountOf: async () => 'acc_1' },
     findingsRevisionRepository: opts.repo,

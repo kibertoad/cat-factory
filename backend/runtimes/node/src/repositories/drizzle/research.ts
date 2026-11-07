@@ -241,6 +241,31 @@ export class DrizzleFindingsRevisionRepository implements FindingsRevisionReposi
       .orderBy(asc(findingsRevisions.seq))
     return rows.map(rowToRevision)
   }
+
+  async listByProjects(projectIds: string[]): Promise<FindingsRevisionRow[]> {
+    const rows: FindingsRevisionRow[] = []
+    for (let i = 0; i < projectIds.length; i += CHUNK) {
+      const chunk = await this.db
+        .select()
+        .from(findingsRevisions)
+        .where(inArray(findingsRevisions.project_id, projectIds.slice(i, i + CHUNK)))
+        .orderBy(asc(findingsRevisions.project_id), asc(findingsRevisions.seq))
+      rows.push(...chunk.map(rowToRevision))
+    }
+    return rows
+  }
+
+  async projectsWithRevisions(projectIds: string[]): Promise<string[]> {
+    const found: string[] = []
+    for (let i = 0; i < projectIds.length; i += CHUNK) {
+      const rows = await this.db
+        .selectDistinct({ projectId: findingsRevisions.project_id })
+        .from(findingsRevisions)
+        .where(inArray(findingsRevisions.project_id, projectIds.slice(i, i + CHUNK)))
+      for (const row of rows) found.push(row.projectId)
+    }
+    return found
+  }
 }
 
 /** The findings-storage policy tiers. */

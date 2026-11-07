@@ -60,7 +60,6 @@ a tracker document](../../AGENTS.md).
 - [PR-review token-burn reduction](./pr-review-turn-reduction.md)
 - [Pre-PR validation checks](./pre-pr-validation.md)
 - [Pre-dispatch input gate](./pre-dispatch-input-gate.md)
-- [Projects, starting with research projects (browser + API exploration, structured learnings)](./research-projects.md)
 - [Ralph loop task type](./ralph-loop.md)
 - [Sandbox coverage expansion (rubrics, fixtures, repo fixtures)](./sandbox-coverage-expansion.md)
 - [Service acceptance criteria](./service-acceptance-criteria.md)

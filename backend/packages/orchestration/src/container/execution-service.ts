@@ -10,6 +10,7 @@ import { createWorkspaceRiskPolicyLibrary } from '../modules/merge/WorkspaceRisk
 import { BoardScanService } from '../modules/boardScan/BoardScanService.js'
 import { BoardService } from '../modules/board/BoardService.js'
 import type { createEngineCollaborators } from './engine-collaborators.js'
+import type { TaskProjectLinkService } from '../modules/projects/TaskProjectLinkService.js'
 import type { createPlatformModules } from './platform-modules.js'
 import type { createCoreFoundation } from './foundation.js'
 import type { resolveCoreRuntime } from './runtime.js'
@@ -33,6 +34,8 @@ export interface ExecutionServiceWiringInput {
   blueprintReconciler: BoardScanService
   platform: ReturnType<typeof createPlatformModules>
   collaborators: ReturnType<typeof createEngineCollaborators>
+  /** The projects linked to tasks as context. Absent when the projects module is. */
+  taskProjectLinks?: TaskProjectLinkService
 }
 
 /** Construct the engine from the already-resolved core spine, modules and collaborators. */
@@ -49,6 +52,7 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     blueprintReconciler,
     platform,
     collaborators,
+    taskProjectLinks,
   } = input
   const { llmObservability, environments, foundationalServices, fragmentLibrary, skillLibrary } =
     platform
@@ -146,6 +150,12 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     // builds against the current design rather than the copy import stored. Present whenever the
     // document module is (it needs no extra facade wiring); absent ⇒ nothing is linked to refresh.
     documentRefresher: platform.documents?.linkedRefresher,
+    ...(taskProjectLinks
+      ? {
+          linkedProjects: (workspaceId: string, blockId: string) =>
+            taskProjectLinks.resolveForDispatch(workspaceId, blockId),
+        }
+      : {}),
     requirementReviewService: requirements?.service,
     docInterviewService: docInterview,
     forkChatService: forkChat,

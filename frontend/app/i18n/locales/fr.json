@@ -727,7 +727,9 @@
         "research_nothing_to_ask": "Ce suivi n'a plus aucune question à poser dans le mode choisi. Choisissez un autre mode ou ajoutez des questions.",
         "findings_too_large_for_inline": "Les résultats sont trop volumineux pour être stockés, et leur déport vers le stockage de contenu n'est pas disponible. Activez le stockage de contenu ou autorisez le déport, puis réessayez.",
         "task_owned_by_project": "Cette tâche appartient à un projet, qui n'a pas de service. Utilisez plutôt l'adresse des tâches du projet.",
-        "research_definition_invalid": "La définition de recherche enfreint une règle : vérifiez que les identifiants de ses thèmes, questions, identifiants d'accès et entrées sont uniques."
+        "research_definition_invalid": "La définition de recherche enfreint une règle : vérifiez que les identifiants de ses thèmes, questions, identifiants d'accès et entrées sont uniques.",
+        "project_link_invalid": "Ce projet n'existe pas ou appartient à une autre organisation. Liez un projet de cette organisation.",
+        "project_has_no_result": "Ce projet n'a pas encore de résultat à lire. Exécutez d'abord une tâche de recherche dans ce projet, puis liez-le."
       }
     },
     "action": {
@@ -9265,6 +9267,18 @@
     "mount": {
       "added": "Projet {title} ajouté à ce tableau",
       "failed": "Impossible d'ajouter le projet"
+    },
+    "taskLinks": {
+      "title": "Projets liés",
+      "hint": "Les agents qui travaillent sur cette tâche lisent le résultat actuel de chaque projet lié, comme les conclusions d'un projet de recherche.",
+      "pick": "Choisir un projet",
+      "link": "Lier",
+      "unlink": "Délier le projet",
+      "empty": "Aucun projet n'est lié.",
+      "linked": "Projet lié",
+      "loadFailed": "Impossible de charger les projets liés",
+      "linkFailed": "Impossible de lier le projet",
+      "unlinkFailed": "Impossible de délier le projet"
     }
   },
   "research": {

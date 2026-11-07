@@ -56,6 +56,7 @@ import {
   projectServiceLinks,
   researchProjects,
   researchTaskSeqs,
+  taskProjectLinks,
   projects,
   services,
   workspaceFragmentDefaults,
@@ -283,6 +284,8 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
           ),
         )
       const projectIds = homedProjects.map((r) => r.id)
+      // Every link this board's tasks hold.
+      await tx.delete(taskProjectLinks).where(eq(taskProjectLinks.workspace_id, id))
       if (projectIds.length) {
         await tx
           .delete(workspaceMounts)
@@ -295,6 +298,8 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
         await tx
           .delete(projectServiceLinks)
           .where(inArray(projectServiceLinks.project_id, projectIds))
+        // Every task's link to a homed project, on any board.
+        await tx.delete(taskProjectLinks).where(inArray(taskProjectLinks.project_id, projectIds))
         // A homed research project's findings, pinned definition and policy tier.
         await tx.delete(findingsRevisions).where(inArray(findingsRevisions.project_id, projectIds))
         await tx.delete(researchTaskSeqs).where(inArray(researchTaskSeqs.project_id, projectIds))

@@ -27,6 +27,7 @@ export interface BlockPayloadArgs {
    */
   contextDocs: (NonNullable<BlockPayload['contextDocs']>[number] & { externalId: string })[]
   contextTasks: NonNullable<BlockPayload['contextTasks']>
+  contextProjects: NonNullable<BlockPayload['contextProjects']>
   docAuthoring: Pick<BlockPayload, 'docTemplateBody' | 'docExemplars' | 'docInterviewBrief'>
 }
 
@@ -39,8 +40,16 @@ export interface BlockPayloadArgs {
  * it into or out of the payload here rather than have it appear by inference.
  */
 export function buildBlockPayload(args: BlockPayloadArgs): BlockPayload {
-  const { block, description, resolved, agentConfig, contextDocs, contextTasks, docAuthoring } =
-    args
+  const {
+    block,
+    description,
+    resolved,
+    agentConfig,
+    contextDocs,
+    contextTasks,
+    contextProjects,
+    docAuthoring,
+  } = args
   return {
     id: block.id,
     title: block.title,
@@ -68,6 +77,7 @@ export function buildBlockPayload(args: BlockPayloadArgs): BlockPayload {
       ? { contextDocs: contextDocs.map(({ externalId: _externalId, ...doc }) => doc) }
       : {}),
     ...(contextTasks.length ? { contextTasks } : {}),
+    ...(contextProjects.length ? { contextProjects } : {}),
     // The task-estimator's triage, when produced earlier in this run — the
     // consensus executor's gating input.
     ...(block.estimate ? { estimate: block.estimate } : {}),

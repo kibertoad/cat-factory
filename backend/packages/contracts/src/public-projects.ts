@@ -18,7 +18,7 @@ import { taskTypeFieldDescriptorSchema } from './task-types.js'
 // ---------------------------------------------------------------------------
 // The public PROJECTS surface (`/api/v1/projects`, `/api/v1/research-definitions`): research
 // definitions an account publishes, projects and their service links, the tasks under a project,
-// and a research project's findings. Design: `docs/initiatives/research-projects.md`.
+// and a research project's findings. Design: `backend/docs/adr/0069-projects-and-research-projects.md`.
 //
 // A project task has its own resource, `PublicProjectTask`, because `PublicTask.serviceId` is a
 // required string and a project task has no service to put there. Retyping that field would break

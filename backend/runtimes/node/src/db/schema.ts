@@ -258,6 +258,21 @@ export const projectServiceLinks = pgTable(
   ],
 )
 
+/** Projects linked to tasks as read-only context. Mirrors D1 migration 0117. */
+export const taskProjectLinks = pgTable(
+  'task_project_links',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    block_id: text('block_id').notNull(),
+    project_id: text('project_id').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.block_id, t.project_id] }),
+    index('idx_task_project_links_project').on(t.project_id),
+  ],
+)
+
 export const workspaceMounts = pgTable(
   'workspace_mounts',
   {

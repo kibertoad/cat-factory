@@ -26,7 +26,7 @@ import {
 import { readFindingsStorageTiers } from './FindingsStoragePolicyService.js'
 
 export interface ResearchFindingsStoreDeps {
-  blockRepository: Pick<BlockRepository, 'findById'>
+  blockRepository: Pick<BlockRepository, 'findById' | 'findByIds'>
   workspaceRepository: Pick<WorkspaceRepository, 'accountOf'>
   findingsRevisionRepository: FindingsRevisionRepository
   findingsStoragePolicyRepository?: FindingsStoragePolicyRepository
@@ -105,12 +105,68 @@ export class ResearchFindingsStore {
   async listRevisions(project: FindingsProject): Promise<FindingsRevision[]> {
     const rows = await this.deps.findingsRevisionRepository.listByProject(project.id)
     if (!rows.some((row) => row.body.kind === 'offloaded')) return rows.map(inlineRevision)
-    const { workspaceId, store } = await this.homeStore(project)
-    // Object storage has no batched GET, so each offloaded body is one read of its own.
+    return this.withBodies(rows, await this.homeStore(project))
+  }
+
+  /**
+   * Every revision of several projects with its body, keyed by project and `seq` ascending, from
+   * one revision read. Throws `findings_body_unavailable` when an offloaded body cannot be read.
+   */
+  async listRevisionsOfProjects(
+    projects: readonly FindingsProject[],
+  ): Promise<Map<string, FindingsRevision[]>> {
+    const rows = await this.deps.findingsRevisionRepository.listByProjects(
+      projects.map((p) => p.id),
+    )
+    const byProject = new Map<string, FindingsRevisionRow[]>()
+    for (const row of rows)
+      byProject.set(row.projectId, [...(byProject.get(row.projectId) ?? []), row])
+    const offloading = projects.filter((p) =>
+      (byProject.get(p.id) ?? []).some((row) => row.body.kind === 'offloaded'),
+    )
+    const homes = await this.homeStores(offloading)
+    const result = new Map<string, FindingsRevision[]>()
+    for (const project of projects) {
+      const own = (byProject.get(project.id) ?? []).sort((a, b) => a.seq - b.seq)
+      const home = homes.get(project.id)
+      result.set(project.id, home ? await this.withBodies(own, home) : own.map(inlineRevision))
+    }
+    return result
+  }
+
+  /** {@link homeStore} for several projects, their roots resolved in one read. */
+  private async homeStores(
+    projects: readonly FindingsProject[],
+  ): Promise<Map<string, { workspaceId: string; store: BinaryArtifactStore | null }>> {
+    const homes = new Map<string, { workspaceId: string; store: BinaryArtifactStore | null }>()
+    if (projects.length === 0) return homes
+    const roots = new Map(
+      (await this.deps.blockRepository.findByIds(projects.map((p) => p.rootBlockId))).map(
+        (found) => [found.block.id, found.workspaceId] as const,
+      ),
+    )
+    for (const project of projects) {
+      const workspaceId = roots.get(project.rootBlockId)
+      if (!workspaceId) throw new Error(`research project '${project.id}' has no root block`)
+      const store = this.deps.resolveBinaryArtifactStore
+        ? await this.deps.resolveBinaryArtifactStore(workspaceId)
+        : null
+      homes.set(project.id, { workspaceId, store })
+    }
+    return homes
+  }
+
+  /** Read every offloaded body of `rows` from the project's home store; object storage has no batched GET. */
+  private withBodies(
+    rows: readonly FindingsRevisionRow[],
+    home: { workspaceId: string; store: BinaryArtifactStore | null },
+  ): Promise<FindingsRevision[]> {
     return Promise.all(
       rows.map(async (row) => {
         if (row.body.kind === 'inline') return inlineRevision(row)
-        const bytes = store ? await store.getBlob(workspaceId, row.body.artifactId) : null
+        const bytes = home.store
+          ? await home.store.getBlob(home.workspaceId, row.body.artifactId)
+          : null
         if (!bytes) throw bodyUnavailable(row.id)
         return withBody(row, decodeBody(row.id, new globalThis.TextDecoder().decode(bytes)))
       }),

@@ -276,6 +276,36 @@ export class D1FindingsRevisionRepository implements FindingsRevisionRepository 
       .all<RevisionRow>()
     return (results ?? []).map(rowToRevision)
   }
+
+  async listByProjects(projectIds: string[]): Promise<FindingsRevisionRow[]> {
+    const rows: FindingsRevisionRow[] = []
+    for (const chunk of chunkForIn(projectIds)) {
+      const { results } = await this.deps.db
+        .prepare(
+          `SELECT * FROM findings_revisions
+           WHERE project_id IN (${chunk.map(() => '?').join(', ')}) ORDER BY project_id, seq`,
+        )
+        .bind(...chunk)
+        .all<RevisionRow>()
+      rows.push(...(results ?? []).map(rowToRevision))
+    }
+    return rows
+  }
+
+  async projectsWithRevisions(projectIds: string[]): Promise<string[]> {
+    const found: string[] = []
+    for (const chunk of chunkForIn(projectIds)) {
+      const { results } = await this.deps.db
+        .prepare(
+          `SELECT DISTINCT project_id FROM findings_revisions
+           WHERE project_id IN (${chunk.map(() => '?').join(', ')})`,
+        )
+        .bind(...chunk)
+        .all<{ project_id: string }>()
+      for (const row of results ?? []) found.push(row.project_id)
+    }
+    return found
+  }
 }
 
 /** The findings-storage policy tiers (migration 0115). */

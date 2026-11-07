@@ -64,6 +64,10 @@ export interface FindingsRevisionRepository {
   get(projectId: string, id: string): Promise<FindingsRevisionRow | null>
   /** The project's revisions, `seq` ascending. */
   listByProject(projectId: string): Promise<FindingsRevisionRow[]>
+  /** The revisions of several projects, in one (chunked) query, each project's `seq` ascending. */
+  listByProjects(projectIds: string[]): Promise<FindingsRevisionRow[]>
+  /** Which of the given projects hold at least one revision, in one (chunked) query. */
+  projectsWithRevisions(projectIds: string[]): Promise<string[]>
 }
 
 export interface FindingsStoragePolicyRepository {

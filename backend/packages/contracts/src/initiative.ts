@@ -189,6 +189,9 @@ export type InitiativePhase = v.InferOutput<typeof initiativePhaseSchema>
  *   - `agentConfig`    — per-agent-kind config values for the spawned pipeline.
  *   - `gates`          — a per-run gate override (parallel to the pipeline's steps, one
  *                        boolean each), threaded through the slice-2 gate-override seam.
+ *   - `projects`: projects linked to the spawned task as read-only context (a research
+ *                        project's findings, say), held to the same rules as a link made on the
+ *                        board.
  * Emitted by the planner (via the draft item) and/or enforced by a preset's `seedPlan`.
  */
 export const initiativeItemSpawnSchema = v.object({
@@ -197,6 +200,7 @@ export const initiativeItemSpawnSchema = v.object({
   fragmentIds: v.optional(v.array(v.string())),
   agentConfig: v.optional(agentConfigValuesSchema),
   gates: v.optional(v.array(v.boolean())),
+  projects: v.optional(v.array(v.pipe(v.string(), v.minLength(1)))),
 })
 export type InitiativeItemSpawn = v.InferOutput<typeof initiativeItemSpawnSchema>
 

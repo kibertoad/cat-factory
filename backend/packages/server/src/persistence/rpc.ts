@@ -313,6 +313,11 @@ export type ScopeRule =
   | { kind: 'projectField'; arg: number }
   | { kind: 'projectInsert'; arg: number }
   | { kind: 'projectServiceLinks'; arg: number; servicesArg: number }
+  /**
+   * `args[arg]` is a workspace id and `args[projectsArg]` a `string[]` of project ids: a task on
+   * that board linking those projects as context. The workspace and every project must be in scope.
+   */
+  | { kind: 'workspaceProjects'; arg: number; projectsArg: number }
   | { kind: 'installation'; arg: number }
   | { kind: 'installationList'; arg: number }
   | { kind: 'skillSource'; arg: number }
@@ -915,7 +920,15 @@ async function checkAccountFieldUpsertScope(
  */
 type ProjectScopeRule = Extract<
   ScopeRule,
-  { kind: 'project' | 'projectList' | 'projectField' | 'projectInsert' | 'projectServiceLinks' }
+  {
+    kind:
+      | 'project'
+      | 'projectList'
+      | 'projectField'
+      | 'projectInsert'
+      | 'projectServiceLinks'
+      | 'workspaceProjects'
+  }
 >
 const PROJECT_SCOPE_KINDS: ReadonlySet<ScopeRule['kind']> = new Set<ProjectScopeRule['kind']>([
   'project',
@@ -923,6 +936,7 @@ const PROJECT_SCOPE_KINDS: ReadonlySet<ScopeRule['kind']> = new Set<ProjectScope
   'projectField',
   'projectInsert',
   'projectServiceLinks',
+  'workspaceProjects',
 ])
 function isProjectScopeRule(rule: ScopeRule): rule is ProjectScopeRule {
   return PROJECT_SCOPE_KINDS.has(rule.kind)
@@ -949,6 +963,7 @@ async function checkEntityCallScope(
         | 'projectField'
         | 'projectInsert'
         | 'projectServiceLinks'
+        | 'workspaceProjects'
         | 'installation'
         | 'installationList'
         | 'skillSource'

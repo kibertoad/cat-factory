@@ -642,6 +642,11 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *  - `research_definition_invalid`      a published definition breaks a rule its schema alone
  *                                       cannot state (a duplicate question id, say).
  *                                       `details.problems` lists them.
+ *  - `project_link_invalid`             a project linked to a task as context does not exist or
+ *                                       belongs to another account. `details.projectIds` names them.
+ *  - `project_has_no_result`            a project linked to a task as context has no result to
+ *                                       read yet (a research project with no findings revision).
+ *                                       `details.projectIds` names them.
  */
 export const PROJECT_REASONS = [
   'project_kind_unregistered',
@@ -661,6 +666,8 @@ export const PROJECT_REASONS = [
   'findings_too_large_for_inline',
   'task_owned_by_project',
   'research_definition_invalid',
+  'project_link_invalid',
+  'project_has_no_result',
 ] as const
 
 export type ProjectReason = (typeof PROJECT_REASONS)[number]

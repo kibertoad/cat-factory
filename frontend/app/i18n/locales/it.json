@@ -6607,7 +6607,9 @@
         "research_nothing_to_ask": "Per questo approfondimento non resta alcuna domanda nella modalità scelta. Scegli un'altra modalità o aggiungi domande.",
         "findings_too_large_for_inline": "I risultati sono troppo grandi da salvare, e spostarli nell'archiviazione dei contenuti non è possibile. Attiva l'archiviazione dei contenuti o consenti lo spostamento, poi riprova.",
         "task_owned_by_project": "Questa attività appartiene a un progetto, che non ha un servizio. Usa invece l'indirizzo delle attività del progetto.",
-        "research_definition_invalid": "La definizione di ricerca viola una regola: verifica che gli id di argomenti, domande, credenziali e input siano univoci."
+        "research_definition_invalid": "La definizione di ricerca viola una regola: verifica che gli id di argomenti, domande, credenziali e input siano univoci.",
+        "project_link_invalid": "Quel progetto non esiste o appartiene a un'altra organizzazione. Collega un progetto di questa organizzazione.",
+        "project_has_no_result": "Quel progetto non ha ancora un risultato da leggere. Esegui prima un'attività di ricerca nel progetto, poi collegalo."
       }
     },
     "action": {
@@ -9265,6 +9267,18 @@
     "mount": {
       "added": "Progetto {title} aggiunto a questa bacheca",
       "failed": "Non è stato possibile aggiungere il progetto"
+    },
+    "taskLinks": {
+      "title": "Progetti collegati",
+      "hint": "Gli agenti che lavorano a questa attività leggono il risultato attuale di ogni progetto collegato, come i risultati di un progetto di ricerca.",
+      "pick": "Scegli un progetto",
+      "link": "Collega",
+      "unlink": "Scollega il progetto",
+      "empty": "Nessun progetto collegato.",
+      "linked": "Progetto collegato",
+      "loadFailed": "Impossibile caricare i progetti collegati",
+      "linkFailed": "Impossibile collegare il progetto",
+      "unlinkFailed": "Impossibile scollegare il progetto"
     }
   },
   "research": {

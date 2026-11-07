@@ -5,6 +5,7 @@ import type {
   InitiativeRepository,
   ProjectRepository,
   ResearchProjectRepository,
+  TaskProjectLinkRepository,
   ServiceConnection,
   ServiceRepository,
   TaskRepository,
@@ -30,6 +31,7 @@ export interface RemovalCascadeDeps {
   serviceRepository?: ServiceRepository
   projectRepository?: ProjectRepository
   researchProjectRepository?: ResearchProjectRepository
+  taskProjectLinkRepository?: TaskProjectLinkRepository
   workspaceMountRepository?: WorkspaceMountRepository
   initiativeRepository?: InitiativeRepository
   documentRepository?: DocumentRepository
@@ -99,6 +101,8 @@ async function reclaimProjects(
   const ids = (await projectRepository.listByRootBlocks([...rootIds])).map((p) => p.id)
   if (ids.length === 0) return
   await workspaceMountRepository.removeBySubjects(ids)
+  // Every task on any board that linked a reclaimed project as context drops the link.
+  await deps.taskProjectLinkRepository?.deleteByProjects(ids)
   // A research project's pinned definition, findings and policy tier go with it.
   await deps.researchProjectRepository?.deleteMany(ids)
   await projectRepository.deleteMany(ids)
@@ -190,6 +194,8 @@ export async function reclaimDoomedEntities(
   input: RemovalCascadeInput,
 ): Promise<void> {
   await reclaimServices(deps, input)
+  // The doomed blocks' own links to projects.
+  await deps.taskProjectLinkRepository?.deleteByBlocks(input.homeWorkspaceId, [...input.doomed])
   await reclaimProjects(deps, input)
   await reclaimInitiatives(deps, input)
   await detachDoomedDocuments(deps, input)
