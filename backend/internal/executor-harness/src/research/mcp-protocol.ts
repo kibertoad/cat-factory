@@ -1,8 +1,6 @@
-import { createInterface } from 'node:readline'
-
-// A minimal Model Context Protocol server over stdio (newline-delimited JSON-RPC 2.0), enough
-// for the agent CLIs to list and call tools. The harness image carries no runtime npm
-// dependencies, so this is hand-written rather than the MCP SDK.
+// A minimal Model Context Protocol server (JSON-RPC 2.0), enough for the agent CLIs to list and
+// call tools. The harness image carries no runtime npm dependencies, so this is hand-written
+// rather than the MCP SDK.
 
 export interface McpTool {
   name: string
@@ -23,7 +21,7 @@ export interface McpServerDefinition {
   call(name: string, args: Record<string, unknown>): Promise<McpToolResult>
 }
 
-interface JsonRpcRequest {
+export interface JsonRpcRequest {
   jsonrpc?: string
   id?: string | number | null
   method?: string
@@ -79,24 +77,4 @@ export async function handleMcpMessage(
     default:
       return isNotification ? null : fail(-32601, `method not found: ${String(message.method)}`)
   }
-}
-
-/** Serve a definition on this process's stdin/stdout until stdin closes. */
-export function serveMcpStdio(server: McpServerDefinition): void {
-  const lines = createInterface({ input: process.stdin })
-  lines.on('line', (line) => {
-    if (!line.trim()) return
-    let message: JsonRpcRequest
-    try {
-      message = JSON.parse(line) as JsonRpcRequest
-    } catch {
-      process.stdout.write(
-        `${JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' } })}\n`,
-      )
-      return
-    }
-    void handleMcpMessage(server, message).then((response) => {
-      if (response) process.stdout.write(`${JSON.stringify(response)}\n`)
-    })
-  })
 }

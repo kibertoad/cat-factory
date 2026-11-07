@@ -221,15 +221,23 @@ are already there), with structured output for the findings shape above.
   small MCP server of its own with tools that take a credential KEY and inject the value
   harness-side:
   - `fill_secret(credentialKey, field, label | selector)`: types one field of a stored credential
-    (`username`, `password`, or the whole `value`) into a field named by its label or a CSS
-    selector, through the same browser session. Playwright MCP's own `--secrets` substitution is
-    not used, because it binds a secret to no origin.
+    (a login's `username` or `password`, any other kind's `value`) into a field named by its label
+    or a CSS selector, through the same browser session. Playwright MCP's own `--secrets`
+    substitution is not used, because it binds a secret to no origin.
   - `http_request(method, url, headers, body, auth: { key, scheme })`: sends the request with the
     credential attached, records the redacted exchange as evidence, and returns the scrubbed
     response to the model. For an `oauth-client` credential the harness performs the token
     exchange itself and attaches the access token, so a minted token never reaches the model.
+- **The values stay in the harness process.** The agent has a shell, so a config file or a child
+  process the agent CLI spawns is readable by the model. The tool server is served on loopback
+  from the harness process with a per-job token, and the CLI spawns only a stdio bridge holding
+  that URL and token, which grant the tools and no value. A value typed into a page stays in that
+  page, which the agent can script (Playwright MCP's `browser_evaluate`, or CDP from its shell):
+  `fill_secret` keeps the stored value out of the model context and the telemetry store, and does
+  not hide a field the model can read back.
 - **A credential is sent only to its vendor.** Both tools refuse when the page or URL origin is
-  not one of the definition's `targets`. The agent reads untrusted vendor pages, and a prompt
+  not one of the definition's `targets`, and `http_request` hands a redirect back rather than
+  following it. The agent reads untrusted vendor pages, and a prompt
   injected there could otherwise point `http_request` at a host of its choosing with the
   credential attached. The refusal is reported to the agent, never silent.
 - **`request_credential(key, reason, observed)`**: the agent calls this when it reaches a point
