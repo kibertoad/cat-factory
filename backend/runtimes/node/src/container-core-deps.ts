@@ -322,6 +322,8 @@ function selectNodeRegistryDeps(bundle: NodeCoreDepsBundle) {
     taskTypeRegistry: options.taskTypeRegistry,
     projectKindRegistry: options.projectKindRegistry,
     projectKindSource: options.projectKindSource,
+    researchDefinitionRegistry: options.researchDefinitionRegistry,
+    registeredResearchDefinitionSource: options.registeredResearchDefinitionSource,
     // The app-owned inline use-case registry (the deployment's non-container model operations);
     // createCore threads it into the public use-case service and re-exposes it on Core for the
     // controller + boot-time validation.

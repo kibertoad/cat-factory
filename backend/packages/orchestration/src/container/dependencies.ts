@@ -189,6 +189,8 @@ import type {
   ResearchDefinitionRepository,
   ResearchProjectRepository,
   ProjectKindSource,
+  RegisteredResearchDefinitionSource,
+  ResearchDefinitionRegistry,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
@@ -460,6 +462,16 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * injects the remote source, the sibling of `promptFragmentSource`.
    */
   projectKindSource?: ProjectKindSource
+  /**
+   * The app-owned research-definition registry: the definitions a deployment ships in code.
+   * Defaulted to an EMPTY registry. A facade injects the SAME instance a deployment registers on.
+   */
+  researchDefinitionRegistry?: ResearchDefinitionRegistry
+  /**
+   * Where REGISTERED research definitions are read from: the registry above unless a
+   * mothership-mode node injects the remote source.
+   */
+  registeredResearchDefinitionSource?: RegisteredResearchDefinitionSource
   /**
    * The app-owned INLINE USE-CASE registry (the deployment's non-container model operations, which
    * `/api/v1/use-cases` publishes and invokes). Optional + defaulted to

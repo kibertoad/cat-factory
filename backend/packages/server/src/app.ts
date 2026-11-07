@@ -117,6 +117,7 @@ import { foundationalBuiltinsController } from './modules/foundationalServices/F
 import { binaryGeneratorsController } from './modules/binaryGenerators/BinaryGeneratorsController.js'
 import { promptFragmentsInternalController } from './modules/promptFragments/PromptFragmentsInternalController.js'
 import { projectKindsInternalController } from './modules/projects/ProjectKindsInternalController.js'
+import { researchDefinitionsInternalController } from './modules/research/ResearchDefinitionsInternalController.js'
 import { agentKindsController } from './modules/agentKinds/AgentKindsController.js'
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicBoardController } from './modules/publicApi/PublicBoardController.js'
@@ -330,6 +331,9 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // Mothership-mode PROJECT KINDS (`GET /internal/project-kinds`), read by a node's
   // `HttpProjectKindSource` when it creates a project or admits a task under one.
   app.route('/', projectKindsInternalController())
+  // Mothership-mode RESEARCH DEFINITIONS registered in code (`GET /internal/research-definitions`),
+  // read by a node when it pins a research project or dispatches a research run.
+  app.route('/', researchDefinitionsInternalController())
   // Mothership-mode AGENT-KIND CAPABILITIES (`GET /internal/agent-kinds`): the fourth of the same
   // family, and the one that serves a SLICE of its registry rather than all of it. A kind's
   // executable half (prompts as functions, `preOps`/`postOps`, its output parser) cannot cross a

@@ -142,6 +142,8 @@ import type {
   TaskTypeRegistry,
   ProjectKindRegistry,
   ProjectKindSource,
+  ResearchDefinitionRegistry,
+  ResearchDefinitionSource,
   VcsWebUrls,
 } from '@cat-factory/kernel'
 
@@ -408,6 +410,10 @@ export interface CoreSpine {
   projectKindRegistry: ProjectKindRegistry
   /** Where project kinds are read from: the registry above, or a mothership node's remote source. */
   projectKinds: ProjectKindSource
+  /** The research-definition registry the engine resolved; the mothership serves it to nodes. */
+  researchDefinitionRegistry: ResearchDefinitionRegistry
+  /** The one read of research definitions, registered and stored. */
+  researchDefinitions: ResearchDefinitionSource
   /**
    * The app-owned inline use-case registry the engine resolved (the facade's injected instance,
    * else the empty default). Re-exposed so the facade passes the SAME instance to
@@ -777,6 +783,8 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     projectKindRegistry,
     projectKinds,
+    researchDefinitionRegistry,
+    researchDefinitions,
     inlineUseCaseRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
@@ -839,6 +847,7 @@ export function createCore(injected: CoreDependencies): Core {
       pipelineRegistry,
       promptFragments,
       projectKinds,
+      researchDefinitions,
       getSpendService: () => spendServiceRef,
       getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
       getSharedStackSeeder: () => sharedStackSeederRef,
@@ -991,6 +1000,8 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     projectKindRegistry,
     projectKinds,
+    researchDefinitionRegistry,
+    researchDefinitions,
     inlineUseCaseRegistry,
     inlineUseCases,
     foundationalServiceRegistry,

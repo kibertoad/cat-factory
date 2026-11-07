@@ -17,6 +17,7 @@ import type {
   AppCaches,
   ExecutionEventPublisher,
   ProjectKindSource,
+  ResearchDefinitionSource,
   TrackerIssueEvent,
 } from '@cat-factory/kernel'
 import { DEFAULT_SPEND_PRICING, SpendService } from '@cat-factory/spend'
@@ -139,18 +140,31 @@ import type {
 /** Assemble the projects module when the project, service and mount repositories are wired. */
 export function createProjectsModule(
   deps: CoreDependencies,
-  projectKinds: ProjectKindSource,
+  sources: { projectKinds: ProjectKindSource; researchDefinitions: ResearchDefinitionSource },
   events: ExecutionEventPublisher,
 ): ProjectsModule | undefined {
-  const { projectRepository, serviceRepository, workspaceMountRepository } = deps
-  if (!projectRepository || !serviceRepository || !workspaceMountRepository) return undefined
+  const {
+    projectRepository,
+    serviceRepository,
+    workspaceMountRepository,
+    researchProjectRepository,
+  } = deps
+  if (
+    !projectRepository ||
+    !serviceRepository ||
+    !workspaceMountRepository ||
+    !researchProjectRepository
+  ) {
+    return undefined
+  }
   const service = new ProjectService({
     projectRepository,
     serviceRepository,
     workspaceMountRepository,
     workspaceRepository: deps.workspaceRepository,
     blockRepository: deps.blockRepository,
-    projectKinds,
+    projectKinds: sources.projectKinds,
+    research: { definitions: sources.researchDefinitions, projects: researchProjectRepository },
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     events,

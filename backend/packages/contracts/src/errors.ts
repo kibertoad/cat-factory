@@ -434,6 +434,9 @@ export const UNAVAILABLE_REASONS = [
   // A mothership-mode node could not read the project kinds from the mothership, so a project
   // write or a task under a project was refused rather than judged against no kinds at all.
   'project_kinds_unreachable',
+  // The same for the research definitions a deployment registers in code: a research project
+  // was not pinned, or a research run not dispatched, rather than judged against none.
+  'research_definitions_unreachable',
   'foundational_builtins_unreachable',
   'connection_credentials_unreadable',
   'vcs_capability_unsupported',
@@ -596,6 +599,14 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *                                       account.
  *  - `project_has_unfinished_tasks`     deleting the project would discard tasks that have not
  *                                       finished; finish or delete them first.
+ *  - `research_pin_required`            the kind keeps research data and the create named no
+ *                                       research definition to pin.
+ *  - `research_pin_not_accepted`        the create named a research definition for a kind that
+ *                                       keeps no research data.
+ *  - `research_definition_not_found`    the definition key and version name nothing the account
+ *                                       can pin. `details` names both.
+ *  - `research_inputs_invalid`          the values for the definition's `inputs` do not satisfy
+ *                                       them. `details.problems` lists why.
  *
  * The SPA keys an exhaustive `Record<ProjectReason, …>` of message keys off this.
  */
@@ -605,6 +616,10 @@ export const PROJECT_REASONS = [
   'project_has_no_writable_repo',
   'project_service_link_invalid',
   'project_has_unfinished_tasks',
+  'research_pin_required',
+  'research_pin_not_accepted',
+  'research_definition_not_found',
+  'research_inputs_invalid',
 ] as const
 
 export type ProjectReason = (typeof PROJECT_REASONS)[number]

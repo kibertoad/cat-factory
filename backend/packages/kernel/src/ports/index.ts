@@ -65,6 +65,13 @@ export type {
   StoredResearchDefinition,
 } from './research-repositories.js'
 export { type ProjectKindSource, registryProjectKindSource } from './project-kinds.js'
+export {
+  type RegisteredResearchDefinitionSource,
+  type ResearchDefinitionSource,
+  type ResolvedResearchDefinition,
+  composeResearchDefinitionSource,
+  registryResearchDefinitionSource,
+} from './research-definitions.js'
 export type { Clock, IdGenerator } from './runtime.js'
 export {
   type LogFields,

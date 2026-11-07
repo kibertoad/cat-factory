@@ -32,10 +32,12 @@ export interface ResearchProjectRepository {
   get(projectId: string): Promise<ResearchProject | null>
   insert(project: ResearchProject): Promise<void>
   /**
-   * Atomically take the project's next findings sequence number (1, 2, 3, ...). Taken when a
-   * research task STARTS, so revisions fold in the order the tasks were asked.
+   * The findings sequence number of a research task, taken the first time the task starts and
+   * returned unchanged on every later call, so a replayed or retried start keeps its place and
+   * revisions fold in the order their tasks were asked. Two racing first claims for one task can
+   * skip a number: a sequence orders revisions, it never counts them.
    */
-  reserveSeq(projectId: string): Promise<number>
+  reserveTaskSeq(projectId: string, taskId: string): Promise<number>
   /** Reclaim the research rows of deleted projects, revisions included. Empty input is a no-op. */
   deleteMany(projectIds: string[]): Promise<void>
 }

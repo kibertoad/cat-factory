@@ -18,6 +18,9 @@ import {
   registryBuiltinSource,
   registryPromptFragmentSource,
   registryProjectKindSource,
+  ResearchDefinitionRegistry,
+  composeResearchDefinitionSource,
+  registryResearchDefinitionSource,
   defaultProjectKindRegistry,
 } from '@cat-factory/kernel'
 import { createAppCaches } from '@cat-factory/caching'
@@ -34,6 +37,8 @@ import type { CoreDependencies } from '../container.js'
  */
 export function resolveCoreRuntime(dependencies: CoreDependencies) {
   const projectKindRegistry = dependencies.projectKindRegistry ?? defaultProjectKindRegistry()
+  const researchDefinitionRegistry =
+    dependencies.researchDefinitionRegistry ?? new ResearchDefinitionRegistry()
   // Resolved ONCE and shared by the two entries below: the registry itself (which the boot
   // validation and the snapshot read) and the default `builtin`-tier source that wraps it. A
   // second `defaultFoundationalServiceRegistry()` call would hand the catalog a different
@@ -68,6 +73,15 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     // Where project kinds are READ from: this process's registry, unless a mothership-mode node
     // injected the remote source (the prompt-fragment registry/source pair's shape).
     projectKinds: dependencies.projectKindSource ?? registryProjectKindSource(projectKindRegistry),
+    researchDefinitionRegistry,
+    // The one read of research definitions: the registered ones (this process's registry, or a
+    // mothership node's remote source) composed with the account's stored ones.
+    researchDefinitions: composeResearchDefinitionSource({
+      registered:
+        dependencies.registeredResearchDefinitionSource ??
+        registryResearchDefinitionSource(researchDefinitionRegistry),
+      stored: dependencies.researchDefinitionRepository,
+    }),
     // The deployment's non-container model operations. Empty by default for the same reason the
     // task-type registry is: what a wrapper over `/api/v1` may generate is the deployment's own
     // declaration, and a shipped default would be a model list nobody chose.

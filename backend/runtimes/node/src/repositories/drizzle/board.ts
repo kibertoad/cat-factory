@@ -55,6 +55,7 @@ import {
   findingsStoragePolicies,
   projectServiceLinks,
   researchProjects,
+  researchTaskSeqs,
   projects,
   services,
   workspaceFragmentDefaults,
@@ -296,6 +297,7 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
           .where(inArray(projectServiceLinks.project_id, projectIds))
         // A homed research project's findings, pinned definition and policy tier.
         await tx.delete(findingsRevisions).where(inArray(findingsRevisions.project_id, projectIds))
+        await tx.delete(researchTaskSeqs).where(inArray(researchTaskSeqs.project_id, projectIds))
         await tx
           .delete(findingsStoragePolicies)
           .where(

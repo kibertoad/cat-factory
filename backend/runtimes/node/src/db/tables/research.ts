@@ -26,6 +26,17 @@ export const researchProjects = pgTable('research_projects', {
   next_seq: integer('next_seq').notNull().default(1),
 })
 
+/** The findings sequence number each research task claimed when it first started. */
+export const researchTaskSeqs = pgTable(
+  'research_task_seqs',
+  {
+    task_id: text('task_id').primaryKey(),
+    project_id: text('project_id').notNull(),
+    seq: integer('seq').notNull(),
+  },
+  (t) => [uniqueIndex('idx_research_task_seqs_seq').on(t.project_id, t.seq)],
+)
+
 /** Findings revisions, written once each. Exactly one of the two body columns is set. */
 export const findingsRevisions = pgTable(
   'findings_revisions',

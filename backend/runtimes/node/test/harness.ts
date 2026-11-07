@@ -190,6 +190,7 @@ type ConformanceAppOpts = {
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
   projectKindRegistry?: CoreDependencies['projectKindRegistry']
+  researchDefinitionRegistry?: CoreDependencies['researchDefinitionRegistry']
   inlineUseCaseRegistry?: CoreDependencies['inlineUseCaseRegistry']
   pipelineRegistry?: CoreDependencies['pipelineRegistry']
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
@@ -321,6 +322,7 @@ function buildContainerRegistryOptions(opts: ConformanceAppOpts | undefined) {
     initiativePresetRegistry: o.initiativePresetRegistry,
     taskTypeRegistry: o.taskTypeRegistry,
     projectKindRegistry: o.projectKindRegistry,
+    researchDefinitionRegistry: o.researchDefinitionRegistry,
     inlineUseCaseRegistry: o.inlineUseCaseRegistry,
     pipelineRegistry: o.pipelineRegistry,
   })
@@ -559,6 +561,8 @@ export function makeConformanceApp(
     requirementReviewRepository: () => new DrizzleRequirementReviewRepository(db),
     agentRunRepository: () => container.agentRunRepository,
     blockRepository: () => createDrizzleRepositories(db, { now: () => Date.now() }).blockRepository,
+    researchProjectRepository: () =>
+      createDrizzleRepositories(db, { now: () => Date.now() }).researchProjectRepository,
     workspaceRepository: () => new DrizzleWorkspaceRepository(db),
     workspaceMemberRepository: () => new DrizzleWorkspaceMemberRepository(db),
     publicApiKeyRepository: () => new DrizzlePublicApiKeyRepository(db),

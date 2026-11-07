@@ -153,6 +153,10 @@ const REASON_DESCRIPTION_KEYS: Record<
   project_has_no_writable_repo: 'errors.reason.description.project_has_no_writable_repo',
   project_service_link_invalid: 'errors.reason.description.project_service_link_invalid',
   project_has_unfinished_tasks: 'errors.reason.description.project_has_unfinished_tasks',
+  research_pin_required: 'errors.reason.description.research_pin_required',
+  research_pin_not_accepted: 'errors.reason.description.research_pin_not_accepted',
+  research_definition_not_found: 'errors.reason.description.research_definition_not_found',
+  research_inputs_invalid: 'errors.reason.description.research_inputs_invalid',
   credential_wait_not_initiator: 'errors.reason.description.credential_wait_not_initiator',
   gate_config_fields_invalid: 'errors.reason.description.gate_config_fields_invalid',
   approvals_chain_stale: 'errors.reason.description.approvals_chain_stale',
@@ -167,6 +171,8 @@ const REASON_DESCRIPTION_KEYS: Record<
   tool_server_without_oauth: 'errors.reason.description.tool_server_without_oauth',
   binary_generators_unreachable: 'errors.unavailable.description.binary_generators_unreachable',
   project_kinds_unreachable: 'errors.unavailable.description.project_kinds_unreachable',
+  research_definitions_unreachable:
+    'errors.unavailable.description.research_definitions_unreachable',
   foundational_builtins_unreachable:
     'errors.unavailable.description.foundational_builtins_unreachable',
   connection_credentials_unreadable:

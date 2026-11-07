@@ -300,6 +300,11 @@ export interface StartOptions {
    */
   projectKindRegistry?: NodeContainerOptions['projectKindRegistry']
   /**
+   * App-owned DI seam for research definitions shipped in code: a deployment news a
+   * `ResearchDefinitionRegistry`, registers its definitions on it, and passes it here.
+   */
+  researchDefinitionRegistry?: NodeContainerOptions['researchDefinitionRegistry']
+  /**
    * App-owned DI seam for the deployment's INLINE USE CASES (mirroring `taskTypeRegistry`): a
    * deployment news a `defaultInlineUseCaseRegistry()`, registers its non-container model
    * operations on it by reference, and passes it here. `/api/v1/use-cases` then publishes and runs
@@ -910,6 +915,7 @@ async function bootServer(
     initiativePresetRegistry: options.initiativePresetRegistry,
     taskTypeRegistry: options.taskTypeRegistry,
     projectKindRegistry: options.projectKindRegistry,
+    researchDefinitionRegistry: options.researchDefinitionRegistry,
     inlineUseCaseRegistry: options.inlineUseCaseRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,

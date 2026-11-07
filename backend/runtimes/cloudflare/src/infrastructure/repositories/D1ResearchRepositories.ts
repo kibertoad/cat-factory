@@ -125,16 +125,35 @@ export class D1ResearchProjectRepository implements ResearchProjectRepository {
       .run()
   }
 
-  async reserveSeq(projectId: string): Promise<number> {
-    const row = await this.deps.db
+  async reserveTaskSeq(projectId: string, taskId: string): Promise<number> {
+    const existing = await this.taskSeq(taskId)
+    if (existing !== null) return existing
+    const next = await this.deps.db
       .prepare(
         `UPDATE research_projects SET next_seq = next_seq + 1 WHERE project_id = ?
          RETURNING next_seq - 1 AS seq`,
       )
       .bind(projectId)
       .first<{ seq: number }>()
-    if (!row) throw new Error(`research project '${projectId}' not found`)
-    return row.seq
+    if (!next) throw new Error(`research project '${projectId}' not found`)
+    await this.deps.db
+      .prepare(
+        `INSERT INTO research_task_seqs (task_id, project_id, seq) VALUES (?, ?, ?)
+         ON CONFLICT(task_id) DO NOTHING`,
+      )
+      .bind(taskId, projectId, next.seq)
+      .run()
+    const claimed = await this.taskSeq(taskId)
+    if (claimed === null) throw new Error(`research task '${taskId}' lost its sequence claim`)
+    return claimed
+  }
+
+  private async taskSeq(taskId: string): Promise<number | null> {
+    const row = await this.deps.db
+      .prepare(`SELECT seq FROM research_task_seqs WHERE task_id = ?`)
+      .bind(taskId)
+      .first<{ seq: number }>()
+    return row?.seq ?? null
   }
 
   async deleteMany(projectIds: string[]): Promise<void> {
@@ -143,6 +162,9 @@ export class D1ResearchProjectRepository implements ResearchProjectRepository {
       await this.deps.db.batch([
         this.deps.db
           .prepare(`DELETE FROM findings_revisions WHERE project_id IN (${placeholders})`)
+          .bind(...chunk),
+        this.deps.db
+          .prepare(`DELETE FROM research_task_seqs WHERE project_id IN (${placeholders})`)
           .bind(...chunk),
         this.deps.db
           .prepare(
