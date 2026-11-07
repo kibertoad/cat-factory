@@ -650,6 +650,11 @@ export class WorkspaceService {
 
   async delete(id: string): Promise<void> {
     await this.require(id)
+    // Re-home the SHARED subjects this board homes: a service or project another board still
+    // mounts must NOT be destroyed just because its home board is deleted. Planned before the
+    // purge, so the artifacts anchored on a re-homed subject's blocks (a project's offloaded
+    // findings, a task's attached images) move with it instead of being purged with the board.
+    const rehome = await this.planSharedServiceRehome(id)
     // Reclaim the board's binary artifacts (screenshots + reference images) — BOTH the metadata
     // rows AND the heavy blob bytes — BEFORE the row cascade. The retention sweeps only ever see
     // LIVE workspaces (`listVisible`), so a deleted board's artifacts would otherwise leak their
@@ -660,13 +665,9 @@ export class WorkspaceService {
     // rows survive rather than orphaning the bytes). But because a deleted board never reappears
     // in `listVisible`, no retention sweep will revisit those rows — reclaim is then out-of-band,
     // so the failure is LOGGED (not silent) rather than promising an auto-retry that can't happen.
-    // Re-home the SHARED subjects this board homes: a service or project another board still
-    // mounts must NOT be destroyed just because its home board is deleted. Planned before the
-    // purge, so the artifacts anchored on a re-homed subject's blocks (a project's offloaded
-    // findings, a task's attached images) move with it instead of being purged with the board.
-    const rehome = await this.planSharedServiceRehome(id)
-    await this.carryRehomedArtifacts(id, rehome)
-    await this.purgeBinaryArtifacts(id)
+    // A carry that failed skips the purge: purging then would destroy the re-homed subjects'
+    // artifacts along with the board's own, so they are kept for the same out-of-band reclaim.
+    if (await this.carryRehomedArtifacts(id, rehome)) await this.purgeBinaryArtifacts(id)
     // Freeze the board's remaining spend into the durable cost rollup while the rows it is
     // folded from are still here. `spend_days` deliberately survives a board delete, but the
     // sweep that fills it only reaches boards that still exist, so without this the board's
@@ -685,10 +686,13 @@ export class WorkspaceService {
 
   /**
    * Move the artifacts anchored on each re-homed subject's blocks to the board it moves to.
-   * Best-effort like the purge after it: a row left behind is purged with the board.
+   * Best-effort like the purge, and false when the carry failed.
    */
-  private async carryRehomedArtifacts(id: string, rehome: readonly MountRehome[]): Promise<void> {
-    if (!this.resolveBinaryArtifactStore || rehome.length === 0) return
+  private async carryRehomedArtifacts(
+    id: string,
+    rehome: readonly MountRehome[],
+  ): Promise<boolean> {
+    if (!this.resolveBinaryArtifactStore || rehome.length === 0) return true
     const resolve = this.resolveBinaryArtifactStore
     const blocks = await this.blockRepository.listByOwners(rehome.map((r) => r.subjectId))
     const roots = await subjectsOwningRoots(
@@ -714,19 +718,21 @@ export class WorkspaceService {
       if (!owner) continue
       blockIdsByOwner.set(owner, [...(blockIdsByOwner.get(owner) ?? []), block.id])
     }
-    await runBestEffort(
+    const carried = await runBestEffort(
       this.logger ?? noopLogger,
       'workspace delete: carry re-homed artifacts',
       async () => {
         const store = await resolve(id)
-        if (!store) return
+        if (!store) return true
         for (const { subjectId, toWorkspaceId } of rehome) {
           const blockIds = blockIdsByOwner.get(subjectId) ?? []
           if (blockIds.length) await store.moveBlocks([id, toWorkspaceId], blockIds)
         }
+        return true
       },
       { workspaceId: id, subjects: rehome.length },
     )
+    return carried === true
   }
 
   /** Purge every binary artifact (rows + blob bytes) of a board being deleted. No-op when the

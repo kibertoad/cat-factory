@@ -134,6 +134,84 @@ describe('WorkspaceService.delete — binary-artifact purge', () => {
   })
 })
 
+// A shared subject this board homes moves to a board that still mounts it, and the artifacts
+// anchored on its blocks (an offloaded findings body, a task's attached image) move with it.
+// Only then is the board's own remainder purged.
+describe("WorkspaceService.delete: carrying a re-homed subject's artifacts", () => {
+  function rehomeDeps(store: Partial<BinaryArtifactStore>) {
+    const order: string[] = []
+    const deleteSpy = vi.fn(() => {
+      order.push('cascade')
+      return Promise.resolve()
+    })
+    const logger = createRecordingLogger()
+    const frame = { id: 'blk_frame', level: 'frame', parentId: null }
+    const service = new WorkspaceService({
+      workspaceRepository: {
+        ...fakeWorkspaceRepository(deleteSpy),
+        accountOf: () => Promise.resolve(null),
+      } as unknown as WorkspaceRepository,
+      blockRepository: {
+        listByWorkspace: () => Promise.resolve([frame]),
+        listByOwners: () =>
+          Promise.resolve([frame, { id: 'blk_task', level: 'task', parentId: 'blk_frame' }]),
+      } as never,
+      pipelineRepository: {} as never,
+      executionRepository: {} as never,
+      serviceRepository: {
+        listByFrameBlocks: () =>
+          Promise.resolve([{ id: 'svc_1', frameBlockId: 'blk_frame', accountId: null }]),
+      } as never,
+      workspaceMountRepository: {
+        listByWorkspace: () => Promise.resolve([{ subjectId: 'svc_1', workspaceId: WS.id }]),
+        listBySubjectIds: () =>
+          Promise.resolve([
+            { subjectId: 'svc_1', workspaceId: WS.id, createdAt: 1 },
+            { subjectId: 'svc_1', workspaceId: 'ws-2', createdAt: 2 },
+          ]),
+      } as never,
+      idGenerator: { next: () => 'x' },
+      clock: { now: () => 1 },
+      resolveBinaryArtifactStore: () =>
+        Promise.resolve({
+          deleteByWorkspace: (id: string) => {
+            order.push(`purge:${id}`)
+            return Promise.resolve(0)
+          },
+          ...store,
+        } as unknown as BinaryArtifactStore),
+      logger,
+    })
+    return { service, deleteSpy, order, logger }
+  }
+
+  it("moves the subject's blocks' artifacts to its new home before purging the board", async () => {
+    const moveBlocks = vi.fn((_ws: readonly [string, string], _ids: readonly string[]) =>
+      Promise.resolve(2),
+    )
+    const { service, order } = rehomeDeps({
+      moveBlocks: (ws, ids) => {
+        order.push('carry')
+        return moveBlocks(ws, ids)
+      },
+    })
+    await service.delete(WS.id)
+    expect(moveBlocks).toHaveBeenCalledWith([WS.id, 'ws-2'], ['blk_frame', 'blk_task'])
+    expect(order).toEqual(['carry', `purge:${WS.id}`, 'cascade'])
+  })
+
+  it("keeps the board's artifacts when the carry fails, rather than purging the re-homed ones", async () => {
+    const { service, deleteSpy, order, logger } = rehomeDeps({
+      moveBlocks: () => Promise.reject(new Error('metadata store down')),
+    })
+    await service.delete(WS.id)
+    // No purge: it would destroy the subject's artifacts along with the board's own.
+    expect(order).toEqual(['cascade'])
+    expect(deleteSpy).toHaveBeenCalledWith(WS.id, [{ subjectId: 'svc_1', toWorkspaceId: 'ws-2' }])
+    expect(logger.lines.some((l) => l.level === 'warn' && /carry re-homed/.test(l.msg))).toBe(true)
+  })
+})
+
 // The board's LAST fold into the durable cost rollup. `spend_days` deliberately survives a board
 // delete, but the sweep that fills it only reaches boards that still exist, so everything the
 // board spent since the last completed rollup day was never folded and its `token_usage` rows go
