@@ -117,6 +117,25 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
       expect(reasonOf(badLink.body)).toBe('project_service_link_invalid')
     })
 
+    it('lists every definition version the account can pin, with its inputs and no questions', async () => {
+      const { app, wsId } = await setup()
+      const listed = await app.call<Array<Record<string, unknown>>>(
+        'GET',
+        `/workspaces/${wsId}/research-definitions`,
+      )
+      expect(listed.status).toBe(200)
+      expect(listed.body).toEqual(
+        [1, 2].map((version) => ({
+          key: 'acme:vendor',
+          version,
+          title: 'Vendor',
+          brief: 'Learn how the vendor integrates.',
+          inputs: [{ key: 'region', label: 'Region', type: 'text', required: true }],
+          origin: 'registered',
+        })),
+      )
+    })
+
     it('pins the research definition a research kind keeps, with its hash and inputs', async () => {
       const { app, wsId } = await setup()
       const latest = await createProject(app, wsId, {
