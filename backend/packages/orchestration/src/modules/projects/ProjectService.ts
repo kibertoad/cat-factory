@@ -6,7 +6,9 @@ import {
   type ResearchPinInput,
   type ResearchProject,
   type UpdateMountInput,
+  sanitizeDescriptorFields,
   validateDescriptorFields,
+  withDescriptorFieldDefaults,
 } from '@cat-factory/contracts'
 import {
   type Block,
@@ -246,7 +248,11 @@ export class ProjectService {
         definitionVersion: pin.definitionVersion ?? null,
       })
     }
-    const problems = validateDescriptorFields(resolved.definition.inputs, pin.inputs)
+    // Defaults first, then validate, then pin only the visible answers: the bag every other
+    // descriptor-form door freezes, so a hidden field can never pin an unvalidated value.
+    const fields = resolved.definition.inputs
+    const inputs = withDescriptorFieldDefaults(fields, pin.inputs)
+    const problems = validateDescriptorFields(fields, inputs)
     if (problems.length) {
       throw new ValidationError('The research inputs do not satisfy the definition', {
         reason: 'research_inputs_invalid',
@@ -258,7 +264,7 @@ export class ProjectService {
       definitionKey: resolved.definition.key,
       definitionVersion: resolved.definition.version,
       definitionHash: resolved.contentHash,
-      inputs: pin.inputs,
+      inputs: sanitizeDescriptorFields(fields, inputs),
     }
   }
 

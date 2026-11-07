@@ -47,7 +47,20 @@ function vendorDefinition(version: number) {
       { id: 'auth', title: 'Auth', questions: [{ id: 'scheme', question: 'Which auth scheme?' }] },
     ],
     targets: [{ baseUrl: 'https://vendor.example', surface: 'api' as const }],
-    inputs: [{ key: 'region', label: 'Region', type: 'text' as const, required: true }],
+    inputs: [
+      { key: 'region', label: 'Region', type: 'text' as const, required: true },
+      {
+        key: 'depth',
+        label: 'Depth',
+        type: 'select' as const,
+        default: 'shallow',
+        options: [
+          { value: 'shallow', label: 'Shallow' },
+          { value: 'deep', label: 'Deep' },
+        ],
+      },
+      { key: 'notes', label: 'Notes', type: 'text' as const },
+    ],
   }
 }
 
@@ -121,7 +134,7 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
       const { app, wsId } = await setup()
       const latest = await createProject(app, wsId, {
         kind: 'vendor-study',
-        research: { definitionKey: 'acme:vendor', inputs: { region: 'eu' } },
+        research: { definitionKey: 'acme:vendor', inputs: { region: 'eu', notes: '' } },
       })
       expect(latest.status).toBe(201)
       const pinned = await app.researchProjectRepository().get(latest.body.project.id)
@@ -129,8 +142,9 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
         definitionKey: 'acme:vendor',
         definitionVersion: 2,
         definitionHash: await researchDefinitionContentHash(definitions().get('acme:vendor', 2)!),
-        inputs: { region: 'eu' },
       })
+      // The declared default answers an omitted field, and an unfilled one is not pinned.
+      expect(pinned?.inputs).toEqual({ region: 'eu', depth: 'shallow' })
       const exact = await createProject(app, wsId, {
         kind: 'vendor-study',
         research: { definitionKey: 'acme:vendor', definitionVersion: 1, inputs: { region: 'us' } },
