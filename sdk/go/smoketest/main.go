@@ -382,6 +382,82 @@ func main() {
 		return nil
 	})
 
+	// A research project pins a definition the deployment registers in code (the test server
+	// ships `e2e:vendor`). The pin is a nullable object on the project and the findings carry a
+	// nullable latest revision, both null-versus-absent cases the four clients must decode alike.
+	projectID := ""
+
+	step("researchDefinitions.list", func() error {
+		result, err := client.ResearchDefinitions.List(ctx)
+		if err != nil {
+			return err
+		}
+		listed := false
+		for _, d := range result.Definitions {
+			if d.Definition.Key == "e2e:vendor" && string(d.Origin) == "registered" {
+				listed = true
+			}
+		}
+		observations["researchDefinitionListed"] = listed
+		return nil
+	})
+
+	step("projects.create", func() error {
+		project, err := client.Projects.Create(ctx, catfactory.CreatePublicProject{
+			Kind:     "research",
+			Title:    "SDK smoketest research",
+			Research: &catfactory.CreatePublicProjectResearch{DefinitionKey: "e2e:vendor"},
+		})
+		if err != nil {
+			return err
+		}
+		projectID = project.ProjectID
+		observations["projectKind"] = project.Kind
+		observations["projectHomedHere"] = project.HomedHere
+		if project.Research != nil {
+			observations["projectPinnedVersion"] = project.Research.DefinitionVersion
+		} else {
+			observations["projectPinnedVersion"] = nil
+		}
+		observations["projectServiceCount"] = len(project.ServiceIds)
+		return nil
+	})
+
+	step("projects.get", func() error {
+		project, err := client.Projects.Get(ctx, projectID)
+		if err != nil {
+			return err
+		}
+		observations["projectFetchedTitle"] = project.Title
+		if project.Research != nil {
+			observations["projectFetchedPinKey"] = project.Research.DefinitionKey
+		} else {
+			observations["projectFetchedPinKey"] = nil
+		}
+		return nil
+	})
+
+	step("projects.getFindings", func() error {
+		findings, err := client.Projects.GetFindings(ctx, projectID)
+		if err != nil {
+			return err
+		}
+		observations["findingsRevisionCount"] = len(findings.Revisions)
+		observations["findingsLatestRevisionIsNull"] = findings.LatestRevisionID == nil
+		observations["findingsTopicCount"] = len(findings.Coverage.ByTopic)
+		observations["findingsUnansweredTotal"] = findings.Coverage.Total.Unanswered
+		return nil
+	})
+
+	step("error: project not found", func() error {
+		_, err := client.Projects.Get(ctx, "prj_definitely_not_a_real_project")
+		if err == nil {
+			return fmt.Errorf("expected a 404, got a success")
+		}
+		observations["projectNotFoundIsTypedClass"] = catfactory.IsNotFound(err)
+		return nil
+	})
+
 	step("tasks.start", func() error {
 		body := catfactory.StartPublicTask{}
 		if pipelineID != "" {
