@@ -202,20 +202,29 @@ export class ResearchFindingsStore {
     if (await this.deps.findingsRevisionRepository.get(project.id, meta.id)) return
     const json = JSON.stringify(input.body)
     const bytes = new globalThis.TextEncoder().encode(json)
+    const policy = await this.policyFor(input.runWorkspaceId, project.id)
+    const place = (blobStoreAvailable: boolean) =>
+      placeFindingsBody({
+        bytes: bytes.byteLength,
+        policy,
+        facadeInlineCeilingBytes: FINDINGS_INLINE_MAX_BYTES_CEILING,
+        blobStoreAvailable,
+      })
+    const row = { ...meta, bodyBytes: bytes.byteLength }
+    // The blob store is resolved only for a body that leaves the row: resolving it reads the
+    // account's storage settings, which an inline body never needs.
+    if (place(true).placement === 'inline') {
+      await this.deps.findingsRevisionRepository.insert({ ...row, body: { kind: 'inline', json } })
+      return
+    }
     const home = await this.homeStore(project)
-    const placement = placeFindingsBody({
-      bytes: bytes.byteLength,
-      policy: await this.policyFor(input.runWorkspaceId, project.id),
-      facadeInlineCeilingBytes: FINDINGS_INLINE_MAX_BYTES_CEILING,
-      blobStoreAvailable: home.store !== null,
-    })
+    const placement = place(home.store !== null)
     if (placement.placement === 'refused') {
       throw new ValidationError('The findings are too large to store inline', {
         reason: placement.reason,
         bytes: bytes.byteLength,
       })
     }
-    const row = { ...meta, bodyBytes: bytes.byteLength }
     if (placement.placement === 'inline' || !home.store) {
       await this.deps.findingsRevisionRepository.insert({ ...row, body: { kind: 'inline', json } })
       return

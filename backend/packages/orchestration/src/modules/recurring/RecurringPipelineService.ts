@@ -255,7 +255,9 @@ export class RecurringPipelineService {
     if (this.workspaceMountRepository) {
       const mounts = await this.workspaceMountRepository.listByWorkspace(workspaceId)
       // One batched query for every mounted service's schedules (not one round-trip per mount).
-      for (const schedule of await this.schedules.listByServices(mounts.map((m) => m.subjectId))) {
+      // A mounted project holds no schedules, and naming one would fail the service scope check.
+      const serviceIds = mounts.filter((m) => m.subjectKind === 'service').map((m) => m.subjectId)
+      for (const schedule of await this.schedules.listByServices(serviceIds)) {
         add(schedule)
       }
     }

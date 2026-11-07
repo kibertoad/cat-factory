@@ -333,10 +333,11 @@ export class ProjectService {
     serviceIds: readonly string[],
   ): Promise<void> {
     if (serviceIds.length === 0) return
-    const found = await this.deps.serviceRepository.listByIds([...serviceIds])
-    const linkable = new Set(
-      found.filter((s) => (s.accountId ?? null) === accountId).map((s) => s.id),
-    )
+    // Read the account's own services rather than the named ids: a mothership node's persistence
+    // RPC refuses a by-id read naming a missing or foreign service as a whole, which would turn
+    // this refusal into a 404 there and a 422 everywhere else.
+    const owned = await this.deps.serviceRepository.listByAccount(accountId)
+    const linkable = new Set(owned.map((s) => s.id))
     const invalid = serviceIds.filter((id) => !linkable.has(id))
     if (invalid.length) {
       throw new ValidationError('A project can only link services of its own organization', {
