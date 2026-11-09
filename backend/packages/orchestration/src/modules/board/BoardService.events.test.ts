@@ -37,12 +37,12 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
         get: async (ws: string, id: string) => (ws === HOME ? (byId.get(id) ?? null) : null),
         findById: async (id: string) => {
           const block = byId.get(id)
-          return block ? { workspaceId: HOME, serviceId: SERVICE_ID, block } : null
+          return block ? { workspaceId: HOME, ownerId: SERVICE_ID, block } : null
         },
         listByWorkspace: async (ws: string) => (ws === HOME ? blocks : []),
         update: async () => {},
         insert: async () => {},
-        setService: async () => {},
+        setOwner: async () => {},
         deleteMany: async () => {},
       },
       // Sharing is wired: the acting workspace mounts the home's service.
@@ -55,9 +55,11 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
       workspaceMountRepository: {
         // Only the ACTING board mounts the service, so a frame edit from elsewhere finds no mount.
         listByWorkspace: async (ws: string) =>
-          ws === ACTING ? [{ workspaceId: ACTING, serviceId: SERVICE_ID }] : [],
+          ws === ACTING ? [{ workspaceId: ACTING, subjectId: SERVICE_ID }] : [],
         get: async (ws: string, serviceId: string) =>
-          ws === ACTING && serviceId === SERVICE_ID ? { workspaceId: ws, serviceId } : null,
+          ws === ACTING && serviceId === SERVICE_ID
+            ? { workspaceId: ws, subjectId: serviceId }
+            : null,
       },
       executionRepository: {},
       idGenerator: { next: (prefix: string) => `${prefix}_new` },
@@ -202,7 +204,7 @@ describe('BoardService targeted vs coarse board changes', () => {
         get: async (_ws: string, id: string) => byId.get(id) ?? null,
         findById: async (id: string) => {
           const block = byId.get(id)
-          return block ? { workspaceId: WS, serviceId: null, block } : null
+          return block ? { workspaceId: WS, ownerId: null, block } : null
         },
         listByWorkspace: async () => blocks,
         update: async (_ws: string, id: string, patch: Partial<Block>) => {
@@ -210,7 +212,7 @@ describe('BoardService targeted vs coarse board changes', () => {
           if (existing) byId.set(id, { ...existing, ...patch })
         },
         insert: async () => {},
-        setService: async () => {},
+        setOwner: async () => {},
         deleteMany: async () => {},
         shiftChildPositions: async () => {},
       },

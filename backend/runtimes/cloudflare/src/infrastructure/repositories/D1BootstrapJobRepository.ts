@@ -202,15 +202,15 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
       delivery: record.delivery,
       workBranch: record.workBranch,
     }
-    // Stamp `service_id` from the materialised service frame (when known) so a shared
-    // service's in-flight bootstrap surfaces on every board that mounts it via `listByService`.
+    // Stamp `owner_id` from the materialised service frame (when known) so a shared
+    // service's in-flight bootstrap surfaces on every board that mounts it via `listByOwners`.
     await this.db
       .prepare(
         `INSERT INTO agent_runs
           (workspace_id, id, kind, block_id, status, detail, subtasks, error, failure,
-           created_at, updated_at, service_id)
+           created_at, updated_at, owner_id)
          VALUES (?, ?, 'bootstrap', ?, ?, ?, ?, ?, ?, ?, ?,
-            (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?))`,
+            (SELECT owner_id FROM blocks WHERE workspace_id = ? AND id = ?))`,
       )
       .bind(
         record.workspaceId,
@@ -275,13 +275,11 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
     }
 
     // The run row is inserted before its service frame exists (block_id is set on a later
-    // patch), so refresh `service_id` from the block whenever block_id is (re)assigned — this
+    // patch), so refresh `owner_id` from the block whenever block_id is (re)assigned: this
     // is when a bootstrap becomes service-discoverable on every board mounting the service.
     const blockIdEntry = entries.find(([key]) => key === 'blockId')
     if (blockIdEntry) {
-      setClauses.push(
-        'service_id = (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?)',
-      )
+      setClauses.push('owner_id = (SELECT owner_id FROM blocks WHERE workspace_id = ? AND id = ?)')
       values.push(workspaceId, blockIdEntry[1] as string | null)
     }
 
@@ -312,15 +310,15 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
     return (results ?? []).map(rowToRecord)
   }
 
-  async listByServices(serviceIds: string[]): Promise<BootstrapJobRecord[]> {
-    if (serviceIds.length === 0) return []
+  async listByOwners(ownerIds: string[]): Promise<BootstrapJobRecord[]> {
+    if (ownerIds.length === 0) return []
     const out: BootstrapJobRecord[] = []
     // Chunk the IN list to stay under D1's bound-parameter limit.
-    for (const chunk of chunkForIn(serviceIds)) {
+    for (const chunk of chunkForIn(ownerIds)) {
       const placeholders = chunk.map(() => '?').join(', ')
       const { results } = await this.db
         .prepare(
-          `SELECT * FROM agent_runs WHERE service_id IN (${placeholders}) AND kind = 'bootstrap' ORDER BY created_at DESC`,
+          `SELECT * FROM agent_runs WHERE owner_id IN (${placeholders}) AND kind = 'bootstrap' ORDER BY created_at DESC`,
         )
         .bind(...chunk)
         .all<AgentRunRow>()

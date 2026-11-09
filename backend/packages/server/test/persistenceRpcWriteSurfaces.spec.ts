@@ -180,13 +180,13 @@ describe('shared-service mount management surface', () => {
 
   // `upsert(mount)` binds on the mount's `workspaceId` FIELD via the `serviceMount` rule: the mount
   // is placed onto exactly `mount.workspaceId` (out-of-scope → refused before any write) AND the
-  // mounted `serviceId` must be owned by the SAME account as that workspace (the cross-org mount
+  // mounted `subjectId` must be owned by the SAME account as that workspace (the cross-org mount
   // invariant, enforced at the RPC layer — not only in the bypassed service layer).
   it('forwards workspaceMountRepository.upsert when the mount targets an in-scope workspace', async () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.upsert!({
         workspaceId: 'ws_in',
-        serviceId: 'svc_in',
+        subjectId: 'svc_in',
       }),
     ).resolves.toBeUndefined()
   })
@@ -195,18 +195,18 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.upsert!({
         workspaceId: 'ws_out',
-        serviceId: 'svc_in',
+        subjectId: 'svc_in',
       }),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 
   it('rejects workspaceMountRepository.upsert when the mount has no workspaceId field (404)', async () => {
     await expect(
-      remoteRegistry().workspaceMountRepository!.upsert!({ serviceId: 'svc_in' }),
+      remoteRegistry().workspaceMountRepository!.upsert!({ subjectId: 'svc_in' }),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 
-  it('rejects workspaceMountRepository.upsert when the mount has no serviceId field (404)', async () => {
+  it('rejects workspaceMountRepository.upsert when the mount has no subjectId field (404)', async () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.upsert!({ workspaceId: 'ws_in' }),
     ).rejects.toMatchObject({ code: 'not_found' })
@@ -216,7 +216,7 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.upsert!({
         workspaceId: 'ws_in',
-        serviceId: 'svc_missing',
+        subjectId: 'svc_missing',
       }),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
@@ -229,7 +229,7 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry([ACCOUNT, OTHER_ACCOUNT]).workspaceMountRepository!.upsert!({
         workspaceId: 'ws_in',
-        serviceId: 'svc_out',
+        subjectId: 'svc_out',
       }),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
@@ -239,25 +239,25 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry([ACCOUNT, OTHER_ACCOUNT]).workspaceMountRepository!.upsert!({
         workspaceId: 'ws_out',
-        serviceId: 'svc_out',
+        subjectId: 'svc_out',
       }),
     ).resolves.toBeUndefined()
   })
 
   it('forwards the batched cascade reads a frame deletion runs', async () => {
-    // `listByServiceIds`/`removeByServices` finish a service delete: without them a node deletes a
+    // `listBySubjectIds`/`removeBySubjects` finish a service delete: without them a node deletes a
     // frame and leaves every OTHER board in the org mounting a service that no longer exists.
     await expect(
-      remoteRegistry().workspaceMountRepository!.listByServiceIds!(['svc_in']),
+      remoteRegistry().workspaceMountRepository!.listBySubjectIds!(['svc_in']),
     ).resolves.toEqual([])
     await expect(
-      remoteRegistry().workspaceMountRepository!.removeByServices!(['svc_in']),
+      remoteRegistry().workspaceMountRepository!.removeBySubjects!(['svc_in']),
     ).resolves.toBeUndefined()
   })
 
   it('rejects the batched cascade reads for an out-of-scope service (404)', async () => {
     await expect(
-      remoteRegistry().workspaceMountRepository!.removeByServices!(['svc_out']),
+      remoteRegistry().workspaceMountRepository!.removeBySubjects!(['svc_out']),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 })

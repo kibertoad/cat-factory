@@ -126,7 +126,7 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
         ? services.byServiceId[services.serviceByFrameBlock[id]!.id]
         : undefined
       if (mount) {
-        await services.updateLayout(mount.serviceId, position)
+        await services.updateLayout(mount.subjectId, position)
         return
       }
       upsert(await api.moveBlock(useWorkspaceStore().requireId(), id, { position }))

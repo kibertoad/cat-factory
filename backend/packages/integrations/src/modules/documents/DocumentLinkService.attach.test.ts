@@ -40,7 +40,7 @@ function makeService(documents: DocumentRecord[], blocks: string[]) {
       calls.blockFindByIds.push(ids)
       return ids
         .filter((id) => live.has(id))
-        .map((id) => ({ workspaceId: 'ws_1', serviceId: null, block: { id } as Block }))
+        .map((id) => ({ workspaceId: 'ws_1', ownerId: null, block: { id } as Block }))
     },
   } as unknown as BlockRepository
   const documentRepository = {

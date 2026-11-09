@@ -23,7 +23,7 @@ function frame(over: Partial<Block> = {}): Block {
 function mount(over: Partial<WorkspaceMount> = {}): WorkspaceMount {
   return {
     workspaceId: 'ws_1',
-    serviceId: 'svc_1',
+    subjectId: 'svc_1',
     position: { x: 400, y: 300 },
     size: null,
     createdAt: 0,

@@ -418,7 +418,7 @@
     `registerServiceForFrame` inserts the service BEFORE the block row exists, so the resolver would
     find nothing and refuse every legitimate frame creation. Opening it needs an account-scoped
     `getByFrameBlock` or a port carrying the frame's workspace: its own slice, with the frame-DELETE
-    cascade (`serviceRepository.deleteMany` + `workspaceMountRepository.removeByServices`, both
+    cascade (`serviceRepository.deleteMany` + `workspaceMountRepository.removeBySubjects`, both
     `serviceList`-bindable and safe) riding along, since both belong to service CRUD.
 
 **The remaining repository surface (the backlog is now EMPTY)**
@@ -465,7 +465,7 @@
     not merely in-scope-ness, is what stops a multi-account token crossing orgs. `serviceUpdate`
     binds the stored service AND any account a patch would re-home it into, because a service's
     account decides whose catalog offers it for mounting. The mount cascade
-    (`listByServiceIds`/`removeByServices`) moved WITH it: opening the delete without the cascade
+    (`listBySubjectIds`/`removeBySubjects`) moved WITH it: opening the delete without the cascade
     would leave every other board in the org mounting a service that no longer exists.
   - **The small remainder**: the Kaizen streak `upsert` (best-effort, which is exactly why leaving
     it off was invisible: a node's runs verified combos nobody recorded) and single-grade `get`,
@@ -479,7 +479,7 @@
     completed login. The guard calls that `preauth`; there is nothing to complete.
   - **Six dead port methods were DELETED rather than proxied**: the single-service `listByService`
     on blocks / executions / schedules / bootstrap jobs / mounts (board composition has gone
-    through the batched `listByServices` for as long as the allow-list has existed),
+    through the batched `listByOwners` for as long as the allow-list has existed),
     `serviceRepository.getByRepo`, `githubInstallationRepository.updateCachedToken` (nothing has
     written that column since the App token cache moved in-process) and the unused
     `DrizzleServiceFrameRepository`. The guard's own note said exposing a method no caller invokes

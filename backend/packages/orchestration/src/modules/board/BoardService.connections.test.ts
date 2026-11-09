@@ -36,7 +36,7 @@ describe('BoardService service-connection guards', () => {
         get: async (ws: string, id: string) => (ws === WS ? (byId.get(id) ?? null) : null),
         findById: async (id: string) => {
           const found = byId.get(id)
-          return found ? { workspaceId: WS, serviceId: null, block: found } : null
+          return found ? { workspaceId: WS, ownerId: null, block: found } : null
         },
         listByWorkspace: async (ws: string) => (ws === WS ? [...byId.values()] : []),
         update: async (_ws: string, id: string, patch: Record<string, unknown>) => {
@@ -210,13 +210,13 @@ describe('BoardService service-connection guards', () => {
       workspaceRepository: { get: async (id: string) => ({ id }) },
       serviceRepository: {},
       workspaceMountRepository: {
-        get: async () => ({ workspaceId: WS, serviceId: 'svc_foreign' }),
+        get: async () => ({ workspaceId: WS, subjectId: 'svc_foreign' }),
       },
       blockRepository: {
         get: async (ws: string, id: string) => (ws === WS ? (local.get(id) ?? null) : null),
         findById: async (id: string) =>
           id === 'foreign'
-            ? { workspaceId: 'ws_other', serviceId: 'svc_foreign', block: foreignConsumer }
+            ? { workspaceId: 'ws_other', ownerId: 'svc_foreign', block: foreignConsumer }
             : null,
         listByWorkspace: async (ws: string) => (ws === WS ? [...local.values()] : []),
         update: async (_ws: string, id: string, patch: Record<string, unknown>) => {

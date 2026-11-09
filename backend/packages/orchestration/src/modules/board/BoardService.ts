@@ -624,10 +624,7 @@ export class BoardService {
     if (local) return { homeWorkspaceId: workspaceId, block: local }
     if (this.serviceRepository && this.workspaceMountRepository) {
       const found = await this.blockRepository.findById(id)
-      if (
-        found?.serviceId &&
-        (await this.workspaceMountRepository.get(workspaceId, found.serviceId))
-      ) {
+      if (found?.ownerId && (await this.workspaceMountRepository.get(workspaceId, found.ownerId))) {
         return { homeWorkspaceId: found.workspaceId, block: found.block }
       }
     }
@@ -660,10 +657,7 @@ export class BoardService {
     if (local) return workspaceId
     if (this.serviceRepository && this.workspaceMountRepository) {
       const found = await this.blockRepository.findById(id)
-      if (
-        found?.serviceId &&
-        (await this.workspaceMountRepository.get(workspaceId, found.serviceId))
-      ) {
+      if (found?.ownerId && (await this.workspaceMountRepository.get(workspaceId, found.ownerId))) {
         return found.workspaceId
       }
     }

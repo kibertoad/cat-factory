@@ -12,7 +12,7 @@ import { parseStoredAgentFailure } from '@cat-factory/contracts'
  * A row of the unified `agent_runs` table. This repository owns only the
  * `kind='env-config-repair'` rows (the durable, asynchronous environment-provider
  * config-repair runs); the execution / bootstrap flows own their own kinds. A repair
- * run has NO board block and NO service frame, so `block_id`/`service_id` stay null —
+ * run has NO board block and NO service frame, so `block_id`/`owner_id` stay null;
  * the repair-specific fields (owner/repo/branch + the post-repair `ok`/`issues`) live
  * in the `detail` JSON column, while lifecycle/progress/failure are the shared
  * top-level columns.
@@ -126,7 +126,7 @@ export class D1EnvConfigRepairJobRepository implements EnvConfigRepairJobReposit
       .prepare(
         `INSERT INTO agent_runs
           (workspace_id, id, kind, block_id, status, detail, subtasks, error, failure,
-           created_at, updated_at, service_id)
+           created_at, updated_at, owner_id)
          VALUES (?, ?, 'env-config-repair', NULL, ?, ?, ?, ?, ?, ?, ?, NULL)`,
       )
       .bind(

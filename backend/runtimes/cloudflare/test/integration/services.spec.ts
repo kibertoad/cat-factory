@@ -27,7 +27,7 @@ describe('in-org shared services — mounting and lifecycle', () => {
 
     const svc = await serviceFor(call, workspace.id, frame.body.id)
     const mounts = await call<WorkspaceMount[]>('GET', `/workspaces/${workspace.id}/services`)
-    const mine = mounts.body.find((m) => m.serviceId === svc.id)
+    const mine = mounts.body.find((m) => m.subjectId === svc.id)
     expect(mine).toBeTruthy()
     expect(mine!.position).toEqual({ x: 10, y: 20 })
   })
@@ -56,14 +56,14 @@ describe('in-org shared services — mounting and lifecycle', () => {
     expect(mount.body.position).toEqual({ x: 100, y: 100 })
 
     const bMounts = await call<WorkspaceMount[]>('GET', `/workspaces/${b.workspace.id}/services`)
-    expect(bMounts.body.map((m) => m.serviceId)).toContain(service.id)
+    expect(bMounts.body.map((m) => m.subjectId)).toContain(service.id)
 
     // Re-layout on B's mount; A's mount is untouched.
     await call('PATCH', `/workspaces/${b.workspace.id}/services/${service.id}/layout`, {
       position: { x: 7, y: 8 },
     })
     const aMounts = await call<WorkspaceMount[]>('GET', `/workspaces/${a.workspace.id}/services`)
-    expect(aMounts.body.find((m) => m.serviceId === service.id)!.position).toEqual({ x: 5, y: 5 })
+    expect(aMounts.body.find((m) => m.subjectId === service.id)!.position).toEqual({ x: 5, y: 5 })
 
     // Unmounting from B leaves the service in the org catalog (not deleted).
     const del = await call('DELETE', `/workspaces/${b.workspace.id}/services/${service.id}`)
@@ -72,7 +72,7 @@ describe('in-org shared services — mounting and lifecycle', () => {
       'GET',
       `/workspaces/${b.workspace.id}/services`,
     )
-    expect(afterUnmount.body.map((m) => m.serviceId)).not.toContain(service.id)
+    expect(afterUnmount.body.map((m) => m.subjectId)).not.toContain(service.id)
     const stillInCatalog = await call<Service[]>(
       'GET',
       `/workspaces/${b.workspace.id}/services/catalog`,
@@ -274,7 +274,7 @@ describe('in-org shared services — layout and cross-board edits', () => {
     expect(snap.body.blocks.find((x) => x.id === frame.body.id)?.position).toEqual({ x: 99, y: 88 })
     const mounts = await call<WorkspaceMount[]>('GET', `/workspaces/${workspace.id}/services`)
     const svc = await serviceFor(call, workspace.id, frame.body.id)
-    expect(mounts.body.find((m) => m.serviceId === svc.id)?.position).toEqual({ x: 99, y: 88 })
+    expect(mounts.body.find((m) => m.subjectId === svc.id)?.position).toEqual({ x: 99, y: 88 })
   })
 
   it('re-homes a task to the destination service when reparented across frames', async () => {
@@ -327,7 +327,7 @@ describe('in-org shared services — layout and cross-board edits', () => {
     const catalog = await call<Service[]>('GET', `/workspaces/${a.workspace.id}/services/catalog`)
     expect(catalog.body.map((s) => s.id)).not.toContain(service.id)
     const bMounts = await call<WorkspaceMount[]>('GET', `/workspaces/${b.workspace.id}/services`)
-    expect(bMounts.body.map((m) => m.serviceId)).not.toContain(service.id)
+    expect(bMounts.body.map((m) => m.subjectId)).not.toContain(service.id)
   })
 
   // --- a mounting board is fully interactive on the shared service -----------

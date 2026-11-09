@@ -54,7 +54,7 @@ describe('registerServiceForFrame', () => {
     await registerServiceForFrame(deps, 'ws_1', frame({ size: { w: 400, h: 300 } }))
     expect(mounts[0]).toEqual({
       workspaceId: 'ws_1',
-      serviceId: 'svc_1',
+      subjectId: 'svc_1',
       position: { x: 40, y: 80 },
       size: { w: 400, h: 300 },
       createdAt: NOW,

@@ -6,7 +6,7 @@ export type {
   PipelineRepository,
   PreloadedBlocks,
   RunRef,
-  ServiceRehome,
+  MountRehome,
   WorkspaceRepository,
   WorkspaceVisibility,
 } from './repositories.js'
