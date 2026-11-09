@@ -1129,6 +1129,11 @@ type BlockTypeMeta = { labelKey: string; icon: string; accent: string }
 
 /** Visual metadata for each architecture block type. */
 export const BLOCK_TYPE_META: Record<BlockType, BlockTypeMeta> = {
+  project: {
+    labelKey: 'board.blockTypes.project',
+    icon: 'i-lucide-folder-kanban',
+    accent: 'var(--app-hue-teal)',
+  },
   frontend: {
     labelKey: 'board.blockTypes.frontend',
     icon: 'i-lucide-monitor',

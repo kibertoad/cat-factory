@@ -149,6 +149,7 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
       stepResolverRegistry: o.stepResolverRegistry,
       initiativePresetRegistry: o.initiativePresetRegistry,
       taskTypeRegistry: o.taskTypeRegistry,
+      projectKindRegistry: o.projectKindRegistry,
       inlineUseCaseRegistry: o.inlineUseCaseRegistry,
       pipelineRegistry: o.pipelineRegistry,
       // - prVerificationReportPublisher + appBaseUrl: the engine's PR-report hook, so the

@@ -25,9 +25,14 @@ depending on the layer: there is one entity, not three:
 
 Both are in `backend/packages/contracts/src/primitives.ts`:
 
-- **Block level**: `blockLevelSchema = ['frame', 'module', 'task', 'epic', 'initiative']`. A
-  "service" on the board is a block with `level: 'frame'`, `parentId: null`; modules are
-  sub-frames; **tasks are the leaves**. A module no longer renders as a box on the board: its
+- **Block level**: `blockLevelSchema = ['frame', 'module', 'task', 'epic', 'initiative',
+  'project']`. A "service" on the board is a block with `level: 'frame'`, `parentId: null`;
+  modules are sub-frames; **tasks are the leaves**. A **project** is the account-owned peer of a
+  service: its root is a block with `level: 'project'`, its tasks sit directly beneath it, and it
+  links to services as read-only context rather than living inside one
+  ([tracker](./initiatives/research-projects.md)). Both are **mounted subjects**: a board's
+  `WorkspaceMount` names one by `subjectKind` and `subjectId`, and blocks and runs carry its id as
+  `owner_id`. A module no longer renders as a box on the board: its
   tasks appear in the enclosing frame's status swimlanes, grouped by module name, so `module` is
   a structural parent rather than a visual container. (See `AGENTS.md` → "Board / service /
   repo-linkage model".)

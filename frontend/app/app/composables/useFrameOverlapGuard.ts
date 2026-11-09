@@ -65,7 +65,7 @@ export function useFrameOverlapGuard() {
 
   /** Every top-level node's rendered rect, in the flow-space coordinates blocks are stored in. */
   const nodeRects = computed<PlacedRect[]>(() => [
-    ...board.frames.map((f) => {
+    ...board.canvasRoots.map((f) => {
       const size = board.containerSize(f.id)
       return { id: f.id, x: f.position.x, y: f.position.y, w: size.w, h: size.h }
     }),

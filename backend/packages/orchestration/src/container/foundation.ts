@@ -32,7 +32,11 @@ import type {
   RunnerPoolSeeder,
   SharedStackSeeder,
 } from '@cat-factory/kernel'
-import { createNotificationsModule, createWorkspaceSettingsModule } from './modules.js'
+import {
+  createNotificationsModule,
+  createProjectsModule,
+  createWorkspaceSettingsModule,
+} from './modules.js'
 import type { ModuleRegistry } from './module-registry.js'
 import type { resolveCoreRuntime } from './runtime.js'
 import type {
@@ -53,6 +57,7 @@ export interface CoreFoundationParams {
   pipelineRegistry: CoreRuntime['pipelineRegistry']
   /** The RESOLVED prompt-fragment pool source (own registry, or the mothership's). */
   promptFragments: CoreRuntime['promptFragments']
+  projectKinds: CoreRuntime['projectKinds']
   /** Late-bound spend-service accessor (built after the foundation) for the account-budget cache. */
   getSpendService: () => SpendService | undefined
   /**
@@ -95,6 +100,7 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     taskTypeRegistry,
     pipelineRegistry,
     promptFragments,
+    projectKinds,
     getSpendService,
     getEnvironmentHandlerSeeder,
     getSharedStackSeeder,
@@ -107,6 +113,9 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
   // settings cache slice — so building them here is safe and keeps the locals threadable.
   const notifications = modules.build('notifications', () =>
     createNotificationsModule(dependencies),
+  )
+  modules.build('projects', () =>
+    createProjectsModule(dependencies, projectKinds, executionEventPublisher),
   )
   const settings = modules.build('settings', () =>
     createWorkspaceSettingsModule(dependencies, caches.workspaceSettings),
@@ -126,6 +135,8 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     // Where a new task's per-type default fragment ids come from: the RESOLVED source, so a
     // mothership-mode node seeds from the mothership's registered sets rather than its own build's.
     promptFragmentSource: promptFragments,
+    // Where task admission under a project resolves the project's kind.
+    projectKinds,
     // The acting workspace's runtime settings, feeding two collaborators: the opt-in review-debt
     // friction guard on task creation (paired with the open-notification reader below), and the
     // default test-environment provisioning stamped onto a new service frame. Optional seam —

@@ -1,0 +1,75 @@
+import type { Project } from '@cat-factory/contracts'
+import {
+  ProjectKindRegistry,
+  registryProjectKindSource,
+  type BlockRepository,
+  type ProjectRepository,
+  type ServiceRepository,
+  type WorkspaceMount,
+  type WorkspaceMountRepository,
+  type WorkspaceRepository,
+} from '@cat-factory/kernel'
+import { describe, expect, it } from 'vitest'
+import { ProjectService } from './ProjectService.js'
+
+function kinds(): ProjectKindRegistry {
+  const registry = new ProjectKindRegistry()
+  registry.register({
+    id: 'research',
+    label: 'Research',
+    taskTypes: [{ taskType: 'spike', repoAccess: 'none' }],
+  })
+  return registry
+}
+
+function harness(failing: 'block' | 'mount') {
+  const projects = new Map<string, Project>()
+  const blocks = new Set<string>()
+  const mounts = new Map<string, WorkspaceMount>()
+  let next = 0
+  const service = new ProjectService({
+    projectRepository: {
+      insert: async (p: Project) => void projects.set(p.id, p),
+      deleteMany: async (ids: string[]) => ids.forEach((id) => projects.delete(id)),
+    } as unknown as ProjectRepository,
+    blockRepository: {
+      insert: async (_ws: string, block: { id: string }) => {
+        if (failing === 'block') throw new Error('block insert failed')
+        blocks.add(block.id)
+      },
+      deleteMany: async (_ws: string, ids: string[]) => ids.forEach((id) => blocks.delete(id)),
+    } as unknown as BlockRepository,
+    workspaceMountRepository: {
+      listByWorkspace: async () => [],
+      upsert: async (m: WorkspaceMount) => {
+        if (failing === 'mount') throw new Error('mount upsert failed')
+        mounts.set(m.subjectId, m)
+      },
+      remove: async (_ws: string, subjectId: string) => void mounts.delete(subjectId),
+    } as unknown as WorkspaceMountRepository,
+    workspaceRepository: {
+      get: async (id: string) => ({ id, name: id }),
+      accountOf: async () => 'acc',
+    } as unknown as WorkspaceRepository,
+    serviceRepository: {} as ServiceRepository,
+    projectKinds: registryProjectKindSource(kinds()),
+    idGenerator: { next: (prefix: string) => `${prefix}_${++next}` },
+    clock: { now: () => 1 },
+  })
+  return { service, projects, blocks, mounts }
+}
+
+describe('ProjectService.create', () => {
+  it.each(['block', 'mount'] as const)(
+    'leaves no project, root or mount behind when the %s write fails',
+    async (failing) => {
+      const { service, projects, blocks, mounts } = harness(failing)
+      await expect(
+        service.create('ws', { kind: 'research', title: 'Q', serviceIds: [] }),
+      ).rejects.toThrow(/failed/)
+      expect(projects.size).toBe(0)
+      expect(blocks.size).toBe(0)
+      expect(mounts.size).toBe(0)
+    },
+  )
+})

@@ -36,6 +36,14 @@ const seed: SpendRollupSeed = {
       .bind(id, accountId, frameBlockId, repoGithubId ?? null)
       .run()
   },
+  async project(id, accountId, rootBlockId) {
+    await env.DB.prepare(
+      `INSERT INTO projects (id, account_id, kind, root_block_id, created_at)
+       VALUES (?, ?, 'research', ?, 0)`,
+    )
+      .bind(id, accountId, rootBlockId)
+      .run()
+  },
   async repo(workspaceId, githubId, owner, name) {
     await env.DB.prepare(
       `INSERT INTO github_repos (workspace_id, github_id, installation_id, owner, name, synced_at)
@@ -55,7 +63,7 @@ const seed: SpendRollupSeed = {
   async run(row) {
     await env.DB.prepare(
       `INSERT INTO agent_runs
-         (workspace_id, id, kind, status, detail, created_at, updated_at, service_id, block_id)
+         (workspace_id, id, kind, status, detail, created_at, updated_at, owner_id, block_id)
        VALUES (?, ?, ?, ?, '{}', ?, ?, ?, ?)`,
     )
       .bind(

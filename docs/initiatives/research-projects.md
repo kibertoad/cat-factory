@@ -57,30 +57,37 @@ interface Project {
   accountId: string
   kind: string // 'research' today; a registered project kind
   title: string
-  frameBlockId: string // the root frame block it owns; its tasks are blocks beneath it
+  rootBlockId: string // the root block it owns; its tasks are blocks beneath it
   serviceIds: string[] // linked services, zero or more
   createdAt: number
 }
 ```
 
-- **It owns its tasks.** Tasks are ordinary blocks under the project's frame, so the engine's
+- **It owns its tasks.** Tasks are ordinary blocks under the project's root block, so the engine's
   block-keyed machinery works unchanged: executions, one live run per block, notifications, the
   inspector, live events and RBAC.
-- **It survives its home board's deletion, as a shared service does.** Its frame block lives in
-  one workspace, and the workspace-delete cascade handles services specially: `ServiceRehome`
-  moves a shared service's blocks to a surviving mounting board before the cascade runs. That
-  re-home generalizes to the mounted subject; without it, deleting the board that homes a project
-  destroys it for every team that mounts it.
-- **It is account-owned and mounted onto boards**, as a service is. The mount generalizes from
-  `(workspaceId, serviceId)` to a mounted subject (`service` or `project`), keeping the rule that a
-  frame's position lives on the mount and every frame read projects through `applyMountLayout`.
+- **It survives its home board's deletion, as a shared service does.** Its root block lives in
+  one workspace, and the workspace-delete cascade re-homes a shared mounted subject
+  (`MountRehome`) to a surviving mounting board before it runs. Without that, deleting the board
+  that homes a project destroys it for every team that mounts it.
+- **It is account-owned and mounted onto boards**, as a service is. A mount names a subject
+  (`subjectKind` of `service` or `project`, plus `subjectId`), keeping the rule that a root block's
+  position lives on the mount and every root read projects through `applyMountLayout`. Blocks
+  and runs carry an `owner_id`: the id of the mounted subject they belong to. Subject ids are
+  globally unique (`svc_…`, `prj_…`), so the owner stamp needs no kind of its own.
+- **Its root block is a `project`-level block of type `project`, not a `frame`.** Roughly fifty
+  backend checks read `level === 'frame'` as "this is a service" (the public `/api/v1/services`
+  listing, task creation under a service, environment, test-secret and validation setup). A new
+  level keeps a project out of all of them by default, and the exhaustive `Record<BlockLevel, …>`
+  and `Record<BlockType, …>` tables force each remaining site to classify it.
 - **It links to services without being inside one.** A link is context: the project's tasks may
   read the linked services' repos and see their descriptions, and the board draws the link. A
   project with no links is valid.
-- **Its repo resolution is its own.** `resolveRepoTarget` meets a project frame where it would meet
-  a service frame, and a project frame resolves to its linked services' repos as read-only
-  context, possibly none. It never falls back to a guessed repo; a project-kind task type that
-  needs a writable repo says so and is refused at admission when the project has none.
+- **Its repo resolution is its own.** `resolveRepoTarget` stops at a project root and refuses with
+  `project_has_no_writable_repo`: a project has no repository to write to. Its linked services'
+  repos are read-only context, resolved by their own read (slice 5), never a guessed checkout. A
+  kind can declare no writing access (`repoAccess: 'none' | 'linked-read-only'`), and a run step
+  that needs a checkout to push to is refused when it dispatches.
 - **A kind is registered**, through a `ProjectKindRegistry` beside `TaskTypeRegistry`, injected by
   reference on both `start()` and `startLocal()`. A kind declares the task types its project
   offers, their default pipelines, the project-level data it keeps, and its result view. A run
@@ -114,6 +121,7 @@ interface ResearchDefinition {
   }>
   targets: Array<{ baseUrl: string; surface: 'ui' | 'api' }> // where the vendor lives
   inputs?: TaskTypeFieldDescriptor[] // per-project parameters, the reusable-operation form vocabulary
+  promptAdditions?: Record<string, string> // org steering per agent kind, as initiative presets carry
 }
 ```
 
@@ -148,7 +156,7 @@ current findings are the fold over its revisions by question id. Revisions are o
 per-project sequence taken when the TASK starts, so two follow-ups that run at once fold in the
 order they were asked, whatever order they finish in. Per question, a newer `answered` or
 `partial` answer replaces an older one; a newer `unanswered` or `blocked` never replaces an
-`answered` one and is kept beside it as a note, so a `refresh` that ran out of budget or lost a
+answer with content (`answered` or `partial`) and is kept beside it as a note, so a `refresh` that ran out of budget or lost a
 login cannot erase what an earlier run established. Per question:
 
 ```ts
@@ -169,7 +177,8 @@ interface QuestionFinding {
 ```
 
 Plus run-level `learnings` (things the agent found that no question asked about) and a prose
-`summary`. A revision is written once and never upserted, so a replayed write cannot recompute
+`summary`. The fold and the coverage count live in `@cat-factory/contracts` (`foldFindings`,
+`researchCoverage`), because the SPA's findings reader and the backend must agree on them. A revision is written once and never upserted, so a replayed write cannot recompute
 against a moved fold.
 
 ## Design by concern
@@ -338,8 +347,8 @@ A new linked-context kind beside documents and tracker tasks:
 
 ### 6. Surfaces
 
-- **SPA**: a project frame on the board beside service frames, with its task swimlanes and its
-  links to services drawn. The research project's frame opens a findings reader (coverage per
+- **SPA**: a project root on the board beside service frames, with its task swimlanes and its
+  links to services drawn. The research project's root opens a findings reader (coverage per
   topic, answers with evidence, revision history), and offers "start follow-up" with a mode. The
   credential park reuses `CredentialWaitNotice`. Tier: projects and research are `basic`, since
   starting research and answering its credential request is everyday work; findings-storage
@@ -363,8 +372,8 @@ A new linked-context kind beside documents and tracker tasks:
 
 ## Decisions
 
-- **Projects are a peer of services, not a block level and not a block-less run.** A project owns
-  a frame and its tasks, so the engine stays block-keyed, and it links to zero or more services
+- **Projects are a peer of services, not a service and not a block-less run.** A project owns
+  a root block and its tasks, so the engine stays block-keyed, and it links to zero or more services
   rather than living inside one.
 - **Definitions come from code and from the public API**, read through one port.
 - **Credentials use the existing capability credential store**; research definitions declare their
@@ -395,38 +404,45 @@ Still open:
 
 ## Slices (each about one PR)
 
-| #   | Slice                                                                                                                                                                                                                                                                                                    | Status | PR    |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----- |
-| 0   | This tracker.                                                                                                                                                                                                                                                                                            | done   | #2501 |
-| 1   | Projects, both facades + conformance: `Project` entity, `ProjectKindRegistry`, the generalized mount and workspace-delete re-home, project frames on the board snapshot, service links, repo resolution through a project frame. Mothership buckets.                                                     | todo   |       |
-| 2   | Contracts + kernel for research: definition schema, `ResearchDefinitionRegistry` + port, findings schema, the fold, the storage-policy resolver. Pure, unit-tested.                                                                                                                                      | todo   |       |
-| 3   | Research persistence, both facades + conformance: definitions table, findings revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                        | todo   |       |
-| 4   | Harness: `research` mode with optional repos (linked repos as `referenceRepos`), the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                   | todo   |       |
-| 5   | Engine: the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                                                                                                                                  | todo   |       |
-| 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance. | todo   |       |
-| 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                            | todo   |       |
-| 8   | SPA: project frames, findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                        | todo   |       |
-| 9   | Task linking: the `projects` linked-context kind, `.cat-context/projects/`, recorded revision. An optional `projects` field on `InitiativeItemSpawn`, so tasks an initiative spawns carry a research project as linked context.                                                                          | todo   |       |
+| #   | Slice                                                                                                                                                                                                                                                                                                                                        | Status    | PR    |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ----- |
+| 0   | This tracker.                                                                                                                                                                                                                                                                                                                                | done      | #2501 |
+| 1a  | Generalize the owner stamp and the mount: `blocks`/`agent_runs` `owner_id`, `workspace_mounts` (`subject_id`), `MountRehome`, owner- and subject-keyed port methods. A refactor with no behaviour change, both facades.                                                                                                                      | in review | #2504 |
+| 1b  | Projects, both facades + conformance: `Project` entity, the `project` block level and type, `subjectKind` on the mount, `ProjectKindRegistry`, project creation, task admission, re-home, service links, repo resolution through a project root. Mothership buckets.                                                                         | todo      |       |
+| 1c  | SPA: project roots on the board, create a project, link services, mount; i18n.                                                                                                                                                                                                                                                               | todo      |       |
+| 2   | Contracts + kernel for research: definition schema, `ResearchDefinitionRegistry` + content hash, findings schema, the fold, the storage-policy resolver. Pure, unit-tested. The definition read port lands with its implementation in slice 3, and the registry is wired on `start()`/`startLocal()` in slice 5, where a run first reads it. | done      | #2503 |
+| 3   | Research persistence, both facades + conformance: definitions table, findings revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                                                            | todo      |       |
+| 4   | Harness: `research` mode with optional repos (linked repos as `referenceRepos`), the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                                                       | todo      |       |
+| 5   | Engine: the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                                                                                                                                                                      | todo      |       |
+| 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                     | todo      |       |
+| 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                                                                | todo      |       |
+| 8   | SPA: findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                                                                            | todo      |       |
+| 9   | Task linking: the `projects` linked-context kind, `.cat-context/projects/`, recorded revision. An optional `projects` field on `InitiativeItemSpawn`, so tasks an initiative spawns carry a research project as linked context.                                                                                                              | todo      |       |
 
-Slices 1, 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4 and 6: the
+Slices 1 (1a to 1c, in order), 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4 and 6: the
 `researcher` kind ships after the park, so a research run never meets a missing credential with
 nowhere to wait. Slice 9 needs 1, 2, 3 and 5, since a project is linkable only once a research
 run has written a revision.
 
 ## Gotchas found during design
 
-- **Repo resolution has deliberately no fallback** ("NO first repo"). A project frame resolving to
+- **Repo resolution has deliberately no fallback** ("NO first repo"). A project root resolving to
   its linked services' repos is a new, explicit rule, and a project task whose type needs a
   writable repo must be refused at admission, never pointed at a guessed one.
-- **A project frame is the host cross-service initiatives lack.** An initiative spans one service
+- **A project root is the host cross-service initiatives lack.** An initiative spans one service
   frame today because its loop spawns tasks under the initiative block's `parentId`
-  (`InitiativeLoopService`). That lookup is generic, so an initiative block under a project frame
-  would spawn there; the open rule is `resolveRepoTarget`, where a project frame resolves to its
+  (`InitiativeLoopService`). That lookup is generic, so an initiative block under a project root
+  would spawn there; the open rule is `resolveRepoTarget`, where a project root resolves to its
   linked services' repos as read-only context. Slice 1 keeps that resolution a single, explicit
   rule, so a later initiative under a project can name which linked service an item writes to
   instead of gaining a second resolution path. Supporting it is out of scope here.
-- **The mount carries layout for a shared frame.** Generalizing it to projects keeps
-  `applyMountLayout` on every frame-returning read; a project frame read that skips it jumps on
+- **A root block id alone does not name a subject.** Seeded boards share frame ids (`blk_auth`),
+  so a reader narrows the candidates: the layout projection by the board's own mounts, and the
+  workspace-delete re-home plan by the owner stamp on the board's own root row, which is what the
+  re-home moves. The plan never re-homes another board's service, and still re-homes a shared
+  subject its home board has unmounted.
+- **The mount carries layout for a shared root.** Generalizing it to projects keeps
+  `applyMountLayout` on every root-returning read; a project root read that skips it jumps on
   the board.
 - **Capability credentials are workspace-scoped, projects are account-scoped.** A project mounted
   on two boards resolves credentials from whichever workspace started the run, so the project view

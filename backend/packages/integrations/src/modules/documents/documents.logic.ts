@@ -1,4 +1,5 @@
-import type { BlockType, DocumentOrigin, DocumentSourceKind } from '@cat-factory/kernel'
+import type { DocumentOrigin, DocumentSourceKind } from '@cat-factory/kernel'
+import type { ServiceFrameType } from '@cat-factory/contracts'
 import type { DocumentBoardPlan, PlanFrame, PlanModule, PlanTask } from '@cat-factory/kernel'
 import type { DocumentSourceProvider, DocumentSourceRegistry } from '@cat-factory/kernel'
 import {
@@ -20,7 +21,7 @@ export { buildExcerpt, markdownToText }
 // source's format. Keeping them pure makes the planner deterministic and
 // trivially testable without a live source or an LLM.
 
-const BLOCK_TYPES: readonly BlockType[] = [
+const BLOCK_TYPES: readonly ServiceFrameType[] = [
   'frontend',
   'service',
   'api',
@@ -116,7 +117,7 @@ function extractHeadings(markdown: string): Heading[] {
 export interface PlanTarget {
   frameId: string
   title: string
-  type: BlockType
+  type: ServiceFrameType
   existingModules: readonly string[]
 }
 
@@ -237,9 +238,7 @@ export function coercePlan(
     const obj = raw as Record<string, unknown>
     const title = asString(obj.title)
     if (!title) continue
-    const type = (BLOCK_TYPES as readonly string[]).includes(obj.type as string)
-      ? (obj.type as BlockType)
-      : 'service'
+    const type = BLOCK_TYPES.find((candidate) => candidate === obj.type) ?? 'service'
     const modules: PlanModule[] = []
     for (const rawModule of Array.isArray(obj.modules) ? obj.modules : []) {
       if (typeof rawModule !== 'object' || rawModule === null) continue

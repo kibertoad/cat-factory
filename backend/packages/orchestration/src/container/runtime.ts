@@ -17,6 +17,8 @@ import {
   registryBinaryGeneratorSource,
   registryBuiltinSource,
   registryPromptFragmentSource,
+  registryProjectKindSource,
+  defaultProjectKindRegistry,
 } from '@cat-factory/kernel'
 import { createAppCaches } from '@cat-factory/caching'
 import type { CoreDependencies } from '../container.js'
@@ -31,6 +33,7 @@ import type { CoreDependencies } from '../container.js'
  * `container.ts` as a cohesive collaborator (the file-size ratchet: split, never grow).
  */
 export function resolveCoreRuntime(dependencies: CoreDependencies) {
+  const projectKindRegistry = dependencies.projectKindRegistry ?? defaultProjectKindRegistry()
   // Resolved ONCE and shared by the two entries below: the registry itself (which the boot
   // validation and the snapshot read) and the default `builtin`-tier source that wraps it. A
   // second `defaultFoundationalServiceRegistry()` call would hand the catalog a different
@@ -61,6 +64,10 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     providerRegistry: dependencies.providerRegistry ?? defaultProviderRegistry(),
     pipelineRegistry: dependencies.pipelineRegistry ?? defaultPipelineRegistry(),
     taskTypeRegistry: dependencies.taskTypeRegistry ?? defaultTaskTypeRegistry(),
+    projectKindRegistry,
+    // Where project kinds are READ from: this process's registry, unless a mothership-mode node
+    // injected the remote source (the prompt-fragment registry/source pair's shape).
+    projectKinds: dependencies.projectKindSource ?? registryProjectKindSource(projectKindRegistry),
     // The deployment's non-container model operations. Empty by default for the same reason the
     // task-type registry is: what a wrapper over `/api/v1` may generate is the deployment's own
     // declaration, and a shipped default would be a model list nobody chose.

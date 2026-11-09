@@ -45,7 +45,7 @@ describe('BoardService: a pinned preset must name something', () => {
       blockRepository: {
         findById: async (id: string) => {
           const found = find(id)
-          return found ? { workspaceId: WS, serviceId: null, block: found } : null
+          return found ? { workspaceId: WS, ownerId: null, block: found } : null
         },
         get: async (_ws: string, id: string) => find(id) ?? null,
         listByWorkspace: async () => blocks,

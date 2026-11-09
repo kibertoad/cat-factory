@@ -18,6 +18,7 @@
 export type {
   BlockStatus,
   BlockType,
+  ServiceFrameType,
   FrameRepoType,
   BlockLevel,
   TaskType,

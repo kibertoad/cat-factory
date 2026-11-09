@@ -59,7 +59,7 @@ const epicLinks = computed(() => {
 // config; deduped so multiple env vars bound to the same service draw one edge.
 const frontendLinks = computed(() => {
   const out: { id: string; source: string; target: string }[] = []
-  for (const f of board.frames) {
+  for (const f of board.canvasRoots) {
     if (f.type !== 'frontend') continue
     const seen = new Set<string>()
     for (const binding of f.frontendConfig?.backendBindings ?? []) {
@@ -78,7 +78,7 @@ const frontendLinks = computed(() => {
 // entry, stored on the consumer end). Deduped; a target deleted out of band draws nothing.
 const connectionLinks = computed(() => {
   const out: { id: string; source: string; target: string }[] = []
-  for (const f of board.frames) {
+  for (const f of board.canvasRoots) {
     if (f.type !== 'service') continue
     const seen = new Set<string>()
     for (const connection of f.serviceConnections ?? []) {

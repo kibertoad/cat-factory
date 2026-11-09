@@ -523,5 +523,6 @@ export {
   type RecurringModule,
   type TrackerModule,
   type ServicesModule,
+  type ProjectsModule,
   createCore,
 } from './container.js'

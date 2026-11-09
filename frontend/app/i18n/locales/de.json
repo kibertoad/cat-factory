@@ -3124,6 +3124,7 @@
       "document": "Dokument-Repository"
     },
     "blockTypes": {
+      "project": "Projekt",
       "frontend": "Frontend",
       "service": "Service",
       "library": "Bibliothek",
@@ -6558,6 +6559,7 @@
     "unavailable": {
       "description": {
         "binary_generators_unreachable": "Die generativen Integrationen dieser Installation konnten gerade nicht gelesen werden, deshalb wurde der Lauf nicht gestartet. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
+        "project_kinds_unreachable": "Die Projektarten dieser Installation konnten gerade nicht gelesen werden, deshalb wurde die Anfrage nicht ausgeführt. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
         "foundational_builtins_unreachable": "Die integrierten Basisdienste dieser Installation konnten gerade nicht gelesen werden. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
         "connection_credentials_unreadable": "Die gespeicherten Zugangsdaten dieser Verbindung konnten nicht gelesen werden. Wenn diese Installation den Dienst mit dem zugehörigen Schlüssel erreicht, verbinden Sie die Quelle neu, um sie zu ersetzen; andernfalls versuchen Sie es erneut, sobald diese Verbindung wiederhergestellt ist.",
         "vcs_capability_unsupported": "Der mit diesem Workspace verbundene Quellcode-Anbieter bietet diesen Vorgang nicht an. Es ist nichts falsch konfiguriert und eine Einrichtung hilft hier nicht: Für diesen Anbieter ist der Vorgang nicht verfügbar.",
@@ -6584,7 +6586,12 @@
         "tool_server_without_oauth": "Dieser Werkzeugserver verwendet kein OAuth mehr, daher gibt es keine Verbindung abzuschließen.",
         "gate_config_fields_invalid": "Die Gate-Einstellungen eines Schritts sind unvollständig oder enthalten einen Wert, den das Gate nicht akzeptiert, meist eine Pflichteinstellung ohne Wert. Füllen Sie die Gate-Einstellungen des Schritts in der Pipeline aus und versuchen Sie es erneut.",
         "approvals_chain_stale": "Diese Pipeline hat sich geändert, nachdem Sie ihre Freigabe-Checkpoints geöffnet haben, daher passen sie nicht mehr zu ihren Schritten. Laden Sie die Pipeline neu und legen Sie sie erneut fest.",
-        "approvals_builtin_checkpoint_locked": "Eine integrierte Pipeline behält die Freigabe-Checkpoints, die ihre Katalogdefinition mitbringt. Klonen Sie die Pipeline, um einen davon zu entfernen."
+        "approvals_builtin_checkpoint_locked": "Eine integrierte Pipeline behält die Freigabe-Checkpoints, die ihre Katalogdefinition mitbringt. Klonen Sie die Pipeline, um einen davon zu entfernen.",
+        "project_kind_unregistered": "Die Art dieses Projekts wird von dieser Installation nicht mehr angeboten, daher kann es keine neue Arbeit aufnehmen. Bitten Sie den Betreiber Ihrer Installation, die Art wieder zu registrieren.",
+        "task_type_not_offered_by_project": "Die Art dieses Projekts nimmt keine Aufgaben dieses Typs an. Wählen Sie einen der Typen, die das Formular dafür anbietet.",
+        "project_has_no_writable_repo": "Ein Schritt dieses Laufs braucht ein Repository zum Schreiben, und ein Projekt hat keines: Die Repositories seiner verknüpften Dienste sind nur lesbarer Kontext. Wählen Sie eine Pipeline, die nur liest und berichtet.",
+        "project_service_link_invalid": "Einer der verknüpften Dienste existiert nicht mehr oder gehört zu einer anderen Organisation. Laden Sie das Board neu und wählen Sie die verknüpften Dienste erneut.",
+        "project_has_unfinished_tasks": "Dieses Projekt hat noch Aufgaben, die nicht abgeschlossen sind. Schließen Sie sie zuerst ab oder löschen Sie sie."
       }
     },
     "action": {
@@ -9183,6 +9190,41 @@
       "high": "Hoch",
       "xhigh": "Sehr hoch",
       "max": "Maximal"
+    }
+  },
+  "projects": {
+    "common": {
+      "cancel": "Abbrechen"
+    },
+    "toolbar": {
+      "menu": "Projekte",
+      "newProject": "Neues Projekt…",
+      "kindsUnavailable": "Projektarten konnten nicht geladen werden"
+    },
+    "create": {
+      "title": "Neues Projekt",
+      "description": "Ein Projekt bündelt Arbeit, die zu keinem einzelnen Service gehört. Es liegt auf diesem Board und kann anderen Boards Ihrer Organisation hinzugefügt werden.",
+      "kindLabel": "Art",
+      "titleLabel": "Titel",
+      "titlePlaceholder": "Zum Beispiel: Recherche zur Anbieter-API",
+      "descriptionLabel": "Beschreibung",
+      "servicesLabel": "Verknüpfte Services",
+      "servicesHelp": "Seine Aufgaben können die Repositorys dieser Services als Kontext lesen.",
+      "submit": "Projekt anlegen",
+      "created": "Projekt {title} angelegt",
+      "failed": "Das Projekt konnte nicht angelegt werden"
+    },
+    "linkServices": {
+      "title": "Verknüpfte Services",
+      "description": "Die Services, deren Repositorys die Aufgaben dieses Projekts als Kontext lesen können.",
+      "servicesLabel": "Services",
+      "save": "Speichern",
+      "saved": "Verknüpfte Services aktualisiert",
+      "failed": "Die verknüpften Services konnten nicht aktualisiert werden"
+    },
+    "mount": {
+      "added": "Projekt {title} zu diesem Board hinzugefügt",
+      "failed": "Das Projekt konnte nicht hinzugefügt werden"
     }
   }
 }

@@ -41,6 +41,8 @@ import type {
   TaskTypeRegistry,
   TaskTypeSuppressionRepository,
   PromptFragmentSource,
+  ProjectKindSource,
+  ProjectRepository,
   ResolveBinaryArtifactStore,
   WorkspaceMount,
   WorkspaceMountRepository,
@@ -52,7 +54,9 @@ import { createBlockRemoval } from './blockRemoval.js'
 import { createBoardLayoutWrites } from './layoutWrites.js'
 import { createBoardReparentWrite } from './reparentWrite.js'
 import { createMountProjection } from './mountProjection.js'
-import { canReparent, gridSlot, serviceOf, tasksOf, wouldCreateCycle } from './board.logic.js'
+import { canReparent, gridSlot, rootOf, tasksOf, wouldCreateCycle } from './board.logic.js'
+import { createProjectTaskAdmission } from './projectTaskAdmission.js'
+import { createBlockHomes } from './blockHomes.js'
 import type { ReviewFrictionNotificationReader } from './reviewFrictionGuard.js'
 import { ReviewFrictionGuard } from './reviewFrictionGuard.js'
 import type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
@@ -177,6 +181,10 @@ export interface BoardServiceDependencies {
    * carries only its explicit/service picks and a registered type's own standing context.
    */
   promptFragmentSource?: PromptFragmentSource
+  /** Account-owned projects, whose root blocks hold tasks like a service frame does. */
+  projectRepository?: ProjectRepository
+  /** Where a project's kind is read from when a task is admitted under the project. */
+  projectKinds?: ProjectKindSource
   /**
    * The acting workspace's runtime settings, read by two collaborators:
    *  - the opt-in review-debt friction guard on task creation
@@ -298,6 +306,9 @@ export class BoardService {
    * mount for a frame, and project it onto anything a mutation hands back.
    */
   private readonly mountProjection: ReturnType<typeof createMountProjection>
+  private readonly projectRepository?: ProjectRepository
+  private readonly projectTasks: ReturnType<typeof createProjectTaskAdmission>
+  private readonly blockHomes: ReturnType<typeof createBlockHomes>
   /**
    * The repo side of `addServiceFromRepo` (see sharedServiceMount.ts): the account-wide dedupe
    * that mounts an existing whole-repo service, and the repository-wide monorepo flag write it
@@ -343,6 +354,8 @@ export class BoardService {
     taskTypeRegistry,
     taskTypeSuppressionRepository,
     promptFragmentSource,
+    projectRepository,
+    projectKinds,
     workspaceSettings,
     reviewFrictionNotifications,
     resolveRunRepoContext,
@@ -378,8 +391,12 @@ export class BoardService {
     })
     this.mountProjection = createMountProjection({
       serviceRepository,
+      projectRepository,
       workspaceMountRepository,
     })
+    this.projectRepository = projectRepository
+    this.projectTasks = createProjectTaskAdmission({ projectRepository, projectKinds })
+    this.blockHomes = createBlockHomes({ blockRepository, workspaceMountRepository })
     this.sharedServiceMount = createSharedServiceMount({
       blockRepository,
       workspaceRepository,
@@ -447,6 +464,7 @@ export class BoardService {
       blockRepository,
       executionRepository,
       serviceRepository,
+      projectRepository,
       workspaceMountRepository,
       initiativeRepository,
       documentRepository,
@@ -479,7 +497,8 @@ export class BoardService {
       riskPolicySelection: this.riskPolicySelection,
       requireWorkspace: (id) => this.requireWorkspace(id),
       resolveBlock: (id, blockId) => this.resolveBlock(id, blockId),
-      serviceForContainer: (blocks, container) => this.serviceForContainer(blocks, container),
+      serviceForContainer: (blocks, container) => this.ownerForContainer(blocks, container),
+      admitProjectTask: (root, taskType) => this.projectTasks.admit(root, taskType),
       assertTaskTypeAllowed: (frame, taskType) => this.assertTaskTypeAllowed(frame, taskType),
       emitBoardChanged: (originWorkspaceId, change) =>
         this.emitBoardChanged(originWorkspaceId, change),
@@ -589,49 +608,29 @@ export class BoardService {
   }
 
   /**
-   * The service id a block being added under `container` belongs to: the service of the
-   * container's enclosing frame. Undefined when the service repos aren't wired or the
-   * frame isn't a registered service (legacy/seeded frame) — the block is then plain
-   * workspace-local.
+   * The owner id a block being added under `container` is stamped with: the service owning the
+   * enclosing frame, or the project owning the enclosing project root. Undefined when the root is
+   * neither a registered service nor a project (a legacy or seeded frame), and the block is then
+   * plain workspace-local.
    */
-  private async serviceForContainer(
-    blocks: Block[],
-    container: Block,
-  ): Promise<string | undefined> {
+  private async ownerForContainer(blocks: Block[], container: Block): Promise<string | undefined> {
+    const root = rootOf(blocks, container)
+    if (!root) return undefined
+    if (root.level === 'project') return (await this.projectTasks.projectOfRoot(root)).id
     if (!this.serviceRepository) return undefined
-    const frame = container.level === 'frame' ? container : serviceOf(blocks, container)
-    if (!frame) return undefined
-    return (await this.serviceRepository.getByFrameBlock(frame.id))?.id
+    return (await this.serviceRepository.getByFrameBlock(root.id))?.id
   }
 
   private requireWorkspace(workspaceId: string) {
     return requireWorkspace(this.workspaceRepository, workspaceId)
   }
 
-  /**
-   * Resolve a block the requesting workspace is allowed to mutate, returning the block plus
-   * the workspace that physically homes it. A block created locally resolves to this
-   * workspace; a block belonging to a service this workspace MOUNTS (in-org sharing) resolves
-   * to the service's home workspace, so a shared board is fully interactive — edits, moves,
-   * adds and deletes act on the one shared copy. Throws NotFound when the workspace neither
-   * homes the block nor mounts its service (or sharing isn't wired and it isn't local).
-   */
-  private async resolveBlock(
+  /** @see createBlockHomes: the block and the workspace that homes it, for a mutation. */
+  private resolveBlock(
     workspaceId: string,
     id: string,
   ): Promise<{ homeWorkspaceId: string; block: Block }> {
-    const local = await this.blockRepository.get(workspaceId, id)
-    if (local) return { homeWorkspaceId: workspaceId, block: local }
-    if (this.serviceRepository && this.workspaceMountRepository) {
-      const found = await this.blockRepository.findById(id)
-      if (
-        found?.serviceId &&
-        (await this.workspaceMountRepository.get(workspaceId, found.serviceId))
-      ) {
-        return { homeWorkspaceId: found.workspaceId, block: found.block }
-      }
-    }
-    return assertFound<{ homeWorkspaceId: string; block: Block }>(null, 'Block', id)
+    return this.blockHomes.resolveBlock(workspaceId, id)
   }
 
   /**
@@ -642,32 +641,12 @@ export class BoardService {
     workspaceId: string,
     id: string,
   ): Promise<{ homeWorkspaceId: string; block: Block }> {
-    return this.resolveBlock(workspaceId, id)
+    return this.blockHomes.resolveBlock(workspaceId, id)
   }
 
-  /**
-   * Resolve the home workspace to run a {@link removeBlock} against. Deletion is idempotent and
-   * best-effort, so unlike {@link resolveBlock} this NEVER 404s: a block local to this workspace
-   * resolves here; a block belonging to a service this workspace mounts resolves to that service's
-   * home (so a shared frame is deleted from any board that mounts it); anything else — a block row
-   * that's already gone, or one only another (un-mounted) workspace can see — resolves to THIS
-   * workspace, where the caller mops up whatever related rows survive. Every cleanup the caller
-   * does is scoped to the returned workspace, so falling back here can only ever touch this
-   * workspace's data, never reach across into another's.
-   */
-  private async resolveBlockHomeForRemoval(workspaceId: string, id: string): Promise<string> {
-    const local = await this.blockRepository.get(workspaceId, id)
-    if (local) return workspaceId
-    if (this.serviceRepository && this.workspaceMountRepository) {
-      const found = await this.blockRepository.findById(id)
-      if (
-        found?.serviceId &&
-        (await this.workspaceMountRepository.get(workspaceId, found.serviceId))
-      ) {
-        return found.workspaceId
-      }
-    }
-    return workspaceId
+  /** @see createBlockHomes: the home to run a {@link removeBlock} against; never 404s. */
+  private resolveBlockHomeForRemoval(workspaceId: string, id: string): Promise<string> {
+    return this.blockHomes.resolveHomeForRemoval(workspaceId, id)
   }
 
   /**
@@ -893,9 +872,14 @@ export class BoardService {
       input.acknowledgeReviewDebt === true,
     )
     const siblings = tasksOf(blocks, containerId).length
-    const service = serviceOf(blocks, container)
+    const root = rootOf(blocks, container)
+    const service = root?.level === 'frame' ? root : undefined
     const taskType = input.taskType ?? 'feature'
     this.assertTaskTypeAllowed(service, taskType)
+    // A task under a project is admitted by the project's kind, which also names its default
+    // pipeline. Before any side effect, and before the repo-reading reference checks below.
+    const projectTask =
+      root?.level === 'project' ? await this.projectTasks.admit(root, taskType) : undefined
     // A reusable operation a workspace admin HID is refused here, not only kept out of the picker:
     // the internal API, the public API, an initiative spawn and a tracker import all reach this
     // method without ever seeing one. Runs in the ACTING workspace's context, like the friction
@@ -985,7 +969,8 @@ export class BoardService {
     // `taskTypeCreationDefaults.ts`); absent, the run-time picker's positional default applies.
     if (input.pipelineId) block.pipelineId = input.pipelineId
     else {
-      const typeDefault = this.taskTypeDefaults.pipelineIdFor(taskType)
+      const typeDefault =
+        projectTask?.defaultPipelineId ?? this.taskTypeDefaults.pipelineIdFor(taskType)
       if (typeDefault) block.pipelineId = typeDefault
     }
     // Task-level agent-contributed config values (e.g. the Tester's environment),
@@ -999,7 +984,7 @@ export class BoardService {
     await this.blockRepository.insert(
       homeWorkspaceId,
       block,
-      await this.serviceForContainer(blocks, container),
+      projectTask ? projectTask.project.id : await this.ownerForContainer(blocks, container),
     )
     // Origin = the block's HOME (the mounted service's home when added to a shared board), so
     // the fan-out reaches every workspace mounting the service, not just the acting one. A new
@@ -1125,7 +1110,7 @@ export class BoardService {
       throw new ValidationError('Modules can only be added to a service frame')
     }
     const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
-    const containerServiceId = await this.serviceForContainer(blocks, service)
+    const containerServiceId = await this.ownerForContainer(blocks, service)
     let n = blocks.filter((b) => b.parentId === serviceId && b.level === 'module').length
     const created: Block[] = []
     for (const input of inputs) {

@@ -1,5 +1,5 @@
 import type {
-  ServiceRehome,
+  MountRehome,
   WorkspaceAccessRow,
   WorkspaceRepository,
   WorkspaceVisibility,
@@ -18,6 +18,11 @@ import { chunkForIn } from './chunk'
 // asserts coverage against the SAME source of truth the delete iterates — the Node/Drizzle
 // completeness spec can't see these facade-only tables, so this is what closes that gap.
 export const D1_ONLY_WORKSPACE_SCOPED_TABLES = ['live_containers'] as const
+
+/** The projects a workspace homes: their root block lives on it, in the workspace's own account. */
+const HOMED_PROJECTS = `SELECT id FROM projects
+  WHERE root_block_id IN (SELECT id FROM blocks WHERE workspace_id = ?)
+    AND account_id IS (SELECT account_id FROM workspaces WHERE id = ?)`
 
 export class D1WorkspaceRepository implements WorkspaceRepository {
   private readonly db: D1Database
@@ -184,7 +189,7 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
     ])
   }
 
-  async delete(id: string, rehome: ServiceRehome[] = []): Promise<void> {
+  async delete(id: string, rehome: MountRehome[] = []): Promise<void> {
     // Cascade explicitly: D1 does not enforce foreign keys by default. The service/mount rows
     // MUST be reclaimed BEFORE the blocks they reference are dropped (their subqueries read
     // `blocks`). A deleted board that leaves its account-owned services behind is not a cosmetic
@@ -195,19 +200,19 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
     //
     // Re-home FIRST (before the cascade reads `blocks`): move each shared service's blocks + run
     // history to a surviving mounting board by re-stamping their `workspace_id`. Blocks are found
-    // by `service_id` (not workspace), so after the move the service's frame no longer lives in
+    // by `owner_id` (not workspace), so after the move the service's frame no longer lives in
     // THIS workspace — the cascade below then skips it (its frame is not in this board's blocks),
     // leaving the service, its subtree and every OTHER board's mount intact.
-    const rehomeStatements = rehome.flatMap(({ serviceId, toWorkspaceId }) => [
+    const rehomeStatements = rehome.flatMap(({ subjectId, toWorkspaceId }) => [
       this.db
         .prepare(
           `UPDATE agent_runs SET workspace_id = ? WHERE block_id IN
-             (SELECT id FROM blocks WHERE service_id = ?)`,
+             (SELECT id FROM blocks WHERE owner_id = ?)`,
         )
-        .bind(toWorkspaceId, serviceId),
+        .bind(toWorkspaceId, subjectId),
       this.db
-        .prepare('UPDATE blocks SET workspace_id = ? WHERE service_id = ?')
-        .bind(toWorkspaceId, serviceId),
+        .prepare('UPDATE blocks SET workspace_id = ? WHERE owner_id = ?')
+        .bind(toWorkspaceId, subjectId),
     ])
     // The bulk reclaim of every plain workspace-scoped table is driven by the shared kernel
     // list (WORKSPACE_SCOPED_TABLES) so this facade and the Node facade cannot drift and a new
@@ -225,13 +230,33 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
       // Every board's mount of a service this workspace HOMES (its frame block lives here).
       this.db
         .prepare(
-          `DELETE FROM workspace_services WHERE service_id IN
+          `DELETE FROM workspace_mounts WHERE subject_id IN
              (SELECT id FROM services WHERE frame_block_id IN
                (SELECT id FROM blocks WHERE workspace_id = ?))`,
         )
         .bind(id),
-      // This workspace's OWN mounts of services homed elsewhere (shared services it mounted).
-      this.db.prepare('DELETE FROM workspace_services WHERE workspace_id = ?').bind(id),
+      // The same for the projects this workspace homes (its root block lives here), then their
+      // links and rows. Scoped to the board's own account too, because block ids are only unique
+      // within a workspace.
+      this.db
+        .prepare(
+          `DELETE FROM workspace_mounts WHERE subject_kind = 'project' AND subject_id IN (${HOMED_PROJECTS})`,
+        )
+        .bind(id, id),
+      this.db
+        .prepare(`DELETE FROM project_service_links WHERE project_id IN (${HOMED_PROJECTS})`)
+        .bind(id, id),
+      this.db.prepare(`DELETE FROM projects WHERE id IN (${HOMED_PROJECTS})`).bind(id, id),
+      // Links from surviving projects to the services this workspace homes, which go below.
+      this.db
+        .prepare(
+          `DELETE FROM project_service_links WHERE service_id IN
+             (SELECT id FROM services WHERE frame_block_id IN
+               (SELECT id FROM blocks WHERE workspace_id = ?))`,
+        )
+        .bind(id),
+      // This workspace's OWN mounts of subjects homed elsewhere (shared services and projects).
+      this.db.prepare('DELETE FROM workspace_mounts WHERE workspace_id = ?').bind(id),
       // The account-owned services this workspace homes — the repo↔frame link that must be freed.
       // MUST precede the `blocks` delete in the bulk list (this subquery reads `blocks`).
       this.db

@@ -45,7 +45,7 @@ function build(opts: {
         opts.local || ws === HOME ? (rows.get(id) ?? null) : null,
       findById: async (id: string) => {
         const block = rows.get(id)
-        return block ? { workspaceId: HOME, serviceId: 'svc', block } : null
+        return block ? { workspaceId: HOME, ownerId: 'svc', block } : null
       },
       listByWorkspace: async (_ws: string) => {
         listCount += 1
@@ -60,7 +60,7 @@ function build(opts: {
     serviceRepository: { getByFrameBlock: async () => null, listByFrameBlocks: async () => [] },
     workspaceMountRepository: {
       get: async (ws: string, serviceId: string) =>
-        !opts.local && serviceId === 'svc' ? { workspaceId: ws, serviceId } : null,
+        !opts.local && serviceId === 'svc' ? { workspaceId: ws, subjectId: serviceId } : null,
       listWorkspaceIdsMountingBlock: async () => [],
     },
     executionRepository: { deleteByBlock: async () => {} },

@@ -146,9 +146,9 @@ export const blocks = pgTable(
     // — serialized JSON array of { name, mode: 'reference' | 'working' }. One optional
     // `working` branch the run builds inside; any number of read-only `reference` branches.
     apriori_branches: text('apriori_branches'),
-    // The account-owned service this block belongs to (migration 0031); will become the
-    // physical scope key once the repositories switch off workspace_id.
-    service_id: text('service_id'),
+    // The account-owned mounted subject (a service) this block belongs to: the scope key the
+    // board composition, the real-time fan-out and the workspace-delete re-home read.
+    owner_id: text('owner_id'),
     // GitHub user id of the block's creator (migration 0038); drives "notify the task
     // creator" routing. Nullable — legacy blocks / auth-disabled dev have no creator.
     created_by: text('created_by'),
@@ -189,7 +189,7 @@ export const blocks = pgTable(
     index('idx_blocks_epic').on(t.workspace_id, t.epic_id),
     index('idx_blocks_initiative').on(t.workspace_id, t.initiative_id),
     index('idx_blocks_expedition').on(t.workspace_id, t.expedition_id),
-    index('idx_blocks_service').on(t.service_id),
+    index('idx_blocks_owner').on(t.owner_id),
     // findById looks a block up by id alone (no workspace_id), so it can't use the
     // (workspace_id, id) PK — index id directly to avoid scanning the largest table.
     // Block ids are only unique within a workspace, so this is a plain lookup index.
@@ -225,11 +225,44 @@ export const services = pgTable(
   ],
 )
 
-export const workspaceServices = pgTable(
-  'workspace_services',
+// Account-owned projects: peers of services, mounted onto boards through `workspace_mounts`.
+export const projects = pgTable(
+  'projects',
+  {
+    id: text('id').primaryKey(),
+    account_id: text('account_id'),
+    kind: text('kind').notNull(),
+    root_block_id: text('root_block_id').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('idx_projects_account').on(t.account_id),
+    uniqueIndex('idx_projects_root').on(t.account_id, t.root_block_id),
+    index('idx_projects_root_block').on(t.root_block_id),
+  ],
+)
+
+// A project's links to services, as read-only context. `position` keeps the authored order.
+export const projectServiceLinks = pgTable(
+  'project_service_links',
+  {
+    project_id: text('project_id').notNull(),
+    service_id: text('service_id').notNull(),
+    position: integer('position').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.project_id, t.service_id] }),
+    index('idx_project_service_links_service').on(t.service_id),
+  ],
+)
+
+export const workspaceMounts = pgTable(
+  'workspace_mounts',
   {
     workspace_id: text('workspace_id').notNull(),
-    service_id: text('service_id').notNull(),
+    // What the mount places: a service or a project.
+    subject_kind: text('subject_kind').notNull().default('service'),
+    subject_id: text('subject_id').notNull(),
     pos_x: doublePrecision('pos_x').notNull().default(0),
     pos_y: doublePrecision('pos_y').notNull().default(0),
     width: doublePrecision('width'),
@@ -237,8 +270,8 @@ export const workspaceServices = pgTable(
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.workspace_id, t.service_id] }),
-    index('idx_workspace_services_service').on(t.service_id),
+    primaryKey({ columns: [t.workspace_id, t.subject_id] }),
+    index('idx_workspace_mounts_subject').on(t.subject_id),
   ],
 )
 
@@ -340,8 +373,8 @@ export const agentRuns = pgTable(
     workflow_instance_id: text('workflow_instance_id'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-    // The service this run targets (migration 0031), derived from its block.
-    service_id: text('service_id'),
+    // The mounted subject this run's block belongs to, derived from its block.
+    owner_id: text('owner_id'),
     // Optimistic-concurrency revision, bumped on every write; guarded by compareAndSwap
     // so a human-action write that raced the driver is retried, not silently clobbered.
     rev: integer('rev').notNull().default(0),
@@ -356,7 +389,7 @@ export const agentRuns = pgTable(
     index('idx_agent_runs_workspace').on(t.workspace_id, t.created_at),
     index('idx_agent_runs_status_lease').on(t.status, t.updated_at),
     index('idx_agent_runs_block').on(t.workspace_id, t.block_id),
-    index('idx_agent_runs_service').on(t.service_id),
+    index('idx_agent_runs_owner').on(t.owner_id),
     // Serves the lean live-run projection `ExecutionRepository.listLive`
     // (workspace_id = ? AND kind = 'execution' AND status IN (running/blocked/paused)) backing the
     // per-service task-concurrency dispatch guard + resumePaused. Mirrors D1 migration 0048.

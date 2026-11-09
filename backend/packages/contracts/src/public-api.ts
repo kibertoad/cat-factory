@@ -3,7 +3,7 @@ import { publicServiceProvisioningSchema } from './public-provisioning.js'
 import { documentSourceKindSchema } from './documents.js'
 import { descriptorFieldValuesSchema } from './form-fields.js'
 import { notificationSchema } from './notifications.js'
-import { blockTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primitives.js'
+import { serviceFrameTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primitives.js'
 import { publicApiKeyWorkspaceIdsSchema, publicApiScopeSchema } from './public-api-keys.js'
 import { MAX_FRAGMENT_ID_LENGTH } from './fragment-library.js'
 import { MAX_TASK_FRAGMENTS } from './public-fragments.js'
@@ -188,7 +188,7 @@ export const publicServiceSchema = v.object({
   title: v.string(),
   description: v.string(),
   /** The service's architectural classification (service / frontend / library / …). */
-  type: blockTypeSchema,
+  type: serviceFrameTypeSchema,
   status: publicTaskStatusSchema,
   /**
    * Where this service's per-run environment manifests are read from, when it declares any.

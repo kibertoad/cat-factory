@@ -1,6 +1,6 @@
 import {
   type AcceptanceCriterion,
-  type BlockType,
+  type ServiceFrameType,
   type BlueprintModule,
   type BlueprintService,
   type BlueprintVersion,
@@ -64,9 +64,9 @@ export function asString(value: unknown): string | undefined {
 const MAX_MODULES = 40
 const MAX_REFERENCES = 40
 
-// The board frame types a service may present as. Kept in lockstep with
-// @cat-factory/contracts `blockTypeSchema`.
-const BLOCK_TYPES: readonly BlockType[] = [
+// The board frame types a blueprint's service may present as: a subset of
+// @cat-factory/contracts `serviceFrameTypeSchema`.
+const BLOCK_TYPES: readonly ServiceFrameType[] = [
   'frontend',
   'service',
   'api',
@@ -118,7 +118,7 @@ export function coerceBlueprintService(
       : root
   const name = asString(obj.name) ?? asString(fallbackName)
   if (!name) return null
-  const type = BLOCK_TYPES.includes(obj.type as BlockType) ? (obj.type as BlockType) : 'service'
+  const type = BLOCK_TYPES.find((candidate) => candidate === obj.type) ?? 'service'
   const modules = (Array.isArray(obj.modules) ? obj.modules : [])
     .map(coerceModule)
     .filter((m): m is BlueprintModule => m !== null)

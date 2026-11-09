@@ -1,10 +1,11 @@
 import type {
   Block,
+  ProjectRepository,
   ServiceRepository,
   WorkspaceMount,
   WorkspaceMountRepository,
 } from '@cat-factory/kernel'
-import { applyMountLayout } from '@cat-factory/kernel'
+import { applyMountLayout, subjectsOwningRoots } from '@cat-factory/kernel'
 
 /**
  * The mount-projection reads: resolve THIS board's layout override for a service frame, and
@@ -19,6 +20,7 @@ import { applyMountLayout } from '@cat-factory/kernel'
 export interface MountProjectionDeps {
   /** Optional: in-org sharing unwired means every block projects as itself. */
   serviceRepository?: ServiceRepository
+  projectRepository?: ProjectRepository
   workspaceMountRepository?: WorkspaceMountRepository
 }
 
@@ -30,10 +32,9 @@ export function createMountProjection(deps: MountProjectionDeps) {
    * every frame-returning read must project through. Costs no query for a non-frame.
    */
   async function frameMount(workspaceId: string, block: Block): Promise<WorkspaceMount | null> {
-    if (block.level !== 'frame') return null
-    const services = deps.serviceRepository
+    if (block.level !== 'frame' && block.level !== 'project') return null
     const mounts = deps.workspaceMountRepository
-    if (!services || !mounts) return null
+    if (!mounts) return null
     // A frame block id does NOT uniquely identify a service: every seeded board carries the same
     // ids (`blk_auth`, …), so `getByFrameBlock` answers with an arbitrary one of them. Paired with
     // `mounts.get(thisWorkspace, thatServiceId)` that reads as "this frame has no mount here" on a
@@ -41,9 +42,9 @@ export function createMountProjection(deps: MountProjectionDeps) {
     // READ overrides with this board's mount (`WorkspaceService.composeBoard`), silently, in the
     // one direction that loses the write. So resolve the candidates for this frame id and keep the
     // one mounted HERE: two batched queries, no per-candidate round-trip.
-    const candidates = await services.listByFrameBlocks([block.id])
+    const candidates = await subjectsOwningRoots([block], deps)
     if (candidates.length === 0) return null
-    const candidateIds = new Set(candidates.map((s) => s.id))
+    const candidateIds = new Set(candidates.map((s) => s.subjectId))
     // Intersect from THIS board's mounts rather than from the candidates' mounts. Both name the
     // same row, but `listByFrameBlocks` is not account-scoped — a colliding seeded id in another
     // org rides the candidate list — so asking for those services' mounts would hand a
@@ -51,7 +52,7 @@ export function createMountProjection(deps: MountProjectionDeps) {
     // such a call CLOSED: every frame edit on the board would 404 rather than degrade. Keyed on
     // the acting workspace, this read is scoped by construction and bounded by this board.
     const mounted = await mounts.listByWorkspace(workspaceId)
-    return mounted.find((m) => candidateIds.has(m.serviceId)) ?? null
+    return mounted.find((m) => candidateIds.has(m.subjectId)) ?? null
   }
 
   /**

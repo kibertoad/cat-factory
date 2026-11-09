@@ -24,7 +24,7 @@ function makeScan(initial: Block[]): {
     get: async (_ws: string, id: string) => rows.get(id) ?? null,
     findById: async (id: string) => {
       const block = rows.get(id)
-      return block ? { workspaceId: WS, serviceId: null, block } : null
+      return block ? { workspaceId: WS, ownerId: null, block } : null
     },
     listByWorkspace: async (_ws: string) => {
       listCount += 1
@@ -37,7 +37,7 @@ function makeScan(initial: Block[]): {
       const cur = rows.get(id)
       if (cur) rows.set(id, { ...cur, ...patch })
     },
-    setService: async () => {},
+    setOwner: async () => {},
     deleteMany: async () => {},
   }
 

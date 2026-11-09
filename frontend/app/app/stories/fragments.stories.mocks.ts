@@ -3,7 +3,7 @@
 // because no panel renders them. Below it, the fragments the library manager curates: a board's
 // and an account's own tiers, the repositories they sync from, and the catalog they merge into.
 import type { FragmentSource, PromptFragment, ResolvedFragment } from '@cat-factory/contracts'
-import type { BlockType } from '~/types/domain'
+import type { ServiceFrameType } from '~/types/domain'
 import { STORY_WORKSPACE_ID } from './workspace'
 
 function fragment(
@@ -11,7 +11,7 @@ function fragment(
   title: string,
   category: string,
   summary: string,
-  blockTypes?: BlockType[],
+  blockTypes?: ServiceFrameType[],
 ): ResolvedFragment {
   return {
     tier: 'builtin',

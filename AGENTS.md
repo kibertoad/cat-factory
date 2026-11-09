@@ -332,7 +332,7 @@ BANNED**, in the service layer, the facade repos, and the HTTP layer alike. Inst
 - **Hoist invariant reads out of the loop.**
 - **Push counts/aggregates into SQL** (`COUNT`/`SUM`/`GROUP BY`), never reduce rows in JS.
 
-Good citizens: `WorkspaceMountRepository.countByServiceIds`, `ServiceRepository.listByIds`,
+Good citizens: `WorkspaceMountRepository.countBySubjectIds`, `ServiceRepository.listByIds`,
 `TaskRepository.listByRefs`, `BoardService.removeBlock`.
 
 ## Logging goes through the kernel `Logger` port, never a local logger interface

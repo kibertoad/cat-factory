@@ -1182,3 +1182,32 @@ export {
 } from './domain/notification-audience.js'
 
 export { type TaskContextView, renderTaskContext } from './shared/tasks-prompt.logic.js'
+
+// Research definitions a deployment registers in code, and the content hash a project pins.
+export {
+  ResearchDefinitionRegistry,
+  researchDefinitionContentHash,
+} from './domain/research-definition-registry.js'
+
+// The account, workspace and project tiers of the findings-storage policy, and where a revision
+// body is placed under it.
+export {
+  type EffectiveFindingsStoragePolicy,
+  type FindingsPlacement,
+  placeFindingsBody,
+  resolveFindingsStoragePolicy,
+} from './domain/findings-storage-policy.js'
+
+// Project kinds a deployment registers in code, and the mount-subject reads that resolve a
+// mounted service or project to its root block.
+export {
+  ProjectKindRegistry,
+  defaultProjectKindRegistry,
+  projectKindTaskType,
+} from './domain/project-kind-registry.js'
+export {
+  type MountSubjectReaders,
+  type MountSubjectRoot,
+  rootBlocksOfMounts,
+  subjectsOwningRoots,
+} from './domain/mount-subjects.js'

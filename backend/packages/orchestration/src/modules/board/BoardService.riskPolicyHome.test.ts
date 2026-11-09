@@ -127,7 +127,7 @@ describe('BoardService: a preset decision is made in the workspace that HOMES th
         findById: async (id: string) => {
           for (const [ws, blocks] of Object.entries(rows)) {
             const found = blocks.find((b) => b.id === id)
-            if (found) return { workspaceId: ws, serviceId: `svc_${ws}`, block: found }
+            if (found) return { workspaceId: ws, ownerId: `svc_${ws}`, block: found }
           }
           return null
         },
@@ -143,7 +143,7 @@ describe('BoardService: a preset decision is made in the workspace that HOMES th
         deleteMany: async (ws: string, ids: string[]) => {
           rows[ws] = (rows[ws] ?? []).filter((b) => !ids.includes(b.id))
         },
-        setService: async () => {},
+        setOwner: async () => {},
       },
       executionRepository: {
         getByBlock: async () => null,
@@ -154,7 +154,9 @@ describe('BoardService: a preset decision is made in the workspace that HOMES th
       workspaceMountRepository: {
         // SRC's board mounts DEST's service, which is what makes `frame_dest` reachable from it.
         get: async (ws: string, serviceId: string) =>
-          ws === SRC && serviceId === `svc_${DEST}` ? { workspaceId: ws, serviceId } : null,
+          ws === SRC && serviceId === `svc_${DEST}`
+            ? { workspaceId: ws, subjectId: serviceId }
+            : null,
         listWorkspaceIdsMountingBlock: async () => [],
       },
       riskPolicyRepository: {

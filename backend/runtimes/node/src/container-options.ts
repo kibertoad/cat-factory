@@ -56,6 +56,8 @@ import {
   type PromptFragmentSource,
   type InlineUseCaseRegistry,
   type TaskTypeRegistry,
+  type ProjectKindRegistry,
+  type ProjectKindSource,
   type ToolSecretResolver,
   type VcsProviderRegistry,
 } from '@cat-factory/kernel'
@@ -433,6 +435,14 @@ export interface NodeContainerOptions {
    * pre-loaded one to assert the seam is symmetric.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * The app-owned project-kind registry. Rides its own option like `taskTypeRegistry`; defaults
+   * (inside `createCore`) to the empty `defaultProjectKindRegistry()`. A deployment registers the
+   * project kinds it offers on it by reference.
+   */
+  projectKindRegistry?: ProjectKindRegistry
+  /** Where project kinds are read from; set only by a mothership-mode local node. */
+  projectKindSource?: ProjectKindSource
   /**
    * The app-owned INLINE USE-CASE registry (the deployment's non-container model operations).
    * Rides its own option like `taskTypeRegistry`; defaults (inside `createCore`) to
