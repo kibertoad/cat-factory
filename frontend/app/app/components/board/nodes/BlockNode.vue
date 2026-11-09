@@ -5,6 +5,7 @@ import DecisionBadge from './DecisionBadge.vue'
 import FrameSwimlanes from './FrameSwimlanes.vue'
 import InitiativeCard from './InitiativeCard.vue'
 import ResizeGrips from './ResizeGrips.vue'
+import ProjectServicesModal from '~/components/projects/ProjectServicesModal.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import AdoptionReviewModal from '~/components/bootstrap/AdoptionReviewModal.vue'
@@ -26,6 +27,7 @@ const tasks = useTasksStore()
 const documents = useDocumentsStore()
 const agentRuns = useAgentRunsStore()
 const services = useServicesStore()
+const projects = useProjectsStore()
 const reviews = useReviewStage()
 const access = useWorkspaceAccess()
 const uiMode = useUiModeStore()
@@ -42,7 +44,21 @@ const block = computed<Block | undefined>(() => board.getBlock(props.id))
  * SERVICE that only its own card can state: nothing else on the board says the work lands in a
  * repo another board also drives.
  */
-const isShared = computed(() => services.isSharedFrame(props.id))
+// A project root is drawn like a service frame (title, status, task swimlanes) but carries none
+// of a service's repository-bound actions: it has no repo of its own.
+const isProject = computed(() => block.value?.level === 'project')
+const project = computed(() => (isProject.value ? projects.byRootBlock[props.id] : undefined))
+const projectKind = computed(() => projects.kindOf(project.value))
+const linkedServices = computed(() =>
+  (project.value?.serviceIds ?? []).map((id) => {
+    const service = services.catalog.find((s) => s.id === id)
+    return { id, title: (service && board.getBlock(service.frameBlockId)?.title) ?? id }
+  }),
+)
+const servicesModalOpen = ref(false)
+const isShared = computed(() =>
+  isProject.value ? projects.isSharedRoot(props.id) : services.isSharedFrame(props.id),
+)
 const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
 
 // ---- this service's children (tasks + modules) -----------------------------
@@ -433,7 +449,9 @@ const ITEM_ICON: Record<string, string | undefined> = {
                     {{ t('board.frame.shared') }}
                   </UBadge>
                 </div>
-                <div class="text-2xs text-muted">{{ t(typeMeta!.labelKey) }}</div>
+                <div class="text-2xs text-muted">
+                  {{ projectKind ? projectKind.label : t(typeMeta!.labelKey) }}
+                </div>
               </div>
             </div>
             <div class="flex items-center gap-1">
@@ -455,7 +473,7 @@ const ITEM_ICON: Record<string, string | undefined> = {
                   @click.stop="addTask"
                 />
                 <IconButton
-                  v-if="tasks.anyOffered"
+                  v-if="tasks.anyOffered && !isProject"
                   class="nodrag"
                   :size="isTouch ? 'sm' : 'xs'"
                   variant="ghost"
@@ -465,7 +483,7 @@ const ITEM_ICON: Record<string, string | undefined> = {
                   @click.stop="createTaskFromIssue"
                 />
                 <IconButton
-                  v-if="documents.connectedDesignSources.length > 0"
+                  v-if="documents.connectedDesignSources.length > 0 && !isProject"
                   class="nodrag"
                   data-testid="frame-start-from-design"
                   :size="isTouch ? 'sm' : 'xs'"
@@ -484,7 +502,7 @@ const ITEM_ICON: Record<string, string | undefined> = {
                      still a block on the board with its own inspector — so what a basic-mode
                      user loses is the ability to author a new one, not sight of one. -->
                 <IconButton
-                  v-if="uiMode.isAdvanced"
+                  v-if="uiMode.isAdvanced && !isProject"
                   class="nodrag"
                   data-testid="frame-add-recurring"
                   :size="isTouch ? 'sm' : 'xs'"
@@ -495,7 +513,7 @@ const ITEM_ICON: Record<string, string | undefined> = {
                   @click.stop="addRecurring"
                 />
                 <IconButton
-                  v-if="uiMode.isAdvanced"
+                  v-if="uiMode.isAdvanced && !isProject"
                   class="nodrag"
                   data-testid="frame-add-initiative"
                   :size="isTouch ? 'sm' : 'xs'"
@@ -511,7 +529,18 @@ const ITEM_ICON: Record<string, string | undefined> = {
                      routes in (a new task, a task from a named ticket, a task from a design) all
                      start from work somebody has already decided to do. -->
                 <IconButton
-                  v-if="tasks.anyOffered && uiRole.fullSurface"
+                  v-if="isProject"
+                  class="nodrag"
+                  data-testid="project-link-services"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-link"
+                  :label="t('projects.linkServices.title')"
+                  @click.stop="servicesModalOpen = true"
+                />
+                <IconButton
+                  v-if="tasks.anyOffered && uiRole.fullSurface && !isProject"
                   class="nodrag"
                   data-testid="frame-hunt-bugs"
                   :size="isTouch ? 'sm' : 'xs'"
@@ -531,6 +560,23 @@ const ITEM_ICON: Record<string, string | undefined> = {
                the canvas answers precisely — and the one people misread, since it counts
                every task ever added to the service rather than the work in flight. What
                stays is what the canvas can't show at a glance. -->
+          <!-- A project's linked services: read-only context for its tasks. -->
+          <div
+            v-if="isProject && linkedServices.length"
+            class="flex flex-wrap items-center gap-1"
+            data-testid="project-linked-services"
+          >
+            <UBadge
+              v-for="service in linkedServices"
+              :key="service.id"
+              color="neutral"
+              variant="subtle"
+              size="sm"
+              icon="i-lucide-box"
+            >
+              {{ service.title }}
+            </UBadge>
+          </div>
           <div
             v-if="modules.length || prTasks"
             class="flex items-center gap-2 text-3xs uppercase tracking-wide text-dimmed"
@@ -588,6 +634,7 @@ const ITEM_ICON: Record<string, string | undefined> = {
     </div>
     <!-- Teleported by UModal, so it renders outside the canvas transform; kept inside the node's
          single root element so the board node stays a one-root component. -->
+    <ProjectServicesModal v-if="project" v-model:open="servicesModalOpen" :project="project" />
     <AdoptionReviewModal
       v-if="reviewOpen && awaitingReview"
       :job="awaitingReview"

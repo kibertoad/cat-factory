@@ -782,7 +782,12 @@
         "tool_server_without_oauth": "This tool server no longer uses OAuth, so there is no connection to finish.",
         "gate_config_fields_invalid": "A gate step's settings are incomplete or hold a value the gate does not accept, usually a required setting with no value. Fill in the step's gate settings in the pipeline, then try again.",
         "approvals_chain_stale": "This pipeline changed after you opened its approval checkpoints, so they no longer line up with its steps. Reload the pipeline and set them again.",
-        "approvals_builtin_checkpoint_locked": "A built-in pipeline keeps the approval checkpoints its catalog definition ships. Clone the pipeline to remove one."
+        "approvals_builtin_checkpoint_locked": "A built-in pipeline keeps the approval checkpoints its catalog definition ships. Clone the pipeline to remove one.",
+        "project_kind_unregistered": "This project's kind is no longer offered by this deployment, so it cannot take new work. Ask your deployment operator to register the kind again.",
+        "task_type_not_offered_by_project": "This project's kind does not take tasks of this type. Pick one of the types the form offers for it.",
+        "project_has_no_writable_repo": "A step of this run needs a repository to write to, and a project has none: its linked services' repositories are read-only context. Pick a pipeline that only reads and reports.",
+        "project_service_link_invalid": "One of the linked services no longer exists or belongs to another organization. Reload the board and pick the linked services again.",
+        "project_has_unfinished_tasks": "This project still has tasks that have not finished. Finish or delete them first."
       }
     },
     "action": {
@@ -9519,6 +9524,41 @@
       "high": "High",
       "xhigh": "Extra high",
       "max": "Max"
+    }
+  },
+  "projects": {
+    "common": {
+      "cancel": "Cancel"
+    },
+    "toolbar": {
+      "menu": "Projects",
+      "newProject": "New project…",
+      "kindsUnavailable": "Project kinds could not be loaded"
+    },
+    "create": {
+      "title": "New project",
+      "description": "A project groups work that belongs to no single service. It lives on this board and can be added to other boards in your organization.",
+      "kindLabel": "Kind",
+      "titleLabel": "Title",
+      "titlePlaceholder": "For example: Vendor API research",
+      "descriptionLabel": "Description",
+      "servicesLabel": "Linked services",
+      "servicesHelp": "Its tasks can read these services' repositories as context.",
+      "submit": "Create project",
+      "created": "Project {title} created",
+      "failed": "Could not create the project"
+    },
+    "linkServices": {
+      "title": "Linked services",
+      "description": "The services whose repositories this project's tasks can read as context.",
+      "servicesLabel": "Services",
+      "save": "Save",
+      "saved": "Linked services updated",
+      "failed": "Could not update the linked services"
+    },
+    "mount": {
+      "added": "Project {title} added to this board",
+      "failed": "Could not add the project"
     }
   }
 }

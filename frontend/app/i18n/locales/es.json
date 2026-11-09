@@ -707,7 +707,12 @@
         "tool_server_without_oauth": "Este servidor de herramientas ya no usa OAuth, así que no hay ninguna conexión que completar.",
         "gate_config_fields_invalid": "Los ajustes de la compuerta de un paso están incompletos o tienen un valor que la compuerta no acepta, normalmente un ajuste obligatorio sin valor. Completa los ajustes de la compuerta del paso en el pipeline y vuelve a intentarlo.",
         "approvals_chain_stale": "Este pipeline cambió después de que abrieras sus puntos de aprobación, así que ya no coinciden con sus pasos. Vuelve a cargar el pipeline y configúralos de nuevo.",
-        "approvals_builtin_checkpoint_locked": "Un pipeline integrado conserva los puntos de aprobación que incluye su definición del catálogo. Clona el pipeline para quitar uno."
+        "approvals_builtin_checkpoint_locked": "Un pipeline integrado conserva los puntos de aprobación que incluye su definición del catálogo. Clona el pipeline para quitar uno.",
+        "project_kind_unregistered": "Esta implementación ya no ofrece el tipo de este proyecto, así que no puede aceptar trabajo nuevo. Pide al operador de tu implementación que vuelva a registrar el tipo.",
+        "task_type_not_offered_by_project": "El tipo de este proyecto no acepta tareas de este tipo. Elige uno de los tipos que el formulario ofrece para él.",
+        "project_has_no_writable_repo": "Un paso de esta ejecución necesita un repositorio en el que escribir, y un proyecto no tiene ninguno: los repositorios de sus servicios vinculados son contexto de solo lectura. Elige un pipeline que solo lea e informe.",
+        "project_service_link_invalid": "Uno de los servicios vinculados ya no existe o pertenece a otra organización. Recarga el tablero y vuelve a elegir los servicios vinculados.",
+        "project_has_unfinished_tasks": "Este proyecto aún tiene tareas sin terminar. Termínalas o elimínalas primero."
       }
     },
     "action": {
@@ -9185,6 +9190,41 @@
       "high": "Alto",
       "xhigh": "Muy alto",
       "max": "Máximo"
+    }
+  },
+  "projects": {
+    "common": {
+      "cancel": "Cancelar"
+    },
+    "toolbar": {
+      "menu": "Proyectos",
+      "newProject": "Nuevo proyecto…",
+      "kindsUnavailable": "No se han podido cargar los tipos de proyecto"
+    },
+    "create": {
+      "title": "Nuevo proyecto",
+      "description": "Un proyecto agrupa trabajo que no pertenece a ningún servicio concreto. Vive en este tablero y se puede añadir a otros tableros de tu organización.",
+      "kindLabel": "Tipo",
+      "titleLabel": "Título",
+      "titlePlaceholder": "Por ejemplo: investigación de la API del proveedor",
+      "descriptionLabel": "Descripción",
+      "servicesLabel": "Servicios vinculados",
+      "servicesHelp": "Sus tareas pueden leer los repositorios de estos servicios como contexto.",
+      "submit": "Crear proyecto",
+      "created": "Proyecto {title} creado",
+      "failed": "No se ha podido crear el proyecto"
+    },
+    "linkServices": {
+      "title": "Servicios vinculados",
+      "description": "Los servicios cuyos repositorios pueden leer como contexto las tareas de este proyecto.",
+      "servicesLabel": "Servicios",
+      "save": "Guardar",
+      "saved": "Servicios vinculados actualizados",
+      "failed": "No se han podido actualizar los servicios vinculados"
+    },
+    "mount": {
+      "added": "Proyecto {title} añadido a este tablero",
+      "failed": "No se ha podido añadir el proyecto"
     }
   }
 }

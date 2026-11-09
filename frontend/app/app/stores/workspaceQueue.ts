@@ -36,7 +36,7 @@ export const useWorkspaceQueueStore = defineStore('workspaceQueue', () => {
    */
   const classified = computed(() => {
     const byId = new Map<string, ClassifiedEntry>()
-    for (const frame of board.frames) {
+    for (const frame of board.canvasRoots) {
       board
         .allTasksUnder(frame.id)
         .forEach((task, order) => byId.set(task.id, classify(task, order)))
@@ -102,7 +102,7 @@ export const useWorkspaceQueueStore = defineStore('workspaceQueue', () => {
   /** Everything the queue lists, before the filter. The attention counter reads this, unfiltered. */
   const entries = computed<QueueEntry[]>(() => {
     const out: QueueEntry[] = []
-    for (const frame of board.frames) {
+    for (const frame of board.canvasRoots) {
       const service = { id: frame.id, title: frame.title }
       // `classified` walks these same frames and tasks, so every one of them has a verdict.
       for (const task of board.allTasksUnder(frame.id)) {
