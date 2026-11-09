@@ -8,6 +8,7 @@ import {
   type FoundationalServiceRegistry,
   type InlineUseCaseRegistry,
   type TaskTypeRegistry,
+  type ProjectKindRegistry,
   DEFAULT_APP_CACHES_PROFILE,
   NodeRealtimeHub,
   backfillDeclaredSeeds,
@@ -102,6 +103,12 @@ export interface StartLocalOptions {
    * picklist only.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * App-owned DI seam for project kinds: a deployment news a `defaultProjectKindRegistry()`,
+   * registers its kinds on it, and passes it here. Threaded to `buildLocalContainer` on both the
+   * Postgres and mothership paths. Absent means no project kinds.
+   */
+  projectKindRegistry?: ProjectKindRegistry
   /**
    * App-owned DI seam for INLINE USE CASES: a deployment news a `defaultInlineUseCaseRegistry()`,
    * registers its non-container model operations on it, and passes it here. Threaded through to
@@ -423,6 +430,7 @@ async function bootLocal(
     agentKindRegistry: options.agentKindRegistry,
     initiativePresetRegistry: options.initiativePresetRegistry,
     taskTypeRegistry: options.taskTypeRegistry,
+    projectKindRegistry: options.projectKindRegistry,
     inlineUseCaseRegistry: options.inlineUseCaseRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
@@ -562,6 +570,7 @@ async function startLocalMothership(
     backendRegistries,
     defaultModelPresetId,
     taskTypeRegistry,
+    projectKindRegistry,
     inlineUseCaseRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
@@ -598,6 +607,7 @@ async function startLocalMothership(
     backendRegistries,
     defaultModelPresetId,
     taskTypeRegistry,
+    projectKindRegistry,
     inlineUseCaseRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,

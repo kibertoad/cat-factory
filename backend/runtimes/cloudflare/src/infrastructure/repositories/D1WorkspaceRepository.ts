@@ -19,6 +19,11 @@ import { chunkForIn } from './chunk'
 // completeness spec can't see these facade-only tables, so this is what closes that gap.
 export const D1_ONLY_WORKSPACE_SCOPED_TABLES = ['live_containers'] as const
 
+/** The projects a workspace homes: their root block lives on it, in the workspace's own account. */
+const HOMED_PROJECTS = `SELECT id FROM projects
+  WHERE root_block_id IN (SELECT id FROM blocks WHERE workspace_id = ?)
+    AND account_id IS (SELECT account_id FROM workspaces WHERE id = ?)`
+
 export class D1WorkspaceRepository implements WorkspaceRepository {
   private readonly db: D1Database
 
@@ -230,7 +235,27 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
                (SELECT id FROM blocks WHERE workspace_id = ?))`,
         )
         .bind(id),
-      // This workspace's OWN mounts of services homed elsewhere (shared services it mounted).
+      // The same for the projects this workspace homes (its root block lives here), then their
+      // links and rows. Scoped to the board's own account too, because block ids are only unique
+      // within a workspace.
+      this.db
+        .prepare(
+          `DELETE FROM workspace_mounts WHERE subject_kind = 'project' AND subject_id IN (${HOMED_PROJECTS})`,
+        )
+        .bind(id, id),
+      this.db
+        .prepare(`DELETE FROM project_service_links WHERE project_id IN (${HOMED_PROJECTS})`)
+        .bind(id, id),
+      this.db.prepare(`DELETE FROM projects WHERE id IN (${HOMED_PROJECTS})`).bind(id, id),
+      // Links from surviving projects to the services this workspace homes, which go below.
+      this.db
+        .prepare(
+          `DELETE FROM project_service_links WHERE service_id IN
+             (SELECT id FROM services WHERE frame_block_id IN
+               (SELECT id FROM blocks WHERE workspace_id = ?))`,
+        )
+        .bind(id),
+      // This workspace's OWN mounts of subjects homed elsewhere (shared services and projects).
       this.db.prepare('DELETE FROM workspace_mounts WHERE workspace_id = ?').bind(id),
       // The account-owned services this workspace homes — the repo↔frame link that must be freed.
       // MUST precede the `blocks` delete in the bulk list (this subquery reads `blocks`).

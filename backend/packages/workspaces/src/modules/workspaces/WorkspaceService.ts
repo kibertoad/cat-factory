@@ -1,6 +1,9 @@
 import type { CreateWorkspaceInput } from '@cat-factory/contracts'
 import {
   applyMountLayout,
+  rootBlocksOfMounts,
+  subjectsOwningRoots,
+  type MountSubjectReaders,
   describeError,
   FINAL_SPEND_FOLD_BUDGET_MS,
   finalSpendFoldPlan,
@@ -46,6 +49,7 @@ import type {
   WorkspaceAccessCacheValue,
   WorkspaceMemberRepository,
   WorkspaceMountRepository,
+  ProjectRepository,
   WorkspaceRepository,
   WorkspaceVisibility,
 } from '@cat-factory/kernel'
@@ -80,6 +84,8 @@ export interface WorkspaceServiceDependencies {
    */
   serviceRepository?: ServiceRepository
   workspaceMountRepository?: WorkspaceMountRepository
+  /** Account-owned projects, mounted onto boards like services. */
+  projectRepository?: ProjectRepository
   /**
    * Workspace-level RBAC roster (workspace-rbac initiative). When wired, `create` seeds an
    * admin member row for the creator (auto-enroll) and {@link WorkspaceService.memberRoleOf}
@@ -180,6 +186,7 @@ export class WorkspaceService {
   private readonly clock: Clock
   private readonly serviceRepository?: ServiceRepository
   private readonly workspaceMountRepository?: WorkspaceMountRepository
+  private readonly projectRepository?: ProjectRepository
   private readonly workspaceMemberRepository?: WorkspaceMemberRepository
   private readonly pipelineRegistry?: PipelineRegistry
   private readonly riskPolicyRepository?: RiskPolicyRepository
@@ -204,6 +211,7 @@ export class WorkspaceService {
     clock,
     serviceRepository,
     workspaceMountRepository,
+    projectRepository,
     workspaceMemberRepository,
     pipelineRegistry,
     riskPolicyRepository,
@@ -224,6 +232,7 @@ export class WorkspaceService {
     this.clock = clock
     this.serviceRepository = serviceRepository
     this.workspaceMountRepository = workspaceMountRepository
+    this.projectRepository = projectRepository
     this.pipelineRegistry = pipelineRegistry
     this.riskPolicyRepository = riskPolicyRepository
     this.workspaceMemberRepository = workspaceMemberRepository
@@ -573,6 +582,14 @@ export class WorkspaceService {
     }
   }
 
+  /** The service and project reads that resolve a mounted subject to its root block. */
+  private subjectReaders(): MountSubjectReaders {
+    return {
+      ...(this.serviceRepository ? { serviceRepository: this.serviceRepository } : {}),
+      ...(this.projectRepository ? { projectRepository: this.projectRepository } : {}),
+    }
+  }
+
   /**
    * Compose a workspace's board from the services it mounts: its own (locally created)
    * blocks plus the full subtree of any service mounted from another workspace in the
@@ -588,22 +605,21 @@ export class WorkspaceService {
 
     const byId = new Map(localBlocks.map((b) => [b.id, b]))
     const localIds = new Set(byId.keys())
-    // The per-workspace layout override for each mounted service's frame.
+    // The per-workspace layout override for each mounted subject's root.
     const frameLayout = new Map<string, WorkspaceMount>()
-    // Resolve every mounted service in one batched query (not a `get` per mount).
-    const services = await this.serviceRepository.listByIds(mounts.map((m) => m.subjectId))
-    const frameOf = new Map(services.map((s) => [s.id, s.frameBlockId]))
-    const foreignServiceIds: string[] = []
+    // Resolve every mounted subject's root in one batched query per subject kind.
+    const rootOf = await rootBlocksOfMounts(mounts, this.subjectReaders())
+    const foreignOwnerIds: string[] = []
     for (const mount of mounts) {
-      const frameBlockId = frameOf.get(mount.subjectId)
-      if (!frameBlockId) continue
-      frameLayout.set(frameBlockId, mount)
-      // Pull in the subtree only for services homed in ANOTHER workspace — a local service's
+      const rootBlockId = rootOf.get(mount.subjectId)
+      if (!rootBlockId) continue
+      frameLayout.set(rootBlockId, mount)
+      // Pull in the subtree only for subjects homed in ANOTHER workspace: a local subject's
       // blocks are already in `localBlocks`.
-      if (!localIds.has(frameBlockId)) foreignServiceIds.push(mount.subjectId)
+      if (!localIds.has(rootBlockId)) foreignOwnerIds.push(mount.subjectId)
     }
-    // One batched query for all foreign subtrees (not one per service).
-    for (const b of await this.blockRepository.listByOwners(foreignServiceIds)) {
+    // One batched query for all foreign subtrees (not one per subject).
+    for (const b of await this.blockRepository.listByOwners(foreignOwnerIds)) {
       if (!byId.has(b.id)) byId.set(b.id, b)
     }
 
@@ -825,13 +841,22 @@ export class WorkspaceService {
   private async planSharedServiceRehome(id: string): Promise<MountRehome[]> {
     if (!this.serviceRepository || !this.workspaceMountRepository) return []
     const blocks = await this.blockRepository.listByWorkspace(id)
-    const frameIds = blocks
-      .filter((b) => b.level === 'frame' && b.parentId === null)
-      .map((b) => b.id)
-    if (frameIds.length === 0) return []
-    const homed = await this.serviceRepository.listByFrameBlocks(frameIds)
+    const roots = blocks.filter(
+      (b) => (b.level === 'frame' || b.level === 'project') && b.parentId === null,
+    )
+    if (roots.length === 0) return []
+    // Root block ids are not unique across boards (every seeded board carries `blk_auth`), so a
+    // subject is homed here only when THIS board's root row carries its owner stamp. That stamp is
+    // also what the re-home moves, and it holds whether or not this board still mounts the subject.
+    const homedHere = new Set<string>()
+    for (const row of await this.blockRepository.findByIds(roots.map((b) => b.id))) {
+      if (row.workspaceId === id && row.ownerId) homedHere.add(row.ownerId)
+    }
+    const homed = (await subjectsOwningRoots(roots, this.subjectReaders()))
+      .filter((s) => homedHere.has(s.subjectId))
+      .map((s) => ({ id: s.subjectId }))
     if (homed.length === 0) return []
-    // One batched mount read for every homed service (not a listByService per service).
+    // One batched mount read for every homed subject (not one per subject).
     const mounts = await this.workspaceMountRepository.listBySubjectIds(homed.map((s) => s.id))
     const externalByService = new Map<string, WorkspaceMount[]>()
     for (const m of mounts) {

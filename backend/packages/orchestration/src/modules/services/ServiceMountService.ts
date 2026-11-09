@@ -10,6 +10,7 @@ import {
   type ServiceRepository,
   type WorkspaceMountRepository,
   type WorkspaceRepository,
+  NotFoundError,
   ValidationError,
   assertFound,
   requireWorkspace,
@@ -89,6 +90,7 @@ export class ServiceMountService {
     if (existing) return existing
     const mount: WorkspaceMount = {
       workspaceId,
+      subjectKind: 'service',
       subjectId: serviceId,
       position: input.position ?? this.defaultPosition(await this.listMounts(workspaceId)),
       size: null,
@@ -101,6 +103,7 @@ export class ServiceMountService {
   /** Remove a service from a workspace board (does NOT delete the shared service). */
   async unmount(workspaceId: string, serviceId: string): Promise<void> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
+    await this.refuseNonServiceMount(workspaceId, serviceId)
     await this.workspaceMountRepository.remove(workspaceId, serviceId)
   }
 
@@ -111,17 +114,27 @@ export class ServiceMountService {
     patch: UpdateMountInput,
   ): Promise<WorkspaceMount> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
-    assertFound(
+    const mount = assertFound(
       await this.workspaceMountRepository.get(workspaceId, serviceId),
       'WorkspaceMount',
       serviceId,
     )
+    if (mount.subjectKind !== 'service') throw new NotFoundError('WorkspaceMount', serviceId)
     await this.workspaceMountRepository.update(workspaceId, serviceId, patch)
     return assertFound(
       await this.workspaceMountRepository.get(workspaceId, serviceId),
       'WorkspaceMount',
       serviceId,
     )
+  }
+
+  /**
+   * The service routes act on service mounts only. A project's mount belongs to ProjectService,
+   * which refuses to unmount a project from its home board.
+   */
+  private async refuseNonServiceMount(workspaceId: string, subjectId: string): Promise<void> {
+    const mount = await this.workspaceMountRepository.get(workspaceId, subjectId)
+    if (mount && mount.subjectKind !== 'service') throw new NotFoundError('Service', subjectId)
   }
 
   private defaultPosition(existing: WorkspaceMount[]): { x: number; y: number } {

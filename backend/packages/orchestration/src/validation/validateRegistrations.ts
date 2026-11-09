@@ -2,6 +2,7 @@ import type { AgentKindRegistry } from '@cat-factory/agents'
 import { INLINE_ENGINE_SYSTEM_PROMPTS, runsInContainer, surfaceTraits } from '@cat-factory/agents'
 import { checkBinaryGenerators } from './validateBinaryGenerators.js'
 import { inlineUseCaseProblems } from './validateInlineUseCases.js'
+import { projectKindProblems } from './validateProjectKinds.js'
 import { descriptorFormProblems } from './validateDescriptorForms.js'
 import type {
   AgentKind,
@@ -17,6 +18,7 @@ import type {
   PromptFragmentRegistry,
   PromptFragmentSource,
   TaskTypeRegistry,
+  ProjectKindRegistry,
 } from '@cat-factory/kernel'
 import {
   CI_FIXER_AGENT_KIND,
@@ -189,6 +191,8 @@ interface ValidatedRegistries {
    * a bad `formPanel`, or a `defaultPipelineId` naming a nonexistent pipeline fails at boot.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /** The app-owned project-kind registry to validate. Optional: omitted, no project-kind checks. */
+  projectKindRegistry?: ProjectKindRegistry
   /**
    * The app-owned DELEGATED-EXECUTOR registry to validate (the facade's injected instance, the
    * SAME one it threads through `CoreDependencies.delegatedExecutorRegistry`). Optional: when
@@ -395,6 +399,15 @@ export function collectRegistrationProblems(
 
   // 5. Custom task types (only when a task-type registry is supplied).
   problems.push(...checkCustomTaskTypes(opts))
+  if (opts.registries.projectKindRegistry) {
+    problems.push(
+      ...projectKindProblems(
+        opts.registries.projectKindRegistry,
+        opts.registries.taskTypeRegistry,
+        new Set(seedPipelines(opts.registries.pipelineRegistry).map((p) => p.id)),
+      ),
+    )
+  }
 
   // 5b/5c. The OTHER two surfaces that declare a form over the same vocabulary, held to the same
   //        bar by the same checker: an initiative preset's create form, and a registered gate's

@@ -20,6 +20,7 @@ import { consensusGroupSchema } from './consensus.js'
 import { serviceFragmentDefaultsSchema } from './service-fragment-defaults.js'
 import { pipelineScheduleSchema } from './recurring.js'
 import { serviceSchema, workspaceMountSchema } from './services.js'
+import { projectKindDescriptorSchema, projectSchema } from './projects.js'
 import { trackerSettingsSchema } from './tracker.js'
 import { workspaceSettingsSchema } from './workspace-settings.js'
 import { agentKindVariantSchema, customAgentKindSchema } from './agent-presentation.js'
@@ -214,6 +215,17 @@ export const workspaceSnapshotSchema = v.object({
    */
   mounts: v.optional(v.array(workspaceMountSchema)),
   serviceCatalog: v.optional(v.array(serviceSchema)),
+  /**
+   * The org's projects the board can mount from, each with `mountCount`, and the project kinds
+   * the deployment registers. Attached by the facade when projects are wired.
+   */
+  projectCatalog: v.optional(v.array(projectSchema)),
+  projectKinds: v.optional(v.array(projectKindDescriptorSchema)),
+  /**
+   * True when projects are wired but their kinds could not be read (a mothership-mode node whose
+   * mothership did not answer), so an empty or absent `projectKinds` is not read as "none".
+   */
+  projectKindsUnavailable: v.optional(v.boolean()),
   /**
    * Archived service frames (`archived === true`) — hidden from `blocks` but surfaced here so
    * the SPA can list them in an "Archived services" panel and restore any one (no expiry). Only

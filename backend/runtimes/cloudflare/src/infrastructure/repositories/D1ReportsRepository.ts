@@ -41,6 +41,12 @@ const SERVICE_LABELS = `SELECT s.id AS service_id, MIN(b.title) AS title
                         GROUP BY s.id`
 
 /**
+ * The `service` dimension's key: the run's owner, unless that owner is a project, whose spend
+ * belongs to no service. Needs `projects p` joined on `ar.owner_id` (a primary key, so 1:1).
+ */
+const SERVICE_KEY = "CASE WHEN p.id IS NULL THEN COALESCE(ar.owner_id, '') ELSE '' END"
+
+/**
  * The tracker ticket a block is linked to, PRE-AGGREGATED to exactly one row per
  * `(workspace_id, linked_block_id)`.
  *
@@ -87,8 +93,9 @@ const SPEND_DIMENSIONS: Record<
   },
   service: {
     joins: `LEFT JOIN agent_runs ar ON ar.workspace_id = tu.workspace_id AND ar.id = tu.execution_id
-            LEFT JOIN (${SERVICE_LABELS}) sl ON sl.service_id = ar.owner_id`,
-    key: "COALESCE(ar.owner_id, '')",
+            LEFT JOIN (${SERVICE_LABELS}) sl ON sl.service_id = ar.owner_id
+            LEFT JOIN projects p ON p.id = ar.owner_id`,
+    key: SERVICE_KEY,
     label: 'MAX(sl.title)',
   },
   taskType: {
@@ -139,8 +146,9 @@ const ACTIVITY_DIMENSIONS: Record<
     label: 'MAX(w.name)',
   },
   service: {
-    joins: `LEFT JOIN (${SERVICE_LABELS}) sl ON sl.service_id = ar.owner_id`,
-    key: "COALESCE(ar.owner_id, '')",
+    joins: `LEFT JOIN (${SERVICE_LABELS}) sl ON sl.service_id = ar.owner_id
+            LEFT JOIN projects p ON p.id = ar.owner_id`,
+    key: SERVICE_KEY,
     label: 'MAX(sl.title)',
   },
   repo: {

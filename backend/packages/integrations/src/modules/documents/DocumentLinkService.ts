@@ -9,7 +9,7 @@ import type {
   DocumentOrigin,
   PlanFrame,
 } from '@cat-factory/kernel'
-import type { BlockEditAuthority } from '@cat-factory/contracts'
+import { type BlockEditAuthority, isServiceFrameType } from '@cat-factory/contracts'
 import { assertFound, ConflictError, ValidationError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
@@ -80,7 +80,7 @@ export class DocumentLinkService {
       'Block',
       frameId,
     )
-    if (frame.level !== 'frame') {
+    if (frame.level !== 'frame' || !isServiceFrameType(frame.type)) {
       throw new ValidationError('Document structure can only be planned into a service frame', {
         reason: 'plan_target_not_a_frame',
       })

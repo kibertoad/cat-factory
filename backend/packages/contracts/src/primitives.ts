@@ -45,7 +45,8 @@ export const namespacedIdSchema = v.pipe(
   ),
 )
 
-export const blockTypeSchema = v.picklist([
+/** The types a SERVICE frame (and the modules and tasks beneath it) can carry. */
+export const SERVICE_FRAME_TYPES = [
   'frontend',
   'service',
   'library',
@@ -56,8 +57,29 @@ export const blockTypeSchema = v.picklist([
   'integration',
   'external',
   'environment',
-])
+] as const
+export const serviceFrameTypeSchema = v.picklist(SERVICE_FRAME_TYPES)
+export type ServiceFrameType = v.InferOutput<typeof serviceFrameTypeSchema>
+
+/**
+ * Every block type: a service frame's types plus `project`, the type of a project's root block
+ * and of the blocks beneath it. Surfaces that only ever describe a service frame (the public
+ * service projection, blueprints, fragment applicability, frame creation) take
+ * {@link serviceFrameTypeSchema} instead, so a project can never be minted or listed through them.
+ */
+export const blockTypeSchema = v.picklist([...SERVICE_FRAME_TYPES, 'project'])
 export type BlockType = v.InferOutput<typeof blockTypeSchema>
+
+/** Whether a block type is a service frame's, the narrowing {@link serviceFrameTypeSchema} reads. */
+export function isServiceFrameType(type: BlockType): type is ServiceFrameType {
+  return type !== 'project'
+}
+
+/** A service frame's type, for a caller that already knows the block is one. Throws otherwise. */
+export function requireServiceFrameType(type: BlockType): ServiceFrameType {
+  if (!isServiceFrameType(type)) throw new Error(`'${type}' is not a service frame type`)
+  return type
+}
 
 /**
  * The repository roles a human can pick when importing an existing repo or bootstrapping a
@@ -95,7 +117,19 @@ export type BlockStatus = v.InferOutput<typeof blockStatusSchema>
  * the `initiatives` entity, and the tasks its execution loop spawns link back
  * via their `initiativeId` membership link (epic-style, not containment).
  */
-export const blockLevelSchema = v.picklist(['frame', 'module', 'task', 'epic', 'initiative'])
+/**
+ * `project` is a project's ROOT block: the peer of a service's `frame`, owning the project's tasks.
+ * It is a level of its own rather than a frame of another type because many readers treat
+ * `level === 'frame'` as "this is a service".
+ */
+export const blockLevelSchema = v.picklist([
+  'frame',
+  'module',
+  'task',
+  'epic',
+  'initiative',
+  'project',
+])
 export type BlockLevel = v.InferOutput<typeof blockLevelSchema>
 
 /**
@@ -119,6 +153,7 @@ export const BLOCK_LEVEL_RUNS_PIPELINES: Record<BlockLevel, boolean> = {
   task: true,
   epic: false,
   initiative: true,
+  project: false,
 }
 
 /** The BUILT-IN task types, in display order (the closed set before any deployment widening). */

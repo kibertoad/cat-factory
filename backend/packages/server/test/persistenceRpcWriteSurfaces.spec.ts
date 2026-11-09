@@ -186,6 +186,7 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.upsert!({
         workspaceId: 'ws_in',
+        subjectKind: 'service',
         subjectId: 'svc_in',
       }),
     ).resolves.toBeUndefined()
@@ -195,6 +196,7 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.upsert!({
         workspaceId: 'ws_out',
+        subjectKind: 'service',
         subjectId: 'svc_in',
       }),
     ).rejects.toMatchObject({ code: 'not_found' })
@@ -202,7 +204,10 @@ describe('shared-service mount management surface', () => {
 
   it('rejects workspaceMountRepository.upsert when the mount has no workspaceId field (404)', async () => {
     await expect(
-      remoteRegistry().workspaceMountRepository!.upsert!({ subjectId: 'svc_in' }),
+      remoteRegistry().workspaceMountRepository!.upsert!({
+        subjectKind: 'service',
+        subjectId: 'svc_in',
+      }),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 
@@ -216,6 +221,7 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.upsert!({
         workspaceId: 'ws_in',
+        subjectKind: 'service',
         subjectId: 'svc_missing',
       }),
     ).rejects.toMatchObject({ code: 'not_found' })
@@ -229,6 +235,7 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry([ACCOUNT, OTHER_ACCOUNT]).workspaceMountRepository!.upsert!({
         workspaceId: 'ws_in',
+        subjectKind: 'service',
         subjectId: 'svc_out',
       }),
     ).rejects.toMatchObject({ code: 'not_found' })
@@ -239,9 +246,80 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry([ACCOUNT, OTHER_ACCOUNT]).workspaceMountRepository!.upsert!({
         workspaceId: 'ws_out',
+        subjectKind: 'service',
         subjectId: 'svc_out',
       }),
     ).resolves.toBeUndefined()
+  })
+
+  it('binds a project mount through the project resolver, never the service one', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_in',
+        subjectKind: 'project',
+        subjectId: 'prj_in',
+      }),
+    ).resolves.toBeUndefined()
+    // A project id labelled as a service resolves to nothing, so the mislabel fails closed.
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_in',
+        subjectKind: 'service',
+        subjectId: 'prj_in',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    await expect(
+      remoteRegistry([ACCOUNT, OTHER_ACCOUNT]).workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_in',
+        subjectKind: 'project',
+        subjectId: 'prj_out',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('binds a project insert to its account, its root block and every linked service', async () => {
+    const project = (over: Record<string, unknown>) => ({
+      id: 'prj_new',
+      accountId: ACCOUNT,
+      kind: 'research',
+      rootBlockId: 'blk_unwritten',
+      serviceIds: ['svc_in'],
+      createdAt: 0,
+      ...over,
+    })
+    const multi = remoteRegistry([ACCOUNT, OTHER_ACCOUNT])
+    await expect(multi.projectRepository!.insert!(project({}))).resolves.toBeUndefined()
+    // A link into another account would hand that account's repos to this project's tasks, even
+    // under a token that holds both.
+    await expect(
+      multi.projectRepository!.insert!(project({ id: 'prj_x', serviceIds: ['svc_out'] })),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    // A root block homed in another account is a hijack, as it is for a service frame.
+    await expect(
+      multi.projectRepository!.insert!(project({ id: 'prj_y', rootBlockId: 'blk_out' })),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('binds a project link change to the project account and every linked service', async () => {
+    const multi = remoteRegistry([ACCOUNT, OTHER_ACCOUNT])
+    await expect(
+      multi.projectRepository!.setServiceLinks!('prj_in', ['svc_in']),
+    ).resolves.toBeUndefined()
+    await expect(
+      multi.projectRepository!.setServiceLinks!('prj_in', ['svc_out']),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    await expect(
+      remoteRegistry().projectRepository!.setServiceLinks!('prj_out', []),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('binds owner lists through services and projects alike', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.listBySubjectIds!(['svc_in', 'prj_in']),
+    ).resolves.toEqual([])
+    await expect(
+      remoteRegistry().workspaceMountRepository!.listBySubjectIds!(['svc_in', 'prj_out']),
+    ).rejects.toMatchObject({ code: 'not_found' })
   })
 
   it('forwards the batched cascade reads a frame deletion runs', async () => {

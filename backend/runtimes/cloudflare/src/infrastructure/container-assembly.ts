@@ -129,6 +129,7 @@ import { D1UserRepository } from './repositories/D1UserRepository'
 import { D1DirectoryRepository } from './repositories/D1DirectoryRepository'
 import { D1WorkspaceMemberRepository } from './repositories/D1WorkspaceMemberRepository'
 import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepository'
+import { D1ProjectRepository } from './repositories/D1ProjectRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import { buildDelegatedAgentExecutor, resolveUrlSafetyPolicy } from '@cat-factory/server'
 import {
@@ -469,6 +470,7 @@ function selectWorkerCorePersistence(
   | 'subscriptionActivationRepository'
   | 'serviceRepository'
   | 'workspaceMountRepository'
+  | 'projectRepository'
   | 'tokenUsageRepository'
 > {
   const { db, clock } = deps
@@ -487,6 +489,7 @@ function selectWorkerCorePersistence(
     subscriptionActivationRepository: new D1SubscriptionActivationRepository({ db }),
     serviceRepository: new D1ServiceRepository({ db }),
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
+    projectRepository: new D1ProjectRepository({ db }),
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
   }
 }

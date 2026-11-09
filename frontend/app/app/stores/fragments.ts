@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { isServiceFrameType } from '@cat-factory/contracts'
 import type { BlockType, PromptFragment } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
 
@@ -55,7 +56,9 @@ export const useFragmentsStore = defineStore('fragments', () => {
   /** Fragments suitable for a block type (those with no `blockTypes` apply to all). */
   function forBlockType(type: BlockType) {
     return fragments.value.filter(
-      (f) => !f.appliesTo?.blockTypes || f.appliesTo.blockTypes.includes(type),
+      (f) =>
+        !f.appliesTo?.blockTypes ||
+        (isServiceFrameType(type) && f.appliesTo.blockTypes.includes(type)),
     )
   }
 

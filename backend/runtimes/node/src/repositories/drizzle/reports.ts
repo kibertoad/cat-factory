@@ -19,6 +19,7 @@ import {
   agentRuns,
   blocks,
   githubRepos,
+  projects,
   services,
   tasks,
   tokenUsage,
@@ -66,6 +67,12 @@ function serviceLabels(db: DrizzleDb) {
   )
 }
 type ServiceLabels = ReturnType<typeof serviceLabels>
+
+/**
+ * The `service` dimension's key: the run's owner, unless that owner is a project, whose spend
+ * belongs to no service. Needs `projects` joined on `agent_runs.owner_id` (a primary key, so 1:1).
+ */
+const serviceKey = sql<string>`case when ${projects.id} is null then coalesce(${agentRuns.owner_id}, '') else '' end`
 
 /**
  * The tracker ticket a block is linked to, PRE-AGGREGATED to exactly one row per
@@ -126,7 +133,7 @@ function spendKeyAndLabel(
       }
     case 'service':
       return {
-        key: sql<string>`coalesce(${agentRuns.owner_id}, '')`,
+        key: serviceKey,
         label: sql<string | null>`max(${labels.title})`,
       }
     case 'taskType':
@@ -174,7 +181,7 @@ function activityKeyAndLabel(
       }
     case 'service':
       return {
-        key: sql<string>`coalesce(${agentRuns.owner_id}, '')`,
+        key: serviceKey,
         label: sql<string | null>`max(${labels.title})`,
       }
     case 'repo':
@@ -261,6 +268,7 @@ export class DrizzleReportsRepository implements ReportsRepository {
           ),
         )
         .leftJoin(labels, eq(labels.serviceId, agentRuns.owner_id))
+        .leftJoin(projects, eq(projects.id, agentRuns.owner_id))
     } else if (dimension === 'taskType' || dimension === 'run') {
       query = query
         .leftJoin(
@@ -354,7 +362,9 @@ export class DrizzleReportsRepository implements ReportsRepository {
     if (dimension === 'workspace') {
       query = query.leftJoin(workspaces, eq(workspaces.id, agentRuns.workspace_id))
     } else if (dimension === 'service') {
-      query = query.leftJoin(labels, eq(labels.serviceId, agentRuns.owner_id))
+      query = query
+        .leftJoin(labels, eq(labels.serviceId, agentRuns.owner_id))
+        .leftJoin(projects, eq(projects.id, agentRuns.owner_id))
     } else if (dimension === 'repo') {
       // Both joins are on primary keys (`services.id`, `(workspace_id, github_id)`), so
       // neither can fan the aggregate out and multiply a repository's run count.

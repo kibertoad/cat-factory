@@ -10,6 +10,7 @@ import {
   HttpDeploymentDocumentResolver,
   HttpAgentKindSource,
   HttpPromptFragmentSource,
+  HttpProjectKindSource,
   HttpPersistenceRpcClient,
   HttpSecretDelegate,
   type LocalFirstPersistenceRepository,
@@ -139,6 +140,12 @@ export interface MothershipComposition {
    * machine token as the persistence RPC.
    */
   promptFragments: HttpPromptFragmentSource
+  /**
+   * The deployment's PROJECT KINDS, read from the MOTHERSHIP over `GET /internal/project-kinds`:
+   * creating a project and admitting a task under one resolve the kinds the deployment registers,
+   * which this node's build can only hold a second copy of.
+   */
+  projectKinds: HttpProjectKindSource
   /**
    * The deployment's AGENT-KIND CAPABILITY layer (the skills and tool servers it assigns to kinds,
    * built-in ones included), read from the MOTHERSHIP over `GET /internal/agent-kinds`. The fourth
@@ -296,6 +303,8 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   // …and the standards pool, on the same base URL + per-request token, for the same reason once
   // more (see the boot warning in `server.ts` when a registry is nonetheless registered here).
   const promptFragments = new HttpPromptFragmentSource({ baseUrl, token: machineToken })
+  // …and the project kinds, on the same base URL + per-request token, for the same reason.
+  const projectKinds = new HttpProjectKindSource({ baseUrl, token: machineToken })
   // …and the capability layer the deployment assigns to agent kinds, on the same base URL +
   // per-request token. Unlike the three above it is MERGED with this node's own registry, because
   // the half that cannot cross (a kind's prompts, hooks and output parser) is the half its own
@@ -361,6 +370,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     foundationalBuiltins,
     binaryGenerators,
     promptFragments,
+    projectKinds,
     agentKinds,
     deploymentDocuments,
     realtimeAdapter,
@@ -729,5 +739,44 @@ export class SqliteWorkRunner implements WorkRunner {
       )
       this.drain()
     }
+  }
+}
+
+/**
+ * The code-registered org state a mothership-mode node READS from the mothership rather than from
+ * its own build: each is a deployment registration a run resolves, which this node's build could
+ * only hold a second, drifting copy of.
+ */
+export function mothershipRegistrySources(mothership: MothershipComposition) {
+  return {
+    // The catalog's `builtin` tier comes from the MOTHERSHIP, not from this node's own
+    // registry: the estate is org state, so a node's copy could only ever be a second one
+    // drifting behind (see `HttpFoundationalBuiltinSource`). `startLocal` warns at boot if
+    // this node registered an estate anyway, because that registration now does nothing.
+    foundationalBuiltinSource: mothership.foundationalBuiltins,
+    // …and the deployment's GENERATIVE INTEGRATIONS, for the same reason one registry
+    // along. What this node's own registry holds is what its BUILD registers; what the
+    // pipeline builder offered (and therefore what a saved step's `generatorIds` mean)
+    // is what the MOTHERSHIP registers. `startLocal` warns at boot if this node registered
+    // integrations anyway, because that registration no longer decides any run.
+    binaryGeneratorSource: mothership.binaryGenerators,
+    // …and the deployment's best-practice STANDARDS, the third of the same family. The pool
+    // a run folds, and the per-task-type default sets a creation seeds from, are the
+    // MOTHERSHIP's registrations; this node's build can only hold a second copy of them.
+    // `startLocal` warns at boot if this node registered fragments anyway.
+    promptFragmentSource: mothership.promptFragments,
+    projectKindSource: mothership.projectKinds,
+    // …and the capability layer the deployment assigns to agent KINDS. The fourth of the
+    // family and the only one that MERGES: this node's build owns each kind's executable
+    // half (prompts, hooks, output parsers), which is why the catalog stays local and a
+    // step naming an unknown kind still fails loudly; what it cannot own is the org's
+    // decision to give `coder` its house playbook or its issue-tracker MCP server, which is
+    // data, and whose absence here would silently produce work without them.
+    agentKindSource: mothership.agentKinds,
+    // …and the LIVING DOCUMENTS those standards may name. The fourth of the same family, and
+    // the one whose reason is a credential rather than a registration: the document-source
+    // credentials are configured in the MOTHERSHIP's environment and never reach a laptop, so
+    // this node reads the resolved BODY rather than authenticating to the vendor itself.
+    deploymentDocumentResolver: mothership.deploymentDocuments,
   }
 }

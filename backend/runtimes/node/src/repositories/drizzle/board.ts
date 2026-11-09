@@ -27,6 +27,7 @@ import type {
   WorkspaceVisibility,
 } from '@cat-factory/kernel'
 import { WORKSPACE_SCOPED_TABLES } from '@cat-factory/kernel'
+import { decodeMountSubjectKind } from '@cat-factory/contracts'
 import {
   blockCompletionStamp,
   blockInsertValues,
@@ -50,6 +51,8 @@ import {
 import {
   agentRuns,
   blocks,
+  projectServiceLinks,
+  projects,
   services,
   workspaceFragmentDefaults,
   workspaceMembers,
@@ -263,7 +266,39 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
         await tx.delete(workspaceMounts).where(inArray(workspaceMounts.subject_id, serviceIds))
         await tx.delete(services).where(inArray(services.id, serviceIds))
       }
-      // This workspace's OWN mounts of services homed elsewhere (shared services it mounted).
+      // The same for the projects this workspace homes (their root block lives here, in the
+      // board's own account), then links from surviving projects to the services just reclaimed.
+      const homedProjects = await tx
+        .select({ id: projects.id })
+        .from(projects)
+        .innerJoin(blocks, eq(projects.root_block_id, blocks.id))
+        .where(
+          and(
+            eq(blocks.workspace_id, id),
+            sql`${projects.account_id} IS NOT DISTINCT FROM (SELECT ${workspaces.account_id} FROM ${workspaces} WHERE ${workspaces.id} = ${id})`,
+          ),
+        )
+      const projectIds = homedProjects.map((r) => r.id)
+      if (projectIds.length) {
+        await tx
+          .delete(workspaceMounts)
+          .where(
+            and(
+              eq(workspaceMounts.subject_kind, 'project'),
+              inArray(workspaceMounts.subject_id, projectIds),
+            ),
+          )
+        await tx
+          .delete(projectServiceLinks)
+          .where(inArray(projectServiceLinks.project_id, projectIds))
+        await tx.delete(projects).where(inArray(projects.id, projectIds))
+      }
+      if (serviceIds.length) {
+        await tx
+          .delete(projectServiceLinks)
+          .where(inArray(projectServiceLinks.service_id, serviceIds))
+      }
+      // This workspace's OWN mounts of subjects homed elsewhere (shared services and projects).
       await tx.delete(workspaceMounts).where(eq(workspaceMounts.workspace_id, id))
       // Bulk reclaim of every plain workspace-scoped table (incl. blocks/agent_runs/pipelines/
       // environments) from the shared kernel list — keeps this cascade in lockstep with the
@@ -737,6 +772,7 @@ export class DrizzleServiceRepository implements ServiceRepository {
 function rowToMount(row: typeof workspaceMounts.$inferSelect): WorkspaceMount {
   return {
     workspaceId: row.workspace_id,
+    subjectKind: decodeMountSubjectKind(row.subject_kind),
     subjectId: row.subject_id,
     position: { x: row.pos_x, y: row.pos_y },
     size: row.width !== null && row.height !== null ? { w: row.width, h: row.height } : null,
@@ -813,6 +849,7 @@ export class DrizzleWorkspaceMountRepository implements WorkspaceMountRepository
       .insert(workspaceMounts)
       .values({
         workspace_id: mount.workspaceId,
+        subject_kind: mount.subjectKind,
         subject_id: mount.subjectId,
         pos_x: mount.position.x,
         pos_y: mount.position.y,

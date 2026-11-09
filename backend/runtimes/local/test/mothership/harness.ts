@@ -235,6 +235,7 @@ interface MothershipAppOptions {
   backendRegistries?: BackendRegistries
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
+  projectKindRegistry?: CoreDependencies['projectKindRegistry']
   pipelineRegistry?: CoreDependencies['pipelineRegistry']
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   judgeRegistry?: CoreDependencies['judgeRegistry']
@@ -447,6 +448,8 @@ export function makeMothershipConformanceApp(
     // Inject the app-owned task-type registry (pre-loaded in the custom-task-type suite) so the
     // SUT container resolves it by reference on this runtime.
     ...(opts?.taskTypeRegistry ? { taskTypeRegistry: opts.taskTypeRegistry } : {}),
+    // Inject the app-owned project-kind registry (pre-loaded in the projects suite).
+    ...(opts?.projectKindRegistry ? { projectKindRegistry: opts.projectKindRegistry } : {}),
     // Inject the app-owned PIPELINE registry (pre-loaded in the pipeline-retirement suite) so the
     // SUT container resolves it by reference on this runtime.
     ...(opts?.pipelineRegistry ? { pipelineRegistry: opts.pipelineRegistry } : {}),

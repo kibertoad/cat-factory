@@ -1197,3 +1197,17 @@ export {
   placeFindingsBody,
   resolveFindingsStoragePolicy,
 } from './domain/findings-storage-policy.js'
+
+// Project kinds a deployment registers in code, and the mount-subject reads that resolve a
+// mounted service or project to its root block.
+export {
+  ProjectKindRegistry,
+  defaultProjectKindRegistry,
+  projectKindTaskType,
+} from './domain/project-kind-registry.js'
+export {
+  type MountSubjectReaders,
+  type MountSubjectRoot,
+  rootBlocksOfMounts,
+  subjectsOwningRoots,
+} from './domain/mount-subjects.js'

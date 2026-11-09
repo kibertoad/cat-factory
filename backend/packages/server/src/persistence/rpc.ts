@@ -14,6 +14,8 @@ import {
   checkOwnerFieldUpsertScope,
   checkOwnerPairScope,
   checkServiceInsertScope,
+  checkProjectCallScope,
+  checkSubjectListScope,
   checkServiceMountScope,
   checkServiceUpdateScope,
   checkUsageRecordScope,
@@ -295,10 +297,20 @@ export type ScopeRule =
   | { kind: 'blockList'; arg: number }
   | { kind: 'workspaceList'; arg: number }
   | { kind: 'serviceList'; arg: number }
+  /**
+   * `args[arg]` is `string[]` of mounted-subject ids (services and projects alike, as the owner
+   * stamp on blocks and runs and the mount's `subjectId` hold them). Each must resolve, as a
+   * service or as a project, to an in-scope account.
+   */
+  | { kind: 'subjectList'; arg: number }
   | { kind: 'service'; arg: number }
   | { kind: 'serviceMount'; arg: number }
   | { kind: 'serviceInsert'; arg: number }
   | { kind: 'serviceUpdate'; arg: number; patchArg: number }
+  | { kind: 'project'; arg: number }
+  | { kind: 'projectList'; arg: number }
+  | { kind: 'projectInsert'; arg: number }
+  | { kind: 'projectServiceLinks'; arg: number; servicesArg: number }
   | { kind: 'installation'; arg: number }
   | { kind: 'installationList'; arg: number }
   | { kind: 'skillSource'; arg: number }
@@ -427,6 +439,11 @@ export interface DispatchOptions {
    * hitting that kind with no resolver fails closed (404).
    */
   resolveServiceAccountIds?(serviceIds: string[]): Promise<Map<string, string | null | undefined>>
+  /**
+   * Resolve each requested project id's owning account id, keyed by project id (a project that
+   * does not exist is absent). Required for the project scope kinds; absent fails closed (404).
+   */
+  resolveProjectAccountIds?(projectIds: string[]): Promise<Map<string, string | null | undefined>>
   /**
    * Resolve a skill source's owning account id (the mothership's `SkillSourceRepository.get`,
    * projected to its `accountId`). Required for the `skillSource` scope kind; a call hitting that
@@ -700,7 +717,15 @@ async function checkCallScope(
 async function checkEntityListCallScope(
   rule: Extract<
     ScopeRule,
-    { kind: 'userList' | 'blockList' | 'workspaceList' | 'serviceList' | 'installationList' }
+    {
+      kind:
+        | 'userList'
+        | 'blockList'
+        | 'workspaceList'
+        | 'serviceList'
+        | 'subjectList'
+        | 'installationList'
+    }
   >,
   args: unknown[],
   opts: DispatchOptions,
@@ -755,6 +780,8 @@ async function checkEntityListCallScope(
       }
       break
     }
+    case 'subjectList':
+      return checkSubjectListScope(args[rule.arg], opts, inScope, denied)
     case 'workspaceList':
       return checkWorkspaceListScope(args[rule.arg], opts, inScope, denied)
     case 'installationList':
@@ -877,10 +904,24 @@ async function checkAccountFieldUpsertScope(
   return undefined
 }
 
+type ProjectScopeRule = Extract<
+  ScopeRule,
+  { kind: 'project' | 'projectList' | 'projectInsert' | 'projectServiceLinks' }
+>
+const PROJECT_SCOPE_KINDS: ReadonlySet<ScopeRule['kind']> = new Set<ProjectScopeRule['kind']>([
+  'project',
+  'projectList',
+  'projectInsert',
+  'projectServiceLinks',
+])
+function isProjectScopeRule(rule: ScopeRule): rule is ProjectScopeRule {
+  return PROJECT_SCOPE_KINDS.has(rule.kind)
+}
+
 /**
  * The entity-resolver half of {@link checkCallScope}: the scope kinds that bind a call via a
  * server-side account resolver (co-membership for users, block/service/skill-source ownership,
- * tenant-library owner pairs). Same contract — a `DispatchResult` (404 `denied`) when out of scope,
+ * tenant-library owner pairs). Same contract: a `DispatchResult` (404 `denied`) when out of scope,
  * `undefined` when it passes. Split from the core kinds purely to keep each function under the
  * complexity ceiling; the `never` default keeps the switches jointly exhaustive over `ScopeRule`.
  */
@@ -896,9 +937,14 @@ async function checkEntityCallScope(
         | 'workspaceList'
         | 'service'
         | 'serviceList'
+        | 'subjectList'
         | 'serviceMount'
         | 'serviceInsert'
         | 'serviceUpdate'
+        | 'project'
+        | 'projectList'
+        | 'projectInsert'
+        | 'projectServiceLinks'
         | 'installation'
         | 'installationList'
         | 'skillSource'
@@ -920,6 +966,8 @@ async function checkEntityCallScope(
 ): Promise<DispatchResult | undefined> {
   const { inScope, visibleUserIds } = helpers
   const denied = fail('not_found', 'Not found')
+  // The project kinds are one family with their own checker, routed in one test.
+  if (isProjectScopeRule(rule)) return checkProjectCallScope(rule, args, opts, inScope, denied)
   switch (rule.kind) {
     case 'user': {
       // Bind via co-membership: the target user's DISPLAY record is readable iff they are a member
@@ -934,6 +982,7 @@ async function checkEntityCallScope(
     case 'blockList':
     case 'workspaceList':
     case 'serviceList':
+    case 'subjectList':
     case 'installationList':
       // The batched list-scope kinds (each id must resolve in scope) are split out to keep this
       // function under the complexity ceiling; same contract (404 `denied` / `undefined`).

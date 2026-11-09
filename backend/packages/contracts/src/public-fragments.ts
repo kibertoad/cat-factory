@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 import { fragmentTierSchema } from './fragment-library.js'
-import { blockTypeSchema } from './primitives.js'
+import { serviceFrameTypeSchema } from './primitives.js'
 import { cursorSchema, pageLimitSchema } from './public-paging.js'
 
 // ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ import { cursorSchema, pageLimitSchema } from './public-paging.js'
  * `publicService.type` already publishes.
  */
 export const publicFragmentAppliesToSchema = v.object({
-  blockTypes: v.optional(v.array(blockTypeSchema)),
+  blockTypes: v.optional(v.array(serviceFrameTypeSchema)),
   agentKinds: v.optional(v.array(v.string())),
 })
 export type PublicFragmentAppliesTo = v.InferOutput<typeof publicFragmentAppliesToSchema>

@@ -5,6 +5,7 @@ import {
   agentRuns,
   blocks,
   githubRepos,
+  projects,
   services,
   tasks,
   tokenUsage,
@@ -47,6 +48,15 @@ if (databaseUrl) {
         account_id: accountId,
         frame_block_id: frameBlockId,
         repo_github_id: repoGithubId ?? null,
+        created_at: 0,
+      })
+    },
+    async project(id, accountId, rootBlockId) {
+      await db.insert(projects).values({
+        id,
+        account_id: accountId,
+        kind: 'research',
+        root_block_id: rootBlockId,
         created_at: 0,
       })
     },

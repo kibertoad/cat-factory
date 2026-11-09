@@ -35,6 +35,7 @@ describe('BoardService — frame responses carry this board’s layout override'
   function build(stored: Block, mountSize: { w: number; h: number } | null = null) {
     const mount: WorkspaceMount = {
       workspaceId: WS,
+      subjectKind: 'service',
       subjectId: 'svc_1',
       position: { ...MOUNTED_AT },
       size: mountSize,
