@@ -1,6 +1,6 @@
 import {
   createProjectContract,
-  listPinnableResearchDefinitionsContract,
+  listPinnableProjectDefinitionsContract,
   listProjectCatalogContract,
   mountProjectContract,
   setProjectServicesContract,
@@ -36,16 +36,21 @@ export function projectController(): Hono<AppEnv> {
     return c.json(await projects.service.listForAccount(accountId), 200)
   })
 
-  buildHonoRoute(app, listPinnableResearchDefinitionsContract, async (c) => {
+  buildHonoRoute(app, listPinnableProjectDefinitionsContract, async (c) => {
     const container = c.get('container')
+    const kind = c.req.valid('param').kind
+    const module = container.projectKindModuleRegistry.get(kind)
+    // A kind with no module here has no definitions this build can validate or pin.
+    if (!module) return c.json([], 200)
     const accountId = await container.workspaceService.accountOf(param(c, 'workspaceId'))
-    const resolved = await container.researchDefinitions.list(accountId ?? '')
+    const resolved = await container.projectDefinitions.list(accountId ?? '', kind)
     return c.json(
       resolved.map(({ definition, origin }) => ({
+        kind: definition.kind,
         key: definition.key,
         version: definition.version,
         title: definition.title,
-        brief: definition.brief,
+        summary: module.definitionSummary(definition),
         inputs: definition.inputs,
         origin,
       })),

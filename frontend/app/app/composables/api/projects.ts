@@ -1,6 +1,6 @@
 import {
   createProjectContract,
-  listPinnableResearchDefinitionsContract,
+  listPinnableProjectDefinitionsContract,
   listProjectCatalogContract,
   mountProjectContract,
   setProjectServicesContract,
@@ -17,8 +17,11 @@ export function projectsApi({ send, ws }: ApiContext) {
     listProjectCatalog: (workspaceId: string) =>
       send(listProjectCatalogContract, { pathPrefix: ws(workspaceId) }),
 
-    listPinnableResearchDefinitions: (workspaceId: string) =>
-      send(listPinnableResearchDefinitionsContract, { pathPrefix: ws(workspaceId) }),
+    listPinnableProjectDefinitions: (workspaceId: string, kind: string) =>
+      send(listPinnableProjectDefinitionsContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { kind },
+      }),
 
     createProject: (workspaceId: string, body: CreateProjectBody) =>
       send(createProjectContract, { pathPrefix: ws(workspaceId), body }),

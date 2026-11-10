@@ -1,13 +1,13 @@
-import type { Project, ResearchProject } from '@cat-factory/contracts'
+import type { Project, ProjectPin } from '@cat-factory/contracts'
 import {
+  ProjectDefinitionRegistry,
   ProjectKindRegistry,
-  ResearchDefinitionRegistry,
-  composeResearchDefinitionSource,
+  composeProjectDefinitionSource,
+  registryProjectDefinitionSource,
   registryProjectKindSource,
-  registryResearchDefinitionSource,
   type BlockRepository,
+  type ProjectRecordRepository,
   type ProjectRepository,
-  type ResearchProjectRepository,
   type ServiceRepository,
   type WorkspaceMount,
   type WorkspaceMountRepository,
@@ -19,37 +19,38 @@ import { ProjectService } from './ProjectService.js'
 function kinds(): ProjectKindRegistry {
   const registry = new ProjectKindRegistry()
   registry.register({
-    id: 'research',
-    label: 'Research',
+    id: 'plain',
+    label: 'Plain',
     taskTypes: [{ taskType: 'spike', repoAccess: 'none' }],
   })
   registry.register({
     id: 'vendor-study',
     label: 'Vendor study',
-    data: 'research',
+    definition: 'required',
     taskTypes: [{ taskType: 'spike', repoAccess: 'none' }],
   })
   return registry
 }
 
-function definitions(): ResearchDefinitionRegistry {
-  const registry = new ResearchDefinitionRegistry()
+function definitions(): ProjectDefinitionRegistry {
+  const registry = new ProjectDefinitionRegistry([
+    { kind: 'vendor-study', parseSpec: (d) => ({ ok: true, value: d.spec }) },
+  ])
   registry.register({
+    kind: 'vendor-study',
     key: 'acme:vendor',
     version: 1,
     title: 'Vendor',
-    brief: 'Learn how the vendor integrates.',
-    topics: [{ id: 'auth', title: 'Auth', questions: [{ id: 'scheme', question: 'Which?' }] }],
-    targets: [{ baseUrl: 'https://vendor.example', surface: 'api' }],
+    spec: { brief: 'Learn how the vendor integrates.' },
   })
   return registry
 }
 
-function harness(failing: 'block' | 'mount') {
+function harness(failing: 'block' | 'mount' | 'none') {
   const projects = new Map<string, Project>()
   const blocks = new Set<string>()
   const mounts = new Map<string, WorkspaceMount>()
-  const pins = new Map<string, ResearchProject>()
+  const pins = new Map<string, ProjectPin>()
   let next = 0
   const service = new ProjectService({
     projectRepository: {
@@ -77,20 +78,20 @@ function harness(failing: 'block' | 'mount') {
     } as unknown as WorkspaceRepository,
     serviceRepository: {} as ServiceRepository,
     projectKinds: registryProjectKindSource(kinds()),
-    research: {
-      definitions: composeResearchDefinitionSource({
-        registered: registryResearchDefinitionSource(definitions()),
-      }),
-      projects: {
-        insert: async (p: ResearchProject) => void pins.set(p.projectId, p),
-        deleteMany: async (ids: string[]) => ids.forEach((id) => pins.delete(id)),
-      } as unknown as ResearchProjectRepository,
-    },
+    definitions: composeProjectDefinitionSource({
+      registered: registryProjectDefinitionSource(definitions()),
+    }),
+    records: {
+      insertPin: async (p: ProjectPin) => void pins.set(p.projectId, p),
+      deleteByProjects: async (ids: string[]) => ids.forEach((id) => pins.delete(id)),
+    } as unknown as ProjectRecordRepository,
     idGenerator: { next: (prefix: string) => `${prefix}_${++next}` },
     clock: { now: () => 1 },
   })
   return { service, projects, blocks, mounts, pins }
 }
+
+const pinned = { kind: 'vendor-study', title: 'Q', serviceIds: [] }
 
 describe('ProjectService.create', () => {
   it.each(['block', 'mount'] as const)(
@@ -98,7 +99,7 @@ describe('ProjectService.create', () => {
     async (failing) => {
       const { service, projects, blocks, mounts } = harness(failing)
       await expect(
-        service.create('ws', { kind: 'research', title: 'Q', serviceIds: [] }),
+        service.create('ws', { kind: 'plain', title: 'Q', serviceIds: [] }),
       ).rejects.toThrow(/failed/)
       expect(projects.size).toBe(0)
       expect(blocks.size).toBe(0)
@@ -107,19 +108,44 @@ describe('ProjectService.create', () => {
   )
 
   it.each(['block', 'mount'] as const)(
-    'leaves no research pin behind when the %s write fails',
+    'leaves no pin behind when the %s write fails',
     async (failing) => {
       const { service, projects, pins } = harness(failing)
       await expect(
-        service.create('ws', {
-          kind: 'vendor-study',
-          title: 'Q',
-          serviceIds: [],
-          research: { definitionKey: 'acme:vendor', inputs: {} },
-        }),
+        service.create('ws', { ...pinned, definition: { key: 'acme:vendor', inputs: {} } }),
       ).rejects.toThrow(/failed/)
       expect(projects.size).toBe(0)
       expect(pins.size).toBe(0)
     },
   )
+
+  it('pins the latest version of a definition of the project own kind', async () => {
+    const { service, pins } = harness('none')
+    const created = await service.create('ws', {
+      ...pinned,
+      definition: { key: 'acme:vendor', inputs: {} },
+    })
+    expect(pins.get(created.project.id)).toMatchObject({
+      definitionKey: 'acme:vendor',
+      definitionVersion: 1,
+    })
+  })
+
+  it('refuses a missing definition, a definition the kind does not pin, and an unknown key', async () => {
+    const { service } = harness('none')
+    await expect(service.create('ws', pinned)).rejects.toMatchObject({
+      details: { reason: 'project_definition_required' },
+    })
+    await expect(
+      service.create('ws', {
+        kind: 'plain',
+        title: 'Q',
+        serviceIds: [],
+        definition: { key: 'acme:vendor', inputs: {} },
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'project_definition_not_accepted' } })
+    await expect(
+      service.create('ws', { ...pinned, definition: { key: 'acme:other', inputs: {} } }),
+    ).rejects.toMatchObject({ details: { reason: 'project_definition_not_found' } })
+  })
 })

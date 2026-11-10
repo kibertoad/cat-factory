@@ -36,12 +36,13 @@ export type ToolSecretSubject =
    */
   | { kind: 'delegated-executor'; id: string }
   /**
-   * A RESEARCH DEFINITION's vendor credentials. Resolved from the credential store ONLY, never the
+   * A PROJECT DEFINITION's credentials, of any project kind; `id` is
+   * `projectDefinitionSubjectId(kind, key)`. Resolved from the credential store ONLY, never the
    * deployment's environment: a stored definition is account-authored, so an environment read
    * would let an account admin name one of the deployment's own variables and have it sent to a
    * target they chose.
    */
-  | { kind: 'research-definition'; id: string }
+  | { kind: 'project-definition'; id: string }
 
 /** Every subject kind, as a total `Record` so a new kind cannot be left out of the reader below. */
 const TOOL_SECRET_SUBJECT_KINDS: Record<ToolSecretSubject['kind'], true> = {
@@ -49,7 +50,7 @@ const TOOL_SECRET_SUBJECT_KINDS: Record<ToolSecretSubject['kind'], true> = {
   'binary-generator': true,
   'foundational-service': true,
   'delegated-executor': true,
-  'research-definition': true,
+  'project-definition': true,
 }
 
 /** Read a persisted `{ kind, id }` back as a subject, or undefined when no current kind names it. */

@@ -374,7 +374,10 @@
           "hint": "Nombre maximal de passes en lecture seule de cette expédition. Laisser vide pour {count}. Sur un gros code, chaque angle est pêché par territoire, et ce que le budget coupe est consigné comme non pêché.",
           "problem": "Saisissez un nombre entier compris entre 1 et {max}, ou laissez le champ vide pour la valeur par défaut."
         }
-      }
+      },
+      "documentsLoadFailed": "Impossible de charger les documents à joindre",
+      "tasksLoadFailed": "Impossible de charger les tickets à joindre",
+      "fragmentsLoadFailed": "Impossible de charger les fragments de bonnes pratiques"
     },
     "recurring": {
       "title": "Ajouter une pipeline récurrente",
@@ -694,8 +697,8 @@
         "delegated_executor_failed": "L’exécuteur externe n’a pas pu démarrer cette étape. Le problème vient du système qui effectue le travail, pas de ce déploiement : consultez ses propres journaux, puis réessayez.",
         "delegated_work_branch_unprepared": "La plateforme n'a pas pu préparer la branche de travail vers laquelle l'exécuteur de cette étape est envoyé, donc rien n'a démarré. Soit la connexion au dépôt ne peut pas y écrire, soit la tâche nomme une branche qui n'existe pas encore : les détails indiquent laquelle des deux.",
         "attached_pr_provider_unreachable": "Le fournisseur du dépôt n'a pas répondu, la pull request n'a donc pas pu être vérifiée et aucune tâche n'a été créée. Il n'y a rien à configurer ici : réessayez dans un instant.",
-        "research_definitions_unreachable": "Les définitions de recherche de ce déploiement n'ont pas pu être lues pour l'instant, la demande n'a donc pas abouti. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
-        "findings_body_unavailable": "Ces résultats sont conservés dans le stockage de contenu, qui ne peut pas les fournir pour l'instant. La demande est correcte : réessayez une fois le stockage disponible."
+        "project_definitions_unreachable": "Les définitions de projet de ce déploiement n'ont pas pu être lues pour l'instant, la demande n'a donc pas abouti. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
+        "outcome_body_unavailable": "Ce résultat du projet est conservé dans le stockage de contenu, qui ne peut pas le fournir pour l'instant. La demande est correcte : réessayez une fois le stockage disponible."
       }
     },
     "reason": {
@@ -716,16 +719,16 @@
         "project_has_no_writable_repo": "Une étape de cette exécution a besoin d'un dépôt dans lequel écrire, et un projet n'en a aucun : les dépôts de ses services liés sont un contexte en lecture seule. Choisissez un pipeline qui se contente de lire et de rendre compte.",
         "project_service_link_invalid": "L'un des services liés n'existe plus ou appartient à une autre organisation. Rechargez le tableau et choisissez de nouveau les services liés.",
         "project_has_unfinished_tasks": "Ce projet a encore des tâches non terminées. Terminez-les ou supprimez-les d'abord.",
-        "research_pin_required": "Ce type de projet conserve des données de recherche : il lui faut une définition de recherche à épingler. Choisissez-en une et réessayez.",
-        "research_pin_not_accepted": "Ce type de projet ne conserve aucune donnée de recherche : il ne peut pas épingler de définition de recherche. Retirez la définition ou choisissez un type de recherche.",
-        "research_definition_not_found": "Aucune définition de recherche de cette organisation ne correspond à cette clé et à cette version. Vérifiez la clé, ou laissez la version vide pour épingler la plus récente.",
-        "research_inputs_invalid": "Les valeurs des entrées de la définition de recherche ne la satisfont pas. Renseignez chaque entrée obligatoire avec une valeur acceptée, puis réessayez.",
-        "task_type_requires_project": "Une tâche de recherche appartient à un projet de recherche, pas à un service. Ajoutez-la plutôt à un projet de recherche.",
-        "research_project_not_pinned": "Une tâche de recherche nécessite un projet de recherche qui épingle une définition de recherche, et celui-ci n'en épingle aucune. Ajoutez la tâche à un projet de recherche.",
-        "research_definition_changed": "La définition de recherche épinglée par ce projet a changé depuis, donc l'exécution s'est arrêtée plutôt que de poser des questions que le projet n'a jamais acceptées. Demandez à l'opérateur du déploiement de publier la modification sous une nouvelle version.",
-        "research_task_already_recorded": "Cette tâche de recherche a déjà enregistré ses résultats. Créez une nouvelle tâche de recherche pour faire un suivi.",
-        "research_nothing_to_ask": "Le mode de cette tâche de recherche ne laisse aucune question à poser : rien de nouveau à ajouter, ou rien de partiel ou de bloqué à clarifier. Choisissez un autre mode ou ajoutez une question.",
-        "findings_too_large_for_inline": "Les résultats sont trop volumineux pour être stockés, et leur déport vers le stockage de contenu n'est pas disponible. Activez le stockage de contenu ou autorisez le déport, puis réessayez."
+        "project_definition_required": "Ce type de projet épingle une définition : il lui en faut une. Choisissez-en une et réessayez.",
+        "project_definition_not_accepted": "Ce type de projet n'épingle aucune définition. Retirez la définition ou choisissez un type qui en utilise une.",
+        "project_definition_not_found": "Aucune définition de ce type de projet dans cette organisation ne correspond à cette clé et à cette version. Vérifiez la clé, ou laissez la version vide pour épingler la plus récente.",
+        "project_definition_inputs_invalid": "Les valeurs des entrées de la définition ne la satisfont pas. Renseignez chaque entrée obligatoire avec une valeur acceptée, puis réessayez.",
+        "task_type_requires_project": "Une tâche de ce type appartient à un projet, pas à un service. Ajoutez-la à un projet d'un type qui la propose.",
+        "project_not_pinned": "Une tâche de ce type a besoin que son projet épingle une définition, et celui-ci n'en épingle aucune. Ajoutez la tâche à un projet qui en épingle une.",
+        "project_definition_changed": "La définition épinglée par ce projet a changé depuis : l'exécution s'est arrêtée plutôt que de travailler à partir d'une définition que le projet n'a jamais acceptée. Demandez à l'opérateur du déploiement de publier la modification comme nouvelle version.",
+        "project_task_already_recorded": "Cette tâche a déjà enregistré son résultat sur le projet. Créez une nouvelle tâche pour faire un suivi.",
+        "outcome_too_large_for_inline": "Le résultat est trop volumineux pour être stocké, il n'a donc pas été enregistré. Restreignez la tâche et relancez-la.",
+        "research_nothing_to_ask": "Le mode de cette tâche de recherche ne laisse aucune question à poser : rien de nouveau à ajouter, ou rien de partiel ou de bloqué à clarifier. Choisissez un autre mode ou ajoutez une question."
       }
     },
     "action": {
@@ -1142,7 +1145,8 @@
       "savedToast": "Surveillance enregistrée",
       "saveFailed": "Impossible d'enregistrer le mappage",
       "clearFailed": "Impossible d'effacer le mappage",
-      "configNoun": "la configuration de santé de la version"
+      "configNoun": "la configuration de santé de la version",
+      "loadFailed": "Impossible de charger les paramètres de santé des releases"
     },
     "testSecrets": {
       "title": "Identifiants de test (sensibles)",
@@ -2092,7 +2096,6 @@
     "title": "Observabilité de la plateforme",
     "refresh": "Actualiser",
     "close": "Fermer",
-    "retry": "Réessayer",
     "window": {
       "oneHour": "Dernière heure",
       "oneDay": "Dernières 24 heures",
@@ -2100,6 +2103,7 @@
       "thirtyDays": "30 derniers jours",
       "ninetyDays": "90 derniers jours"
     },
+    "noAccount": "Aucun compte n'est actif, il n'y a donc aucune donnée à afficher.",
     "outcomes": {
       "title": "Résultats des exécutions",
       "total": "Exécutions totales",
@@ -2940,7 +2944,8 @@
       "roster": {
         "title": "Membres",
         "empty": "Aucun membre pour l'instant.",
-        "remove": "Retirer le membre"
+        "remove": "Retirer le membre",
+        "loadFailed": "Impossible de charger les membres de ce tableau"
       },
       "add": {
         "title": "Ajouter un membre",
@@ -3576,7 +3581,8 @@
         "pagerDutyToken": "Jeton d'API PagerDuty",
         "pagerDutyFromEmail": "E-mail expéditeur PagerDuty",
         "incidentIoKey": "Clé d'API incident.io",
-        "clear": "Effacer"
+        "clear": "Effacer",
+        "loadFailed": "Impossible de charger les outils d'incident"
       },
       "status": {
         "notConnected": "Non connecté",
@@ -3594,7 +3600,8 @@
         "disconnectFailed": "Impossible de déconnecter"
       },
       "connectionNoun": "la connexion d’observabilité",
-      "incidentNoun": "le fournisseur d’incidents"
+      "incidentNoun": "le fournisseur d’incidents",
+      "loadFailed": "Impossible de charger la connexion d'observabilité"
     },
     "packageRegistries": {
       "tab": "Registres de paquets",
@@ -4271,7 +4278,8 @@
         "kubeNoun": "le gestionnaire Kubernetes",
         "kubeOverrideNoun": "le remplacement Kubernetes",
         "customNoun": "ce gestionnaire",
-        "cloudflareNoun": "le gestionnaire Cloudflare"
+        "cloudflareNoun": "le gestionnaire Cloudflare",
+        "loadFailed": "Impossible de charger les gestionnaires d'environnement"
       },
       "cloudflare": {
         "intro": "Déploie un Worker Cloudflare par pull request en déclenchant le workflow d’aperçu du dépôt cible. cat-factory ne parle jamais directement à Cloudflare : il crée un déploiement, lit son statut et publie un statut inactive pour le démonter.",
@@ -4698,7 +4706,8 @@
         "loadProjection": "Impossible de charger les dépôts, les pull requests et les issues",
         "startInstall": "Impossible de démarrer l'installation de la GitHub App",
         "connect": "Connexion impossible"
-      }
+      },
+      "listFailed": "Impossible de lister les installations de la GitHub App"
     },
     "panel": {
       "connectIntro": "Connectez une installation de la GitHub App pour adosser les blocs du tableau à des dépôts, parcourir les pull requests et les tickets, et laisser les agents pousser des branches et ouvrir des PR.",
@@ -4809,7 +4818,8 @@
       "errors": {
         "listDirectory": "Impossible de lister le répertoire"
       },
-      "selectAllFiles": "Sélectionner {count} fichier | Sélectionner les {count} fichiers"
+      "selectAllFiles": "Sélectionner {count} fichier | Sélectionner les {count} fichiers",
+      "listFailed": "Impossible de lister ce dossier"
     }
   },
   "slack": {
@@ -6225,6 +6235,7 @@
       "medium": "Confiance moyenne",
       "low": "Confiance faible"
     },
+    "loadFailed": "Impossible de charger la revue des exigences",
     "findingFloor": {
       "raised": {
         "high": "Ce passage n’a soulevé que des constats élevés.",
@@ -6350,7 +6361,8 @@
       "done": "Terminé",
       "failed": "Échoué"
     },
-    "groupTitle": "Le groupe de consensus vers lequel cette exécution est montée"
+    "groupTitle": "Le groupe de consensus vers lequel cette exécution est montée",
+    "loadFailed": "Impossible de charger la session de consensus"
   },
   "brainstorm": {
     "title": {
@@ -6443,7 +6455,8 @@
       "taskReset": "Tâche réinitialisée : modifiez-la et resoumettez-la",
       "extraRoundGranted": "Une ronde de brainstorming supplémentaire accordée",
       "resolveError": "Impossible de résoudre le brainstorming"
-    }
+    },
+    "loadFailed": "Impossible de charger la session de brainstorming"
   },
   "spec": {
     "title": "Exigences",
@@ -6494,6 +6507,14 @@
       "given": "Given",
       "when": "When",
       "then": "Then"
+    },
+    "anchorReadFailed": {
+      "title": "Impossible de lire la spécification",
+      "description": "La lecture du dépôt a échoué : on ne sait donc pas si ce service a une spécification. Réessayez."
+    },
+    "anchorUnparsed": {
+      "title": "Le fichier de spécification n'est pas valide",
+      "description": "spec/service.json est sur la branche par défaut mais n'a pas pu être analysé. Corrigez le fichier dans le dépôt."
     }
   },
   "followUp": {
@@ -7294,7 +7315,8 @@
       "checkSourceFailed": "Impossible de vérifier le dépôt",
       "sourceUnlinked": "Dépôt délié",
       "unlinkSourceFailed": "Impossible de délier le dépôt"
-    }
+    },
+    "loadFailed": "Impossible de charger le catalogue des services fondamentaux"
   },
   "binaryOutput": {
     "heading": "Sorties binaires",
@@ -8233,7 +8255,8 @@
       "done": "Terminé",
       "save": "Enregistrer",
       "revert": "Rétablir"
-    }
+    },
+    "loadFailed": "Impossible de charger la bibliothèque Claude Skills"
   },
   "merge": {
     "changeClass": {

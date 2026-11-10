@@ -227,7 +227,10 @@ export function buildListWorkspaceRunRepos(
   return async (workspaceId) => {
     const mounts = await deps.workspaceMountRepository.listByWorkspace(workspaceId)
     if (mounts.length === 0) return []
-    const services = await deps.serviceRepository.listByIds(mounts.map((m) => m.subjectId))
+    // A mounted project has no repository; the persistence RPC refuses its id on a service read.
+    const services = await deps.serviceRepository.listByIds(
+      mounts.filter((m) => m.subjectKind === 'service').map((m) => m.subjectId),
+    )
     const targeted = new Set(
       services.map((service) => service.repoGithubId).filter((id): id is number => id != null),
     )

@@ -1,39 +1,45 @@
+import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import {
   adhocQuestionId,
-  decodeFindingsStoragePolicy,
-  decodeResearchMode,
+  findingsRevisionBodySchema,
   foldFindings,
   isAdhocQuestionId,
   parseResearchDefinition,
   researchCoverage,
-  researchDefinitionNamespace,
-  type FindingsRevision,
+  type FoldableFindingsRevision,
   type QuestionFinding,
   type ResearchDefinitionInput,
 } from './research.js'
 
-function definition(over: Partial<ResearchDefinitionInput> = {}): ResearchDefinitionInput {
+function definition(
+  over: Partial<ResearchDefinitionInput> = {},
+  spec: Partial<ResearchDefinitionInput['spec']> = {},
+): ResearchDefinitionInput {
   return {
+    kind: 'research',
     key: 'acme:content-integration',
     version: 1,
     title: 'Content integration',
-    brief: 'Find out how the vendor exposes content.',
-    topics: [
-      {
-        id: 'auth',
-        title: 'Authentication',
-        questions: [
-          { id: 'auth-scheme', question: 'Which auth scheme does the API use?' },
-          { id: 'token-ttl', question: 'How long does a token live?' },
-        ],
-      },
-      {
-        id: 'content',
-        title: 'Content',
-        questions: [{ id: 'list', question: 'How is content listed?' }],
-      },
-    ],
+    spec: {
+      brief: 'Find out how the vendor exposes content.',
+      topics: [
+        {
+          id: 'auth',
+          title: 'Authentication',
+          questions: [
+            { id: 'auth-scheme', question: 'Which auth scheme does the API use?' },
+            { id: 'token-ttl', question: 'How long does a token live?' },
+          ],
+        },
+        {
+          id: 'content',
+          title: 'Content',
+          questions: [{ id: 'list', question: 'How is content listed?' }],
+        },
+      ],
+      ...spec,
+    },
     targets: [{ baseUrl: 'https://api.vendor.example', surface: 'api' }],
     ...over,
   }
@@ -60,16 +66,10 @@ function revision(
   seq: number,
   findings: QuestionFinding[],
   summary = '',
-): FindingsRevision {
+): FoldableFindingsRevision {
   return {
     id,
-    projectId: 'prj_1',
-    taskId: `task_${id}`,
     seq,
-    mode: 'initial',
-    definitionKey: 'acme:content-integration',
-    definitionVersion: 1,
-    createdAt: seq,
     body: { summary, findings, learnings: [], adhocQuestions: [] },
   }
 }
@@ -79,28 +79,32 @@ describe('research definition schema', () => {
     const parsed = parseResearchDefinition(definition())
     expect(parsed.ok).toBe(true)
     if (parsed.ok) {
-      expect(parsed.definition.credentials).toEqual([])
-      expect(parsed.definition.inputs).toEqual([])
+      expect(parsed.value.credentials).toEqual([])
+      expect(parsed.value.inputs).toEqual([])
     }
   })
 
   it('refuses a question id repeated across topics, since findings merge by it', () => {
     const parsed = parseResearchDefinition(
-      definition({
-        topics: [
-          { id: 'a', title: 'A', questions: [{ id: 'q', question: 'one?' }] },
-          { id: 'b', title: 'B', questions: [{ id: 'q', question: 'two?' }] },
-        ],
-      }),
+      definition(
+        {},
+        {
+          topics: [
+            { id: 'a', title: 'A', questions: [{ id: 'q', question: 'one?' }] },
+            { id: 'b', title: 'B', questions: [{ id: 'q', question: 'two?' }] },
+          ],
+        },
+      ),
     )
     expect(parsed.ok).toBe(false)
   })
 
   it('refuses an authored id in the ad-hoc namespace', () => {
     const parsed = parseResearchDefinition(
-      definition({
-        topics: [{ id: 'a', title: 'A', questions: [{ id: 'adhoc:x:1', question: 'q?' }] }],
-      }),
+      definition(
+        {},
+        { topics: [{ id: 'a', title: 'A', questions: [{ id: 'adhoc:x:1', question: 'q?' }] }] },
+      ),
     )
     expect(parsed.ok).toBe(false)
   })
@@ -125,8 +129,14 @@ describe('research definition schema', () => {
     expect(parsed.ok).toBe(false)
   })
 
-  it('reads the namespace off a key', () => {
-    expect(researchDefinitionNamespace('acme:content-integration')).toBe('acme')
+  it('refuses an evidence link a human would follow unless it is http or https', () => {
+    const evidence = (url: string) =>
+      v.safeParse(findingsRevisionBodySchema, {
+        findings: [{ ...finding('list', 'answered', 'Paged'), evidence: [{ kind: 'url', url }] }],
+      }).success
+    expect(evidence('http://docs.vendor.example/list')).toBe(true)
+    expect(evidence('javascript:alert(1)')).toBe(false)
+    expect(evidence('data:text/html,<script>alert(1)</script>')).toBe(false)
   })
 })
 
@@ -179,6 +189,16 @@ describe('foldFindings', () => {
     expect(folded.byQuestion['token-ttl']?.notes[0]?.status).toBe('blocked')
   })
 
+  it('keeps every other attempt as a note, oldest first, across a re-check and a replacement', () => {
+    const folded = foldFindings([
+      revision('r1', 1, [finding('auth-scheme', 'answered', 'API key')]),
+      revision('r2', 2, [finding('auth-scheme', 'blocked')]),
+      revision('r3', 3, [finding('auth-scheme', 'answered', 'OAuth 2')]),
+    ])
+    expect(folded.byQuestion['auth-scheme']?.finding.answer).toBe('OAuth 2')
+    expect(folded.byQuestion['auth-scheme']?.notes.map((n) => n.seq)).toEqual([1, 2])
+  })
+
   it('takes the newest summary and keeps every learning tagged with its revision', () => {
     const first = revision('r1', 1, [], 'first')
     first.body.learnings = [{ title: 'Rate limit is 10/s', detail: '' }]
@@ -201,7 +221,7 @@ describe('foldFindings', () => {
 })
 
 describe('researchCoverage', () => {
-  it('counts every asked question once, treating a never-answered one as unanswered', () => {
+  it('counts every asked question once, even a repeated ad-hoc id, treating a never-answered one as unanswered', () => {
     const parsed = parseResearchDefinition(definition())
     if (!parsed.ok) throw new Error('fixture invalid')
     const adhoc = adhocQuestionId('blk_1', 1)
@@ -213,8 +233,8 @@ describe('researchCoverage', () => {
         finding('retired-question', 'answered', 'old'),
       ]),
     ])
-    const coverage = researchCoverage(parsed.definition.topics, [adhoc], folded)
-    const asked = parsed.definition.topics.flatMap((t) => t.questions).length + 1
+    const coverage = researchCoverage(parsed.value.spec.topics, [adhoc, adhoc], folded)
+    const asked = parsed.value.spec.topics.flatMap((t) => t.questions).length + 1
     const counted = Object.values(coverage.total).reduce((sum, n) => sum + n, 0)
     expect(counted).toBe(asked)
     expect(coverage.byTopic).toEqual([
@@ -223,20 +243,5 @@ describe('researchCoverage', () => {
     ])
     expect(coverage.adhoc.partial).toBe(1)
     expect(coverage.retiredQuestionIds).toEqual(['retired-question'])
-  })
-})
-
-describe('decoding persisted research values', () => {
-  it('reads a stored policy and refuses one outside the schema', () => {
-    expect(decodeFindingsStoragePolicy('{"inlineMaxBytes":1000,"offload":"disabled"}')).toEqual({
-      inlineMaxBytes: 1000,
-      offload: 'disabled',
-    })
-    expect(() => decodeFindingsStoragePolicy('{"inlineMaxBytes":-1}')).toThrow()
-    expect(() => decodeFindingsStoragePolicy('{"offload":"sometimes"}')).toThrow()
-  })
-
-  it('refuses a research mode no current mode names', () => {
-    expect(() => decodeResearchMode('rewrite')).toThrow()
   })
 })

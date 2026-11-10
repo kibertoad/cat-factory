@@ -113,7 +113,10 @@ export { PipelineRegistry, defaultPipelineRegistry } from '@cat-factory/kernel'
 export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
 export {
   ProjectKindRegistry,
-  ResearchDefinitionRegistry,
+  ProjectKindModuleRegistry,
+  ProjectDefinitionRegistry,
+  defaultProjectDefinitionRegistry,
+  defaultProjectKindModuleRegistry,
   defaultProjectKindRegistry,
 } from '@cat-factory/kernel'
 // Installation-level extension point for INLINE USE CASES (the same DI seam again): a deployment

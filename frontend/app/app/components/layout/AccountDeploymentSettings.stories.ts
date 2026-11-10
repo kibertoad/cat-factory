@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { screen } from 'storybook/test'
 import type { AccountSettingsView } from '@cat-factory/contracts'
 import { getAccountSettingsContract } from '@cat-factory/contracts'
 import { apiFailure, apiResponse } from '~/stories/api'
@@ -158,10 +159,13 @@ export const UnregisteredStore: Story = {
 }
 
 /**
- * The load failed: a toast, and every section says Not set with no storage section, which reads
- * like an account with nothing configured.
+ * The load failed: a toast, and the panel says so with a retry instead of a form where every
+ * section reads Not set.
  */
 export const Failed: Story = {
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
   parameters: {
     api: [apiFailure(getAccountSettingsContract, { pathParams: { accountId: orgAccount.id } })],
   },

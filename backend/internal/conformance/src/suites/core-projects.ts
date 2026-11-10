@@ -1,10 +1,12 @@
 import type { Project } from '@cat-factory/contracts'
 import type { Block, WorkspaceMount, WorkspaceSnapshot } from '@cat-factory/kernel'
 import {
+  ProjectKindModuleRegistry,
   ProjectKindRegistry,
-  ResearchDefinitionRegistry,
+  ProjectDefinitionRegistry,
   SIMPLE_PIPELINE_ID,
-  researchDefinitionContentHash,
+  projectDefinitionContentHash,
+  type ProjectKindModule,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
@@ -31,7 +33,7 @@ function kinds(): ProjectKindRegistry {
   registry.register({
     id: 'vendor-study',
     label: 'Vendor study',
-    data: 'research',
+    definition: 'required',
     taskTypes: [{ taskType: 'spike', repoAccess: 'none', defaultPipelineId: SIMPLE_PIPELINE_ID }],
   })
   return registry
@@ -39,14 +41,11 @@ function kinds(): ProjectKindRegistry {
 
 function vendorDefinition(version: number) {
   return {
+    kind: 'vendor-study',
     key: 'acme:vendor',
     version,
     title: 'Vendor',
-    brief: 'Learn how the vendor integrates.',
-    topics: [
-      { id: 'auth', title: 'Auth', questions: [{ id: 'scheme', question: 'Which auth scheme?' }] },
-    ],
-    targets: [{ baseUrl: 'https://vendor.example', surface: 'api' as const }],
+    spec: { brief: 'Learn how the vendor integrates.' },
     inputs: [
       { key: 'region', label: 'Region', type: 'text' as const, required: true },
       {
@@ -64,8 +63,31 @@ function vendorDefinition(version: number) {
   }
 }
 
-function definitions(): ResearchDefinitionRegistry {
-  const registry = new ResearchDefinitionRegistry()
+// The kind's own spec is opaque here: the platform pins whatever the kind's module accepts, and
+// lists a definition by the summary the module writes. Its tasks never run in this suite.
+const vendorStudyModule: ProjectKindModule<unknown> = {
+  kind: 'vendor-study',
+  agentKind: 'vendor-studier',
+  outcomeSchemaVersion: 1,
+  parseSpec: (definition) => ({ ok: true, value: definition.spec }),
+  parseOutcome: (_version, value) => value,
+  planTask: () => ({ intent: 'study', stream: 'main', plan: {} }),
+  brief: () => ({}),
+  mergeCheckpoint: (_earlier, later) => later,
+  finish: ({ reply }) => ({ body: reply, output: '' }),
+  describe: () => '',
+  artifactRefs: () => [],
+  definitionSummary: (definition) => (definition.spec as { brief: string }).brief,
+}
+
+function modules(): ProjectKindModuleRegistry {
+  const registry = new ProjectKindModuleRegistry()
+  registry.register(vendorStudyModule)
+  return registry
+}
+
+function definitions(): ProjectDefinitionRegistry {
+  const registry = new ProjectDefinitionRegistry(modules().all())
   registry.registerAll([vendorDefinition(1), vendorDefinition(2)])
   return registry
 }
@@ -79,7 +101,8 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
     async function setup() {
       const app = harness.makeApp(undefined, {
         projectKindRegistry: kinds(),
-        researchDefinitionRegistry: definitions(),
+        projectKindModuleRegistry: modules(),
+        projectDefinitionRegistry: definitions(),
       })
       const home = await app.createOrgWorkspace({ seed: true })
       const accountId = (await app.workspaceRepository().accountOf(home.workspace.id))!
@@ -130,65 +153,74 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
       expect(reasonOf(badLink.body)).toBe('project_service_link_invalid')
     })
 
-    it('lists every definition version the account can pin, with its inputs and no questions', async () => {
+    it("lists one kind's pinnable definition versions with their inputs and no spec", async () => {
       const { app, wsId } = await setup()
       const listed = await app.call<Array<Record<string, unknown>>>(
         'GET',
-        `/workspaces/${wsId}/research-definitions`,
+        `/workspaces/${wsId}/project-kinds/vendor-study/definitions`,
       )
       expect(listed.status).toBe(200)
       expect(listed.body).toEqual(
         [1, 2].map((version) => ({
+          kind: 'vendor-study',
           key: 'acme:vendor',
           version,
           title: 'Vendor',
-          brief: 'Learn how the vendor integrates.',
-          inputs: [{ key: 'region', label: 'Region', type: 'text', required: true }],
+          summary: 'Learn how the vendor integrates.',
+          inputs: vendorDefinition(version).inputs,
           origin: 'registered',
         })),
       )
+      // A kind with no module of its own lists nothing rather than definitions it cannot pin.
+      const other = await app.call<unknown[]>(
+        'GET',
+        `/workspaces/${wsId}/project-kinds/research-elsewhere/definitions`,
+      )
+      expect(other.body).toEqual([])
     })
 
-    it('pins the research definition a research kind keeps, with its hash and inputs', async () => {
+    it('pins the definition a kind requires, with its hash and inputs', async () => {
       const { app, wsId } = await setup()
       const latest = await createProject(app, wsId, {
         kind: 'vendor-study',
-        research: { definitionKey: 'acme:vendor', inputs: { region: 'eu', notes: '' } },
+        definition: { key: 'acme:vendor', inputs: { region: 'eu', notes: '' } },
       })
       expect(latest.status).toBe(201)
-      const pinned = await app.researchProjectRepository().get(latest.body.project.id)
+      const pinned = await app.projectRecordRepository().getPin(latest.body.project.id)
       expect(pinned).toMatchObject({
         definitionKey: 'acme:vendor',
         definitionVersion: 2,
-        definitionHash: await researchDefinitionContentHash(definitions().get('acme:vendor', 2)!),
+        definitionHash: await projectDefinitionContentHash(
+          definitions().get('vendor-study', 'acme:vendor', 2)!,
+        ),
       })
       // The declared default answers an omitted field, and an unfilled one is not pinned.
       expect(pinned?.inputs).toEqual({ region: 'eu', depth: 'shallow' })
       const exact = await createProject(app, wsId, {
         kind: 'vendor-study',
-        research: { definitionKey: 'acme:vendor', definitionVersion: 1, inputs: { region: 'us' } },
+        definition: { key: 'acme:vendor', version: 1, inputs: { region: 'us' } },
       })
       expect(exact.status).toBe(201)
       expect(
-        (await app.researchProjectRepository().get(exact.body.project.id))?.definitionVersion,
+        (await app.projectRecordRepository().getPin(exact.body.project.id))?.definitionVersion,
       ).toBe(1)
     })
 
-    it('refuses a research pin that is missing, misplaced, unknown or under-filled', async () => {
+    it('refuses a definition that is missing, misplaced, unknown or under-filled', async () => {
       const { app, wsId } = await setup()
       const cases: Array<[Record<string, unknown>, string]> = [
-        [{ kind: 'vendor-study' }, 'research_pin_required'],
-        [{ research: { definitionKey: 'acme:vendor' } }, 'research_pin_not_accepted'],
+        [{ kind: 'vendor-study' }, 'project_definition_required'],
+        [{ definition: { key: 'acme:vendor' } }, 'project_definition_not_accepted'],
         [
           {
             kind: 'vendor-study',
-            research: { definitionKey: 'acme:vendor', definitionVersion: 9 },
+            definition: { key: 'acme:vendor', version: 9 },
           },
-          'research_definition_not_found',
+          'project_definition_not_found',
         ],
         [
-          { kind: 'vendor-study', research: { definitionKey: 'acme:vendor', inputs: {} } },
-          'research_inputs_invalid',
+          { kind: 'vendor-study', definition: { key: 'acme:vendor', inputs: {} } },
+          'project_definition_inputs_invalid',
         ],
       ]
       for (const [body, reason] of cases) {

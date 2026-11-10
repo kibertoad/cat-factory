@@ -28,7 +28,7 @@ export interface SurfaceTraits {
   container: boolean
   /**
    * Whether a dispatch hands the agent a WORKING TREE of its own to read and run `git` in. True
-   * for every container surface but `container-research`, whose container holds a browser and
+   * for every container surface but `container-project`, whose container holds a browser and
    * an HTTP client and at most read-only reference clones, and for `delegated`, whose executor
    * checks the branch out itself.
    */
@@ -82,10 +82,11 @@ export const SURFACE_TRAITS: Record<AgentSurface, SurfaceTraits> = {
     readOnlyGuardrail: false,
     delegated: false,
   },
-  // Our container, with a browser and an HTTP client but no checkout. The reply is the findings.
-  // No read-only guardrail: there is no working tree to keep it off, and the research prompt
-  // carries its own rules about what it may do with a credential.
-  'container-research': {
+  // Our container, with a browser and an HTTP client but no checkout, for a project task. The
+  // reply is the outcome its kind records. No read-only guardrail: there is no working tree to
+  // keep it off, and each kind's prompt carries its own rules about what it may do with a
+  // credential.
+  'container-project': {
     container: true,
     checkout: false,
     deliverableIsReply: true,

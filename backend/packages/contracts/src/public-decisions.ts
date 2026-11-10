@@ -1130,7 +1130,7 @@ export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
  *   dispatch, so the step parked. Only the run's initiator can answer it, by entering their
  *   personal password in the app, which re-mints the credential and resumes the step.
  * - `capability_credential_missing`: a step needs a capability credential (a vendor login a
- *   research definition declared, say) that is not stored for the workspace. A person who can
+ *   project definition declared, say) that is not stored for the workspace. A person who can
  *   manage the workspace's secrets stores it, and any member resumes the step in the app.
  * - `credential_wait_unrecorded`: a credential wait recorded before waits named what they wait
  *   on. It cannot be resumed; the run is restarted.

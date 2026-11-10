@@ -57,8 +57,9 @@ import {
   type InlineUseCaseRegistry,
   type TaskTypeRegistry,
   type ProjectKindRegistry,
-  type RegisteredResearchDefinitionSource,
-  type ResearchDefinitionRegistry,
+  type RegisteredProjectDefinitionSource,
+  type ProjectDefinitionRegistry,
+  type ProjectKindModuleRegistry,
   type ProjectKindSource,
   type ToolSecretResolver,
   type VcsProviderRegistry,
@@ -446,12 +447,17 @@ export interface NodeContainerOptions {
   /** Where project kinds are read from; set only by a mothership-mode local node. */
   projectKindSource?: ProjectKindSource
   /**
-   * The app-owned research-definition registry: the definitions a deployment ships in code.
-   * Defaults (inside `createCore`) to an empty registry.
+   * The app-owned project-kind MODULE registry: each kind's code half. Defaults (inside
+   * `createCore`) to the built-in kinds' modules.
    */
-  researchDefinitionRegistry?: ResearchDefinitionRegistry
-  /** Where registered research definitions are read from; set only by a mothership-mode node. */
-  registeredResearchDefinitionSource?: RegisteredResearchDefinitionSource
+  projectKindModuleRegistry?: ProjectKindModuleRegistry
+  /**
+   * The app-owned project-definition registry: the definitions a deployment ships in code.
+   * Defaults (inside `createCore`) to an empty registry validating the modules' kinds.
+   */
+  projectDefinitionRegistry?: ProjectDefinitionRegistry
+  /** Where registered project definitions are read from; set only by a mothership-mode node. */
+  registeredProjectDefinitionSource?: RegisteredProjectDefinitionSource
   /**
    * The app-owned INLINE USE-CASE registry (the deployment's non-container model operations).
    * Rides its own option like `taskTypeRegistry`; defaults (inside `createCore`) to
