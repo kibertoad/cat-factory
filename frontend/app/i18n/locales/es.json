@@ -696,7 +696,7 @@
         "delegated_executor_failed": "El ejecutor externo no pudo iniciar este paso. El problema está en el sistema que realiza el trabajo, no en esta instalación: revisa sus propios registros e inténtalo de nuevo.",
         "delegated_work_branch_unprepared": "La plataforma no pudo preparar la rama de trabajo a la que se envía el ejecutor de este paso, así que no se inició nada. O la conexión al repositorio no puede escribir en ella, o la tarea indica una rama que aún no existe: los detalles dicen cuál de las dos.",
         "attached_pr_provider_unreachable": "El proveedor del repositorio no respondió, así que no se pudo comprobar la pull request y no se creó ninguna tarea. No hay nada que configurar aquí: vuelve a intentarlo en un momento.",
-        "research_definitions_unreachable": "No se han podido leer las definiciones de investigación de esta instalación en este momento, así que no se ha completado la solicitud. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión."
+        "project_definitions_unreachable": "No se han podido leer las definiciones de proyecto de esta instalación en este momento, así que no se ha completado la solicitud. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión."
       }
     },
     "reason": {
@@ -717,10 +717,10 @@
         "project_has_no_writable_repo": "Un paso de esta ejecución necesita un repositorio en el que escribir, y un proyecto no tiene ninguno: los repositorios de sus servicios vinculados son contexto de solo lectura. Elige un pipeline que solo lea e informe.",
         "project_service_link_invalid": "Uno de los servicios vinculados ya no existe o pertenece a otra organización. Recarga el tablero y vuelve a elegir los servicios vinculados.",
         "project_has_unfinished_tasks": "Este proyecto aún tiene tareas sin terminar. Termínalas o elimínalas primero.",
-        "research_pin_required": "Este tipo de proyecto guarda datos de investigación, así que necesita una definición de investigación que fijar. Elige una e inténtalo de nuevo.",
-        "research_pin_not_accepted": "Este tipo de proyecto no guarda datos de investigación, así que no puede fijar una definición de investigación. Quita la definición o elige un tipo de investigación.",
-        "research_definition_not_found": "Ninguna definición de investigación de esta organización coincide con esa clave y versión. Revisa la clave o deja la versión vacía para fijar la más reciente.",
-        "research_inputs_invalid": "Los valores de las entradas de la definición de investigación no la cumplen. Rellena cada entrada obligatoria con un valor aceptado e inténtalo de nuevo."
+        "project_definition_required": "Este tipo de proyecto fija una definición, así que necesita una. Elige una e inténtalo de nuevo.",
+        "project_definition_not_accepted": "Este tipo de proyecto no fija ninguna definición. Quita la definición o elige un tipo que use una.",
+        "project_definition_not_found": "Ninguna definición de este tipo de proyecto en esta organización coincide con esa clave y versión. Revisa la clave o deja la versión vacía para fijar la más reciente.",
+        "project_definition_inputs_invalid": "Los valores de las entradas de la definición no la cumplen. Rellena cada entrada obligatoria con un valor aceptado e inténtalo de nuevo."
       }
     },
     "action": {

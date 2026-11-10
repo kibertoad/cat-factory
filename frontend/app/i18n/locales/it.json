@@ -6585,7 +6585,7 @@
         "delegated_executor_failed": "L’esecutore esterno non è riuscito ad avviare questo passaggio. Il problema è nel sistema che svolge il lavoro, non in questa installazione: controlla i suoi log e riprova.",
         "delegated_work_branch_unprepared": "La piattaforma non è riuscita a preparare il branch di lavoro su cui viene inviato l'executor di questo passo, quindi non è stato avviato nulla. O la connessione al repository non può scriverci, oppure l'attività indica un branch che non esiste ancora: i dettagli dicono quale dei due.",
         "attached_pr_provider_unreachable": "Il provider del repository non ha risposto, quindi non è stato possibile verificare la pull request e non è stata creata alcuna attività. Non c'è nulla da configurare qui: riprova tra un momento.",
-        "research_definitions_unreachable": "Non è stato possibile leggere le definizioni di ricerca di questa installazione in questo momento, quindi la richiesta non è stata completata. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata."
+        "project_definitions_unreachable": "Non è stato possibile leggere le definizioni di progetto di questa installazione in questo momento, quindi la richiesta non è stata completata. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata."
       }
     },
     "reason": {
@@ -6606,10 +6606,10 @@
         "project_has_no_writable_repo": "Un passo di questa esecuzione ha bisogno di un repository in cui scrivere, e un progetto non ne ha: i repository dei suoi servizi collegati sono contesto in sola lettura. Scegli una pipeline che si limita a leggere e riferire.",
         "project_service_link_invalid": "Uno dei servizi collegati non esiste più o appartiene a un'altra organizzazione. Ricarica la board e scegli di nuovo i servizi collegati.",
         "project_has_unfinished_tasks": "Questo progetto ha ancora attività non concluse. Concludile o eliminale prima.",
-        "research_pin_required": "Questo tipo di progetto conserva dati di ricerca, quindi serve una definizione di ricerca da fissare. Scegline una e riprova.",
-        "research_pin_not_accepted": "Questo tipo di progetto non conserva dati di ricerca, quindi non può fissare una definizione di ricerca. Rimuovi la definizione o scegli un tipo di ricerca.",
-        "research_definition_not_found": "Nessuna definizione di ricerca di questa organizzazione corrisponde a quella chiave e versione. Controlla la chiave, oppure lascia vuota la versione per fissare la più recente.",
-        "research_inputs_invalid": "I valori degli input della definizione di ricerca non la soddisfano. Compila ogni input obbligatorio con un valore accettato e riprova."
+        "project_definition_required": "Questo tipo di progetto fissa una definizione, quindi ne serve una. Scegline una e riprova.",
+        "project_definition_not_accepted": "Questo tipo di progetto non fissa alcuna definizione. Rimuovi la definizione o scegli un tipo che ne usa una.",
+        "project_definition_not_found": "Nessuna definizione di questo tipo di progetto in questa organizzazione corrisponde a quella chiave e versione. Controlla la chiave, oppure lascia vuota la versione per fissare la più recente.",
+        "project_definition_inputs_invalid": "I valori degli input della definizione non la soddisfano. Compila ogni input obbligatorio con un valore accettato e riprova."
       }
     },
     "action": {

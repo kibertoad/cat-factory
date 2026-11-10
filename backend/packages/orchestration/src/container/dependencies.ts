@@ -188,8 +188,8 @@ import type {
   ProjectDefinitionRepository,
   ProjectRecordRepository,
   ProjectKindSource,
-  RegisteredResearchDefinitionSource,
-  ResearchDefinitionRegistry,
+  RegisteredProjectDefinitionSource,
+  ProjectDefinitionRegistry,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
@@ -464,15 +464,15 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    */
   projectKindSource?: ProjectKindSource
   /**
-   * The app-owned research-definition registry: the definitions a deployment ships in code.
+   * The app-owned project-definition registry: the definitions a deployment ships in code.
    * Defaulted to an EMPTY registry. A facade injects the SAME instance a deployment registers on.
    */
-  researchDefinitionRegistry?: ResearchDefinitionRegistry
+  projectDefinitionRegistry?: ProjectDefinitionRegistry
   /**
-   * Where REGISTERED research definitions are read from: the registry above unless a
+   * Where REGISTERED project definitions are read from: the registry above unless a
    * mothership-mode node injects the remote source.
    */
-  registeredResearchDefinitionSource?: RegisteredResearchDefinitionSource
+  registeredProjectDefinitionSource?: RegisteredProjectDefinitionSource
   /**
    * The app-owned INLINE USE-CASE registry (the deployment's non-container model operations, which
    * `/api/v1/use-cases` publishes and invokes). Optional + defaulted to

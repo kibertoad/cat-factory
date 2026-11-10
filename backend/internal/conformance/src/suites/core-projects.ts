@@ -2,9 +2,9 @@ import type { Project } from '@cat-factory/contracts'
 import type { Block, WorkspaceMount, WorkspaceSnapshot } from '@cat-factory/kernel'
 import {
   ProjectKindRegistry,
-  ResearchDefinitionRegistry,
+  ProjectDefinitionRegistry,
   SIMPLE_PIPELINE_ID,
-  researchDefinitionContentHash,
+  projectDefinitionContentHash,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
@@ -31,7 +31,7 @@ function kinds(): ProjectKindRegistry {
   registry.register({
     id: 'vendor-study',
     label: 'Vendor study',
-    data: 'research',
+    definition: 'required',
     taskTypes: [{ taskType: 'spike', repoAccess: 'none', defaultPipelineId: SIMPLE_PIPELINE_ID }],
   })
   return registry
@@ -39,14 +39,11 @@ function kinds(): ProjectKindRegistry {
 
 function vendorDefinition(version: number) {
   return {
+    kind: 'vendor-study',
     key: 'acme:vendor',
     version,
     title: 'Vendor',
-    brief: 'Learn how the vendor integrates.',
-    topics: [
-      { id: 'auth', title: 'Auth', questions: [{ id: 'scheme', question: 'Which auth scheme?' }] },
-    ],
-    targets: [{ baseUrl: 'https://vendor.example', surface: 'api' as const }],
+    spec: { brief: 'Learn how the vendor integrates.' },
     inputs: [
       { key: 'region', label: 'Region', type: 'text' as const, required: true },
       {
@@ -64,8 +61,11 @@ function vendorDefinition(version: number) {
   }
 }
 
-function definitions(): ResearchDefinitionRegistry {
-  const registry = new ResearchDefinitionRegistry()
+// The kind's own spec is opaque here: the platform pins whatever the kind's validator accepts.
+function definitions(): ProjectDefinitionRegistry {
+  const registry = new ProjectDefinitionRegistry([
+    { kind: 'vendor-study', parseSpec: (definition) => ({ ok: true, value: definition.spec }) },
+  ])
   registry.registerAll([vendorDefinition(1), vendorDefinition(2)])
   return registry
 }
@@ -79,7 +79,7 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
     async function setup() {
       const app = harness.makeApp(undefined, {
         projectKindRegistry: kinds(),
-        researchDefinitionRegistry: definitions(),
+        projectDefinitionRegistry: definitions(),
       })
       const home = await app.createOrgWorkspace({ seed: true })
       const accountId = (await app.workspaceRepository().accountOf(home.workspace.id))!
@@ -130,46 +130,48 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
       expect(reasonOf(badLink.body)).toBe('project_service_link_invalid')
     })
 
-    it('pins the research definition a research kind keeps, with its hash and inputs', async () => {
+    it('pins the definition a kind requires, with its hash and inputs', async () => {
       const { app, wsId } = await setup()
       const latest = await createProject(app, wsId, {
         kind: 'vendor-study',
-        research: { definitionKey: 'acme:vendor', inputs: { region: 'eu', notes: '' } },
+        definition: { key: 'acme:vendor', inputs: { region: 'eu', notes: '' } },
       })
       expect(latest.status).toBe(201)
-      const pinned = await app.researchProjectRepository().get(latest.body.project.id)
+      const pinned = await app.projectRecordRepository().getPin(latest.body.project.id)
       expect(pinned).toMatchObject({
         definitionKey: 'acme:vendor',
         definitionVersion: 2,
-        definitionHash: await researchDefinitionContentHash(definitions().get('acme:vendor', 2)!),
+        definitionHash: await projectDefinitionContentHash(
+          definitions().get('vendor-study', 'acme:vendor', 2)!,
+        ),
       })
       // The declared default answers an omitted field, and an unfilled one is not pinned.
       expect(pinned?.inputs).toEqual({ region: 'eu', depth: 'shallow' })
       const exact = await createProject(app, wsId, {
         kind: 'vendor-study',
-        research: { definitionKey: 'acme:vendor', definitionVersion: 1, inputs: { region: 'us' } },
+        definition: { key: 'acme:vendor', version: 1, inputs: { region: 'us' } },
       })
       expect(exact.status).toBe(201)
       expect(
-        (await app.researchProjectRepository().get(exact.body.project.id))?.definitionVersion,
+        (await app.projectRecordRepository().getPin(exact.body.project.id))?.definitionVersion,
       ).toBe(1)
     })
 
-    it('refuses a research pin that is missing, misplaced, unknown or under-filled', async () => {
+    it('refuses a definition that is missing, misplaced, unknown or under-filled', async () => {
       const { app, wsId } = await setup()
       const cases: Array<[Record<string, unknown>, string]> = [
-        [{ kind: 'vendor-study' }, 'research_pin_required'],
-        [{ research: { definitionKey: 'acme:vendor' } }, 'research_pin_not_accepted'],
+        [{ kind: 'vendor-study' }, 'project_definition_required'],
+        [{ definition: { key: 'acme:vendor' } }, 'project_definition_not_accepted'],
         [
           {
             kind: 'vendor-study',
-            research: { definitionKey: 'acme:vendor', definitionVersion: 9 },
+            definition: { key: 'acme:vendor', version: 9 },
           },
-          'research_definition_not_found',
+          'project_definition_not_found',
         ],
         [
-          { kind: 'vendor-study', research: { definitionKey: 'acme:vendor', inputs: {} } },
-          'research_inputs_invalid',
+          { kind: 'vendor-study', definition: { key: 'acme:vendor', inputs: {} } },
+          'project_definition_inputs_invalid',
         ],
       ]
       for (const [body, reason] of cases) {

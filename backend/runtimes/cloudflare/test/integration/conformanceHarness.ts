@@ -32,7 +32,7 @@ import { D1GitHubInstallationRepository } from '../../src/infrastructure/reposit
 import { D1RepoProjectionRepository } from '../../src/infrastructure/repositories/D1RepoProjectionRepository'
 import { D1PipelineRepository } from '../../src/infrastructure/repositories/D1PipelineRepository'
 import { D1BlockRepository } from '../../src/infrastructure/repositories/D1BlockRepository'
-import { D1ResearchProjectRepository } from '../../src/infrastructure/repositories/D1ResearchRepositories'
+import { D1ProjectRecordRepository } from '../../src/infrastructure/repositories/D1ProjectOutcomeRepositories'
 import { D1WorkspaceRepository } from '../../src/infrastructure/repositories/D1WorkspaceRepository'
 import { D1WorkspaceMemberRepository } from '../../src/infrastructure/repositories/D1WorkspaceMemberRepository'
 import { D1PublicApiKeyRepository } from '../../src/infrastructure/repositories/D1PublicApiKeyRepository'
@@ -151,7 +151,7 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
       initiativePresetRegistry: o.initiativePresetRegistry,
       taskTypeRegistry: o.taskTypeRegistry,
       projectKindRegistry: o.projectKindRegistry,
-      researchDefinitionRegistry: o.researchDefinitionRegistry,
+      projectDefinitionRegistry: o.projectDefinitionRegistry,
       inlineUseCaseRegistry: o.inlineUseCaseRegistry,
       pipelineRegistry: o.pipelineRegistry,
       // - prVerificationReportPublisher + appBaseUrl: the engine's PR-report hook, so the
@@ -339,7 +339,7 @@ const harness: ConformanceHarness = {
       agentRunRepository: () =>
         buildTestContainer({ agentExecutor: new FakeAgentExecutor() }).agentRunRepository,
       blockRepository: () => new D1BlockRepository({ db: env.DB }),
-      researchProjectRepository: () => new D1ResearchProjectRepository({ db: env.DB }),
+      projectRecordRepository: () => new D1ProjectRecordRepository({ db: env.DB }),
       workspaceRepository: () => new D1WorkspaceRepository({ db: env.DB }),
       workspaceMemberRepository: () => new D1WorkspaceMemberRepository({ db: env.DB }),
       publicApiKeyRepository: () => new D1PublicApiKeyRepository({ db: env.DB }),

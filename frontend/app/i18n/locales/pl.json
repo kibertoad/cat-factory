@@ -696,7 +696,7 @@
         "delegated_executor_failed": "Zewnętrzny executor nie zdołał uruchomić tego kroku. Problem leży w systemie wykonującym pracę, a nie w tej instalacji: sprawdź jego własne logi i spróbuj ponownie.",
         "delegated_work_branch_unprepared": "Platforma nie mogła przygotować gałęzi roboczej, na którą wysyłany jest executor tego kroku, więc nic nie zostało uruchomione. Albo połączenie z repozytorium nie ma prawa zapisu, albo zadanie wskazuje gałąź, która jeszcze nie istnieje: szczegóły mówią, co z tego.",
         "attached_pr_provider_unreachable": "Dostawca repozytorium nie odpowiedział, więc nie udało się sprawdzić pull requesta i nie utworzono zadania. Nie trzeba tu niczego konfigurować: spróbuj ponownie za chwilę.",
-        "research_definitions_unreachable": "Nie udało się teraz odczytać definicji badań tego wdrożenia, więc żądanie nie zostało wykonane. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci."
+        "project_definitions_unreachable": "Nie udało się teraz odczytać definicji projektów tego wdrożenia, więc żądanie nie zostało wykonane. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci."
       }
     },
     "reason": {
@@ -717,10 +717,10 @@
         "project_has_no_writable_repo": "Krok tego uruchomienia potrzebuje repozytorium do zapisu, a projekt go nie ma: repozytoria powiązanych usług są kontekstem tylko do odczytu. Wybierz pipeline, który tylko czyta i raportuje.",
         "project_service_link_invalid": "Jedna z powiązanych usług już nie istnieje lub należy do innej organizacji. Odśwież tablicę i wybierz powiązane usługi ponownie.",
         "project_has_unfinished_tasks": "Ten projekt ma jeszcze niezakończone zadania. Najpierw je zakończ lub usuń.",
-        "research_pin_required": "Ten rodzaj projektu przechowuje dane badawcze, więc wymaga definicji badania do przypięcia. Wybierz ją i spróbuj ponownie.",
-        "research_pin_not_accepted": "Ten rodzaj projektu nie przechowuje danych badawczych, więc nie może przypiąć definicji badania. Usuń definicję lub wybierz rodzaj badawczy.",
-        "research_definition_not_found": "Żadna definicja badania tej organizacji nie pasuje do tego klucza i wersji. Sprawdź klucz albo zostaw wersję pustą, aby przypiąć najnowszą.",
-        "research_inputs_invalid": "Wartości wejść definicji badania jej nie spełniają. Wypełnij każde wymagane wejście dozwoloną wartością i spróbuj ponownie."
+        "project_definition_required": "Ten rodzaj projektu przypina definicję, więc jej wymaga. Wybierz ją i spróbuj ponownie.",
+        "project_definition_not_accepted": "Ten rodzaj projektu nie przypina żadnej definicji. Usuń definicję lub wybierz rodzaj, który jej używa.",
+        "project_definition_not_found": "Żadna definicja tego rodzaju projektu w tej organizacji nie pasuje do tego klucza i wersji. Sprawdź klucz albo zostaw wersję pustą, aby przypiąć najnowszą.",
+        "project_definition_inputs_invalid": "Wartości wejść definicji jej nie spełniają. Wypełnij każde wymagane wejście dozwoloną wartością i spróbuj ponownie."
       }
     },
     "action": {

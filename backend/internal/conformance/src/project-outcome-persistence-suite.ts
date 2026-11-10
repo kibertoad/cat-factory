@@ -177,6 +177,33 @@ export function defineProjectOutcomePersistenceSuite(
       expect(await repos.records.reserveSeq(projectId)).toBe(2)
     })
 
+    it('gives each task one sequence number, kept across replayed starts', async () => {
+      const repos = makeRepos()
+      const projectId = await pinnedProject(repos)
+      const tasks = [1, 2, 3, 4].map(() => unique('task'))
+      const taken = await Promise.all(tasks.map((t) => repos.records.reserveTaskSeq(projectId, t)))
+      expect(new Set(taken).size).toBe(tasks.length)
+      // A replayed start keeps its place, even when the replays race each other.
+      const replayed = await Promise.all(
+        [...tasks, ...tasks].map((t) => repos.records.reserveTaskSeq(projectId, t)),
+      )
+      expect(replayed).toEqual([...taken, ...taken])
+      // A task and a taskless outcome draw from the one per-project order.
+      expect(await repos.records.reserveSeq(projectId)).toBeGreaterThan(Math.max(...taken))
+      const late = await repos.records.reserveTaskSeq(projectId, unique('task'))
+      expect(late).toBeGreaterThan(Math.max(...taken))
+    })
+
+    it('agrees on one sequence number when first claims for a task race', async () => {
+      const repos = makeRepos()
+      const projectId = await pinnedProject(repos)
+      const task = unique('task')
+      const claims = await Promise.all(
+        [1, 2, 3, 4, 5].map(() => repos.records.reserveTaskSeq(projectId, task)),
+      )
+      expect(new Set(claims).size).toBe(1)
+    })
+
     it('keeps the first write of an outcome and lists outcomes in sequence order', async () => {
       const repos = makeRepos()
       const projectId = await pinnedProject(repos)

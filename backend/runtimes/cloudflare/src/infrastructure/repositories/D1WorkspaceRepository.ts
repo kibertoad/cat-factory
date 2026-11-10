@@ -251,9 +251,6 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
       ...projectRecordDeletes(this.db, HOMED_PROJECTS, [id, id]),
       // This board's own outcome-storage policy tier.
       this.db
-        .prepare(`DELETE FROM research_task_seqs WHERE project_id IN (${HOMED_PROJECTS})`)
-        .bind(id, id),
-      this.db
         .prepare(
           `DELETE FROM outcome_storage_policies WHERE owner_kind = 'workspace' AND owner_id = ?`,
         )
