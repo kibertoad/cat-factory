@@ -8,7 +8,7 @@ import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import TakeoverShell from '~/components/common/TakeoverShell.vue'
-import FailureMessage from '~/components/common/FailureMessage.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 import TrendColumn from '~/components/panels/TrendColumn.vue'
 
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
@@ -185,20 +185,13 @@ watch(
         </header>
 
         <div class="flex-1 overflow-y-auto px-6 py-5">
-          <div
+          <!-- A retry clears `error` and shows the skeleton below, as on the first load. -->
+          <LoadFailedState
             v-if="error"
-            class="mx-auto max-w-2xl rounded-lg border border-app-error-800/60 bg-app-error-950/40 p-4 text-sm text-app-error-200"
-          >
-            <FailureMessage :failure="error" :title="t('platformObservability.loadFailed')" />
-            <UButton
-              color="neutral"
-              variant="ghost"
-              class="mt-2 rounded-md border border-app-error-700 px-3 py-1 text-xs hover:bg-app-error-900/40"
-              @click="refresh"
-            >
-              {{ t('platformObservability.retry') }}
-            </UButton>
-          </div>
+            :title="t('platformObservability.loadFailed')"
+            :failure="error"
+            @retry="refresh"
+          />
 
           <div v-else-if="loading && !view" class="mx-auto flex max-w-5xl flex-col gap-6">
             <USkeleton class="h-20 w-full rounded-lg" />
@@ -538,6 +531,13 @@ watch(
               </section>
             </div>
           </div>
+          <!-- With no active account there is no dashboard to read, which is not a blank page. -->
+          <EmptyState
+            v-else-if="!platform.accountId"
+            icon="i-lucide-building-2"
+            :title="t('platformObservability.noAccount')"
+            data-testid="operator-no-account"
+          />
         </div>
       </TakeoverShell>
     </Transition>
