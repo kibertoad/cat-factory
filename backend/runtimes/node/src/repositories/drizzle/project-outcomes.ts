@@ -1,4 +1,5 @@
 import {
+  decodeOutcomeStoragePolicy,
   parseProjectDefinition,
   type OutcomeStorageOwnerKind,
   type OutcomeStoragePolicy,
@@ -236,7 +237,7 @@ export class DrizzleOutcomeStoragePolicyRepository implements OutcomeStoragePoli
           eq(outcomeStoragePolicies.owner_id, ownerId),
         ),
       )
-    return row ? (JSON.parse(row.policy) as OutcomeStoragePolicy) : null
+    return row ? decodeOutcomeStoragePolicy(row.policy) : null
   }
 
   async set(

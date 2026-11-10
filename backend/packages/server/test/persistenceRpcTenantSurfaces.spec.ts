@@ -118,6 +118,12 @@ describe('prompt-fragment library management surface (owner-scoped)', () => {
         remoteRegistry()[repo]!.upsert!({ ownerKind: 'user', ownerId: 'usr_x' }),
       ).rejects.toMatchObject({ code: 'not_found' })
     })
+
+    it(`rejects ${repo}.upsert under an in-scope project, which no library has as a tier`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ ownerKind: 'project', ownerId: 'prj_in' }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
   }
 })
 

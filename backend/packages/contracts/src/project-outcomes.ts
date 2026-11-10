@@ -78,3 +78,10 @@ export type OutcomeStoragePolicy = v.InferOutput<typeof outcomeStoragePolicySche
 /** The tiers an outcome-storage policy is set at, narrowest last. */
 export const outcomeStorageOwnerKindSchema = v.picklist(['account', 'workspace', 'project'])
 export type OutcomeStorageOwnerKind = v.InferOutput<typeof outcomeStorageOwnerKindSchema>
+
+/** Read a persisted outcome-storage policy, refusing one the schema no longer accepts. */
+export function decodeOutcomeStoragePolicy(json: string): OutcomeStoragePolicy {
+  const parsed = v.safeParse(outcomeStoragePolicySchema, JSON.parse(json))
+  if (!parsed.success) throw new Error('stored outcome-storage policy is unreadable')
+  return parsed.output
+}

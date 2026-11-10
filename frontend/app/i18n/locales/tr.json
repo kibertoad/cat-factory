@@ -707,7 +707,12 @@
         "tool_server_without_oauth": "Bu araç sunucusu artık OAuth kullanmıyor, bu yüzden tamamlanacak bir bağlantı yok.",
         "gate_config_fields_invalid": "Bir adımın kapı ayarları eksik ya da kapının kabul etmediği bir değer içeriyor, genellikle değeri olmayan zorunlu bir ayar. Pipeline'da adımın kapı ayarlarını doldurup yeniden deneyin.",
         "approvals_chain_stale": "Bu pipeline, onay kontrol noktalarını açtıktan sonra değişti, bu yüzden kontrol noktaları artık adımlarıyla eşleşmiyor. Pipeline'ı yeniden yükleyin ve onları tekrar ayarlayın.",
-        "approvals_builtin_checkpoint_locked": "Yerleşik bir pipeline, katalog tanımının içerdiği onay kontrol noktalarını korur. Birini kaldırmak için pipeline'ı klonlayın."
+        "approvals_builtin_checkpoint_locked": "Yerleşik bir pipeline, katalog tanımının içerdiği onay kontrol noktalarını korur. Birini kaldırmak için pipeline'ı klonlayın.",
+        "project_kind_unregistered": "Bu projenin türü artık bu kurulumda sunulmuyor, bu yüzden yeni iş alamaz. Kurulum operatörünüzden türü yeniden kaydetmesini isteyin.",
+        "task_type_not_offered_by_project": "Bu projenin türü bu tipte görev almıyor. Formun onun için sunduğu tiplerden birini seçin.",
+        "project_has_no_writable_repo": "Bu çalıştırmanın bir adımı yazabileceği bir depoya ihtiyaç duyuyor ve projenin deposu yok: bağlı servislerin depoları salt okunur bağlamdır. Yalnızca okuyan ve raporlayan bir pipeline seçin.",
+        "project_service_link_invalid": "Bağlı servislerden biri artık yok ya da başka bir kuruluşa ait. Panoyu yeniden yükleyip bağlı servisleri tekrar seçin.",
+        "project_has_unfinished_tasks": "Bu projenin hâlâ bitmemiş görevleri var. Önce onları bitirin ya da silin."
       }
     },
     "action": {

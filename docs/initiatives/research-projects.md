@@ -63,22 +63,22 @@ interface Project {
   accountId: string
   kind: string // 'research' today; a registered project kind
   title: string
-  frameBlockId: string // the root frame block it owns; its tasks are blocks beneath it
+  rootBlockId: string // the root block it owns; its tasks are blocks beneath it
   serviceIds: string[] // linked services, zero or more
   createdAt: number
 }
 ```
 
-- **It owns its tasks.** Tasks are ordinary blocks under the project's frame, so the engine's
+- **It owns its tasks.** Tasks are ordinary blocks under the project's root block, so the engine's
   block-keyed machinery works unchanged: executions, one live run per block, notifications, the
   inspector, live events and RBAC.
-- **It survives its home board's deletion, as a shared service does.** Its frame block lives in
+- **It survives its home board's deletion, as a shared service does.** Its root block lives in
   one workspace, and the workspace-delete cascade re-homes a shared mounted subject
   (`MountRehome`) to a surviving mounting board before it runs. Without that, deleting the board
   that homes a project destroys it for every team that mounts it.
 - **It is account-owned and mounted onto boards**, as a service is. A mount names a subject
-  (`subjectKind` of `service` or `project`, plus `subjectId`), keeping the rule that a frame's
-  position lives on the mount and every frame read projects through `applyMountLayout`. Blocks
+  (`subjectKind` of `service` or `project`, plus `subjectId`), keeping the rule that a root block's
+  position lives on the mount and every root read projects through `applyMountLayout`. Blocks
   and runs carry an `owner_id`: the id of the mounted subject they belong to. Subject ids are
   globally unique (`svc_…`, `prj_…`), so the owner stamp needs no kind of its own.
 - **Its root block is a `project`-level block of type `project`, not a `frame`.** Roughly fifty
@@ -92,7 +92,8 @@ interface Project {
 - **Its repo resolution is its own.** `resolveRepoTarget` stops at a project root and refuses with
   `project_has_no_writable_repo`: a project has no repository to write to. Its linked services'
   repos are read-only context, resolved by their own read (slice 5), never a guessed checkout. A
-  kind offers only task types that write to no repo (`repoAccess: 'none' | 'linked-read-only'`).
+  kind can declare no writing access (`repoAccess: 'none' | 'linked-read-only'`), and a run step
+  that needs a checkout to push to is refused when it dispatches.
 - **A kind is registered**, through a `ProjectKindRegistry` beside `TaskTypeRegistry`, injected by
   reference on both `start()` and `startLocal()`. A kind declares the task types its project
   offers and their default pipelines, and supplies the code that understands its content (below).
@@ -439,7 +440,7 @@ A new linked-context kind beside documents and tracker tasks:
 
 ### 6. Surfaces
 
-- **SPA**: a project frame on the board beside service frames, with its task swimlanes and its
+- **SPA**: a project root on the board beside service frames, with its task swimlanes and its
   links to services drawn. A project's root opens its kind's outcome view, contributed through
   `registerAppModule` and keyed by kind, with a generic fallback (Markdown or a JSON tree) so a
   new kind is readable before anyone writes a view for it. The research kind's view is a findings
@@ -471,8 +472,8 @@ A new linked-context kind beside documents and tracker tasks:
 
 ## Decisions
 
-- **Projects are a peer of services, not a block level and not a block-less run.** A project owns
-  a frame and its tasks, so the engine stays block-keyed, and it links to zero or more services
+- **Projects are a peer of services, not a service and not a block-less run.** A project owns
+  a root block and its tasks, so the engine stays block-keyed, and it links to zero or more services
   rather than living inside one.
 - **The platform stores project content without understanding it.** Definitions, pins, outcome
   revisions and storage policy are generic tables and ports, and a project kind supplies the code
@@ -529,29 +530,30 @@ Still open:
 | 8   | SPA: the kind-keyed outcome view seam with its generic fallback, the research findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                                | todo      |              |
 | 9   | Task linking: the `projects` linked-context kind rendered by each kind's `renderContext`, `.cat-context/projects/`, recorded revision. An optional `projects` field on `InitiativeItemSpawn`, so tasks an initiative spawns carry a project as linked context.                                                                                                            | todo      |              |
 
-Slices 1, 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4 and 6: the
+Slices 1 (1a to 1c, in order), 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4 and 6: the
 `researcher` kind ships after the park, so a research run never meets a missing credential with
 nowhere to wait. Slice 9 needs 1, 2, 3 and 5, since a project is linkable only once a research
 run has written a revision.
 
 ## Gotchas found during design
 
-- **Repo resolution has deliberately no fallback** ("NO first repo"). A project frame resolving to
+- **Repo resolution has deliberately no fallback** ("NO first repo"). A project root resolving to
   its linked services' repos is a new, explicit rule, and a project task whose type needs a
   writable repo must be refused at admission, never pointed at a guessed one.
-- **A project frame is the host cross-service initiatives lack.** An initiative spans one service
+- **A project root is the host cross-service initiatives lack.** An initiative spans one service
   frame today because its loop spawns tasks under the initiative block's `parentId`
-  (`InitiativeLoopService`). That lookup is generic, so an initiative block under a project frame
-  would spawn there; the open rule is `resolveRepoTarget`, where a project frame resolves to its
+  (`InitiativeLoopService`). That lookup is generic, so an initiative block under a project root
+  would spawn there; the open rule is `resolveRepoTarget`, where a project root resolves to its
   linked services' repos as read-only context. Slice 1 keeps that resolution a single, explicit
   rule, so a later initiative under a project can name which linked service an item writes to
   instead of gaining a second resolution path. Supporting it is out of scope here.
-- **A root block id names a subject only among the board's own mounts.** Seeded boards share
-  frame ids (`blk_auth`), so the workspace-delete re-home plan keeps a candidate only when it is
-  in the board's account AND mounted on the board. Before projects, the plan matched by frame id
-  alone and could re-home another board's service.
-- **The mount carries layout for a shared frame.** Generalizing it to projects keeps
-  `applyMountLayout` on every frame-returning read; a project frame read that skips it jumps on
+- **A root block id alone does not name a subject.** Seeded boards share frame ids (`blk_auth`),
+  so a reader narrows the candidates: the layout projection by the board's own mounts, and the
+  workspace-delete re-home plan by the owner stamp on the board's own root row, which is what the
+  re-home moves. The plan never re-homes another board's service, and still re-homes a shared
+  subject its home board has unmounted.
+- **The mount carries layout for a shared root.** Generalizing it to projects keeps
+  `applyMountLayout` on every root-returning read; a project root read that skips it jumps on
   the board.
 - **Capability credentials are workspace-scoped, projects are account-scoped.** A project mounted
   on two boards resolves credentials from whichever workspace started the run, so the project view

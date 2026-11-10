@@ -1,4 +1,5 @@
 import {
+  decodeOutcomeStoragePolicy,
   parseProjectDefinition,
   type OutcomeStorageOwnerKind,
   type OutcomeStoragePolicy,
@@ -271,7 +272,7 @@ export class D1OutcomeStoragePolicyRepository implements OutcomeStoragePolicyRep
       .prepare(`SELECT policy FROM outcome_storage_policies WHERE owner_kind = ? AND owner_id = ?`)
       .bind(ownerKind, ownerId)
       .first<{ policy: string }>()
-    return row ? (JSON.parse(row.policy) as OutcomeStoragePolicy) : null
+    return row ? decodeOutcomeStoragePolicy(row.policy) : null
   }
 
   async set(
