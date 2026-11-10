@@ -389,8 +389,9 @@ outcomes (and their reclaim), and an `OutcomeStoragePolicyRepository`.
 
 An outcome's body is stored inline in `project_outcomes` while it is at or under the effective
 threshold, and in the account's blob store above it, the row then holding the
-`BinaryArtifactStore` id. A new `outcome` artifact kind, exempt from the age-based retention sweep
-and reclaimed with its project together with every id in the row's `artifactRefs`.
+`BinaryArtifactStore` id. The offloaded body is a new `outcome` artifact kind, exempt from the
+age-based retention sweep. The project reclaim deletes it together with every id in the row's
+`artifactRefs`; both arrive with the offload write in slice 5, since nothing offloads before it.
 
 The policy cascades account → workspace → project, narrowest set value winning, with absence (never
 a stored null) meaning inherit:
@@ -524,7 +525,7 @@ Still open:
 | 2   | Contracts + kernel: the generic project definition envelope and `ProjectDefinitionRegistry` with per-kind spec validators and the content hash, the outcome envelope, the outcome-storage policy resolver; the research kind's spec, findings body and fold. Pure, unit-tested. The registry is wired on `start()`/`startLocal()` in slice 5, where a run first reads it. | done      | #2503, #2507 |
 | 3   | Project outcome persistence, both facades + conformance against two kinds: definitions, pins, the outcome sequence, outcome revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                                           | in review | #2507        |
 | 4   | Harness: `research` mode with optional repos (linked repos as `referenceRepos`), the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                                                                                    | todo      |              |
-| 5   | Engine: the `ProjectKindModule` registration (outcome schema, fold, summary, context renderer, artifact refs), the research kind's module, the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, outcome write with offload, follow-up modes.                                                                                                 | todo      |              |
+| 5   | Engine: the `ProjectKindModule` registration (outcome schema, fold, summary, context renderer, artifact refs), the research kind's module, the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, outcome write with offload, the `outcome` artifact kind and its project reclaim, follow-up modes.                                            | todo      |              |
 | 6   | Credential hand-off: the `project-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                                                   | todo      |              |
 | 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                                                                                             | todo      |              |
 | 8   | SPA: the kind-keyed outcome view seam with its generic fallback, the research findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                                | todo      |              |
