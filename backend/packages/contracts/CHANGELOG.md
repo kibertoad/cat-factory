@@ -1,5 +1,62 @@
 # @cat-factory/contracts
 
+## 0.384.0
+
+### Minor Changes
+
+- fec22dc: Generalize the board mount and the block and run owner stamp from services to mounted subjects,
+  ahead of projects. Internal break, with no behaviour change:
+  
+  - `WorkspaceMount.serviceId` is now `subjectId`, on the internal board snapshot and the mount
+    routes. The SPA ships with the same release.
+  - The `workspace_services` table is now `workspace_mounts` (`service_id` to `subject_id`), and
+    `blocks.service_id` and `agent_runs.service_id` are now `owner_id`. Migrations rename them in
+    place on D1 (`0113_mount_subjects.sql`) and Postgres.
+  - Kernel ports: `BlockRepository.listByOwners`/`setOwner`/`insert(…, ownerId)` and
+    `findById(s)`'s `ownerId`, `ExecutionRepository.listByOwners`,
+    `BootstrapJobRepository.listByOwners`, `WorkspaceMountRepository.listBySubjectIds`/
+    `countBySubjectIds`/`removeBySubjects`, and `MountRehome` (was `ServiceRehome`).
+  - Mothership mode: these port methods are the `/internal/persistence` method names, and the mount
+    record's `subjectId` is what the `serviceMount` scope rule reads, so a node and its mothership
+    must run the same build. A node one build behind gets `unknown_method` on every board that
+    mounts a service, and its mount writes are refused. Update the nodes together with the
+    mothership.
+- 20f9af0: Add project outcome persistence on both runtimes, for projects of any kind: account-published
+  project definitions (immutable per kind, key and version), the definition each project pins, an
+  atomic per-project outcome sequence, outcome revisions (first write wins, inline or offloaded body,
+  opaque to the platform) and the outcome-storage policy tiers. Migrations add five tables on D1
+  (`0115_project_outcomes.sql`) and Postgres. Deleting a project, or the board that homes it,
+  reclaims its records. Nothing writes these yet; the first project kind's run does in a later slice.
+- 6b25215: Add projects: account-owned peers of services, mounted onto boards and holding tasks under a
+  `project` root block. A deployment registers project kinds on the new `ProjectKindRegistry`
+  (`projectKindRegistry` on `start()`, `startLocal()` and the Worker overrides); a kind decides
+  which task types a project takes. New workspace routes create a project, link it to services,
+  and mount or unmount it; the board snapshot carries `projectCatalog` and `projectKinds`.
+  
+  Internal breaks: `WorkspaceMount` gains a required `subjectKind`, `blockTypeSchema` and
+  `blockLevelSchema` gain `project`, and the public, blueprint and fragment surfaces now take
+  `serviceFrameTypeSchema` (the same values they accepted before). Migrations add the `projects`
+  and `project_service_links` tables and `workspace_mounts.subject_kind` on D1 (`0114_projects.sql`)
+  and Postgres.
+  
+  The workspace-delete re-home plan now keeps only subjects in the board's own account and mounted
+  on it, so deleting a seeded board can no longer re-home another board's service that shares a
+  frame id.
+- fc07533: Add the generic project-definition and project-outcome contracts (the definition envelope with an
+  opaque kind-owned `spec`, the pin, the outcome revision envelope and the outcome-storage policy),
+  kernel's `ProjectDefinitionRegistry` with per-kind spec validators, the definition content hash
+  and the storage-policy resolver, plus the research kind's own spec, findings body, fold and
+  coverage built on them. Nothing reads them yet.
+
+### Patch Changes
+
+- aa80dd3: Show projects on the board. A project root renders beside service frames with its kind, its
+  linked services and its task swimlanes, and without the service-only actions. The toolbar's
+  Projects menu creates a project (when the deployment registers a kind) and mounts one of the
+  account's projects onto the board; a project's linked services are edited from its root, and
+  the add-task form offers only the task types the project's kind takes, opening on the kind's
+  default pipeline for each. A refused project write names the project rule it broke.
+
 ## 0.383.0
 
 ### Minor Changes

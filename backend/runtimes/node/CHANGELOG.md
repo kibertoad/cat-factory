@@ -1,5 +1,75 @@
 # @cat-factory/node-server
 
+## 0.247.0
+
+### Minor Changes
+
+- 20f9af0: Add project outcome persistence on both runtimes, for projects of any kind: account-published
+  project definitions (immutable per kind, key and version), the definition each project pins, an
+  atomic per-project outcome sequence, outcome revisions (first write wins, inline or offloaded body,
+  opaque to the platform) and the outcome-storage policy tiers. Migrations add five tables on D1
+  (`0115_project_outcomes.sql`) and Postgres. Deleting a project, or the board that homes it,
+  reclaims its records. Nothing writes these yet; the first project kind's run does in a later slice.
+- 6b25215: Add projects: account-owned peers of services, mounted onto boards and holding tasks under a
+  `project` root block. A deployment registers project kinds on the new `ProjectKindRegistry`
+  (`projectKindRegistry` on `start()`, `startLocal()` and the Worker overrides); a kind decides
+  which task types a project takes. New workspace routes create a project, link it to services,
+  and mount or unmount it; the board snapshot carries `projectCatalog` and `projectKinds`.
+  
+  Internal breaks: `WorkspaceMount` gains a required `subjectKind`, `blockTypeSchema` and
+  `blockLevelSchema` gain `project`, and the public, blueprint and fragment surfaces now take
+  `serviceFrameTypeSchema` (the same values they accepted before). Migrations add the `projects`
+  and `project_service_links` tables and `workspace_mounts.subject_kind` on D1 (`0114_projects.sql`)
+  and Postgres.
+  
+  The workspace-delete re-home plan now keeps only subjects in the board's own account and mounted
+  on it, so deleting a seeded board can no longer re-home another board's service that shares a
+  frame id.
+
+### Patch Changes
+
+- fec22dc: Generalize the board mount and the block and run owner stamp from services to mounted subjects,
+  ahead of projects. Internal break, with no behaviour change:
+  
+  - `WorkspaceMount.serviceId` is now `subjectId`, on the internal board snapshot and the mount
+    routes. The SPA ships with the same release.
+  - The `workspace_services` table is now `workspace_mounts` (`service_id` to `subject_id`), and
+    `blocks.service_id` and `agent_runs.service_id` are now `owner_id`. Migrations rename them in
+    place on D1 (`0113_mount_subjects.sql`) and Postgres.
+  - Kernel ports: `BlockRepository.listByOwners`/`setOwner`/`insert(…, ownerId)` and
+    `findById(s)`'s `ownerId`, `ExecutionRepository.listByOwners`,
+    `BootstrapJobRepository.listByOwners`, `WorkspaceMountRepository.listBySubjectIds`/
+    `countBySubjectIds`/`removeBySubjects`, and `MountRehome` (was `ServiceRehome`).
+  - Mothership mode: these port methods are the `/internal/persistence` method names, and the mount
+    record's `subjectId` is what the `serviceMount` scope rule reads, so a node and its mothership
+    must run the same build. A node one build behind gets `unknown_method` on every board that
+    mounts a service, and its mount writes are refused. Update the nodes together with the
+    mothership.
+- Updated dependencies [fec22dc]
+- Updated dependencies [20f9af0]
+- Updated dependencies [6b25215]
+- Updated dependencies [aa80dd3]
+- Updated dependencies [fc07533]
+  - @cat-factory/contracts@0.384.0
+  - @cat-factory/kernel@0.368.0
+  - @cat-factory/orchestration@0.331.0
+  - @cat-factory/server@0.350.0
+  - @cat-factory/agents@0.176.3
+  - @cat-factory/integrations@0.179.6
+  - @cat-factory/binary-generators@0.3.87
+  - @cat-factory/consensus@0.20.7
+  - @cat-factory/eks@0.1.426
+  - @cat-factory/gates@0.12.23
+  - @cat-factory/gitlab@0.25.6
+  - @cat-factory/observability-otel@0.24.6
+  - @cat-factory/prompt-fragments@1.1.83
+  - @cat-factory/spend@0.23.32
+  - @cat-factory/caching@0.20.121
+  - @cat-factory/observability-langfuse@0.11.87
+  - @cat-factory/provider-bedrock@0.7.580
+  - @cat-factory/provider-cloudflare@0.7.581
+  - @cat-factory/provider-s3@0.2.494
+
 ## 0.246.3
 
 ### Patch Changes
