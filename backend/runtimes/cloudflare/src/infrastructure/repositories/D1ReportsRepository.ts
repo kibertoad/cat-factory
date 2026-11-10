@@ -41,6 +41,12 @@ const SERVICE_LABELS = `SELECT s.id AS service_id, MIN(b.title) AS title
                         GROUP BY s.id`
 
 /**
+ * The `service` dimension's key: the run's owner, unless that owner is a project, whose spend
+ * belongs to no service. Needs `projects p` joined on `ar.owner_id` (a primary key, so 1:1).
+ */
+const SERVICE_KEY = "CASE WHEN p.id IS NULL THEN COALESCE(ar.owner_id, '') ELSE '' END"
+
+/**
  * The tracker ticket a block is linked to, PRE-AGGREGATED to exactly one row per
  * `(workspace_id, linked_block_id)`.
  *
@@ -87,8 +93,9 @@ const SPEND_DIMENSIONS: Record<
   },
   service: {
     joins: `LEFT JOIN agent_runs ar ON ar.workspace_id = tu.workspace_id AND ar.id = tu.execution_id
-            LEFT JOIN (${SERVICE_LABELS}) sl ON sl.service_id = ar.service_id`,
-    key: "COALESCE(ar.service_id, '')",
+            LEFT JOIN (${SERVICE_LABELS}) sl ON sl.service_id = ar.owner_id
+            LEFT JOIN projects p ON p.id = ar.owner_id`,
+    key: SERVICE_KEY,
     label: 'MAX(sl.title)',
   },
   taskType: {
@@ -104,7 +111,7 @@ const SPEND_DIMENSIONS: Record<
     // (which the run's workspace may not hold a row in), so an unsynced repo loses its name
     // and keeps its money.
     joins: `LEFT JOIN agent_runs ar ON ar.workspace_id = tu.workspace_id AND ar.id = tu.execution_id
-            LEFT JOIN services s ON s.id = ar.service_id
+            LEFT JOIN services s ON s.id = ar.owner_id
             LEFT JOIN github_repos gr ON gr.workspace_id = tu.workspace_id
                                      AND gr.github_id = s.repo_github_id`,
     key: "COALESCE(CAST(s.repo_github_id AS TEXT), '')",
@@ -139,8 +146,9 @@ const ACTIVITY_DIMENSIONS: Record<
     label: 'MAX(w.name)',
   },
   service: {
-    joins: `LEFT JOIN (${SERVICE_LABELS}) sl ON sl.service_id = ar.service_id`,
-    key: "COALESCE(ar.service_id, '')",
+    joins: `LEFT JOIN (${SERVICE_LABELS}) sl ON sl.service_id = ar.owner_id
+            LEFT JOIN projects p ON p.id = ar.owner_id`,
+    key: SERVICE_KEY,
     label: 'MAX(sl.title)',
   },
   repo: {
@@ -148,7 +156,7 @@ const ACTIVITY_DIMENSIONS: Record<
     // the run (a run row IS the unit counted here). Key off the service, label off the
     // projection, so a repository the run's board holds no projection row for keeps its runs
     // and loses its name.
-    joins: `LEFT JOIN services s ON s.id = ar.service_id
+    joins: `LEFT JOIN services s ON s.id = ar.owner_id
             LEFT JOIN github_repos gr ON gr.workspace_id = ar.workspace_id
                                      AND gr.github_id = s.repo_github_id`,
     key: "COALESCE(CAST(s.repo_github_id AS TEXT), '')",

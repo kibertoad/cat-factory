@@ -29,9 +29,9 @@
  *
  * Deliberately EXCLUDED (handled specially, NOT by this list):
  * - `workspaces` — the root row, deleted LAST after everything it owns.
- * - `workspace_services` — the board↔service mount join, reclaimed by the bespoke
- *   two-variant handling (every board's mount of a service this board homes, plus
- *   this board's own mounts of services homed elsewhere).
+ * - `workspace_mounts`: the board-to-subject mount join, reclaimed by the bespoke
+ *   two-variant handling (every board's mount of a subject this board homes, plus
+ *   this board's own mounts of subjects homed elsewhere).
  * - `services` — account-scoped (no `workspace_id`; keyed by frame block), re-homed
  *   or reclaimed by the bespoke shared-service handling that must precede `blocks`.
  * - `spend_days`: the durable cost-attribution rollup, deliberately NOT reclaimed at all
@@ -158,7 +158,7 @@ export type WorkspaceScopedTable = (typeof WORKSPACE_SCOPED_TABLES)[number]
  * in the same batch would erase the only record of it. The feed's retention prunes them.
  */
 export const WORKSPACE_CASCADE_SPECIAL_TABLES = [
-  'workspace_services',
+  'workspace_mounts',
   'binary_artifacts',
   'spend_days',
   'directory_changes',

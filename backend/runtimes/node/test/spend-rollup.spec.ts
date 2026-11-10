@@ -5,6 +5,7 @@ import {
   agentRuns,
   blocks,
   githubRepos,
+  projects,
   services,
   tasks,
   tokenUsage,
@@ -50,6 +51,15 @@ if (databaseUrl) {
         created_at: 0,
       })
     },
+    async project(id, accountId, rootBlockId) {
+      await db.insert(projects).values({
+        id,
+        account_id: accountId,
+        kind: 'research',
+        root_block_id: rootBlockId,
+        created_at: 0,
+      })
+    },
     async repo(workspaceId, githubId, owner, name) {
       await db.insert(githubRepos).values({
         workspace_id: workspaceId,
@@ -79,7 +89,7 @@ if (databaseUrl) {
         status: row.status,
         created_at: row.createdAt,
         updated_at: row.updatedAt,
-        service_id: row.serviceId ?? null,
+        owner_id: row.serviceId ?? null,
         block_id: row.blockId ?? null,
       })
     },

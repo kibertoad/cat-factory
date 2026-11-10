@@ -52,7 +52,7 @@ describe('BoardService.reparent re-stamps the declared module', () => {
         listByWorkspace: async (ws: string) => (ws === WS ? [...byId.values()] : []),
         resolve: async (id: string) => {
           const b = byId.get(id)
-          return b ? { workspaceId: WS, block: b, serviceId: null } : null
+          return b ? { workspaceId: WS, block: b, ownerId: null } : null
         },
         update: async (_ws: string, id: string, patch: BlockPatch) => {
           patches.push(patch)

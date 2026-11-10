@@ -35,7 +35,8 @@ describe('BoardService — frame responses carry this board’s layout override'
   function build(stored: Block, mountSize: { w: number; h: number } | null = null) {
     const mount: WorkspaceMount = {
       workspaceId: WS,
-      serviceId: 'svc_1',
+      subjectKind: 'service',
+      subjectId: 'svc_1',
       position: { ...MOUNTED_AT },
       size: mountSize,
       createdAt: 0,
@@ -46,7 +47,7 @@ describe('BoardService — frame responses carry this board’s layout override'
       workspaceRepository: { get: async (id: string) => ({ id }) },
       blockRepository: {
         findById: async (id: string) =>
-          id === current.id ? { workspaceId: WS, serviceId: 'svc_1', block: current } : null,
+          id === current.id ? { workspaceId: WS, ownerId: 'svc_1', block: current } : null,
         get: async (_ws: string, id: string) => (id === current.id ? current : null),
         listByWorkspace: async () => [current],
         update: async (_ws: string, _id: string, patch: Partial<Block>) => {

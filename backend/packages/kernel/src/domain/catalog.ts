@@ -686,4 +686,5 @@ export const BLOCK_TYPE_LABEL: Record<BlockType, string> = {
   integration: 'Integration',
   external: 'External',
   environment: 'Environment',
+  project: 'Project',
 }

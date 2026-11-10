@@ -37,6 +37,19 @@ export function serviceOf(blocks: Block[], block: Block): Block | undefined {
 }
 
 /**
+ * The root a block ultimately belongs to: its service `frame` or its `project` root, the two
+ * account-owned subjects a board mounts. Undefined for a block under neither.
+ */
+export function rootOf(blocks: Block[], block: Block): Block | undefined {
+  const byId = new Map(blocks.map((b) => [b.id, b]))
+  let cur: Block | undefined = block
+  while (cur && cur.level !== 'frame' && cur.level !== 'project') {
+    cur = cur.parentId ? byId.get(cur.parentId) : undefined
+  }
+  return cur
+}
+
+/**
  * Task-level descendants of `rootId` that have NOT finished (`status !== 'done'` — the sole
  * terminal block status). Backs the "can't delete a service with unfinished work, archive it
  * instead" guard: a non-empty result means the frame must be archived rather than deleted.
@@ -67,7 +80,10 @@ export function descendantIds(blocks: Block[], rootId: string): Set<string> {
 
 /** Whether `parent` is a legal container for a block at `childLevel`. */
 export function canReparent(childLevel: BlockLevel, parent: Block): boolean {
-  if (childLevel === 'task') return parent.level === 'frame' || parent.level === 'module'
+  // A project's tasks live directly under its root; a project has no modules.
+  if (childLevel === 'task') {
+    return parent.level === 'frame' || parent.level === 'module' || parent.level === 'project'
+  }
   if (childLevel === 'module') return parent.level === 'frame'
   // An epic may optionally be placed under a service/module (or live top-level); it is a
   // grouping node, never a container, so nothing reparents INTO it.
@@ -76,7 +92,7 @@ export function canReparent(childLevel: BlockLevel, parent: Block): boolean {
   // execution loop spawns join it via their `initiativeId` membership link (epic-style),
   // never by reparenting into it.
   if (childLevel === 'initiative') return parent.level === 'frame'
-  return false // frames are not nested
+  return false // frames and project roots are not nested
 }
 
 /** Tasks that belong to an epic via their `epicId` membership link. */

@@ -161,9 +161,9 @@ export interface BootstrapJobRepository {
   get(workspaceId: string, id: string): Promise<BootstrapJobRecord | null>
   listByWorkspace(workspaceId: string): Promise<BootstrapJobRecord[]>
   /**
-   * Every bootstrap run belonging to ANY of the given services, in a single (chunked) query, so
-   * a shared service's in-flight bootstrap renders on every board that mounts it. Matches the
-   * `service_id` column stamped from the run's service frame. Empty input → empty.
+   * Every bootstrap run belonging to ANY of the given owners, in a single (chunked) query, so a
+   * shared service's in-flight bootstrap renders on every board that mounts it. Matches the
+   * `owner_id` column stamped from the run's service frame. Empty input gives an empty result.
    */
-  listByServices(serviceIds: string[]): Promise<BootstrapJobRecord[]>
+  listByOwners(ownerIds: string[]): Promise<BootstrapJobRecord[]>
 }

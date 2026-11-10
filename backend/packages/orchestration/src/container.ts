@@ -37,6 +37,7 @@ import { buildExecutionService } from './container/execution-service.js'
 import type {} from '@cat-factory/kernel'
 
 import { ServiceMountService } from './modules/services/ServiceMountService.js'
+import { ProjectService } from './modules/projects/ProjectService.js'
 import { createInlineUseCaseService } from './container/use-case-service.js'
 import type { InlineUseCaseService } from './modules/useCases/InlineUseCaseService.js'
 
@@ -139,6 +140,8 @@ import type {
   PromptFragmentSource,
   ResolveRunInitiatorToken,
   TaskTypeRegistry,
+  ProjectKindRegistry,
+  ProjectKindSource,
   VcsWebUrls,
 } from '@cat-factory/kernel'
 
@@ -401,6 +404,10 @@ export interface CoreSpine {
    * (`customTaskTypes`) reads the SAME instance, and the facade passes it to `validateRegistrations`.
    */
   taskTypeRegistry: TaskTypeRegistry
+  /** The project-kind registry the engine resolved; the facade validates and serves it. */
+  projectKindRegistry: ProjectKindRegistry
+  /** Where project kinds are read from: the registry above, or a mothership node's remote source. */
+  projectKinds: ProjectKindSource
   /**
    * The app-owned inline use-case registry the engine resolved (the facade's injected instance,
    * else the empty default). Re-exposed so the facade passes the SAME instance to
@@ -720,6 +727,8 @@ export interface OptionalCoreModules {
   trackerWebhook?: TrackerWebhookModule
   /** Present only when the service + mount repositories are wired (in-org sharing). */
   services?: ServicesModule
+  /** Present only when the project, service and mount repositories are wired. */
+  projects?: ProjectsModule
 }
 
 /**
@@ -731,6 +740,10 @@ export interface Core extends CoreSpine, OptionalCoreModules {}
 
 export interface ServicesModule {
   service: ServiceMountService
+}
+
+export interface ProjectsModule {
+  service: ProjectService
 }
 
 /** Assemble the in-org service-sharing module when its repositories are wired. */
@@ -762,6 +775,8 @@ export function createCore(injected: CoreDependencies): Core {
     delegatedExecutorRegistry,
     pipelineRegistry,
     taskTypeRegistry,
+    projectKindRegistry,
+    projectKinds,
     inlineUseCaseRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
@@ -823,6 +838,7 @@ export function createCore(injected: CoreDependencies): Core {
       taskTypeRegistry,
       pipelineRegistry,
       promptFragments,
+      projectKinds,
       getSpendService: () => spendServiceRef,
       getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
       getSharedStackSeeder: () => sharedStackSeederRef,
@@ -973,6 +989,8 @@ export function createCore(injected: CoreDependencies): Core {
     delegatedExecutorRegistry,
     pipelineRegistry,
     taskTypeRegistry,
+    projectKindRegistry,
+    projectKinds,
     inlineUseCaseRegistry,
     inlineUseCases,
     foundationalServiceRegistry,

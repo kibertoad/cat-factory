@@ -78,15 +78,15 @@ export class D1ExecutionRepository implements ExecutionRepository {
     return row?.n ?? 0
   }
 
-  async listByServices(serviceIds: string[]): Promise<ExecutionInstance[]> {
-    if (serviceIds.length === 0) return []
+  async listByOwners(ownerIds: string[]): Promise<ExecutionInstance[]> {
+    if (ownerIds.length === 0) return []
     const out: ExecutionInstance[] = []
     // Chunk the IN list to stay under D1's bound-parameter limit.
-    for (const chunk of chunkForIn(serviceIds)) {
+    for (const chunk of chunkForIn(ownerIds)) {
       const placeholders = chunk.map(() => '?').join(', ')
       const { results } = await this.db
         .prepare(
-          `SELECT * FROM agent_runs WHERE service_id IN (${placeholders}) AND kind = 'execution' ORDER BY created_at`,
+          `SELECT * FROM agent_runs WHERE owner_id IN (${placeholders}) AND kind = 'execution' ORDER BY created_at`,
         )
         .bind(...chunk)
         .all<ExecutionRow>()
@@ -215,9 +215,9 @@ export class D1ExecutionRepository implements ExecutionRepository {
     const now = this.clock.now()
     const createdAt = adoptCreatedAt(execution, now)
     const detail = executionToDetail(execution)
-    // Stamp `service_id` from the run's block so the run is discoverable by service (in-org
+    // Stamp `owner_id` from the run's block so the run is discoverable by service (in-org
     // sharing): a shared service's runs surface on every board that mounts it via
-    // `listByService`. Derived here (not carried on ExecutionInstance) and refreshed on every
+    // `listByOwners`. Derived here (not carried on ExecutionInstance) and refreshed on every
     // write so it follows a reparent that re-homes the block to another service.
     // `rev` is bumped on every write (and read back via RETURNING onto the instance) so a
     // concurrent compareAndSwap can detect the row moved. A fresh insert starts at 0.
@@ -225,15 +225,15 @@ export class D1ExecutionRepository implements ExecutionRepository {
       .prepare(
         `INSERT INTO agent_runs
            (workspace_id, id, kind, block_id, status, detail, created_at, updated_at,
-            workflow_instance_id, service_id, rev)
+            workflow_instance_id, owner_id, rev)
          VALUES (?, ?, 'execution', ?, ?, ?, ?, ?, ?,
-            (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?), 0)
+            (SELECT owner_id FROM blocks WHERE workspace_id = ? AND id = ?), 0)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            block_id = excluded.block_id,
            status = excluded.status,
            detail = excluded.detail,
            updated_at = excluded.updated_at,
-           service_id = excluded.service_id,
+           owner_id = excluded.owner_id,
            rev = agent_runs.rev + 1
          RETURNING rev`,
       )
@@ -284,9 +284,9 @@ export class D1ExecutionRepository implements ExecutionRepository {
       .prepare(
         `INSERT INTO agent_runs
            (workspace_id, id, kind, block_id, status, detail, created_at, updated_at,
-            workflow_instance_id, service_id, rev)
+            workflow_instance_id, owner_id, rev)
          VALUES (?, ?, 'execution', ?, ?, ?, ?, ?, ?,
-            (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?), 0)
+            (SELECT owner_id FROM blocks WHERE workspace_id = ? AND id = ?), 0)
          ON CONFLICT (workspace_id, block_id)
            WHERE kind = 'execution' AND status IN ('running', 'blocked', 'paused')
            DO NOTHING
@@ -326,7 +326,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
            status = ?,
            detail = ?,
            updated_at = ?,
-           service_id = (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?),
+           owner_id = (SELECT owner_id FROM blocks WHERE workspace_id = ? AND id = ?),
            rev = rev + 1
          WHERE workspace_id = ? AND id = ? AND kind = 'execution' AND rev = ?
          RETURNING rev`,

@@ -126,11 +126,11 @@ describe('cross-service + entity-id read surface (board composition)', () => {
   // The `serviceList`-scoped reads: arg0 is `serviceIds[]`, resolved to each service's account.
   const SERVICE_READS: Array<{ repo: string; method: string }> = [
     { repo: 'serviceRepository', method: 'listByIds' },
-    { repo: 'blockRepository', method: 'listByServices' },
-    { repo: 'executionRepository', method: 'listByServices' },
-    { repo: 'bootstrapJobRepository', method: 'listByServices' },
+    { repo: 'blockRepository', method: 'listByOwners' },
+    { repo: 'executionRepository', method: 'listByOwners' },
+    { repo: 'bootstrapJobRepository', method: 'listByOwners' },
     { repo: 'pipelineScheduleRepository', method: 'listByServices' },
-    { repo: 'workspaceMountRepository', method: 'countByServiceIds' },
+    { repo: 'workspaceMountRepository', method: 'countBySubjectIds' },
   ]
 
   for (const { repo, method } of SERVICE_READS) {

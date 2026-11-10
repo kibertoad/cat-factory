@@ -1,5 +1,6 @@
 import { MAX_FRAGMENT_ID_LENGTH } from '@cat-factory/contracts'
-import type { AgentKind, BlockType } from '@cat-factory/kernel'
+import type { AgentKind } from '@cat-factory/kernel'
+import type { ServiceFrameType } from '@cat-factory/contracts'
 import type { FragmentAppliesTo } from '@cat-factory/kernel'
 import { parseSimpleYaml, splitFrontmatter, str, strArray } from '../repoSourceSync/frontmatter.js'
 
@@ -128,7 +129,9 @@ export function parseFragmentMarkdown(path: string, content: string): ParsedFrag
 function parseAppliesTo(value: unknown): FragmentAppliesTo | undefined {
   if (!value || typeof value !== 'object') return undefined
   const obj = value as Record<string, unknown>
-  const blockTypes = strArray(obj.blockTypes).filter((t): t is BlockType => BLOCK_TYPES.includes(t))
+  const blockTypes = strArray(obj.blockTypes).filter((t): t is ServiceFrameType =>
+    BLOCK_TYPES.includes(t),
+  )
   const agentKinds = strArray(obj.agentKinds) as AgentKind[]
   const out: FragmentAppliesTo = {}
   if (blockTypes.length) out.blockTypes = blockTypes

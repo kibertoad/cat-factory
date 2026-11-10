@@ -74,6 +74,7 @@ interface RegistryFixtures {
   executions: Map<string, ExecutionInstance>
   blocks: Map<string, { workspaceId: string }>
   services: Map<string, { id: string; accountId: string | null }>
+  projects: Map<string, { id: string; accountId: string | null }>
   accountMembers: Map<string, string[]>
   /** VCS installation bindings, keyed by installation id (the `installation` scope's anchor). */
   installations: Map<
@@ -99,6 +100,11 @@ function makeFixtures(): RegistryFixtures {
     services: new Map([
       ['svc_in', { id: 'svc_in', accountId: ACCOUNT }],
       ['svc_out', { id: 'svc_out', accountId: OTHER_ACCOUNT }],
+    ]),
+    // Projects are account-owned like services, with the same in/out-of-scope split.
+    projects: new Map([
+      ['prj_in', { id: 'prj_in', accountId: ACCOUNT }],
+      ['prj_out', { id: 'prj_out', accountId: OTHER_ACCOUNT }],
     ]),
     // Account rosters, for the member-display scope (`user`/`userList`): USER + a co-member live
     // under ACCOUNT; a distinct user lives under OTHER_ACCOUNT — the in/out-of-scope split the
@@ -173,7 +179,7 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
       markFailed: async () => {
         throw new ConflictError('already terminal', 'invalid_state' as never)
       },
-      listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
+      listByOwners: async (ids: string[]) => ids.map((svc) => ({ svc })),
       // The remote debugging surface's run index — echoes the bound workspace like every other
       // workspace-scoped list stub below.
       listRecent: async (workspaceId: string) => [{ ws: workspaceId }],
@@ -183,12 +189,12 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
       // Run admission control's capacity read (workspace-scoped SQL COUNT → a number).
       countActiveByWorkspace: async (_ws: string) => 2,
     },
-    // Entity-id-keyed (findById/findByIds) + cross-service (listByServices) board-composition reads.
+    // Entity-id-keyed (findById/findByIds) + cross-service (listByOwners) board-composition reads.
     blockRepository: {
       findById: async (blockId: string) => {
         const home = blocks.get(blockId)
         return home
-          ? { workspaceId: home.workspaceId, serviceId: null, block: { id: blockId } }
+          ? { workspaceId: home.workspaceId, ownerId: null, block: { id: blockId } }
           : null
       },
       // The batched form (the `blockList` scope's resolver reads this): a missing block is simply
@@ -201,7 +207,7 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
             return home ? { workspaceId: home.workspaceId, block: { id } } : null
           })
           .filter(Boolean),
-      listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
+      listByOwners: async (ids: string[]) => ids.map((svc) => ({ svc })),
       // The run→block REVERSE link, read when a run row cannot be decoded. Echoes the bound
       // workspace like the other workspace-scoped reads (the real method returns a `Block | null`).
       getByExecution: async (ws: string, executionId: string) => ({ ws, executionId }),
@@ -221,6 +227,27 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
         dx,
         dy,
       }),
+    },
+    projectRecordRepository: {
+      insertOutcome: async () => true,
+      getOutcome: async () => null,
+      listOutcomes: async () => [],
+    },
+    outcomeStoragePolicyRepository: {
+      get: async () => null,
+      set: async () => undefined,
+    },
+    projectRepository: {
+      listByIds: async (ids: string[]) => ids.map((id) => fx.projects.get(id)).filter(Boolean),
+      get: async (id: string) => fx.projects.get(id) ?? null,
+      listByAccount: async (accountId: string) => [{ accountId }],
+      listByRootBlocks: async (ids: string[]) => ids.map((rootBlockId) => ({ rootBlockId })),
+      insert: async (project: { id: string; accountId: string | null }) => {
+        fx.projects.set(project.id, { id: project.id, accountId: project.accountId })
+      },
+      setServiceLinks: async () => undefined,
+      unlinkServices: async () => undefined,
+      deleteMany: async () => undefined,
     },
     serviceRepository: {
       // Mirror the real repo: a missing id is simply absent from the result (NOT an error row).
@@ -325,7 +352,7 @@ function buildBoardConfigRepos() {
     workspaceMountRepository: {
       listByWorkspace: async (ws: string) => [{ ws }],
       deleteByWorkspace: async (_ws: string) => undefined,
-      countByServiceIds: async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, 1])),
+      countBySubjectIds: async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, 1])),
       // The shared-service mount management surface: `get`/`update`/`remove` echo the workspaceId
       // (arg0); the record-based `upsert` binds on the mount's `workspaceId` FIELD.
       get: async (ws: string) => ({ ws }),
@@ -335,8 +362,8 @@ function buildBoardConfigRepos() {
       // The real-time fan-out's per-publish read: origin workspaceId (arg0) + a blockId.
       listWorkspaceIdsMountingBlock: async (ws: string, blockId: string) => [`${ws}:${blockId}`],
       // The frame-deletion cascade's batched pair (the `serviceList` rule).
-      listByServiceIds: async (_ids: string[]) => [],
-      removeByServices: async () => undefined,
+      listBySubjectIds: async (_ids: string[]) => [],
+      removeBySubjects: async () => undefined,
     },
     workspaceSettingsRepository: {
       get: async (ws: string) => ({ ws }),
@@ -513,7 +540,7 @@ function buildBoardConfigRepos() {
     // (arg0); the record-based `insert` binds on the job's `workspaceId` FIELD.
     bootstrapJobRepository: {
       listByWorkspace: async (ws: string) => [{ ws }],
-      listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
+      listByOwners: async (ids: string[]) => ids.map((svc) => ({ svc })),
       get: async (ws: string, id: string) => ({ ws, id }),
       insert: async () => undefined,
       update: async () => undefined,

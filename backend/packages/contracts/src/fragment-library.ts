@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { agentKindSchema, blockTypeSchema } from './primitives.js'
+import { agentKindSchema, serviceFrameTypeSchema } from './primitives.js'
 import { promptFragmentSchema } from './entities.js'
 import { documentSourceKindSchema } from './documents.js'
 
@@ -21,7 +21,7 @@ export const fragmentTierSchema = v.picklist(['builtin', 'account', 'workspace']
 export type FragmentTier = v.InferOutput<typeof fragmentTierSchema>
 
 const appliesToSchema = v.object({
-  blockTypes: v.optional(v.array(blockTypeSchema)),
+  blockTypes: v.optional(v.array(serviceFrameTypeSchema)),
   agentKinds: v.optional(v.array(agentKindSchema)),
 })
 

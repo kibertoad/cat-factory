@@ -3129,6 +3129,7 @@
       "document": "Repository di documenti"
     },
     "blockTypes": {
+      "project": "Progetto",
       "frontend": "Frontend",
       "service": "Servizio",
       "library": "Libreria",
@@ -6571,6 +6572,7 @@
     "unavailable": {
       "description": {
         "binary_generators_unreachable": "Non è stato possibile leggere le integrazioni generative di questa installazione in questo momento, quindi l'esecuzione non è partita. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
+        "project_kinds_unreachable": "Non è stato possibile leggere i tipi di progetto di questa installazione in questo momento, quindi la richiesta non è stata completata. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
         "foundational_builtins_unreachable": "Non è stato possibile leggere i servizi fondamentali integrati di questa installazione in questo momento. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
         "connection_credentials_unreadable": "Non è stato possibile leggere le credenziali memorizzate di questa connessione. Se questa installazione riesce a raggiungere il servizio che ne custodisce la chiave, ricollega la sorgente per sostituirle; altrimenti riprova quando quella connessione sarà ripristinata.",
         "vcs_capability_unsupported": "Il provider di controllo del codice collegato a questo workspace non offre questa operazione. Non c'è nulla di configurato male e nessuna impostazione può aiutare: non è disponibile per questo provider.",
@@ -6597,7 +6599,12 @@
         "tool_server_without_oauth": "Questo server degli strumenti non usa più OAuth, quindi non c’è nessuna connessione da completare.",
         "gate_config_fields_invalid": "Le impostazioni del gate di un passo sono incomplete o contengono un valore che il gate non accetta, di solito un'impostazione obbligatoria senza valore. Compila le impostazioni del gate del passo nella pipeline e riprova.",
         "approvals_chain_stale": "Questa pipeline è cambiata dopo che ne hai aperto i punti di approvazione, quindi non corrispondono più ai suoi passaggi. Ricarica la pipeline e impostali di nuovo.",
-        "approvals_builtin_checkpoint_locked": "Una pipeline integrata mantiene i punti di approvazione previsti dalla sua definizione nel catalogo. Clona la pipeline per rimuoverne uno."
+        "approvals_builtin_checkpoint_locked": "Una pipeline integrata mantiene i punti di approvazione previsti dalla sua definizione nel catalogo. Clona la pipeline per rimuoverne uno.",
+        "project_kind_unregistered": "Questa installazione non offre più il tipo di questo progetto, che quindi non può ricevere nuovo lavoro. Chiedi all'operatore della tua installazione di registrare di nuovo il tipo.",
+        "task_type_not_offered_by_project": "Il tipo di questo progetto non accetta attività di questo tipo. Scegli uno dei tipi che il modulo offre per esso.",
+        "project_has_no_writable_repo": "Un passo di questa esecuzione ha bisogno di un repository in cui scrivere, e un progetto non ne ha: i repository dei suoi servizi collegati sono contesto in sola lettura. Scegli una pipeline che si limita a leggere e riferire.",
+        "project_service_link_invalid": "Uno dei servizi collegati non esiste più o appartiene a un'altra organizzazione. Ricarica la board e scegli di nuovo i servizi collegati.",
+        "project_has_unfinished_tasks": "Questo progetto ha ancora attività non concluse. Concludile o eliminale prima."
       }
     },
     "action": {
@@ -9206,6 +9213,41 @@
       "high": "Alto",
       "xhigh": "Molto alto",
       "max": "Massimo"
+    }
+  },
+  "projects": {
+    "common": {
+      "cancel": "Annulla"
+    },
+    "toolbar": {
+      "menu": "Progetti",
+      "newProject": "Nuovo progetto…",
+      "kindsUnavailable": "Non è stato possibile caricare i tipi di progetto"
+    },
+    "create": {
+      "title": "Nuovo progetto",
+      "description": "Un progetto raccoglie lavoro che non appartiene a un singolo servizio. Vive su questa bacheca e può essere aggiunto ad altre bacheche della tua organizzazione.",
+      "kindLabel": "Tipo",
+      "titleLabel": "Titolo",
+      "titlePlaceholder": "Per esempio: ricerca sull'API del fornitore",
+      "descriptionLabel": "Descrizione",
+      "servicesLabel": "Servizi collegati",
+      "servicesHelp": "Le sue attività possono leggere i repository di questi servizi come contesto.",
+      "submit": "Crea progetto",
+      "created": "Progetto {title} creato",
+      "failed": "Non è stato possibile creare il progetto"
+    },
+    "linkServices": {
+      "title": "Servizi collegati",
+      "description": "I servizi i cui repository le attività di questo progetto possono leggere come contesto.",
+      "servicesLabel": "Servizi",
+      "save": "Salva",
+      "saved": "Servizi collegati aggiornati",
+      "failed": "Non è stato possibile aggiornare i servizi collegati"
+    },
+    "mount": {
+      "added": "Progetto {title} aggiunto a questa bacheca",
+      "failed": "Non è stato possibile aggiungere il progetto"
     }
   }
 }

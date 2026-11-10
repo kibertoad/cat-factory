@@ -13,7 +13,7 @@ import { agentRuns } from '../db/schema.js'
 // Drizzle/Postgres mirror of the D1EnvConfigRepairJobRepository. Env-config-repair runs are
 // kind='env-config-repair' rows of the unified agent_runs table (the repair-specific fields —
 // owner/repo/branch + the post-repair ok/issues — ride in the `detail` JSON), exactly like
-// the Worker. A repair run has no board block and no service frame, so block_id/service_id
+// the Worker. A repair run has no board block and no service frame, so block_id/owner_id
 // stay null. Behaviourally identical so the cross-runtime conformance suite asserts the same
 // repair lifecycle on both stores.
 
@@ -98,7 +98,7 @@ export class DrizzleEnvConfigRepairJobRepository implements EnvConfigRepairJobRe
       failure: record.failure == null ? null : JSON.stringify(record.failure),
       created_at: record.createdAt,
       updated_at: record.updatedAt,
-      service_id: null,
+      owner_id: null,
     })
   }
 

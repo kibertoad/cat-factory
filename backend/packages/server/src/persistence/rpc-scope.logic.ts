@@ -1,4 +1,4 @@
-import type { DispatchOptions, DispatchResult, LibrarySourceEntity } from './rpc'
+import type { DispatchOptions, DispatchResult, LibrarySourceEntity, ScopeRule } from './rpc'
 
 /**
  * The `workspaceList` kind: every named workspace must resolve to an in-scope account. The reads
@@ -130,7 +130,7 @@ export async function checkServiceUpdateScope(
 
 /**
  * The `serviceMount` record-based mount `upsert`. Bind on the mount's `workspaceId` FIELD (must be
- * in scope) AND enforce the cross-org mount invariant server-side: the mounted `serviceId` must be
+ * in scope) AND enforce the cross-org mount invariant server-side: the mounted `subjectId` must be
  * owned by the SAME account as the target workspace, so a raw upsert can never plant a cross-org
  * mount — even for a token that spans several accounts (both would be in scope, so a workspace-only
  * check would let one org's service be mounted onto another's board). A non-object arg, a
@@ -148,13 +148,23 @@ export async function checkServiceMountScope(
     record && typeof record === 'object'
       ? (record as { workspaceId?: unknown }).workspaceId
       : undefined
-  const serviceId =
-    record && typeof record === 'object' ? (record as { serviceId?: unknown }).serviceId : undefined
+  const { subjectId: serviceId, subjectKind } =
+    record && typeof record === 'object'
+      ? (record as { subjectId?: unknown; subjectKind?: unknown })
+      : { subjectId: undefined, subjectKind: undefined }
   if (typeof workspaceId !== 'string' || typeof serviceId !== 'string') return denied
-  if (!opts.resolveServiceAccountIds) return denied
+  // The subject's owning account is read through the resolver for ITS kind: a project id resolves
+  // to nothing through the service resolver, and the reverse, so a mislabelled kind fails closed.
+  const resolve =
+    subjectKind === 'service'
+      ? opts.resolveServiceAccountIds
+      : subjectKind === 'project'
+        ? opts.resolveProjectAccountIds
+        : undefined
+  if (!resolve) return denied
   const workspaceAccount = await opts.resolveAccountId(workspaceId)
   if (!inScope(workspaceAccount)) return denied
-  const serviceAccounts = await opts.resolveServiceAccountIds([serviceId])
+  const serviceAccounts = await resolve([serviceId])
   const serviceAccount = serviceAccounts.get(serviceId)
   // Same-account: the service must be owned by the workspace's (in-scope) account. Since
   // `workspaceAccount` is already confirmed in scope, requiring equality also keeps the
@@ -202,7 +212,9 @@ export async function checkUsageRecordScope(
  * Resolve a tenant-library owner PAIR (ownerKind, ownerId) to an account and enforce token scope,
  * shared by the `owner` (positional) and `ownerField` (record-field) kinds. Returns `denied` when
  * the pair is malformed or out of scope, else `undefined`. A `workspace` owner resolves through the
- * workspace's owning account; an `account` owner IS the account; any other kind fails closed.
+ * workspace's owning account; an `account` owner IS the account. A `project` owner resolves through
+ * the project's account, but only when the rule opts in with `projectTier`: the content libraries
+ * have no project tier, so for them that kind fails closed like any other.
  */
 export async function checkOwnerPairScope(
   ownerKind: unknown,
@@ -210,12 +222,16 @@ export async function checkOwnerPairScope(
   opts: DispatchOptions,
   inScope: (accountId: string | null | undefined) => boolean,
   denied: DispatchResult,
+  tiers: { projectTier?: boolean } = {},
 ): Promise<DispatchResult | undefined> {
   if (typeof ownerId !== 'string') return denied
   if (ownerKind === 'workspace') {
     if (!inScope(await opts.resolveAccountId(ownerId))) return denied
   } else if (ownerKind === 'account') {
     if (!inScope(ownerId)) return denied
+  } else if (ownerKind === 'project' && tiers.projectTier) {
+    if (!opts.resolveProjectAccountIds) return denied
+    if (!inScope((await opts.resolveProjectAccountIds([ownerId])).get(ownerId))) return denied
   } else {
     return denied
   }
@@ -330,4 +346,125 @@ export async function checkOwnerFieldUpsertScope(
       return denied
     }
   }
+}
+
+/**
+ * The `projectInsert` record (`projectRepository.insert(project)`). Binds the project's declared
+ * account, the root block it claims (as `serviceInsert` binds a frame), and every service it links:
+ * a linked service's repos become read-only context for the project's tasks, so a link into another
+ * account would hand that account's code to this one.
+ */
+export async function checkProjectInsertScope(
+  record: unknown,
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (!record || typeof record !== 'object') return denied
+  const { accountId, rootBlockId, serviceIds } = record as {
+    accountId?: unknown
+    rootBlockId?: unknown
+    serviceIds?: unknown
+  }
+  if (typeof accountId !== 'string' || !inScope(accountId)) return denied
+  if (typeof rootBlockId !== 'string' || !opts.resolveFrameBlockOwner) return denied
+  const root = await opts.resolveFrameBlockOwner(rootBlockId)
+  if (root.status === 'unreadable') return denied
+  if (root.status === 'found' && root.accountId !== accountId) return denied
+  return checkLinkedServicesShareAccount(serviceIds, accountId, opts, denied)
+}
+
+/**
+ * The `projectServiceLinks` pair (`projectRepository.setServiceLinks(projectId, serviceIds)`):
+ * the stored project must be in scope, and every linked service must share its account.
+ */
+export async function checkProjectServiceLinksScope(
+  projectId: unknown,
+  serviceIds: unknown,
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (typeof projectId !== 'string' || !opts.resolveProjectAccountIds) return denied
+  const projectAccount = (await opts.resolveProjectAccountIds([projectId])).get(projectId)
+  if (typeof projectAccount !== 'string' || !inScope(projectAccount)) return denied
+  return checkLinkedServicesShareAccount(serviceIds, projectAccount, opts, denied)
+}
+
+async function checkLinkedServicesShareAccount(
+  serviceIds: unknown,
+  accountId: string,
+  opts: DispatchOptions,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (!Array.isArray(serviceIds) || serviceIds.some((id) => typeof id !== 'string')) return denied
+  if (serviceIds.length === 0) return undefined
+  if (!opts.resolveServiceAccountIds) return denied
+  const accounts = await opts.resolveServiceAccountIds(serviceIds as string[])
+  return (serviceIds as string[]).every((id) => accounts.get(id) === accountId) ? undefined : denied
+}
+
+/**
+ * The project scope kinds. Projects are account-owned: every requested id must resolve to an
+ * in-scope account, a missing project fails closed, and an empty list is a no-op read. An insert
+ * and a link change also bind every linked service (see the two checks above).
+ */
+export async function checkProjectCallScope(
+  rule: Extract<
+    ScopeRule,
+    { kind: 'project' | 'projectList' | 'projectField' | 'projectInsert' | 'projectServiceLinks' }
+  >,
+  args: unknown[],
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (rule.kind === 'projectInsert') {
+    return checkProjectInsertScope(args[rule.arg], opts, inScope, denied)
+  }
+  if (rule.kind === 'projectServiceLinks') {
+    return checkProjectServiceLinksScope(
+      args[rule.arg],
+      args[rule.servicesArg],
+      opts,
+      inScope,
+      denied,
+    )
+  }
+  const raw = args[rule.arg]
+  const ids =
+    rule.kind === 'projectList'
+      ? raw
+      : rule.kind === 'projectField'
+        ? [raw && typeof raw === 'object' ? (raw as { projectId?: unknown }).projectId : undefined]
+        : [raw]
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
+  if (ids.length === 0) return undefined
+  if (!opts.resolveProjectAccountIds) return denied
+  const accounts = await opts.resolveProjectAccountIds(ids as string[])
+  return (ids as string[]).every((id) => inScope(accounts.get(id))) ? undefined : denied
+}
+
+/**
+ * The `subjectList` kind: mounted-subject ids (services and projects alike, as owner stamps and
+ * mount subjects hold them), each resolving as a service or as a project to an in-scope account.
+ */
+export async function checkSubjectListScope(
+  ids: unknown,
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
+  if (ids.length === 0) return undefined
+  if (!opts.resolveServiceAccountIds || !opts.resolveProjectAccountIds) return denied
+  const [services, projects] = await Promise.all([
+    opts.resolveServiceAccountIds(ids as string[]),
+    opts.resolveProjectAccountIds(ids as string[]),
+  ])
+  return (ids as string[]).every((id) =>
+    inScope(services.has(id) ? services.get(id) : projects.get(id)),
+  )
+    ? undefined
+    : denied
 }

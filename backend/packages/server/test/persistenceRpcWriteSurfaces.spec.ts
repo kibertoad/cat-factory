@@ -180,13 +180,14 @@ describe('shared-service mount management surface', () => {
 
   // `upsert(mount)` binds on the mount's `workspaceId` FIELD via the `serviceMount` rule: the mount
   // is placed onto exactly `mount.workspaceId` (out-of-scope → refused before any write) AND the
-  // mounted `serviceId` must be owned by the SAME account as that workspace (the cross-org mount
+  // mounted `subjectId` must be owned by the SAME account as that workspace (the cross-org mount
   // invariant, enforced at the RPC layer — not only in the bypassed service layer).
   it('forwards workspaceMountRepository.upsert when the mount targets an in-scope workspace', async () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.upsert!({
         workspaceId: 'ws_in',
-        serviceId: 'svc_in',
+        subjectKind: 'service',
+        subjectId: 'svc_in',
       }),
     ).resolves.toBeUndefined()
   })
@@ -195,18 +196,22 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.upsert!({
         workspaceId: 'ws_out',
-        serviceId: 'svc_in',
+        subjectKind: 'service',
+        subjectId: 'svc_in',
       }),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 
   it('rejects workspaceMountRepository.upsert when the mount has no workspaceId field (404)', async () => {
     await expect(
-      remoteRegistry().workspaceMountRepository!.upsert!({ serviceId: 'svc_in' }),
+      remoteRegistry().workspaceMountRepository!.upsert!({
+        subjectKind: 'service',
+        subjectId: 'svc_in',
+      }),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 
-  it('rejects workspaceMountRepository.upsert when the mount has no serviceId field (404)', async () => {
+  it('rejects workspaceMountRepository.upsert when the mount has no subjectId field (404)', async () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.upsert!({ workspaceId: 'ws_in' }),
     ).rejects.toMatchObject({ code: 'not_found' })
@@ -216,7 +221,8 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.upsert!({
         workspaceId: 'ws_in',
-        serviceId: 'svc_missing',
+        subjectKind: 'service',
+        subjectId: 'svc_missing',
       }),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
@@ -229,7 +235,8 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry([ACCOUNT, OTHER_ACCOUNT]).workspaceMountRepository!.upsert!({
         workspaceId: 'ws_in',
-        serviceId: 'svc_out',
+        subjectKind: 'service',
+        subjectId: 'svc_out',
       }),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
@@ -239,25 +246,120 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry([ACCOUNT, OTHER_ACCOUNT]).workspaceMountRepository!.upsert!({
         workspaceId: 'ws_out',
-        serviceId: 'svc_out',
+        subjectKind: 'service',
+        subjectId: 'svc_out',
       }),
     ).resolves.toBeUndefined()
   })
 
-  it('forwards the batched cascade reads a frame deletion runs', async () => {
-    // `listByServiceIds`/`removeByServices` finish a service delete: without them a node deletes a
-    // frame and leaves every OTHER board in the org mounting a service that no longer exists.
+  it('binds a project mount through the project resolver, never the service one', async () => {
     await expect(
-      remoteRegistry().workspaceMountRepository!.listByServiceIds!(['svc_in']),
+      remoteRegistry().workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_in',
+        subjectKind: 'project',
+        subjectId: 'prj_in',
+      }),
+    ).resolves.toBeUndefined()
+    // A project id labelled as a service resolves to nothing, so the mislabel fails closed.
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_in',
+        subjectKind: 'service',
+        subjectId: 'prj_in',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    await expect(
+      remoteRegistry([ACCOUNT, OTHER_ACCOUNT]).workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_in',
+        subjectKind: 'project',
+        subjectId: 'prj_out',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('binds a project insert to its account, its root block and every linked service', async () => {
+    const project = (over: Record<string, unknown>) => ({
+      id: 'prj_new',
+      accountId: ACCOUNT,
+      kind: 'research',
+      rootBlockId: 'blk_unwritten',
+      serviceIds: ['svc_in'],
+      createdAt: 0,
+      ...over,
+    })
+    const multi = remoteRegistry([ACCOUNT, OTHER_ACCOUNT])
+    await expect(multi.projectRepository!.insert!(project({}))).resolves.toBeUndefined()
+    // A link into another account would hand that account's repos to this project's tasks, even
+    // under a token that holds both.
+    await expect(
+      multi.projectRepository!.insert!(project({ id: 'prj_x', serviceIds: ['svc_out'] })),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    // A root block homed in another account is a hijack, as it is for a service frame.
+    await expect(
+      multi.projectRepository!.insert!(project({ id: 'prj_y', rootBlockId: 'blk_out' })),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('binds a project link change to the project account and every linked service', async () => {
+    const multi = remoteRegistry([ACCOUNT, OTHER_ACCOUNT])
+    await expect(
+      multi.projectRepository!.setServiceLinks!('prj_in', ['svc_in']),
+    ).resolves.toBeUndefined()
+    await expect(
+      multi.projectRepository!.setServiceLinks!('prj_in', ['svc_out']),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    await expect(
+      remoteRegistry().projectRepository!.setServiceLinks!('prj_out', []),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('binds a project outcome to the project it is written under', async () => {
+    await expect(
+      remoteRegistry().projectRecordRepository!.insertOutcome!({
+        id: 'rev_1',
+        projectId: 'prj_in',
+      }),
+    ).resolves.toBe(true)
+    await expect(
+      remoteRegistry().projectRecordRepository!.insertOutcome!({
+        id: 'rev_2',
+        projectId: 'prj_out',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it("binds a project-tier storage policy through the project's account", async () => {
+    await expect(
+      remoteRegistry().outcomeStoragePolicyRepository!.get!('project', 'prj_in'),
+    ).resolves.toBeNull()
+    await expect(
+      remoteRegistry().outcomeStoragePolicyRepository!.set!('project', 'prj_out', null),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('binds owner lists through services and projects alike', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.listBySubjectIds!(['svc_in', 'prj_in']),
     ).resolves.toEqual([])
     await expect(
-      remoteRegistry().workspaceMountRepository!.removeByServices!(['svc_in']),
+      remoteRegistry().workspaceMountRepository!.listBySubjectIds!(['svc_in', 'prj_out']),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('forwards the batched cascade reads a frame deletion runs', async () => {
+    // `listBySubjectIds`/`removeBySubjects` finish a service delete: without them a node deletes a
+    // frame and leaves every OTHER board in the org mounting a service that no longer exists.
+    await expect(
+      remoteRegistry().workspaceMountRepository!.listBySubjectIds!(['svc_in']),
+    ).resolves.toEqual([])
+    await expect(
+      remoteRegistry().workspaceMountRepository!.removeBySubjects!(['svc_in']),
     ).resolves.toBeUndefined()
   })
 
   it('rejects the batched cascade reads for an out-of-scope service (404)', async () => {
     await expect(
-      remoteRegistry().workspaceMountRepository!.removeByServices!(['svc_out']),
+      remoteRegistry().workspaceMountRepository!.removeBySubjects!(['svc_out']),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 })

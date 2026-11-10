@@ -52,20 +52,33 @@ export const serviceSchema = v.object({
 })
 export type Service = v.InferOutput<typeof serviceSchema>
 
+/** The kinds of account-owned subject a board can mount. */
+export const mountSubjectKindSchema = v.picklist(['service', 'project'])
+export type MountSubjectKind = v.InferOutput<typeof mountSubjectKindSchema>
+
+/** Read a persisted subject kind, refusing a value no current kind names rather than guessing. */
+export function decodeMountSubjectKind(value: string): MountSubjectKind {
+  if (value === 'service' || value === 'project') return value
+  throw new Error(`unknown mount subject kind '${value}'`)
+}
+
 /**
- * A *mount*: a service placed onto a workspace's board. The primary key is
- * `(workspaceId, serviceId)`. The position/size are the per-workspace LAYOUT
- * OVERRIDE for the service's frame — each board can position the shared frame
+ * A *mount*: an account-owned subject (today a service) placed onto a workspace's board. The
+ * primary key is `(workspaceId, subjectId)`. The position/size are the per-workspace LAYOUT
+ * OVERRIDE for the subject's root frame: each board can position the shared frame
  * independently, while the task/module positions inside it stay shared.
  */
 export const workspaceMountSchema = v.object({
   workspaceId: v.string(),
-  serviceId: v.string(),
-  /** Per-workspace board position of the service's frame. */
+  /** What is mounted: a service, or a project. */
+  subjectKind: mountSubjectKindSchema,
+  /** The mounted subject's id; subject ids are globally unique across subject kinds. */
+  subjectId: v.string(),
+  /** Per-workspace board position of the subject's root frame. */
   position: positionSchema,
   /** Per-workspace dragged frame size; absent => auto-size from contents. */
   size: v.optional(v.nullable(sizeSchema)),
-  /** Epoch ms the service was mounted onto this workspace. */
+  /** Epoch ms the subject was mounted onto this workspace. */
   createdAt: v.number(),
 })
 export type WorkspaceMount = v.InferOutput<typeof workspaceMountSchema>

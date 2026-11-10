@@ -3,6 +3,7 @@ import { useBoardFlow, BOARD_MIN_ZOOM, BOARD_MAX_ZOOM } from '~/composables/useB
 import NotificationsInbox from '~/components/layout/NotificationsInbox.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import LaneViewControl from '~/components/board/LaneViewControl.vue'
+import ProjectsToolbarMenu from '~/components/projects/ProjectsToolbarMenu.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -217,6 +218,9 @@ const spendColor = computed(() => (spend.value?.exceeded ? 'error' : 'neutral'))
         <span class="hidden sm:inline">{{ t('board.toolbar.addService') }}</span>
       </UButton>
     </UDropdownMenu>
+
+    <!-- projects: create one, or mount one of the account's onto this board (board.write) -->
+    <ProjectsToolbarMenu />
 
     <!-- archived services: hidden from the board, restorable with no expiry (board.write) -->
     <UDropdownMenu v-if="archivedItems.length && access.canWriteBoard.value" :items="archivedItems">

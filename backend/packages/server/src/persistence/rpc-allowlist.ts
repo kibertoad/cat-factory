@@ -23,7 +23,7 @@ import { VCS_PERSISTENCE_METHODS } from './rpc-allowlist-vcs.js'
  * machine token's scope is refused as 404.
  *
  * The cross-service board-composition reads keyed on `serviceIds[]`/`accountId`
- * (`listByServices`, `serviceRepository.listByIds`/`listByAccount`, `countByServiceIds`) and the
+ * (`listByOwners`, `serviceRepository.listByIds`/`listByAccount`, `countBySubjectIds`) and the
  * entity-id-keyed `blockRepository.findById` are allow-listed here too, each bound by the
  * {@link ScopeRule} `serviceList` / `block` / `account` kinds that resolve the entity's owning
  * account server-side before the scope check.
@@ -80,7 +80,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     getByExecution: { scope: { kind: 'workspace', arg: 0 } },
     insert: { scope: { kind: 'workspace', arg: 0 } },
     update: { scope: { kind: 'workspace', arg: 0 } },
-    setService: { scope: { kind: 'workspace', arg: 0 } },
+    setOwner: { scope: { kind: 'workspace', arg: 0 } },
     // The container-resize child translation (`BoardService.resizeBlock`): one arithmetic UPDATE
     // over a parent's direct children. Workspace-scoped like `update`, and remote for the same
     // reason — it is board state, on a path a mothership-mode node serves from a laptop.
@@ -91,7 +91,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // The batched form (the cross-workspace dependency resolution on the run-start path).
     findByIds: { scope: { kind: 'blockList', arg: 0 } },
     // Cross-service: compose a board's blocks from every service it mounts.
-    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
+    listByOwners: { scope: { kind: 'subjectList', arg: 0 } },
     // One bounded page of a service frame's task subtree (the public API's paginated task list).
     listServiceTasks: { scope: { kind: 'workspace', arg: 0 } },
     // The public API's in-flight concurrency backstop (`BoardService.countActiveInternalTasks`),
@@ -141,7 +141,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
     markFailed: { scope: { kind: 'workspace', arg: 0 } },
     // Cross-service: compose a board's runs from every service it mounts.
-    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
+    listByOwners: { scope: { kind: 'subjectList', arg: 0 } },
     // One bounded page of the workspace's headless (`internal`-anchored) runs — the public API's
     // job list. Workspace-scoped like every other list read here.
     listInternal: { scope: { kind: 'workspace', arg: 0 } },
@@ -249,7 +249,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // workspaceId as arg0, so they reuse the `workspace` rule (resolve the owning account, reject
   // out-of-scope as 404). Reads only — no mutation is exposed here.
   //
-  // The cross-service reads (`*.listByServices`, `countByServiceIds`, `serviceRepository.*`)
+  // The cross-service reads (`*.listByOwners`, `countBySubjectIds`, `serviceRepository.*`)
   // compose a board from the services it mounts; their arg0 is `serviceIds[]` (the `serviceList`
   // rule resolves each service's owning account) or an `accountId` (the `account` rule).
   serviceRepository: {
@@ -291,20 +291,20 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // The org-catalog / shared-service mounting flow a mothership-mode SPA drives
   // (`ServiceMountService` / `ServiceMountController`): mount / unmount / re-layout a shared
   // account service onto a workspace board. The reads that compose the catalog badge
-  // (`listByWorkspace`, `countByServiceIds`) were already exposed; these complete the write
+  // (`listByWorkspace`, `countBySubjectIds`) were already exposed; these complete the write
   // surface. `get`/`update`/`remove` take the workspaceId as arg0 (the `workspace` rule); the
   // record-based `upsert(mount)` binds on the mount's `workspaceId` FIELD via the `serviceMount`
   // rule. Each is member-level (the mount endpoints are not admin-gated) and workspace-scoped.
   //
   // Cross-org sharing stays enforced at the RPC layer, NOT only in the (bypassed) service layer:
-  // the `serviceMount` rule additionally requires the mounted `serviceId` to be owned by the SAME
+  // the `serviceMount` rule additionally requires the mounted `subjectId` to be owned by the SAME
   // account as the target workspace, so a raw `upsert` can never plant a cross-org mount — even
   // for a machine token that spans several accounts (a user in multiple orgs). Board composition
-  // (`blockRepository.listByServices`, `serviceRepository.listByIds`) stays account-scoped as a
+  // (`blockRepository.listByOwners`, `serviceRepository.listByIds`) stays account-scoped as a
   // second line of defence, but it is no longer the sole guard for the mount invariant.
   workspaceMountRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-    countByServiceIds: { scope: { kind: 'serviceList', arg: 0 } },
+    countBySubjectIds: { scope: { kind: 'subjectList', arg: 0 } },
     // The real-time fan-out's hot read, and the one method on this table that is NOT a management
     // surface: `FanOutEventPublisher.targets` calls it on EVERY engine event publish to expand the
     // changed block to the set of boards mounting its service. It is therefore load-bearing for
@@ -327,9 +327,43 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // They were held back only because the flows around them (service CRUD, workspace delete) were
     // themselves mothership-internal; service CRUD is now remote, so the cascade that finishes it
     // must be too, or a node deletes a frame and leaves its mounts pointing at a doomed service on
-    // every OTHER board in the org. Both take `serviceIds[]` (the `serviceList` rule).
-    listByServiceIds: { scope: { kind: 'serviceList', arg: 0 } },
-    removeByServices: { scope: { kind: 'serviceList', arg: 0 } },
+    // every OTHER board in the org. Both take subject ids (the `subjectList` rule), services and
+    // projects alike.
+    listBySubjectIds: { scope: { kind: 'subjectList', arg: 0 } },
+    removeBySubjects: { scope: { kind: 'subjectList', arg: 0 } },
+  },
+  // What projects of any kind keep. Definitions are account-owned; a pin or an outcome is written
+  // under one project and binds through it; the storage-policy tiers bind through their owner.
+  projectDefinitionRepository: {
+    get: { scope: { kind: 'account', arg: 0 } },
+    listByAccount: { scope: { kind: 'account', arg: 0 } },
+    insert: { scope: { kind: 'accountField', arg: 0 } },
+  },
+  projectRecordRepository: {
+    getPin: { scope: { kind: 'project', arg: 0 } },
+    insertPin: { scope: { kind: 'projectField', arg: 0 } },
+    reserveSeq: { scope: { kind: 'project', arg: 0 } },
+    insertOutcome: { scope: { kind: 'projectField', arg: 0 } },
+    getOutcome: { scope: { kind: 'project', arg: 0 } },
+    listOutcomes: { scope: { kind: 'project', arg: 0 } },
+    deleteByProjects: { scope: { kind: 'projectList', arg: 0 } },
+  },
+  outcomeStoragePolicyRepository: {
+    get: { scope: { kind: 'owner', kindArg: 0, idArg: 1, projectTier: true } },
+    set: { scope: { kind: 'owner', kindArg: 0, idArg: 1, projectTier: true } },
+  },
+  // Account-owned projects, the peers of services. Every read and write binds the project's own
+  // account; an insert or a link change also binds every linked service to that same account,
+  // since a linked service's repos become read-only context for the project's tasks.
+  projectRepository: {
+    get: { scope: { kind: 'project', arg: 0 } },
+    listByIds: { scope: { kind: 'projectList', arg: 0 } },
+    listByAccount: { scope: { kind: 'account', arg: 0 } },
+    listByRootBlocks: { scope: { kind: 'blockList', arg: 0 } },
+    insert: { scope: { kind: 'projectInsert', arg: 0 } },
+    setServiceLinks: { scope: { kind: 'projectServiceLinks', arg: 0, servicesArg: 1 } },
+    unlinkServices: { scope: { kind: 'serviceList', arg: 0 } },
+    deleteMany: { scope: { kind: 'projectList', arg: 0 } },
   },
   workspaceSettingsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
@@ -813,7 +847,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // The bootstrap flow a mothership-mode SPA drives (`BootstrapController` +
   // `AgentRunController`): start a repo bootstrap, read a single job (the board-card poll), and
   // retry / stop a failed or running one. The board-load reads (`listByWorkspace` /
-  // `listByServices`) were already exposed; these complete the surface. `get`/`update` take the
+  // `listByOwners`) were already exposed; these complete the surface. `get`/`update` take the
   // workspaceId as arg0 (the `workspace` rule); the record-based `insert(record)` binds on the
   // job's `workspaceId` FIELD (the `workspaceField` rule — the id is a property, not a positional
   // arg). Each is member-level (the bootstrap endpoints are not admin-gated) and workspace-scoped —
@@ -824,7 +858,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // workspace-scoped `referenceArchitectureRepository.get` below, which 404s a cross-workspace id.
   bootstrapJobRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-    listByServices: { scope: { kind: 'serviceList', arg: 0 } },
+    listByOwners: { scope: { kind: 'subjectList', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
     insert: { scope: { kind: 'workspaceField', arg: 0 } },
     update: { scope: { kind: 'workspace', arg: 0 } },

@@ -242,9 +242,9 @@ const DETAIL_FIELDS = [
 export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
   constructor(private readonly db: DrizzleDb) {}
 
-  /** The service_id of a workspace's block, as a correlated subquery value. */
-  private blockServiceId(workspaceId: string, blockId: string | null) {
-    return sql<string | null>`(SELECT ${blocks.service_id} FROM ${blocks}
+  /** The owner_id of a workspace's block, as a correlated subquery value. */
+  private blockOwnerId(workspaceId: string, blockId: string | null) {
+    return sql<string | null>`(SELECT ${blocks.owner_id} FROM ${blocks}
       WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${blockId})`
   }
 
@@ -277,9 +277,9 @@ export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
       failure: record.failure == null ? null : JSON.stringify(record.failure),
       created_at: record.createdAt,
       updated_at: record.updatedAt,
-      // Stamp service_id from the materialised service frame (when known) so a shared
+      // Stamp owner_id from the materialised service frame (when known) so a shared
       // service's in-flight bootstrap surfaces on every board that mounts it.
-      service_id: this.blockServiceId(record.workspaceId, record.blockId),
+      owner_id: this.blockOwnerId(record.workspaceId, record.blockId),
     })
   }
 
@@ -327,9 +327,9 @@ export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
     if (patch.status !== undefined) set.status = patch.status
     if (patch.blockId !== undefined) {
       set.block_id = patch.blockId
-      // The run row is inserted before its service frame exists, so refresh service_id
+      // The run row is inserted before its service frame exists, so refresh owner_id
       // from the block whenever block_id is (re)assigned.
-      set.service_id = this.blockServiceId(workspaceId, patch.blockId)
+      set.owner_id = this.blockOwnerId(workspaceId, patch.blockId)
     }
     if (patch.subtasks !== undefined) {
       set.subtasks = patch.subtasks == null ? null : JSON.stringify(patch.subtasks)
@@ -376,12 +376,12 @@ export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
     return rows.map(rowToBootstrapJob)
   }
 
-  async listByServices(serviceIds: string[]): Promise<BootstrapJobRecord[]> {
-    if (serviceIds.length === 0) return []
+  async listByOwners(ownerIds: string[]): Promise<BootstrapJobRecord[]> {
+    if (ownerIds.length === 0) return []
     const rows = await this.db
       .select()
       .from(agentRuns)
-      .where(and(inArray(agentRuns.service_id, serviceIds), eq(agentRuns.kind, 'bootstrap')))
+      .where(and(inArray(agentRuns.owner_id, ownerIds), eq(agentRuns.kind, 'bootstrap')))
       .orderBy(desc(agentRuns.created_at))
     return rows.map(rowToBootstrapJob)
   }

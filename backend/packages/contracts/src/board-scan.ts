@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { blockTypeSchema } from './primitives.js'
+import { serviceFrameTypeSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Service-blueprint wire contracts. The `blueprints` pipeline step decomposes a
@@ -37,7 +37,7 @@ export type BlueprintModule = v.InferOutput<typeof blueprintModuleSchema>
 /** The repository as a single top-level service frame with its modules. */
 export const blueprintServiceSchema = v.object({
   /** Board frame type the repo presents as (service / api / frontend / …). */
-  type: blockTypeSchema,
+  type: serviceFrameTypeSchema,
   /** Human name for the service (defaults to the repo name). */
   name: nameField,
   /** One or two sentences describing the service overall. */

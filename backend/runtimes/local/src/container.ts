@@ -24,6 +24,7 @@ import {
   SqliteWorkRunner,
   type MothershipComposition,
   composeMothership,
+  mothershipRegistrySources,
   createMothershipConnector,
   isMothershipMode,
 } from './mothership.js'
@@ -437,34 +438,8 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
           // ROW and the mothership opens it; a write goes back up to be sealed under the org key,
           // so a row this laptop provisions is one the mothership's own teardown can still reclaim.
           secretDelegate: mothership.secretDelegate,
-          // The catalog's `builtin` tier comes from the MOTHERSHIP, not from this node's own
-          // registry: the estate is org state, so a node's copy could only ever be a second one
-          // drifting behind (see `HttpFoundationalBuiltinSource`). `startLocal` warns at boot if
-          // this node registered an estate anyway, because that registration now does nothing.
-          foundationalBuiltinSource: mothership.foundationalBuiltins,
-          // …and the deployment's GENERATIVE INTEGRATIONS, for the same reason one registry
-          // along. What this node's own registry holds is what its BUILD registers; what the
-          // pipeline builder offered — and therefore what a saved step's `generatorIds` mean —
-          // is what the MOTHERSHIP registers. `startLocal` warns at boot if this node registered
-          // integrations anyway, because that registration no longer decides any run.
-          binaryGeneratorSource: mothership.binaryGenerators,
-          // …and the deployment's best-practice STANDARDS, the third of the same family. The pool
-          // a run folds, and the per-task-type default sets a creation seeds from, are the
-          // MOTHERSHIP's registrations; this node's build can only hold a second copy of them.
-          // `startLocal` warns at boot if this node registered fragments anyway.
-          promptFragmentSource: mothership.promptFragments,
-          // …and the capability layer the deployment assigns to agent KINDS. The fourth of the
-          // family and the only one that MERGES: this node's build owns each kind's executable
-          // half (prompts, hooks, output parsers), which is why the catalog stays local and a
-          // step naming an unknown kind still fails loudly; what it cannot own is the org's
-          // decision to give `coder` its house playbook or its issue-tracker MCP server, which is
-          // data, and whose absence here would silently produce work without them.
-          agentKindSource: mothership.agentKinds,
-          // …and the LIVING DOCUMENTS those standards may name. The fourth of the same family, and
-          // the one whose reason is a credential rather than a registration: the document-source
-          // credentials are configured in the MOTHERSHIP's environment and never reach a laptop, so
-          // this node reads the resolved BODY rather than authenticating to the vendor itself.
-          deploymentDocumentResolver: mothership.deploymentDocuments,
+          // The code-registered org state a run resolves, read from the MOTHERSHIP.
+          ...mothershipRegistrySources(mothership),
         }
       : {}),
     // Share the SAME registries the pool resolver above was built with (so a custom runner

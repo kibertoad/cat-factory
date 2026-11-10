@@ -109,6 +109,7 @@ import {
   defaultPipelineRegistry,
   defaultInlineUseCaseRegistry,
   defaultTaskTypeRegistry,
+  defaultProjectKindRegistry,
   describeError,
 } from '@cat-factory/kernel'
 import { D1WorkspaceRepository } from './infrastructure/repositories/D1WorkspaceRepository'
@@ -202,6 +203,7 @@ export { PipelineRegistry, defaultPipelineRegistry } from '@cat-factory/kernel'
 // reference, and injects it via the `taskTypeRegistry` override — the SPA renders each as a
 // first-class create-task choice + card badge (snapshot `customTaskTypes`).
 export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
+export { ProjectKindRegistry, defaultProjectKindRegistry } from '@cat-factory/kernel'
 // Installation-level extension point for INLINE USE CASES (the same DI seam again): a deployment
 // news a `defaultInlineUseCaseRegistry()`, registers its non-container model operations on it by
 // reference, and injects it via the `inlineUseCaseRegistry` override, so `/api/v1/use-cases`
@@ -485,6 +487,8 @@ export function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
     pipelineRegistry: overrides.pipelineRegistry ?? defaultPipelineRegistry(),
     // Custom task types (empty by default); registered ones surface in the snapshot.
     taskTypeRegistry: overrides.taskTypeRegistry ?? defaultTaskTypeRegistry(),
+    // Project kinds (empty by default); registered ones are offered on the board.
+    projectKindRegistry: overrides.projectKindRegistry ?? defaultProjectKindRegistry(),
     // Inline use cases (empty by default); registered ones are published and invocable over
     // `/api/v1/use-cases`, and a malformed registration fails boot rather than a first invocation.
     inlineUseCaseRegistry: overrides.inlineUseCaseRegistry ?? defaultInlineUseCaseRegistry(),

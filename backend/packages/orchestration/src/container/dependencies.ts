@@ -182,6 +182,12 @@ import type {
   WorkspaceAgentSettingsRepository,
   WorkspaceMemberRepository,
   WorkspaceMountRepository,
+  ProjectRepository,
+  ProjectKindRegistry,
+  OutcomeStoragePolicyRepository,
+  ProjectDefinitionRepository,
+  ProjectRecordRepository,
+  ProjectKindSource,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
@@ -324,6 +330,15 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    */
   serviceRepository?: ServiceRepository
   workspaceMountRepository?: WorkspaceMountRepository
+  /** Account-owned projects, mounted through the same mounts. Optional like the two above. */
+  projectRepository?: ProjectRepository
+  /**
+   * What projects of any kind keep: published definitions, each project's pin and outcome
+   * revisions, and the outcome-storage policy tiers. Optional like the project repository.
+   */
+  projectDefinitionRepository?: ProjectDefinitionRepository
+  projectRecordRepository?: ProjectRecordRepository
+  outcomeStoragePolicyRepository?: OutcomeStoragePolicyRepository
   idGenerator: IdGenerator
   clock: Clock
   /**
@@ -435,6 +450,17 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * Existing construction sites (tests / harnesses) that omit it get an empty registry.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * The app-owned project-kind registry. Defaulted to `defaultProjectKindRegistry()` (EMPTY: the
+   * platform ships no project kind of its own). A facade injects the SAME instance a deployment
+   * registers on.
+   */
+  projectKindRegistry?: ProjectKindRegistry
+  /**
+   * Where project kinds are READ from: this process's own registry unless a mothership-mode node
+   * injects the remote source, the sibling of `promptFragmentSource`.
+   */
+  projectKindSource?: ProjectKindSource
   /**
    * The app-owned INLINE USE-CASE registry (the deployment's non-container model operations, which
    * `/api/v1/use-cases` publishes and invokes). Optional + defaulted to

@@ -1182,3 +1182,32 @@ export {
 } from './domain/notification-audience.js'
 
 export { type TaskContextView, renderTaskContext } from './shared/tasks-prompt.logic.js'
+
+// Project definitions a deployment registers in code, and the content hash a project pins.
+export {
+  ProjectDefinitionRegistry,
+  projectDefinitionContentHash,
+} from './domain/project-definition-registry.js'
+
+// The account, workspace and project tiers of the outcome-storage policy, and where an outcome
+// body is placed under it.
+export {
+  type EffectiveOutcomeStoragePolicy,
+  type OutcomePlacement,
+  placeOutcomeBody,
+  resolveOutcomeStoragePolicy,
+} from './domain/outcome-storage-policy.js'
+
+// Project kinds a deployment registers in code, and the mount-subject reads that resolve a
+// mounted service or project to its root block.
+export {
+  ProjectKindRegistry,
+  defaultProjectKindRegistry,
+  projectKindTaskType,
+} from './domain/project-kind-registry.js'
+export {
+  type MountSubjectReaders,
+  type MountSubjectRoot,
+  rootBlocksOfMounts,
+  subjectsOwningRoots,
+} from './domain/mount-subjects.js'

@@ -56,7 +56,7 @@ export function createBoardLayoutWrites(deps: BoardLayoutDeps) {
     const mount = await deps.frameMount(workspaceId, block)
     if (mount) {
       // `frameMount` only resolves a mount when the mount repository is wired.
-      await deps.workspaceMountRepository?.update(workspaceId, mount.serviceId, { position })
+      await deps.workspaceMountRepository?.update(workspaceId, mount.subjectId, { position })
       // The frame's position is this workspace's private layout override: other boards mounting
       // the service keep their own spot, so this signal is origin-only, and carries no payload
       // for the same reason (the new coordinates are true of THIS board alone).
@@ -123,7 +123,7 @@ export function createBoardLayoutWrites(deps: BoardLayoutDeps) {
       mount ? { size: bounds.size } : { size: bounds.size, position: bounds.position },
     )
     if (mount) {
-      await deps.workspaceMountRepository?.update(workspaceId, mount.serviceId, {
+      await deps.workspaceMountRepository?.update(workspaceId, mount.subjectId, {
         position: bounds.position,
       })
     }

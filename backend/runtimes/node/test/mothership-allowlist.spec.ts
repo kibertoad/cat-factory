@@ -276,7 +276,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `countActiveInternal` (the public API's initiative-start concurrency backstop) is now
   // allow-listed, completing the headless surface whose paginated reads were already remote. The
   // single-service `listByService` is GONE rather than classified: board composition has gone
-  // through the batched `listByServices` for as long as this table has existed, so it was a dead
+  // through the batched `listByOwners` for as long as this table has existed, so it was a dead
   // port method, and allow-listing one buys attack surface for a caller that does not exist.
   blockRepository: {},
   pipelineRepository: {},
@@ -474,10 +474,13 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `getByRepo` is gone rather than classified: nothing called it.
   serviceRepository: {},
   // Fully remote too, and it had to move WITH the service CRUD above: the frame-deletion cascade
-  // (`removeByServices`) and the board-delete re-home read (`listByServiceIds`) are what finish a
+  // (`removeBySubjects`) and the board-delete re-home read (`listBySubjectIds`) are what finish a
   // service delete, so opening the delete without them would leave every OTHER board in the org
   // mounting a service that no longer exists. The unbatched `listByService` was deleted.
   workspaceMountRepository: {},
+  // Fully remote, like the service and mount tables beside it. `withLinks` is the row mapper
+  // that attaches each project's service links in one batched read.
+  projectRepository: { withLinks: 'helper' },
   // The whole requirement-review repo is remote (getByBlock/get/upsert were exposed earlier; the
   // rev-guarded compareAndSwap — which every review edit now rides — and the atomic
   // replaceForBlock that starts a fresh review run complete it).
@@ -558,10 +561,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   },
   // --- non-core repositories -----------------------------------------------------
   // `get`/`insert`/`update` are now allow-listed (the bootstrap start / board-card poll / retry /
-  // stop surface); `listByWorkspace`/`listByServices` were already remote. `blockServiceId` is a
+  // stop surface); `listByWorkspace`/`listByOwners` were already remote. `blockOwnerId` is a
   // row-mapping helper; the serviceId-keyed `listByService` stays off the SPA path.
   bootstrapJobRepository: {
-    blockServiceId: 'helper',
+    blockOwnerId: 'helper',
   },
   // The whole reference-architecture library is now remote (the bootstrap modal's CRUD + the
   // retry re-resolve): get/listByWorkspace/insert/update/softDelete.

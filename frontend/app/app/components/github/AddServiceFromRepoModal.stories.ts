@@ -97,7 +97,8 @@ function opened() {
       [
         {
           workspaceId: STORY_WORKSPACE_ID,
-          serviceId: authServiceRow.id,
+          subjectKind: 'service',
+          subjectId: authServiceRow.id,
           position: { x: 0, y: 0 },
           createdAt: authServiceRow.createdAt,
         },

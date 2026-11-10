@@ -14,6 +14,8 @@ import {
   checkOwnerFieldUpsertScope,
   checkOwnerPairScope,
   checkServiceInsertScope,
+  checkProjectCallScope,
+  checkSubjectListScope,
   checkServiceMountScope,
   checkServiceUpdateScope,
   checkUsageRecordScope,
@@ -203,8 +205,10 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *   - `owner`         — `args[kindArg]`/`args[idArg]` are a tenant-library `(ownerKind, ownerId)`
  *                       PAIR (the prompt-fragment library, `ownerKind` ∈ `workspace` | `account`):
  *                       `workspace` → resolve the workspace's owning account (like `workspace`);
- *                       `account` → the ownerId IS an accountId (like `account`). Any other kind, a
- *                       non-string ownerId, or an unresolvable / out-of-scope owner fails closed (404).
+ *                       `account` → the ownerId IS an accountId (like `account`). With `projectTier`
+ *                       (the outcome-storage policy tiers), `project` → the project's account too.
+ *                       Any other kind, a non-string ownerId, or an unresolvable / out-of-scope owner
+ *                       fails closed (404).
  *   - `ownerField`    — `args[arg]` is a library record whose `(ownerKind, ownerId)` are FIELDS (an
  *                       `upsert(record)` whose owner is a property, not positional args). Binds on
  *                       those fields exactly like `owner`; a non-object arg / missing fields fail closed.
@@ -295,10 +299,22 @@ export type ScopeRule =
   | { kind: 'blockList'; arg: number }
   | { kind: 'workspaceList'; arg: number }
   | { kind: 'serviceList'; arg: number }
+  /**
+   * `args[arg]` is `string[]` of mounted-subject ids (services and projects alike, as the owner
+   * stamp on blocks and runs and the mount's `subjectId` hold them). Each must resolve, as a
+   * service or as a project, to an in-scope account.
+   */
+  | { kind: 'subjectList'; arg: number }
   | { kind: 'service'; arg: number }
   | { kind: 'serviceMount'; arg: number }
   | { kind: 'serviceInsert'; arg: number }
   | { kind: 'serviceUpdate'; arg: number; patchArg: number }
+  | { kind: 'project'; arg: number }
+  | { kind: 'projectList'; arg: number }
+  /** `args[arg]` is a record whose `projectId` FIELD names the project it is written under. */
+  | { kind: 'projectField'; arg: number }
+  | { kind: 'projectInsert'; arg: number }
+  | { kind: 'projectServiceLinks'; arg: number; servicesArg: number }
   | { kind: 'installation'; arg: number }
   | { kind: 'installationList'; arg: number }
   | { kind: 'skillSource'; arg: number }
@@ -308,7 +324,8 @@ export type ScopeRule =
   // handled.
   | { kind: 'accountFieldUpsert'; arg: number; entity: 'skillSource' }
   | { kind: 'usageRecord'; arg: number }
-  | { kind: 'owner'; kindArg: number; idArg: number }
+  /** `projectTier` also admits a `project` owner, bound through the project's account. */
+  | { kind: 'owner'; kindArg: number; idArg: number; projectTier?: true }
   | { kind: 'ownerField'; arg: number }
   /**
    * `ownerField` over a BATCH write: EVERY record in the list must declare an in-scope owner.
@@ -427,6 +444,11 @@ export interface DispatchOptions {
    * hitting that kind with no resolver fails closed (404).
    */
   resolveServiceAccountIds?(serviceIds: string[]): Promise<Map<string, string | null | undefined>>
+  /**
+   * Resolve each requested project id's owning account id, keyed by project id (a project that
+   * does not exist is absent). Required for the project scope kinds; absent fails closed (404).
+   */
+  resolveProjectAccountIds?(projectIds: string[]): Promise<Map<string, string | null | undefined>>
   /**
    * Resolve a skill source's owning account id (the mothership's `SkillSourceRepository.get`,
    * projected to its `accountId`). Required for the `skillSource` scope kind; a call hitting that
@@ -700,7 +722,15 @@ async function checkCallScope(
 async function checkEntityListCallScope(
   rule: Extract<
     ScopeRule,
-    { kind: 'userList' | 'blockList' | 'workspaceList' | 'serviceList' | 'installationList' }
+    {
+      kind:
+        | 'userList'
+        | 'blockList'
+        | 'workspaceList'
+        | 'serviceList'
+        | 'subjectList'
+        | 'installationList'
+    }
   >,
   args: unknown[],
   opts: DispatchOptions,
@@ -755,6 +785,8 @@ async function checkEntityListCallScope(
       }
       break
     }
+    case 'subjectList':
+      return checkSubjectListScope(args[rule.arg], opts, inScope, denied)
     case 'workspaceList':
       return checkWorkspaceListScope(args[rule.arg], opts, inScope, denied)
     case 'installationList':
@@ -877,10 +909,25 @@ async function checkAccountFieldUpsertScope(
   return undefined
 }
 
+type ProjectScopeRule = Extract<
+  ScopeRule,
+  { kind: 'project' | 'projectList' | 'projectField' | 'projectInsert' | 'projectServiceLinks' }
+>
+const PROJECT_SCOPE_KINDS: ReadonlySet<ScopeRule['kind']> = new Set<ProjectScopeRule['kind']>([
+  'project',
+  'projectList',
+  'projectField',
+  'projectInsert',
+  'projectServiceLinks',
+])
+function isProjectScopeRule(rule: ScopeRule): rule is ProjectScopeRule {
+  return PROJECT_SCOPE_KINDS.has(rule.kind)
+}
+
 /**
  * The entity-resolver half of {@link checkCallScope}: the scope kinds that bind a call via a
  * server-side account resolver (co-membership for users, block/service/skill-source ownership,
- * tenant-library owner pairs). Same contract — a `DispatchResult` (404 `denied`) when out of scope,
+ * tenant-library owner pairs). Same contract: a `DispatchResult` (404 `denied`) when out of scope,
  * `undefined` when it passes. Split from the core kinds purely to keep each function under the
  * complexity ceiling; the `never` default keeps the switches jointly exhaustive over `ScopeRule`.
  */
@@ -896,9 +943,15 @@ async function checkEntityCallScope(
         | 'workspaceList'
         | 'service'
         | 'serviceList'
+        | 'subjectList'
         | 'serviceMount'
         | 'serviceInsert'
         | 'serviceUpdate'
+        | 'project'
+        | 'projectList'
+        | 'projectField'
+        | 'projectInsert'
+        | 'projectServiceLinks'
         | 'installation'
         | 'installationList'
         | 'skillSource'
@@ -920,6 +973,8 @@ async function checkEntityCallScope(
 ): Promise<DispatchResult | undefined> {
   const { inScope, visibleUserIds } = helpers
   const denied = fail('not_found', 'Not found')
+  // The project kinds are one family with their own checker, routed in one test.
+  if (isProjectScopeRule(rule)) return checkProjectCallScope(rule, args, opts, inScope, denied)
   switch (rule.kind) {
     case 'user': {
       // Bind via co-membership: the target user's DISPLAY record is readable iff they are a member
@@ -934,6 +989,7 @@ async function checkEntityCallScope(
     case 'blockList':
     case 'workspaceList':
     case 'serviceList':
+    case 'subjectList':
     case 'installationList':
       // The batched list-scope kinds (each id must resolve in scope) are split out to keep this
       // function under the complexity ceiling; same contract (404 `denied` / `undefined`).
@@ -962,7 +1018,9 @@ async function checkEntityCallScope(
       return checkServiceUpdateScope(args[rule.arg], args[rule.patchArg], opts, inScope, denied)
     case 'owner':
       // A tenant-library row keyed by an (ownerKind, ownerId) PAIR, positionally.
-      return checkOwnerPairScope(args[rule.kindArg], args[rule.idArg], opts, inScope, denied)
+      return checkOwnerPairScope(args[rule.kindArg], args[rule.idArg], opts, inScope, denied, {
+        projectTier: rule.projectTier === true,
+      })
     case 'ownerField': {
       // The same pair as FIELDS of a record `upsert(record)`, so the row can only ever be
       // persisted under the caller's own in-scope owner.

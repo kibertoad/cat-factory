@@ -185,6 +185,7 @@
       "document": "Repozytorium dokumentacji"
     },
     "blockTypes": {
+      "project": "Projekt",
       "frontend": "Frontend",
       "service": "Usługa",
       "library": "Biblioteka",
@@ -682,6 +683,7 @@
     "unavailable": {
       "description": {
         "binary_generators_unreachable": "Nie udało się teraz odczytać integracji generatywnych tego wdrożenia, więc uruchomienie nie wystartowało. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
+        "project_kinds_unreachable": "Nie udało się teraz odczytać rodzajów projektów tego wdrożenia, więc żądanie nie zostało wykonane. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
         "foundational_builtins_unreachable": "Nie udało się teraz odczytać wbudowanych usług podstawowych tego wdrożenia. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
         "connection_credentials_unreadable": "Nie udało się odczytać zapisanych poświadczeń tego połączenia. Jeśli to wdrożenie ma dostęp do usługi przechowującej jego klucz, połącz źródło ponownie, aby je zastąpić; w przeciwnym razie spróbuj ponownie, gdy to połączenie wróci.",
         "vcs_capability_unsupported": "Dostawca kontroli źródeł połączony z tą przestrzenią roboczą nie obsługuje tej operacji. Nic nie jest źle skonfigurowane i zmiana ustawień nie pomoże: dla tego dostawcy ta operacja jest niedostępna.",
@@ -708,7 +710,12 @@
         "tool_server_without_oauth": "Ten serwer narzędzi nie używa już OAuth, więc nie ma połączenia do dokończenia.",
         "gate_config_fields_invalid": "Ustawienia bramki kroku są niekompletne lub zawierają wartość, której bramka nie akceptuje, zwykle wymagane ustawienie bez wartości. Uzupełnij ustawienia bramki kroku w pipeline'ie i spróbuj ponownie.",
         "approvals_chain_stale": "Ten pipeline zmienił się po otwarciu jego punktów zatwierdzania, więc nie pasują już do jego kroków. Wczytaj pipeline ponownie i ustaw je jeszcze raz.",
-        "approvals_builtin_checkpoint_locked": "Wbudowany pipeline zachowuje punkty zatwierdzania, które zawiera jego definicja z katalogu. Sklonuj pipeline, aby usunąć któryś z nich."
+        "approvals_builtin_checkpoint_locked": "Wbudowany pipeline zachowuje punkty zatwierdzania, które zawiera jego definicja z katalogu. Sklonuj pipeline, aby usunąć któryś z nich.",
+        "project_kind_unregistered": "To wdrożenie nie oferuje już rodzaju tego projektu, więc nie może on przyjmować nowej pracy. Poproś operatora wdrożenia o ponowne zarejestrowanie rodzaju.",
+        "task_type_not_offered_by_project": "Rodzaj tego projektu nie przyjmuje zadań tego typu. Wybierz jeden z typów, które formularz dla niego oferuje.",
+        "project_has_no_writable_repo": "Krok tego uruchomienia potrzebuje repozytorium do zapisu, a projekt go nie ma: repozytoria powiązanych usług są kontekstem tylko do odczytu. Wybierz pipeline, który tylko czyta i raportuje.",
+        "project_service_link_invalid": "Jedna z powiązanych usług już nie istnieje lub należy do innej organizacji. Odśwież tablicę i wybierz powiązane usługi ponownie.",
+        "project_has_unfinished_tasks": "Ten projekt ma jeszcze niezakończone zadania. Najpierw je zakończ lub usuń."
       }
     },
     "action": {
@@ -9206,6 +9213,41 @@
       "high": "Wysoki",
       "xhigh": "Bardzo wysoki",
       "max": "Maksymalny"
+    }
+  },
+  "projects": {
+    "common": {
+      "cancel": "Anuluj"
+    },
+    "toolbar": {
+      "menu": "Projekty",
+      "newProject": "Nowy projekt…",
+      "kindsUnavailable": "Nie udało się wczytać rodzajów projektów"
+    },
+    "create": {
+      "title": "Nowy projekt",
+      "description": "Projekt grupuje pracę, która nie należy do żadnej pojedynczej usługi. Znajduje się na tej tablicy i można go dodać do innych tablic w Twojej organizacji.",
+      "kindLabel": "Rodzaj",
+      "titleLabel": "Tytuł",
+      "titlePlaceholder": "Na przykład: analiza API dostawcy",
+      "descriptionLabel": "Opis",
+      "servicesLabel": "Powiązane usługi",
+      "servicesHelp": "Jego zadania mogą czytać repozytoria tych usług jako kontekst.",
+      "submit": "Utwórz projekt",
+      "created": "Utworzono projekt {title}",
+      "failed": "Nie udało się utworzyć projektu"
+    },
+    "linkServices": {
+      "title": "Powiązane usługi",
+      "description": "Usługi, których repozytoria zadania tego projektu mogą czytać jako kontekst.",
+      "servicesLabel": "Usługi",
+      "save": "Zapisz",
+      "saved": "Zaktualizowano powiązane usługi",
+      "failed": "Nie udało się zaktualizować powiązanych usług"
+    },
+    "mount": {
+      "added": "Dodano projekt {title} do tej tablicy",
+      "failed": "Nie udało się dodać projektu"
     }
   }
 }

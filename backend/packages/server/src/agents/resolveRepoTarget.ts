@@ -80,6 +80,14 @@ async function walkToRepo(
     }
     seen.add(cursor)
     const block = await deps.blockRepository.get(workspaceId, cursor)
+    // A project root ends the walk: a project has no repository of its own to write to, and its
+    // linked services' repos are read-only context, never a checkout to push to.
+    if (block?.level === 'project') {
+      throw new ValidationError(
+        `Block '${blockId}' belongs to a project, which has no repository to write to`,
+        { reason: 'project_has_no_writable_repo' },
+      )
+    }
     cursor = block?.parentId ?? null
   }
   return undefined
@@ -219,7 +227,10 @@ export function buildListWorkspaceRunRepos(
   return async (workspaceId) => {
     const mounts = await deps.workspaceMountRepository.listByWorkspace(workspaceId)
     if (mounts.length === 0) return []
-    const services = await deps.serviceRepository.listByIds(mounts.map((m) => m.serviceId))
+    // A mounted project has no repository; the persistence RPC refuses its id on a service read.
+    const services = await deps.serviceRepository.listByIds(
+      mounts.filter((m) => m.subjectKind === 'service').map((m) => m.subjectId),
+    )
     const targeted = new Set(
       services.map((service) => service.repoGithubId).filter((id): id is number => id != null),
     )

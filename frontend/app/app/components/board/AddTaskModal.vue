@@ -41,6 +41,7 @@ import ReviewSkillQueue from '~/components/skills/ReviewSkillQueue.vue'
 import ReviewEffortSelect from '~/components/skills/ReviewEffortSelect.vue'
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
+import { useTaskTypeOffer, type TaskTypeChoice } from '~/composables/useTaskTypeOffer'
 import { isReviewDebtConflict, reviewFrictionContext } from '~/utils/reviewFriction'
 import { apiErrorEnvelope, isModuleOffRefusal } from '~/composables/api/errors'
 import type { ReviewTargetReason } from '@cat-factory/contracts'
@@ -92,16 +93,6 @@ const container = computed(() =>
   ui.addTaskContainerId ? board.getBlock(ui.addTaskContainerId) : undefined,
 )
 
-// The enclosing service frame: the container itself when it's a frame, else its parent
-// frame (a module's parent). Drives which task types are offered — a document repository
-// only authors documents/spikes, so the other kinds are hidden (and rejected server-side).
-const frame = computed(() => {
-  const c = container.value
-  if (!c) return undefined
-  return c.level === 'frame' ? c : c.parentId ? board.getBlock(c.parentId) : undefined
-})
-const isDocRepo = computed(() => frame.value?.type === 'document')
-
 const title = ref('')
 const description = ref('')
 const saving = ref(false)
@@ -109,44 +100,17 @@ const saving = ref(false)
 // non-functional change). Left off ⇒ the engine infers it from the spec phase.
 const technical = ref(false)
 
-// The kind of task being created. `recurring` is special: it is created through the
-// recurring-pipeline schedule flow (a schedule on the service frame), so picking it
-// delegates to <RecurringPipelineModal> instead of creating a one-off task here.
-type TaskTypeChoice = CreateTaskType | 'recurring'
+// The task types this container takes (built in and registered) and its enclosing frame: see
+// `useTaskTypeOffer`. `recurring` is created through the schedule flow, not as a one-off task.
 const taskType = ref<TaskTypeChoice>('feature')
-const TASK_TYPES = computed<{ value: TaskTypeChoice; label: string; icon: string }[]>(() => {
-  const all: { value: TaskTypeChoice; label: string; icon: string }[] = [
-    { value: 'feature', label: t('board.addTask.types.feature'), icon: 'i-lucide-sparkles' },
-    { value: 'bug', label: t('board.addTask.types.bug'), icon: 'i-lucide-bug' },
-    {
-      value: 'bug-fishing',
-      label: t('board.addTask.types.bugFishing'),
-      icon: 'i-lucide-fish',
-    },
-    { value: 'document', label: t('board.addTask.types.document'), icon: 'i-lucide-file-text' },
-    { value: 'spike', label: t('board.addTask.types.spike'), icon: 'i-lucide-flask-conical' },
-    {
-      value: 'review',
-      label: t('board.addTask.types.review'),
-      icon: 'i-lucide-clipboard-check',
-    },
-    { value: 'ralph', label: t('board.addTask.types.ralph'), icon: 'i-lucide-infinity' },
-    { value: 'media', label: t('board.addTask.types.media'), icon: 'i-lucide-image-plus' },
-    { value: 'recurring', label: t('board.addTask.types.recurring'), icon: 'i-lucide-repeat' },
-  ]
-  // A document repository only accepts document/spike tasks (see BoardService.addTask).
-  return isDocRepo.value ? all.filter((k) => k.value === 'document' || k.value === 'spike') : all
-})
-// Keep the selection valid when the target is a document repo (default to document).
-watch(
-  isDocRepo,
-  (doc) => {
-    if (doc && taskType.value !== 'document' && taskType.value !== 'spike') {
-      taskType.value = 'document'
-    }
-  },
-  { immediate: true },
-)
+const {
+  frame,
+  isProject,
+  taskTypeChoices: TASK_TYPES,
+  customTaskTypes,
+  defaultTaskType,
+  projectEntry,
+} = useTaskTypeOffer(container, taskType)
 const isRecurring = computed(() => taskType.value === 'recurring')
 
 // Per-type fields (only the ones relevant to the chosen type are shown / sent).
@@ -193,13 +157,6 @@ const reviewEffort = ref<ReviewEffortLevel>(DEFAULT_REVIEW_EFFORT_LEVEL)
 const fragmentIds = ref<string[]>([])
 const isReview = computed(() => taskType.value === 'review')
 
-// Custom (deployment-registered) task types — the frontend-extension-mechanism slice B twin of
-// custom agent kinds. The task-types store merges CODE-shipped (`taskTypes` slot) + BACKEND
-// (snapshot `customTaskTypes`) into one catalog; the picker offers them alongside the built-ins.
-// A document repo only accepts document/spike (server-rejected otherwise), so custom types are
-// hidden there — mirroring the built-in `isDocRepo` filter.
-const taskTypesStore = useTaskTypesStore()
-const customTaskTypes = computed(() => (isDocRepo.value ? [] : taskTypesStore.customTaskTypes))
 const selectedCustomType = computed(() =>
   customTaskTypes.value.find((tt) => tt.taskType === taskType.value),
 )
@@ -514,9 +471,10 @@ const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
   'bug-fishing': 'pl_bug_fishing',
 }
 /**
- * The pipeline a task type opens with: a custom type's registered `defaultPipelineId`, else the
- * built-in map — and for an ordinary IMPLEMENTATION task (feature / bug / chore, which the map
- * deliberately does not name), the build rung this interface mode defaults to. Basic mode gets the
+ * The pipeline a task type opens with: under a project root its kind's entry for the type, else a
+ * custom type's registered `defaultPipelineId`, else the built-in map. Outside a project, an
+ * ordinary IMPLEMENTATION task (feature / bug / chore, which the map deliberately does not name)
+ * then falls to the build rung this interface mode defaults to. Basic mode gets the
  * fixed Standard build, advanced the Adaptive one; `defaultBuildPipelineId` owns that rule so the
  * create form and the task card's plain "Start" cannot disagree about it. Empty when the resolved
  * preset is not in this workspace's library (an older seed, or a retired rung) or when the picker
@@ -537,13 +495,18 @@ const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
  */
 function defaultPipelineIdFor(type: TaskTypeChoice): string {
   const custom = customTaskTypes.value.find((tt) => tt.taskType === type)
+  // Under a project root its kind's pipeline for the type leads, the one the server applies when
+  // the form sends none. A project gets no build fallback, having no repository to build in.
   const preset =
+    projectEntry(type)?.defaultPipelineId ??
     custom?.defaultPipelineId ??
     DEFAULT_PIPELINE_FOR_TYPE[type] ??
-    // The workspace's own declared in-app default, ahead of the interface-mode rung, so this form
-    // and the task card's plain Start still cannot disagree (see `declaredDefaultId`).
-    pipelines.declaredDefaultId('interactive') ??
-    defaultBuildPipelineId(uiMode.isAdvanced)
+    (isProject.value
+      ? undefined
+      : // The workspace's own declared in-app default, ahead of the interface-mode rung, so this
+        // form and the task card's plain Start still cannot disagree (see `declaredDefaultId`).
+        (pipelines.declaredDefaultId('interactive') ?? defaultBuildPipelineId(uiMode.isAdvanced)))
+  if (!preset) return ''
   const resolved = pipelines.pipelines.find((p) => p.id === preset)
   const offered =
     !!resolved && pipelineAllowedForManualStart(resolved, frame.value, board.blocks, type, 'task')
@@ -653,10 +616,10 @@ onModalOpen(open, () => {
   title.value = ''
   description.value = ''
   saving.value = false
-  // This reset runs after the `isDocRepo` watcher in the same open tick, so it must pick the
-  // doc-repo-aware default itself — a document frame only offers document/spike, so `feature`
-  // would leave the selector on a hidden, server-rejected value.
-  taskType.value = isDocRepo.value ? 'document' : 'feature'
+  // This reset runs after the offer's watcher in the same open tick, so it must pick the
+  // container-aware default itself: a document frame or a project root does not offer every type,
+  // so `feature` would leave the selector on a hidden, server-rejected value.
+  taskType.value = defaultTaskType.value
   technical.value = false
   severity.value = ''
   stepsToReproduce.value = ''

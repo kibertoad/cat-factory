@@ -8,6 +8,8 @@ import type {
   Logger,
   PreloadedBlocks,
   ResolveBinaryArtifactStore,
+  ProjectRepository,
+  ProjectRecordRepository,
   ServiceRepository,
   TaskRepository,
   WorkspaceMountRepository,
@@ -33,6 +35,8 @@ export interface BlockRemovalDeps {
   blockRepository: BlockRepository
   executionRepository: ExecutionRepository
   serviceRepository?: ServiceRepository
+  projectRepository?: ProjectRepository
+  projectRecordRepository?: ProjectRecordRepository
   workspaceMountRepository?: WorkspaceMountRepository
   initiativeRepository?: InitiativeRepository
   documentRepository?: DocumentRepository
@@ -136,6 +140,10 @@ export function createBlockRemoval(deps: BlockRemovalDeps) {
     await reclaimDoomedEntities(
       {
         ...(deps.serviceRepository ? { serviceRepository: deps.serviceRepository } : {}),
+        ...(deps.projectRepository ? { projectRepository: deps.projectRepository } : {}),
+        ...(deps.projectRecordRepository
+          ? { projectRecordRepository: deps.projectRecordRepository }
+          : {}),
         ...(deps.workspaceMountRepository
           ? { workspaceMountRepository: deps.workspaceMountRepository }
           : {}),
@@ -174,9 +182,17 @@ export function createBlockRemoval(deps: BlockRemovalDeps) {
  */
 function assertNoUnfinishedWork(blocks: Block[], id: string): void {
   const target = blocks.find((b) => b.id === id)
-  if (target?.level !== 'frame' || target.parentId !== null) return
+  if (!target || target.parentId !== null) return
+  if (target.level !== 'frame' && target.level !== 'project') return
   const unfinished = unfinishedTasksUnder(blocks, id)
   if (unfinished.length === 0) return
+  // A project has no archive, so its refusal names the only way forward.
+  if (target.level === 'project') {
+    throw new ValidationError(
+      `This project has ${unfinished.length} unfinished task(s); finish or delete them first.`,
+      { reason: 'project_has_unfinished_tasks', unfinishedTasks: unfinished.length },
+    )
+  }
   // The `reason` is what makes this refusal actionable through a door with no prose to read:
   // `DELETE /api/v1/services/{serviceId}` answers it as a 422, and the caller's next move is to
   // delete those tasks (or archive instead), which it can only choose from the code.
