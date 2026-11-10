@@ -397,7 +397,7 @@ All under `/workspaces/:workspaceId`. Once registered, that workspace's agent st
 run on your pool; unregister to revert.
 
 **Or declare it once per account (Platform):** a deployment can pass `seedAccountRunnerPool` to the
-Node `start()`: a callback `(account) => { config, secrets } | undefined` (the same payload as the
+Node `start()` or the local `startLocal()`: a callback `(account) => { config, secrets } | undefined` (the same payload as the
 form). The server stores the result as the ACCOUNT's pool: at boot for every account, and for the
 account of each new board when it has none. At boot it also compares each stored pool with what the
 callback answers now (config, and the secrets decrypted) and replaces it when they differ, so a
@@ -406,7 +406,13 @@ pool, because a replica still on the previous seed during a rolling deploy would
 A callback that stops declaring a pool for an account leaves the stored one in place.
 Personal and org accounts both inherit. A legacy board (no account) gets nothing and keeps
 registering per workspace. On stock Node, where a pool is the only executor, this is what lets a new
-board run an agent with no step above. The Worker, `startLocal()` and mothership mode do not take it.
+board run an agent with no step above. On local, agents still run in host containers unless the
+board turns on `delegateAgentsToRunnerPool`; the start-time guard for that setting reads the same
+resolver, so an inherited pool satisfies it. The Worker does not take the option. A local node in
+mothership mode ignores it with a boot warning, and an account pool does not reach such a node at
+all: the node opens pool secrets with its own key, and account rows are sealed with the mothership's.
+So the node wires no account tier (dispatch, the start guard and the API read the board's own row
+only), and a board there needs a pool registered on it from the node.
 
 How a board resolves its pool (one resolver, `RunnerPoolConnectionService`): its own live row, else
 its account's row, else none. A board stops inheriting with the explicit marker
@@ -416,7 +422,8 @@ deletion never silently re-routes work to a pool the board did not choose. The s
 a registration (backend kind registered, URL safe, referenced secrets present). A seed that fails is
 logged at `error` naming the account on every boot; a failed read never fails board creation.
 The account row is `account_runner_pools` (one row per account, a unique key makes the insert race
-safe), served to a mothership node through the `accountRunnerPoolRepository` allow-list entry.
+safe). The `accountRunnerPoolRepository` allow-list entry still serves its two reads to a mothership
+node, which does not call them for the reason above.
 
 ---
 

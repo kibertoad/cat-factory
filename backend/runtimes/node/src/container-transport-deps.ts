@@ -31,6 +31,7 @@ import {
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
   buildNodeResolveTransport,
+  type NodeRunnerPoolServiceExtras,
   buildTraceSink,
   selectNodeRepoBootstrapper,
   type BootstrapObservabilityDeps,
@@ -57,9 +58,7 @@ export interface NodeTransportDeployInput {
   workspaceRepository: WorkspaceRepository
   /** Facade overrides (`resolveTransport`, the deploy seams) threaded from `NodeContainerOptions`. */
   resolveTransportOverride?: ResolveRunnerTransport | null
-  runnerPoolProvider?: NonNullable<
-    Parameters<typeof buildNodeResolveTransport>[5]
-  >['injectedPoolProvider']
+  runnerPoolProvider?: NodeRunnerPoolServiceExtras['injectedPoolProvider']
   skipProvisioningLogWrap?: boolean
   mintInstallationToken?: DispatchTokenMintDependencies['mint']
   deployJobClientOverride?: DeployJobClient

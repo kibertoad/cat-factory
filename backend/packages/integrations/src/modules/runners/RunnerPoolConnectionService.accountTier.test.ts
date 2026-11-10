@@ -98,6 +98,38 @@ function setup(opts: {
   return { service, inserted, replaced, logger }
 }
 
+describe('RunnerPoolConnectionService dispatch readiness', () => {
+  it('is ready on an inherited account pool whose kind is registered', async () => {
+    const { service } = setup({ account: accountRow('acc_1') })
+
+    expect(await service.dispatchReadiness('ws_1')).toEqual({ state: 'ready' })
+  })
+
+  it('names a stored kind the registry no longer has, where resolve answers null', async () => {
+    const { service } = setup({ account: { ...accountRow('acc_1'), kind: 'nomad' } })
+
+    expect(await service.dispatchReadiness('ws_1')).toEqual({
+      state: 'unknown_kind',
+      kind: 'nomad',
+    })
+    expect(await service.resolve('ws_1')).toBeNull()
+  })
+
+  it('tells a board that declined its account pool apart from one with no pool anywhere', async () => {
+    const declined = setup({ account: accountRow('acc_1'), inherit: false })
+    const nothing = setup({ account: null })
+
+    expect(await declined.service.dispatchReadiness('ws_1')).toEqual({ state: 'inheritance_off' })
+    expect(await nothing.service.dispatchReadiness('ws_1')).toEqual({ state: 'none' })
+  })
+
+  it('answers none without an account tier, even for an account with a pool', async () => {
+    const { service } = setup({ account: accountRow('acc_1'), wired: false })
+
+    expect(await service.dispatchReadiness('ws_1')).toEqual({ state: 'none' })
+  })
+})
+
 describe('RunnerPoolConnectionService account tier', () => {
   it('falls back to the account pool for a board with none of its own', async () => {
     const { service } = setup({ account: accountRow('acc_1') })
