@@ -1,12 +1,12 @@
 import { createInterface } from 'node:readline'
 
-// The stdio side of the research tool server: the agent CLI spawns this, and it forwards each
+// The stdio side of the access tool server: the agent CLI spawns this, and it forwards each
 // newline-delimited JSON-RPC message to the server the harness process hosts on loopback. It
 // holds no credential value, only the endpoint and the per-job token (see
-// research-tools-server.ts for why the values stay in the harness process).
+// access-tools-server.ts for why the values stay in the harness process).
 
-export const RESEARCH_TOOLS_URL_ENV = 'CF_RESEARCH_TOOLS_URL'
-export const RESEARCH_TOOLS_TOKEN_ENV = 'CF_RESEARCH_TOOLS_TOKEN'
+export const ACCESS_TOOLS_URL_ENV = 'CF_PROJECT_ACCESS_TOOLS_URL'
+export const ACCESS_TOOLS_TOKEN_ENV = 'CF_PROJECT_ACCESS_TOOLS_TOKEN'
 
 export interface ProxyEndpoint {
   url: string
@@ -31,7 +31,7 @@ export async function forwardMcpLine(
       body: line,
     })
     if (res.status === 204) return null
-    if (!res.ok) throw new Error(`the research tool server answered HTTP ${res.status}`)
+    if (!res.ok) throw new Error(`the access tool server answered HTTP ${res.status}`)
     return (await res.text()).trim()
   } catch (error) {
     if (id === null) return null
@@ -41,10 +41,10 @@ export async function forwardMcpLine(
 }
 
 function main(): void {
-  const url = process.env[RESEARCH_TOOLS_URL_ENV]
-  const token = process.env[RESEARCH_TOOLS_TOKEN_ENV]
+  const url = process.env[ACCESS_TOOLS_URL_ENV]
+  const token = process.env[ACCESS_TOOLS_TOKEN_ENV]
   if (!url || !token) {
-    process.stderr.write(`${RESEARCH_TOOLS_URL_ENV} and ${RESEARCH_TOOLS_TOKEN_ENV} are required\n`)
+    process.stderr.write(`${ACCESS_TOOLS_URL_ENV} and ${ACCESS_TOOLS_TOKEN_ENV} are required\n`)
     process.exit(1)
   }
   const lines = createInterface({ input: process.stdin })
@@ -56,4 +56,4 @@ function main(): void {
   })
 }
 
-if (process.argv[1]?.endsWith('research-tools-proxy.js')) main()
+if (process.argv[1]?.endsWith('access-tools-proxy.js')) main()
