@@ -373,7 +373,10 @@
           "hint": "Nombre maximal de passes en lecture seule de cette expédition. Laisser vide pour {count}. Sur un gros code, chaque angle est pêché par territoire, et ce que le budget coupe est consigné comme non pêché.",
           "problem": "Saisissez un nombre entier compris entre 1 et {max}, ou laissez le champ vide pour la valeur par défaut."
         }
-      }
+      },
+      "documentsLoadFailed": "Impossible de charger les documents à joindre",
+      "tasksLoadFailed": "Impossible de charger les tickets à joindre",
+      "fragmentsLoadFailed": "Impossible de charger les fragments de bonnes pratiques"
     },
     "recurring": {
       "title": "Ajouter une pipeline récurrente",
@@ -1129,7 +1132,8 @@
       "savedToast": "Surveillance enregistrée",
       "saveFailed": "Impossible d'enregistrer le mappage",
       "clearFailed": "Impossible d'effacer le mappage",
-      "configNoun": "la configuration de santé de la version"
+      "configNoun": "la configuration de santé de la version",
+      "loadFailed": "Impossible de charger les paramètres de santé des releases"
     },
     "testSecrets": {
       "title": "Identifiants de test (sensibles)",
@@ -2079,7 +2083,6 @@
     "title": "Observabilité de la plateforme",
     "refresh": "Actualiser",
     "close": "Fermer",
-    "retry": "Réessayer",
     "window": {
       "oneHour": "Dernière heure",
       "oneDay": "Dernières 24 heures",
@@ -2087,6 +2090,7 @@
       "thirtyDays": "30 derniers jours",
       "ninetyDays": "90 derniers jours"
     },
+    "noAccount": "Aucun compte n'est actif, il n'y a donc aucune donnée à afficher.",
     "outcomes": {
       "title": "Résultats des exécutions",
       "total": "Exécutions totales",
@@ -2927,7 +2931,8 @@
       "roster": {
         "title": "Membres",
         "empty": "Aucun membre pour l'instant.",
-        "remove": "Retirer le membre"
+        "remove": "Retirer le membre",
+        "loadFailed": "Impossible de charger les membres de ce tableau"
       },
       "add": {
         "title": "Ajouter un membre",
@@ -3563,7 +3568,8 @@
         "pagerDutyToken": "Jeton d'API PagerDuty",
         "pagerDutyFromEmail": "E-mail expéditeur PagerDuty",
         "incidentIoKey": "Clé d'API incident.io",
-        "clear": "Effacer"
+        "clear": "Effacer",
+        "loadFailed": "Impossible de charger les outils d'incident"
       },
       "status": {
         "notConnected": "Non connecté",
@@ -3581,7 +3587,8 @@
         "disconnectFailed": "Impossible de déconnecter"
       },
       "connectionNoun": "la connexion d’observabilité",
-      "incidentNoun": "le fournisseur d’incidents"
+      "incidentNoun": "le fournisseur d’incidents",
+      "loadFailed": "Impossible de charger la connexion d'observabilité"
     },
     "packageRegistries": {
       "tab": "Registres de paquets",
@@ -4258,7 +4265,8 @@
         "kubeNoun": "le gestionnaire Kubernetes",
         "kubeOverrideNoun": "le remplacement Kubernetes",
         "customNoun": "ce gestionnaire",
-        "cloudflareNoun": "le gestionnaire Cloudflare"
+        "cloudflareNoun": "le gestionnaire Cloudflare",
+        "loadFailed": "Impossible de charger les gestionnaires d'environnement"
       },
       "cloudflare": {
         "intro": "Déploie un Worker Cloudflare par pull request en déclenchant le workflow d’aperçu du dépôt cible. cat-factory ne parle jamais directement à Cloudflare : il crée un déploiement, lit son statut et publie un statut inactive pour le démonter.",
@@ -4685,7 +4693,8 @@
         "loadProjection": "Impossible de charger les dépôts, les pull requests et les issues",
         "startInstall": "Impossible de démarrer l'installation de la GitHub App",
         "connect": "Connexion impossible"
-      }
+      },
+      "listFailed": "Impossible de lister les installations de la GitHub App"
     },
     "panel": {
       "connectIntro": "Connectez une installation de la GitHub App pour adosser les blocs du tableau à des dépôts, parcourir les pull requests et les tickets, et laisser les agents pousser des branches et ouvrir des PR.",
@@ -4796,7 +4805,8 @@
       "errors": {
         "listDirectory": "Impossible de lister le répertoire"
       },
-      "selectAllFiles": "Sélectionner {count} fichier | Sélectionner les {count} fichiers"
+      "selectAllFiles": "Sélectionner {count} fichier | Sélectionner les {count} fichiers",
+      "listFailed": "Impossible de lister ce dossier"
     }
   },
   "slack": {
@@ -6211,6 +6221,7 @@
       "medium": "Confiance moyenne",
       "low": "Confiance faible"
     },
+    "loadFailed": "Impossible de charger la revue des exigences",
     "findingFloor": {
       "raised": {
         "high": "Ce passage n’a soulevé que des constats élevés.",
@@ -6336,7 +6347,8 @@
       "done": "Terminé",
       "failed": "Échoué"
     },
-    "groupTitle": "Le groupe de consensus vers lequel cette exécution est montée"
+    "groupTitle": "Le groupe de consensus vers lequel cette exécution est montée",
+    "loadFailed": "Impossible de charger la session de consensus"
   },
   "brainstorm": {
     "title": {
@@ -6429,7 +6441,8 @@
       "taskReset": "Tâche réinitialisée : modifiez-la et resoumettez-la",
       "extraRoundGranted": "Une ronde de brainstorming supplémentaire accordée",
       "resolveError": "Impossible de résoudre le brainstorming"
-    }
+    },
+    "loadFailed": "Impossible de charger la session de brainstorming"
   },
   "spec": {
     "title": "Exigences",
@@ -6480,6 +6493,14 @@
       "given": "Given",
       "when": "When",
       "then": "Then"
+    },
+    "anchorReadFailed": {
+      "title": "Impossible de lire la spécification",
+      "description": "La lecture du dépôt a échoué : on ne sait donc pas si ce service a une spécification. Réessayez."
+    },
+    "anchorUnparsed": {
+      "title": "Le fichier de spécification n'est pas valide",
+      "description": "spec/service.json est sur la branche par défaut mais n'a pas pu être analysé. Corrigez le fichier dans le dépôt."
     }
   },
   "followUp": {
@@ -7280,7 +7301,8 @@
       "checkSourceFailed": "Impossible de vérifier le dépôt",
       "sourceUnlinked": "Dépôt délié",
       "unlinkSourceFailed": "Impossible de délier le dépôt"
-    }
+    },
+    "loadFailed": "Impossible de charger le catalogue des services fondamentaux"
   },
   "binaryOutput": {
     "heading": "Sorties binaires",
@@ -8219,7 +8241,8 @@
       "done": "Terminé",
       "save": "Enregistrer",
       "revert": "Rétablir"
-    }
+    },
+    "loadFailed": "Impossible de charger la bibliothèque Claude Skills"
   },
   "merge": {
     "changeClass": {

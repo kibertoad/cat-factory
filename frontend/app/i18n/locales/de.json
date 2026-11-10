@@ -251,7 +251,8 @@
         "kubeNoun": "der Kubernetes-Handler",
         "kubeOverrideNoun": "der Kubernetes-Override",
         "customNoun": "dieser Handler",
-        "cloudflareNoun": "den Cloudflare-Handler"
+        "cloudflareNoun": "den Cloudflare-Handler",
+        "loadFailed": "Die Umgebungs-Handler konnten nicht geladen werden"
       },
       "cloudflare": {
         "intro": "Startet pro Pull Request einen Cloudflare Worker, indem der Preview-Workflow des Ziel-Repositorys angestoßen wird. cat-factory spricht nie direkt mit Cloudflare: Es legt ein Deployment an, liest dessen Status und setzt zum Abbau einen inactive-Status.",
@@ -706,7 +707,8 @@
         "pagerDutyToken": "PagerDuty-API-Token",
         "pagerDutyFromEmail": "PagerDuty From-E-Mail",
         "incidentIoKey": "incident.io-API-Schlüssel",
-        "clear": "Leeren"
+        "clear": "Leeren",
+        "loadFailed": "Die Incident-Tools konnten nicht geladen werden"
       },
       "status": {
         "notConnected": "Nicht verbunden",
@@ -724,7 +726,8 @@
         "disconnectFailed": "Trennen fehlgeschlagen"
       },
       "connectionNoun": "die Observability-Verbindung",
-      "incidentNoun": "der Incident-Provider"
+      "incidentNoun": "der Incident-Provider",
+      "loadFailed": "Die Observability-Verbindung konnte nicht geladen werden"
     },
     "packageRegistries": {
       "tab": "Package-Registries",
@@ -1619,7 +1622,8 @@
       "savedToast": "Monitoring gespeichert",
       "saveFailed": "Zuordnung konnte nicht gespeichert werden",
       "clearFailed": "Zuordnung konnte nicht geleert werden",
-      "configNoun": "die Release-Health-Konfiguration"
+      "configNoun": "die Release-Health-Konfiguration",
+      "loadFailed": "Die Einstellungen zur Release-Gesundheit konnten nicht geladen werden"
     },
     "testSecrets": {
       "title": "Test-Anmeldedaten (sensibel)",
@@ -3024,7 +3028,8 @@
       "roster": {
         "title": "Mitglieder",
         "empty": "Noch keine Mitglieder.",
-        "remove": "Mitglied entfernen"
+        "remove": "Mitglied entfernen",
+        "loadFailed": "Die Mitglieder dieses Boards konnten nicht geladen werden"
       },
       "add": {
         "title": "Mitglied hinzufügen",
@@ -3312,7 +3317,10 @@
           "hint": "Höchstzahl der Nur-Lese-Durchgänge dieser Expedition. Leer lassen für {count}. Bei einer großen Codebasis wird jeder Blickwinkel pro Gebiet durchsucht; was das Budget streicht, wird als nicht durchsucht vermerkt.",
           "problem": "Geben Sie eine ganze Zahl zwischen 1 und {max} ein oder lassen Sie das Feld leer für den Standardwert."
         }
-      }
+      },
+      "documentsLoadFailed": "Die anzuhängenden Dokumente konnten nicht geladen werden",
+      "tasksLoadFailed": "Die anzuhängenden Issues konnten nicht geladen werden",
+      "fragmentsLoadFailed": "Die Best-Practice-Fragmente konnten nicht geladen werden"
     },
     "recurring": {
       "title": "Eine wiederkehrende Pipeline hinzufügen",
@@ -3823,7 +3831,8 @@
         "loadProjection": "Repositories, Pull Requests und Issues konnten nicht geladen werden",
         "startInstall": "Die Installation der GitHub App konnte nicht gestartet werden",
         "connect": "Verbindung nicht möglich"
-      }
+      },
+      "listFailed": "Die Installationen der GitHub App konnten nicht aufgelistet werden"
     },
     "panel": {
       "connectIntro": "Verbinden Sie eine GitHub-App-Installation, um Board-Blöcke mit Repositorys zu hinterlegen, Pull Requests und Issues zu durchsuchen und Agents Branches pushen und PRs öffnen zu lassen.",
@@ -3934,7 +3943,8 @@
       "errors": {
         "listDirectory": "Verzeichnis konnte nicht aufgelistet werden"
       },
-      "selectAllFiles": "{count} Datei auswählen | Alle {count} Dateien auswählen"
+      "selectAllFiles": "{count} Datei auswählen | Alle {count} Dateien auswählen",
+      "listFailed": "Dieser Ordner konnte nicht aufgelistet werden"
     }
   },
   "personalSubscriptions": {
@@ -4152,7 +4162,6 @@
     "title": "Plattform-Observability",
     "refresh": "Aktualisieren",
     "close": "Schließen",
-    "retry": "Erneut versuchen",
     "window": {
       "oneHour": "Letzte Stunde",
       "oneDay": "Letzte 24 Stunden",
@@ -4160,6 +4169,7 @@
       "thirtyDays": "Letzte 30 Tage",
       "ninetyDays": "Letzte 90 Tage"
     },
+    "noAccount": "Es ist kein Konto aktiv, daher gibt es keine Daten anzuzeigen.",
     "outcomes": {
       "title": "Lauf-Ergebnisse",
       "total": "Läufe gesamt",
@@ -5461,6 +5471,7 @@
       "medium": "Mittlere Zuversicht",
       "low": "Geringe Zuversicht"
     },
+    "loadFailed": "Die Anforderungsprüfung konnte nicht geladen werden",
     "findingFloor": {
       "raised": {
         "high": "Dieser Durchlauf hat nur hohe Befunde gemeldet.",
@@ -6005,7 +6016,8 @@
       "checkSourceFailed": "Repo konnte nicht geprüft werden",
       "sourceUnlinked": "Repo-Verknüpfung gelöst",
       "unlinkSourceFailed": "Repo-Verknüpfung konnte nicht gelöst werden"
-    }
+    },
+    "loadFailed": "Der Katalog der Basisdienste konnte nicht geladen werden"
   },
   "binaryOutput": {
     "heading": "Binäre Ausgaben",
@@ -6160,7 +6172,8 @@
       "taskReset": "Aufgabe zurückgesetzt: Bearbeiten Sie sie und reichen Sie sie erneut ein",
       "extraRoundGranted": "Eine weitere Brainstorm-Runde gewährt",
       "resolveError": "Der Brainstorm konnte nicht abgeschlossen werden"
-    }
+    },
+    "loadFailed": "Die Brainstorming-Sitzung konnte nicht geladen werden"
   },
   "clarity": {
     "title": "Bug-Report-Triage",
@@ -7151,7 +7164,8 @@
       "done": "Fertig",
       "failed": "Fehlgeschlagen"
     },
-    "groupTitle": "Die Konsensgruppe, auf die dieser Lauf hochgestuft hat"
+    "groupTitle": "Die Konsensgruppe, auf die dieser Lauf hochgestuft hat",
+    "loadFailed": "Die Konsens-Sitzung konnte nicht geladen werden"
   },
   "spec": {
     "title": "Anforderungen",
@@ -7202,6 +7216,14 @@
       "given": "Angenommen",
       "when": "Wenn",
       "then": "Dann"
+    },
+    "anchorReadFailed": {
+      "title": "Die Spezifikation konnte nicht gelesen werden",
+      "description": "Das Lesen des Repositorys ist fehlgeschlagen, daher ist unbekannt, ob dieser Dienst eine Spezifikation hat. Versuchen Sie es erneut."
+    },
+    "anchorUnparsed": {
+      "title": "Die Spezifikationsdatei ist ungültig",
+      "description": "spec/service.json liegt im Standard-Branch, konnte aber nicht geparst werden. Korrigieren Sie die Datei im Repository."
     }
   },
   "followUp": {
@@ -8219,7 +8241,8 @@
       "done": "Fertig",
       "save": "Speichern",
       "revert": "Zurücksetzen"
-    }
+    },
+    "loadFailed": "Die Claude-Skills-Bibliothek konnte nicht geladen werden"
   },
   "merge": {
     "changeClass": {

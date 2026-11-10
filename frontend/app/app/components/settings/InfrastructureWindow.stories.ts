@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { screen } from 'storybook/test'
 import {
   getCapabilityCredentialsContract,
   getLocalSettingsContract,
@@ -130,10 +131,13 @@ export const TestEnvironments: Story = {
 }
 
 /**
- * The Test environments tab when the handler read fails: the configurator is gone, and nothing
- * says why. The store reads any failure as the integration being off.
+ * The Test environments tab when the handler read fails: the configurator says the handlers could
+ * not be loaded, with a retry, rather than disappearing as if the integration were off.
  */
 export const HandlersFailed: Story = {
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
   decorators: [opened('environment', workerCapabilities)],
   parameters: {
     api: [...providers, ...modules, apiFailure(listEnvironmentHandlersContract, { pathPrefix })],

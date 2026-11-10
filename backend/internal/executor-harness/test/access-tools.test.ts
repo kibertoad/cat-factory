@@ -1,22 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { handleMcpMessage } from '../src/research/mcp-protocol.js'
-import { parseResearchJob } from '../src/research/research-job.js'
-import { forwardMcpLine } from '../src/research/research-tools-proxy.js'
-import { researchTools, startResearchToolsHost } from '../src/research/research-tools-server.js'
+import { handleMcpMessage } from '../src/project/mcp-protocol.js'
+import { parseProjectJob } from '../src/project/project-job.js'
+import { forwardMcpLine } from '../src/project/access-tools-proxy.js'
+import { accessTools, startAccessToolsHost } from '../src/project/access-tools-server.js'
 import {
   applyAuth,
   credentialSecrets,
   isTargetOrigin,
   scrub,
   targetOrigins,
-} from '../src/research/research-tools.logic.js'
+} from '../src/project/access-tools.logic.js'
 
 const TARGETS = [
   { baseUrl: 'https://api.vendor.example/v2', surface: 'api' as const },
   { baseUrl: 'https://app.vendor.example', surface: 'ui' as const },
 ]
 
-describe('research tool rules', () => {
+describe('access tool rules', () => {
   it('admits only the target origins, whatever the path', () => {
     const origins = targetOrigins(TARGETS)
     expect(isTargetOrigin('https://api.vendor.example/other/path', origins)).toBe(true)
@@ -100,13 +100,13 @@ describe('the MCP protocol', () => {
   })
 })
 
-describe('the research tool server', () => {
+describe('the access tool server', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
   function tools() {
-    return researchTools({
+    return accessTools({
       targets: TARGETS,
       credentials: [
         { key: 'VENDOR_TOKEN', kind: 'api-token', value: 'sk-live-secret-123' },
@@ -132,8 +132,8 @@ describe('the research tool server', () => {
         new Response('{"echo":"sk-live-secret-123"}', { status: 200 }),
     )
     vi.stubGlobal('fetch', fetchSpy)
-    const research = tools()
-    const result = await research.definition.call('http_request', {
+    const access = tools()
+    const result = await access.definition.call('http_request', {
       url: 'https://api.vendor.example/v2/items',
       auth: { credentialKey: 'VENDOR_TOKEN', scheme: 'bearer' },
     })
@@ -142,7 +142,7 @@ describe('the research tool server', () => {
     })
     expect(result.text).toContain('evidence ref: http-1')
     expect(result.text).not.toContain('sk-live-secret-123')
-    const { httpExchanges } = research.recorded()
+    const { httpExchanges } = access.recorded()
     expect(httpExchanges.map((e) => e.ref)).toEqual(['http-1'])
     expect(JSON.stringify(httpExchanges)).not.toContain('sk-live-secret-123')
     expect(httpExchanges[0]?.exchange.request.headers.authorization).toBeUndefined()
@@ -183,13 +183,13 @@ describe('the research tool server', () => {
   })
 
   it('records a credential request for the run to wait on', async () => {
-    const research = tools()
-    await research.definition.call('request_credential', {
+    const access = tools()
+    await access.definition.call('request_credential', {
       credentialKey: 'VENDOR_OAUTH',
       reason: 'The partner API needs an OAuth client',
       observed: 'Created under Settings > API',
     })
-    expect(research.recorded().needsCredential).toEqual({
+    expect(access.recorded().needsCredential).toEqual({
       key: 'VENDOR_OAUTH',
       reason: 'The partner API needs an OAuth client',
       observed: 'Created under Settings > API',
@@ -216,7 +216,7 @@ describe('the research tool server', () => {
   })
 })
 
-describe('the research tool host and its stdio bridge', () => {
+describe('the access tool host and its stdio bridge', () => {
   const definition = {
     name: 'test',
     version: '1',
@@ -225,7 +225,7 @@ describe('the research tool host and its stdio bridge', () => {
   }
 
   it('serves the tools over loopback to a bridge holding the token, and to nothing else', async () => {
-    const host = await startResearchToolsHost(definition)
+    const host = await startAccessToolsHost(definition)
     try {
       const call = JSON.stringify({
         jsonrpc: '2.0',
@@ -247,7 +247,7 @@ describe('the research tool host and its stdio bridge', () => {
   })
 })
 
-describe('parseResearchJob', () => {
+describe('parseProjectJob', () => {
   const body = {
     jobId: 'job_1',
     model: 'm',
@@ -255,29 +255,36 @@ describe('parseResearchJob', () => {
     userPrompt: 'u',
     harness: 'claude-code',
     subscriptionToken: 't',
-    research: {
+    access: {
       targets: [{ baseUrl: 'https://api.vendor.example', surface: 'api' }],
       credentials: [{ key: 'K', kind: 'api-token', value: 'v' }],
       browser: true,
     },
   }
 
-  it('parses a research job with no repository', () => {
-    expect(parseResearchJob(body).research).toEqual(body.research)
+  it('parses a project job with no repository', () => {
+    expect(parseProjectJob(body).access).toEqual(body.access)
   })
 
-  it('refuses a non-https target, an unknown credential kind and no targets', () => {
-    const with_ = (research: unknown) => ({ ...body, research })
+  it('accepts no targets, since a project kind need not reach any', () => {
+    expect(parseProjectJob({ ...body, access: { targets: [], credentials: [] } }).access).toEqual({
+      targets: [],
+      credentials: [],
+      browser: false,
+    })
+  })
+
+  it('refuses a non-https target and an unknown credential kind', () => {
+    const with_ = (access: unknown) => ({ ...body, access })
     expect(() =>
-      parseResearchJob(
-        with_({ ...body.research, targets: [{ baseUrl: 'http://x.example', surface: 'api' }] }),
+      parseProjectJob(
+        with_({ ...body.access, targets: [{ baseUrl: 'http://x.example', surface: 'api' }] }),
       ),
     ).toThrow(/https/)
     expect(() =>
-      parseResearchJob(
-        with_({ ...body.research, credentials: [{ key: 'K', kind: 'magic', value: 'v' }] }),
+      parseProjectJob(
+        with_({ ...body.access, credentials: [{ key: 'K', kind: 'magic', value: 'v' }] }),
       ),
     ).toThrow(/kind/)
-    expect(() => parseResearchJob(with_({ ...body.research, targets: [] }))).toThrow(/empty/)
   })
 })

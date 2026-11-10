@@ -20,23 +20,23 @@ import {
   scrub,
   targetOrigins,
   type AuthScheme,
-  type ResearchCredential,
-  type ResearchTarget,
-} from './research-tools.logic.js'
+  type AccessCredential,
+  type AccessTarget,
+} from './access-tools.logic.js'
 
-// The research run's own tool server. It holds the run's credential VALUES so the model never
+// A project run's access tool server. It holds the run's credential VALUES so the model never
 // does: it types a login into a page, attaches a token to a request, and records a request for a
 // credential the run does not have. A credential only ever goes to one of the definition's target
 // origins, and every response is scrubbed before the model sees it.
 //
 // It runs inside the harness process, never in a process the agent CLI spawns: the agent has a
 // shell, so a value written to a config file or handed to a child it can inspect is a value the
-// model can read. The CLI reaches it through `research-tools-proxy.ts`, a stdio bridge that holds
+// model can read. The CLI reaches it through `access-tools-proxy.ts`, a stdio bridge that holds
 // only this server's loopback URL and a per-job token, which grant the tools and nothing more.
 
-export interface ResearchToolsConfig {
-  targets: ResearchTarget[]
-  credentials: ResearchCredential[]
+export interface AccessToolsConfig {
+  targets: AccessTarget[]
+  credentials: AccessCredential[]
   /** The browser Playwright MCP drives, shared over CDP so a login fills the same session. */
   cdpEndpoint?: string
   /** The installed `playwright` package directory, for the CDP connection. */
@@ -45,7 +45,7 @@ export interface ResearchToolsConfig {
   signal?: AbortSignal
 }
 
-/** One `http_request` exchange as recorded for the findings, already scrubbed. */
+/** One `http_request` exchange as recorded for the result, already scrubbed. */
 export interface HttpExchange {
   request: { method: string; url: string; headers: Record<string, string>; body?: string }
   response: { status: number; headers: string; body: string }
@@ -59,26 +59,26 @@ export interface CredentialRequest {
 }
 
 /** What the tools recorded over the run, read by the job once the agent has finished. */
-export interface ResearchToolsRecord {
+export interface AccessToolsRecord {
   httpExchanges: Array<{ ref: string; exchange: HttpExchange }>
   needsCredential?: CredentialRequest
 }
 
-export interface ResearchTools {
+export interface AccessTools {
   definition: McpServerDefinition
-  recorded(): ResearchToolsRecord
+  recorded(): AccessToolsRecord
 }
 
 const RESPONSE_TEXT_MAX = 16_000
 const EVIDENCE_BODY_MAX = 64_000
 const HTTP_TIMEOUT_MS = 60_000
 
-/** The research tools as the agent sees them. */
-const RESEARCH_TOOLS: McpTool[] = [
+/** The access tools as the agent sees them. */
+const ACCESS_TOOLS: McpTool[] = [
   {
     name: 'fill_secret',
     description:
-      'Type a stored credential into a field on an open page of a research target, without ' +
+      'Type a stored credential into a field on an open page of a project target, without ' +
       'the value passing through you. Name the field by its label or a CSS selector. A login ' +
       'has a username and a password; every other credential has a value.',
     inputSchema: {
@@ -95,7 +95,7 @@ const RESEARCH_TOOLS: McpTool[] = [
   {
     name: 'http_request',
     description:
-      'Send an HTTP request to a research target, optionally with a stored credential attached, ' +
+      'Send an HTTP request to a project target, optionally with a stored credential attached, ' +
       'and get the scrubbed response. Each exchange is recorded as evidence under its ref. ' +
       'Redirects are not followed: a redirect comes back with its location, which you may request.',
     inputSchema: {
@@ -125,8 +125,8 @@ const RESEARCH_TOOLS: McpTool[] = [
     name: 'request_credential',
     description:
       'Ask a person for a credential this run does not have. Call it when you reach a point ' +
-      'that needs it, say what you observed (for example the vendor page where it is created), ' +
-      'then give your final answer with the findings you have so far.',
+      'that needs it, say what you observed (for example the page where it is created), ' +
+      'then give your final answer with what you have so far.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -139,12 +139,12 @@ const RESEARCH_TOOLS: McpTool[] = [
   },
 ]
 
-export function researchTools(config: ResearchToolsConfig): ResearchTools {
+export function accessTools(config: AccessToolsConfig): AccessTools {
   const origins = targetOrigins(config.targets)
   const uiOrigins = targetOrigins(config.targets.filter((t) => t.surface === 'ui'))
   const secrets = credentialSecrets(config.credentials)
   const tokens = new Map<string, string>()
-  const httpExchanges: ResearchToolsRecord['httpExchanges'] = []
+  const httpExchanges: AccessToolsRecord['httpExchanges'] = []
   let needsCredential: CredentialRequest | undefined
   const credential = (key: unknown) =>
     typeof key === 'string' ? config.credentials.find((c) => c.key === key) : undefined
@@ -192,7 +192,7 @@ export function researchTools(config: ResearchToolsConfig): ResearchTools {
         return { text: `Filled the ${field} of '${found.key}' on ${new URL(page.url()).origin}.` }
       }
       return refuse(
-        'No open page on one of the research targets has that field. A credential is only typed ' +
+        'No open page on one of the targets has that field. A credential is only typed ' +
           'into a page on a target origin.',
       )
     } finally {
@@ -201,7 +201,7 @@ export function researchTools(config: ResearchToolsConfig): ResearchTools {
     }
   }
 
-  async function accessToken(found: ResearchCredential): Promise<string> {
+  async function accessToken(found: AccessCredential): Promise<string> {
     const cached = tokens.get(found.key)
     if (cached) return cached
     const client = oauthClient(found.value)
@@ -233,9 +233,7 @@ export function researchTools(config: ResearchToolsConfig): ResearchTools {
     const method = typeof args.method === 'string' ? args.method.toUpperCase() : 'GET'
     const rawUrl = typeof args.url === 'string' ? args.url : ''
     if (!isTargetOrigin(rawUrl, origins)) {
-      return refuse(
-        `${rawUrl || 'That URL'} is not on one of the research targets, so it was not sent.`,
-      )
+      return refuse(`${rawUrl || 'That URL'} is not on one of the targets, so it was not sent.`)
     }
     let url = rawUrl
     let headers: Record<string, string> = {}
@@ -324,16 +322,16 @@ export function researchTools(config: ResearchToolsConfig): ResearchTools {
     }
     return {
       text:
-        'Recorded. Stop now: give your final answer with the findings you have, marking each ' +
-        `question that needs '${key}' as blocked on it. The run resumes once a person provides it.`,
+        'Recorded. Stop now: give your final answer with what you have so far, and say in it ' +
+        `which part of the work waits on '${key}'. The run resumes once a person provides it.`,
     }
   }
 
   return {
     definition: {
-      name: 'cat-factory-research',
+      name: 'cat-factory-project-access',
       version: HARNESS_VERSION ?? 'unknown',
-      tools: RESEARCH_TOOLS,
+      tools: ACCESS_TOOLS,
       call(name, args) {
         if (name === 'fill_secret') return fillSecret(args)
         if (name === 'http_request') return httpRequest(args)
@@ -375,7 +373,7 @@ interface CdpBrowser {
 }
 
 /** The in-process endpoint the stdio bridge forwards to. */
-export interface ResearchToolsHost {
+export interface AccessToolsHost {
   /** Loopback URL taking one JSON-RPC message per POST. */
   url: string
   /** Bearer token the bridge must present; it grants the tools and no credential value. */
@@ -386,9 +384,9 @@ export interface ResearchToolsHost {
 const MAX_MESSAGE_BYTES = 1_000_000
 
 /** Serve a tool definition on a loopback port for this job only. */
-export async function startResearchToolsHost(
+export async function startAccessToolsHost(
   definition: McpServerDefinition,
-): Promise<ResearchToolsHost> {
+): Promise<AccessToolsHost> {
   const token = randomBytes(32).toString('hex')
   const want = Buffer.from(`Bearer ${token}`)
   const send = (res: ServerResponse, status: number, body?: unknown) => {

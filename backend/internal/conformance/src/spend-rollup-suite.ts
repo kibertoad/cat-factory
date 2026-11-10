@@ -7,7 +7,7 @@ import type {
   SpendRollupRepository,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import { type ReportsSeed, seedReportsFixture } from './reports-suite.js'
+import { type ReportsSeed, seedProjectRun, seedReportsFixture } from './reports-suite.js'
 
 // Cross-runtime parity for the DURABLE cost-attribution rollup (`spend_days`), on the same
 // fixture the ledger-side reports suite uses, because the load-bearing property is not that
@@ -107,6 +107,20 @@ export function defineSpendRollupSuite(
           await reports.spendByDimension(scopeOf(account), dimension, dayRange),
         )
       }
+    })
+
+    it("freezes a project's spend with no service, as the ledger reports it", async () => {
+      const { reports, rollup } = makeRepos()
+      const seed = makeSeed()
+      const fixture = await seedFixture(seed)
+      const { projectId } = await seedProjectRun(seed, fixture)
+      await rollup.rollupSpendDays(dayRange.since, dayRange.until)
+      const rolled = await rollup.spendByDimension(scopeOf(fixture.account), 'service', dayRange)
+      expect(rolled.some((r) => r.key === projectId)).toBe(false)
+      expectSameBreakdown(
+        rolled,
+        await reports.spendByDimension(scopeOf(fixture.account), 'service', dayRange),
+      )
     })
 
     it('keeps the attribution after the ledger, the runs and the tickets are gone', async () => {
