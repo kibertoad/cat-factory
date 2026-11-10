@@ -227,7 +227,7 @@ export async function checkOwnerPairScope(
   } else if (ownerKind === 'account') {
     if (!inScope(ownerId)) return denied
   } else if (ownerKind === 'project') {
-    // The findings-storage policy's narrowest tier: bound through the project's own account.
+    // The outcome-storage policy's narrowest tier: bound through the project's own account.
     if (!opts.resolveProjectAccountIds) return denied
     if (!inScope((await opts.resolveProjectAccountIds([ownerId])).get(ownerId))) return denied
   } else {

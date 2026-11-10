@@ -4,7 +4,7 @@ import type {
   DocumentRepository,
   InitiativeRepository,
   ProjectRepository,
-  ResearchProjectRepository,
+  ProjectRecordRepository,
   ServiceConnection,
   ServiceRepository,
   TaskRepository,
@@ -29,7 +29,7 @@ import type {
 export interface RemovalCascadeDeps {
   serviceRepository?: ServiceRepository
   projectRepository?: ProjectRepository
-  researchProjectRepository?: ResearchProjectRepository
+  projectRecordRepository?: ProjectRecordRepository
   workspaceMountRepository?: WorkspaceMountRepository
   initiativeRepository?: InitiativeRepository
   documentRepository?: DocumentRepository
@@ -99,8 +99,7 @@ async function reclaimProjects(
   const ids = (await projectRepository.listByRootBlocks([...rootIds])).map((p) => p.id)
   if (ids.length === 0) return
   await workspaceMountRepository.removeBySubjects(ids)
-  // A research project's pinned definition, findings and policy tier go with it.
-  await deps.researchProjectRepository?.deleteMany(ids)
+  await deps.projectRecordRepository?.deleteByProjects(ids)
   await projectRepository.deleteMany(ids)
 }
 
