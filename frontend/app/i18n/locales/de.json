@@ -3180,7 +3180,8 @@
         "review": "Review",
         "ralph": "Ralph-Schleife",
         "bugFishing": "Fehlersuche",
-        "resolveConflicts": "Konflikte lösen"
+        "resolveConflicts": "Konflikte lösen",
+        "research": "Recherche"
       },
       "recurringWithFrame": "Eine wiederkehrende Aufgabe führt eine Pipeline in einem Takt aus. Fahren Sie fort, um Zeitplan + Prompt festzulegen.",
       "recurringNoFrame": "Eine wiederkehrende Aufgabe muss auf einem Service liegen. Fügen Sie sie aus einem Service-Frame (oder einem darin enthaltenen Modul) hinzu.",
@@ -4939,7 +4940,8 @@
         "research": "Recherche",
         "planning": "Planung",
         "media": "Medien",
-        "maintenance": "PR-Pflege"
+        "maintenance": "PR-Pflege",
+        "projectResearch": "Projektrecherche"
       },
       "strategyOption": {
         "specialist-panel": "Spezialisten-Panel",
@@ -6609,7 +6611,13 @@
         "project_definition_required": "Diese Projektart legt eine Definition fest und braucht daher eine. Wähle eine aus und versuche es erneut.",
         "project_definition_not_accepted": "Diese Projektart legt keine Definition fest. Entferne die Definition oder wähle eine Projektart, die eine verwendet.",
         "project_definition_not_found": "Keine Definition dieser Projektart in dieser Organisation passt zu diesem Schlüssel und dieser Version. Prüfe den Schlüssel oder lass die Version leer, um die neueste festzulegen.",
-        "project_definition_inputs_invalid": "Die Werte für die Eingaben der Definition erfüllen sie nicht. Fülle jede Pflichteingabe mit einem zulässigen Wert aus und versuche es erneut."
+        "project_definition_inputs_invalid": "Die Werte für die Eingaben der Definition erfüllen sie nicht. Fülle jede Pflichteingabe mit einem zulässigen Wert aus und versuche es erneut.",
+        "task_type_requires_project": "Eine Aufgabe dieses Typs gehört in ein Projekt, nicht zu einem Service. Füge sie einem Projekt einer Art hinzu, die sie anbietet.",
+        "project_not_pinned": "Eine Aufgabe dieses Typs braucht ein Projekt, das eine Definition festlegt, und dieses legt keine fest. Füge die Aufgabe einem Projekt hinzu, das eine festlegt.",
+        "project_definition_changed": "Die Definition, die dieses Projekt festgelegt hat, hat sich seitdem geändert. Der Lauf wurde deshalb angehalten, statt mit einer Definition zu arbeiten, der das Projekt nie zugestimmt hat. Bitte deinen Betreiber, die Änderung als neue Version zu veröffentlichen.",
+        "project_task_already_recorded": "Diese Aufgabe hat ihr Ergebnis bereits im Projekt festgehalten. Lege für eine Nachfolge eine neue Aufgabe an.",
+        "outcome_too_large_for_inline": "Das Ergebnis ist zu groß zum Speichern und wurde daher nicht festgehalten. Grenze die Aufgabe ein und starte sie erneut.",
+        "research_nothing_to_ask": "Der Modus dieser Rechercheaufgabe lässt keine Frage übrig: nichts Neues zum Erweitern oder nichts Unvollständiges oder Blockiertes zum Klären. Wähle einen anderen Modus oder füge eine Frage hinzu."
       }
     },
     "action": {

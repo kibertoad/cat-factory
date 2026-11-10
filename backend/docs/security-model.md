@@ -653,6 +653,16 @@ Do not lean on any of these; the codebase explicitly refuses to:
   `allowedTools` does not contain this (first bullet). The controls that do exist are which
   servers a deployment wires for which kinds and the scope of the credential each is handed:
   see `mcp-tool-servers.md` → Security posture.
+- **A project definition's `targets` as an egress control.** A project run (the step of a
+  project task, such as a research project's `project-researcher`) reaches whatever hosts the
+  hosting network allows, like every other run container. The targets tell the agent where to
+  browse and bound where a CREDENTIAL may go: the harness's `fill_secret` and `http_request`
+  refuse a page or URL whose origin is not a target, so a prompt injected on a target's page cannot
+  have a stored credential sent to a host of its choosing. They do not bound what the agent can
+  fetch without one, so treat everything a project run reads as untrusted input and everything it
+  writes as an outcome to be reviewed. A definition's credentials resolve from the credential
+  store only (the `project-definition` subject reads no environment) and a reserved key is never
+  sent.
 
 ## Operator hardening checklist
 

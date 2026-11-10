@@ -3,7 +3,7 @@ import type { AgentSurface } from '@cat-factory/kernel'
 // ---------------------------------------------------------------------------
 // What a declared `agent.surface` IMPLIES, stated once, as a TOTAL table.
 //
-// Four questions are asked of a surface all over the platform: does the kind need one of OUR
+// Five questions are asked of a surface all over the platform: does the kind need one of OUR
 // containers, does a dispatch of it hand the agent a checkout, is its deliverable the reply it
 // returns, and does it leave the platform entirely. Every one of them used to be a `surface ===`
 // comparison at its own call site, which is the shape that answers a NEW surface by falling
@@ -14,7 +14,7 @@ import type { AgentSurface } from '@cat-factory/kernel'
 // build here, on the table, with every question in front of the person adding it.
 // ---------------------------------------------------------------------------
 
-/** The four answers a surface owes, and nothing derived from a kind or a dispatch. */
+/** The five answers a surface owes, and nothing derived from a kind or a dispatch. */
 export interface SurfaceTraits {
   /**
    * Whether the kind needs one of OUR containers: a checkout the harness clones, edits and pushes.
@@ -26,6 +26,13 @@ export interface SurfaceTraits {
    * prompt already named the branch it was working on.
    */
   container: boolean
+  /**
+   * Whether a dispatch hands the agent a WORKING TREE of its own to read and run `git` in. True
+   * for every container surface but `container-project`, whose container holds a browser and
+   * an HTTP client and at most read-only reference clones, and for `delegated`, whose executor
+   * checks the branch out itself.
+   */
+  checkout: boolean
   /**
    * Whether the kind's DELIVERABLE is the visible reply it returns, rather than a commit it
    * pushed. Drives `FINAL_ANSWER_IN_REPLY` and every caller that would otherwise read a step's
@@ -53,12 +60,14 @@ export interface SurfaceTraits {
 export const SURFACE_TRAITS: Record<AgentSurface, SurfaceTraits> = {
   inline: {
     container: false,
+    checkout: false,
     deliverableIsReply: true,
     readOnlyGuardrail: false,
     delegated: false,
   },
   'container-explore': {
     container: true,
+    checkout: true,
     deliverableIsReply: true,
     // Withdrawn per-kind by `localWrites` for an explore kind that legitimately writes inside its
     // own tree (a tester installing dependencies); that is a KIND's exception to this row, and it
@@ -68,12 +77,25 @@ export const SURFACE_TRAITS: Record<AgentSurface, SurfaceTraits> = {
   },
   'container-coding': {
     container: true,
+    checkout: true,
     deliverableIsReply: false,
+    readOnlyGuardrail: false,
+    delegated: false,
+  },
+  // Our container, with a browser and an HTTP client but no checkout, for a project task. The
+  // reply is the outcome its kind records. No read-only guardrail: there is no working tree to
+  // keep it off, and each kind's prompt carries its own rules about what it may do with a
+  // credential.
+  'container-project': {
+    container: true,
+    checkout: false,
+    deliverableIsReply: true,
     readOnlyGuardrail: false,
     delegated: false,
   },
   delegated: {
     container: false,
+    checkout: true,
     deliverableIsReply: false,
     readOnlyGuardrail: false,
     delegated: true,

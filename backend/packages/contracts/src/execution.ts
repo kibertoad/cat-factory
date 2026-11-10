@@ -11,6 +11,7 @@ import { ralphStepStateSchema } from './ralph.js'
 import { validationReportSchema } from './validation-checks.js'
 import { reproductionReportSchema } from './reproduction.js'
 import { bugFishingStepStateSchema } from './bugFishing.js'
+import { projectStepStateSchema } from './project-outcomes.js'
 import { prReviewChallengeJobSchema, prReviewStepStateSchema } from './prReview.js'
 import { runInputGateSchema } from './input-gate.js'
 import { stepCredentialWaitSchema } from './credential-wait.js'
@@ -755,6 +756,8 @@ export const pipelineStepSchema = v.object({
    * every earlier pass. Absent for non-`bug-fisher` steps. See {@link bugFishingStepStateSchema}.
    */
   bugFishing: v.optional(v.nullable(bugFishingStepStateSchema)),
+  /** A project task's step state: its project, sequence, the kind's plan and any checkpoint. */
+  project: v.optional(v.nullable(projectStepStateSchema)),
   /**
    * The at-most-once driver marker for the PR-review "post" resolution: set when the human
    * resolves a parked review with `post`, so the durable driver — on re-entry, off the HTTP

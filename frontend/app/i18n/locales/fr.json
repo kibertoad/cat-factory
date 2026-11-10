@@ -236,7 +236,8 @@
         "review": "Revue",
         "ralph": "Boucle Ralph",
         "bugFishing": "Pêche aux bogues",
-        "resolveConflicts": "Résoudre les conflits"
+        "resolveConflicts": "Résoudre les conflits",
+        "research": "Recherche"
       },
       "recurringWithFrame": "Une tâche récurrente exécute une pipeline selon une cadence. Continuez pour définir le calendrier et le prompt.",
       "recurringNoFrame": "Une tâche récurrente doit appartenir à un service. Ajoutez-la depuis un cadre de service (ou un module à l’intérieur).",
@@ -720,7 +721,13 @@
         "project_definition_required": "Ce type de projet épingle une définition : il lui en faut une. Choisissez-en une et réessayez.",
         "project_definition_not_accepted": "Ce type de projet n'épingle aucune définition. Retirez la définition ou choisissez un type qui en utilise une.",
         "project_definition_not_found": "Aucune définition de ce type de projet dans cette organisation ne correspond à cette clé et à cette version. Vérifiez la clé, ou laissez la version vide pour épingler la plus récente.",
-        "project_definition_inputs_invalid": "Les valeurs des entrées de la définition ne la satisfont pas. Renseignez chaque entrée obligatoire avec une valeur acceptée, puis réessayez."
+        "project_definition_inputs_invalid": "Les valeurs des entrées de la définition ne la satisfont pas. Renseignez chaque entrée obligatoire avec une valeur acceptée, puis réessayez.",
+        "task_type_requires_project": "Une tâche de ce type appartient à un projet, pas à un service. Ajoutez-la à un projet d'un type qui la propose.",
+        "project_not_pinned": "Une tâche de ce type a besoin que son projet épingle une définition, et celui-ci n'en épingle aucune. Ajoutez la tâche à un projet qui en épingle une.",
+        "project_definition_changed": "La définition épinglée par ce projet a changé depuis : l'exécution s'est arrêtée plutôt que de travailler à partir d'une définition que le projet n'a jamais acceptée. Demandez à l'opérateur du déploiement de publier la modification comme nouvelle version.",
+        "project_task_already_recorded": "Cette tâche a déjà enregistré son résultat sur le projet. Créez une nouvelle tâche pour faire un suivi.",
+        "outcome_too_large_for_inline": "Le résultat est trop volumineux pour être stocké, il n'a donc pas été enregistré. Restreignez la tâche et relancez-la.",
+        "research_nothing_to_ask": "Le mode de cette tâche de recherche ne laisse aucune question à poser : rien de nouveau à ajouter, ou rien de partiel ou de bloqué à clarifier. Choisissez un autre mode ou ajoutez une question."
       }
     },
     "action": {
@@ -5508,7 +5515,8 @@
         "research": "Recherche",
         "planning": "Planification",
         "media": "Média",
-        "maintenance": "Maintenance de PR"
+        "maintenance": "Maintenance de PR",
+        "projectResearch": "Recherche de projet"
       },
       "strategyOption": {
         "specialist-panel": "Panel de spécialistes",

@@ -272,7 +272,8 @@
         "review": "Review",
         "ralph": "Ralph loop",
         "bugFishing": "Bug fishing",
-        "resolveConflicts": "Resolve conflicts"
+        "resolveConflicts": "Resolve conflicts",
+        "research": "Research"
       },
       "recurringWithFrame": "A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.",
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
@@ -795,7 +796,13 @@
         "project_definition_required": "This project kind pins a definition, so it needs one to start from. Pick one and try again.",
         "project_definition_not_accepted": "This project kind pins no definition. Remove the definition, or pick a kind that uses one.",
         "project_definition_not_found": "No definition of this project kind matches that key and version for this organization. Check the key, or leave the version empty to pin the latest.",
-        "project_definition_inputs_invalid": "The values for the definition's inputs do not satisfy it. Fill in every required input with an accepted value, then try again."
+        "project_definition_inputs_invalid": "The values for the definition's inputs do not satisfy it. Fill in every required input with an accepted value, then try again.",
+        "task_type_requires_project": "A task of this type belongs under a project, not under a service. Add it to a project of a kind that offers it.",
+        "project_not_pinned": "A task of this type needs its project to pin a definition, and this one pins none. Add the task to a project that does.",
+        "project_definition_changed": "The definition this project pinned has changed since, so the run stopped rather than work from a definition the project never agreed to. Ask your deployment operator to publish the change as a new version.",
+        "project_task_already_recorded": "This task already recorded its result on the project. Create a new task to follow up.",
+        "outcome_too_large_for_inline": "The result is too large to store, so it was not recorded. Narrow the task and run it again.",
+        "research_nothing_to_ask": "This research task's mode leaves no question to ask: nothing new to extend with, or nothing partial or blocked to clarify. Pick another mode or add a question."
       }
     },
     "action": {
@@ -5708,7 +5715,8 @@
         "research": "Research",
         "planning": "Planning",
         "media": "Media",
-        "maintenance": "PR maintenance"
+        "maintenance": "PR maintenance",
+        "projectResearch": "Project research"
       },
       "strategyOption": {
         "specialist-panel": "Specialist panel",

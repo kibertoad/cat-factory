@@ -50,6 +50,7 @@ import type { InterviewGateController } from './InterviewGateController.js'
 import type { MergeResolver } from './MergeResolver.js'
 import type { PrReviewController } from './PrReviewController.js'
 import type { BugFishingController } from './BugFishingController.js'
+import type { ProjectStepController } from '../projects/ProjectStepController.js'
 import type { PrVerificationReportController } from './PrVerificationReportController.js'
 import type { RalphController } from './RalphController.js'
 import type { ReviewGateController, ReviewKind } from './ReviewGateController.js'
@@ -171,6 +172,7 @@ export interface RunDispatcherDeps {
   binaryCandidateController: BinaryCandidateController
   prReviewController: PrReviewController
   bugFishingController: BugFishingController
+  projectStep?: ProjectStepController
   requirementsKind: ReviewKind<RequirementReview>
   clarityKind: ReviewKind<ClarityReview>
   requirementsBrainstormKind: ReviewKind<BrainstormSession>

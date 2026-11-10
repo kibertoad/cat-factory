@@ -4,6 +4,9 @@ import {
   type ProjectKindTaskType,
   type TaskType,
 } from '@cat-factory/contracts'
+import { ProjectDefinitionRegistry } from './project-definition-registry.js'
+import { ProjectKindModuleRegistry } from './project-kind-module.js'
+import { RESEARCH_PROJECT_KIND, researchKindModule } from './research-kind.js'
 
 // App-owned registry of project kinds, beside the task-type and pipeline registries. The
 // composition root news one and a deployment registers its kinds on it by reference. A kind
@@ -29,9 +32,32 @@ export class ProjectKindRegistry {
   }
 }
 
-/** A fresh, empty registry. The platform ships no project kind of its own yet. */
+/**
+ * A registry holding the platform's built-in kind. A deployment that adds kinds of its own
+ * registers them on this instance; one that wants none of the built-ins news a bare registry.
+ */
 export function defaultProjectKindRegistry(): ProjectKindRegistry {
-  return new ProjectKindRegistry()
+  const registry = new ProjectKindRegistry()
+  registry.register(RESEARCH_PROJECT_KIND)
+  return registry
+}
+
+/**
+ * The modules of the platform's built-in kinds. A deployment adding a kind registers its module on
+ * this instance, beside the kind's descriptor on the {@link defaultProjectKindRegistry} one.
+ */
+export function defaultProjectKindModuleRegistry(): ProjectKindModuleRegistry {
+  const registry = new ProjectKindModuleRegistry()
+  registry.register(researchKindModule)
+  return registry
+}
+
+/**
+ * An empty definition registry that validates the built-in kinds' definitions. A deployment with
+ * kinds of its own passes their modules instead: `new ProjectDefinitionRegistry(modules.all())`.
+ */
+export function defaultProjectDefinitionRegistry(): ProjectDefinitionRegistry {
+  return new ProjectDefinitionRegistry(defaultProjectKindModuleRegistry().all())
 }
 
 /** The entry a kind declares for `taskType`, or undefined when the kind does not offer it. */

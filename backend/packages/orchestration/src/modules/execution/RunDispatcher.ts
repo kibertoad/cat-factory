@@ -462,6 +462,8 @@ export class RunDispatcher {
       binaryCandidateController: this.binaryCandidateController,
       prReviewController: this.prReviewController,
       bugFishingController: this.bugFishingController,
+      projectStep: deps.projectStep,
+      persistInstance: (ws, instance) => this.runStateMachine.persistAndEmit(ws, instance),
       mergeResolver: this.mergeResolver,
       requirementsKind: deps.requirementsKind,
       clarityKind: deps.clarityKind,

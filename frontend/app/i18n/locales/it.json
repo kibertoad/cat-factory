@@ -3180,7 +3180,8 @@
         "review": "Revisione",
         "ralph": "Ciclo Ralph",
         "bugFishing": "Pesca di bug",
-        "resolveConflicts": "Risolvi conflitti"
+        "resolveConflicts": "Risolvi conflitti",
+        "research": "Ricerca"
       },
       "recurringWithFrame": "Un'attività ricorrente esegue una pipeline a cadenza regolare. Continua per impostare la pianificazione e il prompt.",
       "recurringNoFrame": "Un'attività ricorrente deve risiedere su un servizio. Aggiungila da un frame di servizio (o da un modulo al suo interno).",
@@ -4939,7 +4940,8 @@
         "research": "Ricerca",
         "planning": "Pianificazione",
         "media": "Media",
-        "maintenance": "Manutenzione PR"
+        "maintenance": "Manutenzione PR",
+        "projectResearch": "Ricerca di progetto"
       },
       "strategyOption": {
         "specialist-panel": "Panel di specialisti",
@@ -6609,7 +6611,13 @@
         "project_definition_required": "Questo tipo di progetto fissa una definizione, quindi ne serve una. Scegline una e riprova.",
         "project_definition_not_accepted": "Questo tipo di progetto non fissa alcuna definizione. Rimuovi la definizione o scegli un tipo che ne usa una.",
         "project_definition_not_found": "Nessuna definizione di questo tipo di progetto in questa organizzazione corrisponde a quella chiave e versione. Controlla la chiave, oppure lascia vuota la versione per fissare la più recente.",
-        "project_definition_inputs_invalid": "I valori degli input della definizione non la soddisfano. Compila ogni input obbligatorio con un valore accettato e riprova."
+        "project_definition_inputs_invalid": "I valori degli input della definizione non la soddisfano. Compila ogni input obbligatorio con un valore accettato e riprova.",
+        "task_type_requires_project": "Un'attività di questo tipo appartiene a un progetto, non a un servizio. Aggiungila a un progetto di un tipo che la offre.",
+        "project_not_pinned": "Un'attività di questo tipo richiede che il suo progetto fissi una definizione, e questo non ne fissa nessuna. Aggiungi l'attività a un progetto che ne fissa una.",
+        "project_definition_changed": "La definizione fissata da questo progetto è cambiata nel frattempo, quindi l'esecuzione si è fermata invece di lavorare su una definizione che il progetto non ha mai accettato. Chiedi all'operatore del deployment di pubblicare la modifica come nuova versione.",
+        "project_task_already_recorded": "Questa attività ha già registrato il suo risultato nel progetto. Crea una nuova attività per proseguire.",
+        "outcome_too_large_for_inline": "Il risultato è troppo grande per essere salvato, quindi non è stato registrato. Restringi l'attività ed eseguila di nuovo.",
+        "research_nothing_to_ask": "La modalità di questa attività di ricerca non lascia alcuna domanda da porre: niente di nuovo da aggiungere, o niente di parziale o bloccato da chiarire. Scegli un'altra modalità o aggiungi una domanda."
       }
     },
     "action": {

@@ -20,7 +20,7 @@ const serviceIds = ref<string[]>([])
 const busy = ref(false)
 
 const kindOptions = computed(() =>
-  projects.kinds.map((k) => ({ label: k.label, value: k.id, description: k.description })),
+  projects.creatableKinds.map((k) => ({ label: k.label, value: k.id, description: k.description })),
 )
 const serviceOptions = computed(() =>
   services.catalog.map((s) => ({
@@ -31,7 +31,7 @@ const serviceOptions = computed(() =>
 
 watch(open, (isOpen) => {
   if (!isOpen) return
-  kind.value = projects.kinds[0]?.id ?? ''
+  kind.value = projects.creatableKinds[0]?.id ?? ''
   title.value = ''
   description.value = ''
   serviceIds.value = []

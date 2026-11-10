@@ -190,6 +190,7 @@ import type {
   ProjectKindSource,
   RegisteredProjectDefinitionSource,
   ProjectDefinitionRegistry,
+  ProjectKindModuleRegistry,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
@@ -464,8 +465,16 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    */
   projectKindSource?: ProjectKindSource
   /**
+   * The app-owned project-kind MODULE registry: the code half of each kind (how its definitions
+   * validate, how its tasks are planned and briefed, how its outcomes fold). Defaulted to the
+   * built-in kinds' modules. A facade injects the SAME instance a deployment registers on. Local
+   * on a mothership node too, because a module is code its own build runs.
+   */
+  projectKindModuleRegistry?: ProjectKindModuleRegistry
+  /**
    * The app-owned project-definition registry: the definitions a deployment ships in code.
-   * Defaulted to an EMPTY registry. A facade injects the SAME instance a deployment registers on.
+   * Defaulted to an EMPTY registry that validates the kinds `projectKindModuleRegistry` holds.
+   * A facade injects the SAME instance a deployment registers on.
    */
   projectDefinitionRegistry?: ProjectDefinitionRegistry
   /**

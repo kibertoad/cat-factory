@@ -74,7 +74,10 @@ export { PipelineRegistry, defaultPipelineRegistry } from '@cat-factory/kernel'
 export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
 export {
   ProjectKindRegistry,
+  ProjectKindModuleRegistry,
   ProjectDefinitionRegistry,
+  defaultProjectDefinitionRegistry,
+  defaultProjectKindModuleRegistry,
   defaultProjectKindRegistry,
 } from '@cat-factory/kernel'
 // Installation-level extension point for INLINE USE CASES (the same DI seam again): a deployment
@@ -296,6 +299,7 @@ export {
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
   BUG_FISHING_PIPELINE_ID,
+  RESEARCH_PIPELINE_ID,
   MEDIA_PIPELINE_ID,
 } from '@cat-factory/kernel'
 // The pipeline AUTHORING seam, so a deployment writes a registered pipeline the way the built-in

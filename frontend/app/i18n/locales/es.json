@@ -236,7 +236,8 @@
         "review": "Revisión",
         "ralph": "Bucle Ralph",
         "bugFishing": "Pesca de errores",
-        "resolveConflicts": "Resolver conflictos"
+        "resolveConflicts": "Resolver conflictos",
+        "research": "Investigación"
       },
       "recurringWithFrame": "Una tarea recurrente ejecuta una pipeline con cierta cadencia. Continúa para definir el horario y el prompt.",
       "recurringNoFrame": "Una tarea recurrente debe vivir en un servicio. Añádela desde un marco de servicio (o un módulo dentro de él).",
@@ -720,7 +721,13 @@
         "project_definition_required": "Este tipo de proyecto fija una definición, así que necesita una. Elige una e inténtalo de nuevo.",
         "project_definition_not_accepted": "Este tipo de proyecto no fija ninguna definición. Quita la definición o elige un tipo que use una.",
         "project_definition_not_found": "Ninguna definición de este tipo de proyecto en esta organización coincide con esa clave y versión. Revisa la clave o deja la versión vacía para fijar la más reciente.",
-        "project_definition_inputs_invalid": "Los valores de las entradas de la definición no la cumplen. Rellena cada entrada obligatoria con un valor aceptado e inténtalo de nuevo."
+        "project_definition_inputs_invalid": "Los valores de las entradas de la definición no la cumplen. Rellena cada entrada obligatoria con un valor aceptado e inténtalo de nuevo.",
+        "task_type_requires_project": "Una tarea de este tipo va en un proyecto, no en un servicio. Añádela a un proyecto de un tipo que la ofrezca.",
+        "project_not_pinned": "Una tarea de este tipo necesita que su proyecto fije una definición, y este no fija ninguna. Añade la tarea a un proyecto que la fije.",
+        "project_definition_changed": "La definición que fijó este proyecto ha cambiado desde entonces, así que la ejecución se detuvo en lugar de trabajar con una definición que el proyecto nunca aceptó. Pide al operador del despliegue que publique el cambio como una versión nueva.",
+        "project_task_already_recorded": "Esta tarea ya registró su resultado en el proyecto. Crea una tarea nueva para continuar.",
+        "outcome_too_large_for_inline": "El resultado es demasiado grande para guardarlo, así que no se registró. Acota la tarea y vuelve a ejecutarla.",
+        "research_nothing_to_ask": "El modo de esta tarea de investigación no deja ninguna pregunta por hacer: nada nuevo con lo que ampliar, o nada parcial o bloqueado que aclarar. Elige otro modo o añade una pregunta."
       }
     },
     "action": {
@@ -5508,7 +5515,8 @@
         "research": "Investigación",
         "planning": "Planificación",
         "media": "Medios",
-        "maintenance": "Mantenimiento de PR"
+        "maintenance": "Mantenimiento de PR",
+        "projectResearch": "Investigación de proyecto"
       },
       "strategyOption": {
         "specialist-panel": "Panel de especialistas",

@@ -240,6 +240,13 @@ const PLATFORM_AUTHORED_TASK_TYPES = new Set(['recurring'])
 const CODEBASE_INPUT_TASK_TYPES = new Set(['bug-fishing'])
 
 /**
+ * Task types whose brief is a PINNED DEFINITION rather than the task's description. A research
+ * task answers its project's research definition: the questions, the targets and the vendor's
+ * name all live there, and the task adds at most a mode and a few questions of its own.
+ */
+const DEFINITION_INPUT_TASK_TYPES = new Set(['research'])
+
+/**
  * Whether this block's description is the authored statement of work the gate is entitled to
  * judge. Two ways it is not, and they are separate mechanisms rather than one list:
  *
@@ -250,7 +257,8 @@ const CODEBASE_INPUT_TASK_TYPES = new Set(['bug-fishing'])
  *    (an initiative's planning pipeline is the everyday case) reads the entity rather than the
  *    caption. Judging it would park exactly the runs with no task to go and fix.
  *  - **The task type is platform-authored** ({@link PLATFORM_AUTHORED_TASK_TYPES}), or its input
- *    is the CODEBASE rather than a brief ({@link CODEBASE_INPUT_TASK_TYPES}), or it is a pull
+ *    is the CODEBASE rather than a brief ({@link CODEBASE_INPUT_TASK_TYPES}) or a pinned
+ *    definition ({@link DEFINITION_INPUT_TASK_TYPES}), or it is a pull
  *    request ATTACHED at creation (`taskTypeAttachesPullRequest`), which creation has already
  *    confirmed is open and pushable.
  *
@@ -267,6 +275,7 @@ function describesAuthoredTaskInput(input: InputGateInput): boolean {
   return !(
     PLATFORM_AUTHORED_TASK_TYPES.has(input.taskType) ||
     CODEBASE_INPUT_TASK_TYPES.has(input.taskType) ||
+    DEFINITION_INPUT_TASK_TYPES.has(input.taskType) ||
     taskTypeAttachesPullRequest(input.taskType)
   )
 }

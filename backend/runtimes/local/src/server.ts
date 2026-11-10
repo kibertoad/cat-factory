@@ -10,6 +10,7 @@ import {
   type TaskTypeRegistry,
   type ProjectKindRegistry,
   type ProjectDefinitionRegistry,
+  type ProjectKindModuleRegistry,
   DEFAULT_APP_CACHES_PROFILE,
   NodeRealtimeHub,
   backfillDeclaredSeeds,
@@ -116,6 +117,12 @@ export interface StartLocalOptions {
    * means none. On the mothership path the node reads the mothership's instead.
    */
   projectDefinitionRegistry?: ProjectDefinitionRegistry
+  /**
+   * App-owned DI seam for project kind MODULES, each kind's code half: a deployment adding a
+   * project kind registers its module on a `defaultProjectKindModuleRegistry()` and passes it
+   * here. Local on the mothership path too, because a module is code this build runs.
+   */
+  projectKindModuleRegistry?: ProjectKindModuleRegistry
   /**
    * App-owned DI seam for INLINE USE CASES: a deployment news a `defaultInlineUseCaseRegistry()`,
    * registers its non-container model operations on it, and passes it here. Threaded through to
@@ -439,6 +446,7 @@ async function bootLocal(
     taskTypeRegistry: options.taskTypeRegistry,
     projectKindRegistry: options.projectKindRegistry,
     projectDefinitionRegistry: options.projectDefinitionRegistry,
+    projectKindModuleRegistry: options.projectKindModuleRegistry,
     inlineUseCaseRegistry: options.inlineUseCaseRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
@@ -580,6 +588,7 @@ async function startLocalMothership(
     taskTypeRegistry,
     projectKindRegistry,
     projectDefinitionRegistry,
+    projectKindModuleRegistry,
     inlineUseCaseRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
@@ -618,6 +627,7 @@ async function startLocalMothership(
     taskTypeRegistry,
     projectKindRegistry,
     projectDefinitionRegistry,
+    projectKindModuleRegistry,
     inlineUseCaseRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,

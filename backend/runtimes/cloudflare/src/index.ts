@@ -111,6 +111,7 @@ import {
   defaultTaskTypeRegistry,
   defaultProjectKindRegistry,
   ProjectDefinitionRegistry,
+  defaultProjectKindModuleRegistry,
   describeError,
 } from '@cat-factory/kernel'
 import { D1WorkspaceRepository } from './infrastructure/repositories/D1WorkspaceRepository'
@@ -206,7 +207,10 @@ export { PipelineRegistry, defaultPipelineRegistry } from '@cat-factory/kernel'
 export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
 export {
   ProjectKindRegistry,
+  ProjectKindModuleRegistry,
   ProjectDefinitionRegistry,
+  defaultProjectDefinitionRegistry,
+  defaultProjectKindModuleRegistry,
   defaultProjectKindRegistry,
 } from '@cat-factory/kernel'
 // Installation-level extension point for INLINE USE CASES (the same DI seam again): a deployment
@@ -422,6 +426,7 @@ export {
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
   BUG_FISHING_PIPELINE_ID,
+  RESEARCH_PIPELINE_ID,
   MEDIA_PIPELINE_ID,
 } from '@cat-factory/kernel'
 // The pipeline AUTHORING seam, so a deployment writes a registered pipeline the way the built-in
@@ -470,6 +475,8 @@ export { DEFAULT_MODEL_PRESET_ID, MODEL_PRESET_SEED_IDS } from '@cat-factory/ker
  * in, exactly as it would through `start({ … })` / `startLocal({ … })` on the other two facades.
  */
 export function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
+  // Resolved once: the definition registry below validates exactly the kinds these modules hold.
+  const modules = overrides.projectKindModuleRegistry ?? defaultProjectKindModuleRegistry()
   return {
     // Custom agent kinds (the built-ins plus anything a deployment registered by reference). Our
     // OWN default carries the opt-in Nuxt UI capability, and this is the instance both boot
@@ -494,9 +501,12 @@ export function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
     taskTypeRegistry: overrides.taskTypeRegistry ?? defaultTaskTypeRegistry(),
     // Project kinds (empty by default); registered ones are offered on the board.
     projectKindRegistry: overrides.projectKindRegistry ?? defaultProjectKindRegistry(),
-    // project definitions shipped in code (empty by default); a project pins one at creation.
+    // Project kind modules (the built-in kinds' by default): each kind's code half.
+    projectKindModuleRegistry: modules,
+    // Project definitions shipped in code (empty by default, validating the kinds above); a
+    // project pins one at creation.
     projectDefinitionRegistry:
-      overrides.projectDefinitionRegistry ?? new ProjectDefinitionRegistry(),
+      overrides.projectDefinitionRegistry ?? new ProjectDefinitionRegistry(modules.all()),
     // Inline use cases (empty by default); registered ones are published and invocable over
     // `/api/v1/use-cases`, and a malformed registration fails boot rather than a first invocation.
     inlineUseCaseRegistry: overrides.inlineUseCaseRegistry ?? defaultInlineUseCaseRegistry(),
