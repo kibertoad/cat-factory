@@ -6,6 +6,7 @@ import type {
   SkillSource,
   SkillSyncResult,
 } from '~/types/domain'
+import { isModuleOffRefusal } from '~/composables/api/errors'
 import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { useSkillsStore } from '~/stores/skills'
 
@@ -30,6 +31,8 @@ function skillLibrarySetup(resolveAccountId: () => string | null) {
 
   /** null = not probed yet; true/false = library on/off (the catalog read). */
   const available = ref<boolean | null>(null)
+  /** True when the last catalog read failed with anything but the 503 of an unwired library. */
+  const loadFailed = ref(false)
   /** false when the GitHub integration is off (catalog works; source linking/syncing does not). */
   const sourcesAvailable = ref(true)
   /** The account's synced skills (full detail — instructions + resource manifest). */
@@ -65,9 +68,14 @@ function skillLibrarySetup(resolveAccountId: () => string | null) {
     try {
       catalog.value = await api.listAccountSkills(id)
       available.value = true
+      loadFailed.value = false
       syncPicker()
-    } catch {
-      available.value = false
+    } catch (error) {
+      // Only a 503 means the library is off. A read that did not answer says nothing about the
+      // gate, so `available` goes back to unknown and the failure is stated on its own.
+      const off = isModuleOffRefusal(error)
+      available.value = off ? false : null
+      loadFailed.value = !off
       catalog.value = []
       sources.value = []
       return
@@ -135,6 +143,7 @@ function skillLibrarySetup(resolveAccountId: () => string | null) {
 
   return {
     available,
+    loadFailed,
     sourcesAvailable,
     catalog,
     sources,

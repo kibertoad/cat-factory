@@ -599,6 +599,6 @@ Additive. A consumer built against 1.93.0 keeps parsing; before this, the same r
 
 ## 1.95.0
 
-`PublicUnanswerableWait.reason` gains `capability_credential_missing`: a step needs a capability credential (a vendor login a research definition declared, say) that is not stored for the workspace. A person who can manage the workspace's secrets stores it, then any member resumes the run in the app. It also gains `credential_wait_unrecorded`, a credential wait recorded before waits named what they wait on, which cannot be resumed; the run is restarted. The error vocabulary gains the `capability_credential_still_missing` and `credential_wait_unrecorded` conflict reasons, answered by the app's resume route.
+`PublicUnanswerableWait.reason` gains `capability_credential_missing`: a step needs a capability credential (a vendor login a project definition declared, say) that is not stored for the workspace. A person who can manage the workspace's secrets stores it, then any member resumes the run in the app. It also gains `credential_wait_unrecorded`, a credential wait recorded before waits named what they wait on, which cannot be resumed; the run is restarted. The error vocabulary gains the `capability_credential_still_missing` and `credential_wait_unrecorded` conflict reasons, answered by the app's resume route.
 
 Additive. A consumer built against 1.94.0 keeps parsing.

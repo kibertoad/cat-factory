@@ -206,7 +206,7 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *                       PAIR (the prompt-fragment library, `ownerKind` ∈ `workspace` | `account`):
  *                       `workspace` → resolve the workspace's owning account (like `workspace`);
  *                       `account` → the ownerId IS an accountId (like `account`). With `projectTier`
- *                       (the findings-storage policy tiers), `project` → the project's account too.
+ *                       (the outcome-storage policy tiers), `project` → the project's account too.
  *                       Any other kind, a non-string ownerId, or an unresolvable / out-of-scope owner
  *                       fails closed (404).
  *   - `ownerField`    — `args[arg]` is a library record whose `(ownerKind, ownerId)` are FIELDS (an

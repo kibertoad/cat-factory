@@ -332,25 +332,23 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listBySubjectIds: { scope: { kind: 'subjectList', arg: 0 } },
     removeBySubjects: { scope: { kind: 'subjectList', arg: 0 } },
   },
-  // Research persistence. Definitions are account-owned; every research row is written under one
-  // project and binds through it; the storage-policy tiers bind through their (kind, id) owner.
-  researchDefinitionRepository: {
+  // What projects of any kind keep. Definitions are account-owned; a pin or an outcome is written
+  // under one project and binds through it; the storage-policy tiers bind through their owner.
+  projectDefinitionRepository: {
     get: { scope: { kind: 'account', arg: 0 } },
     listByAccount: { scope: { kind: 'account', arg: 0 } },
     insert: { scope: { kind: 'accountField', arg: 0 } },
   },
-  researchProjectRepository: {
-    get: { scope: { kind: 'project', arg: 0 } },
-    insert: { scope: { kind: 'projectField', arg: 0 } },
-    reserveTaskSeq: { scope: { kind: 'project', arg: 0 } },
-    deleteMany: { scope: { kind: 'projectList', arg: 0 } },
+  projectRecordRepository: {
+    getPin: { scope: { kind: 'project', arg: 0 } },
+    insertPin: { scope: { kind: 'projectField', arg: 0 } },
+    reserveSeq: { scope: { kind: 'project', arg: 0 } },
+    insertOutcome: { scope: { kind: 'projectField', arg: 0 } },
+    getOutcome: { scope: { kind: 'project', arg: 0 } },
+    listOutcomes: { scope: { kind: 'project', arg: 0 } },
+    deleteByProjects: { scope: { kind: 'projectList', arg: 0 } },
   },
-  findingsRevisionRepository: {
-    insert: { scope: { kind: 'projectField', arg: 0 } },
-    get: { scope: { kind: 'project', arg: 0 } },
-    listByProject: { scope: { kind: 'project', arg: 0 } },
-  },
-  findingsStoragePolicyRepository: {
+  outcomeStoragePolicyRepository: {
     get: { scope: { kind: 'owner', kindArg: 0, idArg: 1, projectTier: true } },
     set: { scope: { kind: 'owner', kindArg: 0, idArg: 1, projectTier: true } },
   },

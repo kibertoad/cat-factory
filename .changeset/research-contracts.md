@@ -3,6 +3,8 @@
 '@cat-factory/kernel': minor
 ---
 
-Add the research-definition and findings contracts (schema, the findings fold, coverage, the
-findings-storage policy) and kernel's `ResearchDefinitionRegistry`, definition content hash and
-storage-policy resolver. Nothing reads them yet.
+Add the generic project-definition and project-outcome contracts (the definition envelope with an
+opaque kind-owned `spec`, the pin, the outcome revision envelope and the outcome-storage policy),
+kernel's `ProjectDefinitionRegistry` with per-kind spec validators, the definition content hash
+and the storage-policy resolver, plus the research kind's own spec, findings body, fold and
+coverage built on them. Nothing reads them yet.

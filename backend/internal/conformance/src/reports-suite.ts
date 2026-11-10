@@ -34,7 +34,10 @@ export interface ReportsSeedRun {
   updatedAt: number
   /** `agent_runs.kind`; defaults to `execution`. Activity counts every kind (see the port). */
   kind?: string
-  /** The account-owned service the run targets; null ⇒ unattributed. */
+  /**
+   * The run's owner: the account-owned service it targets, or a project (seeded through
+   * {@link ReportsSeed.project}); null ⇒ unattributed.
+   */
   serviceId?: string | null
   /** The block the run targets, resolved for the `taskType` dimension; null ⇒ unattributed. */
   blockId?: string | null
@@ -56,6 +59,8 @@ export interface ReportsSeed {
     frameBlockId: string,
     repoGithubId?: number | null,
   ): Promise<void>
+  /** Insert a `projects` row, an account-owned run owner that is not a service. */
+  project(id: string, accountId: string, rootBlockId: string): Promise<void>
   /** Insert a `github_repos` projection row (the `repo` dimension's LABEL source). */
   repo(workspaceId: string, githubId: number, owner: string, name: string): Promise<void>
   /** Insert a `tasks` row linked to a block (the `ticket` dimension's key source). */
@@ -303,6 +308,45 @@ export async function seedReportsFixture(
   return { account, ws, wsB, svcOne, svcTwo, svcThree, repoId, tag, other }
 }
 
+/**
+ * A run owned by a PROJECT on board A, with one metered call inside the window. A project is not
+ * a service, so the `service` dimension must bucket it as unattributed rather than key a slice
+ * on the project id with no label.
+ */
+export async function seedProjectRun(
+  seed: ReportsSeed,
+  fixture: { account: string; ws: string; tag: string },
+): Promise<{ projectId: string }> {
+  const { account, ws, tag } = fixture
+  const projectId = `prj-${tag}`
+  const root = `blk-prj-${tag}`
+  await seed.block(ws, root, 'Vendor research', null)
+  await seed.project(projectId, account, root)
+  await seed.run({
+    workspaceId: ws,
+    id: `run-prj-${tag}`,
+    status: 'done',
+    createdAt: 5_000,
+    updatedAt: 5_200,
+    serviceId: projectId,
+    blockId: null,
+  })
+  await seed.usage({
+    id: `tok-prj-${tag}`,
+    workspaceId: ws,
+    executionId: `run-prj-${tag}`,
+    agentKind: 'researcher',
+    provider: 'anthropic',
+    model: 'sonnet',
+    inputTokens: 10,
+    outputTokens: 1,
+    costEstimate: 0.5,
+    billing: 'metered',
+    createdAt: 5_100,
+  })
+  return { projectId }
+}
+
 export function defineReportsSuite(
   name: string,
   makeRepo: () => ReportsRepository,
@@ -456,6 +500,20 @@ export function defineReportsSuite(
       const taskType = byKey(await repo.spendByDimension(scopeOf(account), 'taskType', range))
       expect(service.get('')).toMatchObject({ calls: 1, meteredCost: 0.25 })
       expect(taskType.get('')).toMatchObject({ calls: 1, meteredCost: 0.25 })
+    })
+
+    it("buckets a project's spend and runs as unattributed on the service axis", async () => {
+      const repo = makeRepo()
+      const seed = makeSeed()
+      const fixture = await seedReportsFixture(seed, ids, range)
+      const { projectId } = await seedProjectRun(seed, fixture)
+      const scope = scopeOf(fixture.account)
+      const spend = byKey(await repo.spendByDimension(scope, 'service', range))
+      expect(spend.has(projectId)).toBe(false)
+      expect(spend.get('')).toMatchObject({ calls: 2, meteredCost: 0.75 })
+      const activity = byKey(await repo.activityByDimension(scope, 'service', range))
+      expect(activity.has(projectId)).toBe(false)
+      expect(activity.get('')).toMatchObject({ runs: 2 })
     })
 
     it('groups spend by task type through the run block', async () => {

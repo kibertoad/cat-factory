@@ -26,17 +26,35 @@ export const useWorkspaceMembersStore = defineStore('workspaceMembers', () => {
    * briefly shows the previous board's members before the new load resolves.
    */
   const loadedFor = ref<string | null>(null)
+  /**
+   * The workspace id whose latest load FAILED, so the panel can end its skeleton and say so.
+   * `loadedFor` alone cannot: it is set only on success, so a failed load left it unmatched and
+   * the skeleton up for good.
+   */
+  const failedFor = ref<string | null>(null)
   // Monotonic request token: only the latest-issued load() commits, so a slow, superseded
   // fetch can't clobber a newer board's roster (the ordering hazard the coherence rules warn about).
   let loadSeq = 0
 
-  /** Load the board's member roster (enriched with display details by the backend). */
+  /**
+   * Load the board's member roster (enriched with display details by the backend). A failure
+   * is recorded on `failedFor` and rethrown for the caller to report.
+   */
   async function load(workspaceId: string) {
     const token = ++loadSeq
-    const roster = await api.listWorkspaceMembers(workspaceId)
+    // A new load clears the previous failure, so a retry shows the skeleton while it runs.
+    if (failedFor.value === workspaceId) failedFor.value = null
+    let roster: WorkspaceMember[]
+    try {
+      roster = await api.listWorkspaceMembers(workspaceId)
+    } catch (error) {
+      if (token === loadSeq) failedFor.value = workspaceId
+      throw error
+    }
     if (token !== loadSeq) return // a newer load() superseded this one; drop the stale result
     members.value = roster
     loadedFor.value = workspaceId
+    failedFor.value = null
   }
 
   /** Add an account member to the board at a workspace role (upsert). */
@@ -70,5 +88,5 @@ export const useWorkspaceMembersStore = defineStore('workspaceMembers', () => {
     return updated
   }
 
-  return { members, loadedFor, load, add, setRole, remove, setAccessMode }
+  return { members, loadedFor, failedFor, load, add, setRole, remove, setAccessMode }
 })

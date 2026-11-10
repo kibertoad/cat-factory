@@ -13,16 +13,16 @@ import {
   type HarnessAuthFields,
   type ReferenceRepoSpec,
 } from '../job.js'
-import type { ResearchCredential, ResearchTarget } from './research-tools.logic.js'
-import type { CredentialRequest, HttpExchange } from './research-tools-server.js'
+import type { AccessCredential, AccessTarget } from './access-tools.logic.js'
+import type { CredentialRequest, HttpExchange } from './access-tools-server.js'
 
 /**
- * A research run: an agent over a browser and an HTTP client against a vendor, with NO checkout
+ * A project run: an agent over a browser and an HTTP client against the definition's targets, with NO checkout
  * of its own. Linked services' repos arrive as read-only `referenceRepos`. Its own job kind
  * rather than an `AgentJob` mode, because every `AgentJob` flow is built around a repository it
  * clones and may push to, and this one has neither.
  */
-export interface ResearchJob extends HarnessAuthFields {
+export interface ProjectJob extends HarnessAuthFields {
   jobId: string
   workspaceId?: string
   executionId?: string
@@ -35,21 +35,21 @@ export interface ResearchJob extends HarnessAuthFields {
   ghToken?: string
   contextFiles?: ContextFileSpec[]
   guardLimits?: GuardLimitsSpec
-  /** The deployment's own tool servers for this run, beside the research tools. */
+  /** The deployment's own tool servers for this run, beside the access tools. */
   mcpServers?: McpServerSpec[]
   /** Capability credentials injected as env, as for any agent job. */
   capabilitySecrets?: TestSecretSpec[]
-  research: {
-    targets: ResearchTarget[]
-    /** Resolved values, held by the research tool server and never shown to the model. */
-    credentials: ResearchCredential[]
+  access: {
+    targets: AccessTarget[]
+    /** Resolved values, held by the access tool server and never shown to the model. */
+    credentials: AccessCredential[]
     /** Whether to start a browser (the `ui` image) for Playwright MCP and `fill_secret`. */
     browser: boolean
   }
 }
 
-/** A research run's result: the agent's structured findings, plus what the tools recorded. */
-export interface ResearchResult extends AgentResult {
+/** A project run's result: the agent's structured answer, plus what the tools recorded. */
+export interface ProjectResult extends AgentResult {
   /** The credential the agent asked a person for, when it stopped to wait for one. */
   needsCredential?: CredentialRequest
   /** The scrubbed HTTP exchanges `http_request` recorded, by the ref the agent cites. */
@@ -58,39 +58,38 @@ export interface ResearchResult extends AgentResult {
 
 const CREDENTIAL_KINDS = new Set(['login', 'api-token', 'oauth-client', 'secret'])
 
-function parseResearchSection(value: unknown): ResearchJob['research'] {
+function parseAccessSection(value: unknown): ProjectJob['access'] {
   if (!value || typeof value !== 'object') {
-    throw new Error("Invalid research job: 'research' must be an object")
+    throw new Error("Invalid project job: 'access' must be an object")
   }
   const o = value as Record<string, unknown>
-  const targets = (Array.isArray(o.targets) ? o.targets : []).map((raw, i): ResearchTarget => {
+  const targets = (Array.isArray(o.targets) ? o.targets : []).map((raw, i): AccessTarget => {
     const t = (raw ?? {}) as Record<string, unknown>
-    const baseUrl = str(t.baseUrl, `research.targets[${i}].baseUrl`)
+    const baseUrl = str(t.baseUrl, `access.targets[${i}].baseUrl`)
     if (!baseUrl.startsWith('https://')) {
-      throw new Error(`Invalid research job: research.targets[${i}].baseUrl must be https`)
+      throw new Error(`Invalid project job: access.targets[${i}].baseUrl must be https`)
     }
     if (t.surface !== 'ui' && t.surface !== 'api') {
-      throw new Error(`Invalid research job: research.targets[${i}].surface must be ui or api`)
+      throw new Error(`Invalid project job: access.targets[${i}].surface must be ui or api`)
     }
     return { baseUrl, surface: t.surface }
   })
-  if (targets.length === 0) throw new Error('Invalid research job: research.targets is empty')
   const credentials = (Array.isArray(o.credentials) ? o.credentials : []).map((raw, i) => {
     const c = (raw ?? {}) as Record<string, unknown>
     if (typeof c.kind !== 'string' || !CREDENTIAL_KINDS.has(c.kind)) {
-      throw new Error(`Invalid research job: research.credentials[${i}].kind is unknown`)
+      throw new Error(`Invalid project job: access.credentials[${i}].kind is unknown`)
     }
     return {
-      key: str(c.key, `research.credentials[${i}].key`),
-      kind: c.kind as ResearchCredential['kind'],
-      value: str(c.value, `research.credentials[${i}].value`),
+      key: str(c.key, `access.credentials[${i}].key`),
+      kind: c.kind as AccessCredential['kind'],
+      value: str(c.value, `access.credentials[${i}].value`),
     }
   })
   return { targets, credentials, browser: o.browser === true }
 }
 
-/** Validate and narrow an untrusted body into a {@link ResearchJob}, throwing on bad input. */
-export function parseResearchJob(input: unknown): ResearchJob {
+/** Validate and narrow an untrusted body into a {@link ProjectJob}, throwing on bad input. */
+export function parseProjectJob(input: unknown): ProjectJob {
   if (typeof input !== 'object' || input === null) {
     throw new Error('Invalid job: body must be an object')
   }
@@ -119,6 +118,6 @@ export function parseResearchJob(input: unknown): ResearchJob {
     ...(guardLimits ? { guardLimits } : {}),
     ...(mcpServers?.length ? { mcpServers } : {}),
     ...(capabilitySecrets.length ? { capabilitySecrets } : {}),
-    research: parseResearchSection(o.research),
+    access: parseAccessSection(o.access),
   }
 }

@@ -1,17 +1,17 @@
 import { redact } from '../redact.js'
 
-// The pure half of the research tool server: which origins a credential may reach, how a
-// credential is attached to a request, and how a vendor response is scrubbed before the model
+// The pure half of the access tool server: which origins a credential may reach, how a
+// credential is attached to a request, and how a target's response is scrubbed before the model
 // sees it. No IO, so each rule is unit-tested on its own.
 
-/** A credential the research run was handed, with its resolved value. */
-export interface ResearchCredential {
+/** A credential the project run was handed, with its resolved value. */
+export interface AccessCredential {
   key: string
   kind: 'login' | 'api-token' | 'oauth-client' | 'secret'
   value: string
 }
 
-export interface ResearchTarget {
+export interface AccessTarget {
   baseUrl: string
   surface: 'ui' | 'api'
 }
@@ -25,7 +25,7 @@ export type AuthScheme =
   | { scheme: 'oauth-client' }
 
 /** The origins of the definition's targets: the only places a credential is sent. */
-export function targetOrigins(targets: readonly ResearchTarget[]): Set<string> {
+export function targetOrigins(targets: readonly AccessTarget[]): Set<string> {
   const origins = new Set<string>()
   for (const target of targets) {
     try {
@@ -110,7 +110,7 @@ export function applyAuth(
 }
 
 /** Every secret string a credential can contribute, for redaction. */
-export function credentialSecrets(credentials: readonly ResearchCredential[]): string[] {
+export function credentialSecrets(credentials: readonly AccessCredential[]): string[] {
   const out: string[] = []
   for (const credential of credentials) {
     out.push(credential.value)
@@ -122,7 +122,7 @@ export function credentialSecrets(credentials: readonly ResearchCredential[]): s
   return out.filter((s) => s.length >= 4)
 }
 
-// Shapes that look like a credential even when the run never knew the value: a token the vendor
+// Shapes that look like a credential even when the run never knew the value: a token the target
 // shows once on a page, or mints in a response. Replaced wholesale, keeping the field name.
 const TOKEN_SHAPES: ReadonlyArray<[RegExp, string]> = [
   [/\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}\b/g, '***'],
@@ -135,7 +135,7 @@ const TOKEN_SHAPES: ReadonlyArray<[RegExp, string]> = [
 ]
 
 /**
- * Scrub text before it reaches the model or the findings: the job's known secret values first,
+ * Scrub text before it reaches the model or the result: the job's known secret values first,
  * then the platform's own redaction, then a token-shape pass for values the run never knew.
  */
 export function scrub(text: string, knownSecrets: readonly string[]): string {

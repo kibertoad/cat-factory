@@ -313,21 +313,27 @@ describe('shared-service mount management surface', () => {
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 
-  it('binds a findings revision to the project it is written under', async () => {
+  it('binds a project outcome to the project it is written under', async () => {
     await expect(
-      remoteRegistry().findingsRevisionRepository!.insert!({ id: 'rev_1', projectId: 'prj_in' }),
+      remoteRegistry().projectRecordRepository!.insertOutcome!({
+        id: 'rev_1',
+        projectId: 'prj_in',
+      }),
     ).resolves.toBe(true)
     await expect(
-      remoteRegistry().findingsRevisionRepository!.insert!({ id: 'rev_2', projectId: 'prj_out' }),
+      remoteRegistry().projectRecordRepository!.insertOutcome!({
+        id: 'rev_2',
+        projectId: 'prj_out',
+      }),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 
   it("binds a project-tier storage policy through the project's account", async () => {
     await expect(
-      remoteRegistry().findingsStoragePolicyRepository!.get!('project', 'prj_in'),
+      remoteRegistry().outcomeStoragePolicyRepository!.get!('project', 'prj_in'),
     ).resolves.toBeNull()
     await expect(
-      remoteRegistry().findingsStoragePolicyRepository!.set!('project', 'prj_out', null),
+      remoteRegistry().outcomeStoragePolicyRepository!.set!('project', 'prj_out', null),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 

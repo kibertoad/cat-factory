@@ -373,7 +373,10 @@
           "hint": "Bu seferin yapabileceği en fazla salt okunur geçiş sayısı. {count} için boş bırakın. Büyük bir kod tabanında her açı her bölge için ayrı taranır ve bütçenin kestikleri taranmamış olarak kaydedilir.",
           "problem": "1 ile {max} arasında bir tam sayı girin veya varsayılan değer için boş bırakın."
         }
-      }
+      },
+      "documentsLoadFailed": "Eklenecek belgeler yüklenemedi",
+      "tasksLoadFailed": "Eklenecek sorunlar yüklenemedi",
+      "fragmentsLoadFailed": "En iyi uygulama parçaları yüklenemedi"
     },
     "recurring": {
       "title": "Yinelenen bir işlem hattı ekle",
@@ -1134,7 +1137,8 @@
       "savedToast": "İzleme kaydedildi",
       "saveFailed": "Eşleme kaydedilemedi",
       "clearFailed": "Eşleme temizlenemedi",
-      "configNoun": "sürüm sağlığı yapılandırması"
+      "configNoun": "sürüm sağlığı yapılandırması",
+      "loadFailed": "Sürüm sağlığı ayarları yüklenemedi"
     },
     "testSecrets": {
       "title": "Test kimlik bilgileri (hassas)",
@@ -2084,7 +2088,6 @@
     "title": "Platform gözlemlenebilirliği",
     "refresh": "Yenile",
     "close": "Kapat",
-    "retry": "Yeniden dene",
     "window": {
       "oneHour": "Son bir saat",
       "oneDay": "Son 24 saat",
@@ -2092,6 +2095,7 @@
       "thirtyDays": "Son 30 gün",
       "ninetyDays": "Son 90 gün"
     },
+    "noAccount": "Etkin hesap yok, bu nedenle gösterilecek veri yok.",
     "outcomes": {
       "title": "Çalıştırma sonuçları",
       "total": "Toplam çalıştırma",
@@ -2932,7 +2936,8 @@
       "roster": {
         "title": "Üyeler",
         "empty": "Henüz üye yok.",
-        "remove": "Üyeyi kaldır"
+        "remove": "Üyeyi kaldır",
+        "loadFailed": "Bu panonun üyeleri yüklenemedi"
       },
       "add": {
         "title": "Üye ekle",
@@ -3254,7 +3259,8 @@
         "kubeNoun": "Kubernetes işleyicisi",
         "kubeOverrideNoun": "Kubernetes geçersiz kılması",
         "customNoun": "bu işleyici",
-        "cloudflareNoun": "Cloudflare işleyicisini"
+        "cloudflareNoun": "Cloudflare işleyicisini",
+        "loadFailed": "Ortam işleyicileri yüklenemedi"
       },
       "cloudflare": {
         "intro": "Hedef deponun kendi önizleme iş akışını tetikleyerek her pull request için bir Cloudflare Worker ayağa kaldırır. cat-factory Cloudflare ile hiçbir zaman doğrudan konuşmaz: bir dağıtım oluşturur, durumunu okur ve kaldırmak için inactive durumu yazar.",
@@ -3709,7 +3715,8 @@
         "pagerDutyToken": "PagerDuty API jetonu",
         "pagerDutyFromEmail": "PagerDuty Gönderen e-postası",
         "incidentIoKey": "incident.io API anahtarı",
-        "clear": "Temizle"
+        "clear": "Temizle",
+        "loadFailed": "Olay araçları yüklenemedi"
       },
       "status": {
         "notConnected": "Bağlı değil",
@@ -3727,7 +3734,8 @@
         "disconnectFailed": "Bağlantı kesilemedi"
       },
       "connectionNoun": "gözlemlenebilirlik bağlantısı",
-      "incidentNoun": "olay sağlayıcısı"
+      "incidentNoun": "olay sağlayıcısı",
+      "loadFailed": "Gözlemlenebilirlik bağlantısı yüklenemedi"
     },
     "packageRegistries": {
       "tab": "Paket kayıt defterleri",
@@ -4690,7 +4698,8 @@
         "loadProjection": "Depolar, çekme istekleri ve sorunlar yüklenemedi",
         "startInstall": "GitHub App yüklemesi başlatılamadı",
         "connect": "Bağlanamadı"
-      }
+      },
+      "listFailed": "GitHub App kurulumları listelenemedi"
     },
     "panel": {
       "connectIntro": "Pano bloklarını depolarla desteklemek, pull request'lere ve sorunlara göz atmak ve agent'ların dal göndermesine ve PR açmasına izin vermek için bir GitHub App yüklemesi bağlayın.",
@@ -4801,7 +4810,8 @@
       "errors": {
         "listDirectory": "Dizin listelenemedi"
       },
-      "selectAllFiles": "{count} dosyayı seç | Tüm {count} dosyayı seç"
+      "selectAllFiles": "{count} dosyayı seç | Tüm {count} dosyayı seç",
+      "listFailed": "Bu klasör listelenemedi"
     }
   },
   "slack": {
@@ -6216,6 +6226,7 @@
       "medium": "Orta güven",
       "low": "Düşük güven"
     },
+    "loadFailed": "Gereksinim incelemesi yüklenemedi",
     "findingFloor": {
       "raised": {
         "high": "Bu geçiş yalnızca yüksek bulguları dile getirdi.",
@@ -6341,7 +6352,8 @@
       "done": "Tamamlandı",
       "failed": "Başarısız"
     },
-    "groupTitle": "Bu çalışmanın yükseldiği uzlaşı grubu"
+    "groupTitle": "Bu çalışmanın yükseldiği uzlaşı grubu",
+    "loadFailed": "Uzlaşı oturumu yüklenemedi"
   },
   "brainstorm": {
     "title": {
@@ -6434,7 +6446,8 @@
       "taskReset": "Görev sıfırlandı: düzenleyip yeniden gönderin",
       "extraRoundGranted": "Bir beyin fırtınası turu daha verildi",
       "resolveError": "Beyin fırtınası çözülemedi"
-    }
+    },
+    "loadFailed": "Beyin fırtınası oturumu yüklenemedi"
   },
   "spec": {
     "title": "Gereksinimler",
@@ -6485,6 +6498,14 @@
       "given": "Given",
       "when": "When",
       "then": "Then"
+    },
+    "anchorReadFailed": {
+      "title": "Belirtim okunamadı",
+      "description": "Depo okunamadı, bu nedenle bu hizmetin bir belirtimi olup olmadığı bilinmiyor. Yeniden deneyin."
+    },
+    "anchorUnparsed": {
+      "title": "Belirtim dosyası geçerli değil",
+      "description": "spec/service.json varsayılan dalda var ancak ayrıştırılamadı. Dosyayı depoda düzeltin."
     }
   },
   "followUp": {
@@ -7285,7 +7306,8 @@
       "checkSourceFailed": "Depo denetlenemedi",
       "sourceUnlinked": "Deponun bağlantısı kaldırıldı",
       "unlinkSourceFailed": "Deponun bağlantısı kaldırılamadı"
-    }
+    },
+    "loadFailed": "Temel hizmetler kataloğu yüklenemedi"
   },
   "binaryOutput": {
     "heading": "İkili çıktılar",
@@ -8224,7 +8246,8 @@
       "done": "Tamam",
       "save": "Kaydet",
       "revert": "Geri al"
-    }
+    },
+    "loadFailed": "Claude Skills kitaplığı yüklenemedi"
   },
   "merge": {
     "changeClass": {

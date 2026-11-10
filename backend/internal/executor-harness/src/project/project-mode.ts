@@ -13,26 +13,22 @@ import { registerKnownSecrets } from '../redact.js'
 import { runAgentInWorkspace } from '../pi-workspace.js'
 import type { RunOptions } from '../runner.js'
 import { resolveStructuredOutput } from '../structured-output.js'
-import type { ResearchJob, ResearchResult } from './research-job.js'
-import { credentialSecrets } from './research-tools.logic.js'
-import {
-  researchTools,
-  startResearchToolsHost,
-  type ResearchToolsHost,
-} from './research-tools-server.js'
-import { RESEARCH_TOOLS_TOKEN_ENV, RESEARCH_TOOLS_URL_ENV } from './research-tools-proxy.js'
+import type { ProjectJob, ProjectResult } from './project-job.js'
+import { credentialSecrets } from './access-tools.logic.js'
+import { accessTools, startAccessToolsHost, type AccessToolsHost } from './access-tools-server.js'
+import { ACCESS_TOOLS_TOKEN_ENV, ACCESS_TOOLS_URL_ENV } from './access-tools-proxy.js'
 
-// The `research` job handler: an agent over a browser (Playwright MCP) and the research tool
+// The `project` job handler: an agent over a browser (Playwright MCP) and the access tool
 // server, in an empty workspace holding only read-only clones of the linked services' repos.
-// The credential values stay in this process (see research-tools-server.ts); the browser profile
+// The credential values stay in this process (see access-tools-server.ts); the browser profile
 // lives in a private directory outside the workspace, and the workspace, that directory, the
 // browser and the tool server are all torn down when the job ends.
 
-const TOOLS_PROXY = fileURLToPath(new URL('./research-tools-proxy.js', import.meta.url))
+const TOOLS_PROXY = fileURLToPath(new URL('./access-tools-proxy.js', import.meta.url))
 const BROWSER_START_TIMEOUT_MS = 30_000
 
 /** The browser Playwright MCP drives and `fill_secret` reaches over CDP. */
-interface ResearchBrowser {
+interface ProjectBrowser {
   cdpEndpoint: string
   playwrightModule: string
   stop(): void
@@ -54,13 +50,13 @@ async function globalPlaywrightModule(): Promise<string | undefined> {
 
 /**
  * Start a headless Chromium with a per-job profile and remote debugging, so Playwright MCP and
- * the research tool server drive ONE browser session (a login made in one is seen by the other).
+ * the access tool server drive ONE browser session (a login made in one is seen by the other).
  * Undefined when the image ships no browser, which the agent is told.
  */
 async function startBrowser(
   profileDir: string,
   logger: Logger,
-): Promise<ResearchBrowser | undefined> {
+): Promise<ProjectBrowser | undefined> {
   const playwrightModule = await globalPlaywrightModule()
   if (!playwrightModule) return undefined
   const { chromium } = (await import(pathToFileURL(join(playwrightModule, 'index.mjs')).href)) as {
@@ -96,7 +92,7 @@ async function startBrowser(
   })
   if (!cdpEndpoint) {
     child.kill('SIGKILL')
-    logger.warn('research: the browser did not start')
+    logger.warn('project: the browser did not start')
     return undefined
   }
   return { cdpEndpoint, playwrightModule, stop: () => child.kill('SIGKILL') }
@@ -104,7 +100,7 @@ async function startBrowser(
 
 /** Clone each linked service's repo, read-only, as a sibling directory of the workspace. */
 async function cloneReferences(
-  job: ResearchJob,
+  job: ProjectJob,
   workspace: string,
   opts: RunOptions,
   logger: Logger,
@@ -113,7 +109,7 @@ async function cloneReferences(
   for (const ref of job.referenceRepos ?? []) {
     const token = ref.ghToken ?? job.ghToken
     if (!token) {
-      logger.warn('research: a linked repo has no token and was not cloned', {
+      logger.warn('project: a linked repo has no token and was not cloned', {
         repo: `${ref.repo.owner}/${ref.repo.name}`,
       })
       continue
@@ -127,43 +123,43 @@ async function cloneReferences(
   }
 }
 
-export async function handleResearch(
-  job: ResearchJob,
+export async function handleProject(
+  job: ProjectJob,
   opts: RunOptions = {},
-): Promise<ResearchResult> {
-  const logger = (opts.log ?? log).child({ kind: 'research', jobId: job.jobId })
-  registerKnownSecrets(credentialSecrets(job.research.credentials))
+): Promise<ProjectResult> {
+  const logger = (opts.log ?? log).child({ kind: 'project', jobId: job.jobId })
+  registerKnownSecrets(credentialSecrets(job.access.credentials))
   let workspace: string | undefined
   let privateDir: string | undefined
-  let browser: ResearchBrowser | undefined
-  let host: ResearchToolsHost | undefined
+  let browser: ProjectBrowser | undefined
+  let host: AccessToolsHost | undefined
   try {
-    workspace = await mkdtemp(join(tmpdir(), 'cf-research-'))
-    privateDir = await mkdtemp(join(tmpdir(), 'cf-research-private-'))
+    workspace = await mkdtemp(join(tmpdir(), 'cf-project-'))
+    privateDir = await mkdtemp(join(tmpdir(), 'cf-project-private-'))
     await chmod(privateDir, 0o700)
     opts.onPhase?.('clone')
     await cloneReferences(job, workspace, opts, logger)
-    browser = job.research.browser
+    browser = job.access.browser
       ? await startBrowser(join(privateDir, 'profile'), logger)
       : undefined
 
-    const tools = researchTools({
-      targets: job.research.targets,
-      credentials: job.research.credentials,
+    const tools = accessTools({
+      targets: job.access.targets,
+      credentials: job.access.credentials,
       ...(browser
         ? { cdpEndpoint: browser.cdpEndpoint, playwrightModule: browser.playwrightModule }
         : {}),
       ...(opts.signal ? { signal: opts.signal } : {}),
     })
-    host = await startResearchToolsHost(tools.definition)
+    host = await startAccessToolsHost(tools.definition)
     const mcpServers: McpServerSpec[] = [
       ...(job.mcpServers ?? []),
       {
-        id: 'research',
+        id: 'project-access',
         transport: 'stdio',
         command: process.execPath,
         args: [TOOLS_PROXY],
-        env: { [RESEARCH_TOOLS_URL_ENV]: host.url, [RESEARCH_TOOLS_TOKEN_ENV]: host.token },
+        env: { [ACCESS_TOOLS_URL_ENV]: host.url, [ACCESS_TOOLS_TOKEN_ENV]: host.token },
       },
       ...(browser
         ? [
@@ -184,9 +180,9 @@ export async function handleResearch(
         : []),
     ]
     const browserNote =
-      job.research.browser && !browser
-        ? '\n\nNote: no browser is available to this run, so the vendor UI cannot be explored. ' +
-          'Answer what the API allows and mark UI-only questions as unanswered.'
+      job.access.browser && !browser
+        ? '\n\nNote: no browser is available to this run, so no target can be used through its ' +
+          'UI. Do what the APIs allow and say in your answer what needed a UI.'
         : ''
 
     opts.onPhase?.('agent')
@@ -224,13 +220,13 @@ export async function handleResearch(
     if (!run.summary.trim()) {
       return {
         ...common,
-        error: 'the research agent returned no answer',
+        error: 'the project agent returned no answer',
         failureCause: 'no-usable-output',
       }
     }
     const resolved = await resolveStructuredOutput(
       {
-        label: 'research',
+        label: 'project',
         shapeHint: job.output?.shapeHint ?? 'Expected a single JSON object.',
         parse: (text) => extractJsonObject(text),
       },
@@ -250,11 +246,11 @@ export async function handleResearch(
     if (resolved.value === undefined || resolved.value === null) {
       return {
         ...common,
-        error: 'the research agent returned no readable findings',
+        error: 'the project agent returned no readable result',
         failureCause: 'no-usable-output',
       }
     }
-    logger.info('research: done', {
+    logger.info('project: done', {
       exchanges: httpExchanges.length,
       waiting: Boolean(request),
     })
