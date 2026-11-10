@@ -167,8 +167,22 @@ export function parseProjectDefinition(input: unknown): DefinitionParseResult<Pr
 }
 
 /**
+ * Validate a definition's envelope for writing and serialize it. A store's read refuses a row
+ * the envelope schema does not accept, so a write must refuse it too.
+ */
+export function encodeProjectDefinition(definition: ProjectDefinition): string {
+  const parsed = parseProjectDefinition(definition)
+  if (!parsed.ok) {
+    throw new Error(`invalid project definition: ${parsed.issues.join('; ')}`)
+  }
+  return JSON.stringify(parsed.value)
+}
+
+/**
  * How a project kind validates the `spec` of its definitions. The kind supplies one; the
  * platform runs it at registration and at publish without knowing what the spec holds.
+ * `parseSpec` answers the spec as its kind normalizes it (trimmed, defaults filled), which is
+ * what the platform stores and hashes.
  */
 export interface ProjectDefinitionSpecValidator {
   kind: string

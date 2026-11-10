@@ -55,10 +55,6 @@ export interface ProjectOutcome<Body = unknown> extends ProjectOutcomeMeta {
   body: Body
 }
 
-// ---------------------------------------------------------------------------
-// Outcome storage policy
-// ---------------------------------------------------------------------------
-
 /** The largest inline threshold any tier may set; a facade's own row cap may be lower. */
 export const OUTCOME_INLINE_MAX_BYTES_CEILING = 2_000_000
 export const DEFAULT_OUTCOME_INLINE_MAX_BYTES = 256 * 1024
@@ -84,4 +80,11 @@ export function decodeOutcomeStoragePolicy(json: string): OutcomeStoragePolicy {
   const parsed = v.safeParse(outcomeStoragePolicySchema, JSON.parse(json))
   if (!parsed.success) throw new Error('stored outcome-storage policy is unreadable')
   return parsed.output
+}
+
+/** Validate a policy for writing and serialize it, so no write stores what a read refuses. */
+export function encodeOutcomeStoragePolicy(policy: OutcomeStoragePolicy): string {
+  const parsed = v.safeParse(outcomeStoragePolicySchema, policy)
+  if (!parsed.success) throw new Error('outcome-storage policy is outside the schema')
+  return JSON.stringify(parsed.output)
 }

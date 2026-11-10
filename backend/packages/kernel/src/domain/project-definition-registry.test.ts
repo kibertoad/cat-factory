@@ -70,6 +70,15 @@ describe('ProjectDefinitionRegistry', () => {
     expect(() => defs.register(research(1))).not.toThrow()
     expect(() => defs.register(research(1, 'Something else?'))).toThrow(/new version/)
   })
+
+  it('holds the spec as its kind normalizes it, so whitespace is not a new version', () => {
+    const defs = registry()
+    defs.register(research(1, '  Which auth scheme?  '))
+    expect(() => defs.register(research(1))).not.toThrow()
+    expect(defs.get('research', 'acme:vendor', 1)?.spec).toMatchObject({
+      topics: [{ questions: [{ question: 'Which auth scheme?' }] }],
+    })
+  })
 })
 
 describe('projectDefinitionContentHash', () => {

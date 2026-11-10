@@ -10,6 +10,7 @@ import type { D1Database } from '@cloudflare/workers-types'
 import { appendDirectoryChanges, workspaceSource, workspaceTreeSource } from './directoryFeed'
 import { type WorkspaceRow, rowToWorkspace } from './mappers'
 import { chunkForIn } from './chunk'
+import { projectRecordDeletes } from './D1ProjectOutcomeRepositories'
 
 // Cloudflare-only workspace-scoped tables that have no Node/Drizzle analogue (Durable-Object
 // tracking), appended to the shared cascade list for this facade. Kept here — not in the
@@ -247,21 +248,7 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
         .prepare(`DELETE FROM project_service_links WHERE project_id IN (${HOMED_PROJECTS})`)
         .bind(id, id),
       // A homed project's outcomes, sequence, pin and policy tier.
-      this.db
-        .prepare(`DELETE FROM project_outcomes WHERE project_id IN (${HOMED_PROJECTS})`)
-        .bind(id, id),
-      this.db
-        .prepare(`DELETE FROM project_outcome_seqs WHERE project_id IN (${HOMED_PROJECTS})`)
-        .bind(id, id),
-      this.db
-        .prepare(`DELETE FROM project_pins WHERE project_id IN (${HOMED_PROJECTS})`)
-        .bind(id, id),
-      this.db
-        .prepare(
-          `DELETE FROM outcome_storage_policies
-           WHERE owner_kind = 'project' AND owner_id IN (${HOMED_PROJECTS})`,
-        )
-        .bind(id, id),
+      ...projectRecordDeletes(this.db, HOMED_PROJECTS, [id, id]),
       // This board's own outcome-storage policy tier.
       this.db
         .prepare(

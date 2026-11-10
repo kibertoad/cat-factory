@@ -1,5 +1,7 @@
 import {
   decodeOutcomeStoragePolicy,
+  encodeOutcomeStoragePolicy,
+  encodeProjectDefinition,
   parseProjectDefinition,
   type OutcomeStorageOwnerKind,
   type OutcomeStoragePolicy,
@@ -12,7 +14,7 @@ import type {
   ProjectRecordRepository,
   StoredProjectDefinition,
 } from '@cat-factory/kernel'
-import type { D1Database } from '@cloudflare/workers-types'
+import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
 
 interface DefinitionRow {
@@ -78,7 +80,7 @@ export class D1ProjectDefinitionRepository implements ProjectDefinitionRepositor
         definition.kind,
         definition.key,
         definition.version,
-        JSON.stringify(definition),
+        encodeProjectDefinition(definition),
         stored.contentHash,
         stored.createdAt,
       )
@@ -135,6 +137,30 @@ function rowToOutcome(row: OutcomeRow): ProjectOutcomeRow {
     body,
     bodyBytes: row.body_bytes,
   }
+}
+
+/**
+ * The statements reclaiming every record of the projects `projectIds` selects: a placeholder
+ * list or a subquery, bound with `binds`. The board delete runs them too, inside its own batch.
+ */
+export function projectRecordDeletes(
+  db: D1Database,
+  projectIds: string,
+  binds: readonly unknown[],
+): D1PreparedStatement[] {
+  return [
+    db.prepare(`DELETE FROM project_outcomes WHERE project_id IN (${projectIds})`).bind(...binds),
+    db
+      .prepare(`DELETE FROM project_outcome_seqs WHERE project_id IN (${projectIds})`)
+      .bind(...binds),
+    db.prepare(`DELETE FROM project_pins WHERE project_id IN (${projectIds})`).bind(...binds),
+    db
+      .prepare(
+        `DELETE FROM outcome_storage_policies
+         WHERE owner_kind = 'project' AND owner_id IN (${projectIds})`,
+      )
+      .bind(...binds),
+  ]
 }
 
 /** A project's pin, outcome sequence and outcome revisions (migration 0115). */
@@ -242,23 +268,7 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
   async deleteByProjects(projectIds: string[]): Promise<void> {
     for (const chunk of chunkForIn(projectIds)) {
       const placeholders = chunk.map(() => '?').join(', ')
-      await this.deps.db.batch([
-        this.deps.db
-          .prepare(`DELETE FROM project_outcomes WHERE project_id IN (${placeholders})`)
-          .bind(...chunk),
-        this.deps.db
-          .prepare(`DELETE FROM project_outcome_seqs WHERE project_id IN (${placeholders})`)
-          .bind(...chunk),
-        this.deps.db
-          .prepare(`DELETE FROM project_pins WHERE project_id IN (${placeholders})`)
-          .bind(...chunk),
-        this.deps.db
-          .prepare(
-            `DELETE FROM outcome_storage_policies
-             WHERE owner_kind = 'project' AND owner_id IN (${placeholders})`,
-          )
-          .bind(...chunk),
-      ])
+      await this.deps.db.batch(projectRecordDeletes(this.deps.db, placeholders, chunk))
     }
   }
 }
@@ -292,7 +302,7 @@ export class D1OutcomeStoragePolicyRepository implements OutcomeStoragePolicyRep
         `INSERT INTO outcome_storage_policies (owner_kind, owner_id, policy) VALUES (?, ?, ?)
          ON CONFLICT (owner_kind, owner_id) DO UPDATE SET policy = excluded.policy`,
       )
-      .bind(ownerKind, ownerId, JSON.stringify(policy))
+      .bind(ownerKind, ownerId, encodeOutcomeStoragePolicy(policy))
       .run()
   }
 }

@@ -105,6 +105,6 @@ export class ProjectDefinitionRegistry {
         `invalid ${envelope.value.kind} definition ${envelope.value.key}: ${spec.issues.join('; ')}`,
       )
     }
-    return envelope.value
+    return { ...envelope.value, spec: spec.value }
   }
 }

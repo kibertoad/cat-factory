@@ -52,9 +52,6 @@ import {
   agentRuns,
   blocks,
   outcomeStoragePolicies,
-  projectOutcomeSeqs,
-  projectOutcomes,
-  projectPins,
   projectServiceLinks,
   projects,
   services,
@@ -63,6 +60,7 @@ import {
   workspaceMounts,
   workspaces,
 } from '../../db/schema.js'
+import { deleteProjectRecords } from './project-outcomes.js'
 
 export class DrizzleWorkspaceRepository implements WorkspaceRepository {
   constructor(private readonly db: DrizzleDb) {}
@@ -296,19 +294,7 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
           .delete(projectServiceLinks)
           .where(inArray(projectServiceLinks.project_id, projectIds))
         // A homed project's outcomes, sequence, pin and policy tier.
-        await tx.delete(projectOutcomes).where(inArray(projectOutcomes.project_id, projectIds))
-        await tx
-          .delete(projectOutcomeSeqs)
-          .where(inArray(projectOutcomeSeqs.project_id, projectIds))
-        await tx.delete(projectPins).where(inArray(projectPins.project_id, projectIds))
-        await tx
-          .delete(outcomeStoragePolicies)
-          .where(
-            and(
-              eq(outcomeStoragePolicies.owner_kind, 'project'),
-              inArray(outcomeStoragePolicies.owner_id, projectIds),
-            ),
-          )
+        await deleteProjectRecords(tx, projectIds)
         await tx.delete(projects).where(inArray(projects.id, projectIds))
       }
       if (serviceIds.length) {

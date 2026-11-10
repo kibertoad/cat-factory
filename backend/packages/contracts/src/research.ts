@@ -112,7 +112,10 @@ export function parseResearchDefinition(input: unknown): DefinitionParseResult<R
 /** The research kind's validator for the platform's definition registry and publisher. */
 export const researchSpecValidator: ProjectDefinitionSpecValidator = {
   kind: RESEARCH_KIND,
-  parseSpec: (definition: ProjectDefinition) => parseResearchDefinition(definition),
+  parseSpec: (definition: ProjectDefinition) => {
+    const parsed = parseResearchDefinition(definition)
+    return parsed.ok ? { ok: true, value: parsed.value.spec } : parsed
+  },
 }
 
 // ---------------------------------------------------------------------------

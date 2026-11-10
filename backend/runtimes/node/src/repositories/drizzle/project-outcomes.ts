@@ -1,5 +1,7 @@
 import {
   decodeOutcomeStoragePolicy,
+  encodeOutcomeStoragePolicy,
+  encodeProjectDefinition,
   parseProjectDefinition,
   type OutcomeStorageOwnerKind,
   type OutcomeStoragePolicy,
@@ -61,7 +63,7 @@ export class DrizzleProjectDefinitionRepository implements ProjectDefinitionRepo
       .select()
       .from(projectDefinitions)
       .where(and(eq(projectDefinitions.account_id, accountId), eq(projectDefinitions.kind, kind)))
-      .orderBy(asc(projectDefinitions.key), asc(projectDefinitions.version))
+      .orderBy(sql`${projectDefinitions.key} COLLATE "C"`, asc(projectDefinitions.version))
     return rows.map(rowToDefinition)
   }
 
@@ -74,7 +76,7 @@ export class DrizzleProjectDefinitionRepository implements ProjectDefinitionRepo
         kind: definition.kind,
         key: definition.key,
         version: definition.version,
-        body: JSON.stringify(definition),
+        body: encodeProjectDefinition(definition),
         content_hash: stored.contentHash,
         created_at: stored.createdAt,
       })
@@ -114,6 +116,27 @@ function rowToOutcome(row: typeof projectOutcomes.$inferSelect): ProjectOutcomeR
     body,
     bodyBytes: row.body_bytes,
   }
+}
+
+/**
+ * Reclaim every record of `projectIds` on `tx`. The board delete calls it inside its own
+ * transaction, so a table added here is reclaimed by both.
+ */
+export async function deleteProjectRecords(
+  tx: Pick<DrizzleDb, 'delete'>,
+  projectIds: string[],
+): Promise<void> {
+  await tx.delete(projectOutcomes).where(inArray(projectOutcomes.project_id, projectIds))
+  await tx.delete(projectOutcomeSeqs).where(inArray(projectOutcomeSeqs.project_id, projectIds))
+  await tx.delete(projectPins).where(inArray(projectPins.project_id, projectIds))
+  await tx
+    .delete(outcomeStoragePolicies)
+    .where(
+      and(
+        eq(outcomeStoragePolicies.owner_kind, 'project'),
+        inArray(outcomeStoragePolicies.owner_id, projectIds),
+      ),
+    )
 }
 
 /** A project's pin, outcome sequence and outcome revisions. */
@@ -206,19 +229,7 @@ export class DrizzleProjectRecordRepository implements ProjectRecordRepository {
   async deleteByProjects(projectIds: string[]): Promise<void> {
     for (let i = 0; i < projectIds.length; i += CHUNK) {
       const chunk = projectIds.slice(i, i + CHUNK)
-      await this.db.transaction(async (tx) => {
-        await tx.delete(projectOutcomes).where(inArray(projectOutcomes.project_id, chunk))
-        await tx.delete(projectOutcomeSeqs).where(inArray(projectOutcomeSeqs.project_id, chunk))
-        await tx.delete(projectPins).where(inArray(projectPins.project_id, chunk))
-        await tx
-          .delete(outcomeStoragePolicies)
-          .where(
-            and(
-              eq(outcomeStoragePolicies.owner_kind, 'project'),
-              inArray(outcomeStoragePolicies.owner_id, chunk),
-            ),
-          )
-      })
+      await this.db.transaction((tx) => deleteProjectRecords(tx, chunk))
     }
   }
 }
@@ -253,12 +264,13 @@ export class DrizzleOutcomeStoragePolicyRepository implements OutcomeStoragePoli
       await this.db.delete(outcomeStoragePolicies).where(where)
       return
     }
+    const encoded = encodeOutcomeStoragePolicy(policy)
     await this.db
       .insert(outcomeStoragePolicies)
-      .values({ owner_kind: ownerKind, owner_id: ownerId, policy: JSON.stringify(policy) })
+      .values({ owner_kind: ownerKind, owner_id: ownerId, policy: encoded })
       .onConflictDoUpdate({
         target: [outcomeStoragePolicies.owner_kind, outcomeStoragePolicies.owner_id],
-        set: { policy: JSON.stringify(policy) },
+        set: { policy: encoded },
       })
   }
 }
