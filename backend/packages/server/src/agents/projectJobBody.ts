@@ -1,9 +1,13 @@
-import { isReservedPlatformEnvKey, type ResearchDefinition } from '@cat-factory/contracts'
+import {
+  isReservedPlatformEnvKey,
+  projectDefinitionSubjectId,
+  type ProjectDefinition,
+} from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   CapabilityCredentialMissingError,
   type AgentRunContext,
-  type ResearchRunContext,
+  type ProjectRunContext,
   type RunnerDispatchKind,
   type ToolSecretResolver,
   type ToolSecretSubject,
@@ -17,17 +21,18 @@ import type { ResolveRepoTargets } from './resolveRepoTarget.js'
 import { toolServersSection } from '@cat-factory/agents'
 
 // ---------------------------------------------------------------------------
-// The harness body of a RESEARCH job (`kind: 'research'`), the repo-less sibling of
-// `buildJobBody`. A research run has no checkout of its own: the project's linked services' repos
-// ride as read-only `referenceRepos`, and the research definition's credentials are resolved
-// here, once, into the `research` section the harness's research tool server holds (the values
-// never reach the model). A credential the definition needs at START that does not resolve
+// The harness body of a PROJECT job (`kind: 'project'`), the repo-less sibling of `buildJobBody`,
+// for a task of any project kind. A project run has no checkout of its own: the project's linked
+// services' repos ride as read-only `referenceRepos`, and the pinned definition's credentials are
+// resolved here, once, into the `access` section the harness's access tool server holds (the
+// values never reach the model). What the agent is asked is the kind's prompt over its brief.
+// A credential the definition needs at START that does not resolve
 // refuses the dispatch with `CapabilityCredentialMissingError`, so the step parks before any
 // container starts. Design: `docs/initiatives/research-projects.md`.
 // ---------------------------------------------------------------------------
 
-/** What the research body reads, as bound callbacks so the executor stays the only owner. */
-export interface ResearchJobBodyDeps {
+/** What the project body reads, as bound callbacks so the executor stays the only owner. */
+export interface ProjectJobBodyDeps {
   agentKindRegistry: AgentKindRegistry
   resolveToolSecrets?: ToolSecretResolver
   resolveRepoTargets?: ResolveRepoTargets
@@ -41,7 +46,7 @@ export interface ResearchJobBodyDeps {
   resolveToolServers: (ambientAuth: boolean) => Promise<ResolvedToolServers>
 }
 
-export interface ResearchJobBody {
+export interface ProjectJobBody {
   body: Record<string, unknown>
   model: string
   provider: string
@@ -50,21 +55,25 @@ export interface ResearchJobBody {
   toolServers: ResolvedToolServers
 }
 
-/** Assemble the research job body for a `container-research` dispatch. */
-export async function buildResearchJobBody(
+/** Assemble the project job body for a `container-project` dispatch. */
+export async function buildProjectJobBody(
   context: AgentRunContext,
   ids: { workspaceId: string; executionId: string; jobId: string },
-  deps: ResearchJobBodyDeps,
-): Promise<ResearchJobBody> {
-  const research = requireResearch(context)
-  const credentials = await resolveResearchCredentials(research.definition, {
-    workspaceId: ids.workspaceId,
-    ...(deps.resolveToolSecrets ? { resolver: deps.resolveToolSecrets } : {}),
-  })
+  deps: ProjectJobBodyDeps,
+): Promise<ProjectJobBody> {
+  const project = requireProject(context)
+  // A kind that pins no definition reaches no target and holds no credential.
+  const targets = project.definition?.targets ?? []
+  const credentials = project.definition
+    ? await resolveProjectCredentials(project.definition, {
+        workspaceId: ids.workspaceId,
+        ...(deps.resolveToolSecrets ? { resolver: deps.resolveToolSecrets } : {}),
+      })
+    : []
   const [model, authResult, linked] = await Promise.all([
     deps.resolveModel(),
     deps.resolveAuth(),
-    resolveLinkedRepos(research, ids.workspaceId, deps),
+    resolveLinkedRepos(project, ids.workspaceId, deps),
   ])
   const tools = await deps.resolveToolServers(authResult.auth.ambientAuth === true)
   const ghToken = linked.targets.length
@@ -92,17 +101,17 @@ export async function buildResearchJobBody(
     ...(ghToken ? { ghToken } : {}),
     ...(linked.referenceRepos.length ? { referenceRepos: linked.referenceRepos } : {}),
     ...(tools.mcpServers.length ? { mcpServers: tools.mcpServers } : {}),
-    research: {
-      targets: research.definition.targets,
+    access: {
+      targets,
       credentials,
-      browser: research.definition.targets.some((t) => t.surface === 'ui'),
+      browser: targets.some((t) => t.surface === 'ui'),
     },
   }
   return {
     body,
     model: `${model.provider}:${model.model}`,
     provider: model.provider,
-    kind: 'research',
+    kind: 'project',
     ...(authResult.subscriptionTokenId
       ? { subscriptionTokenId: authResult.subscriptionTokenId }
       : {}),
@@ -110,29 +119,32 @@ export async function buildResearchJobBody(
   }
 }
 
-function requireResearch(context: AgentRunContext): ResearchRunContext {
-  if (!context.research) {
+function requireProject(context: AgentRunContext): ProjectRunContext {
+  if (!context.project) {
     throw new Error(
-      `A '${context.agentKind}' step dispatched without its research brief; the research step ` +
+      `A '${context.agentKind}' step dispatched without its project brief; the project step ` +
         'handler did not run for it.',
     )
   }
-  return context.research
+  return context.project
 }
 
 /**
  * The definition's credentials, resolved for the run's workspace from the credential store
- * (the `research-definition` subject reads no environment). A key in the reserved platform set
+ * (the `project-definition` subject reads no environment). A key in the reserved platform set
  * is never sent. A credential needed at start that does not resolve refuses the dispatch; one the
  * agent asks for later is left out and named in the prompt instead.
  */
-export async function resolveResearchCredentials(
-  definition: ResearchDefinition,
+export async function resolveProjectCredentials(
+  definition: ProjectDefinition,
   args: { workspaceId: string; resolver?: ToolSecretResolver },
 ): Promise<Array<{ key: string; kind: string; value: string }>> {
   const declared = definition.credentials.filter((c) => !isReservedPlatformEnvKey(c.key))
   if (declared.length === 0) return []
-  const subject: ToolSecretSubject = { kind: 'research-definition', id: definition.key }
+  const subject: ToolSecretSubject = {
+    kind: 'project-definition',
+    id: projectDefinitionSubjectId(definition.kind, definition.key),
+  }
   const values = args.resolver
     ? await args.resolver.resolve({
         workspaceId: args.workspaceId,
@@ -147,7 +159,7 @@ export async function resolveResearchCredentials(
       declaredBy: subject,
       label: missing.label,
       ...(missing.onboarding ? { onboarding: missing.onboarding } : {}),
-      reason: 'The research definition needs this credential before the run can start.',
+      reason: 'The project definition needs this credential before the run can start.',
     })
   }
   return declared
@@ -157,24 +169,24 @@ export async function resolveResearchCredentials(
 
 /** The linked services' repos as read-only reference clones, plus the prompt line naming them. */
 async function resolveLinkedRepos(
-  research: ResearchRunContext,
+  project: ProjectRunContext,
   workspaceId: string,
-  deps: Pick<ResearchJobBodyDeps, 'resolveRepoTargets' | 'resolveRepoOrigin'>,
+  deps: Pick<ProjectJobBodyDeps, 'resolveRepoTargets' | 'resolveRepoOrigin'>,
 ): Promise<{
   targets: RepoTarget[]
   referenceRepos: { repo: Record<string, unknown> }[]
   section: string
 }> {
-  if (research.linkedFrameBlockIds.length === 0 || !deps.resolveRepoTargets) {
+  if (project.linkedFrameBlockIds.length === 0 || !deps.resolveRepoTargets) {
     return { targets: [], referenceRepos: [], section: '' }
   }
   const { checkouts } = await deps.resolveRepoTargets(
     workspaceId,
     null,
-    research.linkedFrameBlockIds,
+    project.linkedFrameBlockIds,
   )
   const targets = checkouts.map((c) => c.target)
-  const skipped = research.linkedFrameBlockIds.length - checkouts.flatMap((c) => c.involved).length
+  const skipped = project.linkedFrameBlockIds.length - checkouts.flatMap((c) => c.involved).length
   const lines = targets.map((t) => `- \`${t.owner}/${t.name}\` (read-only, never push to it)`)
   if (skipped > 0) {
     lines.push(`- ${skipped} linked service(s) have no repository this workspace can read.`)

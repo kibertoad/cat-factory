@@ -30,11 +30,11 @@ export type AgentSurface =
   /** A container run that edits a working tree and commits + pushes (optionally opens a PR). */
   | 'container-coding'
   /**
-   * A RESEARCH run: an agent over a browser and an HTTP client against a vendor, in one of our
-   * containers but with no checkout of its own. Linked repos arrive read-only. Its reply is the
-   * findings it recorded.
+   * A PROJECT run: an agent for a project task, in one of our containers but with no checkout of
+   * its own, beside a browser and the access tool server for the definition's targets. Linked
+   * repos arrive read-only. Its reply is the outcome its kind records.
    */
-  | 'container-research'
+  | 'container-project'
   /**
    * A DELEGATED run: an external system the deployment registered (see kernel's
    * `DelegatedExecutor`) does the work and the platform observes it. No harness, no checkout of

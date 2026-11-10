@@ -13,6 +13,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import { CapabilityCredentialMissingError } from '@cat-factory/kernel'
+import type { ResearchBrief } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   defaultAgentKindRegistry,
@@ -404,12 +405,14 @@ export class FakeAgentExecutor implements AgentExecutor {
    * request.
    */
   private runResearcher(context: AgentRunContext): AgentRunResult {
-    const questions = context.research?.questions ?? []
+    // The research kind's module built this brief for its agent kind.
+    const brief = context.project?.brief as ResearchBrief | undefined
+    const questions = brief?.questions ?? []
     const runKey = context.executionId ?? 'noexec'
     const ask = this.options.researchCredentialRequest
     const asking = !!ask && !this.researchAsked.has(runKey)
     if (asking) this.researchAsked.add(runKey)
-    const settled = new Set((context.research?.checkpoint?.findings ?? []).map((f) => f.questionId))
+    const settled = new Set((brief?.checkpoint?.findings ?? []).map((f) => f.questionId))
     const open = questions.filter((q) => !settled.has(q.id))
     const answered = asking ? open.slice(0, 1) : open
     return {

@@ -1,32 +1,36 @@
 import type { Project } from '@cat-factory/contracts'
 import type { Block, ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
-import { RESEARCH_PIPELINE_ID, ResearchDefinitionRegistry } from '@cat-factory/kernel'
+import { RESEARCH_PIPELINE_ID, defaultProjectDefinitionRegistry } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { FakeAgentOptions } from '../FakeAgentExecutor.js'
 import type { ConformanceHarness } from '../harness.js'
 
-// Research runs: a `research` task under a research project dispatches the `project-researcher`
-// step with its brief, claims one findings sequence number per task, records one findings
-// revision, and parks on a credential the agent asks for with its partial findings kept on the
-// step. Pins the engine half and both stores' round-trip of the step's research state.
+// Research runs, the built-in project kind driven through the generic project step: a `research`
+// task under a research project dispatches the `project-researcher` step with its kind's brief,
+// claims one outcome sequence number per task, records one outcome, and parks on a credential the
+// agent asks for with its partial findings kept on the step. Pins the engine half and both
+// stores' round-trip of the step's project state.
 
-function definitions(): ResearchDefinitionRegistry {
-  const registry = new ResearchDefinitionRegistry()
+function definitions() {
+  const registry = defaultProjectDefinitionRegistry()
   registry.register({
+    kind: 'research',
     key: 'acme:vendor',
     version: 1,
     title: 'Vendor',
-    brief: 'Learn how the vendor integrates.',
-    topics: [
-      {
-        id: 'auth',
-        title: 'Auth',
-        questions: [
-          { id: 'scheme', question: 'Which auth scheme?' },
-          { id: 'scopes', question: 'Which scopes exist?' },
-        ],
-      },
-    ],
+    spec: {
+      brief: 'Learn how the vendor integrates.',
+      topics: [
+        {
+          id: 'auth',
+          title: 'Auth',
+          questions: [
+            { id: 'scheme', question: 'Which auth scheme?' },
+            { id: 'scopes', question: 'Which scopes exist?' },
+          ],
+        },
+      ],
+    },
     credentials: [
       {
         key: 'VENDOR_LOGIN',
@@ -50,14 +54,14 @@ export function defineCoreResearchRunsConformance(harness: ConformanceHarness): 
     async function setup(agentOptions: FakeAgentOptions = {}) {
       const app = harness.makeApp(
         { asyncKinds: ['project-researcher'], ...agentOptions },
-        { researchDefinitionRegistry: definitions() },
+        { projectDefinitionRegistry: definitions() },
       )
       const home = await app.createOrgWorkspace({ seed: true })
       const wsId = home.workspace.id
       const created = await app.call<{ project: Project }>('POST', `/workspaces/${wsId}/projects`, {
         kind: 'research',
         title: 'Vendor research',
-        research: { definitionKey: 'acme:vendor' },
+        definition: { key: 'acme:vendor' },
       })
       expect(created.status).toBe(201)
       return { app, wsId, project: created.body.project }
@@ -88,25 +92,27 @@ export function defineCoreResearchRunsConformance(harness: ConformanceHarness): 
       return { task: task.body, exec }
     }
 
-    it('records one findings revision per task, in the order the tasks started', async () => {
+    it('records one outcome per task, in the order the tasks started', async () => {
       const { app, wsId, project } = await setup()
       const first = await runTask(app, wsId, project)
       expect(first.exec.status).toBe('done')
       const step = first.exec.steps.find((s) => s.agentKind === 'project-researcher')!
-      expect(step.research).toMatchObject({
+      expect(step.project).toMatchObject({
         projectId: project.id,
+        kind: 'research',
         seq: 1,
-        mode: 'initial',
+        intent: 'initial',
+        stream: 'main',
         definitionKey: 'acme:vendor',
-        questionIds: ['scheme', 'scopes'],
-        revisionId: `frv_${first.task.id}`,
+        plan: { questionIds: ['scheme', 'scopes'] },
+        outcomeId: `pout_${first.task.id}`,
       })
       expect(step.output).toContain('Recorded findings revision 1')
       expect(step.output).toContain('2 answered')
       const second = await runTask(app, wsId, project, { researchMode: 'refresh' })
       expect(second.exec.status).toBe('done')
       expect(
-        second.exec.steps.find((s) => s.agentKind === 'project-researcher')?.research?.seq,
+        second.exec.steps.find((s) => s.agentKind === 'project-researcher')?.project?.seq,
       ).toBe(2)
     })
 
@@ -124,18 +130,18 @@ export function defineCoreResearchRunsConformance(harness: ConformanceHarness): 
       expect(step.credentialWait).toMatchObject({
         subject: 'capability',
         key: 'VENDOR_LOGIN',
-        declaredBy: { kind: 'research-definition', id: 'acme:vendor' },
+        declaredBy: { kind: 'project-definition', id: 'research/acme:vendor' },
         label: 'Vendor login',
         onboarding: { instructions: 'Create a user under Admin, Users.' },
         observed: 'Redirected to the sign-in page',
       })
-      expect(step.research?.seq).toBe(1)
-      const checkpoint = step.research?.checkpoint as { findings: { questionId: string }[] }
+      expect(step.project?.seq).toBe(1)
+      const checkpoint = step.project?.checkpoint as { findings: { questionId: string }[] }
       expect(checkpoint.findings.map((f) => f.questionId)).toEqual(['scheme'])
-      expect(step.research?.revisionId).toBeUndefined()
+      expect(step.project?.outcomeId).toBeUndefined()
 
       // Once the credential is stored the run resumes from its checkpoint: the resumed dispatch
-      // answers only what the checkpoint left open, and the one revision it records is the merge.
+      // answers only what the checkpoint left open, and the one outcome it records is the merge.
       const stored = await app.call(
         'PUT',
         `/workspaces/${wsId}/capability-credentials/VENDOR_LOGIN`,
@@ -150,7 +156,7 @@ export function defineCoreResearchRunsConformance(harness: ConformanceHarness): 
       const done = (await app.drive(wsId)).find((e) => e.id === exec.id)!
       expect(done.status).toBe('done')
       const finished = done.steps.find((s) => s.agentKind === 'project-researcher')!
-      expect(finished.research).toMatchObject({ seq: 1, revisionId: `frv_${exec.blockId}` })
+      expect(finished.project).toMatchObject({ seq: 1, outcomeId: `pout_${exec.blockId}` })
       expect(finished.output).toContain('2 answered')
     })
 

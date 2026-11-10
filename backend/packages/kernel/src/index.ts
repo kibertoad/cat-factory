@@ -1205,10 +1205,25 @@ export {
 // mounted service or project to its root block.
 export {
   ProjectKindRegistry,
-  RESEARCH_PROJECT_KIND,
+  defaultProjectDefinitionRegistry,
+  defaultProjectKindModuleRegistry,
   defaultProjectKindRegistry,
   projectKindTaskType,
 } from './domain/project-kind-registry.js'
+// The code half of a project kind, and the research kind the platform ships.
+export {
+  type ProjectKindModule,
+  ProjectKindModuleRegistry,
+  type ProjectTaskInput,
+  type ProjectTaskPlan,
+} from './domain/project-kind-module.js'
+export {
+  PROJECT_RESEARCHER_AGENT_KIND,
+  RESEARCH_PROJECT_KIND,
+  mergeFindingsBodies,
+  researchKindModule,
+  selectQuestionIds,
+} from './domain/research-kind.js'
 export {
   type MountSubjectReaders,
   type MountSubjectRoot,

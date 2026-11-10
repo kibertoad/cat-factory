@@ -818,7 +818,7 @@ export class BoardService {
       throw new ValidationError('A document repository only accepts document or spike tasks')
     }
     if (frame && taskTypeRequiresProject(taskType)) {
-      throw new ValidationError(`A '${taskType}' task belongs under a research project`, {
+      throw new ValidationError(`A '${taskType}' task belongs under a project`, {
         reason: 'task_type_requires_project',
         taskType,
       })

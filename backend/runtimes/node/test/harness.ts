@@ -191,6 +191,7 @@ type ConformanceAppOpts = {
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
   projectKindRegistry?: CoreDependencies['projectKindRegistry']
   projectDefinitionRegistry?: CoreDependencies['projectDefinitionRegistry']
+  projectKindModuleRegistry?: CoreDependencies['projectKindModuleRegistry']
   inlineUseCaseRegistry?: CoreDependencies['inlineUseCaseRegistry']
   pipelineRegistry?: CoreDependencies['pipelineRegistry']
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
@@ -323,6 +324,7 @@ function buildContainerRegistryOptions(opts: ConformanceAppOpts | undefined) {
     taskTypeRegistry: o.taskTypeRegistry,
     projectKindRegistry: o.projectKindRegistry,
     projectDefinitionRegistry: o.projectDefinitionRegistry,
+    projectKindModuleRegistry: o.projectKindModuleRegistry,
     inlineUseCaseRegistry: o.inlineUseCaseRegistry,
     pipelineRegistry: o.pipelineRegistry,
   })

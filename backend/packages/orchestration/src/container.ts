@@ -143,6 +143,7 @@ import type {
   ProjectKindRegistry,
   ProjectKindSource,
   ProjectDefinitionRegistry,
+  ProjectKindModuleRegistry,
   ProjectDefinitionSource,
   VcsWebUrls,
 } from '@cat-factory/kernel'
@@ -410,6 +411,8 @@ export interface CoreSpine {
   projectKindRegistry: ProjectKindRegistry
   /** Where project kinds are read from: the registry above, or a mothership node's remote source. */
   projectKinds: ProjectKindSource
+  /** The project-kind module registry the engine resolved: each kind's code half. */
+  projectKindModuleRegistry: ProjectKindModuleRegistry
   /** The project-definition registry the engine resolved; the mothership serves it to nodes. */
   projectDefinitionRegistry: ProjectDefinitionRegistry
   /** The one read of project definitions, registered and stored. */
@@ -783,6 +786,7 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     projectKindRegistry,
     projectKinds,
+    projectKindModuleRegistry,
     projectDefinitionRegistry,
     projectDefinitions,
     inlineUseCaseRegistry,
@@ -1000,6 +1004,7 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     projectKindRegistry,
     projectKinds,
+    projectKindModuleRegistry,
     projectDefinitionRegistry,
     projectDefinitions,
     inlineUseCaseRegistry,

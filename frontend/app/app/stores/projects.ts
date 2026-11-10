@@ -43,12 +43,12 @@ export const useProjectsStore = defineStore('projects', () => {
   })
 
   /**
-   * The kinds the create form can make a project of. A kind that keeps research data needs a
-   * research definition picked at creation, which this form does not collect yet, so it is
-   * hidden here rather than offered and then refused.
+   * The kinds the create form can make a project of. A kind that requires a definition needs one
+   * picked at creation, which this form does not collect yet, so it is hidden here rather than
+   * offered and then refused.
    */
   const creatableKinds = computed<ProjectKindDescriptor[]>(() =>
-    kinds.value.filter((k) => k.data === undefined),
+    kinds.value.filter((k) => k.definition !== 'required'),
   )
 
   function kindOf(project: Project | undefined): ProjectKindDescriptor | undefined {

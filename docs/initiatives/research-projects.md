@@ -289,7 +289,7 @@ org state the node must fetch rather than hold a stale copy of.
 
 ### 2. The research agent and its tools
 
-A built-in `project-researcher` agent kind, on a `container-research` surface and the `ui` image (Playwright and Chromium
+A built-in `project-researcher` agent kind, on the `container-project` surface and the `ui` image (Playwright and Chromium
 are already there), with structured output for the findings shape above.
 
 The harness half below is not research's: it is a `project` job kind that any project kind's run
@@ -540,7 +540,7 @@ Still open:
 | 3   | Project outcome persistence, both facades + conformance against two kinds: definitions, pins, the outcome sequence, outcome revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                                           | done      | #2507        |
 | 4   | Harness: the `project` job kind with no checkout (linked repos as `referenceRepos`), the access tool server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                                                                                         | in review | #2508        |
 | 5a  | Engine groundwork: the `ProjectDefinitionSource` read port keyed by kind (registry plus store, `/internal/project-definitions` for a mothership node), the `ProjectDefinitionRegistry` option on every entry point, the kind's `definition` declaration and the pin at project creation, the per-task outcome sequence.                                                   | in review | #2510        |
-| 5b  | Engine: the `ProjectKindModule` registration (outcome schema, fold, summary, context renderer, artifact refs), the research kind's module, the `project-researcher` kind, the `research` task type and pipeline, repo-less dispatch, outcome write, follow-up modes.                                                                                                      | todo      | #2511        |
+| 5b  | Engine: the `ProjectKindModule` registration (outcome schema, fold, summary, context renderer, artifact refs), the research kind's module, the `project-researcher` kind, the `research` task type and pipeline, repo-less dispatch, outcome write, follow-up modes.                                                                                                      | in review | #2511        |
 | 5c  | Outcome offload with the `outcome` artifact kind and its project reclaim; picking a definition on the board.                                                                                                                                                                                                                                                              | todo      | #2512        |
 | 6   | Credential hand-off: the `project-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                                                   | in review | #2509        |
 | 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                                                                                             | todo      |              |
@@ -554,15 +554,20 @@ run has written a revision.
 
 ## Gotchas found during design
 
-- **The checkpoint rides the step as `unknown`.** Typing `PipelineStep.research.checkpoint` through
-  the findings schema made the workspace snapshot's type too deep for the compiler to instantiate,
-  so the step holds it untyped and the engine parses it with `findingsRevisionBodySchema` on read.
+- **The plan and checkpoint ride the step as `unknown`.** Typing `PipelineStep.project` through a
+  kind's schemas made the workspace snapshot's type too deep for the compiler to instantiate, and
+  would tie the generic step to one kind anyway, so the step holds both untyped and the engine
+  hands them back to the kind's module, which parses them on read.
 - **A research task's description is not its brief.** The input gate exempts the `research` type,
   as it does `bug-fishing`: the questions, targets and vendor live on the pinned definition.
-- **Findings are stored inline until 5c.** The revision row names an offloaded body by artifact id
+- **Outcomes are stored inline until 5c.** The outcome row names an offloaded body by artifact id
   alone, and the artifact store is workspace-scoped, so offloading needs the row to record which
   store holds it. Until then a body over the runtime's row ceiling is refused with
-  `findings_too_large_for_inline` rather than truncated.
+  `outcome_too_large_for_inline` rather than truncated.
+- **A kind module and its agent are one kind's two halves.** The engine hands the agent the brief
+  the module built as `unknown`, and the kind's agent prompt reads it as the module's shape. A
+  module is code, so it is local on a mothership node too: only the kind descriptors and the
+  registered definitions are read from the mothership.
 
 - **The agent kind is `project-researcher`.** A `researcher` kind already exists: the repo-reading
   investigator the `pl_complex` pipeline runs before design. Reusing the name would collide in the

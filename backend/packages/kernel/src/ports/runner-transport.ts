@@ -193,6 +193,10 @@ export interface RunnerJobResult {
    * kind). See {@link RunnerInfraSetup}.
    */
   infraSetup?: RunnerInfraSetup
+  /** A project job that stopped to ask a person for a credential, checkpointing in `custom`. */
+  needsCredential?: { key: string; reason: string; observed: string }
+  /** The scrubbed HTTP exchanges a project job's `http_request` tool recorded, by evidence ref. */
+  httpExchanges?: Array<{ ref: string; exchange: unknown }>
   /**
    * A `ralph` iteration's validation verdict: whether the configured completion command
    * exited 0, its exit code, and a bounded output tail. Computed by the harness (it runs
@@ -200,10 +204,6 @@ export interface RunnerJobResult {
    * programmatic check rather than a model self-report. The executor's `toRunResult`
    * forwards it onto {@link AgentRunResult.ralphVerdict}. Absent for non-`ralph` kinds.
    */
-  /** A research job that stopped to ask a person for a credential, checkpointing in `custom`. */
-  needsCredential?: { key: string; reason: string; observed: string }
-  /** The scrubbed HTTP exchanges a research job's `http_request` tool recorded, by evidence ref. */
-  httpExchanges?: Array<{ ref: string; exchange: unknown }>
   ralphVerdict?: {
     validationPassed: boolean
     exitCode: number
@@ -315,11 +315,11 @@ interface RunnerInfraSetup {
  * same executor-harness image, so runtime parity is automatic. Kept as a multi-member type
  * so the transport seam stays explicit. `deploy` is the second kind: it targets the
  * container-backed deploy adapter (real `kubectl`/`kustomize`/`helm`) on a SEPARATE image
- * (`image: 'deploy'`), used to render + apply a service's Kubernetes manifests. `research` is
- * the third: an agent over a browser and an HTTP client against a vendor, with no checkout of its
- * own (the linked services' repos ride as read-only reference repos).
+ * (`image: 'deploy'`), used to render + apply a service's Kubernetes manifests. `project` is
+ * the third: an agent for a project task with no checkout of its own (the linked services' repos
+ * ride as read-only reference repos), beside a browser and the access tool server.
  */
-export type RunnerDispatchKind = 'agent' | 'deploy' | 'research'
+export type RunnerDispatchKind = 'agent' | 'deploy' | 'project'
 
 /**
  * Which executor image a job runs on, by NAME.
