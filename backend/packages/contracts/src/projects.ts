@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { descriptorFieldValuesSchema } from './form-fields.js'
 import { positionSchema, taskTypeSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,17 @@ const serviceIdsSchema = v.pipe(
   v.check((ids) => new Set(ids).size === ids.length, 'service ids must be unique'),
 )
 
+/**
+ * The definition a project pins at creation, of the project's own kind, and the values for its
+ * `inputs`. No version pins the highest one the account can see.
+ */
+export const projectPinInputSchema = v.object({
+  key: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+  version: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
+  inputs: v.optional(descriptorFieldValuesSchema, {}),
+})
+export type ProjectPinInput = v.InferOutput<typeof projectPinInputSchema>
+
 export const createProjectInputSchema = v.object({
   kind: projectKindIdSchema,
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(PROJECT_TITLE_MAX)),
@@ -47,6 +59,8 @@ export const createProjectInputSchema = v.object({
   serviceIds: v.optional(serviceIdsSchema, []),
   /** Where to drop the root on the creating board; laid out on the board's grid when absent. */
   position: v.optional(positionSchema),
+  /** Required by a kind whose `definition` is `required`, refused by a kind that pins none. */
+  definition: v.optional(projectPinInputSchema),
 })
 export type CreateProjectInput = v.InferOutput<typeof createProjectInputSchema>
 
@@ -65,6 +79,14 @@ export type SetProjectServicesInput = v.InferOutput<typeof setProjectServicesInp
 export const projectRepoAccessSchema = v.picklist(['none', 'linked-read-only'])
 export type ProjectRepoAccess = v.InferOutput<typeof projectRepoAccessSchema>
 
+/**
+ * Whether a kind's projects pin a definition: `required` at creation, or `optional`. Absent means
+ * the kind has no definitions. What a definition holds is the kind's own; the platform resolves
+ * and pins it the same way for every kind.
+ */
+export const projectKindDefinitionUseSchema = v.picklist(['required', 'optional'])
+export type ProjectKindDefinitionUse = v.InferOutput<typeof projectKindDefinitionUseSchema>
+
 /** One task type a project kind offers. */
 export const projectKindTaskTypeSchema = v.object({
   taskType: taskTypeSchema,
@@ -81,6 +103,8 @@ export const projectKindDescriptorSchema = v.object({
   description: v.optional(v.pipe(v.string(), v.maxLength(PROJECT_DESCRIPTION_MAX))),
   /** At least one, so a project of this kind can hold work. */
   taskTypes: v.pipe(v.array(projectKindTaskTypeSchema), v.minLength(1)),
+  /** Whether its projects pin a definition of this kind at creation. */
+  definition: v.optional(projectKindDefinitionUseSchema),
 })
 export type ProjectKindDescriptor = v.InferOutput<typeof projectKindDescriptorSchema>
 

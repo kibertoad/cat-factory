@@ -770,7 +770,8 @@
         "assistant_reply_unreadable": "The assistant's model answered with something that is not a decision this platform can act on. Rephrasing rarely helps: pick a different model for the assistant in the model settings.",
         "delegated_executor_failed": "The external executor could not start this step. The problem is in the system that runs the work, not in this deployment: check its own logs and try again.",
         "delegated_work_branch_unprepared": "The platform could not prepare the work branch this step's executor is dispatched onto, so nothing was started. Either the repository connection cannot write to it, or the task names a branch that does not exist yet: the details say which.",
-        "attached_pr_provider_unreachable": "The repository provider did not answer, so the pull request could not be checked and no task was created. Nothing needs setting up here: try again in a moment."
+        "attached_pr_provider_unreachable": "The repository provider did not answer, so the pull request could not be checked and no task was created. Nothing needs setting up here: try again in a moment.",
+        "project_definitions_unreachable": "This deployment's project definitions could not be read just now, so the request was not completed. Nothing is misconfigured and no change is needed: try again once the connection recovers."
       }
     },
     "reason": {
@@ -790,7 +791,11 @@
         "task_type_not_offered_by_project": "This project's kind does not take tasks of this type. Pick one of the types the form offers for it.",
         "project_has_no_writable_repo": "A step of this run needs a repository to write to, and a project has none: its linked services' repositories are read-only context. Pick a pipeline that only reads and reports.",
         "project_service_link_invalid": "One of the linked services no longer exists or belongs to another organization. Reload the board and pick the linked services again.",
-        "project_has_unfinished_tasks": "This project still has tasks that have not finished. Finish or delete them first."
+        "project_has_unfinished_tasks": "This project still has tasks that have not finished. Finish or delete them first.",
+        "project_definition_required": "This project kind pins a definition, so it needs one to start from. Pick one and try again.",
+        "project_definition_not_accepted": "This project kind pins no definition. Remove the definition, or pick a kind that uses one.",
+        "project_definition_not_found": "No definition of this project kind matches that key and version for this organization. Check the key, or leave the version empty to pin the latest.",
+        "project_definition_inputs_invalid": "The values for the definition's inputs do not satisfy it. Fill in every required input with an accepted value, then try again."
       }
     },
     "action": {

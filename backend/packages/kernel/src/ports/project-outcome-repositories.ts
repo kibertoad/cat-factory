@@ -56,6 +56,13 @@ export interface ProjectRecordRepository {
    */
   reserveSeq(projectId: string): Promise<number>
   /**
+   * The sequence number of the outcome a task will write, taken the first time the task starts
+   * and returned unchanged on every later call, so a replayed or retried start keeps its place.
+   * Two racing first claims for one task can skip a number: a sequence orders outcomes, it never
+   * counts them.
+   */
+  reserveTaskSeq(projectId: string, taskId: string): Promise<number>
+  /**
    * Write an outcome. First write wins: a replayed write with the same id is ignored and returns
    * false, so it can never recompute against a moved fold.
    */

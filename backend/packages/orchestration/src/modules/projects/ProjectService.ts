@@ -1,8 +1,14 @@
-import type {
-  CreateProjectInput,
-  MountServiceInput,
-  Project,
-  UpdateMountInput,
+import {
+  type CreateProjectInput,
+  type MountServiceInput,
+  type Project,
+  type ProjectKindDescriptor,
+  type ProjectPin,
+  type ProjectPinInput,
+  type UpdateMountInput,
+  sanitizeDescriptorFields,
+  validateDescriptorFields,
+  withDescriptorFieldDefaults,
 } from '@cat-factory/contracts'
 import {
   type Block,
@@ -13,6 +19,8 @@ import {
   type Logger,
   type ProjectKindSource,
   type ProjectRepository,
+  type ProjectDefinitionSource,
+  type ProjectRecordRepository,
   type ServiceRepository,
   type WorkspaceMount,
   type WorkspaceMountRepository,
@@ -32,6 +40,9 @@ export interface ProjectServiceDependencies {
   workspaceRepository: WorkspaceRepository
   blockRepository: BlockRepository
   projectKinds: ProjectKindSource
+  /** Where a kind that pins a definition resolves it, and where the pin is kept. */
+  definitions: ProjectDefinitionSource
+  records: ProjectRecordRepository
   idGenerator: IdGenerator
   clock: Clock
   events?: ExecutionEventPublisher
@@ -76,12 +87,14 @@ export class ProjectService {
       })
     }
     await this.assertLinkableServices(accountId, input.serviceIds)
+    const projectId = this.deps.idGenerator.next('prj')
+    const pin = await this.resolvePin(accountId, kind, input.definition, projectId)
     const now = this.deps.clock.now()
     const position =
       input.position ??
       this.defaultPosition(await this.deps.workspaceMountRepository.listByWorkspace(workspaceId))
     const project: Project = {
-      id: this.deps.idGenerator.next('prj'),
+      id: projectId,
       accountId,
       kind: kind.id,
       rootBlockId: this.deps.idGenerator.next('blk'),
@@ -113,6 +126,7 @@ export class ProjectService {
     // the persistence RPC scopes each of them through it.
     await this.deps.projectRepository.insert(project)
     try {
+      if (pin) await this.deps.records.insertPin(pin)
       await this.deps.blockRepository.insert(workspaceId, rootBlock, project.id)
       await this.deps.workspaceMountRepository.upsert(mount)
     } catch (error) {
@@ -203,6 +217,62 @@ export class ProjectService {
     return assertFound(project, 'Project', projectId)
   }
 
+  /**
+   * The definition a kind that pins one resolves at creation, checked before any row is written.
+   * A kind that pins none refuses a definition rather than dropping it.
+   */
+  private async resolvePin(
+    accountId: string | null,
+    kind: ProjectKindDescriptor,
+    input: ProjectPinInput | undefined,
+    projectId: string,
+  ): Promise<ProjectPin | null> {
+    if (!input) {
+      if (kind.definition !== 'required') return null
+      throw new ValidationError(`A '${kind.id}' project needs a definition to pin`, {
+        reason: 'project_definition_required',
+        kind: kind.id,
+      })
+    }
+    if (!kind.definition) {
+      throw new ValidationError(`A '${kind.id}' project pins no definition`, {
+        reason: 'project_definition_not_accepted',
+        kind: kind.id,
+      })
+    }
+    const account = accountId ?? ''
+    const resolved =
+      input.version === undefined
+        ? await this.deps.definitions.latest(account, kind.id, input.key)
+        : await this.deps.definitions.get(account, kind.id, input.key, input.version)
+    if (!resolved) {
+      throw new ValidationError(`No '${kind.id}' definition matches that key and version`, {
+        reason: 'project_definition_not_found',
+        kind: kind.id,
+        definitionKey: input.key,
+        definitionVersion: input.version ?? null,
+      })
+    }
+    // Defaults first, then validate, then pin only the visible answers: the bag every other
+    // descriptor-form door freezes, so a hidden field can never pin an unvalidated value.
+    const fields = resolved.definition.inputs
+    const inputs = withDescriptorFieldDefaults(fields, input.inputs)
+    const problems = validateDescriptorFields(fields, inputs)
+    if (problems.length) {
+      throw new ValidationError('The inputs do not satisfy the definition', {
+        reason: 'project_definition_inputs_invalid',
+        problems,
+      })
+    }
+    return {
+      projectId,
+      definitionKey: resolved.definition.key,
+      definitionVersion: resolved.definition.version,
+      definitionHash: resolved.contentHash,
+      inputs: sanitizeDescriptorFields(fields, inputs),
+    }
+  }
+
   /** Every linked service must exist and belong to the project's own account. */
   private async assertLinkableServices(
     accountId: string | null,
@@ -234,6 +304,7 @@ export class ProjectService {
       async () => {
         await this.deps.workspaceMountRepository.remove(workspaceId, project.id)
         await this.deps.blockRepository.deleteMany(workspaceId, [project.rootBlockId])
+        await this.deps.records.deleteByProjects([project.id])
         await this.deps.projectRepository.deleteMany([project.id])
       },
       fields,

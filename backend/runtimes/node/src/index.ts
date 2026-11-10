@@ -111,7 +111,11 @@ export { PipelineRegistry, defaultPipelineRegistry } from '@cat-factory/kernel'
 // passes it to `start()` via `buildContainer`'s `taskTypeRegistry` option — the SPA renders each
 // as a first-class create-task choice + card badge (snapshot `customTaskTypes`).
 export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
-export { ProjectKindRegistry, defaultProjectKindRegistry } from '@cat-factory/kernel'
+export {
+  ProjectKindRegistry,
+  ProjectDefinitionRegistry,
+  defaultProjectKindRegistry,
+} from '@cat-factory/kernel'
 // Installation-level extension point for INLINE USE CASES (the same DI seam again): a deployment
 // news a `defaultInlineUseCaseRegistry()`, registers its non-container model operations on it, and
 // passes it to `start()` via the `inlineUseCaseRegistry` option. `/api/v1/use-cases` then publishes

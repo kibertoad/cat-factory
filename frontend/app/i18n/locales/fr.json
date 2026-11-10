@@ -695,7 +695,8 @@
         "assistant_reply_unreadable": "Le modèle de l'assistant a répondu quelque chose que cette plateforme ne peut pas exécuter comme décision. Reformuler aide rarement : choisissez un autre modèle pour l'assistant dans les paramètres de modèles.",
         "delegated_executor_failed": "L’exécuteur externe n’a pas pu démarrer cette étape. Le problème vient du système qui effectue le travail, pas de ce déploiement : consultez ses propres journaux, puis réessayez.",
         "delegated_work_branch_unprepared": "La plateforme n'a pas pu préparer la branche de travail vers laquelle l'exécuteur de cette étape est envoyé, donc rien n'a démarré. Soit la connexion au dépôt ne peut pas y écrire, soit la tâche nomme une branche qui n'existe pas encore : les détails indiquent laquelle des deux.",
-        "attached_pr_provider_unreachable": "Le fournisseur du dépôt n'a pas répondu, la pull request n'a donc pas pu être vérifiée et aucune tâche n'a été créée. Il n'y a rien à configurer ici : réessayez dans un instant."
+        "attached_pr_provider_unreachable": "Le fournisseur du dépôt n'a pas répondu, la pull request n'a donc pas pu être vérifiée et aucune tâche n'a été créée. Il n'y a rien à configurer ici : réessayez dans un instant.",
+        "project_definitions_unreachable": "Les définitions de projet de ce déploiement n'ont pas pu être lues pour l'instant, la demande n'a donc pas abouti. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie."
       }
     },
     "reason": {
@@ -715,7 +716,11 @@
         "task_type_not_offered_by_project": "Le type de ce projet n'accepte pas les tâches de ce type. Choisissez l'un des types que le formulaire propose pour lui.",
         "project_has_no_writable_repo": "Une étape de cette exécution a besoin d'un dépôt dans lequel écrire, et un projet n'en a aucun : les dépôts de ses services liés sont un contexte en lecture seule. Choisissez un pipeline qui se contente de lire et de rendre compte.",
         "project_service_link_invalid": "L'un des services liés n'existe plus ou appartient à une autre organisation. Rechargez le tableau et choisissez de nouveau les services liés.",
-        "project_has_unfinished_tasks": "Ce projet a encore des tâches non terminées. Terminez-les ou supprimez-les d'abord."
+        "project_has_unfinished_tasks": "Ce projet a encore des tâches non terminées. Terminez-les ou supprimez-les d'abord.",
+        "project_definition_required": "Ce type de projet épingle une définition : il lui en faut une. Choisissez-en une et réessayez.",
+        "project_definition_not_accepted": "Ce type de projet n'épingle aucune définition. Retirez la définition ou choisissez un type qui en utilise une.",
+        "project_definition_not_found": "Aucune définition de ce type de projet dans cette organisation ne correspond à cette clé et à cette version. Vérifiez la clé, ou laissez la version vide pour épingler la plus récente.",
+        "project_definition_inputs_invalid": "Les valeurs des entrées de la définition ne la satisfont pas. Renseignez chaque entrée obligatoire avec une valeur acceptée, puis réessayez."
       }
     },
     "action": {

@@ -236,6 +236,7 @@ interface MothershipAppOptions {
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
   projectKindRegistry?: CoreDependencies['projectKindRegistry']
+  projectDefinitionRegistry?: CoreDependencies['projectDefinitionRegistry']
   pipelineRegistry?: CoreDependencies['pipelineRegistry']
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   judgeRegistry?: CoreDependencies['judgeRegistry']
@@ -383,6 +384,31 @@ const AUTH_DISABLED: Pick<ConformanceApp, 'authEnabled' | 'session' | 'machineTo
 }
 
 /**
+ * The app-owned registries a suite pre-loaded (a custom preset, task type, project kind, project
+ * definition, pipeline, judge, agent kind, gate or external executor), injected by reference into
+ * the SUT container the way the Worker, Node and local-standalone harnesses wire them. The
+ * agent-kind and external-executor registries travel together: the kind registry is what tells
+ * the engine a kind's work leaves the platform, so one without the other never routes to it.
+ */
+function injectedRegistries(opts: MothershipAppOptions | undefined) {
+  const picked = {
+    backendRegistries: opts?.backendRegistries,
+    initiativePresetRegistry: opts?.initiativePresetRegistry,
+    taskTypeRegistry: opts?.taskTypeRegistry,
+    projectKindRegistry: opts?.projectKindRegistry,
+    projectDefinitionRegistry: opts?.projectDefinitionRegistry,
+    pipelineRegistry: opts?.pipelineRegistry,
+    judgeRegistry: opts?.judgeRegistry,
+    agentKindRegistry: opts?.agentKindRegistry,
+    gateRegistry: opts?.gateRegistry,
+    delegatedExecutorRegistry: opts?.delegatedExecutorRegistry,
+  }
+  return Object.fromEntries(
+    Object.entries(picked).filter(([, registry]) => registry !== undefined),
+  ) as Partial<typeof picked>
+}
+
+/**
  * Build one mothership-mode conformance app over the shared Postgres mothership. The SUT is a
  * no-database `buildNodeContainer` whose repositories are RPC-backed; the deterministic fake
  * agent + no-op runner let the suite advance runs itself via `drive`.
@@ -438,33 +464,7 @@ export function makeMothershipConformanceApp(
     subscriptionActivationRepository: credentialStore.subscriptionActivationRepository,
     cloudflareModelsEnabled: opts?.cloudflareModelsEnabled ?? true,
     gateProviders: opts?.gateProviders,
-    ...(opts?.backendRegistries ? { backendRegistries: opts.backendRegistries } : {}),
-    // Inject the app-owned initiative-preset registry (pre-loaded with a custom preset in the
-    // custom-preset suite) so the SUT container resolves it by reference on this runtime — the
-    // same DI seam the Worker/Node/local-standalone harnesses wire.
-    ...(opts?.initiativePresetRegistry
-      ? { initiativePresetRegistry: opts.initiativePresetRegistry }
-      : {}),
-    // Inject the app-owned task-type registry (pre-loaded in the custom-task-type suite) so the
-    // SUT container resolves it by reference on this runtime.
-    ...(opts?.taskTypeRegistry ? { taskTypeRegistry: opts.taskTypeRegistry } : {}),
-    // Inject the app-owned project-kind registry (pre-loaded in the projects suite).
-    ...(opts?.projectKindRegistry ? { projectKindRegistry: opts.projectKindRegistry } : {}),
-    // Inject the app-owned PIPELINE registry (pre-loaded in the pipeline-retirement suite) so the
-    // SUT container resolves it by reference on this runtime.
-    ...(opts?.pipelineRegistry ? { pipelineRegistry: opts.pipelineRegistry } : {}),
-    // Inject the app-owned JUDGE registry (pre-loaded in the judge suite) so the SUT container
-    // resolves it by reference on this runtime.
-    ...(opts?.judgeRegistry ? { judgeRegistry: opts.judgeRegistry } : {}),
-    // The app-owned agent-kind registry and the external-executor registry, resolved by reference
-    // on this runtime like every other registry above. The kind registry is what tells the engine
-    // a kind's work leaves the platform, so the pair travels together: one without the other
-    // composes a container that can never route to the executor.
-    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
-    ...(opts?.gateRegistry ? { gateRegistry: opts.gateRegistry } : {}),
-    ...(opts?.delegatedExecutorRegistry
-      ? { delegatedExecutorRegistry: opts.delegatedExecutorRegistry }
-      : {}),
+    ...injectedRegistries(opts),
   })
   harnessCalls.bind(container.llmObservability)
   const app = createApp(container, SUT_ENV)
@@ -618,6 +618,7 @@ export function makeMothershipConformanceApp(
     agentRunRepository: () => ms.container.agentRunRepository,
     // Direct-store probes read the mothership's authoritative Postgres, like seedService.
     blockRepository: () => mothershipRepos().blockRepository,
+    projectRecordRepository: () => mothershipRepos().projectRecordRepository,
     workspaceRepository: () => new DrizzleWorkspaceRepository(db),
     workspaceMemberRepository: () => new DrizzleWorkspaceMemberRepository(db),
     initiativeRepository: () => mothershipRepos().initiativeRepository,
