@@ -1,9 +1,12 @@
 import { DEFAULT_OUTCOME_INLINE_MAX_BYTES, type OutcomeStoragePolicy } from '@cat-factory/contracts'
 
-/** A outcome-storage policy with every field decided. */
+/** An outcome-storage policy with every field decided. */
 export interface EffectiveOutcomeStoragePolicy {
+  /** Never above `facadeInlineCeilingBytes`. */
   inlineMaxBytes: number
   offload: 'enabled' | 'disabled'
+  /** The runtime's own row cap, carried so placement judges against the cap the policy did. */
+  facadeInlineCeilingBytes: number
 }
 
 /**
@@ -24,6 +27,7 @@ export function resolveOutcomeStoragePolicy(input: {
   return {
     inlineMaxBytes: Math.min(inlineMaxBytes, input.facadeInlineCeilingBytes),
     offload: pick('offload') ?? 'enabled',
+    facadeInlineCeilingBytes: input.facadeInlineCeilingBytes,
   }
 }
 
@@ -41,12 +45,11 @@ export type OutcomePlacement =
 export function placeOutcomeBody(input: {
   bytes: number
   policy: EffectiveOutcomeStoragePolicy
-  facadeInlineCeilingBytes: number
   blobStoreAvailable: boolean
 }): OutcomePlacement {
   if (input.bytes <= input.policy.inlineMaxBytes) return { placement: 'inline' }
   if (input.policy.offload === 'enabled' && input.blobStoreAvailable)
     return { placement: 'offload' }
-  if (input.bytes <= input.facadeInlineCeilingBytes) return { placement: 'inline' }
+  if (input.bytes <= input.policy.facadeInlineCeilingBytes) return { placement: 'inline' }
   return { placement: 'refused', reason: 'outcome_too_large_for_inline' }
 }

@@ -9,6 +9,7 @@ import {
   projectDefinitionChecks,
   projectDefinitionEntries,
   projectTargetSchema,
+  webUrlSchema,
 } from './project-definitions.js'
 import type { ProjectOutcome } from './project-outcomes.js'
 
@@ -138,7 +139,7 @@ export const findingEvidenceSchema = v.variant('kind', [
   /** A recorded, redacted request/response pair. */
   v.object({ kind: v.literal('http-exchange'), ref: v.pipe(v.string(), v.minLength(1)) }),
   v.object({ kind: v.literal('screenshot'), artifactId: v.pipe(v.string(), v.minLength(1)) }),
-  v.object({ kind: v.literal('url'), url: v.pipe(v.string(), v.url()) }),
+  v.object({ kind: v.literal('url'), url: webUrlSchema }),
   v.object({
     kind: v.literal('repo-path'),
     repoId: v.pipe(v.string(), v.minLength(1)),
@@ -220,7 +221,10 @@ export interface FoldedFinding {
   /** The revision the current answer came from. */
   revisionId: string
   seq: number
-  /** Later attempts that did not replace the answer (an `unanswered` or `blocked` re-check). */
+  /**
+   * Every other attempt at the question, oldest first: answers this one superseded, and later
+   * `unanswered` or `blocked` re-checks that did not replace it.
+   */
   notes: FindingNote[]
 }
 
@@ -262,7 +266,7 @@ export function foldFindings(revisions: readonly FoldableFindingsRevision[]): Fo
           finding,
           revisionId: revision.id,
           seq: revision.seq,
-          notes: current ? [...current.notes, noteOf(current)] : [],
+          notes: current ? [...current.notes, noteOf(current)].sort((a, b) => a.seq - b.seq) : [],
         }
         continue
       }
@@ -333,7 +337,7 @@ export function researchCoverage(
     return { topicId: topic.id, counts }
   })
   const adhoc = emptyCounts()
-  for (const questionId of adhocQuestionIds) {
+  for (const questionId of new Set(adhocQuestionIds)) {
     const status = statusOf(questionId)
     adhoc[status] += 1
     total[status] += 1

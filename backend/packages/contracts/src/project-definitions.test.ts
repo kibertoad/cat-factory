@@ -43,6 +43,24 @@ describe('project definition envelope', () => {
     ).toBe(false)
   })
 
+  it('refuses a credential onboarding link unless it is http or https', () => {
+    const credential = (url: string) =>
+      parseProjectDefinition({
+        ...envelope,
+        credentials: [
+          {
+            key: 'VENDOR_TOKEN',
+            kind: 'api-token',
+            label: 'Vendor token',
+            onboarding: { url, instructions: 'Create a token.' },
+            requiredAtStart: true,
+          },
+        ],
+      }).ok
+    expect(credential('https://vendor.example/tokens')).toBe(true)
+    expect(credential('javascript:alert(1)')).toBe(false)
+  })
+
   it('leaves the spec to its kind: research refuses an envelope another kind would accept', () => {
     const parsed = parseProjectDefinition({ ...envelope, kind: 'research' })
     if (!parsed.ok) throw new Error('envelope fixture invalid')

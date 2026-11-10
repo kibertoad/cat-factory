@@ -40,6 +40,13 @@ const title = v.pipe(
   v.maxLength(PROJECT_DEFINITION_TITLE_MAX),
 )
 
+/** A link a human follows from the SPA, so a `javascript:` or `data:` URL can never pass. */
+export const webUrlSchema = v.pipe(
+  v.string(),
+  v.url(),
+  v.regex(/^https?:\/\//i, 'must be an http:// or https:// URL'),
+)
+
 export const projectCredentialKindSchema = v.picklist([
   'login',
   'api-token',
@@ -56,7 +63,7 @@ export const projectCredentialSchema = v.object({
   /** What the human does to obtain the credential from the vendor. */
   onboarding: v.optional(
     v.object({
-      url: v.optional(v.pipe(v.string(), v.url())),
+      url: v.optional(webUrlSchema),
       instructions: v.pipe(
         v.string(),
         v.trim(),

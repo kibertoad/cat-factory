@@ -9,6 +9,7 @@ describe('resolveOutcomeStoragePolicy', () => {
     expect(resolveOutcomeStoragePolicy({ facadeInlineCeilingBytes: CEILING })).toEqual({
       inlineMaxBytes: DEFAULT_OUTCOME_INLINE_MAX_BYTES,
       offload: 'enabled',
+      facadeInlineCeilingBytes: CEILING,
     })
   })
 
@@ -20,7 +21,7 @@ describe('resolveOutcomeStoragePolicy', () => {
         project: { offload: 'enabled' },
         facadeInlineCeilingBytes: CEILING,
       }),
-    ).toEqual({ inlineMaxBytes: 2000, offload: 'enabled' })
+    ).toEqual({ inlineMaxBytes: 2000, offload: 'enabled', facadeInlineCeilingBytes: CEILING })
   })
 
   it('never raises the threshold past the facade ceiling', () => {
@@ -34,14 +35,16 @@ describe('resolveOutcomeStoragePolicy', () => {
 })
 
 describe('placeOutcomeBody', () => {
-  const policy = { inlineMaxBytes: 100, offload: 'enabled' as const }
+  const policy = resolveOutcomeStoragePolicy({
+    account: { inlineMaxBytes: 100 },
+    facadeInlineCeilingBytes: 1000,
+  })
 
   it('keeps a body at or under the threshold inline', () => {
     expect(
       placeOutcomeBody({
         bytes: 100,
         policy,
-        facadeInlineCeilingBytes: 1000,
         blobStoreAvailable: true,
       }),
     ).toEqual({ placement: 'inline' })
@@ -52,7 +55,6 @@ describe('placeOutcomeBody', () => {
       placeOutcomeBody({
         bytes: 101,
         policy,
-        facadeInlineCeilingBytes: 1000,
         blobStoreAvailable: true,
       }),
     ).toEqual({ placement: 'offload' })
@@ -63,7 +65,6 @@ describe('placeOutcomeBody', () => {
       placeOutcomeBody({
         bytes: 500,
         policy,
-        facadeInlineCeilingBytes: 1000,
         blobStoreAvailable: false,
       }),
     ).toEqual({ placement: 'inline' })
@@ -71,7 +72,6 @@ describe('placeOutcomeBody', () => {
       placeOutcomeBody({
         bytes: 500,
         policy: { ...policy, offload: 'disabled' },
-        facadeInlineCeilingBytes: 1000,
         blobStoreAvailable: true,
       }),
     ).toEqual({ placement: 'inline' })
@@ -82,7 +82,6 @@ describe('placeOutcomeBody', () => {
       placeOutcomeBody({
         bytes: 1001,
         policy,
-        facadeInlineCeilingBytes: 1000,
         blobStoreAvailable: false,
       }),
     ).toEqual({ placement: 'refused', reason: 'outcome_too_large_for_inline' })
