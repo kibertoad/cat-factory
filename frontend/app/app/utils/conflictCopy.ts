@@ -96,13 +96,13 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
     titleKey: 'errors.conflict.title.credential_wait_unrecorded',
     descriptionKey: 'errors.conflict.description.credential_wait_unrecorded',
   },
-  research_definition_version_exists: {
-    titleKey: 'errors.conflict.title.research_definition_version_exists',
-    descriptionKey: 'errors.conflict.description.research_definition_version_exists',
+  project_definition_version_exists: {
+    titleKey: 'errors.conflict.title.project_definition_version_exists',
+    descriptionKey: 'errors.conflict.description.project_definition_version_exists',
   },
-  research_definition_key_registered: {
-    titleKey: 'errors.conflict.title.research_definition_key_registered',
-    descriptionKey: 'errors.conflict.description.research_definition_key_registered',
+  project_definition_key_registered: {
+    titleKey: 'errors.conflict.title.project_definition_key_registered',
+    descriptionKey: 'errors.conflict.description.project_definition_key_registered',
   },
   project_homed_elsewhere: {
     titleKey: 'errors.conflict.title.project_homed_elsewhere',

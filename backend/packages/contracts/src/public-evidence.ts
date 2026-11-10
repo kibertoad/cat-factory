@@ -50,9 +50,9 @@ export type PublicArtifactKind = v.InferOutput<typeof publicArtifactKindSchema>
 const PUBLIC_ARTIFACT_KINDS: ReadonlySet<string> = new Set(publicArtifactKindSchema.options)
 
 /**
- * Whether a stored artifact kind is one this surface serves. A research project's offloaded
- * `findings` body is not run evidence: it is read through the project's findings, never listed
- * or served as a run artifact.
+ * Whether a stored artifact kind is one this surface serves. A project's offloaded `outcome` body
+ * is not run evidence: it is read through the project's outcomes, never listed or served as a run
+ * artifact.
  */
 export function isPublicArtifactKind(kind: string): kind is PublicArtifactKind {
   return PUBLIC_ARTIFACT_KINDS.has(kind)

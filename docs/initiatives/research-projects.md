@@ -1,6 +1,6 @@
 # Initiative: Projects, starting with research projects (browser + API exploration → structured learnings)
 
-**Status:** design, no slice landed · **Started:** 2026-11-06
+**Status:** in progress, slices 0 to 3 on the stack base · **Started:** 2026-11-06
 
 > Tracker for a multi-PR initiative. Read "Model" and "Decisions" first: the project concept
 > shapes every slice. Update the checklist at the end of each PR.
@@ -42,8 +42,14 @@ What the platform has today does not cover it:
 The motivating consumer is the connector-research phase of the org-side integration initiative
 described in [custom initiative definitions](./custom-initiative-definitions.md). That initiative
 already decided cat-factory ships mechanisms and no domain content, and the same rule holds here:
-the platform ships projects, the research run, the tools, the credential hand-off and the findings
-store; an org supplies the definition saying what to research.
+the platform ships projects, the research run, the tools, the credential hand-off and a store for
+project outcomes; an org supplies the definition saying what to research.
+
+The same rule holds one level down, between the platform and its own project kinds. Research is
+one thing a project can produce; an architecture design, a requirements draft or any other
+solutioning work produces the same kind of durable result. So the platform stores, orders, sizes,
+reclaims and serves what a project produces without knowing what it is, and each project kind owns
+the shape of its content. Nothing below the kind registration names research.
 
 ## Model
 
@@ -57,22 +63,22 @@ interface Project {
   accountId: string
   kind: string // 'research' today; a registered project kind
   title: string
-  frameBlockId: string // the root frame block it owns; its tasks are blocks beneath it
+  rootBlockId: string // the root block it owns; its tasks are blocks beneath it
   serviceIds: string[] // linked services, zero or more
   createdAt: number
 }
 ```
 
-- **It owns its tasks.** Tasks are ordinary blocks under the project's frame, so the engine's
+- **It owns its tasks.** Tasks are ordinary blocks under the project's root block, so the engine's
   block-keyed machinery works unchanged: executions, one live run per block, notifications, the
   inspector, live events and RBAC.
-- **It survives its home board's deletion, as a shared service does.** Its frame block lives in
+- **It survives its home board's deletion, as a shared service does.** Its root block lives in
   one workspace, and the workspace-delete cascade re-homes a shared mounted subject
   (`MountRehome`) to a surviving mounting board before it runs. Without that, deleting the board
   that homes a project destroys it for every team that mounts it.
 - **It is account-owned and mounted onto boards**, as a service is. A mount names a subject
-  (`subjectKind` of `service` or `project`, plus `subjectId`), keeping the rule that a frame's
-  position lives on the mount and every frame read projects through `applyMountLayout`. Blocks
+  (`subjectKind` of `service` or `project`, plus `subjectId`), keeping the rule that a root block's
+  position lives on the mount and every root read projects through `applyMountLayout`. Blocks
   and runs carry an `owner_id`: the id of the mounted subject they belong to. Subject ids are
   globally unique (`svc_…`, `prj_…`), so the owner stamp needs no kind of its own.
 - **Its root block is a `project`-level block of type `project`, not a `frame`.** Roughly fifty
@@ -86,30 +92,26 @@ interface Project {
 - **Its repo resolution is its own.** `resolveRepoTarget` stops at a project root and refuses with
   `project_has_no_writable_repo`: a project has no repository to write to. Its linked services'
   repos are read-only context, resolved by their own read (slice 5), never a guessed checkout. A
-  kind offers only task types that write to no repo (`repoAccess: 'none' | 'linked-read-only'`).
+  kind can declare no writing access (`repoAccess: 'none' | 'linked-read-only'`), and a run step
+  that needs a checkout to push to is refused when it dispatches.
 - **A kind is registered**, through a `ProjectKindRegistry` beside `TaskTypeRegistry`, injected by
   reference on both `start()` and `startLocal()`. A kind declares the task types its project
-  offers, their default pipelines, the project-level data it keeps, and its result view. A run
-  resolves it, so in mothership mode it is org state read over its own `/internal/*` route.
+  offers and their default pipelines, and supplies the code that understands its content (below).
+  A run resolves it, so in mothership mode it is org state read over its own `/internal/*` route.
   Research is the only kind this initiative ships; requirements definition is the next candidate
   and is out of scope here.
 
-### Research definition
+### Definitions, pins and outcomes
 
-A versioned, org-authored description of one kind of research. A definition says what to find
-out, never how to find it out:
+Three concepts carry everything a project keeps. The platform owns how each is stored and the
+rules it obeys; it never reads a kind's content.
 
 ```ts
-interface ResearchDefinition {
+interface ProjectDefinition {
+  kind: string // the project kind this definition is for
   key: string // namespaced, e.g. 'acme:content-integration'
   version: number // immutable once published; a change is a new version
   title: string
-  brief: string // the goal, in prose, for the agent and the human
-  topics: Array<{
-    id: string // stable across versions, so findings merge by id
-    title: string
-    questions: Array<{ id: string; question: string; answerHint?: string }>
-  }>
   credentials: Array<{
     // declared BY NAME, never valued
     key: string // a capability-credential lookup key
@@ -118,21 +120,103 @@ interface ResearchDefinition {
     onboarding?: { url?: string; instructions: string } // what the human does to obtain it
     requiredAtStart: boolean // false: the agent asks for it when it reaches the point of need
   }>
-  targets: Array<{ baseUrl: string; surface: 'ui' | 'api' }> // where the vendor lives
-  inputs?: TaskTypeFieldDescriptor[] // per-project parameters, the reusable-operation form vocabulary
-  promptAdditions?: Record<string, string> // org steering per agent kind, as initiative presets carry
+  targets: Array<{ baseUrl: string; surface: 'ui' | 'api' }> // the only origins a credential reaches
+  inputs: TaskTypeFieldDescriptor[] // per-project parameters, the reusable-operation form vocabulary
+  promptAdditions: Record<string, string> // org steering per agent kind, as initiative presets carry
+  spec: unknown // the kind's own content, validated by the kind
+}
+
+interface ProjectPin {
+  projectId: string
+  definitionKey: string
+  definitionVersion: number
+  definitionHash: string // content hash, so a code-registered definition edited in place refuses
+  inputs: Record<string, unknown>
+}
+
+interface ProjectOutcomeMeta {
+  id: string
+  projectId: string
+  stream: string // a named sequence within the project; 'main' for a kind that declares one
+  seq: number // per-project, across streams, taken when the writing work STARTED
+  intent: string // what the writing task asked for, in the kind's vocabulary
+  schemaVersion: number // the version of the kind's body schema it was written in
+  taskId: string | null // null for an outcome no task produced
+  definitionKey: string | null // null for a pinless kind
+  definitionVersion: number | null
+  artifactRefs: string[] // blobs the body references, so cascades find them unread
+  createdAt: number
 }
 ```
 
-The question list is the contract between the definition and its findings. The agent answers by
-question id, and the platform computes coverage (answered, partial, unanswered, blocked) from those
-judgements, per "the model judges; the platform computes".
+- **A definition** is the versioned template a project of some kind pins. The envelope is the part
+  the platform acts on: credentials feed the credential hand-off, targets bound where a credential
+  may be sent, inputs render through the descriptor form, prompt additions steer the kind's agent.
+  These are not research concepts: any kind whose runs reach an external system needs them.
+  `spec` is opaque and its kind validates it. A kind with nothing to template pins nothing.
+- **A pin** is a project's choice of one definition version, with its input values.
+- **An outcome** is one immutable revision in one of the project's streams, written once (first
+  write wins) by the work that produced it. Its body is opaque JSON, inline in its row or
+  offloaded to the account's blob store (concern 4).
 
-A research project pins one definition key and version and holds the values for its `inputs`.
+What the platform cannot do without understanding content, the kind supplies when it registers:
+
+```ts
+interface ProjectKindModule<Body> {
+  kind: string
+  agentKind: string // the step a task of this kind dispatches
+  parseSpec(definition: ProjectDefinition): ParseResult<Spec> // at registration and publish
+  parseOutcome(schemaVersion: number, body: unknown): Body | undefined // before every write and read
+  planTask(input: ProjectTaskInput<Body>): ProjectTaskPlan // intent, stream, plan; fixed at first dispatch
+  brief(input: ProjectTaskInput<Body> & { plan: unknown }): unknown // what the agent is told
+  finish(input: { plan: unknown; seq: number; reply: Body }): { body: Body; output: string }
+  artifactRefs(body: Body): string[]
+  definitionSummary(definition: ProjectDefinition): string // one line for a picker
+  view?(input: { definition; inputs; outcomes: ProjectOutcome<Body>[] }): unknown // current state
+  schemas?: { spec?; outcome?; view? } // served as JSON Schema by the public API
+  summarize(view: View): { headline: string; progress?: { done: number; total: number } } // slice 8
+  renderContext(view: View): { index: string; files: Record<string, string> } // concern 5, slice 9
+}
+```
+
+How revisions combine is the main way kinds differ. Research merges answers per question id. An
+architecture design or a requirements draft is more naturally "the newest revision is the
+document". So `view` is the kind's, and a kind that wants neither writes its own reducer. Progress
+is `summarize().progress`, which lets the board, notifications and the context index show
+"34 of 50" without knowing it counts questions. A kind that needs two kinds of output (a draft
+and its open questions) writes two streams rather than one body with two jobs. `schemaVersion`
+lets a kind change its body shape and still read what it wrote before.
+
+The spec validator is the one piece that lands before its first reader: the
+`ProjectDefinitionRegistry` takes one `ProjectDefinitionSpecValidator` per kind at construction
+and refuses a definition whose kind has none. The rest of the module lands with the slice that
+first calls it.
+
+### Research definition
+
+The research kind's `spec`, inside the envelope above. A research definition says what to find
+out, never how to find it out:
+
+```ts
+interface ResearchSpec {
+  brief: string // the goal, in prose, for the agent and the human
+  topics: Array<{
+    id: string // stable across versions, so findings merge by id
+    title: string
+    questions: Array<{ id: string; question: string; answerHint?: string }>
+  }>
+}
+```
+
+The research kind also requires at least one target, since a research run browses and calls the
+vendor. The question list is the contract between the definition and its findings. The agent
+answers by question id, and the platform computes coverage (answered, partial, unanswered,
+blocked) from those judgements, per "the model judges; the platform computes".
 
 ### Research tasks
 
-Each research run is a task in the project, of the `research` task type, carrying a `mode`:
+Each research run is a task in the project, of the `research` task type, carrying a `mode`. The
+mode is the research kind's outcome `intent` vocabulary:
 
 - `initial`: answer every question in the pinned definition.
 - `extend`: answer questions added since the last run, by a definition upgrade or added on the task
@@ -150,8 +234,9 @@ version can never reuse one.
 
 ### Findings
 
-Each research task writes one immutable **findings revision** on the project, and the project's
-current findings are the fold over its revisions by question id. Revisions are ordered by a
+Findings are the research kind's outcome body. Each research task writes one outcome revision
+(a **findings revision**) on the project's `main` stream, and the project's current findings are
+the research kind's fold over those revisions by question id. Revisions are ordered by the
 per-project sequence each TASK claims the first time it starts (a replayed or retried start
 reads back the same number), so two follow-ups that run at once fold in the
 order they were asked, whatever order they finish in. Per question, a newer `answered` or
@@ -177,9 +262,12 @@ interface QuestionFinding {
 ```
 
 Plus run-level `learnings` (things the agent found that no question asked about) and a prose
-`summary`. The fold and the coverage count live in `@cat-factory/contracts` (`foldFindings`,
-`researchCoverage`), because the SPA's findings reader and the backend must agree on them. A revision is written once and never upserted, so a replayed write cannot recompute
-against a moved fold.
+`summary`. The schemas, the fold and the coverage count live in `@cat-factory/contracts`
+(`research.ts`: `foldFindings`, `researchCoverage`, `findingsArtifactRefs`), because the SPA's
+findings reader and the backend must agree on them. That module is the research kind's, built on
+the generic contracts (`project-definitions.ts`, `project-outcomes.ts`); nothing in the platform
+imports it except the kind's own registration. A revision is written once and never upserted, so
+a replayed write cannot recompute against a moved fold.
 
 ## Design by concern
 
@@ -188,48 +276,62 @@ against a moved fold.
 Two producers converge on one registry read, the shape the foundational-services catalog already
 uses:
 
-- **Code**: a `ResearchDefinitionRegistry` a deployment registers on, injected by reference on both
-  `start()` and `startLocal()` like every app-owned registry.
-- **Data**: `PUT /api/v1/research-definitions/{key}/versions/{version}` stores an account-scoped
-  definition. A published version is immutable (`409`, reason
-  `research_definition_version_exists`), so a project pinned to it never changes meaning
-  underneath. Listing and reading are `GET` siblings.
+- **Code**: a `ProjectDefinitionRegistry` a deployment registers on, injected by reference on both
+  `start()` and `startLocal()` like every app-owned registry. It validates the envelope and hands
+  `spec` to the kind's validator.
+- **Data**: `PUT /api/v1/project-kinds/{kind}/definitions/{key}/versions/{version}` stores an
+  account-scoped definition, validated by the same kind validator. A published version is
+  immutable (`409`, reason `project_definition_version_exists`), so a project pinned to it never
+  changes meaning underneath. Listing and reading are `GET` siblings.
 
 The API lets an org's integration team publish a definition from its own CI without a deployment
 build; the registry lets a deployment ship definitions with its code. The two key spaces never
 overlap: a stored key must carry the account's own namespace, and a `PUT` naming a key the
-registry holds is refused (`409`, reason `research_definition_key_registered`). Code cannot be
-held immutable by a store, so a project pinned to a registered definition also records the
-definition's content hash, and a dispatch whose registered body no longer matches it refuses
-rather than running a question list the project never agreed to. Both are read through a
-port, because in mothership mode definitions are org state the node must fetch rather than hold a
-stale copy of.
+registry holds for that kind is refused (`409`, reason `project_definition_key_registered`). Code
+cannot be held immutable by a store, so a pin records the definition's content hash, and a
+dispatch whose registered body no longer matches it refuses rather than running a definition the
+project never agreed to. Both are read through a port, because in mothership mode definitions are
+org state the node must fetch rather than hold a stale copy of.
 
 ### 2. The research agent and its tools
 
-A built-in `project-researcher` agent kind, on a `container-research` surface and the `ui` image (Playwright and Chromium
+A built-in `project-researcher` agent kind, on the `container-project` surface and the `ui` image (Playwright and Chromium
 are already there), with structured output for the findings shape above.
+
+The harness half below is not research's: it is a `project` job kind that any project kind's run
+uses, carrying only the targets it may reach, the credentials for them and whether it needs a
+browser. What the agent does, and how it reports what a missing credential blocked, is in the
+prompt the kind writes. A requirements kind with no targets dispatches the same job with an empty
+target list.
 
 - **Browser**: the Playwright MCP server (`@playwright/mcp`), preinstalled in `Dockerfile.ui` and
   attached as a stdio tool server. The harness starts one headless Chromium per job, with a
   per-job profile and remote debugging, and points Playwright MCP at it with `--cdp-endpoint`, so
-  the research tool server reaches the same session over CDP and a login made in one is seen by
+  the access tool server reaches the same session over CDP and a login made in one is seen by
   the other. It drives the page through accessibility snapshots rather than screenshots.
   Preinstalling it is an image change: it bumps `@cat-factory/executor-harness` and the pinned tag.
 - **Secrets never pass through the model.** Playwright MCP's `browser_type` takes the literal text,
   which would put a password into the model context and the telemetry store. The harness adds a
-  small MCP server of its own with tools that take a credential KEY and inject the value
+  small MCP server of its own, the access tool server, with tools that take a credential KEY and inject the value
   harness-side:
   - `fill_secret(credentialKey, field, label | selector)`: types one field of a stored credential
-    (`username`, `password`, or the whole `value`) into a field named by its label or a CSS
-    selector, through the same browser session. Playwright MCP's own `--secrets` substitution is
-    not used, because it binds a secret to no origin.
+    (a login's `username` or `password`, any other kind's `value`) into a field named by its label
+    or a CSS selector, through the same browser session. Playwright MCP's own `--secrets`
+    substitution is not used, because it binds a secret to no origin.
   - `http_request(method, url, headers, body, auth: { key, scheme })`: sends the request with the
     credential attached, records the redacted exchange as evidence, and returns the scrubbed
     response to the model. For an `oauth-client` credential the harness performs the token
     exchange itself and attaches the access token, so a minted token never reaches the model.
+- **The values stay in the harness process.** The agent has a shell, so a config file or a child
+  process the agent CLI spawns is readable by the model. The tool server is served on loopback
+  from the harness process with a per-job token, and the CLI spawns only a stdio bridge holding
+  that URL and token, which grant the tools and no value. A value typed into a page stays in that
+  page, which the agent can script (Playwright MCP's `browser_evaluate`, or CDP from its shell):
+  `fill_secret` keeps the stored value out of the model context and the telemetry store, and does
+  not hide a field the model can read back.
 - **A credential is sent only to its vendor.** Both tools refuse when the page or URL origin is
-  not one of the definition's `targets`. The agent reads untrusted vendor pages, and a prompt
+  not one of the definition's `targets`, and `http_request` hands a redirect back rather than
+  following it. The agent reads untrusted vendor pages, and a prompt
   injected there could otherwise point `http_request` at a host of its choosing with the
   credential attached. The refusal is reported to the agent, never silent.
 - **`request_credential(key, reason, observed)`**: the agent calls this when it reaches a point
@@ -240,7 +342,7 @@ are already there), with structured output for the findings shape above.
   agent meets in the browser (a token shown once on a vendor page), is scrubbed with
   `redactSecrets`, extended to the job's known secret values plus a token-shape pass, before it
   reaches the model or the findings.
-- **Repo-less dispatch**: a harness job kind `research` of its own, beside `agent` and `inline`,
+- **Repo-less dispatch**: a harness job kind `project` of its own, beside `agent` and `inline`,
   since every `agent` flow is built around a repository it clones and may push to. The project's
   linked repos ride the existing `referenceRepos` job field, which already clones a repo
   read-only with no branch or PR.
@@ -254,14 +356,14 @@ are already there), with structured output for the findings shape above.
 Credentials ride the existing **capability credential store** ([ADR 0041](../../backend/docs/adr/0041-capability-credential-store.md)),
 resolved through `ToolSecretResolver` for the workspace the run was started on. No new store.
 
-- **Declared, so they show up where operators already look.** A research definition is a new
-  credential producer: `ToolSecretSubject` gains `research-definition`, and
+- **Declared, so they show up where operators already look.** A project definition is a new
+  credential producer, whatever its kind: `ToolSecretSubject` gains `project-definition`, and
   `collectDeclaredCapabilityCredentials` enumerates the definitions in use, so the existing
   checklist panel lists each key with its label and onboarding instructions.
 - **A stored definition's keys resolve from the store only.** Today only code-registered producers
   declare credentials (a stored foundational-service row may not, because the resolver reads a
   declared key off the deployment's environment). A definition published through the API is the
-  first stored declarer, so the `research-definition` subject resolves with `environmentFallback`
+  first stored declarer, so the `project-definition` subject resolves with `environmentFallback`
   off, and a key in the reserved set `docs/environment-variables.md` lists is refused at publish.
   Otherwise an account admin could name one of the deployment's own environment variables and have
   `http_request` send it to a target they chose.
@@ -273,7 +375,7 @@ The hand-off:
 1. **Pre-dispatch**: every `requiredAtStart` credential must resolve, or the dispatch throws
    `CapabilityCredentialMissingError` and the step parks before any container starts.
 2. **Mid-run**: `request_credential` ends the step with `needsCredential: { key, reason, observed }`,
-   which the research executor raises as the same error after checkpointing its findings.
+   which the project run's executor raises as the same error after checkpointing what it has.
 3. **Park**: `CredentialWaitController` recognises both refusals in one place. The persisted wait is
    a union on `subject`: `personal` (`{ raisedAt }`), and `capability` (`{ key, declaredBy, label,
    onboarding, reason, observed }`), where `declaredBy` names the declaring subject so the resume
@@ -297,39 +399,51 @@ The hand-off:
 The generalized park is not research-specific: any kind declaring a required capability credential
 can use it, which closes the silent `missing_secret` degradation for kinds that opt in.
 
-### 4. Findings storage
+### 4. Outcome storage
 
-A revision's body is stored inline in `research_findings_revisions` while it is at or under the
-effective threshold, and in the account's blob store above it, the row then holding the
-`BinaryArtifactStore` id. A new `findings` artifact kind, exempt from the age-based retention sweep
-and reclaimed with its project. The artifact is anchored on the project's root block in the
-root's home workspace, so the row needs only the artifact id: a reader resolves the home
-workspace from the root, and deleting the home board carries the artifact to the board the
-project is re-homed to.
+Five tables serve every kind: `project_definitions` (keyed by account, kind, key and version),
+`project_pins`, `project_outcome_seqs` (the atomic per-project counter, an upsert, so a pinless
+project sequences too), `project_outcomes` and `outcome_storage_policies`. Ports: a
+`ProjectDefinitionRepository`, a `ProjectRecordRepository` for a project's pin, sequence and
+outcomes (and their reclaim), and an `OutcomeStoragePolicyRepository`.
+
+An outcome's body is stored inline in `project_outcomes` while it is at or under the effective
+threshold, and in the account's blob store above it, the row then holding the
+`BinaryArtifactStore` id. The offloaded body is an `outcome` artifact, exempt from the age-based
+retention sweep and anchored on the project's root block in the root's home workspace, so the
+row needs only the artifact id: a reader resolves the home workspace from the root, the body is
+reclaimed with the root, and deleting the home board carries it to the board the project is
+re-homed to. `ProjectOutcomeStore` is the one reader and writer, for every kind: it handles the
+body as opaque JSON and the kind's module decodes it. The row's `artifactRefs` names the other
+blobs a body references, so a cascade can find them without reading the body.
 
 The policy cascades account → workspace → project, narrowest set value winning, with absence (never
 a stored null) meaning inherit:
 
 ```ts
-interface FindingsStoragePolicy {
+interface OutcomeStoragePolicy {
   inlineMaxBytes: number // capped by the facade ceiling below
   offload: 'enabled' | 'disabled'
 }
 ```
 
-All three tiers live in one `findings_storage_policies` table keyed by `(owner_kind, owner_id)`, so
+All three tiers live in one `outcome_storage_policies` table keyed by `(owner_kind, owner_id)`, so
 one repository and one RPC rule serve them; one pure resolver lives in kernel
-(`resolveFindingsStoragePolicy`). A project is
+(`resolveOutcomeStoragePolicy`, `placeOutcomeBody`). A project is
 account-owned and mounted on several boards, so the workspace tier read is the workspace that
 started the run. The BACKEND is not overridable below the account: it is the account's
 `contentStorage` choice, because a workspace cannot name a store its account never configured. Two
 loud refusals instead of silent truncation:
 
 - A body over the facade's own ceiling (D1 caps a row at 2 MB) is offloaded whatever the threshold
-  says, and refused with `findings_too_large_for_inline` when offload is disabled or the account's
+  says, and refused with `outcome_too_large_for_inline` when offload is disabled or the account's
   storage is `off`.
 - The SPA states where a revision lives (inline or offloaded, and how large), so "small" and
   "missing" never render alike.
+
+Bodies are validated by the kind's `parseOutcome` before the write. In mothership mode that runs
+on the node, before the persistence RPC: the mothership may be a build behind and need not run the
+kind's code, and the store it writes to does not read the body.
 
 ### 5. Linking a project to a task
 
@@ -339,26 +453,35 @@ A new linked-context kind beside documents and tracker tasks:
   project to any task, in any service or project; `POST /api/v1/tasks/{taskId}/projects/detach`
   unlinks it, the shape `documents/detach` already has. A research project may be linked once it
   has at least one revision (`422`, reason `project_has_no_result`).
-- `resolveLinkedContext` folds the project's current findings at dispatch: the summary and the
-  coverage line go into the prompt's linked-context index, the full findings into
-  `.cat-context/projects/<project>.md`. The revision used is recorded on the step, so a reader can
-  tell what the agent saw even after a follow-up moves the fold.
-- What a project contributes as context is its kind's to render, so a requirements project later
-  plugs in through the same kind registration.
+- `resolveLinkedContext` folds the project's outcomes at dispatch through its kind's `fold`, and
+  the kind's `renderContext` decides what goes into the prompt's linked-context index and what
+  into `.cat-context/projects/<project>/`. For research that is the summary and the coverage line,
+  and the full findings. The revision used is recorded on the step, so a reader can tell what the
+  agent saw even after a follow-up moves the fold.
+- The platform never renders a project's content itself, so a requirements project later plugs in
+  through its own kind module with no change here.
 - A linked project that cannot be read breaks the run naming it, through the same
   `assertContextDocumentsReadable` rule documents use.
 
 ### 6. Surfaces
 
-- **SPA**: a project frame on the board beside service frames, with its task swimlanes and its
-  links to services drawn. The research project's frame opens a findings reader (coverage per
-  topic, answers with evidence, revision history), and offers "start follow-up" with a mode. The
+- **SPA**: a project root on the board beside service frames, with its task swimlanes and its
+  links to services drawn. A project's root opens its kind's outcome view, contributed through
+  `registerAppModule` and keyed by kind, with a generic fallback (Markdown or a JSON tree) so a
+  new kind is readable before anyone writes a view for it. The research kind's view is a findings
+  reader (coverage per topic, answers with evidence, revision history) that offers "start
+  follow-up" with a mode. The
   credential park reuses `CredentialWaitNotice`. Tier: projects and research are `basic`, since
-  starting research and answering its credential request is everyday work; findings-storage
+  starting research and answering its credential request is everyday work; outcome-storage
   overrides are `advanced`. Every string goes through i18n in all locales.
-- **Public API**: projects (create, list, get, link and unlink services, mount), definitions (above),
-  project tasks (below), findings (current fold, revision by id), credential resume. Each endpoint
-  gets a `scripts/sdk/surface.mjs` entry; all additive, OpenAPI minor bump.
+- **Public API**: project kinds, projects (create, list, get, link and unlink services, mount),
+  definitions (above), project tasks (below), outcomes (a list without bodies, optionally one
+  stream's, one outcome by id, and the view the kind's module computes over every outcome),
+  credential resume. An outcome is served as its envelope (`schemaVersion` included) plus an
+  opaque `body`, and each kind's spec, body and view JSON Schemas are served from
+  `GET /api/v1/project-kinds/{kind}`, converted from the schemas its module declares. The SDKs therefore carry no research classes; a typed
+  client for one kind is generated from that kind's schema by whoever needs it. Each endpoint gets
+  a `scripts/sdk/surface.mjs` entry; all additive, OpenAPI minor bump.
 - **Project tasks get their own public resource.** `PublicTask.serviceId` is a required string,
   and eight `/api/v1` operations return `PublicTask` (`GET`/`PATCH /tasks/{taskId}`, `start`,
   `stop`, `retry`, the two dependency calls, `POST /services/{serviceId}/tasks`). A project task
@@ -375,9 +498,20 @@ A new linked-context kind beside documents and tracker tasks:
 
 ## Decisions
 
-- **Projects are a peer of services, not a block level and not a block-less run.** A project owns
-  a frame and its tasks, so the engine stays block-keyed, and it links to zero or more services
+- **Projects are a peer of services, not a service and not a block-less run.** A project owns
+  a root block and its tasks, so the engine stays block-keyed, and it links to zero or more services
   rather than living inside one.
+- **The platform stores project content without understanding it.** Definitions, pins, outcome
+  revisions and storage policy are generic tables and ports, and a project kind supplies the code
+  that validates, folds, summarizes and renders its content. The alternative is typed tables per
+  kind (`research_definitions`, `findings_revisions` with a `mode` column), which buys SQL-level
+  typing of a body nothing queries by field and costs a parallel set of tables, ports, RPC rules,
+  routes, SDK models and SPA views for every new kind. Typed columns stay where the platform acts
+  on the value: `seq`, `stream`, `intent`, sizes, artifact refs.
+- **A second kind keeps the abstraction honest.** The persistence conformance suite writes a
+  research kind and a pinless `notes` kind with unrelated body shapes through the same
+  repositories, so a store that grows to understand one kind's content fails a test instead of a
+  review.
 - **Definitions come from code and from the public API**, read through one port.
 - **Credentials use the existing capability credential store**; research definitions declare their
   keys into it.
@@ -407,64 +541,69 @@ Still open:
 
 ## Slices (each about one PR)
 
-| #   | Slice                                                                                                                                                                                                                                                                                                                                        | Status    | PR    |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ----- |
-| 0   | This tracker.                                                                                                                                                                                                                                                                                                                                | done      | #2501 |
-| 1a  | Generalize the owner stamp and the mount: `blocks`/`agent_runs` `owner_id`, `workspace_mounts` (`subject_id`), `MountRehome`, owner- and subject-keyed port methods. A refactor with no behaviour change, both facades.                                                                                                                      | in review | #2504 |
-| 1b  | Projects, both facades + conformance: `Project` entity, the `project` block level and type, `subjectKind` on the mount, `ProjectKindRegistry`, project creation, task admission, re-home, service links, repo resolution through a project root. Mothership buckets.                                                                         | in review | #2505 |
-| 1c  | SPA: project roots on the board, create a project, link services, mount; i18n.                                                                                                                                                                                                                                                               | in review | #2506 |
-| 2   | Contracts + kernel for research: definition schema, `ResearchDefinitionRegistry` + content hash, findings schema, the fold, the storage-policy resolver. Pure, unit-tested. The definition read port lands with its implementation in slice 3, and the registry is wired on `start()`/`startLocal()` in slice 5, where a run first reads it. | in review | #2503 |
-| 3   | Research persistence, both facades + conformance: definitions table, findings revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                                                            | in review | #2507 |
-| 4   | Harness: `research` mode with optional repos (linked repos as `referenceRepos`), the secret-injecting MCP server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                                                       | in review | #2508 |
-| 5a  | Engine groundwork: the `ResearchDefinitionSource` read port (registry plus store, `/internal/research-definitions` for a mothership node), the registry option on every entry point, a research kind pinning its definition at project creation, the per-task findings sequence claim. Conformance.                                          | in review | #2510 |
-| 5b  | Engine: the `project-researcher` kind, the `research` task type and pipeline, repo-less dispatch, findings write with offload, follow-up modes.                                                                                                                                                                                              | in review | #2511 |
-| 5c  | Findings offload to the blob store, anchored on the project root in its home workspace and carried when the project is re-homed; one reader for a body wherever it lives. The definition picker on the create-project form. Translated copy for every project refusal. Ad-hoc questions carried to later `clarify` and `refresh` tasks.      | in review | #2512 |
-| 6   | Credential hand-off: the `research-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                     | in review | #2509 |
-| 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                                                                | in review | #2513 |
-| 8   | SPA: project frames, findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                                                            | todo      |       |
-| 9   | Task linking: the `projects` linked-context kind, `.cat-context/projects/`, recorded revision. An optional `projects` field on `InitiativeItemSpawn`, so tasks an initiative spawns carry a research project as linked context.                                                                                                              | todo      |       |
+| #   | Slice                                                                                                                                                                                                                                                                                                                                                                     | Status    | PR           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------ |
+| 0   | This tracker.                                                                                                                                                                                                                                                                                                                                                             | done      | #2501        |
+| 1a  | Generalize the owner stamp and the mount: `blocks`/`agent_runs` `owner_id`, `workspace_mounts` (`subject_id`), `MountRehome`, owner- and subject-keyed port methods. A refactor with no behaviour change, both facades.                                                                                                                                                   | done      | #2504        |
+| 1b  | Projects, both facades + conformance: `Project` entity, the `project` block level and type, `subjectKind` on the mount, `ProjectKindRegistry`, project creation, task admission, re-home, service links, repo resolution through a project root. Mothership buckets.                                                                                                      | done      | #2505        |
+| 1c  | SPA: project roots on the board, create a project, link services, mount; i18n.                                                                                                                                                                                                                                                                                            | done      | #2506        |
+| 2   | Contracts + kernel: the generic project definition envelope and `ProjectDefinitionRegistry` with per-kind spec validators and the content hash, the outcome envelope, the outcome-storage policy resolver; the research kind's spec, findings body and fold. Pure, unit-tested. The registry is wired on `start()`/`startLocal()` in slice 5, where a run first reads it. | done      | #2503, #2507 |
+| 3   | Project outcome persistence, both facades + conformance against two kinds: definitions, pins, the outcome sequence, outcome revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                                           | done      | #2507        |
+| 4   | Harness: the `project` job kind with no checkout (linked repos as `referenceRepos`), the access tool server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                                                                                         | in review | #2508        |
+| 5a  | Engine groundwork: the `ProjectDefinitionSource` read port keyed by kind (registry plus store, `/internal/project-definitions` for a mothership node), the `ProjectDefinitionRegistry` option on every entry point, the kind's `definition` declaration and the pin at project creation, the per-task outcome sequence.                                                   | in review | #2510        |
+| 5b  | Engine: the `ProjectKindModule` registration (outcome schema, fold, summary, context renderer, artifact refs), the research kind's module, the `project-researcher` kind, the `research` task type and pipeline, repo-less dispatch, outcome write, follow-up modes.                                                                                                      | in review | #2511        |
+| 5c  | Outcome offload through `ProjectOutcomeStore` (the `outcome` artifact kind, anchored on the project root and carried on a re-home); picking a definition of the project's own kind on the board, listed with its kind's summary.                                                                                                                                          | in review | #2512        |
+| 6   | Credential hand-off: the `project-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                                                   | in review | #2509        |
+| 7   | Public API + SDK surface + website page: definitions per kind with the spec validated by its module, the project pin, outcomes and the view a kind computes, the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                   | in review | #2513        |
+| 8   | SPA: the kind-keyed outcome view seam with its generic fallback, the research findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                                | todo      |              |
+| 9   | Task linking: the `projects` linked-context kind rendered by each kind's `renderContext`, `.cat-context/projects/`, recorded revision. An optional `projects` field on `InitiativeItemSpawn`, so tasks an initiative spawns carry a project as linked context.                                                                                                            | todo      |              |
 
-Slices 1, 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4 and 6: the
+Slices 1 (1a to 1c, in order), 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4 and 6: the
 `project-researcher` kind ships after the park, so a research run never meets a missing credential with
 nowhere to wait. Slice 9 needs 1, 2, 3 and 5, since a project is linkable only once a research
 run has written a revision.
 
 ## Gotchas found during design
 
-- **The checkpoint rides the step as `unknown`.** Typing `PipelineStep.research.checkpoint` through
-  the findings schema made the workspace snapshot's type too deep for the compiler to instantiate,
-  so the step holds it untyped and the engine parses it with `findingsRevisionBodySchema` on read.
+- **The plan and checkpoint ride the step as `unknown`.** Typing `PipelineStep.project` through a
+  kind's schemas made the workspace snapshot's type too deep for the compiler to instantiate, and
+  would tie the generic step to one kind anyway, so the step holds both untyped and the engine
+  hands them back to the kind's module, which parses them on read.
 - **A research task's description is not its brief.** The input gate exempts the `research` type,
   as it does `bug-fishing`: the questions, targets and vendor live on the pinned definition.
-- **Findings are stored inline until 5c.** The revision row names an offloaded body by artifact id
+- **Outcomes are stored inline until 5c.** The outcome row names an offloaded body by artifact id
   alone, and the artifact store is workspace-scoped, so offloading needs the row to record which
   store holds it. Until then a body over the runtime's row ceiling is refused with
-  `findings_too_large_for_inline` rather than truncated.
+  `outcome_too_large_for_inline` rather than truncated.
+- **A kind module and its agent are one kind's two halves.** The engine hands the agent the brief
+  the module built as `unknown`, and the kind's agent prompt reads it as the module's shape. A
+  module is code, so it is local on a mothership node too: only the kind descriptors and the
+  registered definitions are read from the mothership.
 
 - **The agent kind is `project-researcher`.** A `researcher` kind already exists: the repo-reading
   investigator the `pl_complex` pipeline runs before design. Reusing the name would collide in the
-  agent-kind registry, so the research-project kind takes its own.
-- **A project kind declares the data it keeps** (`data: 'research'`), a closed vocabulary the
-  platform implements, rather than a switch on the kind id in `ProjectService`. A kind keeping
-  research data refuses a create without a definition to pin, and a kind keeping none refuses one
-  that names a definition.
-
-- **Repo resolution has deliberately no fallback** ("NO first repo"). A project frame resolving to
+  agent-kind registry, so the research kind's agent takes its own.
+- **A kind declares whether it pins a definition** (`definition: 'required' | 'optional'`), never
+  what the definition holds, so `ProjectService` pins every kind the same way. A kind requiring one
+  refuses a create without it, and a kind pinning none refuses one that names a definition. A
+  definition is looked up by the project's own kind, so a key under another kind never resolves.
+- **Repo resolution has deliberately no fallback** ("NO first repo"). A project root resolving to
   its linked services' repos is a new, explicit rule, and a project task whose type needs a
   writable repo must be refused at admission, never pointed at a guessed one.
-- **A project frame is the host cross-service initiatives lack.** An initiative spans one service
+- **A project root is the host cross-service initiatives lack.** An initiative spans one service
   frame today because its loop spawns tasks under the initiative block's `parentId`
-  (`InitiativeLoopService`). That lookup is generic, so an initiative block under a project frame
-  would spawn there; the open rule is `resolveRepoTarget`, where a project frame resolves to its
+  (`InitiativeLoopService`). That lookup is generic, so an initiative block under a project root
+  would spawn there; the open rule is `resolveRepoTarget`, where a project root resolves to its
   linked services' repos as read-only context. Slice 1 keeps that resolution a single, explicit
   rule, so a later initiative under a project can name which linked service an item writes to
   instead of gaining a second resolution path. Supporting it is out of scope here.
-- **A root block id names a subject only among the board's own mounts.** Seeded boards share
-  frame ids (`blk_auth`), so the workspace-delete re-home plan keeps a candidate only when it is
-  in the board's account AND mounted on the board. Before projects, the plan matched by frame id
-  alone and could re-home another board's service.
-- **The mount carries layout for a shared frame.** Generalizing it to projects keeps
-  `applyMountLayout` on every frame-returning read; a project frame read that skips it jumps on
+- **A root block id alone does not name a subject.** Seeded boards share frame ids (`blk_auth`),
+  so a reader narrows the candidates: the layout projection by the board's own mounts, and the
+  workspace-delete re-home plan by the owner stamp on the board's own root row, which is what the
+  re-home moves. The plan never re-homes another board's service, and still re-homes a shared
+  subject its home board has unmounted.
+- **The mount carries layout for a shared root.** Generalizing it to projects keeps
+  `applyMountLayout` on every root-returning read; a project root read that skips it jumps on
   the board.
 - **Capability credentials are workspace-scoped, projects are account-scoped.** A project mounted
   on two boards resolves credentials from whichever workspace started the run, so the project view
@@ -485,4 +624,11 @@ run has written a revision.
   statement; a separate `research` variant is the fallback if the browser toolchains diverge.
 - **The Postgres blob backend refuses bodies over 16 MiB** and D1 has no blob backend at all, so
   the offload path depends on the account's configured store. A Cloudflare account with storage
-  `off` can hold only inline findings, under the D1 row cap.
+  `off` can hold only inline outcomes, under the D1 row cap.
+- **A persisted kind vocabulary is not the platform's to decode.** `intent` and `stream` are
+  stored as plain strings, so a research mode retired later is the research kind's to name as
+  retired when it reads its own rows; a platform-side enum over them would make every new kind a
+  platform change.
+- **The outcome sequence outlives no project.** `deleteByProjects` drops the counter with the
+  outcomes, so a project id reused after deletion (none is today) would start again at 1 rather
+  than collide with a stale counter.

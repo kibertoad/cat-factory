@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import {
   type DescriptorFieldValues,
-  type PinnableResearchDefinition,
+  type PinnableProjectDefinition,
   descriptorFieldDefaults,
   validateDescriptorFields,
 } from '@cat-factory/contracts'
@@ -11,7 +11,7 @@ import DescriptorFields from '~/components/common/DescriptorFields.vue'
 
 // Create a project on this board: one of the kinds the deployment registers, a title, and the
 // services its tasks read as context. The project is account-owned; this board is its home. A kind
-// that keeps research data also pins a research definition, with the values for its inputs.
+// that pins a definition also takes one of its own, with the values for its inputs.
 const open = defineModel<boolean>('open', { default: false })
 
 const { t } = useI18n()
@@ -27,7 +27,7 @@ const description = ref('')
 const serviceIds = ref<string[]>([])
 const busy = ref(false)
 
-const definitions = ref<PinnableResearchDefinition[]>([])
+const definitions = ref<PinnableProjectDefinition[]>([])
 const definitionsLoading = ref(false)
 const definitionsFailed = ref(false)
 const definitionId = ref('')
@@ -42,15 +42,14 @@ const serviceOptions = computed(() =>
     value: s.id,
   })),
 )
-const keepsResearch = computed(
-  () => projects.kinds.find((k) => k.id === kind.value)?.data === 'research',
-)
-const definitionKeyOf = (d: PinnableResearchDefinition) => `${d.key}@${d.version}`
+const definitionUse = computed(() => projects.kinds.find((k) => k.id === kind.value)?.definition)
+const pinsDefinition = computed(() => definitionUse.value !== undefined)
+const definitionKeyOf = (d: PinnableProjectDefinition) => `${d.key}@${d.version}`
 const definitionOptions = computed(() =>
   definitions.value.map((d) => ({
     label: t('projects.create.definitionOption', { title: d.title, version: d.version }),
     value: definitionKeyOf(d),
-    description: d.brief,
+    description: d.summary,
   })),
 )
 const definition = computed(() =>
@@ -63,7 +62,7 @@ const canSubmit = computed(
   () =>
     !!kind.value &&
     !!title.value.trim() &&
-    (!keepsResearch.value || (!!definition.value && inputProblems.value.length === 0)),
+    (definition.value ? inputProblems.value.length === 0 : definitionUse.value !== 'required'),
 )
 
 onModalOpen(open, () => {
@@ -78,22 +77,44 @@ onModalOpen(open, () => {
   void loadDefinitions()
 })
 
-watch(keepsResearch, () => loadDefinitions())
+// Definitions are per kind, so a different kind reads its own.
+watch(kind, () => {
+  definitions.value = []
+  definitionId.value = ''
+  void loadDefinitions()
+})
 
-/** Read the definitions once a research kind is picked, not for a kind that pins none. */
+/** Read the picked kind's definitions, not for a kind that pins none. */
 async function loadDefinitions() {
-  if (!keepsResearch.value || definitions.value.length || definitionsLoading.value) return
+  if (!pinsDefinition.value || definitions.value.length || definitionsLoading.value) return
+  const forKind = kind.value
   definitionsLoading.value = true
   definitionsFailed.value = false
   try {
-    definitions.value = await projects.listPinnableDefinitions()
-    definitionId.value = definitions.value[0] ? definitionKeyOf(definitions.value[0]) : ''
+    const listed = await projects.listPinnableDefinitions(forKind)
+    // A kind switched while the read was in flight owns the list now.
+    if (kind.value !== forKind) return
+    definitions.value = listed
+    definitionId.value = definitionUse.value === 'required' ? defaultDefinitionId(listed) : ''
   } catch (e) {
     definitionsFailed.value = true
     present(e, 'projects.create.definitionsFailed')
   } finally {
     definitionsLoading.value = false
   }
+}
+
+/**
+ * The newest version of the first listed key: the list holds every pinnable version, and a
+ * project should not pin a superseded one unless someone picks it.
+ */
+function defaultDefinitionId(list: readonly PinnableProjectDefinition[]): string {
+  const first = list[0]
+  if (!first) return ''
+  const newest = list
+    .filter((d) => d.key === first.key)
+    .reduce((best, d) => (d.version > best.version ? d : best))
+  return definitionKeyOf(newest)
 }
 
 watch(definition, (picked) => {
@@ -103,7 +124,7 @@ watch(definition, (picked) => {
 async function submit() {
   busy.value = true
   try {
-    const picked = keepsResearch.value ? definition.value : undefined
+    const picked = pinsDefinition.value ? definition.value : undefined
     const created = await projects.create({
       kind: kind.value,
       title: title.value.trim(),
@@ -111,9 +132,9 @@ async function submit() {
       serviceIds: serviceIds.value,
       ...(picked
         ? {
-            research: {
-              definitionKey: picked.key,
-              definitionVersion: picked.version,
+            definition: {
+              key: picked.key,
+              version: picked.version,
               inputs: inputValues.value,
             },
           }
@@ -159,10 +180,10 @@ async function submit() {
         <UFormField :label="t('projects.create.descriptionLabel')">
           <UTextarea v-model="description" :rows="3" autoresize class="w-full" />
         </UFormField>
-        <template v-if="keepsResearch">
+        <template v-if="pinsDefinition">
           <UFormField
             :label="t('projects.create.definitionLabel')"
-            :help="definition?.brief ?? t('projects.create.definitionHelp')"
+            :help="definition?.summary ?? t('projects.create.definitionHelp')"
           >
             <USkeleton v-if="definitionsLoading" class="h-8 w-full" />
             <p

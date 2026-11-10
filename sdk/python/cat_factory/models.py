@@ -834,9 +834,9 @@ class CreatePublicProject:
     kind: str
     title: str
     #: May be absent entirely.
-    description: str | None = None
+    definition: CreatePublicProjectDefinition | None = None
     #: May be absent entirely.
-    research: CreatePublicProjectResearch | None = None
+    description: str | None = None
     #: May be absent entirely.
     service_ids: list[str] | None = None
 
@@ -848,12 +848,12 @@ class CreatePublicProject:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "CreatePublicProject":
         """Decode a `CreatePublicProject` from its JSON object."""
-        known = {"kind", "title", "description", "research", "serviceIds"}
+        known = {"kind", "title", "definition", "description", "serviceIds"}
         return cls(
             kind=data.get("kind"),
             title=data.get("title"),
+            definition=None if data.get("definition") is None else CreatePublicProjectDefinition.from_dict(data.get("definition")),
             description=data.get("description"),
-            research=None if data.get("research") is None else CreatePublicProjectResearch.from_dict(data.get("research")),
             service_ids=None if data.get("serviceIds") is None else [item for item in data.get("serviceIds") or []],
             extra={k: v for k, v in data.items() if k not in known},
         )
@@ -863,24 +863,24 @@ class CreatePublicProject:
         out: dict[str, Any] = dict(self.extra)
         out["kind"] = self.kind
         out["title"] = self.title
+        if self.definition is not None:
+            out["definition"] = _encode(self.definition)
         if self.description is not None:
             out["description"] = self.description
-        if self.research is not None:
-            out["research"] = _encode(self.research)
         if self.service_ids is not None:
             out["serviceIds"] = [_encode(item) for item in self.service_ids]
         return out
 
 
 @dataclass(frozen=True, slots=True)
-class CreatePublicProjectResearch:
-    """`CreatePublicProjectResearch`, as carried on the wire."""
+class CreatePublicProjectDefinition:
+    """`CreatePublicProjectDefinition`, as carried on the wire."""
 
-    definition_key: str
-    #: May be absent entirely.
-    definition_version: int | None = None
+    key: str
     #: May be absent entirely.
     inputs: dict[str, CreatePublicTaskFieldsValue] | None = None
+    #: May be absent entirely.
+    version: int | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -888,24 +888,24 @@ class CreatePublicProjectResearch:
     extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "CreatePublicProjectResearch":
-        """Decode a `CreatePublicProjectResearch` from its JSON object."""
-        known = {"definitionKey", "definitionVersion", "inputs"}
+    def from_dict(cls, data: Mapping[str, Any]) -> "CreatePublicProjectDefinition":
+        """Decode a `CreatePublicProjectDefinition` from its JSON object."""
+        known = {"key", "inputs", "version"}
         return cls(
-            definition_key=data.get("definitionKey"),
-            definition_version=data.get("definitionVersion"),
+            key=data.get("key"),
             inputs=None if data.get("inputs") is None else {key: CreatePublicTaskFieldsValue.from_dict(val) for key, val in (data.get("inputs") or {}).items()},
+            version=data.get("version"),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
     def to_dict(self) -> dict[str, Any]:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
-        out["definitionKey"] = self.definition_key
-        if self.definition_version is not None:
-            out["definitionVersion"] = self.definition_version
+        out["key"] = self.key
         if self.inputs is not None:
             out["inputs"] = {key: _encode(val) for key, val in self.inputs.items()}
+        if self.version is not None:
+            out["version"] = self.version
         return out
 
 
@@ -12421,426 +12421,6 @@ class PublicDeployment:
 
 
 @dataclass(frozen=True, slots=True)
-class PublicFindingsRevision:
-    """`PublicFindingsRevision`, as carried on the wire."""
-
-    created_at: float
-    definition_key: str
-    definition_version: int
-    findings: list[PublicFindingsRevisionFinding]
-    id: str
-    learnings: list[PublicFindingsRevisionLearning]
-    mode: PublicFindingsRevisionMode
-    project_id: str
-    seq: int
-    summary: str
-    task_id: str
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicFindingsRevision":
-        """Decode a `PublicFindingsRevision` from its JSON object."""
-        known = {"createdAt", "definitionKey", "definitionVersion", "findings", "id", "learnings", "mode", "projectId", "seq", "summary", "taskId"}
-        return cls(
-            created_at=data.get("createdAt"),
-            definition_key=data.get("definitionKey"),
-            definition_version=data.get("definitionVersion"),
-            findings=[PublicFindingsRevisionFinding.from_dict(item) for item in data.get("findings") or []],
-            id=data.get("id"),
-            learnings=[PublicFindingsRevisionLearning.from_dict(item) for item in data.get("learnings") or []],
-            mode=_enum(PublicFindingsRevisionMode, data.get("mode")),
-            project_id=data.get("projectId"),
-            seq=data.get("seq"),
-            summary=data.get("summary"),
-            task_id=data.get("taskId"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["createdAt"] = self.created_at
-        out["definitionKey"] = self.definition_key
-        out["definitionVersion"] = self.definition_version
-        out["findings"] = [_encode(item) for item in self.findings]
-        out["id"] = self.id
-        out["learnings"] = [_encode(item) for item in self.learnings]
-        out["mode"] = _encode(self.mode)
-        out["projectId"] = self.project_id
-        out["seq"] = self.seq
-        out["summary"] = self.summary
-        out["taskId"] = self.task_id
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicFindingsRevisionFinding:
-    """`PublicFindingsRevisionFinding`, as carried on the wire."""
-
-    answer: str
-    caveats: list[str]
-    confidence: PublicReviewFindingSeverity
-    evidence: list[PublicFindingsRevisionFindingEvidence]
-    question_id: str
-    status: PublicFindingsRevisionFindingStatus
-    #: May be absent entirely.
-    blocked_on: PublicFindingsRevisionFindingBlockedOn | None = None
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicFindingsRevisionFinding":
-        """Decode a `PublicFindingsRevisionFinding` from its JSON object."""
-        known = {"answer", "caveats", "confidence", "evidence", "questionId", "status", "blockedOn"}
-        return cls(
-            answer=data.get("answer"),
-            caveats=[item for item in data.get("caveats") or []],
-            confidence=_enum(PublicReviewFindingSeverity, data.get("confidence")),
-            evidence=[PublicFindingsRevisionFindingEvidence.from_dict(item) for item in data.get("evidence") or []],
-            question_id=data.get("questionId"),
-            status=_enum(PublicFindingsRevisionFindingStatus, data.get("status")),
-            blocked_on=None if data.get("blockedOn") is None else PublicFindingsRevisionFindingBlockedOn.from_dict(data.get("blockedOn")),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["answer"] = self.answer
-        out["caveats"] = [_encode(item) for item in self.caveats]
-        out["confidence"] = _encode(self.confidence)
-        out["evidence"] = [_encode(item) for item in self.evidence]
-        out["questionId"] = self.question_id
-        out["status"] = _encode(self.status)
-        if self.blocked_on is not None:
-            out["blockedOn"] = _encode(self.blocked_on)
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicFindingsRevisionFindingBlockedOn:
-    """`PublicFindingsRevisionFindingBlockedOn`, as carried on the wire."""
-
-    credential_key: str
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicFindingsRevisionFindingBlockedOn":
-        """Decode a `PublicFindingsRevisionFindingBlockedOn` from its JSON object."""
-        known = {"credentialKey"}
-        return cls(
-            credential_key=data.get("credentialKey"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["credentialKey"] = self.credential_key
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicFindingsRevisionFindingEvidenceVariant0:
-    """`PublicFindingsRevisionFindingEvidenceVariant0`, as carried on the wire."""
-
-    kind: str
-    ref: str
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicFindingsRevisionFindingEvidenceVariant0":
-        """Decode a `PublicFindingsRevisionFindingEvidenceVariant0` from its JSON object."""
-        known = {"kind", "ref"}
-        return cls(
-            kind=data.get("kind"),
-            ref=data.get("ref"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["kind"] = self.kind
-        out["ref"] = self.ref
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicFindingsRevisionFindingEvidenceVariant1:
-    """`PublicFindingsRevisionFindingEvidenceVariant1`, as carried on the wire."""
-
-    artifact_id: str
-    kind: str
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicFindingsRevisionFindingEvidenceVariant1":
-        """Decode a `PublicFindingsRevisionFindingEvidenceVariant1` from its JSON object."""
-        known = {"artifactId", "kind"}
-        return cls(
-            artifact_id=data.get("artifactId"),
-            kind=data.get("kind"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["artifactId"] = self.artifact_id
-        out["kind"] = self.kind
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicFindingsRevisionFindingEvidenceVariant2:
-    """`PublicFindingsRevisionFindingEvidenceVariant2`, as carried on the wire."""
-
-    kind: str
-    url: str
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicFindingsRevisionFindingEvidenceVariant2":
-        """Decode a `PublicFindingsRevisionFindingEvidenceVariant2` from its JSON object."""
-        known = {"kind", "url"}
-        return cls(
-            kind=data.get("kind"),
-            url=data.get("url"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["kind"] = self.kind
-        out["url"] = self.url
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicFindingsRevisionFindingEvidenceVariant3:
-    """`PublicFindingsRevisionFindingEvidenceVariant3`, as carried on the wire."""
-
-    kind: str
-    path: str
-    repo_id: str
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicFindingsRevisionFindingEvidenceVariant3":
-        """Decode a `PublicFindingsRevisionFindingEvidenceVariant3` from its JSON object."""
-        known = {"kind", "path", "repoId"}
-        return cls(
-            kind=data.get("kind"),
-            path=data.get("path"),
-            repo_id=data.get("repoId"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["kind"] = self.kind
-        out["path"] = self.path
-        out["repoId"] = self.repo_id
-        return out
-
-
-class PublicFindingsRevisionFindingStatus(StrEnum):
-    """The `PublicFindingsRevisionFindingStatus` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    ANSWERED = "answered"
-    PARTIAL = "partial"
-    UNANSWERED = "unanswered"
-    BLOCKED = "blocked"
-
-
-@dataclass(frozen=True, slots=True)
-class PublicFindingsRevisionLearning:
-    """`PublicFindingsRevisionLearning`, as carried on the wire."""
-
-    detail: str
-    title: str
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicFindingsRevisionLearning":
-        """Decode a `PublicFindingsRevisionLearning` from its JSON object."""
-        known = {"detail", "title"}
-        return cls(
-            detail=data.get("detail"),
-            title=data.get("title"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["detail"] = self.detail
-        out["title"] = self.title
-        return out
-
-
-class PublicFindingsRevisionMode(StrEnum):
-    """The `PublicFindingsRevisionMode` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    INITIAL = "initial"
-    EXTEND = "extend"
-    CLARIFY = "clarify"
-    REFRESH = "refresh"
-
-
-@dataclass(frozen=True, slots=True)
-class PublicFoldedFinding:
-    """`PublicFoldedFinding`, as carried on the wire."""
-
-    finding: PublicFindingsRevisionFinding
-    notes: list[PublicFoldedFindingNote]
-    revision_id: str
-    seq: float
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicFoldedFinding":
-        """Decode a `PublicFoldedFinding` from its JSON object."""
-        known = {"finding", "notes", "revisionId", "seq"}
-        return cls(
-            finding=PublicFindingsRevisionFinding.from_dict(data.get("finding")),
-            notes=[PublicFoldedFindingNote.from_dict(item) for item in data.get("notes") or []],
-            revision_id=data.get("revisionId"),
-            seq=data.get("seq"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["finding"] = _encode(self.finding)
-        out["notes"] = [_encode(item) for item in self.notes]
-        out["revisionId"] = self.revision_id
-        out["seq"] = self.seq
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicFoldedFindingNote:
-    """`PublicFoldedFindingNote`, as carried on the wire."""
-
-    answer: str
-    revision_id: str
-    seq: float
-    status: PublicFindingsRevisionFindingStatus
-    #: May be absent entirely.
-    blocked_on: PublicFoldedFindingNoteBlockedOn | None = None
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicFoldedFindingNote":
-        """Decode a `PublicFoldedFindingNote` from its JSON object."""
-        known = {"answer", "revisionId", "seq", "status", "blockedOn"}
-        return cls(
-            answer=data.get("answer"),
-            revision_id=data.get("revisionId"),
-            seq=data.get("seq"),
-            status=_enum(PublicFindingsRevisionFindingStatus, data.get("status")),
-            blocked_on=None if data.get("blockedOn") is None else PublicFoldedFindingNoteBlockedOn.from_dict(data.get("blockedOn")),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["answer"] = self.answer
-        out["revisionId"] = self.revision_id
-        out["seq"] = self.seq
-        out["status"] = _encode(self.status)
-        if self.blocked_on is not None:
-            out["blockedOn"] = _encode(self.blocked_on)
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicFoldedFindingNoteBlockedOn:
-    """`PublicFoldedFindingNoteBlockedOn`, as carried on the wire."""
-
-    credential_key: str
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicFoldedFindingNoteBlockedOn":
-        """Decode a `PublicFoldedFindingNoteBlockedOn` from its JSON object."""
-        known = {"credentialKey"}
-        return cls(
-            credential_key=data.get("credentialKey"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["credentialKey"] = self.credential_key
-        return out
-
-
-@dataclass(frozen=True, slots=True)
 class PublicFollowUpItem:
     """`PublicFollowUpItem`, as carried on the wire."""
 
@@ -14449,7 +14029,7 @@ class PublicProject:
     service_ids: list[str]
     title: str
     #: Always present; ``None`` when the server has no value for it.
-    research: PublicResearchPin | None = None
+    pin: PublicProjectPin | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -14459,7 +14039,7 @@ class PublicProject:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicProject":
         """Decode a `PublicProject` from its JSON object."""
-        known = {"createdAt", "description", "homedHere", "kind", "projectId", "serviceIds", "title", "research"}
+        known = {"createdAt", "description", "homedHere", "kind", "projectId", "serviceIds", "title", "pin"}
         return cls(
             created_at=data.get("createdAt"),
             description=data.get("description"),
@@ -14468,7 +14048,7 @@ class PublicProject:
             project_id=data.get("projectId"),
             service_ids=[item for item in data.get("serviceIds") or []],
             title=data.get("title"),
-            research=None if data.get("research") is None else PublicResearchPin.from_dict(data.get("research")),
+            pin=None if data.get("pin") is None else PublicProjectPin.from_dict(data.get("pin")),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -14482,24 +14062,17 @@ class PublicProject:
         out["projectId"] = self.project_id
         out["serviceIds"] = [_encode(item) for item in self.service_ids]
         out["title"] = self.title
-        out["research"] = _encode(self.research)
+        out["pin"] = _encode(self.pin)
         return out
 
 
 @dataclass(frozen=True, slots=True)
-class PublicProjectFindings:
-    """`PublicProjectFindings`, as carried on the wire."""
+class PublicProjectDefinition:
+    """`PublicProjectDefinition`, as carried on the wire."""
 
-    coverage: PublicProjectFindingsCoverage
-    definition_key: str
-    definition_version: int
-    findings: list[PublicFoldedFinding]
-    learnings: list[PublicProjectFindingsLearning]
-    project_id: str
-    revisions: list[PublicProjectFindingsRevision]
-    summary: str
-    #: Always present; ``None`` when the server has no value for it.
-    latest_revision_id: str | None = None
+    content_hash: str
+    definition: PublicProjectDefinitionDefinition
+    origin: PublicProjectDefinitionOrigin
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -14507,146 +14080,38 @@ class PublicProjectFindings:
     extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectFindings":
-        """Decode a `PublicProjectFindings` from its JSON object."""
-        known = {"coverage", "definitionKey", "definitionVersion", "findings", "learnings", "projectId", "revisions", "summary", "latestRevisionId"}
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectDefinition":
+        """Decode a `PublicProjectDefinition` from its JSON object."""
+        known = {"contentHash", "definition", "origin"}
         return cls(
-            coverage=PublicProjectFindingsCoverage.from_dict(data.get("coverage")),
-            definition_key=data.get("definitionKey"),
-            definition_version=data.get("definitionVersion"),
-            findings=[PublicFoldedFinding.from_dict(item) for item in data.get("findings") or []],
-            learnings=[PublicProjectFindingsLearning.from_dict(item) for item in data.get("learnings") or []],
-            project_id=data.get("projectId"),
-            revisions=[PublicProjectFindingsRevision.from_dict(item) for item in data.get("revisions") or []],
-            summary=data.get("summary"),
-            latest_revision_id=data.get("latestRevisionId"),
+            content_hash=data.get("contentHash"),
+            definition=PublicProjectDefinitionDefinition.from_dict(data.get("definition")),
+            origin=_enum(PublicProjectDefinitionOrigin, data.get("origin")),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
     def to_dict(self) -> dict[str, Any]:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
-        out["coverage"] = _encode(self.coverage)
-        out["definitionKey"] = self.definition_key
-        out["definitionVersion"] = self.definition_version
-        out["findings"] = [_encode(item) for item in self.findings]
-        out["learnings"] = [_encode(item) for item in self.learnings]
-        out["projectId"] = self.project_id
-        out["revisions"] = [_encode(item) for item in self.revisions]
-        out["summary"] = self.summary
-        out["latestRevisionId"] = self.latest_revision_id
+        out["contentHash"] = self.content_hash
+        out["definition"] = _encode(self.definition)
+        out["origin"] = _encode(self.origin)
         return out
 
 
 @dataclass(frozen=True, slots=True)
-class PublicProjectFindingsCoverage:
-    """`PublicProjectFindingsCoverage`, as carried on the wire."""
+class PublicProjectDefinitionDefinition:
+    """`PublicProjectDefinitionDefinition`, as carried on the wire."""
 
-    adhoc: PublicProjectFindingsCoverageAdhoc
-    by_topic: list[PublicProjectFindingsCoverageByTopic]
-    retired_question_ids: list[str]
-    total: PublicProjectFindingsCoverageAdhoc
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectFindingsCoverage":
-        """Decode a `PublicProjectFindingsCoverage` from its JSON object."""
-        known = {"adhoc", "byTopic", "retiredQuestionIds", "total"}
-        return cls(
-            adhoc=PublicProjectFindingsCoverageAdhoc.from_dict(data.get("adhoc")),
-            by_topic=[PublicProjectFindingsCoverageByTopic.from_dict(item) for item in data.get("byTopic") or []],
-            retired_question_ids=[item for item in data.get("retiredQuestionIds") or []],
-            total=PublicProjectFindingsCoverageAdhoc.from_dict(data.get("total")),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["adhoc"] = _encode(self.adhoc)
-        out["byTopic"] = [_encode(item) for item in self.by_topic]
-        out["retiredQuestionIds"] = [_encode(item) for item in self.retired_question_ids]
-        out["total"] = _encode(self.total)
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicProjectFindingsCoverageAdhoc:
-    """`PublicProjectFindingsCoverageAdhoc`, as carried on the wire."""
-
-    answered: float
-    blocked: float
-    partial: float
-    unanswered: float
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectFindingsCoverageAdhoc":
-        """Decode a `PublicProjectFindingsCoverageAdhoc` from its JSON object."""
-        known = {"answered", "blocked", "partial", "unanswered"}
-        return cls(
-            answered=data.get("answered"),
-            blocked=data.get("blocked"),
-            partial=data.get("partial"),
-            unanswered=data.get("unanswered"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["answered"] = self.answered
-        out["blocked"] = self.blocked
-        out["partial"] = self.partial
-        out["unanswered"] = self.unanswered
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicProjectFindingsCoverageByTopic:
-    """`PublicProjectFindingsCoverageByTopic`, as carried on the wire."""
-
-    counts: PublicProjectFindingsCoverageAdhoc
-    topic_id: str
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectFindingsCoverageByTopic":
-        """Decode a `PublicProjectFindingsCoverageByTopic` from its JSON object."""
-        known = {"counts", "topicId"}
-        return cls(
-            counts=PublicProjectFindingsCoverageAdhoc.from_dict(data.get("counts")),
-            topic_id=data.get("topicId"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["counts"] = _encode(self.counts)
-        out["topicId"] = self.topic_id
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicProjectFindingsLearning:
-    """`PublicProjectFindingsLearning`, as carried on the wire."""
-
-    detail: str
-    revision_id: str
+    credentials: list[PublicProjectDefinitionDefinitionCredential]
+    inputs: list[PublicProjectDefinitionDefinitionInput]
+    key: str
+    kind: str
+    prompt_additions: dict[str, str]
+    spec: Any
+    targets: list[PublicProjectDefinitionDefinitionTarget]
     title: str
+    version: int
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -14654,37 +14119,47 @@ class PublicProjectFindingsLearning:
     extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectFindingsLearning":
-        """Decode a `PublicProjectFindingsLearning` from its JSON object."""
-        known = {"detail", "revisionId", "title"}
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectDefinitionDefinition":
+        """Decode a `PublicProjectDefinitionDefinition` from its JSON object."""
+        known = {"credentials", "inputs", "key", "kind", "promptAdditions", "spec", "targets", "title", "version"}
         return cls(
-            detail=data.get("detail"),
-            revision_id=data.get("revisionId"),
+            credentials=[PublicProjectDefinitionDefinitionCredential.from_dict(item) for item in data.get("credentials") or []],
+            inputs=[PublicProjectDefinitionDefinitionInput.from_dict(item) for item in data.get("inputs") or []],
+            key=data.get("key"),
+            kind=data.get("kind"),
+            prompt_additions={key: val for key, val in (data.get("promptAdditions") or {}).items()},
+            spec=data.get("spec"),
+            targets=[PublicProjectDefinitionDefinitionTarget.from_dict(item) for item in data.get("targets") or []],
             title=data.get("title"),
+            version=data.get("version"),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
     def to_dict(self) -> dict[str, Any]:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
-        out["detail"] = self.detail
-        out["revisionId"] = self.revision_id
+        out["credentials"] = [_encode(item) for item in self.credentials]
+        out["inputs"] = [_encode(item) for item in self.inputs]
+        out["key"] = self.key
+        out["kind"] = self.kind
+        out["promptAdditions"] = {key: _encode(val) for key, val in self.prompt_additions.items()}
+        out["spec"] = self.spec
+        out["targets"] = [_encode(item) for item in self.targets]
         out["title"] = self.title
+        out["version"] = self.version
         return out
 
 
 @dataclass(frozen=True, slots=True)
-class PublicProjectFindingsRevision:
-    """`PublicProjectFindingsRevision`, as carried on the wire."""
+class PublicProjectDefinitionDefinitionCredential:
+    """`PublicProjectDefinitionDefinitionCredential`, as carried on the wire."""
 
-    created_at: float
-    definition_key: str
-    definition_version: int
-    id: str
-    mode: PublicFindingsRevisionMode
-    project_id: str
-    seq: int
-    task_id: str
+    key: str
+    kind: PublicProjectDefinitionDefinitionCredentialKind
+    label: str
+    required_at_start: bool
+    #: May be absent entirely.
+    onboarding: PublicProjectDefinitionDefinitionCredentialOnboarding | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -14692,33 +14167,490 @@ class PublicProjectFindingsRevision:
     extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectFindingsRevision":
-        """Decode a `PublicProjectFindingsRevision` from its JSON object."""
-        known = {"createdAt", "definitionKey", "definitionVersion", "id", "mode", "projectId", "seq", "taskId"}
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectDefinitionDefinitionCredential":
+        """Decode a `PublicProjectDefinitionDefinitionCredential` from its JSON object."""
+        known = {"key", "kind", "label", "requiredAtStart", "onboarding"}
         return cls(
-            created_at=data.get("createdAt"),
-            definition_key=data.get("definitionKey"),
-            definition_version=data.get("definitionVersion"),
-            id=data.get("id"),
-            mode=_enum(PublicFindingsRevisionMode, data.get("mode")),
-            project_id=data.get("projectId"),
-            seq=data.get("seq"),
-            task_id=data.get("taskId"),
+            key=data.get("key"),
+            kind=_enum(PublicProjectDefinitionDefinitionCredentialKind, data.get("kind")),
+            label=data.get("label"),
+            required_at_start=data.get("requiredAtStart"),
+            onboarding=None if data.get("onboarding") is None else PublicProjectDefinitionDefinitionCredentialOnboarding.from_dict(data.get("onboarding")),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
     def to_dict(self) -> dict[str, Any]:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
-        out["createdAt"] = self.created_at
-        out["definitionKey"] = self.definition_key
-        out["definitionVersion"] = self.definition_version
-        out["id"] = self.id
-        out["mode"] = _encode(self.mode)
-        out["projectId"] = self.project_id
-        out["seq"] = self.seq
-        out["taskId"] = self.task_id
+        out["key"] = self.key
+        out["kind"] = _encode(self.kind)
+        out["label"] = self.label
+        out["requiredAtStart"] = self.required_at_start
+        if self.onboarding is not None:
+            out["onboarding"] = _encode(self.onboarding)
         return out
+
+
+class PublicProjectDefinitionDefinitionCredentialKind(StrEnum):
+    """The `PublicProjectDefinitionDefinitionCredentialKind` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    LOGIN = "login"
+    API_TOKEN = "api-token"
+    OAUTH_CLIENT = "oauth-client"
+    SECRET = "secret"
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectDefinitionDefinitionCredentialOnboarding:
+    """`PublicProjectDefinitionDefinitionCredentialOnboarding`, as carried on the wire."""
+
+    instructions: str
+    #: May be absent entirely.
+    url: str | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectDefinitionDefinitionCredentialOnboarding":
+        """Decode a `PublicProjectDefinitionDefinitionCredentialOnboarding` from its JSON object."""
+        known = {"instructions", "url"}
+        return cls(
+            instructions=data.get("instructions"),
+            url=data.get("url"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["instructions"] = self.instructions
+        if self.url is not None:
+            out["url"] = self.url
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectDefinitionDefinitionInput:
+    """`PublicProjectDefinitionDefinitionInput`, as carried on the wire."""
+
+    key: str
+    label: str
+    #: May be absent entirely.
+    default: str | None = None
+    #: May be absent entirely.
+    default_values: list[str] | None = None
+    #: May be absent entirely.
+    help: str | None = None
+    #: May be absent entirely.
+    integer: bool | None = None
+    #: May be absent entirely.
+    max: float | None = None
+    #: May be absent entirely.
+    max_length: int | None = None
+    #: May be absent entirely.
+    min: float | None = None
+    #: May be absent entirely.
+    options: list[ListPublicTaskTypesResponseTaskTypeFieldOption] | None = None
+    #: May be absent entirely.
+    placeholder: str | None = None
+    #: May be absent entirely.
+    required: bool | None = None
+    #: May be absent entirely.
+    section: str | None = None
+    #: May be absent entirely.
+    show_when: ListPublicTaskTypesResponseTaskTypeFieldShowWhen | None = None
+    #: May be absent entirely.
+    type_: PublicProjectDefinitionDefinitionInputType | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectDefinitionDefinitionInput":
+        """Decode a `PublicProjectDefinitionDefinitionInput` from its JSON object."""
+        known = {"key", "label", "default", "defaultValues", "help", "integer", "max", "maxLength", "min", "options", "placeholder", "required", "section", "showWhen", "type"}
+        return cls(
+            key=data.get("key"),
+            label=data.get("label"),
+            default=data.get("default"),
+            default_values=None if data.get("defaultValues") is None else [item for item in data.get("defaultValues") or []],
+            help=data.get("help"),
+            integer=data.get("integer"),
+            max=data.get("max"),
+            max_length=data.get("maxLength"),
+            min=data.get("min"),
+            options=None if data.get("options") is None else [ListPublicTaskTypesResponseTaskTypeFieldOption.from_dict(item) for item in data.get("options") or []],
+            placeholder=data.get("placeholder"),
+            required=data.get("required"),
+            section=data.get("section"),
+            show_when=None if data.get("showWhen") is None else ListPublicTaskTypesResponseTaskTypeFieldShowWhen.from_dict(data.get("showWhen")),
+            type_=None if data.get("type") is None else _enum(PublicProjectDefinitionDefinitionInputType, data.get("type")),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["key"] = self.key
+        out["label"] = self.label
+        if self.default is not None:
+            out["default"] = self.default
+        if self.default_values is not None:
+            out["defaultValues"] = [_encode(item) for item in self.default_values]
+        if self.help is not None:
+            out["help"] = self.help
+        if self.integer is not None:
+            out["integer"] = self.integer
+        if self.max is not None:
+            out["max"] = self.max
+        if self.max_length is not None:
+            out["maxLength"] = self.max_length
+        if self.min is not None:
+            out["min"] = self.min
+        if self.options is not None:
+            out["options"] = [_encode(item) for item in self.options]
+        if self.placeholder is not None:
+            out["placeholder"] = self.placeholder
+        if self.required is not None:
+            out["required"] = self.required
+        if self.section is not None:
+            out["section"] = self.section
+        if self.show_when is not None:
+            out["showWhen"] = _encode(self.show_when)
+        if self.type_ is not None:
+            out["type"] = _encode(self.type_)
+        return out
+
+
+class PublicProjectDefinitionDefinitionInputType(StrEnum):
+    """The `PublicProjectDefinitionDefinitionInputType` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    TEXT = "text"
+    TEXTAREA = "textarea"
+    NUMBER = "number"
+    SELECT = "select"
+    CHECKBOX = "checkbox"
+    CHECKBOX_GROUP = "checkbox-group"
+    PATH = "path"
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectDefinitionDefinitionTarget:
+    """`PublicProjectDefinitionDefinitionTarget`, as carried on the wire."""
+
+    base_url: str
+    surface: PublicProjectDefinitionDefinitionTargetSurface
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectDefinitionDefinitionTarget":
+        """Decode a `PublicProjectDefinitionDefinitionTarget` from its JSON object."""
+        known = {"baseUrl", "surface"}
+        return cls(
+            base_url=data.get("baseUrl"),
+            surface=_enum(PublicProjectDefinitionDefinitionTargetSurface, data.get("surface")),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["baseUrl"] = self.base_url
+        out["surface"] = _encode(self.surface)
+        return out
+
+
+class PublicProjectDefinitionDefinitionTargetSurface(StrEnum):
+    """The `PublicProjectDefinitionDefinitionTargetSurface` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    UI = "ui"
+    API = "api"
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectDefinitionList:
+    """`PublicProjectDefinitionList`, as carried on the wire."""
+
+    definitions: list[PublicProjectDefinition]
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectDefinitionList":
+        """Decode a `PublicProjectDefinitionList` from its JSON object."""
+        known = {"definitions"}
+        return cls(
+            definitions=[PublicProjectDefinition.from_dict(item) for item in data.get("definitions") or []],
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["definitions"] = [_encode(item) for item in self.definitions]
+        return out
+
+
+class PublicProjectDefinitionOrigin(StrEnum):
+    """The `PublicProjectDefinitionOrigin` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    REGISTERED = "registered"
+    STORED = "stored"
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectKind:
+    """`PublicProjectKind`, as carried on the wire."""
+
+    id: str
+    label: str
+    task_types: list[PublicProjectKindTaskType]
+    #: May be absent entirely.
+    definition: PublicProjectKindDefinition | None = None
+    #: May be absent entirely.
+    description: str | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectKind":
+        """Decode a `PublicProjectKind` from its JSON object."""
+        known = {"id", "label", "taskTypes", "definition", "description"}
+        return cls(
+            id=data.get("id"),
+            label=data.get("label"),
+            task_types=[PublicProjectKindTaskType.from_dict(item) for item in data.get("taskTypes") or []],
+            definition=None if data.get("definition") is None else _enum(PublicProjectKindDefinition, data.get("definition")),
+            description=data.get("description"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["id"] = self.id
+        out["label"] = self.label
+        out["taskTypes"] = [_encode(item) for item in self.task_types]
+        if self.definition is not None:
+            out["definition"] = _encode(self.definition)
+        if self.description is not None:
+            out["description"] = self.description
+        return out
+
+
+class PublicProjectKindDefinition(StrEnum):
+    """The `PublicProjectKindDefinition` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    REQUIRED = "required"
+    OPTIONAL = "optional"
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectKindDetail:
+    """`PublicProjectKindDetail`, as carried on the wire."""
+
+    id: str
+    label: str
+    schemas: PublicProjectKindDetailSchemas
+    task_types: list[PublicProjectKindTaskType]
+    #: May be absent entirely.
+    definition: PublicProjectKindDefinition | None = None
+    #: May be absent entirely.
+    description: str | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectKindDetail":
+        """Decode a `PublicProjectKindDetail` from its JSON object."""
+        known = {"id", "label", "schemas", "taskTypes", "definition", "description"}
+        return cls(
+            id=data.get("id"),
+            label=data.get("label"),
+            schemas=PublicProjectKindDetailSchemas.from_dict(data.get("schemas")),
+            task_types=[PublicProjectKindTaskType.from_dict(item) for item in data.get("taskTypes") or []],
+            definition=None if data.get("definition") is None else _enum(PublicProjectKindDefinition, data.get("definition")),
+            description=data.get("description"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["id"] = self.id
+        out["label"] = self.label
+        out["schemas"] = _encode(self.schemas)
+        out["taskTypes"] = [_encode(item) for item in self.task_types]
+        if self.definition is not None:
+            out["definition"] = _encode(self.definition)
+        if self.description is not None:
+            out["description"] = self.description
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectKindDetailSchemas:
+    """`PublicProjectKindDetailSchemas`, as carried on the wire."""
+
+    #: Always present; ``None`` when the server has no value for it.
+    outcome: dict[str, Any] | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    spec: dict[str, Any] | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    view: dict[str, Any] | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectKindDetailSchemas":
+        """Decode a `PublicProjectKindDetailSchemas` from its JSON object."""
+        known = {"outcome", "spec", "view"}
+        return cls(
+            outcome=None if data.get("outcome") is None else {key: val for key, val in (data.get("outcome") or {}).items()},
+            spec=None if data.get("spec") is None else {key: val for key, val in (data.get("spec") or {}).items()},
+            view=None if data.get("view") is None else {key: val for key, val in (data.get("view") or {}).items()},
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["outcome"] = {key: _encode(val) for key, val in self.outcome.items()}
+        out["spec"] = {key: _encode(val) for key, val in self.spec.items()}
+        out["view"] = {key: _encode(val) for key, val in self.view.items()}
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectKindList:
+    """`PublicProjectKindList`, as carried on the wire."""
+
+    kinds: list[PublicProjectKind]
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectKindList":
+        """Decode a `PublicProjectKindList` from its JSON object."""
+        known = {"kinds"}
+        return cls(
+            kinds=[PublicProjectKind.from_dict(item) for item in data.get("kinds") or []],
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["kinds"] = [_encode(item) for item in self.kinds]
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectKindTaskType:
+    """`PublicProjectKindTaskType`, as carried on the wire."""
+
+    repo_access: PublicProjectKindTaskTypeRepoAccess
+    task_type: str
+    #: May be absent entirely.
+    default_pipeline_id: str | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectKindTaskType":
+        """Decode a `PublicProjectKindTaskType` from its JSON object."""
+        known = {"repoAccess", "taskType", "defaultPipelineId"}
+        return cls(
+            repo_access=_enum(PublicProjectKindTaskTypeRepoAccess, data.get("repoAccess")),
+            task_type=data.get("taskType"),
+            default_pipeline_id=data.get("defaultPipelineId"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["repoAccess"] = _encode(self.repo_access)
+        out["taskType"] = self.task_type
+        if self.default_pipeline_id is not None:
+            out["defaultPipelineId"] = self.default_pipeline_id
+        return out
+
+
+class PublicProjectKindTaskTypeRepoAccess(StrEnum):
+    """The `PublicProjectKindTaskTypeRepoAccess` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    NONE = "none"
+    LINKED_READ_ONLY = "linked-read-only"
 
 
 @dataclass(frozen=True, slots=True)
@@ -14745,6 +14677,192 @@ class PublicProjectList:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
         out["projects"] = [_encode(item) for item in self.projects]
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectOutcome:
+    """`PublicProjectOutcome`, as carried on the wire."""
+
+    artifact_refs: list[str]
+    body: Any
+    created_at: float
+    id: str
+    intent: str
+    project_id: str
+    schema_version: int
+    seq: int
+    stream: str
+    #: Always present; ``None`` when the server has no value for it.
+    definition_key: str | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    definition_version: int | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    task_id: str | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectOutcome":
+        """Decode a `PublicProjectOutcome` from its JSON object."""
+        known = {"artifactRefs", "body", "createdAt", "id", "intent", "projectId", "schemaVersion", "seq", "stream", "definitionKey", "definitionVersion", "taskId"}
+        return cls(
+            artifact_refs=[item for item in data.get("artifactRefs") or []],
+            body=data.get("body"),
+            created_at=data.get("createdAt"),
+            id=data.get("id"),
+            intent=data.get("intent"),
+            project_id=data.get("projectId"),
+            schema_version=data.get("schemaVersion"),
+            seq=data.get("seq"),
+            stream=data.get("stream"),
+            definition_key=data.get("definitionKey"),
+            definition_version=data.get("definitionVersion"),
+            task_id=data.get("taskId"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["artifactRefs"] = [_encode(item) for item in self.artifact_refs]
+        out["body"] = self.body
+        out["createdAt"] = self.created_at
+        out["id"] = self.id
+        out["intent"] = self.intent
+        out["projectId"] = self.project_id
+        out["schemaVersion"] = self.schema_version
+        out["seq"] = self.seq
+        out["stream"] = self.stream
+        out["definitionKey"] = self.definition_key
+        out["definitionVersion"] = self.definition_version
+        out["taskId"] = self.task_id
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectOutcomeList:
+    """`PublicProjectOutcomeList`, as carried on the wire."""
+
+    outcomes: list[PublicProjectOutcomeListOutcome]
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectOutcomeList":
+        """Decode a `PublicProjectOutcomeList` from its JSON object."""
+        known = {"outcomes"}
+        return cls(
+            outcomes=[PublicProjectOutcomeListOutcome.from_dict(item) for item in data.get("outcomes") or []],
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["outcomes"] = [_encode(item) for item in self.outcomes]
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectOutcomeListOutcome:
+    """`PublicProjectOutcomeListOutcome`, as carried on the wire."""
+
+    artifact_refs: list[str]
+    created_at: float
+    id: str
+    intent: str
+    project_id: str
+    schema_version: int
+    seq: int
+    stream: str
+    #: Always present; ``None`` when the server has no value for it.
+    definition_key: str | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    definition_version: int | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    task_id: str | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectOutcomeListOutcome":
+        """Decode a `PublicProjectOutcomeListOutcome` from its JSON object."""
+        known = {"artifactRefs", "createdAt", "id", "intent", "projectId", "schemaVersion", "seq", "stream", "definitionKey", "definitionVersion", "taskId"}
+        return cls(
+            artifact_refs=[item for item in data.get("artifactRefs") or []],
+            created_at=data.get("createdAt"),
+            id=data.get("id"),
+            intent=data.get("intent"),
+            project_id=data.get("projectId"),
+            schema_version=data.get("schemaVersion"),
+            seq=data.get("seq"),
+            stream=data.get("stream"),
+            definition_key=data.get("definitionKey"),
+            definition_version=data.get("definitionVersion"),
+            task_id=data.get("taskId"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["artifactRefs"] = [_encode(item) for item in self.artifact_refs]
+        out["createdAt"] = self.created_at
+        out["id"] = self.id
+        out["intent"] = self.intent
+        out["projectId"] = self.project_id
+        out["schemaVersion"] = self.schema_version
+        out["seq"] = self.seq
+        out["stream"] = self.stream
+        out["definitionKey"] = self.definition_key
+        out["definitionVersion"] = self.definition_version
+        out["taskId"] = self.task_id
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectPin:
+    """`PublicProjectPin`, as carried on the wire."""
+
+    definition_hash: str
+    definition_key: str
+    definition_version: int
+    inputs: dict[str, CreatePublicTaskFieldsValue]
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectPin":
+        """Decode a `PublicProjectPin` from its JSON object."""
+        known = {"definitionHash", "definitionKey", "definitionVersion", "inputs"}
+        return cls(
+            definition_hash=data.get("definitionHash"),
+            definition_key=data.get("definitionKey"),
+            definition_version=data.get("definitionVersion"),
+            inputs={key: CreatePublicTaskFieldsValue.from_dict(val) for key, val in (data.get("inputs") or {}).items()},
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["definitionHash"] = self.definition_hash
+        out["definitionKey"] = self.definition_key
+        out["definitionVersion"] = self.definition_version
+        out["inputs"] = {key: _encode(val) for key, val in self.inputs.items()}
         return out
 
 
@@ -14848,6 +14966,39 @@ class PublicProjectTaskList:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
         out["tasks"] = [_encode(item) for item in self.tasks]
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectView:
+    """`PublicProjectView`, as carried on the wire."""
+
+    kind: str
+    project_id: str
+    view: Any
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectView":
+        """Decode a `PublicProjectView` from its JSON object."""
+        known = {"kind", "projectId", "view"}
+        return cls(
+            kind=data.get("kind"),
+            project_id=data.get("projectId"),
+            view=data.get("view"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["kind"] = self.kind
+        out["projectId"] = self.project_id
+        out["view"] = self.view
         return out
 
 
@@ -15594,482 +15745,6 @@ class PublicRequirementsFindingFloorBasis(StrEnum):
     FIXED = "fixed"
     ESTIMATE = "estimate"
     NO_ESTIMATE = "no_estimate"
-
-
-@dataclass(frozen=True, slots=True)
-class PublicResearchDefinition:
-    """`PublicResearchDefinition`, as carried on the wire."""
-
-    content_hash: str
-    definition: PublicResearchDefinitionDefinition
-    origin: PublicResearchDefinitionOrigin
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicResearchDefinition":
-        """Decode a `PublicResearchDefinition` from its JSON object."""
-        known = {"contentHash", "definition", "origin"}
-        return cls(
-            content_hash=data.get("contentHash"),
-            definition=PublicResearchDefinitionDefinition.from_dict(data.get("definition")),
-            origin=_enum(PublicResearchDefinitionOrigin, data.get("origin")),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["contentHash"] = self.content_hash
-        out["definition"] = _encode(self.definition)
-        out["origin"] = _encode(self.origin)
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicResearchDefinitionDefinition:
-    """`PublicResearchDefinitionDefinition`, as carried on the wire."""
-
-    brief: str
-    credentials: list[PublicResearchDefinitionDefinitionCredential]
-    inputs: list[PublicResearchDefinitionDefinitionInput]
-    key: str
-    prompt_additions: dict[str, str]
-    targets: list[PublicResearchDefinitionDefinitionTarget]
-    title: str
-    topics: list[PublicResearchDefinitionDefinitionTopic]
-    version: int
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicResearchDefinitionDefinition":
-        """Decode a `PublicResearchDefinitionDefinition` from its JSON object."""
-        known = {"brief", "credentials", "inputs", "key", "promptAdditions", "targets", "title", "topics", "version"}
-        return cls(
-            brief=data.get("brief"),
-            credentials=[PublicResearchDefinitionDefinitionCredential.from_dict(item) for item in data.get("credentials") or []],
-            inputs=[PublicResearchDefinitionDefinitionInput.from_dict(item) for item in data.get("inputs") or []],
-            key=data.get("key"),
-            prompt_additions={key: val for key, val in (data.get("promptAdditions") or {}).items()},
-            targets=[PublicResearchDefinitionDefinitionTarget.from_dict(item) for item in data.get("targets") or []],
-            title=data.get("title"),
-            topics=[PublicResearchDefinitionDefinitionTopic.from_dict(item) for item in data.get("topics") or []],
-            version=data.get("version"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["brief"] = self.brief
-        out["credentials"] = [_encode(item) for item in self.credentials]
-        out["inputs"] = [_encode(item) for item in self.inputs]
-        out["key"] = self.key
-        out["promptAdditions"] = {key: _encode(val) for key, val in self.prompt_additions.items()}
-        out["targets"] = [_encode(item) for item in self.targets]
-        out["title"] = self.title
-        out["topics"] = [_encode(item) for item in self.topics]
-        out["version"] = self.version
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicResearchDefinitionDefinitionCredential:
-    """`PublicResearchDefinitionDefinitionCredential`, as carried on the wire."""
-
-    key: str
-    kind: PublicResearchDefinitionDefinitionCredentialKind
-    label: str
-    required_at_start: bool
-    #: May be absent entirely.
-    onboarding: PublicResearchDefinitionDefinitionCredentialOnboarding | None = None
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicResearchDefinitionDefinitionCredential":
-        """Decode a `PublicResearchDefinitionDefinitionCredential` from its JSON object."""
-        known = {"key", "kind", "label", "requiredAtStart", "onboarding"}
-        return cls(
-            key=data.get("key"),
-            kind=_enum(PublicResearchDefinitionDefinitionCredentialKind, data.get("kind")),
-            label=data.get("label"),
-            required_at_start=data.get("requiredAtStart"),
-            onboarding=None if data.get("onboarding") is None else PublicResearchDefinitionDefinitionCredentialOnboarding.from_dict(data.get("onboarding")),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["key"] = self.key
-        out["kind"] = _encode(self.kind)
-        out["label"] = self.label
-        out["requiredAtStart"] = self.required_at_start
-        if self.onboarding is not None:
-            out["onboarding"] = _encode(self.onboarding)
-        return out
-
-
-class PublicResearchDefinitionDefinitionCredentialKind(StrEnum):
-    """The `PublicResearchDefinitionDefinitionCredentialKind` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    LOGIN = "login"
-    API_TOKEN = "api-token"
-    OAUTH_CLIENT = "oauth-client"
-    SECRET = "secret"
-
-
-@dataclass(frozen=True, slots=True)
-class PublicResearchDefinitionDefinitionCredentialOnboarding:
-    """`PublicResearchDefinitionDefinitionCredentialOnboarding`, as carried on the wire."""
-
-    instructions: str
-    #: May be absent entirely.
-    url: str | None = None
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicResearchDefinitionDefinitionCredentialOnboarding":
-        """Decode a `PublicResearchDefinitionDefinitionCredentialOnboarding` from its JSON object."""
-        known = {"instructions", "url"}
-        return cls(
-            instructions=data.get("instructions"),
-            url=data.get("url"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["instructions"] = self.instructions
-        if self.url is not None:
-            out["url"] = self.url
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicResearchDefinitionDefinitionInput:
-    """`PublicResearchDefinitionDefinitionInput`, as carried on the wire."""
-
-    key: str
-    label: str
-    #: May be absent entirely.
-    default: str | None = None
-    #: May be absent entirely.
-    default_values: list[str] | None = None
-    #: May be absent entirely.
-    help: str | None = None
-    #: May be absent entirely.
-    integer: bool | None = None
-    #: May be absent entirely.
-    max: float | None = None
-    #: May be absent entirely.
-    max_length: int | None = None
-    #: May be absent entirely.
-    min: float | None = None
-    #: May be absent entirely.
-    options: list[ListPublicTaskTypesResponseTaskTypeFieldOption] | None = None
-    #: May be absent entirely.
-    placeholder: str | None = None
-    #: May be absent entirely.
-    required: bool | None = None
-    #: May be absent entirely.
-    section: str | None = None
-    #: May be absent entirely.
-    show_when: ListPublicTaskTypesResponseTaskTypeFieldShowWhen | None = None
-    #: May be absent entirely.
-    type_: PublicResearchDefinitionDefinitionInputType | None = None
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicResearchDefinitionDefinitionInput":
-        """Decode a `PublicResearchDefinitionDefinitionInput` from its JSON object."""
-        known = {"key", "label", "default", "defaultValues", "help", "integer", "max", "maxLength", "min", "options", "placeholder", "required", "section", "showWhen", "type"}
-        return cls(
-            key=data.get("key"),
-            label=data.get("label"),
-            default=data.get("default"),
-            default_values=None if data.get("defaultValues") is None else [item for item in data.get("defaultValues") or []],
-            help=data.get("help"),
-            integer=data.get("integer"),
-            max=data.get("max"),
-            max_length=data.get("maxLength"),
-            min=data.get("min"),
-            options=None if data.get("options") is None else [ListPublicTaskTypesResponseTaskTypeFieldOption.from_dict(item) for item in data.get("options") or []],
-            placeholder=data.get("placeholder"),
-            required=data.get("required"),
-            section=data.get("section"),
-            show_when=None if data.get("showWhen") is None else ListPublicTaskTypesResponseTaskTypeFieldShowWhen.from_dict(data.get("showWhen")),
-            type_=None if data.get("type") is None else _enum(PublicResearchDefinitionDefinitionInputType, data.get("type")),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["key"] = self.key
-        out["label"] = self.label
-        if self.default is not None:
-            out["default"] = self.default
-        if self.default_values is not None:
-            out["defaultValues"] = [_encode(item) for item in self.default_values]
-        if self.help is not None:
-            out["help"] = self.help
-        if self.integer is not None:
-            out["integer"] = self.integer
-        if self.max is not None:
-            out["max"] = self.max
-        if self.max_length is not None:
-            out["maxLength"] = self.max_length
-        if self.min is not None:
-            out["min"] = self.min
-        if self.options is not None:
-            out["options"] = [_encode(item) for item in self.options]
-        if self.placeholder is not None:
-            out["placeholder"] = self.placeholder
-        if self.required is not None:
-            out["required"] = self.required
-        if self.section is not None:
-            out["section"] = self.section
-        if self.show_when is not None:
-            out["showWhen"] = _encode(self.show_when)
-        if self.type_ is not None:
-            out["type"] = _encode(self.type_)
-        return out
-
-
-class PublicResearchDefinitionDefinitionInputType(StrEnum):
-    """The `PublicResearchDefinitionDefinitionInputType` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    TEXT = "text"
-    TEXTAREA = "textarea"
-    NUMBER = "number"
-    SELECT = "select"
-    CHECKBOX = "checkbox"
-    CHECKBOX_GROUP = "checkbox-group"
-    PATH = "path"
-
-
-@dataclass(frozen=True, slots=True)
-class PublicResearchDefinitionDefinitionTarget:
-    """`PublicResearchDefinitionDefinitionTarget`, as carried on the wire."""
-
-    base_url: str
-    surface: PublicResearchDefinitionDefinitionTargetSurface
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicResearchDefinitionDefinitionTarget":
-        """Decode a `PublicResearchDefinitionDefinitionTarget` from its JSON object."""
-        known = {"baseUrl", "surface"}
-        return cls(
-            base_url=data.get("baseUrl"),
-            surface=_enum(PublicResearchDefinitionDefinitionTargetSurface, data.get("surface")),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["baseUrl"] = self.base_url
-        out["surface"] = _encode(self.surface)
-        return out
-
-
-class PublicResearchDefinitionDefinitionTargetSurface(StrEnum):
-    """The `PublicResearchDefinitionDefinitionTargetSurface` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    UI = "ui"
-    API = "api"
-
-
-@dataclass(frozen=True, slots=True)
-class PublicResearchDefinitionDefinitionTopic:
-    """`PublicResearchDefinitionDefinitionTopic`, as carried on the wire."""
-
-    id: str
-    questions: list[PublicResearchDefinitionDefinitionTopicQuestion]
-    title: str
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicResearchDefinitionDefinitionTopic":
-        """Decode a `PublicResearchDefinitionDefinitionTopic` from its JSON object."""
-        known = {"id", "questions", "title"}
-        return cls(
-            id=data.get("id"),
-            questions=[PublicResearchDefinitionDefinitionTopicQuestion.from_dict(item) for item in data.get("questions") or []],
-            title=data.get("title"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["id"] = self.id
-        out["questions"] = [_encode(item) for item in self.questions]
-        out["title"] = self.title
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicResearchDefinitionDefinitionTopicQuestion:
-    """`PublicResearchDefinitionDefinitionTopicQuestion`, as carried on the wire."""
-
-    id: str
-    question: str
-    #: May be absent entirely.
-    answer_hint: str | None = None
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicResearchDefinitionDefinitionTopicQuestion":
-        """Decode a `PublicResearchDefinitionDefinitionTopicQuestion` from its JSON object."""
-        known = {"id", "question", "answerHint"}
-        return cls(
-            id=data.get("id"),
-            question=data.get("question"),
-            answer_hint=data.get("answerHint"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["id"] = self.id
-        out["question"] = self.question
-        if self.answer_hint is not None:
-            out["answerHint"] = self.answer_hint
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class PublicResearchDefinitionList:
-    """`PublicResearchDefinitionList`, as carried on the wire."""
-
-    definitions: list[PublicResearchDefinition]
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicResearchDefinitionList":
-        """Decode a `PublicResearchDefinitionList` from its JSON object."""
-        known = {"definitions"}
-        return cls(
-            definitions=[PublicResearchDefinition.from_dict(item) for item in data.get("definitions") or []],
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["definitions"] = [_encode(item) for item in self.definitions]
-        return out
-
-
-class PublicResearchDefinitionOrigin(StrEnum):
-    """The `PublicResearchDefinitionOrigin` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    REGISTERED = "registered"
-    STORED = "stored"
-
-
-@dataclass(frozen=True, slots=True)
-class PublicResearchPin:
-    """`PublicResearchPin`, as carried on the wire."""
-
-    definition_hash: str
-    definition_key: str
-    definition_version: int
-    inputs: dict[str, CreatePublicTaskFieldsValue]
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicResearchPin":
-        """Decode a `PublicResearchPin` from its JSON object."""
-        known = {"definitionHash", "definitionKey", "definitionVersion", "inputs"}
-        return cls(
-            definition_hash=data.get("definitionHash"),
-            definition_key=data.get("definitionKey"),
-            definition_version=data.get("definitionVersion"),
-            inputs={key: CreatePublicTaskFieldsValue.from_dict(val) for key, val in (data.get("inputs") or {}).items()},
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["definitionHash"] = self.definition_hash
-        out["definitionKey"] = self.definition_key
-        out["definitionVersion"] = self.definition_version
-        out["inputs"] = {key: _encode(val) for key, val in self.inputs.items()}
-        return out
 
 
 @dataclass(frozen=True, slots=True)
@@ -17863,19 +17538,19 @@ class PublicVisualConfirmDecisionPhase(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class PublishResearchDefinition:
-    """`PublishResearchDefinition`, as carried on the wire."""
+class PublishProjectDefinition:
+    """`PublishProjectDefinition`, as carried on the wire."""
 
-    brief: str
-    targets: list[PublicResearchDefinitionDefinitionTarget]
+    spec: Any
     title: str
-    topics: list[PublicResearchDefinitionDefinitionTopic]
     #: May be absent entirely.
-    credentials: list[PublicResearchDefinitionDefinitionCredential] | None = None
+    credentials: list[PublicProjectDefinitionDefinitionCredential] | None = None
     #: May be absent entirely.
-    inputs: list[PublicResearchDefinitionDefinitionInput] | None = None
+    inputs: list[PublicProjectDefinitionDefinitionInput] | None = None
     #: May be absent entirely.
     prompt_additions: dict[str, str] | None = None
+    #: May be absent entirely.
+    targets: list[PublicProjectDefinitionDefinitionTarget] | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -17883,33 +17558,32 @@ class PublishResearchDefinition:
     extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublishResearchDefinition":
-        """Decode a `PublishResearchDefinition` from its JSON object."""
-        known = {"brief", "targets", "title", "topics", "credentials", "inputs", "promptAdditions"}
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublishProjectDefinition":
+        """Decode a `PublishProjectDefinition` from its JSON object."""
+        known = {"spec", "title", "credentials", "inputs", "promptAdditions", "targets"}
         return cls(
-            brief=data.get("brief"),
-            targets=[PublicResearchDefinitionDefinitionTarget.from_dict(item) for item in data.get("targets") or []],
+            spec=data.get("spec"),
             title=data.get("title"),
-            topics=[PublicResearchDefinitionDefinitionTopic.from_dict(item) for item in data.get("topics") or []],
-            credentials=None if data.get("credentials") is None else [PublicResearchDefinitionDefinitionCredential.from_dict(item) for item in data.get("credentials") or []],
-            inputs=None if data.get("inputs") is None else [PublicResearchDefinitionDefinitionInput.from_dict(item) for item in data.get("inputs") or []],
+            credentials=None if data.get("credentials") is None else [PublicProjectDefinitionDefinitionCredential.from_dict(item) for item in data.get("credentials") or []],
+            inputs=None if data.get("inputs") is None else [PublicProjectDefinitionDefinitionInput.from_dict(item) for item in data.get("inputs") or []],
             prompt_additions=None if data.get("promptAdditions") is None else {key: val for key, val in (data.get("promptAdditions") or {}).items()},
+            targets=None if data.get("targets") is None else [PublicProjectDefinitionDefinitionTarget.from_dict(item) for item in data.get("targets") or []],
             extra={k: v for k, v in data.items() if k not in known},
         )
 
     def to_dict(self) -> dict[str, Any]:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
-        out["brief"] = self.brief
-        out["targets"] = [_encode(item) for item in self.targets]
+        out["spec"] = self.spec
         out["title"] = self.title
-        out["topics"] = [_encode(item) for item in self.topics]
         if self.credentials is not None:
             out["credentials"] = [_encode(item) for item in self.credentials]
         if self.inputs is not None:
             out["inputs"] = [_encode(item) for item in self.inputs]
         if self.prompt_additions is not None:
             out["promptAdditions"] = {key: _encode(val) for key, val in self.prompt_additions.items()}
+        if self.targets is not None:
+            out["targets"] = [_encode(item) for item in self.targets]
         return out
 
 
@@ -19276,27 +18950,6 @@ def decode_public_decision(data: Mapping[str, Any]) -> PublicDecision:
     if tag == "interview":
         return PublicInterviewDecision.from_dict(data)
     raise ValueError(f"Unknown PublicDecision kind: {tag!r}")
-
-
-#: `PublicFindingsRevisionFindingEvidence` — one of: PublicFindingsRevisionFindingEvidenceVariant0, PublicFindingsRevisionFindingEvidenceVariant1, PublicFindingsRevisionFindingEvidenceVariant2, PublicFindingsRevisionFindingEvidenceVariant3. Discriminated by `kind`; decode with `decode_public_findings_revision_finding_evidence`.
-PublicFindingsRevisionFindingEvidence: TypeAlias = PublicFindingsRevisionFindingEvidenceVariant0 | PublicFindingsRevisionFindingEvidenceVariant1 | PublicFindingsRevisionFindingEvidenceVariant2 | PublicFindingsRevisionFindingEvidenceVariant3
-
-def decode_public_findings_revision_finding_evidence(data: Mapping[str, Any]) -> PublicFindingsRevisionFindingEvidence:
-    """Decode a `PublicFindingsRevisionFindingEvidence` by its `kind` tag.
-    An unrecognised tag raises rather than guessing a variant: every variant here has a
-    different shape, so picking the wrong one would hand back a value whose fields are
-    silently absent instead of an error naming what was not understood.
-    """
-    tag = data.get("kind")
-    if tag == "http-exchange":
-        return PublicFindingsRevisionFindingEvidenceVariant0.from_dict(data)
-    if tag == "screenshot":
-        return PublicFindingsRevisionFindingEvidenceVariant1.from_dict(data)
-    if tag == "url":
-        return PublicFindingsRevisionFindingEvidenceVariant2.from_dict(data)
-    if tag == "repo-path":
-        return PublicFindingsRevisionFindingEvidenceVariant3.from_dict(data)
-    raise ValueError(f"Unknown PublicFindingsRevisionFindingEvidence kind: {tag!r}")
 
 
 #: `PublicServiceProvisioning` — one of: PublicServiceProvisioningVariant0, PublicServiceProvisioningVariant1, PublicServiceProvisioningVariant2. Discriminated by `type`; decode with `decode_public_service_provisioning`.

@@ -376,23 +376,23 @@ type CreatePublicJob struct {
 
 // CreatePublicProject is the `CreatePublicProject` wire model.
 type CreatePublicProject struct {
+	// Definition may be absent entirely.
+	Definition *CreatePublicProjectDefinition `json:"definition,omitempty"`
 	// Description may be absent entirely.
 	Description *string `json:"description,omitempty"`
 	Kind        string  `json:"kind"`
-	// Research may be absent entirely.
-	Research *CreatePublicProjectResearch `json:"research,omitempty"`
 	// ServiceIds may be absent entirely.
 	ServiceIds []string `json:"serviceIds,omitempty"`
 	Title      string   `json:"title"`
 }
 
-// CreatePublicProjectResearch is the `CreatePublicProjectResearch` wire model.
-type CreatePublicProjectResearch struct {
-	DefinitionKey string `json:"definitionKey"`
-	// DefinitionVersion may be absent entirely.
-	DefinitionVersion *int `json:"definitionVersion,omitempty"`
+// CreatePublicProjectDefinition is the `CreatePublicProjectDefinition` wire model.
+type CreatePublicProjectDefinition struct {
 	// Inputs may be absent entirely.
 	Inputs map[string]CreatePublicTaskFieldsValue `json:"inputs,omitempty"`
+	Key    string                                 `json:"key"`
+	// Version may be absent entirely.
+	Version *int `json:"version,omitempty"`
 }
 
 // CreatePublicProjectTask is the `CreatePublicProjectTask` wire model.
@@ -5258,209 +5258,6 @@ type PublicDeployment struct {
 	AppURL string `json:"appUrl"`
 }
 
-// PublicFindingsRevision is the `PublicFindingsRevision` wire model.
-type PublicFindingsRevision struct {
-	CreatedAt         float64                          `json:"createdAt"`
-	DefinitionKey     string                           `json:"definitionKey"`
-	DefinitionVersion int                              `json:"definitionVersion"`
-	Findings          []PublicFindingsRevisionFinding  `json:"findings"`
-	ID                string                           `json:"id"`
-	Learnings         []PublicFindingsRevisionLearning `json:"learnings"`
-	Mode              PublicFindingsRevisionMode       `json:"mode"`
-	ProjectID         string                           `json:"projectId"`
-	Seq               int                              `json:"seq"`
-	Summary           string                           `json:"summary"`
-	TaskID            string                           `json:"taskId"`
-}
-
-// PublicFindingsRevisionFinding is the `PublicFindingsRevisionFinding` wire model.
-type PublicFindingsRevisionFinding struct {
-	Answer string `json:"answer"`
-	// BlockedOn may be absent entirely.
-	BlockedOn  *PublicFindingsRevisionFindingBlockedOn `json:"blockedOn,omitempty"`
-	Caveats    []string                                `json:"caveats"`
-	Confidence PublicReviewFindingSeverity             `json:"confidence"`
-	Evidence   []PublicFindingsRevisionFindingEvidence `json:"evidence"`
-	QuestionID string                                  `json:"questionId"`
-	Status     PublicFindingsRevisionFindingStatus     `json:"status"`
-}
-
-// PublicFindingsRevisionFindingBlockedOn is the `PublicFindingsRevisionFindingBlockedOn` wire model.
-type PublicFindingsRevisionFindingBlockedOn struct {
-	CredentialKey string `json:"credentialKey"`
-}
-
-// PublicFindingsRevisionFindingEvidence is a `PublicFindingsRevisionFindingEvidence`: exactly one variant pointer is non-nil, chosen by
-// kind.
-// Go has no sum type, so the variants are pointers on one struct. Switch on Kind (or test the
-// pointers) to reach the populated one.
-type PublicFindingsRevisionFindingEvidence struct {
-	// Kind is the discriminator the server sent, INCLUDING one this SDK release does not
-	// know — in which case every variant pointer is nil and Raw holds the body verbatim.
-	Kind string
-	// PublicFindingsRevisionFindingEvidenceVariant0 is set when kind == "http-exchange".
-	PublicFindingsRevisionFindingEvidenceVariant0 *PublicFindingsRevisionFindingEvidenceVariant0
-	// PublicFindingsRevisionFindingEvidenceVariant1 is set when kind == "screenshot".
-	PublicFindingsRevisionFindingEvidenceVariant1 *PublicFindingsRevisionFindingEvidenceVariant1
-	// PublicFindingsRevisionFindingEvidenceVariant2 is set when kind == "url".
-	PublicFindingsRevisionFindingEvidenceVariant2 *PublicFindingsRevisionFindingEvidenceVariant2
-	// PublicFindingsRevisionFindingEvidenceVariant3 is set when kind == "repo-path".
-	PublicFindingsRevisionFindingEvidenceVariant3 *PublicFindingsRevisionFindingEvidenceVariant3
-	// Raw is the undecoded body, always populated.
-	Raw json.RawMessage
-}
-
-// UnmarshalJSON decodes a PublicFindingsRevisionFindingEvidence by its kind tag.
-func (u *PublicFindingsRevisionFindingEvidence) UnmarshalJSON(data []byte) error {
-	u.Raw = append(json.RawMessage(nil), data...)
-	var tag struct {
-		Kind string `json:"kind"`
-	}
-	if err := json.Unmarshal(data, &tag); err != nil {
-		return err
-	}
-	u.Kind = tag.Kind
-	switch tag.Kind {
-	case "http-exchange":
-		var out PublicFindingsRevisionFindingEvidenceVariant0
-		if err := json.Unmarshal(data, &out); err != nil {
-			return err
-		}
-		u.PublicFindingsRevisionFindingEvidenceVariant0 = &out
-		return nil
-	case "screenshot":
-		var out PublicFindingsRevisionFindingEvidenceVariant1
-		if err := json.Unmarshal(data, &out); err != nil {
-			return err
-		}
-		u.PublicFindingsRevisionFindingEvidenceVariant1 = &out
-		return nil
-	case "url":
-		var out PublicFindingsRevisionFindingEvidenceVariant2
-		if err := json.Unmarshal(data, &out); err != nil {
-			return err
-		}
-		u.PublicFindingsRevisionFindingEvidenceVariant2 = &out
-		return nil
-	case "repo-path":
-		var out PublicFindingsRevisionFindingEvidenceVariant3
-		if err := json.Unmarshal(data, &out); err != nil {
-			return err
-		}
-		u.PublicFindingsRevisionFindingEvidenceVariant3 = &out
-		return nil
-	}
-	// An unknown variant is NOT an error: the surface is additive, and Raw + Kind still let
-	// a caller see exactly what arrived.
-	return nil
-}
-
-// MarshalJSON re-emits the variant that is set, or the raw body when none is.
-func (u PublicFindingsRevisionFindingEvidence) MarshalJSON() ([]byte, error) {
-	if u.PublicFindingsRevisionFindingEvidenceVariant0 != nil {
-		return json.Marshal(u.PublicFindingsRevisionFindingEvidenceVariant0)
-	}
-	if u.PublicFindingsRevisionFindingEvidenceVariant1 != nil {
-		return json.Marshal(u.PublicFindingsRevisionFindingEvidenceVariant1)
-	}
-	if u.PublicFindingsRevisionFindingEvidenceVariant2 != nil {
-		return json.Marshal(u.PublicFindingsRevisionFindingEvidenceVariant2)
-	}
-	if u.PublicFindingsRevisionFindingEvidenceVariant3 != nil {
-		return json.Marshal(u.PublicFindingsRevisionFindingEvidenceVariant3)
-	}
-	if len(u.Raw) > 0 {
-		return u.Raw, nil
-	}
-	return []byte("null"), nil
-}
-
-// PublicFindingsRevisionFindingEvidenceVariant0 is the `PublicFindingsRevisionFindingEvidenceVariant0` wire model.
-type PublicFindingsRevisionFindingEvidenceVariant0 struct {
-	Kind string `json:"kind"`
-	Ref  string `json:"ref"`
-}
-
-// PublicFindingsRevisionFindingEvidenceVariant1 is the `PublicFindingsRevisionFindingEvidenceVariant1` wire model.
-type PublicFindingsRevisionFindingEvidenceVariant1 struct {
-	ArtifactID string `json:"artifactId"`
-	Kind       string `json:"kind"`
-}
-
-// PublicFindingsRevisionFindingEvidenceVariant2 is the `PublicFindingsRevisionFindingEvidenceVariant2` wire model.
-type PublicFindingsRevisionFindingEvidenceVariant2 struct {
-	Kind string `json:"kind"`
-	URL  string `json:"url"`
-}
-
-// PublicFindingsRevisionFindingEvidenceVariant3 is the `PublicFindingsRevisionFindingEvidenceVariant3` wire model.
-type PublicFindingsRevisionFindingEvidenceVariant3 struct {
-	Kind   string `json:"kind"`
-	Path   string `json:"path"`
-	RepoID string `json:"repoId"`
-}
-
-// PublicFindingsRevisionFindingStatus is the `PublicFindingsRevisionFindingStatus` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type PublicFindingsRevisionFindingStatus string
-
-const (
-	PublicFindingsRevisionFindingStatusAnswered   PublicFindingsRevisionFindingStatus = "answered"
-	PublicFindingsRevisionFindingStatusPartial    PublicFindingsRevisionFindingStatus = "partial"
-	PublicFindingsRevisionFindingStatusUnanswered PublicFindingsRevisionFindingStatus = "unanswered"
-	PublicFindingsRevisionFindingStatusBlocked    PublicFindingsRevisionFindingStatus = "blocked"
-)
-
-// PublicFindingsRevisionFindingStatusValues lists every PublicFindingsRevisionFindingStatus this SDK release knows.
-var PublicFindingsRevisionFindingStatusValues = []PublicFindingsRevisionFindingStatus{PublicFindingsRevisionFindingStatusAnswered, PublicFindingsRevisionFindingStatusPartial, PublicFindingsRevisionFindingStatusUnanswered, PublicFindingsRevisionFindingStatusBlocked}
-
-// PublicFindingsRevisionLearning is the `PublicFindingsRevisionLearning` wire model.
-type PublicFindingsRevisionLearning struct {
-	Detail string `json:"detail"`
-	Title  string `json:"title"`
-}
-
-// PublicFindingsRevisionMode is the `PublicFindingsRevisionMode` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type PublicFindingsRevisionMode string
-
-const (
-	PublicFindingsRevisionModeInitial PublicFindingsRevisionMode = "initial"
-	PublicFindingsRevisionModeExtend  PublicFindingsRevisionMode = "extend"
-	PublicFindingsRevisionModeClarify PublicFindingsRevisionMode = "clarify"
-	PublicFindingsRevisionModeRefresh PublicFindingsRevisionMode = "refresh"
-)
-
-// PublicFindingsRevisionModeValues lists every PublicFindingsRevisionMode this SDK release knows.
-var PublicFindingsRevisionModeValues = []PublicFindingsRevisionMode{PublicFindingsRevisionModeInitial, PublicFindingsRevisionModeExtend, PublicFindingsRevisionModeClarify, PublicFindingsRevisionModeRefresh}
-
-// PublicFoldedFinding is the `PublicFoldedFinding` wire model.
-type PublicFoldedFinding struct {
-	Finding    PublicFindingsRevisionFinding `json:"finding"`
-	Notes      []PublicFoldedFindingNote     `json:"notes"`
-	RevisionID string                        `json:"revisionId"`
-	Seq        float64                       `json:"seq"`
-}
-
-// PublicFoldedFindingNote is the `PublicFoldedFindingNote` wire model.
-type PublicFoldedFindingNote struct {
-	Answer string `json:"answer"`
-	// BlockedOn may be absent entirely.
-	BlockedOn  *PublicFoldedFindingNoteBlockedOn   `json:"blockedOn,omitempty"`
-	RevisionID string                              `json:"revisionId"`
-	Seq        float64                             `json:"seq"`
-	Status     PublicFindingsRevisionFindingStatus `json:"status"`
-}
-
-// PublicFoldedFindingNoteBlockedOn is the `PublicFoldedFindingNoteBlockedOn` wire model.
-type PublicFoldedFindingNoteBlockedOn struct {
-	CredentialKey string `json:"credentialKey"`
-}
-
 // PublicFollowUpItem is the `PublicFollowUpItem` wire model.
 type PublicFollowUpItem struct {
 	// Answer always present; nil when the server has no value for it.
@@ -6079,71 +5876,283 @@ type PublicProject struct {
 	Description string  `json:"description"`
 	HomedHere   bool    `json:"homedHere"`
 	Kind        string  `json:"kind"`
-	ProjectID   string  `json:"projectId"`
-	// Research always present; nil when the server has no value for it.
-	Research   *PublicResearchPin `json:"research"`
-	ServiceIds []string           `json:"serviceIds"`
-	Title      string             `json:"title"`
+	// Pin always present; nil when the server has no value for it.
+	Pin        *PublicProjectPin `json:"pin"`
+	ProjectID  string            `json:"projectId"`
+	ServiceIds []string          `json:"serviceIds"`
+	Title      string            `json:"title"`
 }
 
-// PublicProjectFindings is the `PublicProjectFindings` wire model.
-type PublicProjectFindings struct {
-	Coverage          PublicProjectFindingsCoverage `json:"coverage"`
-	DefinitionKey     string                        `json:"definitionKey"`
-	DefinitionVersion int                           `json:"definitionVersion"`
-	Findings          []PublicFoldedFinding         `json:"findings"`
-	// LatestRevisionID always present; nil when the server has no value for it.
-	LatestRevisionID *string                         `json:"latestRevisionId"`
-	Learnings        []PublicProjectFindingsLearning `json:"learnings"`
-	ProjectID        string                          `json:"projectId"`
-	Revisions        []PublicProjectFindingsRevision `json:"revisions"`
-	Summary          string                          `json:"summary"`
+// PublicProjectDefinition is the `PublicProjectDefinition` wire model.
+type PublicProjectDefinition struct {
+	ContentHash string                            `json:"contentHash"`
+	Definition  PublicProjectDefinitionDefinition `json:"definition"`
+	Origin      PublicProjectDefinitionOrigin     `json:"origin"`
 }
 
-// PublicProjectFindingsCoverage is the `PublicProjectFindingsCoverage` wire model.
-type PublicProjectFindingsCoverage struct {
-	Adhoc              PublicProjectFindingsCoverageAdhoc     `json:"adhoc"`
-	ByTopic            []PublicProjectFindingsCoverageByTopic `json:"byTopic"`
-	RetiredQuestionIds []string                               `json:"retiredQuestionIds"`
-	Total              PublicProjectFindingsCoverageAdhoc     `json:"total"`
+// PublicProjectDefinitionDefinition is the `PublicProjectDefinitionDefinition` wire model.
+type PublicProjectDefinitionDefinition struct {
+	Credentials     []PublicProjectDefinitionDefinitionCredential `json:"credentials"`
+	Inputs          []PublicProjectDefinitionDefinitionInput      `json:"inputs"`
+	Key             string                                        `json:"key"`
+	Kind            string                                        `json:"kind"`
+	PromptAdditions map[string]string                             `json:"promptAdditions"`
+	Spec            any                                           `json:"spec"`
+	Targets         []PublicProjectDefinitionDefinitionTarget     `json:"targets"`
+	Title           string                                        `json:"title"`
+	Version         int                                           `json:"version"`
 }
 
-// PublicProjectFindingsCoverageAdhoc is the `PublicProjectFindingsCoverageAdhoc` wire model.
-type PublicProjectFindingsCoverageAdhoc struct {
-	Answered   float64 `json:"answered"`
-	Blocked    float64 `json:"blocked"`
-	Partial    float64 `json:"partial"`
-	Unanswered float64 `json:"unanswered"`
+// PublicProjectDefinitionDefinitionCredential is the `PublicProjectDefinitionDefinitionCredential` wire model.
+type PublicProjectDefinitionDefinitionCredential struct {
+	Key   string                                          `json:"key"`
+	Kind  PublicProjectDefinitionDefinitionCredentialKind `json:"kind"`
+	Label string                                          `json:"label"`
+	// Onboarding may be absent entirely.
+	Onboarding      *PublicProjectDefinitionDefinitionCredentialOnboarding `json:"onboarding,omitempty"`
+	RequiredAtStart bool                                                   `json:"requiredAtStart"`
 }
 
-// PublicProjectFindingsCoverageByTopic is the `PublicProjectFindingsCoverageByTopic` wire model.
-type PublicProjectFindingsCoverageByTopic struct {
-	Counts  PublicProjectFindingsCoverageAdhoc `json:"counts"`
-	TopicID string                             `json:"topicId"`
+// PublicProjectDefinitionDefinitionCredentialKind is the `PublicProjectDefinitionDefinitionCredentialKind` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicProjectDefinitionDefinitionCredentialKind string
+
+const (
+	PublicProjectDefinitionDefinitionCredentialKindLogin       PublicProjectDefinitionDefinitionCredentialKind = "login"
+	PublicProjectDefinitionDefinitionCredentialKindAPIToken    PublicProjectDefinitionDefinitionCredentialKind = "api-token"
+	PublicProjectDefinitionDefinitionCredentialKindOauthClient PublicProjectDefinitionDefinitionCredentialKind = "oauth-client"
+	PublicProjectDefinitionDefinitionCredentialKindSecret      PublicProjectDefinitionDefinitionCredentialKind = "secret"
+)
+
+// PublicProjectDefinitionDefinitionCredentialKindValues lists every PublicProjectDefinitionDefinitionCredentialKind this SDK release knows.
+var PublicProjectDefinitionDefinitionCredentialKindValues = []PublicProjectDefinitionDefinitionCredentialKind{PublicProjectDefinitionDefinitionCredentialKindLogin, PublicProjectDefinitionDefinitionCredentialKindAPIToken, PublicProjectDefinitionDefinitionCredentialKindOauthClient, PublicProjectDefinitionDefinitionCredentialKindSecret}
+
+// PublicProjectDefinitionDefinitionCredentialOnboarding is the `PublicProjectDefinitionDefinitionCredentialOnboarding` wire model.
+type PublicProjectDefinitionDefinitionCredentialOnboarding struct {
+	Instructions string `json:"instructions"`
+	// URL may be absent entirely.
+	URL *string `json:"url,omitempty"`
 }
 
-// PublicProjectFindingsLearning is the `PublicProjectFindingsLearning` wire model.
-type PublicProjectFindingsLearning struct {
-	Detail     string `json:"detail"`
-	RevisionID string `json:"revisionId"`
-	Title      string `json:"title"`
+// PublicProjectDefinitionDefinitionInput is the `PublicProjectDefinitionDefinitionInput` wire model.
+type PublicProjectDefinitionDefinitionInput struct {
+	// Default may be absent entirely.
+	Default *string `json:"default,omitempty"`
+	// DefaultValues may be absent entirely.
+	DefaultValues []string `json:"defaultValues,omitempty"`
+	// Help may be absent entirely.
+	Help *string `json:"help,omitempty"`
+	// Integer may be absent entirely.
+	Integer *bool  `json:"integer,omitempty"`
+	Key     string `json:"key"`
+	Label   string `json:"label"`
+	// Max may be absent entirely.
+	Max *float64 `json:"max,omitempty"`
+	// MaxLength may be absent entirely.
+	MaxLength *int `json:"maxLength,omitempty"`
+	// Min may be absent entirely.
+	Min *float64 `json:"min,omitempty"`
+	// Options may be absent entirely.
+	Options []ListPublicTaskTypesResponseTaskTypeFieldOption `json:"options,omitempty"`
+	// Placeholder may be absent entirely.
+	Placeholder *string `json:"placeholder,omitempty"`
+	// Required may be absent entirely.
+	Required *bool `json:"required,omitempty"`
+	// Section may be absent entirely.
+	Section *string `json:"section,omitempty"`
+	// ShowWhen may be absent entirely.
+	ShowWhen *ListPublicTaskTypesResponseTaskTypeFieldShowWhen `json:"showWhen,omitempty"`
+	// Type may be absent entirely.
+	Type *PublicProjectDefinitionDefinitionInputType `json:"type,omitempty"`
 }
 
-// PublicProjectFindingsRevision is the `PublicProjectFindingsRevision` wire model.
-type PublicProjectFindingsRevision struct {
-	CreatedAt         float64                    `json:"createdAt"`
-	DefinitionKey     string                     `json:"definitionKey"`
-	DefinitionVersion int                        `json:"definitionVersion"`
-	ID                string                     `json:"id"`
-	Mode              PublicFindingsRevisionMode `json:"mode"`
-	ProjectID         string                     `json:"projectId"`
-	Seq               int                        `json:"seq"`
-	TaskID            string                     `json:"taskId"`
+// PublicProjectDefinitionDefinitionInputType is the `PublicProjectDefinitionDefinitionInputType` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicProjectDefinitionDefinitionInputType string
+
+const (
+	PublicProjectDefinitionDefinitionInputTypeText          PublicProjectDefinitionDefinitionInputType = "text"
+	PublicProjectDefinitionDefinitionInputTypeTextarea      PublicProjectDefinitionDefinitionInputType = "textarea"
+	PublicProjectDefinitionDefinitionInputTypeNumber        PublicProjectDefinitionDefinitionInputType = "number"
+	PublicProjectDefinitionDefinitionInputTypeSelect        PublicProjectDefinitionDefinitionInputType = "select"
+	PublicProjectDefinitionDefinitionInputTypeCheckbox      PublicProjectDefinitionDefinitionInputType = "checkbox"
+	PublicProjectDefinitionDefinitionInputTypeCheckboxGroup PublicProjectDefinitionDefinitionInputType = "checkbox-group"
+	PublicProjectDefinitionDefinitionInputTypePath          PublicProjectDefinitionDefinitionInputType = "path"
+)
+
+// PublicProjectDefinitionDefinitionInputTypeValues lists every PublicProjectDefinitionDefinitionInputType this SDK release knows.
+var PublicProjectDefinitionDefinitionInputTypeValues = []PublicProjectDefinitionDefinitionInputType{PublicProjectDefinitionDefinitionInputTypeText, PublicProjectDefinitionDefinitionInputTypeTextarea, PublicProjectDefinitionDefinitionInputTypeNumber, PublicProjectDefinitionDefinitionInputTypeSelect, PublicProjectDefinitionDefinitionInputTypeCheckbox, PublicProjectDefinitionDefinitionInputTypeCheckboxGroup, PublicProjectDefinitionDefinitionInputTypePath}
+
+// PublicProjectDefinitionDefinitionTarget is the `PublicProjectDefinitionDefinitionTarget` wire model.
+type PublicProjectDefinitionDefinitionTarget struct {
+	BaseURL string                                         `json:"baseUrl"`
+	Surface PublicProjectDefinitionDefinitionTargetSurface `json:"surface"`
 }
+
+// PublicProjectDefinitionDefinitionTargetSurface is the `PublicProjectDefinitionDefinitionTargetSurface` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicProjectDefinitionDefinitionTargetSurface string
+
+const (
+	PublicProjectDefinitionDefinitionTargetSurfaceUi  PublicProjectDefinitionDefinitionTargetSurface = "ui"
+	PublicProjectDefinitionDefinitionTargetSurfaceAPI PublicProjectDefinitionDefinitionTargetSurface = "api"
+)
+
+// PublicProjectDefinitionDefinitionTargetSurfaceValues lists every PublicProjectDefinitionDefinitionTargetSurface this SDK release knows.
+var PublicProjectDefinitionDefinitionTargetSurfaceValues = []PublicProjectDefinitionDefinitionTargetSurface{PublicProjectDefinitionDefinitionTargetSurfaceUi, PublicProjectDefinitionDefinitionTargetSurfaceAPI}
+
+// PublicProjectDefinitionList is the `PublicProjectDefinitionList` wire model.
+type PublicProjectDefinitionList struct {
+	Definitions []PublicProjectDefinition `json:"definitions"`
+}
+
+// PublicProjectDefinitionOrigin is the `PublicProjectDefinitionOrigin` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicProjectDefinitionOrigin string
+
+const (
+	PublicProjectDefinitionOriginRegistered PublicProjectDefinitionOrigin = "registered"
+	PublicProjectDefinitionOriginStored     PublicProjectDefinitionOrigin = "stored"
+)
+
+// PublicProjectDefinitionOriginValues lists every PublicProjectDefinitionOrigin this SDK release knows.
+var PublicProjectDefinitionOriginValues = []PublicProjectDefinitionOrigin{PublicProjectDefinitionOriginRegistered, PublicProjectDefinitionOriginStored}
+
+// PublicProjectKind is the `PublicProjectKind` wire model.
+type PublicProjectKind struct {
+	// Definition may be absent entirely.
+	Definition *PublicProjectKindDefinition `json:"definition,omitempty"`
+	// Description may be absent entirely.
+	Description *string                     `json:"description,omitempty"`
+	ID          string                      `json:"id"`
+	Label       string                      `json:"label"`
+	TaskTypes   []PublicProjectKindTaskType `json:"taskTypes"`
+}
+
+// PublicProjectKindDefinition is the `PublicProjectKindDefinition` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicProjectKindDefinition string
+
+const (
+	PublicProjectKindDefinitionRequired PublicProjectKindDefinition = "required"
+	PublicProjectKindDefinitionOptional PublicProjectKindDefinition = "optional"
+)
+
+// PublicProjectKindDefinitionValues lists every PublicProjectKindDefinition this SDK release knows.
+var PublicProjectKindDefinitionValues = []PublicProjectKindDefinition{PublicProjectKindDefinitionRequired, PublicProjectKindDefinitionOptional}
+
+// PublicProjectKindDetail is the `PublicProjectKindDetail` wire model.
+type PublicProjectKindDetail struct {
+	// Definition may be absent entirely.
+	Definition *PublicProjectKindDefinition `json:"definition,omitempty"`
+	// Description may be absent entirely.
+	Description *string                        `json:"description,omitempty"`
+	ID          string                         `json:"id"`
+	Label       string                         `json:"label"`
+	Schemas     PublicProjectKindDetailSchemas `json:"schemas"`
+	TaskTypes   []PublicProjectKindTaskType    `json:"taskTypes"`
+}
+
+// PublicProjectKindDetailSchemas is the `PublicProjectKindDetailSchemas` wire model.
+type PublicProjectKindDetailSchemas struct {
+	// Outcome always present; nil when the server has no value for it.
+	Outcome map[string]any `json:"outcome"`
+	// Spec always present; nil when the server has no value for it.
+	Spec map[string]any `json:"spec"`
+	// View always present; nil when the server has no value for it.
+	View map[string]any `json:"view"`
+}
+
+// PublicProjectKindList is the `PublicProjectKindList` wire model.
+type PublicProjectKindList struct {
+	Kinds []PublicProjectKind `json:"kinds"`
+}
+
+// PublicProjectKindTaskType is the `PublicProjectKindTaskType` wire model.
+type PublicProjectKindTaskType struct {
+	// DefaultPipelineID may be absent entirely.
+	DefaultPipelineID *string                             `json:"defaultPipelineId,omitempty"`
+	RepoAccess        PublicProjectKindTaskTypeRepoAccess `json:"repoAccess"`
+	TaskType          string                              `json:"taskType"`
+}
+
+// PublicProjectKindTaskTypeRepoAccess is the `PublicProjectKindTaskTypeRepoAccess` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicProjectKindTaskTypeRepoAccess string
+
+const (
+	PublicProjectKindTaskTypeRepoAccessNone           PublicProjectKindTaskTypeRepoAccess = "none"
+	PublicProjectKindTaskTypeRepoAccessLinkedReadOnly PublicProjectKindTaskTypeRepoAccess = "linked-read-only"
+)
+
+// PublicProjectKindTaskTypeRepoAccessValues lists every PublicProjectKindTaskTypeRepoAccess this SDK release knows.
+var PublicProjectKindTaskTypeRepoAccessValues = []PublicProjectKindTaskTypeRepoAccess{PublicProjectKindTaskTypeRepoAccessNone, PublicProjectKindTaskTypeRepoAccessLinkedReadOnly}
 
 // PublicProjectList is the `PublicProjectList` wire model.
 type PublicProjectList struct {
 	Projects []PublicProject `json:"projects"`
+}
+
+// PublicProjectOutcome is the `PublicProjectOutcome` wire model.
+type PublicProjectOutcome struct {
+	ArtifactRefs []string `json:"artifactRefs"`
+	Body         any      `json:"body"`
+	CreatedAt    float64  `json:"createdAt"`
+	// DefinitionKey always present; nil when the server has no value for it.
+	DefinitionKey *string `json:"definitionKey"`
+	// DefinitionVersion always present; nil when the server has no value for it.
+	DefinitionVersion *int   `json:"definitionVersion"`
+	ID                string `json:"id"`
+	Intent            string `json:"intent"`
+	ProjectID         string `json:"projectId"`
+	SchemaVersion     int    `json:"schemaVersion"`
+	Seq               int    `json:"seq"`
+	Stream            string `json:"stream"`
+	// TaskID always present; nil when the server has no value for it.
+	TaskID *string `json:"taskId"`
+}
+
+// PublicProjectOutcomeList is the `PublicProjectOutcomeList` wire model.
+type PublicProjectOutcomeList struct {
+	Outcomes []PublicProjectOutcomeListOutcome `json:"outcomes"`
+}
+
+// PublicProjectOutcomeListOutcome is the `PublicProjectOutcomeListOutcome` wire model.
+type PublicProjectOutcomeListOutcome struct {
+	ArtifactRefs []string `json:"artifactRefs"`
+	CreatedAt    float64  `json:"createdAt"`
+	// DefinitionKey always present; nil when the server has no value for it.
+	DefinitionKey *string `json:"definitionKey"`
+	// DefinitionVersion always present; nil when the server has no value for it.
+	DefinitionVersion *int   `json:"definitionVersion"`
+	ID                string `json:"id"`
+	Intent            string `json:"intent"`
+	ProjectID         string `json:"projectId"`
+	SchemaVersion     int    `json:"schemaVersion"`
+	Seq               int    `json:"seq"`
+	Stream            string `json:"stream"`
+	// TaskID always present; nil when the server has no value for it.
+	TaskID *string `json:"taskId"`
+}
+
+// PublicProjectPin is the `PublicProjectPin` wire model.
+type PublicProjectPin struct {
+	DefinitionHash    string                                 `json:"definitionHash"`
+	DefinitionKey     string                                 `json:"definitionKey"`
+	DefinitionVersion int                                    `json:"definitionVersion"`
+	Inputs            map[string]CreatePublicTaskFieldsValue `json:"inputs"`
 }
 
 // PublicProjectServices is the `PublicProjectServices` wire model.
@@ -6167,6 +6176,13 @@ type PublicProjectTask struct {
 // PublicProjectTaskList is the `PublicProjectTaskList` wire model.
 type PublicProjectTaskList struct {
 	Tasks []PublicProjectTask `json:"tasks"`
+}
+
+// PublicProjectView is the `PublicProjectView` wire model.
+type PublicProjectView struct {
+	Kind      string `json:"kind"`
+	ProjectID string `json:"projectId"`
+	View      any    `json:"view"`
 }
 
 // PublicPromptFragment is the `PublicPromptFragment` wire model.
@@ -6461,172 +6477,6 @@ const (
 
 // PublicRequirementsFindingFloorBasisValues lists every PublicRequirementsFindingFloorBasis this SDK release knows.
 var PublicRequirementsFindingFloorBasisValues = []PublicRequirementsFindingFloorBasis{PublicRequirementsFindingFloorBasisFixed, PublicRequirementsFindingFloorBasisEstimate, PublicRequirementsFindingFloorBasisNoEstimate}
-
-// PublicResearchDefinition is the `PublicResearchDefinition` wire model.
-type PublicResearchDefinition struct {
-	ContentHash string                             `json:"contentHash"`
-	Definition  PublicResearchDefinitionDefinition `json:"definition"`
-	Origin      PublicResearchDefinitionOrigin     `json:"origin"`
-}
-
-// PublicResearchDefinitionDefinition is the `PublicResearchDefinitionDefinition` wire model.
-type PublicResearchDefinitionDefinition struct {
-	Brief           string                                         `json:"brief"`
-	Credentials     []PublicResearchDefinitionDefinitionCredential `json:"credentials"`
-	Inputs          []PublicResearchDefinitionDefinitionInput      `json:"inputs"`
-	Key             string                                         `json:"key"`
-	PromptAdditions map[string]string                              `json:"promptAdditions"`
-	Targets         []PublicResearchDefinitionDefinitionTarget     `json:"targets"`
-	Title           string                                         `json:"title"`
-	Topics          []PublicResearchDefinitionDefinitionTopic      `json:"topics"`
-	Version         int                                            `json:"version"`
-}
-
-// PublicResearchDefinitionDefinitionCredential is the `PublicResearchDefinitionDefinitionCredential` wire model.
-type PublicResearchDefinitionDefinitionCredential struct {
-	Key   string                                           `json:"key"`
-	Kind  PublicResearchDefinitionDefinitionCredentialKind `json:"kind"`
-	Label string                                           `json:"label"`
-	// Onboarding may be absent entirely.
-	Onboarding      *PublicResearchDefinitionDefinitionCredentialOnboarding `json:"onboarding,omitempty"`
-	RequiredAtStart bool                                                    `json:"requiredAtStart"`
-}
-
-// PublicResearchDefinitionDefinitionCredentialKind is the `PublicResearchDefinitionDefinitionCredentialKind` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type PublicResearchDefinitionDefinitionCredentialKind string
-
-const (
-	PublicResearchDefinitionDefinitionCredentialKindLogin       PublicResearchDefinitionDefinitionCredentialKind = "login"
-	PublicResearchDefinitionDefinitionCredentialKindAPIToken    PublicResearchDefinitionDefinitionCredentialKind = "api-token"
-	PublicResearchDefinitionDefinitionCredentialKindOauthClient PublicResearchDefinitionDefinitionCredentialKind = "oauth-client"
-	PublicResearchDefinitionDefinitionCredentialKindSecret      PublicResearchDefinitionDefinitionCredentialKind = "secret"
-)
-
-// PublicResearchDefinitionDefinitionCredentialKindValues lists every PublicResearchDefinitionDefinitionCredentialKind this SDK release knows.
-var PublicResearchDefinitionDefinitionCredentialKindValues = []PublicResearchDefinitionDefinitionCredentialKind{PublicResearchDefinitionDefinitionCredentialKindLogin, PublicResearchDefinitionDefinitionCredentialKindAPIToken, PublicResearchDefinitionDefinitionCredentialKindOauthClient, PublicResearchDefinitionDefinitionCredentialKindSecret}
-
-// PublicResearchDefinitionDefinitionCredentialOnboarding is the `PublicResearchDefinitionDefinitionCredentialOnboarding` wire model.
-type PublicResearchDefinitionDefinitionCredentialOnboarding struct {
-	Instructions string `json:"instructions"`
-	// URL may be absent entirely.
-	URL *string `json:"url,omitempty"`
-}
-
-// PublicResearchDefinitionDefinitionInput is the `PublicResearchDefinitionDefinitionInput` wire model.
-type PublicResearchDefinitionDefinitionInput struct {
-	// Default may be absent entirely.
-	Default *string `json:"default,omitempty"`
-	// DefaultValues may be absent entirely.
-	DefaultValues []string `json:"defaultValues,omitempty"`
-	// Help may be absent entirely.
-	Help *string `json:"help,omitempty"`
-	// Integer may be absent entirely.
-	Integer *bool  `json:"integer,omitempty"`
-	Key     string `json:"key"`
-	Label   string `json:"label"`
-	// Max may be absent entirely.
-	Max *float64 `json:"max,omitempty"`
-	// MaxLength may be absent entirely.
-	MaxLength *int `json:"maxLength,omitempty"`
-	// Min may be absent entirely.
-	Min *float64 `json:"min,omitempty"`
-	// Options may be absent entirely.
-	Options []ListPublicTaskTypesResponseTaskTypeFieldOption `json:"options,omitempty"`
-	// Placeholder may be absent entirely.
-	Placeholder *string `json:"placeholder,omitempty"`
-	// Required may be absent entirely.
-	Required *bool `json:"required,omitempty"`
-	// Section may be absent entirely.
-	Section *string `json:"section,omitempty"`
-	// ShowWhen may be absent entirely.
-	ShowWhen *ListPublicTaskTypesResponseTaskTypeFieldShowWhen `json:"showWhen,omitempty"`
-	// Type may be absent entirely.
-	Type *PublicResearchDefinitionDefinitionInputType `json:"type,omitempty"`
-}
-
-// PublicResearchDefinitionDefinitionInputType is the `PublicResearchDefinitionDefinitionInputType` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type PublicResearchDefinitionDefinitionInputType string
-
-const (
-	PublicResearchDefinitionDefinitionInputTypeText          PublicResearchDefinitionDefinitionInputType = "text"
-	PublicResearchDefinitionDefinitionInputTypeTextarea      PublicResearchDefinitionDefinitionInputType = "textarea"
-	PublicResearchDefinitionDefinitionInputTypeNumber        PublicResearchDefinitionDefinitionInputType = "number"
-	PublicResearchDefinitionDefinitionInputTypeSelect        PublicResearchDefinitionDefinitionInputType = "select"
-	PublicResearchDefinitionDefinitionInputTypeCheckbox      PublicResearchDefinitionDefinitionInputType = "checkbox"
-	PublicResearchDefinitionDefinitionInputTypeCheckboxGroup PublicResearchDefinitionDefinitionInputType = "checkbox-group"
-	PublicResearchDefinitionDefinitionInputTypePath          PublicResearchDefinitionDefinitionInputType = "path"
-)
-
-// PublicResearchDefinitionDefinitionInputTypeValues lists every PublicResearchDefinitionDefinitionInputType this SDK release knows.
-var PublicResearchDefinitionDefinitionInputTypeValues = []PublicResearchDefinitionDefinitionInputType{PublicResearchDefinitionDefinitionInputTypeText, PublicResearchDefinitionDefinitionInputTypeTextarea, PublicResearchDefinitionDefinitionInputTypeNumber, PublicResearchDefinitionDefinitionInputTypeSelect, PublicResearchDefinitionDefinitionInputTypeCheckbox, PublicResearchDefinitionDefinitionInputTypeCheckboxGroup, PublicResearchDefinitionDefinitionInputTypePath}
-
-// PublicResearchDefinitionDefinitionTarget is the `PublicResearchDefinitionDefinitionTarget` wire model.
-type PublicResearchDefinitionDefinitionTarget struct {
-	BaseURL string                                          `json:"baseUrl"`
-	Surface PublicResearchDefinitionDefinitionTargetSurface `json:"surface"`
-}
-
-// PublicResearchDefinitionDefinitionTargetSurface is the `PublicResearchDefinitionDefinitionTargetSurface` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type PublicResearchDefinitionDefinitionTargetSurface string
-
-const (
-	PublicResearchDefinitionDefinitionTargetSurfaceUi  PublicResearchDefinitionDefinitionTargetSurface = "ui"
-	PublicResearchDefinitionDefinitionTargetSurfaceAPI PublicResearchDefinitionDefinitionTargetSurface = "api"
-)
-
-// PublicResearchDefinitionDefinitionTargetSurfaceValues lists every PublicResearchDefinitionDefinitionTargetSurface this SDK release knows.
-var PublicResearchDefinitionDefinitionTargetSurfaceValues = []PublicResearchDefinitionDefinitionTargetSurface{PublicResearchDefinitionDefinitionTargetSurfaceUi, PublicResearchDefinitionDefinitionTargetSurfaceAPI}
-
-// PublicResearchDefinitionDefinitionTopic is the `PublicResearchDefinitionDefinitionTopic` wire model.
-type PublicResearchDefinitionDefinitionTopic struct {
-	ID        string                                            `json:"id"`
-	Questions []PublicResearchDefinitionDefinitionTopicQuestion `json:"questions"`
-	Title     string                                            `json:"title"`
-}
-
-// PublicResearchDefinitionDefinitionTopicQuestion is the `PublicResearchDefinitionDefinitionTopicQuestion` wire model.
-type PublicResearchDefinitionDefinitionTopicQuestion struct {
-	// AnswerHint may be absent entirely.
-	AnswerHint *string `json:"answerHint,omitempty"`
-	ID         string  `json:"id"`
-	Question   string  `json:"question"`
-}
-
-// PublicResearchDefinitionList is the `PublicResearchDefinitionList` wire model.
-type PublicResearchDefinitionList struct {
-	Definitions []PublicResearchDefinition `json:"definitions"`
-}
-
-// PublicResearchDefinitionOrigin is the `PublicResearchDefinitionOrigin` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type PublicResearchDefinitionOrigin string
-
-const (
-	PublicResearchDefinitionOriginRegistered PublicResearchDefinitionOrigin = "registered"
-	PublicResearchDefinitionOriginStored     PublicResearchDefinitionOrigin = "stored"
-)
-
-// PublicResearchDefinitionOriginValues lists every PublicResearchDefinitionOrigin this SDK release knows.
-var PublicResearchDefinitionOriginValues = []PublicResearchDefinitionOrigin{PublicResearchDefinitionOriginRegistered, PublicResearchDefinitionOriginStored}
-
-// PublicResearchPin is the `PublicResearchPin` wire model.
-type PublicResearchPin struct {
-	DefinitionHash    string                                 `json:"definitionHash"`
-	DefinitionKey     string                                 `json:"definitionKey"`
-	DefinitionVersion int                                    `json:"definitionVersion"`
-	Inputs            map[string]CreatePublicTaskFieldsValue `json:"inputs"`
-}
 
 // PublicResolveAgentDecision is the `PublicResolveAgentDecision` wire model.
 type PublicResolveAgentDecision struct {
@@ -7525,18 +7375,18 @@ const (
 // PublicVisualConfirmDecisionPhaseValues lists every PublicVisualConfirmDecisionPhase this SDK release knows.
 var PublicVisualConfirmDecisionPhaseValues = []PublicVisualConfirmDecisionPhase{PublicVisualConfirmDecisionPhaseAwaitingHuman, PublicVisualConfirmDecisionPhaseFixing, PublicVisualConfirmDecisionPhaseApproved}
 
-// PublishResearchDefinition is the `PublishResearchDefinition` wire model.
-type PublishResearchDefinition struct {
-	Brief string `json:"brief"`
+// PublishProjectDefinition is the `PublishProjectDefinition` wire model.
+type PublishProjectDefinition struct {
 	// Credentials may be absent entirely.
-	Credentials []PublicResearchDefinitionDefinitionCredential `json:"credentials,omitempty"`
+	Credentials []PublicProjectDefinitionDefinitionCredential `json:"credentials,omitempty"`
 	// Inputs may be absent entirely.
-	Inputs []PublicResearchDefinitionDefinitionInput `json:"inputs,omitempty"`
+	Inputs []PublicProjectDefinitionDefinitionInput `json:"inputs,omitempty"`
 	// PromptAdditions may be absent entirely.
-	PromptAdditions map[string]string                          `json:"promptAdditions,omitempty"`
-	Targets         []PublicResearchDefinitionDefinitionTarget `json:"targets"`
-	Title           string                                     `json:"title"`
-	Topics          []PublicResearchDefinitionDefinitionTopic  `json:"topics"`
+	PromptAdditions map[string]string `json:"promptAdditions,omitempty"`
+	Spec            any               `json:"spec"`
+	// Targets may be absent entirely.
+	Targets []PublicProjectDefinitionDefinitionTarget `json:"targets,omitempty"`
+	Title   string                                    `json:"title"`
 }
 
 // PutDirectoryWebhook is the `PutDirectoryWebhook` wire model.

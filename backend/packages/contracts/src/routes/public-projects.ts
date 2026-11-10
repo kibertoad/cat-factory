@@ -4,18 +4,24 @@ import { startPublicTaskSchema } from '../public-api.js'
 import {
   createPublicProjectSchema,
   createPublicProjectTaskSchema,
+  projectDefinitionKeyParamsSchema,
+  projectDefinitionVersionParamsSchema,
+  projectKindParamsSchema,
   publicCredentialResumeSchema,
-  publicFindingsRevisionSchema,
-  publicProjectFindingsSchema,
+  publicProjectDefinitionListSchema,
+  publicProjectDefinitionSchema,
+  publicProjectKindDetailSchema,
+  publicProjectKindListSchema,
   publicProjectListSchema,
+  publicProjectOutcomeListQuerySchema,
+  publicProjectOutcomeListSchema,
+  publicProjectOutcomeSchema,
   publicProjectSchema,
   publicProjectServicesSchema,
   publicProjectTaskListSchema,
   publicProjectTaskSchema,
-  publicResearchDefinitionListSchema,
-  publicResearchDefinitionSchema,
-  publishResearchDefinitionSchema,
-  researchDefinitionVersionParamsSchema,
+  publicProjectViewSchema,
+  publishProjectDefinitionSchema,
 } from '../public-projects.js'
 import { errorResponses, singleStringParam, withMinScope, withPersonalUnlock } from './_shared.js'
 
@@ -25,47 +31,71 @@ import { errorResponses, singleStringParam, withMinScope, withPersonalUnlock } f
 //
 // Scopes follow the task surface: reads are `read`, creating and linking are `write`, and
 // starting or retrying a project task is `write` with the personal-unlock headers. Publishing a
-// research definition is `admin`: a definition declares the credentials a run sends to a vendor
-// and the targets it may send them to, which is configuration rather than work.
+// definition is `admin`: a definition declares the credentials a run sends to a third party and
+// the targets it may send them to, which is configuration rather than work.
 // ---------------------------------------------------------------------------
 
 const projectIdParams = singleStringParam('projectId')
-const definitionKeyParams = singleStringParam('key')
-const definitionVersionParams = withObjectKeys(researchDefinitionVersionParamsSchema)
+const kindParams = withObjectKeys(projectKindParamsSchema)
+const definitionKeyParams = withObjectKeys(projectDefinitionKeyParamsSchema)
+const definitionVersionParams = withObjectKeys(projectDefinitionVersionParamsSchema)
 const projectTaskParams = withObjectKeys(v.object({ projectId: v.string(), taskId: v.string() }))
 const runIdParams = singleStringParam('runId')
-const revisionParams = withObjectKeys(v.object({ projectId: v.string(), revisionId: v.string() }))
+const outcomeParams = withObjectKeys(v.object({ projectId: v.string(), outcomeId: v.string() }))
 
-/** Every research definition the key's account can pin: the deployment's, then its own. */
-export const listPublicResearchDefinitionsContract = withMinScope(
+/** The project kinds the deployment offers. */
+export const listPublicProjectKindsContract = withMinScope(
   'read',
   defineApiContract({
     method: 'get',
-    pathResolver: () => '/api/v1/research-definitions',
-    responsesByStatusCode: { 200: publicResearchDefinitionListSchema, ...errorResponses },
+    pathResolver: () => '/api/v1/project-kinds',
+    responsesByStatusCode: { 200: publicProjectKindListSchema, ...errorResponses },
+  }),
+)
+
+/** One project kind with the JSON Schemas of its spec, outcome body and view. */
+export const getPublicProjectKindContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: kindParams,
+    pathResolver: ({ kind }) => `/api/v1/project-kinds/${kind}`,
+    responsesByStatusCode: { 200: publicProjectKindDetailSchema, ...errorResponses },
+  }),
+)
+
+/** Every definition of one kind the key's account can pin: the deployment's, then its own. */
+export const listPublicProjectDefinitionsContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: kindParams,
+    pathResolver: ({ kind }) => `/api/v1/project-kinds/${kind}/definitions`,
+    responsesByStatusCode: { 200: publicProjectDefinitionListSchema, ...errorResponses },
   }),
 )
 
 /** Every version of one definition key, ascending. */
-export const getPublicResearchDefinitionContract = withMinScope(
+export const getPublicProjectDefinitionContract = withMinScope(
   'read',
   defineApiContract({
     method: 'get',
     requestPathParamsSchema: definitionKeyParams,
-    pathResolver: ({ key }) => `/api/v1/research-definitions/${key}`,
-    responsesByStatusCode: { 200: publicResearchDefinitionListSchema, ...errorResponses },
+    pathResolver: ({ kind, key }) => `/api/v1/project-kinds/${kind}/definitions/${key}`,
+    responsesByStatusCode: { 200: publicProjectDefinitionListSchema, ...errorResponses },
   }),
 )
 
-/** Publish one immutable version of an account-owned research definition. */
-export const publishPublicResearchDefinitionContract = withMinScope(
+/** Publish one immutable version of an account-owned definition. */
+export const publishPublicProjectDefinitionContract = withMinScope(
   'admin',
   defineApiContract({
     method: 'put',
     requestPathParamsSchema: definitionVersionParams,
-    pathResolver: ({ key, version }) => `/api/v1/research-definitions/${key}/versions/${version}`,
-    requestBodySchema: publishResearchDefinitionSchema,
-    responsesByStatusCode: { 201: publicResearchDefinitionSchema, ...errorResponses },
+    pathResolver: ({ kind, key, version }) =>
+      `/api/v1/project-kinds/${kind}/definitions/${key}/versions/${version}`,
+    requestBodySchema: publishProjectDefinitionSchema,
+    responsesByStatusCode: { 201: publicProjectDefinitionSchema, ...errorResponses },
   }),
 )
 
@@ -206,26 +236,38 @@ export const retryPublicProjectTaskContract = withPersonalUnlock(
   ),
 )
 
-/** A research project's current findings: the fold over every revision, and its coverage. */
-export const getPublicProjectFindingsContract = withMinScope(
+/** The project's outcomes without their bodies, `seq` ascending. */
+export const listPublicProjectOutcomesContract = withMinScope(
   'read',
   defineApiContract({
     method: 'get',
     requestPathParamsSchema: projectIdParams,
-    pathResolver: ({ projectId }) => `/api/v1/projects/${projectId}/findings`,
-    responsesByStatusCode: { 200: publicProjectFindingsSchema, ...errorResponses },
+    requestQuerySchema: publicProjectOutcomeListQuerySchema,
+    pathResolver: ({ projectId }) => `/api/v1/projects/${projectId}/outcomes`,
+    responsesByStatusCode: { 200: publicProjectOutcomeListSchema, ...errorResponses },
   }),
 )
 
-/** One findings revision with its body. */
-export const getPublicFindingsRevisionContract = withMinScope(
+/** One outcome with its body. */
+export const getPublicProjectOutcomeContract = withMinScope(
   'read',
   defineApiContract({
     method: 'get',
-    requestPathParamsSchema: revisionParams,
-    pathResolver: ({ projectId, revisionId }) =>
-      `/api/v1/projects/${projectId}/findings/revisions/${revisionId}`,
-    responsesByStatusCode: { 200: publicFindingsRevisionSchema, ...errorResponses },
+    requestPathParamsSchema: outcomeParams,
+    pathResolver: ({ projectId, outcomeId }) =>
+      `/api/v1/projects/${projectId}/outcomes/${outcomeId}`,
+    responsesByStatusCode: { 200: publicProjectOutcomeSchema, ...errorResponses },
+  }),
+)
+
+/** The project's current state as its kind reads every outcome. */
+export const getPublicProjectViewContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: projectIdParams,
+    pathResolver: ({ projectId }) => `/api/v1/projects/${projectId}/view`,
+    responsesByStatusCode: { 200: publicProjectViewSchema, ...errorResponses },
   }),
 )
 

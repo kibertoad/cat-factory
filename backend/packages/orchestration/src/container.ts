@@ -38,8 +38,8 @@ import type {} from '@cat-factory/kernel'
 
 import { ServiceMountService } from './modules/services/ServiceMountService.js'
 import { ProjectService } from './modules/projects/ProjectService.js'
-import type { ResearchDefinitionPublisher } from './modules/research/ResearchDefinitionPublisher.js'
-import type { ResearchFindingsStore } from './modules/research/ResearchFindingsStore.js'
+import type { ProjectDefinitionPublisher } from './modules/projects/ProjectDefinitionPublisher.js'
+import type { ProjectOutcomeReader } from './modules/projects/ProjectOutcomeReader.js'
 import { createInlineUseCaseService } from './container/use-case-service.js'
 import type { InlineUseCaseService } from './modules/useCases/InlineUseCaseService.js'
 
@@ -144,9 +144,10 @@ import type {
   TaskTypeRegistry,
   ProjectKindRegistry,
   ProjectKindSource,
-  ResearchDefinitionRegistry,
-  ResearchDefinitionSource,
-  ResearchProjectRepository,
+  ProjectDefinitionRegistry,
+  ProjectKindModuleRegistry,
+  ProjectDefinitionSource,
+  ProjectRecordRepository,
   VcsWebUrls,
 } from '@cat-factory/kernel'
 
@@ -413,10 +414,12 @@ export interface CoreSpine {
   projectKindRegistry: ProjectKindRegistry
   /** Where project kinds are read from: the registry above, or a mothership node's remote source. */
   projectKinds: ProjectKindSource
-  /** The research-definition registry the engine resolved; the mothership serves it to nodes. */
-  researchDefinitionRegistry: ResearchDefinitionRegistry
-  /** The one read of research definitions, registered and stored. */
-  researchDefinitions: ResearchDefinitionSource
+  /** The project-kind module registry the engine resolved: each kind's code half. */
+  projectKindModuleRegistry: ProjectKindModuleRegistry
+  /** The project-definition registry the engine resolved; the mothership serves it to nodes. */
+  projectDefinitionRegistry: ProjectDefinitionRegistry
+  /** The one read of project definitions, registered and stored. */
+  projectDefinitions: ProjectDefinitionSource
   /**
    * The app-owned inline use-case registry the engine resolved (the facade's injected instance,
    * else the empty default). Re-exposed so the facade passes the SAME instance to
@@ -753,15 +756,16 @@ export interface ServicesModule {
 
 export interface ProjectsModule {
   service: ProjectService
-  /** A research project's pin, the definitions it can pin, publishing and the findings reader. */
-  research: {
-    projects: ResearchProjectRepository
-    definitions: ResearchDefinitionSource
-    /** Absent when the facade wires no definition store. */
-    publisher?: ResearchDefinitionPublisher
-    /** Absent when the facade wires no findings store. */
-    findings?: ResearchFindingsStore
-  }
+  /** Every project's own records: its pin, outcome sequence and outcomes. */
+  records: ProjectRecordRepository
+  /** The definitions a project can pin, every kind's. */
+  definitions: ProjectDefinitionSource
+  /** Each kind's code half, for what only the kind understands. */
+  modules: ProjectKindModuleRegistry
+  /** A project's outcomes and its kind's view of them. */
+  outcomes: ProjectOutcomeReader
+  /** Absent when the facade wires no definition store. */
+  publisher?: ProjectDefinitionPublisher
 }
 
 /** Assemble the in-org service-sharing module when its repositories are wired. */
@@ -795,9 +799,9 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     projectKindRegistry,
     projectKinds,
-    researchDefinitionRegistry,
-    researchDefinitions,
-    registeredResearchDefinitions,
+    projectKindModuleRegistry,
+    projectDefinitionRegistry,
+    projectDefinitions,
     inlineUseCaseRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
@@ -860,8 +864,9 @@ export function createCore(injected: CoreDependencies): Core {
       pipelineRegistry,
       promptFragments,
       projectKinds,
-      researchDefinitions,
-      registeredResearchDefinitions,
+      projectDefinitions,
+      registeredProjectDefinitions: runtime.registeredProjectDefinitions,
+      projectKindModules: projectKindModuleRegistry,
       getSpendService: () => spendServiceRef,
       getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
       getSharedStackSeeder: () => sharedStackSeederRef,
@@ -1014,8 +1019,9 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     projectKindRegistry,
     projectKinds,
-    researchDefinitionRegistry,
-    researchDefinitions,
+    projectKindModuleRegistry,
+    projectDefinitionRegistry,
+    projectDefinitions,
     inlineUseCaseRegistry,
     inlineUseCases,
     foundationalServiceRegistry,

@@ -251,7 +251,8 @@
         "kubeNoun": "der Kubernetes-Handler",
         "kubeOverrideNoun": "der Kubernetes-Override",
         "customNoun": "dieser Handler",
-        "cloudflareNoun": "den Cloudflare-Handler"
+        "cloudflareNoun": "den Cloudflare-Handler",
+        "loadFailed": "Die Umgebungs-Handler konnten nicht geladen werden"
       },
       "cloudflare": {
         "intro": "Startet pro Pull Request einen Cloudflare Worker, indem der Preview-Workflow des Ziel-Repositorys angestoßen wird. cat-factory spricht nie direkt mit Cloudflare: Es legt ein Deployment an, liest dessen Status und setzt zum Abbau einen inactive-Status.",
@@ -706,7 +707,8 @@
         "pagerDutyToken": "PagerDuty-API-Token",
         "pagerDutyFromEmail": "PagerDuty From-E-Mail",
         "incidentIoKey": "incident.io-API-Schlüssel",
-        "clear": "Leeren"
+        "clear": "Leeren",
+        "loadFailed": "Die Incident-Tools konnten nicht geladen werden"
       },
       "status": {
         "notConnected": "Nicht verbunden",
@@ -724,7 +726,8 @@
         "disconnectFailed": "Trennen fehlgeschlagen"
       },
       "connectionNoun": "die Observability-Verbindung",
-      "incidentNoun": "der Incident-Provider"
+      "incidentNoun": "der Incident-Provider",
+      "loadFailed": "Die Observability-Verbindung konnte nicht geladen werden"
     },
     "packageRegistries": {
       "tab": "Package-Registries",
@@ -1619,7 +1622,8 @@
       "savedToast": "Monitoring gespeichert",
       "saveFailed": "Zuordnung konnte nicht gespeichert werden",
       "clearFailed": "Zuordnung konnte nicht geleert werden",
-      "configNoun": "die Release-Health-Konfiguration"
+      "configNoun": "die Release-Health-Konfiguration",
+      "loadFailed": "Die Einstellungen zur Release-Gesundheit konnten nicht geladen werden"
     },
     "testSecrets": {
       "title": "Test-Anmeldedaten (sensibel)",
@@ -3024,7 +3028,8 @@
       "roster": {
         "title": "Mitglieder",
         "empty": "Noch keine Mitglieder.",
-        "remove": "Mitglied entfernen"
+        "remove": "Mitglied entfernen",
+        "loadFailed": "Die Mitglieder dieses Boards konnten nicht geladen werden"
       },
       "add": {
         "title": "Mitglied hinzufügen",
@@ -3313,7 +3318,10 @@
           "hint": "Höchstzahl der Nur-Lese-Durchgänge dieser Expedition. Leer lassen für {count}. Bei einer großen Codebasis wird jeder Blickwinkel pro Gebiet durchsucht; was das Budget streicht, wird als nicht durchsucht vermerkt.",
           "problem": "Geben Sie eine ganze Zahl zwischen 1 und {max} ein oder lassen Sie das Feld leer für den Standardwert."
         }
-      }
+      },
+      "documentsLoadFailed": "Die anzuhängenden Dokumente konnten nicht geladen werden",
+      "tasksLoadFailed": "Die anzuhängenden Issues konnten nicht geladen werden",
+      "fragmentsLoadFailed": "Die Best-Practice-Fragmente konnten nicht geladen werden"
     },
     "recurring": {
       "title": "Eine wiederkehrende Pipeline hinzufügen",
@@ -3824,7 +3832,8 @@
         "loadProjection": "Repositories, Pull Requests und Issues konnten nicht geladen werden",
         "startInstall": "Die Installation der GitHub App konnte nicht gestartet werden",
         "connect": "Verbindung nicht möglich"
-      }
+      },
+      "listFailed": "Die Installationen der GitHub App konnten nicht aufgelistet werden"
     },
     "panel": {
       "connectIntro": "Verbinden Sie eine GitHub-App-Installation, um Board-Blöcke mit Repositorys zu hinterlegen, Pull Requests und Issues zu durchsuchen und Agents Branches pushen und PRs öffnen zu lassen.",
@@ -3935,7 +3944,8 @@
       "errors": {
         "listDirectory": "Verzeichnis konnte nicht aufgelistet werden"
       },
-      "selectAllFiles": "{count} Datei auswählen | Alle {count} Dateien auswählen"
+      "selectAllFiles": "{count} Datei auswählen | Alle {count} Dateien auswählen",
+      "listFailed": "Dieser Ordner konnte nicht aufgelistet werden"
     }
   },
   "personalSubscriptions": {
@@ -4153,7 +4163,6 @@
     "title": "Plattform-Observability",
     "refresh": "Aktualisieren",
     "close": "Schließen",
-    "retry": "Erneut versuchen",
     "window": {
       "oneHour": "Letzte Stunde",
       "oneDay": "Letzte 24 Stunden",
@@ -4161,6 +4170,7 @@
       "thirtyDays": "Letzte 30 Tage",
       "ninetyDays": "Letzte 90 Tage"
     },
+    "noAccount": "Es ist kein Konto aktiv, daher gibt es keine Daten anzuzeigen.",
     "outcomes": {
       "title": "Lauf-Ergebnisse",
       "total": "Läufe gesamt",
@@ -5463,6 +5473,7 @@
       "medium": "Mittlere Zuversicht",
       "low": "Geringe Zuversicht"
     },
+    "loadFailed": "Die Anforderungsprüfung konnte nicht geladen werden",
     "findingFloor": {
       "raised": {
         "high": "Dieser Durchlauf hat nur hohe Befunde gemeldet.",
@@ -6007,7 +6018,8 @@
       "checkSourceFailed": "Repo konnte nicht geprüft werden",
       "sourceUnlinked": "Repo-Verknüpfung gelöst",
       "unlinkSourceFailed": "Repo-Verknüpfung konnte nicht gelöst werden"
-    }
+    },
+    "loadFailed": "Der Katalog der Basisdienste konnte nicht geladen werden"
   },
   "binaryOutput": {
     "heading": "Binäre Ausgaben",
@@ -6162,7 +6174,8 @@
       "taskReset": "Aufgabe zurückgesetzt: Bearbeiten Sie sie und reichen Sie sie erneut ein",
       "extraRoundGranted": "Eine weitere Brainstorm-Runde gewährt",
       "resolveError": "Der Brainstorm konnte nicht abgeschlossen werden"
-    }
+    },
+    "loadFailed": "Die Brainstorming-Sitzung konnte nicht geladen werden"
   },
   "clarity": {
     "title": "Bug-Report-Triage",
@@ -6574,8 +6587,8 @@
         "delegated_executor_failed": "Der externe Executor konnte diesen Schritt nicht starten. Das Problem liegt im System, das die Arbeit ausführt, nicht in dieser Installation: prüfe dessen Logs und versuche es erneut.",
         "delegated_work_branch_unprepared": "Die Plattform konnte den Arbeitsbranch nicht bereitstellen, auf den der Executor dieses Schritts geschickt wird, daher wurde nichts gestartet. Entweder darf die Repository-Verbindung nicht darauf schreiben, oder die Aufgabe nennt einen Branch, den es noch nicht gibt: die Details sagen, was davon.",
         "attached_pr_provider_unreachable": "Der Repository-Anbieter hat nicht geantwortet, daher konnte der Pull Request nicht geprüft werden und es wurde keine Aufgabe angelegt. Hier muss nichts eingerichtet werden: versuche es gleich noch einmal.",
-        "research_definitions_unreachable": "Die Recherche-Definitionen dieser Installation konnten gerade nicht gelesen werden, deshalb wurde die Anfrage nicht ausgeführt. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
-        "findings_body_unavailable": "Diese Ergebnisse liegen im Inhaltsspeicher, der sie gerade nicht ausliefern kann. Mit der Anfrage ist alles in Ordnung: versuchen Sie es erneut, sobald der Speicher verfügbar ist."
+        "project_definitions_unreachable": "Die Projektdefinitionen dieser Installation konnten gerade nicht gelesen werden, deshalb wurde die Anfrage nicht ausgeführt. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
+        "outcome_body_unavailable": "Dieses Projektergebnis liegt im Inhaltsspeicher, der es gerade nicht ausliefern kann. Mit der Anfrage ist alles in Ordnung: versuchen Sie es erneut, sobald der Speicher verfügbar ist."
       }
     },
     "reason": {
@@ -6591,23 +6604,23 @@
         "gate_config_fields_invalid": "Die Gate-Einstellungen eines Schritts sind unvollständig oder enthalten einen Wert, den das Gate nicht akzeptiert, meist eine Pflichteinstellung ohne Wert. Füllen Sie die Gate-Einstellungen des Schritts in der Pipeline aus und versuchen Sie es erneut.",
         "approvals_chain_stale": "Diese Pipeline hat sich geändert, nachdem Sie ihre Freigabe-Checkpoints geöffnet haben, daher passen sie nicht mehr zu ihren Schritten. Laden Sie die Pipeline neu und legen Sie sie erneut fest.",
         "approvals_builtin_checkpoint_locked": "Eine integrierte Pipeline behält die Freigabe-Checkpoints, die ihre Katalogdefinition mitbringt. Klonen Sie die Pipeline, um einen davon zu entfernen.",
-        "project_kind_unregistered": "Diese Projektart wird von dieser Installation nicht mehr angeboten. Fragen Sie eine Administratorin oder einen Administrator, welche Projektarten verfügbar sind.",
-        "task_type_not_offered_by_project": "Dieses Projekt bietet diesen Aufgabentyp nicht an. Wählen Sie einen der Aufgabentypen, die das Projekt anbietet.",
-        "project_has_no_writable_repo": "Ein Schritt in der Pipeline dieser Aufgabe braucht ein Repository zum Schreiben, und ein Projekt hat keines. Wählen Sie eine Pipeline, die nur die Repositorys der verknüpften Services liest.",
-        "project_service_link_invalid": "Ein verknüpfter Service existiert nicht oder gehört zu einer anderen Organisation. Wählen Sie Services dieser Organisation.",
-        "project_has_unfinished_tasks": "Dieses Projekt hat noch nicht abgeschlossene Aufgaben. Schließen Sie sie ab oder löschen Sie sie, dann löschen Sie das Projekt.",
-        "research_pin_required": "Ein Rechercheprojekt braucht eine Recherche-Definition. Wählen Sie eine aus, bevor Sie das Projekt anlegen.",
-        "research_pin_not_accepted": "Diese Projektart verwendet keine Recherche-Definition. Legen Sie es ohne an.",
-        "research_definition_not_found": "Diese Recherche-Definition oder Version gibt es für diese Organisation nicht. Wählen Sie eine aus der Liste.",
-        "research_inputs_invalid": "Die für die Recherche-Definition eingegebenen Werte sind ungültig. Prüfen Sie die markierten Felder.",
-        "task_type_requires_project": "Eine Rechercheaufgabe gehört zu einem Rechercheprojekt, nicht zu einem Service. Fügen Sie sie stattdessen einem Projekt hinzu.",
-        "research_project_not_pinned": "Für das Projekt dieser Aufgabe ist keine Recherche-Definition festgelegt, deshalb kann sie nicht recherchieren.",
-        "research_definition_changed": "Die Recherche-Definition hat sich geändert, seit dieses Projekt sie festgelegt hat. Legen Sie ein neues Projekt an, um die neue Version zu verwenden.",
-        "research_task_already_recorded": "Diese Rechercheaufgabe hat ihre Ergebnisse bereits erfasst. Starten Sie eine Folgeaufgabe, um weiter zu recherchieren.",
-        "research_nothing_to_ask": "Für diese Folgeaufgabe bleibt im gewählten Modus keine Frage offen. Wählen Sie einen anderen Modus oder fügen Sie Fragen hinzu.",
-        "findings_too_large_for_inline": "Die Ergebnisse sind zu groß zum Speichern, und das Auslagern in den Inhaltsspeicher ist nicht verfügbar. Aktivieren Sie den Inhaltsspeicher oder erlauben Sie das Auslagern und versuchen Sie es erneut.",
+        "project_kind_unregistered": "Die Art dieses Projekts wird von dieser Installation nicht mehr angeboten, daher kann es keine neue Arbeit aufnehmen. Bitten Sie den Betreiber Ihrer Installation, die Art wieder zu registrieren.",
+        "task_type_not_offered_by_project": "Die Art dieses Projekts nimmt keine Aufgaben dieses Typs an. Wählen Sie einen der Typen, die das Formular dafür anbietet.",
+        "project_has_no_writable_repo": "Ein Schritt dieses Laufs braucht ein Repository zum Schreiben, und ein Projekt hat keines: Die Repositories seiner verknüpften Dienste sind nur lesbarer Kontext. Wählen Sie eine Pipeline, die nur liest und berichtet.",
+        "project_service_link_invalid": "Einer der verknüpften Dienste existiert nicht mehr oder gehört zu einer anderen Organisation. Laden Sie das Board neu und wählen Sie die verknüpften Dienste erneut.",
+        "project_has_unfinished_tasks": "Dieses Projekt hat noch Aufgaben, die nicht abgeschlossen sind. Schließen Sie sie zuerst ab oder löschen Sie sie.",
+        "project_definition_required": "Diese Projektart legt eine Definition fest und braucht daher eine. Wähle eine aus und versuche es erneut.",
+        "project_definition_not_accepted": "Diese Projektart legt keine Definition fest. Entferne die Definition oder wähle eine Projektart, die eine verwendet.",
+        "project_definition_not_found": "Keine Definition dieser Projektart in dieser Organisation passt zu diesem Schlüssel und dieser Version. Prüfe den Schlüssel oder lass die Version leer, um die neueste festzulegen.",
+        "project_definition_inputs_invalid": "Die Werte für die Eingaben der Definition erfüllen sie nicht. Fülle jede Pflichteingabe mit einem zulässigen Wert aus und versuche es erneut.",
+        "task_type_requires_project": "Eine Aufgabe dieses Typs gehört in ein Projekt, nicht zu einem Service. Füge sie einem Projekt einer Art hinzu, die sie anbietet.",
+        "project_not_pinned": "Eine Aufgabe dieses Typs braucht ein Projekt, das eine Definition festlegt, und dieses legt keine fest. Füge die Aufgabe einem Projekt hinzu, das eine festlegt.",
+        "project_definition_changed": "Die Definition, die dieses Projekt festgelegt hat, hat sich seitdem geändert. Der Lauf wurde deshalb angehalten, statt mit einer Definition zu arbeiten, der das Projekt nie zugestimmt hat. Bitte deinen Betreiber, die Änderung als neue Version zu veröffentlichen.",
+        "project_task_already_recorded": "Diese Aufgabe hat ihr Ergebnis bereits im Projekt festgehalten. Lege für eine Nachfolge eine neue Aufgabe an.",
+        "outcome_too_large_for_inline": "Das Ergebnis ist zu groß zum Speichern und wurde daher nicht festgehalten. Grenze die Aufgabe ein und starte sie erneut.",
+        "research_nothing_to_ask": "Der Modus dieser Rechercheaufgabe lässt keine Frage übrig: nichts Neues zum Erweitern oder nichts Unvollständiges oder Blockiertes zum Klären. Wähle einen anderen Modus oder füge eine Frage hinzu.",
         "task_owned_by_project": "Diese Aufgabe gehört zu einem Projekt, das keinen Service hat. Verwenden Sie stattdessen die Aufgabenadresse des Projekts.",
-        "research_definition_invalid": "Die Recherche-Definition verletzt eine Regel: Prüfen Sie, ob ihre Themen-, Fragen-, Zugangsdaten- und Eingabe-IDs eindeutig sind."
+        "project_definition_invalid": "Die Definition wird von ihrem Rahmen oder von ihrer Projektart abgelehnt. Die Antwort nennt jedes Problem; beheben Sie sie und veröffentlichen Sie erneut."
       }
     },
     "action": {
@@ -6699,8 +6712,8 @@
         "no_linked_issues": "Kein verknüpftes Tracker-Issue",
         "capability_credential_still_missing": "Zugangsdaten fehlen noch",
         "credential_wait_unrecorded": "Diese Wartestellung lässt sich nicht fortsetzen",
-        "research_definition_version_exists": "Version bereits veröffentlicht",
-        "research_definition_key_registered": "Namensraum belegt",
+        "project_definition_version_exists": "Version bereits veröffentlicht",
+        "project_definition_key_registered": "Namensraum belegt",
         "project_homed_elsewhere": "Projekt liegt auf einem anderen Board",
         "credential_wait_personal_in_app": "In der App erneuern"
       },
@@ -6769,8 +6782,8 @@
         "no_linked_issues": "Mit dieser Aufgabe ist kein Tracker-Issue verknüpft. Verknüpfe das Issue, aus dem sie stammt, und aktualisiere dann erneut.",
         "capability_credential_still_missing": "Die Zugangsdaten, die dieser Schritt braucht, sind für diesen Workspace noch nicht hinterlegt. Hinterlegen Sie sie in den Einstellungen für Capability-Zugangsdaten und setzen Sie den Lauf dann fort.",
         "credential_wait_unrecorded": "Diese Wartestellung wurde erfasst, bevor die Plattform festhielt, worauf eine Wartestellung wartet, deshalb lässt sie sich nicht fortsetzen. Starten Sie den Lauf stattdessen neu.",
-        "research_definition_version_exists": "Diese Version der Recherche-Definition ist bereits veröffentlicht und kann sich nicht mehr ändern. Veröffentlichen Sie stattdessen eine neue Version.",
-        "research_definition_key_registered": "Dieser Namensraum gehört zu Recherche-Definitionen, die die Installation mitbringt. Veröffentlichen Sie im eigenen Namensraum Ihrer Organisation.",
+        "project_definition_version_exists": "Diese Version der Definition ist bereits veröffentlicht und kann sich nicht mehr ändern. Veröffentlichen Sie stattdessen eine neue Version.",
+        "project_definition_key_registered": "Dieser Namensraum gehört zu Definitionen, die die Installation mitbringt. Veröffentlichen Sie im eigenen Namensraum Ihrer Organisation.",
         "project_homed_elsewhere": "Die Aufgaben eines Projekts werden auf dem Board angelegt und ausgeführt, auf dem es liegt. Öffnen Sie dieses Board, um daran zu arbeiten.",
         "credential_wait_personal_in_app": "Abgelaufene persönliche Zugangsdaten erneuert die Person, die den Lauf gestartet hat, mit ihrem Passwort in der App."
       },
@@ -7175,7 +7188,8 @@
       "done": "Fertig",
       "failed": "Fehlgeschlagen"
     },
-    "groupTitle": "Die Konsensgruppe, auf die dieser Lauf hochgestuft hat"
+    "groupTitle": "Die Konsensgruppe, auf die dieser Lauf hochgestuft hat",
+    "loadFailed": "Die Konsens-Sitzung konnte nicht geladen werden"
   },
   "spec": {
     "title": "Anforderungen",
@@ -7226,6 +7240,14 @@
       "given": "Angenommen",
       "when": "Wenn",
       "then": "Dann"
+    },
+    "anchorReadFailed": {
+      "title": "Die Spezifikation konnte nicht gelesen werden",
+      "description": "Das Lesen des Repositorys ist fehlgeschlagen, daher ist unbekannt, ob dieser Dienst eine Spezifikation hat. Versuchen Sie es erneut."
+    },
+    "anchorUnparsed": {
+      "title": "Die Spezifikationsdatei ist ungültig",
+      "description": "spec/service.json liegt im Standard-Branch, konnte aber nicht geparst werden. Korrigieren Sie die Datei im Repository."
     }
   },
   "followUp": {
@@ -8243,7 +8265,8 @@
       "done": "Fertig",
       "save": "Speichern",
       "revert": "Zurücksetzen"
-    }
+    },
+    "loadFailed": "Die Claude-Skills-Bibliothek konnte nicht geladen werden"
   },
   "merge": {
     "changeClass": {

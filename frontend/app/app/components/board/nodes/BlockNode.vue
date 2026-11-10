@@ -49,10 +49,10 @@ const block = computed<Block | undefined>(() => board.getBlock(props.id))
 const isProject = computed(() => block.value?.level === 'project')
 const project = computed(() => (isProject.value ? projects.byRootBlock[props.id] : undefined))
 const projectKind = computed(() => projects.kindOf(project.value))
-const linkedServiceTitles = computed(() =>
+const linkedServices = computed(() =>
   (project.value?.serviceIds ?? []).map((id) => {
     const service = services.catalog.find((s) => s.id === id)
-    return (service && board.getBlock(service.frameBlockId)?.title) ?? id
+    return { id, title: (service && board.getBlock(service.frameBlockId)?.title) ?? id }
   }),
 )
 const servicesModalOpen = ref(false)
@@ -562,19 +562,19 @@ const ITEM_ICON: Record<string, string | undefined> = {
                stays is what the canvas can't show at a glance. -->
           <!-- A project's linked services: read-only context for its tasks. -->
           <div
-            v-if="isProject && linkedServiceTitles.length"
+            v-if="isProject && linkedServices.length"
             class="flex flex-wrap items-center gap-1"
             data-testid="project-linked-services"
           >
             <UBadge
-              v-for="title in linkedServiceTitles"
-              :key="title"
+              v-for="service in linkedServices"
+              :key="service.id"
               color="neutral"
               variant="subtle"
               size="sm"
               icon="i-lucide-box"
             >
-              {{ title }}
+              {{ service.title }}
             </UBadge>
           </div>
           <div

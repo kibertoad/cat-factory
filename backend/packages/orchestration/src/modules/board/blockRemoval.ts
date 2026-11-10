@@ -9,7 +9,7 @@ import type {
   PreloadedBlocks,
   ResolveBinaryArtifactStore,
   ProjectRepository,
-  ResearchProjectRepository,
+  ProjectRecordRepository,
   ServiceRepository,
   TaskRepository,
   WorkspaceMountRepository,
@@ -36,7 +36,7 @@ export interface BlockRemovalDeps {
   executionRepository: ExecutionRepository
   serviceRepository?: ServiceRepository
   projectRepository?: ProjectRepository
-  researchProjectRepository?: ResearchProjectRepository
+  projectRecordRepository?: ProjectRecordRepository
   workspaceMountRepository?: WorkspaceMountRepository
   initiativeRepository?: InitiativeRepository
   documentRepository?: DocumentRepository
@@ -141,8 +141,8 @@ export function createBlockRemoval(deps: BlockRemovalDeps) {
       {
         ...(deps.serviceRepository ? { serviceRepository: deps.serviceRepository } : {}),
         ...(deps.projectRepository ? { projectRepository: deps.projectRepository } : {}),
-        ...(deps.researchProjectRepository
-          ? { researchProjectRepository: deps.researchProjectRepository }
+        ...(deps.projectRecordRepository
+          ? { projectRecordRepository: deps.projectRecordRepository }
           : {}),
         ...(deps.workspaceMountRepository
           ? { workspaceMountRepository: deps.workspaceMountRepository }

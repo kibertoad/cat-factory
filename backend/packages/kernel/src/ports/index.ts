@@ -56,22 +56,21 @@ export type {
 } from './service-repositories.js'
 export type { ProjectRepository } from './project-repositories.js'
 export type {
-  FindingsRevisionBodyRef,
-  FindingsRevisionRepository,
-  FindingsRevisionRow,
-  FindingsStoragePolicyRepository,
-  ResearchDefinitionRepository,
-  ResearchProjectRepository,
-  StoredResearchDefinition,
-} from './research-repositories.js'
+  OutcomeStoragePolicyRepository,
+  ProjectDefinitionRepository,
+  ProjectOutcomeBodyRef,
+  ProjectOutcomeRow,
+  ProjectRecordRepository,
+  StoredProjectDefinition,
+} from './project-outcome-repositories.js'
 export { type ProjectKindSource, registryProjectKindSource } from './project-kinds.js'
 export {
-  type RegisteredResearchDefinitionSource,
-  type ResearchDefinitionSource,
-  type ResolvedResearchDefinition,
-  composeResearchDefinitionSource,
-  registryResearchDefinitionSource,
-} from './research-definitions.js'
+  type ProjectDefinitionSource,
+  type RegisteredProjectDefinitionSource,
+  type ResolvedProjectDefinition,
+  composeProjectDefinitionSource,
+  registryProjectDefinitionSource,
+} from './project-definitions.js'
 export type { Clock, IdGenerator } from './runtime.js'
 export {
   type LogFields,
@@ -273,8 +272,8 @@ export type {
   AgentJobUpdate,
   AgentRunContext,
   AgentRunResult,
-  ResearchCredentialRequest,
-  ResearchRunContext,
+  CredentialRequest,
+  ProjectRunContext,
   AgentTokenUsage,
   AsyncAgentExecutor,
   ReviewedPoint,

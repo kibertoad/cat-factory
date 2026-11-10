@@ -1,25 +1,25 @@
 import {
   type Block,
   type DescriptorFieldValues,
+  type ProjectPin,
   createPublicProjectContract,
   createPublicProjectTaskContract,
-  foldFindings,
-  getPublicFindingsRevisionContract,
   getPublicProjectContract,
-  getPublicProjectFindingsContract,
+  getPublicProjectDefinitionContract,
+  getPublicProjectKindContract,
+  getPublicProjectOutcomeContract,
   getPublicProjectTaskContract,
-  getPublicResearchDefinitionContract,
-  isAdhocQuestionId,
+  getPublicProjectViewContract,
   linkPublicProjectServicesContract,
+  listPublicProjectDefinitionsContract,
+  listPublicProjectKindsContract,
+  listPublicProjectOutcomesContract,
   listPublicProjectsContract,
   listPublicProjectTasksContract,
-  listPublicResearchDefinitionsContract,
   mountPublicProjectContract,
   type PublicProject,
   type PublicProjectTask,
-  publishPublicResearchDefinitionContract,
-  researchCoverage,
-  type ResearchProject,
+  publishPublicProjectDefinitionContract,
   retryPublicProjectTaskContract,
   startPublicProjectTaskContract,
   stopPublicProjectTaskContract,
@@ -35,11 +35,12 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
 import { authorize, refuse } from './publicApiAuth.js'
+import { kindSchemas } from './projectKindSchemas.js'
 import { resolveTaskTypeFields } from './taskTypeFields.js'
 import { retryTaskRun, startTaskRun, stopTaskRun } from './taskRunActions.js'
 
-// The public PROJECTS surface: projects a key's workspace mounts, their service links and tasks,
-// and a research project's findings. A project is account-owned and mounted on boards like a
+// The public PROJECTS surface: project kinds and their definitions, the projects a key's workspace
+// mounts with their service links and tasks, and a project's outcomes. A project is account-owned and mounted on boards like a
 // service, so every read here takes the projects the KEY's workspace mounts. Its tasks are created
 // and run on the board that homes it, which is the board whose runs and spend they belong to; a
 // key whose board only mounts the project reads them and is refused a write with
@@ -60,7 +61,7 @@ async function accountOf<E extends AppEnv>(c: Context<E>, workspaceId: string): 
 function toPublicProject(
   mounted: MountedProject,
   keyWorkspaceId: string,
-  pin: ResearchProject | undefined,
+  pin: ProjectPin | undefined,
   frames: ReadonlyMap<string, string>,
 ): PublicProject {
   const { project, rootBlock } = mounted
@@ -74,7 +75,7 @@ function toPublicProject(
       return frame ? [frame] : []
     }),
     homedHere: mounted.homeWorkspaceId === keyWorkspaceId,
-    research: pin
+    pin: pin
       ? {
           definitionKey: pin.definitionKey,
           definitionVersion: pin.definitionVersion,
@@ -99,14 +100,14 @@ function toPublicProjectTask(block: Block, projectId: string): PublicProjectTask
   }
 }
 
-/** The project with its research pin, projected for the key. */
+/** The project with its pin, projected for the key. */
 async function projectFor<E extends AppEnv>(
   c: Context<E>,
   workspaceId: string,
   mounted: MountedProject,
 ): Promise<PublicProject> {
   const projects = requireProjects(c)
-  const pin = await projects.research.projects.get(mounted.project.id)
+  const pin = await projects.records.getPin(mounted.project.id)
   const frames = await projects.service.frameIdsByService(mounted.project.serviceIds)
   return toPublicProject(mounted, workspaceId, pin ?? undefined, frames)
 }
@@ -151,48 +152,71 @@ async function reread<E extends AppEnv>(
 
 export function publicProjectController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  registerKindRoutes(app)
   registerDefinitionRoutes(app)
   registerProjectRoutes(app)
   registerProjectTaskRoutes(app)
-  registerFindingsRoutes(app)
+  registerOutcomeRoutes(app)
   return app
 }
 
-function registerDefinitionRoutes(app: Hono<AppEnv>): void {
-  buildHonoRoute(app, listPublicResearchDefinitionsContract, async (c) => {
-    const gate = await authorize(c, listPublicResearchDefinitionsContract.minScope)
+function registerKindRoutes(app: Hono<AppEnv>): void {
+  buildHonoRoute(app, listPublicProjectKindsContract, async (c) => {
+    const gate = await authorize(c, listPublicProjectKindsContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
+    return c.json({ kinds: await c.get('container').projectKinds.all() }, 200)
+  })
+
+  buildHonoRoute(app, getPublicProjectKindContract, async (c) => {
+    const gate = await authorize(c, getPublicProjectKindContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const { kind } = c.req.valid('param')
+    const container = c.get('container')
+    const descriptor = await container.projectKinds.get(kind)
+    if (!descriptor) throw new NotFoundError('ProjectKind', kind)
+    const schemas = kindSchemas(container.projectKindModuleRegistry.get(kind)?.schemas)
+    return c.json({ ...descriptor, schemas }, 200)
+  })
+}
+
+function registerDefinitionRoutes(app: Hono<AppEnv>): void {
+  buildHonoRoute(app, listPublicProjectDefinitionsContract, async (c) => {
+    const gate = await authorize(c, listPublicProjectDefinitionsContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const { kind } = c.req.valid('param')
     const account = await accountOf(c, gate.auth.workspaceId)
-    const definitions = await c.get('container').researchDefinitions.list(account)
+    const definitions = await c.get('container').projectDefinitions.list(account, kind)
     return c.json({ definitions }, 200)
   })
 
-  buildHonoRoute(app, getPublicResearchDefinitionContract, async (c) => {
-    const gate = await authorize(c, getPublicResearchDefinitionContract.minScope)
+  buildHonoRoute(app, getPublicProjectDefinitionContract, async (c) => {
+    const gate = await authorize(c, getPublicProjectDefinitionContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
-    const { key } = c.req.valid('param')
+    const { kind, key } = c.req.valid('param')
     const account = await accountOf(c, gate.auth.workspaceId)
-    const definitions = (await c.get('container').researchDefinitions.list(account)).filter(
+    const definitions = (await c.get('container').projectDefinitions.list(account, kind)).filter(
       (d) => d.definition.key === key,
     )
     if (definitions.length === 0) {
-      throw new NotFoundError('ResearchDefinition', key, {
-        reason: 'research_definition_not_found',
+      throw new NotFoundError('ProjectDefinition', key, {
+        reason: 'project_definition_not_found',
+        kind,
       })
     }
     return c.json({ definitions }, 200)
   })
 
-  buildHonoRoute(app, publishPublicResearchDefinitionContract, async (c) => {
-    const gate = await authorize(c, publishPublicResearchDefinitionContract.minScope)
+  buildHonoRoute(app, publishPublicProjectDefinitionContract, async (c) => {
+    const gate = await authorize(c, publishPublicProjectDefinitionContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const publisher = requireCapability(
-      requireProjects(c).research.publisher,
-      'Publishing research definitions is not configured',
+      requireProjects(c).publisher,
+      'Publishing project definitions is not configured',
     )
-    const { key, version } = c.req.valid('param')
+    const { kind, key, version } = c.req.valid('param')
     const stored = await publisher.publish(await accountOf(c, gate.auth.workspaceId), {
       ...c.req.valid('json'),
+      kind,
       key,
       version: Number(version),
     })
@@ -210,9 +234,10 @@ function registerProjectRoutes(app: Hono<AppEnv>): void {
     const projects = requireProjects(c)
     const mounted = await projects.service.listMounted(gate.auth.workspaceId)
     const pins = new Map(
-      (await projects.research.projects.listByProjectIds(mounted.map((m) => m.project.id))).map(
-        (pin) => [pin.projectId, pin],
-      ),
+      (await projects.records.listPins(mounted.map((m) => m.project.id))).map((pin) => [
+        pin.projectId,
+        pin,
+      ]),
     )
     const frames = await projects.service.frameIdsByService(
       mounted.flatMap((m) => m.project.serviceIds),
@@ -231,12 +256,12 @@ function registerProjectRoutes(app: Hono<AppEnv>): void {
     const gate = await authorize(c, createPublicProjectContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const workspaceId = gate.auth.workspaceId
-    const { serviceIds, research, ...body } = c.req.valid('json')
+    const { serviceIds, definition, ...body } = c.req.valid('json')
     const projects = requireProjects(c)
     const created = await projects.service.create(workspaceId, {
       ...body,
       serviceIds: await projects.service.serviceIdsOfFrames(workspaceId, serviceIds ?? []),
-      ...(research ? { research: { ...research, inputs: research.inputs ?? {} } } : {}),
+      ...(definition ? { definition: { ...definition, inputs: definition.inputs ?? {} } } : {}),
     })
     const mounted = { ...created, homeWorkspaceId: workspaceId }
     return c.json(await projectFor(c, workspaceId, mounted), 201)
@@ -399,71 +424,38 @@ function registerProjectTaskRoutes(app: Hono<AppEnv>): void {
   })
 }
 
-function registerFindingsRoutes(app: Hono<AppEnv>): void {
-  buildHonoRoute(app, getPublicProjectFindingsContract, async (c) => {
-    const gate = await authorize(c, getPublicProjectFindingsContract.minScope)
+function registerOutcomeRoutes(app: Hono<AppEnv>): void {
+  buildHonoRoute(app, listPublicProjectOutcomesContract, async (c) => {
+    const gate = await authorize(c, listPublicProjectOutcomesContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
-    const { projectId } = c.req.valid('param')
-    const { workspaceId } = gate.auth
     const projects = requireProjects(c)
-    const mounted = await projects.service.getMounted(workspaceId, projectId)
-    const pin = await requirePin(projects, projectId)
-    const findings = requireFindings(projects)
-    const definition = await c
-      .get('container')
-      .researchDefinitions.get(
-        await accountOf(c, workspaceId),
-        pin.definitionKey,
-        pin.definitionVersion,
-      )
-    const revisions = await findings.listRevisions(mounted.project)
-    const folded = foldFindings(revisions)
-    const adhocIds = [
-      ...new Set(Object.keys(folded.byQuestion).filter((id) => isAdhocQuestionId(id))),
-    ]
-    return c.json(
-      {
-        projectId,
-        definitionKey: pin.definitionKey,
-        definitionVersion: pin.definitionVersion,
-        summary: folded.summary,
-        latestRevisionId: folded.latestRevisionId,
-        findings: Object.values(folded.byQuestion),
-        learnings: folded.learnings,
-        coverage: researchCoverage(definition?.definition.topics ?? [], adhocIds, folded),
-        revisions: revisions.map(({ body: _body, ...meta }) => meta),
-      },
-      200,
+    const { project } = await projects.service.getMounted(
+      gate.auth.workspaceId,
+      c.req.valid('param').projectId,
     )
+    const outcomes = await projects.outcomes.list(project.id, c.req.valid('query').stream)
+    return c.json({ outcomes }, 200)
   })
 
-  buildHonoRoute(app, getPublicFindingsRevisionContract, async (c) => {
-    const gate = await authorize(c, getPublicFindingsRevisionContract.minScope)
+  buildHonoRoute(app, getPublicProjectOutcomeContract, async (c) => {
+    const gate = await authorize(c, getPublicProjectOutcomeContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
-    const { projectId, revisionId } = c.req.valid('param')
+    const { projectId, outcomeId } = c.req.valid('param')
     const projects = requireProjects(c)
-    const mounted = await projects.service.getMounted(gate.auth.workspaceId, projectId)
-    const revision = await requireFindings(projects).getRevision(mounted.project, revisionId)
-    if (!revision) throw new NotFoundError('FindingsRevision', revisionId)
-    const { body, ...meta } = revision
-    return c.json(
-      { ...meta, summary: body.summary, findings: body.findings, learnings: body.learnings },
-      200,
-    )
+    const { project } = await projects.service.getMounted(gate.auth.workspaceId, projectId)
+    const outcome = await projects.outcomes.get(project, outcomeId)
+    if (!outcome) throw new NotFoundError('ProjectOutcome', outcomeId)
+    return c.json(outcome, 200)
   })
-}
 
-async function requirePin(projects: ProjectsModule, projectId: string): Promise<ResearchProject> {
-  const pin = await projects.research.projects.get(projectId)
-  if (!pin) {
-    throw new ValidationError('This project pins no research definition', {
-      reason: 'research_project_not_pinned',
-      projectId,
-    })
-  }
-  return pin
-}
-
-function requireFindings(projects: ProjectsModule) {
-  return requireCapability(projects.research.findings, 'Research findings are not configured')
+  buildHonoRoute(app, getPublicProjectViewContract, async (c) => {
+    const gate = await authorize(c, getPublicProjectViewContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const projects = requireProjects(c)
+    const { project } = await projects.service.getMounted(
+      gate.auth.workspaceId,
+      c.req.valid('param').projectId,
+    )
+    return c.json({ projectId: project.id, ...(await projects.outcomes.view(project)) }, 200)
+  })
 }

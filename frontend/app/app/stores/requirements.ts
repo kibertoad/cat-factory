@@ -10,6 +10,7 @@ import type {
   ReviewItemStatus,
 } from '~/types/requirements'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { useKeyedLoads } from '~/composables/useKeyedLoads'
 // The settlement derivations over one review's findings (`stores/requirements/settlement.ts`):
 // pure, memoised per review object, and re-exported below so every caller keeps reading them off
 // the store.
@@ -32,7 +33,8 @@ import {
  * at once (status `incorporating`) and the user goes back to the board; they are summoned
  * again (a notification) only if the re-review yields findings or hits the cap. The store is
  * patched both from call responses and from live `requirements` stream events (see
- * `upsert`). `available` mirrors the backend's opt-in gate (a 503 hides the UI).
+ * `upsert`). `available` mirrors the backend's opt-in gate (a 503 hides the UI); any other failed
+ * load is recorded per block on `loadFailed`, so the window can tell it from "no review yet".
  * Per-workspace; nothing is persisted client-side.
  */
 export const useRequirementsStore = defineStore('requirements', () => {
@@ -49,15 +51,12 @@ export const useRequirementsStore = defineStore('requirements', () => {
   const incorporating = ref<Set<string>>(new Set())
   /** Block ids whose Requirement Writer is currently producing recommendations. */
   const recommending = ref<Set<string>>(new Set())
-  /** Block ids whose current review is being fetched (the initial `load`). */
-  const loadingByBlock = ref<Set<string>>(new Set())
   /**
-   * In-flight `load()` promises keyed by block id, so concurrent callers for the same
-   * block (the inspector's badge watch + the review window opening together) share ONE
-   * request instead of each firing its own. Plain Map — internal bookkeeping, not
-   * reactive. Cleared once the request settles.
+   * The per-block `load` state: which blocks are being fetched, which last failed with anything
+   * but the feature-off 503, and one shared request per block, so the inspector's badge watch and
+   * the review window opening together fire ONE fetch.
    */
-  const inFlight = new Map<string, Promise<void>>()
+  const loads = useKeyedLoads({ onModuleOff: () => (available.value = false) })
 
   function reviewFor(blockId: string): RequirementReview | null {
     return reviews.value[blockId] ?? null
@@ -88,9 +87,8 @@ export const useRequirementsStore = defineStore('requirements', () => {
   function isReviewing(blockId: string): boolean {
     return reviewing.value.has(blockId)
   }
-  function isLoading(blockId: string): boolean {
-    return loadingByBlock.value.has(blockId)
-  }
+  const isLoading = loads.isLoading
+  const loadFailed = loads.loadFailed
   function isIncorporating(reviewId: string): boolean {
     return incorporating.value.has(reviewId)
   }
@@ -124,8 +122,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     reviewing.value = new Set()
     incorporating.value = new Set()
     recommending.value = new Set()
-    loadingByBlock.value = new Set()
-    inFlight.clear()
+    loads.reset()
   }
 
   function withFlag(set: typeof reviewing, key: string, on: boolean) {
@@ -138,27 +135,13 @@ export const useRequirementsStore = defineStore('requirements', () => {
   /** Fetch the current review for a block (probing the feature's availability). */
   async function load(blockId: string) {
     if (!workspace.workspaceId) return
-    // Coalesce overlapping loads of the same block onto a single request.
-    const pending = inFlight.get(blockId)
-    if (pending) return pending
-    const promise = (async () => {
-      withFlag(loadingByBlock, blockId, true)
-      try {
-        const review = await api.getRequirementReview(workspace.requireId(), blockId)
-        available.value = true
-        // Written by key like `store()`, and directly because a load resolving to "none exists"
-        // caches a null the getter reads as "fetched, absent".
-        reviews.value[blockId] = review
-      } catch {
-        // 503 (feature off) or any error → hide the UI entry points.
-        available.value = false
-      } finally {
-        withFlag(loadingByBlock, blockId, false)
-        inFlight.delete(blockId)
-      }
-    })()
-    inFlight.set(blockId, promise)
-    return promise
+    return loads.run(blockId, async () => {
+      const review = await api.getRequirementReview(workspace.requireId(), blockId)
+      available.value = true
+      // Written by key like `store()`, and directly because a load resolving to "none exists"
+      // caches a null the getter reads as "fetched, absent".
+      reviews.value[blockId] = review
+    })
   }
 
   /** Record a human's answer to one item. */
@@ -260,6 +243,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     backgroundStage,
     isReviewing,
     isLoading,
+    loadFailed,
     isIncorporating,
     isRecommending,
     openCount,

@@ -286,10 +286,12 @@ export const Empty: Story = {
 
 /**
  * The provider failed to read the spec's anchor file, so the backend cannot say whether a spec
- * exists. The window does not read the diagnostics, so this shows the same empty state as no
- * spec.
+ * exists. The window says the read failed and offers a retry, not the no-spec empty state.
  */
 export const AnchorReadFailed: Story = {
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
   parameters: {
     api: [
       specIs({
@@ -299,6 +301,26 @@ export const AnchorReadFailed: Story = {
         diagnostics: {
           anchor: 'read_failed',
           issues: [{ path: 'spec/service.json', kind: 'read_failed', dropped: 0 }],
+        },
+      }),
+    ],
+  },
+}
+
+/** The anchor file exists but does not parse: the window says so, with no retry to offer. */
+export const AnchorUnparsed: Story = {
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
+  parameters: {
+    api: [
+      specIs({
+        present: false,
+        spec: null,
+        features: [],
+        diagnostics: {
+          anchor: 'unparsed',
+          issues: [{ path: 'spec/service.json', kind: 'unparsed', dropped: 0 }],
         },
       }),
     ],

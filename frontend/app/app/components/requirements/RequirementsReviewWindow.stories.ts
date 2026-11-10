@@ -7,7 +7,7 @@ import {
 } from '@cat-factory/contracts'
 import type { HttpHandler } from 'msw'
 import { screen, userEvent, within } from 'storybook/test'
-import { apiPending, apiResponse } from '~/stories/api'
+import { apiFailure, apiPending, apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { loginTask } from '~/stories/board.stories.mocks'
 import { snapshot } from '~/stories/snapshot.stories.mocks'
@@ -173,6 +173,14 @@ export const Empty: Story = story(null)
 
 /** The read of the review has not answered. */
 export const Loading: Story = opened(apiPending(getRequirementReviewContract, read))
+
+/** The read failed: the window says so with a retry, not the no-review empty state. */
+export const Failed: Story = {
+  ...opened(apiFailure(getRequirementReviewContract, read)),
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
+}
 
 /**
  * The answers are folded into a draft document, open below the findings, waiting for a person to

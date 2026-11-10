@@ -1,13 +1,15 @@
 import type {
   ExecutionEventPublisher,
+  ProjectDefinitionSource,
+  ProjectKindModuleRegistry,
   ProjectKindSource,
-  RegisteredResearchDefinitionSource,
-  ResearchDefinitionSource,
+  RegisteredProjectDefinitionSource,
 } from '@cat-factory/kernel'
 import type { ProjectsModule } from '../container.js'
+import { ProjectDefinitionPublisher } from '../modules/projects/ProjectDefinitionPublisher.js'
+import { ProjectOutcomeReader } from '../modules/projects/ProjectOutcomeReader.js'
 import { ProjectService } from '../modules/projects/ProjectService.js'
-import { ResearchDefinitionPublisher } from '../modules/research/ResearchDefinitionPublisher.js'
-import { createResearchFindingsStore } from '../modules/research/createResearchStepController.js'
+import { createProjectOutcomeStore } from '../modules/projects/createProjectStepController.js'
 import type { CoreDependencies } from './dependencies.js'
 
 /** Assemble the projects module when the project, service and mount repositories are wired. */
@@ -15,8 +17,9 @@ export function createProjectsModule(
   deps: CoreDependencies,
   sources: {
     projectKinds: ProjectKindSource
-    researchDefinitions: ResearchDefinitionSource
-    registeredResearchDefinitions: RegisteredResearchDefinitionSource
+    projectDefinitions: ProjectDefinitionSource
+    registeredProjectDefinitions: RegisteredProjectDefinitionSource
+    projectKindModules: ProjectKindModuleRegistry
   },
   events: ExecutionEventPublisher,
 ): ProjectsModule | undefined {
@@ -24,13 +27,13 @@ export function createProjectsModule(
     projectRepository,
     serviceRepository,
     workspaceMountRepository,
-    researchProjectRepository,
+    projectRecordRepository,
   } = deps
   if (
     !projectRepository ||
     !serviceRepository ||
     !workspaceMountRepository ||
-    !researchProjectRepository
+    !projectRecordRepository
   ) {
     return undefined
   }
@@ -41,30 +44,34 @@ export function createProjectsModule(
     workspaceRepository: deps.workspaceRepository,
     blockRepository: deps.blockRepository,
     projectKinds: sources.projectKinds,
-    research: { definitions: sources.researchDefinitions, projects: researchProjectRepository },
+    definitions: sources.projectDefinitions,
+    records: projectRecordRepository,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     events,
     logger: deps.logger,
   })
-  const { researchDefinitionRepository, findingsRevisionRepository } = deps
+  const { projectDefinitionRepository } = deps
   return {
     service,
-    research: {
-      projects: researchProjectRepository,
-      definitions: sources.researchDefinitions,
-      ...(researchDefinitionRepository
-        ? {
-            publisher: new ResearchDefinitionPublisher({
-              registered: sources.registeredResearchDefinitions,
-              repository: researchDefinitionRepository,
-              clock: deps.clock,
-            }),
-          }
-        : {}),
-      ...(findingsRevisionRepository
-        ? { findings: createResearchFindingsStore(deps, findingsRevisionRepository) }
-        : {}),
-    },
+    records: projectRecordRepository,
+    definitions: sources.projectDefinitions,
+    modules: sources.projectKindModules,
+    outcomes: new ProjectOutcomeReader({
+      records: projectRecordRepository,
+      outcomes: createProjectOutcomeStore(deps, projectRecordRepository),
+      definitions: sources.projectDefinitions,
+      modules: sources.projectKindModules,
+    }),
+    ...(projectDefinitionRepository
+      ? {
+          publisher: new ProjectDefinitionPublisher({
+            registered: sources.registeredProjectDefinitions,
+            repository: projectDefinitionRepository,
+            modules: sources.projectKindModules,
+            clock: deps.clock,
+          }),
+        }
+      : {}),
   }
 }

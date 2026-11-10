@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
   CreateProjectInput,
-  PinnableResearchDefinition,
+  PinnableProjectDefinition,
   Project,
   ProjectKindDescriptor,
   WorkspaceMount,
@@ -65,10 +65,10 @@ export const useProjectsStore = defineStore('projects', () => {
     return created
   }
 
-  /** The research definition versions this board's account can pin on a new research project. */
-  async function listPinnableDefinitions(): Promise<PinnableResearchDefinition[]> {
+  /** The definition versions of `kind` this board's account can pin on a new project. */
+  async function listPinnableDefinitions(kind: string): Promise<PinnableProjectDefinition[]> {
     const ws = useWorkspaceStore()
-    return api.listPinnableResearchDefinitions(ws.requireId())
+    return api.listPinnableProjectDefinitions(ws.requireId(), kind)
   }
 
   async function setServices(projectId: string, serviceIds: string[]) {

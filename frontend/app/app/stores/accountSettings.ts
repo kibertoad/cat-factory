@@ -5,6 +5,7 @@ import type {
   AccountSettingsView,
   UpdateAccountSettingsInput,
 } from '~/types/accountSettings'
+import { isModuleOffRefusal } from '~/composables/api/errors'
 
 /**
  * Thrown by `saveConfigPatch` when the account's current config is not in hand. A panel disables
@@ -21,7 +22,7 @@ export class AccountConfigNotLoadedError extends Error {
  * Per-account deployment settings (admin only): the integration secrets — Slack app OAuth
  * credentials + the web-search upstream keys — sealed at rest in the DB. Secrets are
  * write-only: this store only ever holds the non-secret `summary` (which integrations are
- * configured), never the values. `available` mirrors the backend opt-in: a 503 (no
+ * configured), never the values. `available` mirrors the backend opt-in: the module-off 503 (no
  * ENCRYPTION_KEY) hides the panel. Loaded on demand from the account-settings panel.
  *
  * Several panels on the account's Team tab read and patch the one `view`, and the tab is not
@@ -69,13 +70,9 @@ export const useAccountSettingsStore = defineStore('accountSettings', () => {
       if (superseded()) return
       view.value = null
       viewAccountId.value = null
-      // 503 ⇒ the settings store isn't wired (no ENCRYPTION_KEY) ⇒ hide the panel.
-      if (
-        e &&
-        typeof e === 'object' &&
-        'statusCode' in e &&
-        (e as { statusCode?: number }).statusCode === 503
-      ) {
+      // The module-off 503 ⇒ the settings store isn't wired (no ENCRYPTION_KEY) ⇒ hide the panel.
+      // Any other failure, an outage 503 included, is rethrown for the panel to state.
+      if (isModuleOffRefusal(e)) {
         available.value = false
       } else {
         throw e

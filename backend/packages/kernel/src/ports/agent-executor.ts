@@ -1,9 +1,4 @@
-import type {
-  FindingsRevisionBody,
-  QuestionStatus,
-  ResearchDefinition,
-  ResearchMode,
-} from '@cat-factory/contracts'
+import type { ProjectDefinition } from '@cat-factory/contracts'
 import type {
   AgentConfigValues,
   AgentKind,
@@ -967,11 +962,10 @@ export interface AgentRunContext {
     }
   }
   /**
-   * A research task's brief: the project's pinned definition, the questions this task answers,
-   * what earlier revisions established for them, and a checkpoint the step recorded before it
-   * parked for a credential. Set by the engine's research step handler; absent on every other run.
+   * A project task's run: its project, the definition it pinned and the brief its kind built. Set
+   * by the engine's project step handler; absent on every other run.
    */
-  research?: ResearchRunContext
+  project?: ProjectRunContext
 }
 
 /** A point at which the agent needs a human to choose before continuing. */
@@ -1005,25 +999,23 @@ export interface AgentTokenUsage {
   inputClasses?: InputTokenClassCounts
 }
 
-/** What a research run is asked, resolved by the engine when the task's step starts. */
-export interface ResearchRunContext {
+/** What a project task's run is asked, resolved by the engine when the task's step starts. */
+export interface ProjectRunContext {
   projectId: string
-  mode: ResearchMode
-  definition: ResearchDefinition
+  /** The project's kind, whose module built `brief`. */
+  kind: string
+  /** The definition the project pinned, or null for a kind that pins none. */
+  definition: ProjectDefinition | null
   /** The project's values for the definition's `inputs`. */
   inputs: Record<string, unknown>
-  /** The questions this task answers, each with its topic, ad-hoc ones included. */
-  questions: Array<{ id: string; topic: string; question: string; answerHint?: string }>
-  /** What earlier revisions established for those questions, so a follow-up starts from it. */
-  priorFindings: Array<{ questionId: string; status: QuestionStatus; answer: string }>
-  /** Partial findings the step recorded before it stopped to wait for a credential. */
-  checkpoint?: FindingsRevisionBody
   /** The frame blocks of the services the project links, whose repos are read-only context. */
   linkedFrameBlockIds: string[]
+  /** What the kind asks of this task, in the kind's own shape, for the kind's agent prompt. */
+  brief: unknown
 }
 
 /** A credential the agent stopped to ask a person for. */
-export interface ResearchCredentialRequest {
+export interface CredentialRequest {
   key: string
   reason: string
   observed: string
@@ -1103,11 +1095,11 @@ export interface AgentRunResult {
    */
   ralphVerdict?: unknown
   /**
-   * A research run that stopped to ask a person for a credential. The engine checkpoints the
+   * A project run that stopped to ask a person for a credential. The engine checkpoints the
    * partial findings in `custom` and parks the step on the credential instead of completing it.
    */
-  credentialRequest?: ResearchCredentialRequest
-  /** The scrubbed HTTP exchanges a research run's `http_request` tool recorded, by evidence ref. */
+  credentialRequest?: CredentialRequest
+  /** The scrubbed HTTP exchanges a project run's `http_request` tool recorded, by evidence ref. */
   httpExchanges?: Array<{ ref: string; exchange: unknown }>
   /**
    * A coding step's PRE-PR validation report: which of the service's configured check commands

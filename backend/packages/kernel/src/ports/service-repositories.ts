@@ -4,7 +4,7 @@ import type { Service, WorkspaceMount } from '../domain/types.js'
 // Persistence ports for in-org shared services.
 //
 // A `Service` is account-owned (keyed by its own global id); a `WorkspaceMount`
-// places a service onto a workspace board (keyed by (workspace_id, service_id))
+// places a service onto a workspace board (keyed by (workspace_id, subject_id))
 // and carries the per-workspace layout override. These are the seam that lets
 // the same service appear on several workspaces in one org without duplicating
 // its subtree, state or sync.

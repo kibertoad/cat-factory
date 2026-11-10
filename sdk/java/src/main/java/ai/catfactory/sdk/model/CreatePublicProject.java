@@ -11,21 +11,21 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code CreatePublicProject} wire model.
+ * @param definition May be absent entirely.
  * @param description May be absent entirely. Length 0..2000.
  * @param kind the {@code kind} field.
- * @param research May be absent entirely.
  * @param serviceIds May be absent entirely.
  * @param title Length 1..200.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record CreatePublicProject(
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("definition") @Nullable CreatePublicProjectDefinition definition,
+
     /** May be absent entirely. Length 0..2000. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("description") @Nullable String description,
 
     @JsonProperty("kind") String kind,
-
-    /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("research") @Nullable CreatePublicProjectResearch research,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("serviceIds") @Nullable List<String> serviceIds,
@@ -46,11 +46,17 @@ public record CreatePublicProject(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable CreatePublicProjectDefinition definition;
         private @Nullable String description;
         private @Nullable String kind;
-        private @Nullable CreatePublicProjectResearch research;
         private @Nullable List<String> serviceIds;
         private @Nullable String title;
+
+        /** Set {@code definition}. */
+        public Builder definition(@Nullable CreatePublicProjectDefinition definition) {
+            this.definition = definition;
+            return this;
+        }
 
         /** Set {@code description}. */
         public Builder description(@Nullable String description) {
@@ -61,12 +67,6 @@ public record CreatePublicProject(
         /** Set {@code kind}. */
         public Builder kind(@Nullable String kind) {
             this.kind = kind;
-            return this;
-        }
-
-        /** Set {@code research}. */
-        public Builder research(@Nullable CreatePublicProjectResearch research) {
-            this.research = research;
             return this;
         }
 
@@ -84,7 +84,7 @@ public record CreatePublicProject(
 
         /** Build the {@link CreatePublicProject}. */
         public CreatePublicProject build() {
-            return new CreatePublicProject(description, kind, research, serviceIds, title);
+            return new CreatePublicProject(definition, description, kind, serviceIds, title);
         }
     }
 }

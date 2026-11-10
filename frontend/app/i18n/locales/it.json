@@ -251,7 +251,8 @@
         "kubeNoun": "l'handler Kubernetes",
         "kubeOverrideNoun": "l'override Kubernetes",
         "customNoun": "questo handler",
-        "cloudflareNoun": "l’handler Cloudflare"
+        "cloudflareNoun": "l’handler Cloudflare",
+        "loadFailed": "Impossibile caricare i gestori di ambiente"
       },
       "cloudflare": {
         "intro": "Avvia un Worker Cloudflare per ogni pull request attivando il workflow di anteprima del repository di destinazione. cat-factory non parla mai direttamente con Cloudflare: crea un deployment, ne legge lo stato e pubblica uno stato inactive per smantellarlo.",
@@ -706,7 +707,8 @@
         "pagerDutyToken": "Token API PagerDuty",
         "pagerDutyFromEmail": "Email From di PagerDuty",
         "incidentIoKey": "Chiave API incident.io",
-        "clear": "Cancella"
+        "clear": "Cancella",
+        "loadFailed": "Impossibile caricare gli strumenti per gli incidenti"
       },
       "status": {
         "notConnected": "Non connesso",
@@ -724,7 +726,8 @@
         "disconnectFailed": "Impossibile disconnettere"
       },
       "connectionNoun": "la connessione di osservabilita",
-      "incidentNoun": "il provider degli incidenti"
+      "incidentNoun": "il provider degli incidenti",
+      "loadFailed": "Impossibile caricare la connessione di osservabilità"
     },
     "packageRegistries": {
       "tab": "Registry di package",
@@ -1619,7 +1622,8 @@
       "savedToast": "Monitoraggio salvato",
       "saveFailed": "Impossibile salvare il mapping",
       "clearFailed": "Impossibile cancellare il mapping",
-      "configNoun": "la configurazione dello stato di rilascio"
+      "configNoun": "la configurazione dello stato di rilascio",
+      "loadFailed": "Impossibile caricare le impostazioni sullo stato dei rilasci"
     },
     "testSecrets": {
       "title": "Credenziali di test (sensibili)",
@@ -3024,7 +3028,8 @@
       "roster": {
         "title": "Membri",
         "empty": "Ancora nessun membro.",
-        "remove": "Rimuovi membro"
+        "remove": "Rimuovi membro",
+        "loadFailed": "Impossibile caricare i membri di questa bacheca"
       },
       "add": {
         "title": "Aggiungi un membro",
@@ -3313,7 +3318,10 @@
           "hint": "Numero massimo di passaggi in sola lettura di questa spedizione. Lascia vuoto per {count}. Su una codebase grande ogni angolazione viene pescata per territorio, e ciò che il budget taglia resta registrato come non pescato.",
           "problem": "Inserisci un numero intero compreso tra 1 e {max}, oppure lascia vuoto per il valore predefinito."
         }
-      }
+      },
+      "documentsLoadFailed": "Impossibile caricare i documenti da allegare",
+      "tasksLoadFailed": "Impossibile caricare le issue da allegare",
+      "fragmentsLoadFailed": "Impossibile caricare i frammenti di best practice"
     },
     "recurring": {
       "title": "Aggiungi una pipeline ricorrente",
@@ -3824,7 +3832,8 @@
         "loadProjection": "Impossibile caricare repository, pull request e issue",
         "startInstall": "Impossibile avviare l'installazione della GitHub App",
         "connect": "Impossibile collegare"
-      }
+      },
+      "listFailed": "Impossibile elencare le installazioni della GitHub App"
     },
     "panel": {
       "connectIntro": "Collega un'installazione della GitHub App per associare i blocchi della board ai repository, sfogliare pull request e issue, e permettere agli agenti di effettuare il push dei branch e aprire PR.",
@@ -3935,7 +3944,8 @@
       "errors": {
         "listDirectory": "Impossibile elencare la directory"
       },
-      "selectAllFiles": "Seleziona {count} file | Seleziona tutti i {count} file"
+      "selectAllFiles": "Seleziona {count} file | Seleziona tutti i {count} file",
+      "listFailed": "Impossibile elencare questa cartella"
     }
   },
   "personalSubscriptions": {
@@ -4153,7 +4163,6 @@
     "title": "Osservabilità della piattaforma",
     "refresh": "Aggiorna",
     "close": "Chiudi",
-    "retry": "Riprova",
     "window": {
       "oneHour": "Ultima ora",
       "oneDay": "Ultime 24 ore",
@@ -4161,6 +4170,7 @@
       "thirtyDays": "Ultimi 30 giorni",
       "ninetyDays": "Ultimi 90 giorni"
     },
+    "noAccount": "Nessun account è attivo, quindi non ci sono dati da mostrare.",
     "outcomes": {
       "title": "Esiti delle esecuzioni",
       "total": "Esecuzioni totali",
@@ -5463,6 +5473,7 @@
       "medium": "Confidenza media",
       "low": "Confidenza bassa"
     },
+    "loadFailed": "Impossibile caricare la revisione dei requisiti",
     "findingFloor": {
       "raised": {
         "high": "Questo passaggio ha segnalato solo rilievi alti.",
@@ -6007,7 +6018,8 @@
       "checkSourceFailed": "Impossibile controllare il repository",
       "sourceUnlinked": "Repository scollegato",
       "unlinkSourceFailed": "Impossibile scollegare il repository"
-    }
+    },
+    "loadFailed": "Impossibile caricare il catalogo dei servizi fondamentali"
   },
   "binaryOutput": {
     "heading": "Output binari",
@@ -6162,7 +6174,8 @@
       "taskReset": "Attività reimpostata: modificala e inviala di nuovo",
       "extraRoundGranted": "Concesso un altro giro di brainstorm",
       "resolveError": "Impossibile risolvere il brainstorm"
-    }
+    },
+    "loadFailed": "Impossibile caricare la sessione di brainstorming"
   },
   "clarity": {
     "title": "Triage delle segnalazioni di bug",
@@ -6574,8 +6587,8 @@
         "delegated_executor_failed": "L’esecutore esterno non è riuscito ad avviare questo passaggio. Il problema è nel sistema che svolge il lavoro, non in questa installazione: controlla i suoi log e riprova.",
         "delegated_work_branch_unprepared": "La piattaforma non è riuscita a preparare il branch di lavoro su cui viene inviato l'executor di questo passo, quindi non è stato avviato nulla. O la connessione al repository non può scriverci, oppure l'attività indica un branch che non esiste ancora: i dettagli dicono quale dei due.",
         "attached_pr_provider_unreachable": "Il provider del repository non ha risposto, quindi non è stato possibile verificare la pull request e non è stata creata alcuna attività. Non c'è nulla da configurare qui: riprova tra un momento.",
-        "research_definitions_unreachable": "Non è stato possibile leggere le definizioni di ricerca di questa installazione in questo momento, quindi la richiesta non è stata completata. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
-        "findings_body_unavailable": "Questi risultati sono conservati nell'archiviazione dei contenuti, che ora non può fornirli. La richiesta è corretta: riprova quando l'archiviazione sarà disponibile."
+        "project_definitions_unreachable": "Non è stato possibile leggere le definizioni di progetto di questa installazione in questo momento, quindi la richiesta non è stata completata. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
+        "outcome_body_unavailable": "Questo risultato del progetto è conservato nell'archiviazione dei contenuti, che ora non può fornirlo. La richiesta è corretta: riprova quando l'archiviazione sarà disponibile."
       }
     },
     "reason": {
@@ -6591,23 +6604,23 @@
         "gate_config_fields_invalid": "Le impostazioni del gate di un passo sono incomplete o contengono un valore che il gate non accetta, di solito un'impostazione obbligatoria senza valore. Compila le impostazioni del gate del passo nella pipeline e riprova.",
         "approvals_chain_stale": "Questa pipeline è cambiata dopo che ne hai aperto i punti di approvazione, quindi non corrispondono più ai suoi passaggi. Ricarica la pipeline e impostali di nuovo.",
         "approvals_builtin_checkpoint_locked": "Una pipeline integrata mantiene i punti di approvazione previsti dalla sua definizione nel catalogo. Clona la pipeline per rimuoverne uno.",
-        "project_kind_unregistered": "Questo tipo di progetto non è più offerto da questa installazione. Chiedi a un amministratore quali tipi di progetto sono disponibili.",
-        "task_type_not_offered_by_project": "Questo progetto non offre quel tipo di attività. Scegli uno dei tipi di attività che il progetto offre.",
-        "project_has_no_writable_repo": "Un passaggio della pipeline di questa attività ha bisogno di un repository in cui scrivere, e un progetto non ne ha. Scegli una pipeline che legge soltanto i repository dei servizi collegati.",
-        "project_service_link_invalid": "Un servizio collegato non esiste o appartiene a un'altra organizzazione. Scegli servizi di questa organizzazione.",
-        "project_has_unfinished_tasks": "Questo progetto ha ancora attività non concluse. Concludile o eliminale, poi elimina il progetto.",
-        "research_pin_required": "Un progetto di ricerca ha bisogno di una definizione di ricerca. Scegline una prima di creare il progetto.",
-        "research_pin_not_accepted": "Questo tipo di progetto non usa una definizione di ricerca. Crealo senza.",
-        "research_definition_not_found": "Quella definizione di ricerca o versione non esiste per questa organizzazione. Scegline una dall'elenco.",
-        "research_inputs_invalid": "I valori inseriti per la definizione di ricerca non sono validi. Controlla i campi evidenziati.",
-        "task_type_requires_project": "Un'attività di ricerca appartiene a un progetto di ricerca, non a un servizio. Aggiungila invece a un progetto.",
-        "research_project_not_pinned": "Il progetto di questa attività non ha una definizione di ricerca fissata, quindi non può fare ricerca.",
-        "research_definition_changed": "La definizione di ricerca è cambiata da quando questo progetto l'ha fissata. Crea un nuovo progetto per usare la nuova versione.",
-        "research_task_already_recorded": "Questa attività di ricerca ha già registrato i suoi risultati. Avvia un'attività di approfondimento per continuare la ricerca.",
-        "research_nothing_to_ask": "Per questo approfondimento non resta alcuna domanda nella modalità scelta. Scegli un'altra modalità o aggiungi domande.",
-        "findings_too_large_for_inline": "I risultati sono troppo grandi da salvare, e spostarli nell'archiviazione dei contenuti non è possibile. Attiva l'archiviazione dei contenuti o consenti lo spostamento, poi riprova.",
+        "project_kind_unregistered": "Questa installazione non offre più il tipo di questo progetto, che quindi non può ricevere nuovo lavoro. Chiedi all'operatore della tua installazione di registrare di nuovo il tipo.",
+        "task_type_not_offered_by_project": "Il tipo di questo progetto non accetta attività di questo tipo. Scegli uno dei tipi che il modulo offre per esso.",
+        "project_has_no_writable_repo": "Un passo di questa esecuzione ha bisogno di un repository in cui scrivere, e un progetto non ne ha: i repository dei suoi servizi collegati sono contesto in sola lettura. Scegli una pipeline che si limita a leggere e riferire.",
+        "project_service_link_invalid": "Uno dei servizi collegati non esiste più o appartiene a un'altra organizzazione. Ricarica la board e scegli di nuovo i servizi collegati.",
+        "project_has_unfinished_tasks": "Questo progetto ha ancora attività non concluse. Concludile o eliminale prima.",
+        "project_definition_required": "Questo tipo di progetto fissa una definizione, quindi ne serve una. Scegline una e riprova.",
+        "project_definition_not_accepted": "Questo tipo di progetto non fissa alcuna definizione. Rimuovi la definizione o scegli un tipo che ne usa una.",
+        "project_definition_not_found": "Nessuna definizione di questo tipo di progetto in questa organizzazione corrisponde a quella chiave e versione. Controlla la chiave, oppure lascia vuota la versione per fissare la più recente.",
+        "project_definition_inputs_invalid": "I valori degli input della definizione non la soddisfano. Compila ogni input obbligatorio con un valore accettato e riprova.",
+        "task_type_requires_project": "Un'attività di questo tipo appartiene a un progetto, non a un servizio. Aggiungila a un progetto di un tipo che la offre.",
+        "project_not_pinned": "Un'attività di questo tipo richiede che il suo progetto fissi una definizione, e questo non ne fissa nessuna. Aggiungi l'attività a un progetto che ne fissa una.",
+        "project_definition_changed": "La definizione fissata da questo progetto è cambiata nel frattempo, quindi l'esecuzione si è fermata invece di lavorare su una definizione che il progetto non ha mai accettato. Chiedi all'operatore del deployment di pubblicare la modifica come nuova versione.",
+        "project_task_already_recorded": "Questa attività ha già registrato il suo risultato nel progetto. Crea una nuova attività per proseguire.",
+        "outcome_too_large_for_inline": "Il risultato è troppo grande per essere salvato, quindi non è stato registrato. Restringi l'attività ed eseguila di nuovo.",
+        "research_nothing_to_ask": "La modalità di questa attività di ricerca non lascia alcuna domanda da porre: niente di nuovo da aggiungere, o niente di parziale o bloccato da chiarire. Scegli un'altra modalità o aggiungi una domanda.",
         "task_owned_by_project": "Questa attività appartiene a un progetto, che non ha un servizio. Usa invece l'indirizzo delle attività del progetto.",
-        "research_definition_invalid": "La definizione di ricerca viola una regola: verifica che gli id di argomenti, domande, credenziali e input siano univoci."
+        "project_definition_invalid": "La definizione è rifiutata dalla sua struttura o dal suo tipo di progetto. La risposta elenca ogni problema; correggili e pubblica di nuovo."
       }
     },
     "action": {
@@ -6699,8 +6712,8 @@
         "no_linked_issues": "Nessuna issue collegata",
         "capability_credential_still_missing": "Credenziale ancora mancante",
         "credential_wait_unrecorded": "Impossibile riprendere questa attesa",
-        "research_definition_version_exists": "Versione già pubblicata",
-        "research_definition_key_registered": "Spazio dei nomi occupato",
+        "project_definition_version_exists": "Versione già pubblicata",
+        "project_definition_key_registered": "Spazio dei nomi occupato",
         "project_homed_elsewhere": "Progetto ospitato su un'altra bacheca",
         "credential_wait_personal_in_app": "Rinnova nell'app"
       },
@@ -6769,8 +6782,8 @@
         "no_linked_issues": "Questa attività non ha issue del tracker collegate. Collega la issue da cui proviene, poi aggiorna di nuovo.",
         "capability_credential_still_missing": "La credenziale di cui ha bisogno questo passaggio non è ancora salvata per questo spazio di lavoro. Salvala nelle impostazioni delle credenziali delle capacità, poi riprendi l'esecuzione.",
         "credential_wait_unrecorded": "Questa attesa è stata registrata prima che la piattaforma annotasse che cosa attende ogni attesa, quindi non si può riprendere. Riavvia invece l'esecuzione.",
-        "research_definition_version_exists": "Questa versione della definizione di ricerca è già pubblicata e non può cambiare. Pubblica invece una nuova versione.",
-        "research_definition_key_registered": "Questo spazio dei nomi appartiene alle definizioni di ricerca fornite dall'installazione. Pubblica nello spazio dei nomi della tua organizzazione.",
+        "project_definition_version_exists": "Questa versione della definizione è già pubblicata e non può cambiare. Pubblica invece una nuova versione.",
+        "project_definition_key_registered": "Questo spazio dei nomi appartiene alle definizioni fornite dall'installazione. Pubblica nello spazio dei nomi della tua organizzazione.",
         "project_homed_elsewhere": "Le attività di un progetto vengono create ed eseguite sulla bacheca che lo ospita. Apri quella bacheca per lavorarci.",
         "credential_wait_personal_in_app": "Una credenziale personale scaduta la rinnova chi ha avviato l'esecuzione, con la propria password, nell'app."
       },
@@ -7175,7 +7188,8 @@
       "done": "Fatto",
       "failed": "Non riuscito"
     },
-    "groupTitle": "Il gruppo di consenso a cui è salita questa esecuzione"
+    "groupTitle": "Il gruppo di consenso a cui è salita questa esecuzione",
+    "loadFailed": "Impossibile caricare la sessione di consenso"
   },
   "spec": {
     "title": "Requisiti",
@@ -7226,6 +7240,14 @@
       "given": "Given",
       "when": "When",
       "then": "Then"
+    },
+    "anchorReadFailed": {
+      "title": "Impossibile leggere la specifica",
+      "description": "La lettura del repository non è riuscita, quindi non si sa se questo servizio ha una specifica. Riprova."
+    },
+    "anchorUnparsed": {
+      "title": "Il file della specifica non è valido",
+      "description": "spec/service.json è sul branch predefinito ma non è stato possibile analizzarlo. Correggi il file nel repository."
     }
   },
   "followUp": {
@@ -8243,7 +8265,8 @@
       "done": "Fatto",
       "save": "Salva",
       "revert": "Ripristina"
-    }
+    },
+    "loadFailed": "Impossibile caricare la libreria Claude Skills"
   },
   "merge": {
     "changeClass": {

@@ -186,21 +186,21 @@ export interface CreatePublicJob {
 }
 
 export interface CreatePublicProject {
+  definition?: CreatePublicProjectDefinition
   /** Length 0..2000. */
   description?: string
   kind: string
-  research?: CreatePublicProjectResearch
   serviceIds?: string[]
   /** Length 1..200. */
   title: string
 }
 
-export interface CreatePublicProjectResearch {
-  /** Length 1..120. */
-  definitionKey: string
-  /** Range 1..∞. */
-  definitionVersion?: number
+export interface CreatePublicProjectDefinition {
   inputs?: Record<string, CreatePublicTaskFieldsValue>
+  /** Length 1..120. */
+  key: string
+  /** Range 1..∞. */
+  version?: number
 }
 
 export interface CreatePublicProjectTask {
@@ -3013,107 +3013,6 @@ export interface PublicDeployment {
   appUrl: string
 }
 
-export interface PublicFindingsRevision {
-  createdAt: number
-  definitionKey: string
-  /** Range 1..∞. */
-  definitionVersion: number
-  findings: PublicFindingsRevisionFinding[]
-  id: string
-  learnings: PublicFindingsRevisionLearning[]
-  mode: PublicFindingsRevisionMode
-  projectId: string
-  /** Range 1..∞. */
-  seq: number
-  summary: string
-  taskId: string
-}
-
-export interface PublicFindingsRevisionFinding {
-  /** Length 0..20000. */
-  answer: string
-  blockedOn?: PublicFindingsRevisionFindingBlockedOn
-  caveats: string[]
-  confidence: PublicReviewFindingSeverity
-  evidence: PublicFindingsRevisionFindingEvidence[]
-  /** Length 1..200. */
-  questionId: string
-  status: PublicFindingsRevisionFindingStatus
-}
-
-export interface PublicFindingsRevisionFindingBlockedOn {
-  /** Length 1..128. */
-  credentialKey: string
-}
-
-/** Discriminated by `kind`. */
-export type PublicFindingsRevisionFindingEvidence =
-  | PublicFindingsRevisionFindingEvidenceVariant0
-  | PublicFindingsRevisionFindingEvidenceVariant1
-  | PublicFindingsRevisionFindingEvidenceVariant2
-  | PublicFindingsRevisionFindingEvidenceVariant3
-
-export interface PublicFindingsRevisionFindingEvidenceVariant0 {
-  kind: 'http-exchange'
-  /** Length 1..∞. */
-  ref: string
-}
-
-export interface PublicFindingsRevisionFindingEvidenceVariant1 {
-  /** Length 1..∞. */
-  artifactId: string
-  kind: 'screenshot'
-}
-
-export interface PublicFindingsRevisionFindingEvidenceVariant2 {
-  kind: 'url'
-  url: string
-}
-
-export interface PublicFindingsRevisionFindingEvidenceVariant3 {
-  kind: 'repo-path'
-  /** Length 1..1000. */
-  path: string
-  /** Length 1..∞. */
-  repoId: string
-}
-
-export type PublicFindingsRevisionFindingStatus = 'answered' | 'partial' | 'unanswered' | 'blocked'
-
-/** Every `PublicFindingsRevisionFindingStatus` value, for exhaustive handling and runtime validation. */
-export const PUBLIC_FINDINGS_REVISION_FINDING_STATUS_VALUES = ['answered', 'partial', 'unanswered', 'blocked'] as const
-
-export interface PublicFindingsRevisionLearning {
-  /** Length 0..20000. */
-  detail: string
-  /** Length 1..200. */
-  title: string
-}
-
-export type PublicFindingsRevisionMode = 'initial' | 'extend' | 'clarify' | 'refresh'
-
-/** Every `PublicFindingsRevisionMode` value, for exhaustive handling and runtime validation. */
-export const PUBLIC_FINDINGS_REVISION_MODE_VALUES = ['initial', 'extend', 'clarify', 'refresh'] as const
-
-export interface PublicFoldedFinding {
-  finding: PublicFindingsRevisionFinding
-  notes: PublicFoldedFindingNote[]
-  revisionId: string
-  seq: number
-}
-
-export interface PublicFoldedFindingNote {
-  answer: string
-  blockedOn?: PublicFoldedFindingNoteBlockedOn
-  revisionId: string
-  seq: number
-  status: PublicFindingsRevisionFindingStatus
-}
-
-export interface PublicFoldedFindingNoteBlockedOn {
-  credentialKey: string
-}
-
 export interface PublicFollowUpItem {
   /** Always present; `null` when the server has no value for it. */
   answer: string | null
@@ -3502,69 +3401,206 @@ export interface PublicProject {
   description: string
   homedHere: boolean
   kind: string
-  projectId: string
   /** Always present; `null` when the server has no value for it. */
-  research: PublicResearchPin | null
+  pin: PublicProjectPin | null
+  projectId: string
   serviceIds: string[]
   title: string
 }
 
-export interface PublicProjectFindings {
-  coverage: PublicProjectFindingsCoverage
-  definitionKey: string
-  /** Range 1..∞. */
-  definitionVersion: number
-  findings: PublicFoldedFinding[]
-  /** Always present; `null` when the server has no value for it. */
-  latestRevisionId: string | null
-  learnings: PublicProjectFindingsLearning[]
-  projectId: string
-  revisions: PublicProjectFindingsRevision[]
-  summary: string
+export interface PublicProjectDefinition {
+  contentHash: string
+  definition: PublicProjectDefinitionDefinition
+  origin: PublicProjectDefinitionOrigin
 }
 
-export interface PublicProjectFindingsCoverage {
-  adhoc: PublicProjectFindingsCoverageAdhoc
-  byTopic: PublicProjectFindingsCoverageByTopic[]
-  retiredQuestionIds: string[]
-  total: PublicProjectFindingsCoverageAdhoc
-}
-
-export interface PublicProjectFindingsCoverageAdhoc {
-  answered: number
-  blocked: number
-  partial: number
-  unanswered: number
-}
-
-export interface PublicProjectFindingsCoverageByTopic {
-  counts: PublicProjectFindingsCoverageAdhoc
-  topicId: string
-}
-
-export interface PublicProjectFindingsLearning {
-  /** Length 0..20000. */
-  detail: string
-  revisionId: string
+export interface PublicProjectDefinitionDefinition {
+  credentials: PublicProjectDefinitionDefinitionCredential[]
+  inputs: PublicProjectDefinitionDefinitionInput[]
+  key: string
+  kind: string
+  promptAdditions: Record<string, string>
+  spec: unknown
+  targets: PublicProjectDefinitionDefinitionTarget[]
   /** Length 1..200. */
   title: string
+  /** Range 1..∞. */
+  version: number
 }
 
-export interface PublicProjectFindingsRevision {
-  createdAt: number
-  definitionKey: string
-  /** Range 1..∞. */
-  definitionVersion: number
-  id: string
-  mode: PublicFindingsRevisionMode
-  projectId: string
-  /** Range 1..∞. */
-  seq: number
-  taskId: string
+export interface PublicProjectDefinitionDefinitionCredential {
+  /** Length 1..128. */
+  key: string
+  kind: PublicProjectDefinitionDefinitionCredentialKind
+  /** Length 1..200. */
+  label: string
+  onboarding?: PublicProjectDefinitionDefinitionCredentialOnboarding
+  requiredAtStart: boolean
 }
+
+export type PublicProjectDefinitionDefinitionCredentialKind = 'login' | 'api-token' | 'oauth-client' | 'secret'
+
+/** Every `PublicProjectDefinitionDefinitionCredentialKind` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PROJECT_DEFINITION_DEFINITION_CREDENTIAL_KIND_VALUES = ['login', 'api-token', 'oauth-client', 'secret'] as const
+
+export interface PublicProjectDefinitionDefinitionCredentialOnboarding {
+  /** Length 1..2000. */
+  instructions: string
+  url?: string
+}
+
+export interface PublicProjectDefinitionDefinitionInput {
+  /** Length 0..2000. */
+  default?: string
+  defaultValues?: string[]
+  /** Length 0..300. */
+  help?: string
+  integer?: boolean
+  /** Length 1..80. */
+  key: string
+  /** Length 1..120. */
+  label: string
+  max?: number
+  /** Range 1..2000. */
+  maxLength?: number
+  min?: number
+  options?: ListPublicTaskTypesResponseTaskTypeFieldOption[]
+  /** Length 0..200. */
+  placeholder?: string
+  required?: boolean
+  /** Length 1..120. */
+  section?: string
+  showWhen?: ListPublicTaskTypesResponseTaskTypeFieldShowWhen
+  type?: PublicProjectDefinitionDefinitionInputType
+}
+
+export type PublicProjectDefinitionDefinitionInputType = 'text' | 'textarea' | 'number' | 'select' | 'checkbox' | 'checkbox-group' | 'path'
+
+/** Every `PublicProjectDefinitionDefinitionInputType` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PROJECT_DEFINITION_DEFINITION_INPUT_TYPE_VALUES = ['text', 'textarea', 'number', 'select', 'checkbox', 'checkbox-group', 'path'] as const
+
+export interface PublicProjectDefinitionDefinitionTarget {
+  baseUrl: string
+  surface: PublicProjectDefinitionDefinitionTargetSurface
+}
+
+export type PublicProjectDefinitionDefinitionTargetSurface = 'ui' | 'api'
+
+/** Every `PublicProjectDefinitionDefinitionTargetSurface` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PROJECT_DEFINITION_DEFINITION_TARGET_SURFACE_VALUES = ['ui', 'api'] as const
+
+export interface PublicProjectDefinitionList {
+  definitions: PublicProjectDefinition[]
+}
+
+export type PublicProjectDefinitionOrigin = 'registered' | 'stored'
+
+/** Every `PublicProjectDefinitionOrigin` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PROJECT_DEFINITION_ORIGIN_VALUES = ['registered', 'stored'] as const
+
+export interface PublicProjectKind {
+  definition?: PublicProjectKindDefinition
+  /** Length 0..2000. */
+  description?: string
+  id: string
+  /** Length 1..80. */
+  label: string
+  taskTypes: PublicProjectKindTaskType[]
+}
+
+export type PublicProjectKindDefinition = 'required' | 'optional'
+
+/** Every `PublicProjectKindDefinition` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PROJECT_KIND_DEFINITION_VALUES = ['required', 'optional'] as const
+
+export interface PublicProjectKindDetail {
+  definition?: PublicProjectKindDefinition
+  /** Length 0..2000. */
+  description?: string
+  id: string
+  /** Length 1..80. */
+  label: string
+  schemas: PublicProjectKindDetailSchemas
+  taskTypes: PublicProjectKindTaskType[]
+}
+
+export interface PublicProjectKindDetailSchemas {
+  /** Always present; `null` when the server has no value for it. */
+  outcome: Record<string, unknown> | null
+  /** Always present; `null` when the server has no value for it. */
+  spec: Record<string, unknown> | null
+  /** Always present; `null` when the server has no value for it. */
+  view: Record<string, unknown> | null
+}
+
+export interface PublicProjectKindList {
+  kinds: PublicProjectKind[]
+}
+
+export interface PublicProjectKindTaskType {
+  defaultPipelineId?: string
+  repoAccess: PublicProjectKindTaskTypeRepoAccess
+  taskType: 'feature' | 'bug' | 'bug-fishing' | 'document' | 'spike' | 'review' | 'resolve-conflicts' | 'ralph' | 'media' | 'research' | 'recurring' | (string & {})
+}
+
+export type PublicProjectKindTaskTypeRepoAccess = 'none' | 'linked-read-only'
+
+/** Every `PublicProjectKindTaskTypeRepoAccess` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PROJECT_KIND_TASK_TYPE_REPO_ACCESS_VALUES = ['none', 'linked-read-only'] as const
 
 export interface PublicProjectList {
   projects: PublicProject[]
+}
+
+export interface PublicProjectOutcome {
+  artifactRefs: string[]
+  body: unknown
+  createdAt: number
+  /** Always present; `null` when the server has no value for it. */
+  definitionKey: string | null
+  /** Always present; `null` when the server has no value for it. */
+  definitionVersion: number | null
+  id: string
+  intent: string
+  projectId: string
+  /** Range 1..∞. */
+  schemaVersion: number
+  /** Range 1..∞. */
+  seq: number
+  stream: string
+  /** Always present; `null` when the server has no value for it. */
+  taskId: string | null
+}
+
+export interface PublicProjectOutcomeList {
+  outcomes: PublicProjectOutcomeListOutcome[]
+}
+
+export interface PublicProjectOutcomeListOutcome {
+  artifactRefs: string[]
+  createdAt: number
+  /** Always present; `null` when the server has no value for it. */
+  definitionKey: string | null
+  /** Always present; `null` when the server has no value for it. */
+  definitionVersion: number | null
+  id: string
+  intent: string
+  projectId: string
+  /** Range 1..∞. */
+  schemaVersion: number
+  /** Range 1..∞. */
+  seq: number
+  stream: string
+  /** Always present; `null` when the server has no value for it. */
+  taskId: string | null
+}
+
+export interface PublicProjectPin {
+  definitionHash: string
+  definitionKey: string
+  /** Range 1..∞. */
+  definitionVersion: number
+  inputs: Record<string, CreatePublicTaskFieldsValue>
 }
 
 export interface PublicProjectServices {
@@ -3585,6 +3621,12 @@ export interface PublicProjectTask {
 
 export interface PublicProjectTaskList {
   tasks: PublicProjectTask[]
+}
+
+export interface PublicProjectView {
+  kind: string
+  projectId: string
+  view: unknown
 }
 
 export interface PublicPromptFragment {
@@ -3769,120 +3811,6 @@ export type PublicRequirementsFindingFloorBasis = 'fixed' | 'estimate' | 'no_est
 
 /** Every `PublicRequirementsFindingFloorBasis` value, for exhaustive handling and runtime validation. */
 export const PUBLIC_REQUIREMENTS_FINDING_FLOOR_BASIS_VALUES = ['fixed', 'estimate', 'no_estimate'] as const
-
-export interface PublicResearchDefinition {
-  contentHash: string
-  definition: PublicResearchDefinitionDefinition
-  origin: PublicResearchDefinitionOrigin
-}
-
-export interface PublicResearchDefinitionDefinition {
-  /** Length 1..20000. */
-  brief: string
-  credentials: PublicResearchDefinitionDefinitionCredential[]
-  inputs: PublicResearchDefinitionDefinitionInput[]
-  key: string
-  promptAdditions: Record<string, string>
-  targets: PublicResearchDefinitionDefinitionTarget[]
-  /** Length 1..200. */
-  title: string
-  topics: PublicResearchDefinitionDefinitionTopic[]
-  /** Range 1..∞. */
-  version: number
-}
-
-export interface PublicResearchDefinitionDefinitionCredential {
-  /** Length 1..128. */
-  key: string
-  kind: PublicResearchDefinitionDefinitionCredentialKind
-  /** Length 1..200. */
-  label: string
-  onboarding?: PublicResearchDefinitionDefinitionCredentialOnboarding
-  requiredAtStart: boolean
-}
-
-export type PublicResearchDefinitionDefinitionCredentialKind = 'login' | 'api-token' | 'oauth-client' | 'secret'
-
-/** Every `PublicResearchDefinitionDefinitionCredentialKind` value, for exhaustive handling and runtime validation. */
-export const PUBLIC_RESEARCH_DEFINITION_DEFINITION_CREDENTIAL_KIND_VALUES = ['login', 'api-token', 'oauth-client', 'secret'] as const
-
-export interface PublicResearchDefinitionDefinitionCredentialOnboarding {
-  /** Length 1..2000. */
-  instructions: string
-  url?: string
-}
-
-export interface PublicResearchDefinitionDefinitionInput {
-  /** Length 0..2000. */
-  default?: string
-  defaultValues?: string[]
-  /** Length 0..300. */
-  help?: string
-  integer?: boolean
-  /** Length 1..80. */
-  key: string
-  /** Length 1..120. */
-  label: string
-  max?: number
-  /** Range 1..2000. */
-  maxLength?: number
-  min?: number
-  options?: ListPublicTaskTypesResponseTaskTypeFieldOption[]
-  /** Length 0..200. */
-  placeholder?: string
-  required?: boolean
-  /** Length 1..120. */
-  section?: string
-  showWhen?: ListPublicTaskTypesResponseTaskTypeFieldShowWhen
-  type?: PublicResearchDefinitionDefinitionInputType
-}
-
-export type PublicResearchDefinitionDefinitionInputType = 'text' | 'textarea' | 'number' | 'select' | 'checkbox' | 'checkbox-group' | 'path'
-
-/** Every `PublicResearchDefinitionDefinitionInputType` value, for exhaustive handling and runtime validation. */
-export const PUBLIC_RESEARCH_DEFINITION_DEFINITION_INPUT_TYPE_VALUES = ['text', 'textarea', 'number', 'select', 'checkbox', 'checkbox-group', 'path'] as const
-
-export interface PublicResearchDefinitionDefinitionTarget {
-  baseUrl: string
-  surface: PublicResearchDefinitionDefinitionTargetSurface
-}
-
-export type PublicResearchDefinitionDefinitionTargetSurface = 'ui' | 'api'
-
-/** Every `PublicResearchDefinitionDefinitionTargetSurface` value, for exhaustive handling and runtime validation. */
-export const PUBLIC_RESEARCH_DEFINITION_DEFINITION_TARGET_SURFACE_VALUES = ['ui', 'api'] as const
-
-export interface PublicResearchDefinitionDefinitionTopic {
-  id: string
-  questions: PublicResearchDefinitionDefinitionTopicQuestion[]
-  /** Length 1..200. */
-  title: string
-}
-
-export interface PublicResearchDefinitionDefinitionTopicQuestion {
-  /** Length 0..2000. */
-  answerHint?: string
-  id: string
-  /** Length 1..2000. */
-  question: string
-}
-
-export interface PublicResearchDefinitionList {
-  definitions: PublicResearchDefinition[]
-}
-
-export type PublicResearchDefinitionOrigin = 'registered' | 'stored'
-
-/** Every `PublicResearchDefinitionOrigin` value, for exhaustive handling and runtime validation. */
-export const PUBLIC_RESEARCH_DEFINITION_ORIGIN_VALUES = ['registered', 'stored'] as const
-
-export interface PublicResearchPin {
-  definitionHash: string
-  definitionKey: string
-  /** Range 1..∞. */
-  definitionVersion: number
-  inputs: Record<string, CreatePublicTaskFieldsValue>
-}
 
 export interface PublicResolveAgentDecision {
   /** Length 1..4000. */
@@ -4324,16 +4252,14 @@ export type PublicVisualConfirmDecisionPhase = 'awaiting_human' | 'fixing' | 'ap
 /** Every `PublicVisualConfirmDecisionPhase` value, for exhaustive handling and runtime validation. */
 export const PUBLIC_VISUAL_CONFIRM_DECISION_PHASE_VALUES = ['awaiting_human', 'fixing', 'approved'] as const
 
-export interface PublishResearchDefinition {
-  /** Length 1..20000. */
-  brief: string
-  credentials?: PublicResearchDefinitionDefinitionCredential[]
-  inputs?: PublicResearchDefinitionDefinitionInput[]
+export interface PublishProjectDefinition {
+  credentials?: PublicProjectDefinitionDefinitionCredential[]
+  inputs?: PublicProjectDefinitionDefinitionInput[]
   promptAdditions?: Record<string, string>
-  targets: PublicResearchDefinitionDefinitionTarget[]
+  spec: unknown
+  targets?: PublicProjectDefinitionDefinitionTarget[]
   /** Length 1..200. */
   title: string
-  topics: PublicResearchDefinitionDefinitionTopic[]
 }
 
 export interface PutDirectoryWebhook {

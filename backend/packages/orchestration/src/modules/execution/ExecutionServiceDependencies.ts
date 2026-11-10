@@ -92,7 +92,7 @@ import type { FoundationalServiceResolver } from './run-foundational-services.js
 import type { ForkChatService } from './ForkChatService.js'
 import type { KaizenScheduler } from './RunStateMachine.js'
 import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
-import type { ResearchStepController } from '../research/ResearchStepController.js'
+import type { ProjectStepController } from '../projects/ProjectStepController.js'
 
 // The injected collaborator contract of the {@link ExecutionService} — the engine's single
 // `dependencies` object, split out of `ExecutionService.ts` so a ~350-line declaration block
@@ -669,10 +669,10 @@ export interface ExecutionServiceDependencies {
    */
   serviceRepository?: ServiceRepository
   /**
-   * Optional: the engine half of a research project's run (its brief, checkpoint and findings
-   * revision). Absent when research persistence is not wired, and then no research step resolves.
+   * Optional: the engine half of a project task's run (its brief, checkpoint and outcome).
+   * Absent when project persistence is not wired, and then no project step resolves.
    */
-  researchStep?: ResearchStepController
+  projectStep?: ProjectStepController
   /**
    * Optional: the settled-gate projection behind the operator dashboard's gate/CI-fixer
    * attempt statistics. Written best-effort when a polling gate reaches a terminal verdict.

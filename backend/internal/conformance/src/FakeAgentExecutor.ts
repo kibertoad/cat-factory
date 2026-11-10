@@ -13,6 +13,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import { CapabilityCredentialMissingError } from '@cat-factory/kernel'
+import type { ResearchBrief } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   defaultAgentKindRegistry,
@@ -44,7 +45,7 @@ export interface FakeAgentOptions {
   dispatchThrowMessage?: string
   /**
    * Agent kinds whose `startJob` refuses with a missing CAPABILITY credential (`VENDOR_TOKEN`,
-   * declared by a research definition), so the suite can assert the engine parks the step on it.
+   * declared by a project definition), so the suite can assert the engine parks the step on it.
    * Only meaningful for {@link asyncKinds}.
    */
   missingCredentialKinds?: AgentKind[]
@@ -312,8 +313,9 @@ export interface FakeAgentOptions {
   /**
    * The credential a `project-researcher` step's FIRST dispatch in each run asks a person for,
    * answering only its first question beside the request (the analogue of the harness's
-   * `request_credential` with a checkpoint). Later dispatches answer every question. Omitted: the
-   * first dispatch answers every question.
+   * `request_credential` with a checkpoint). A later dispatch answers only the questions its
+   * checkpoint does not, as the prompt tells a resumed run to. Omitted: the first dispatch answers
+   * every question.
    */
   researchCredentialRequest?: AgentRunResult['credentialRequest']
   /**
@@ -398,16 +400,21 @@ export class FakeAgentExecutor implements AgentExecutor {
   private readonly researchAsked = new Set<string>()
 
   /**
-   * A research run's findings: every asked question answered, or (on the first dispatch of a run
-   * scripted to ask) the first one answered beside a credential request.
+   * A research run's findings: every asked question its checkpoint has not settled answered, or
+   * (on the first dispatch of a run scripted to ask) the first one answered beside a credential
+   * request.
    */
   private runResearcher(context: AgentRunContext): AgentRunResult {
-    const questions = context.research?.questions ?? []
+    // The research kind's module built this brief for its agent kind.
+    const brief = context.project?.brief as ResearchBrief | undefined
+    const questions = brief?.questions ?? []
     const runKey = context.executionId ?? 'noexec'
     const ask = this.options.researchCredentialRequest
     const asking = !!ask && !this.researchAsked.has(runKey)
     if (asking) this.researchAsked.add(runKey)
-    const answered = asking ? questions.slice(0, 1) : questions
+    const settled = new Set((brief?.checkpoint?.findings ?? []).map((f) => f.questionId))
+    const open = questions.filter((q) => !settled.has(q.id))
+    const answered = asking ? open.slice(0, 1) : open
     return {
       output: '[project-researcher] researched',
       model: 'fake',
@@ -946,7 +953,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     if (this.missingCredentialKinds.has(context.agentKind)) {
       throw new CapabilityCredentialMissingError('VENDOR_TOKEN is not stored', {
         key: 'VENDOR_TOKEN',
-        declaredBy: { kind: 'research-definition', id: 'acme:vendor' },
+        declaredBy: { kind: 'project-definition', id: 'research/acme:vendor' },
         label: 'Vendor API token',
         onboarding: { instructions: 'Create a token under Settings, API.' },
       })

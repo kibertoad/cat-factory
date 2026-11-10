@@ -42,7 +42,7 @@ export function createMountProjection(deps: MountProjectionDeps) {
     // READ overrides with this board's mount (`WorkspaceService.composeBoard`), silently, in the
     // one direction that loses the write. So resolve the candidates for this frame id and keep the
     // one mounted HERE: two batched queries, no per-candidate round-trip.
-    const candidates = await subjectsOwningRoots([block.id], deps)
+    const candidates = await subjectsOwningRoots([block], deps)
     if (candidates.length === 0) return null
     const candidateIds = new Set(candidates.map((s) => s.subjectId))
     // Intersect from THIS board's mounts rather than from the candidates' mounts. Both name the

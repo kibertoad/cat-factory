@@ -145,9 +145,9 @@ type Client struct {
 	// The platform's own improvement backlog: post-run gradings of each agent step, and the
 	// acknowledgement that takes one off the backlog.
 	Kaizen *KaizenService
-	// Research definitions a research project can pin, and publishing an account-owned version.
-	ResearchDefinitions *ResearchDefinitionsService
-	// Projects, their service links and tasks, and a research project's findings.
+	// Project kinds with their schemas, and the definitions a project of each kind can pin.
+	ProjectKinds *ProjectKindsService
+	// Projects, their service links and tasks, and their outcomes and view.
 	Projects *ProjectsService
 	// Guided pull request review: a PR explained, question threads about it, and comment drafts.
 	GuidedReviews *GuidedReviewsService
@@ -227,7 +227,7 @@ func New(options Options) (*Client, error) {
 	client.Evidence = &EvidenceService{client: client}
 	client.MergeRecords = &MergeRecordsService{client: client}
 	client.Kaizen = &KaizenService{client: client}
-	client.ResearchDefinitions = &ResearchDefinitionsService{client: client}
+	client.ProjectKinds = &ProjectKindsService{client: client}
 	client.Projects = &ProjectsService{client: client}
 	client.GuidedReviews = &GuidedReviewsService{client: client}
 	client.PrAssessments = &PrAssessmentsService{client: client}
