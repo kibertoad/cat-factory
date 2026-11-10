@@ -195,7 +195,7 @@ function port(value: unknown): number | undefined {
  * tighter-than-default value parses fine here and is clamped back up to the base there.
  * Returns undefined when nothing usable was supplied so the job body stays sparse.
  */
-function parseGuardLimits(value: unknown): GuardLimitsSpec | undefined {
+export function parseGuardLimits(value: unknown): GuardLimitsSpec | undefined {
   if (typeof value !== 'object' || value === null) return undefined
   const o = value as Record<string, unknown>
   const spec: GuardLimitsSpec = {}
@@ -237,7 +237,7 @@ function parseValidationSpec(value: unknown): ValidationSpec | undefined {
  * harness (`claude-code` / `codex`) requires `subscriptionToken`; the default Pi
  * harness requires `proxyBaseUrl` + `sessionToken`.
  */
-function parseHarnessAuth(o: Record<string, unknown>): HarnessAuthFields {
+export function parseHarnessAuth(o: Record<string, unknown>): HarnessAuthFields {
   const harness =
     o.harness === 'claude-code' || o.harness === 'codex' || o.harness === 'pi'
       ? (o.harness as HarnessKind)
@@ -350,7 +350,7 @@ function parsePeerRepos(value: unknown): PeerRepoSpec[] {
  * Any branch/PR fields on the wire are IGNORED — a reference repo is never pushed, so the parsed
  * shape has none to carry. A malformed list throws; an absent one yields `[]`.
  */
-function parseReferenceRepos(value: unknown): ReferenceRepoSpec[] {
+export function parseReferenceRepos(value: unknown): ReferenceRepoSpec[] {
   if (value === undefined || value === null) return []
   if (!Array.isArray(value)) throw new Error("Invalid job: 'referenceRepos' must be an array")
   return value.map((entry, i) => {
@@ -412,7 +412,7 @@ export function allowedGithubHosts(env: NodeJS.ProcessEnv = process.env): Set<st
  * are local (no token leaves the box) and so are always permitted; anything else
  * must be http(s) to an allowlisted host.
  */
-function assertAllowedHost(
+export function assertAllowedHost(
   rawUrl: string,
   path: string,
   env: NodeJS.ProcessEnv = process.env,
@@ -1355,7 +1355,7 @@ interface ParsedAgentJobParts {
 }
 
 /** Parse the optional structured-output spec (`{ kind, shapeHint?, repair?, failOnUnusableFinal? }`). */
-function parseAgentOutputSpec(raw: unknown): AgentOutputSpec | undefined {
+export function parseAgentOutputSpec(raw: unknown): AgentOutputSpec | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined
   const so = raw as Record<string, unknown>
   const kind = so.kind === 'structured' ? 'structured' : 'prose'
