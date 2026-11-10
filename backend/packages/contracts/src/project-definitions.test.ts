@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { parseProjectDefinition, projectDefinitionNamespace } from './project-definitions.js'
+import {
+  parseProjectDefinition,
+  projectDefinitionNamespace,
+  projectDefinitionSubjectId,
+} from './project-definitions.js'
 import { researchSpecValidator } from './research.js'
 
 const envelope = {
@@ -69,5 +73,14 @@ describe('project definition envelope', () => {
 
   it('reads the namespace off a key', () => {
     expect(projectDefinitionNamespace('acme:content-integration')).toBe('acme')
+  })
+})
+
+describe('projectDefinitionSubjectId', () => {
+  it('qualifies the key with its kind, since keys repeat across kinds', () => {
+    expect(projectDefinitionSubjectId('research', 'acme:vendor')).toBe('research/acme:vendor')
+    expect(projectDefinitionSubjectId('notes', 'acme:vendor')).not.toBe(
+      projectDefinitionSubjectId('research', 'acme:vendor'),
+    )
   })
 })

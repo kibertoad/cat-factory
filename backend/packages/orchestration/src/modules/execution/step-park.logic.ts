@@ -73,7 +73,7 @@ export function dedicatedParkSurface(
 ): DedicatedParkSurface | null {
   if (instance.inputGate?.status === 'blocked') return 'input-gate'
   // Ahead of every kind check: ANY step can park on a lapsed credential, a review step included,
-  // and only `resumeCredentialWait` answers it.
+  // and only the credential-wait resume answers it.
   if (isCredentialWaitParked(step)) return 'credential'
   if (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND) return 'requirements-review'
   if (step.agentKind === CLARITY_REVIEW_AGENT_KIND) return 'clarity-review'

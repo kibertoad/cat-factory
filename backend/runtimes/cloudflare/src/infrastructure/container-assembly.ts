@@ -119,6 +119,7 @@ import { D1SealedSecretInventory } from './repositories/D1SealedSecretInventory'
 import { D1ServiceRepository } from './repositories/D1ServiceRepository'
 import { D1SubscriptionActivationRepository } from './repositories/D1PersonalSubscriptionRepository'
 import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
+import { D1CapabilityCredentialRepository } from './repositories/D1CapabilityCredentialRepository'
 import { D1ValidationConfigRepository } from './repositories/D1ValidationConfigRepository'
 import { D1WritebackPostRepository } from './repositories/D1WritebackPostRepository'
 import { D1ReportsRepository } from './repositories/D1ReportsRepository'
@@ -1000,6 +1001,10 @@ function buildWorkerPersistenceRegistry(
     // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
     // connections.
     testSecretsRepository: new D1TestSecretsRepository({ db }),
+    // The per-workspace capability credentials, sealed the same way and read through a service
+    // rather than the Core. Allow-listed for a mothership-mode node, whose settings CRUD and
+    // dispatch-time resolve otherwise come back `... is not wired`.
+    capabilityCredentialRepository: new D1CapabilityCredentialRepository({ db }),
     // Same reasoning for the per-service PRE-PR VALIDATION CHECKS: the engine reads them via
     // the `resolveValidationChecks` FUNCTION, and the inspector CRUD goes through the service,
     // so the repo isn't in `CoreDependencies` — reflect it explicitly or a mothership-mode

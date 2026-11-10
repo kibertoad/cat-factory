@@ -201,3 +201,11 @@ export const projectPinSchema = v.object({
   inputs: v.optional(v.record(v.string(), v.unknown()), {}),
 })
 export type ProjectPin = v.InferOutput<typeof projectPinSchema>
+
+/**
+ * The id a definition's credentials are declared under (`research/acme:vendor`). A key is only
+ * unique within its kind, so the id carries both; a kind is a slug, so the first `/` splits them.
+ */
+export function projectDefinitionSubjectId(kind: string, key: string): string {
+  return `${kind}/${key}`
+}

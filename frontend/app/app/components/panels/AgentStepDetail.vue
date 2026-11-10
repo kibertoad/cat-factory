@@ -604,11 +604,16 @@ async function copyOutput() {
             :execution-id="instance.id"
             compact
           />
-          <!-- the run's personal-subscription credential lapsed before this step dispatched -->
+          <!-- a credential this step needs is missing (a lapsed personal one, or a capability one) -->
           <CredentialWaitNotice
-            v-if="dedicatedPark === 'credential' && instance?.status === 'blocked'"
+            v-if="
+              dedicatedPark === 'credential' &&
+              instance?.status === 'blocked' &&
+              step?.credentialWait
+            "
             :execution-id="instance.id"
             :initiated-by="instance.initiatedBy"
+            :wait="step.credentialWait"
             compact
           />
 

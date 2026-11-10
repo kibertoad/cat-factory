@@ -88,6 +88,14 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
     titleKey: 'errors.conflict.title.credential_wait_not_parked',
     descriptionKey: 'errors.conflict.description.credential_wait_not_parked',
   },
+  capability_credential_still_missing: {
+    titleKey: 'errors.conflict.title.capability_credential_still_missing',
+    descriptionKey: 'errors.conflict.description.capability_credential_still_missing',
+  },
+  credential_wait_unrecorded: {
+    titleKey: 'errors.conflict.title.credential_wait_unrecorded',
+    descriptionKey: 'errors.conflict.description.credential_wait_unrecorded',
+  },
   input_gate_parked: {
     titleKey: 'errors.conflict.title.input_gate_parked',
     descriptionKey: 'errors.conflict.description.input_gate_parked',
