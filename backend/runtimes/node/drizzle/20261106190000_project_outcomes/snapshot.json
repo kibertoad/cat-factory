@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "a42ab863-d4e5-472d-b55b-a3c09c9e155a",
+  "id": "fa3e7bda-62fa-45f1-86be-419c1577d3b2",
   "prevIds": [
     "6850c2f1-7ea5-4259-a384-637f99e52f8e"
   ],
@@ -486,25 +486,31 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "findings_revisions",
+      "name": "outcome_storage_policies",
       "entityType": "tables",
       "schema": "public"
     },
     {
       "isRlsEnabled": false,
-      "name": "findings_storage_policies",
+      "name": "project_definitions",
       "entityType": "tables",
       "schema": "public"
     },
     {
       "isRlsEnabled": false,
-      "name": "research_definitions",
+      "name": "project_outcome_seqs",
       "entityType": "tables",
       "schema": "public"
     },
     {
       "isRlsEnabled": false,
-      "name": "research_projects",
+      "name": "project_outcomes",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "project_pins",
       "entityType": "tables",
       "schema": "public"
     },
@@ -11892,153 +11898,10 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "findings_revisions"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "project_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "findings_revisions"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "task_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "findings_revisions"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "seq",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "findings_revisions"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "mode",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "findings_revisions"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "definition_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "findings_revisions"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "definition_version",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "findings_revisions"
-    },
-    {
-      "type": "bigint",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "findings_revisions"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "body_inline",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "findings_revisions"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "body_artifact_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "findings_revisions"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "body_bytes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "findings_revisions"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
       "name": "owner_kind",
       "entityType": "columns",
       "schema": "public",
-      "table": "findings_storage_policies"
+      "table": "outcome_storage_policies"
     },
     {
       "type": "text",
@@ -12051,7 +11914,7 @@
       "name": "owner_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "findings_storage_policies"
+      "table": "outcome_storage_policies"
     },
     {
       "type": "text",
@@ -12064,7 +11927,7 @@
       "name": "policy",
       "entityType": "columns",
       "schema": "public",
-      "table": "findings_storage_policies"
+      "table": "outcome_storage_policies"
     },
     {
       "type": "text",
@@ -12077,7 +11940,20 @@
       "name": "account_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "research_definitions"
+      "table": "project_definitions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_definitions"
     },
     {
       "type": "text",
@@ -12090,7 +11966,7 @@
       "name": "key",
       "entityType": "columns",
       "schema": "public",
-      "table": "research_definitions"
+      "table": "project_definitions"
     },
     {
       "type": "integer",
@@ -12103,7 +11979,7 @@
       "name": "version",
       "entityType": "columns",
       "schema": "public",
-      "table": "research_definitions"
+      "table": "project_definitions"
     },
     {
       "type": "text",
@@ -12116,7 +11992,7 @@
       "name": "body",
       "entityType": "columns",
       "schema": "public",
-      "table": "research_definitions"
+      "table": "project_definitions"
     },
     {
       "type": "text",
@@ -12129,7 +12005,7 @@
       "name": "content_hash",
       "entityType": "columns",
       "schema": "public",
-      "table": "research_definitions"
+      "table": "project_definitions"
     },
     {
       "type": "bigint",
@@ -12142,7 +12018,7 @@
       "name": "created_at",
       "entityType": "columns",
       "schema": "public",
-      "table": "research_definitions"
+      "table": "project_definitions"
     },
     {
       "type": "text",
@@ -12155,7 +12031,215 @@
       "name": "project_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "research_projects"
+      "table": "project_outcome_seqs"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "next_seq",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcome_seqs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcomes"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcomes"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "stream",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcomes"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "seq",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcomes"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "intent",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcomes"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "schema_version",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcomes"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "task_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcomes"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "definition_key",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcomes"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "definition_version",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcomes"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "artifact_refs",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcomes"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcomes"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "body_inline",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcomes"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "body_artifact_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcomes"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "body_bytes",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_outcomes"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_pins"
     },
     {
       "type": "text",
@@ -12168,7 +12252,7 @@
       "name": "definition_key",
       "entityType": "columns",
       "schema": "public",
-      "table": "research_projects"
+      "table": "project_pins"
     },
     {
       "type": "integer",
@@ -12181,7 +12265,7 @@
       "name": "definition_version",
       "entityType": "columns",
       "schema": "public",
-      "table": "research_projects"
+      "table": "project_pins"
     },
     {
       "type": "text",
@@ -12194,7 +12278,7 @@
       "name": "definition_hash",
       "entityType": "columns",
       "schema": "public",
-      "table": "research_projects"
+      "table": "project_pins"
     },
     {
       "type": "text",
@@ -12207,20 +12291,7 @@
       "name": "inputs",
       "entityType": "columns",
       "schema": "public",
-      "table": "research_projects"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "1",
-      "generated": null,
-      "identity": null,
-      "name": "next_seq",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "research_projects"
+      "table": "project_pins"
     },
     {
       "type": "text",
@@ -22058,10 +22129,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_findings_revisions_seq",
+      "name": "idx_project_outcomes_seq",
       "entityType": "indexes",
       "schema": "public",
-      "table": "findings_revisions"
+      "table": "project_outcomes"
     },
     {
       "nameExplicit": true,
@@ -24054,22 +24125,23 @@
         "owner_id"
       ],
       "nameExplicit": false,
-      "name": "findings_storage_policies_pkey",
+      "name": "outcome_storage_policies_pkey",
       "entityType": "pks",
       "schema": "public",
-      "table": "findings_storage_policies"
+      "table": "outcome_storage_policies"
     },
     {
       "columns": [
         "account_id",
+        "kind",
         "key",
         "version"
       ],
       "nameExplicit": false,
-      "name": "research_definitions_pkey",
+      "name": "project_definitions_pkey",
       "entityType": "pks",
       "schema": "public",
-      "table": "research_definitions"
+      "table": "project_definitions"
     },
     {
       "columns": [
@@ -24645,12 +24717,22 @@
     },
     {
       "columns": [
+        "project_id"
+      ],
+      "nameExplicit": false,
+      "name": "project_outcome_seqs_pkey",
+      "schema": "public",
+      "table": "project_outcome_seqs",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
         "id"
       ],
       "nameExplicit": false,
-      "name": "findings_revisions_pkey",
+      "name": "project_outcomes_pkey",
       "schema": "public",
-      "table": "findings_revisions",
+      "table": "project_outcomes",
       "entityType": "pks"
     },
     {
@@ -24658,9 +24740,9 @@
         "project_id"
       ],
       "nameExplicit": false,
-      "name": "research_projects_pkey",
+      "name": "project_pins_pkey",
       "schema": "public",
-      "table": "research_projects",
+      "table": "project_pins",
       "entityType": "pks"
     },
     {

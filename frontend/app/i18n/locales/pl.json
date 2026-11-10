@@ -373,7 +373,10 @@
           "hint": "Najwyższa liczba przejść tylko do odczytu w tej wyprawie. Zostaw puste, aby użyć {count}. W dużej bazie kodu każdy kąt przeszukiwany jest osobno dla każdego terytorium, a to, co utnie budżet, zapisujemy jako nieprzeszukane.",
           "problem": "Podaj liczbę całkowitą od 1 do {max} albo pozostaw pole puste, aby użyć wartości domyślnej."
         }
-      }
+      },
+      "documentsLoadFailed": "Nie udało się wczytać dokumentów do dołączenia",
+      "tasksLoadFailed": "Nie udało się wczytać zgłoszeń do dołączenia",
+      "fragmentsLoadFailed": "Nie udało się wczytać fragmentów dobrych praktyk"
     },
     "recurring": {
       "title": "Dodaj cykliczny pipeline",
@@ -1125,7 +1128,8 @@
       "savedToast": "Monitorowanie zapisane",
       "saveFailed": "Nie udało się zapisać mapowania",
       "clearFailed": "Nie udało się wyczyścić mapowania",
-      "configNoun": "konfigurację kondycji wydania"
+      "configNoun": "konfigurację kondycji wydania",
+      "loadFailed": "Nie udało się wczytać ustawień kondycji wydania"
     },
     "testSecrets": {
       "title": "Poświadczenia testowe (wrażliwe)",
@@ -2075,7 +2079,6 @@
     "title": "Obserwowalność platformy",
     "refresh": "Odśwież",
     "close": "Zamknij",
-    "retry": "Ponów",
     "window": {
       "oneHour": "Ostatnia godzina",
       "oneDay": "Ostatnie 24 godziny",
@@ -2083,6 +2086,7 @@
       "thirtyDays": "Ostatnie 30 dni",
       "ninetyDays": "Ostatnie 90 dni"
     },
+    "noAccount": "Brak aktywnego konta, więc nie ma danych do pokazania.",
     "outcomes": {
       "title": "Wyniki uruchomień",
       "total": "Łącznie uruchomień",
@@ -2923,7 +2927,8 @@
       "roster": {
         "title": "Członkowie",
         "empty": "Brak członków.",
-        "remove": "Usuń członka"
+        "remove": "Usuń członka",
+        "loadFailed": "Nie udało się wczytać członków tej tablicy"
       },
       "add": {
         "title": "Dodaj członka",
@@ -3559,7 +3564,8 @@
         "pagerDutyToken": "Token API PagerDuty",
         "pagerDutyFromEmail": "E-mail nadawcy PagerDuty",
         "incidentIoKey": "Klucz API incident.io",
-        "clear": "Wyczyść"
+        "clear": "Wyczyść",
+        "loadFailed": "Nie udało się wczytać narzędzi do incydentów"
       },
       "status": {
         "notConnected": "Nie połączono",
@@ -3577,7 +3583,8 @@
         "disconnectFailed": "Nie można rozłączyć"
       },
       "connectionNoun": "połączenie obserwowalności",
-      "incidentNoun": "dostawcę incydentów"
+      "incidentNoun": "dostawcę incydentów",
+      "loadFailed": "Nie udało się wczytać połączenia obserwowalności"
     },
     "packageRegistries": {
       "tab": "Rejestry pakietów",
@@ -4254,7 +4261,8 @@
         "kubeNoun": "obsługę Kubernetes",
         "kubeOverrideNoun": "nadpisanie Kubernetes",
         "customNoun": "tę obsługę",
-        "cloudflareNoun": "obsługę Cloudflare"
+        "cloudflareNoun": "obsługę Cloudflare",
+        "loadFailed": "Nie udało się wczytać obsługi środowisk"
       },
       "cloudflare": {
         "intro": "Uruchamia Worker Cloudflare dla każdego pull requesta, wyzwalając workflow podglądu w docelowym repozytorium. cat-factory nigdy nie komunikuje się bezpośrednio z Cloudflare: tworzy wdrożenie, odczytuje jego status i publikuje status inactive, aby je usunąć.",
@@ -4681,7 +4689,8 @@
         "loadProjection": "Nie udało się wczytać repozytoriów, pull requestów i zgłoszeń",
         "startInstall": "Nie udało się rozpocząć instalacji aplikacji GitHub",
         "connect": "Nie udało się połączyć"
-      }
+      },
+      "listFailed": "Nie udało się wyświetlić instalacji GitHub App"
     },
     "panel": {
       "connectIntro": "Połącz instalację aplikacji GitHub, aby powiązać bloki tablicy z repozytoriami, przeglądać pull requesty i zgłoszenia oraz pozwolić agentom wypychać gałęzie i otwierać PR.",
@@ -4792,7 +4801,8 @@
       "errors": {
         "listDirectory": "Nie udało się wyświetlić katalogu"
       },
-      "selectAllFiles": "Zaznacz {count} plik | Zaznacz wszystkie {count} pliki | Zaznacz wszystkie {count} plików"
+      "selectAllFiles": "Zaznacz {count} plik | Zaznacz wszystkie {count} pliki | Zaznacz wszystkie {count} plików",
+      "listFailed": "Nie udało się wyświetlić zawartości tego folderu"
     }
   },
   "slack": {
@@ -6200,6 +6210,7 @@
       "medium": "Średnia pewność",
       "low": "Niska pewność"
     },
+    "loadFailed": "Nie udało się wczytać przeglądu wymagań",
     "findingFloor": {
       "raised": {
         "high": "Ten przebieg zgłosił tylko uwagi o wysokiej wadze.",
@@ -6325,7 +6336,8 @@
       "done": "Gotowe",
       "failed": "Niepowodzenie"
     },
-    "groupTitle": "Grupa konsensusu, do której eskalowało to uruchomienie"
+    "groupTitle": "Grupa konsensusu, do której eskalowało to uruchomienie",
+    "loadFailed": "Nie udało się wczytać sesji konsensusu"
   },
   "brainstorm": {
     "title": {
@@ -6418,7 +6430,8 @@
       "taskReset": "Zadanie zresetowane: edytuj je i prześlij ponownie",
       "extraRoundGranted": "Przyznano jeszcze jedną rundę burzy mózgów",
       "resolveError": "Nie udało się rozwiązać burzy mózgów"
-    }
+    },
+    "loadFailed": "Nie udało się wczytać sesji burzy mózgów"
   },
   "spec": {
     "title": "Wymagania",
@@ -6469,6 +6482,14 @@
       "given": "Given",
       "when": "When",
       "then": "Then"
+    },
+    "anchorReadFailed": {
+      "title": "Nie udało się odczytać specyfikacji",
+      "description": "Odczyt repozytorium nie powiódł się, więc nie wiadomo, czy ta usługa ma specyfikację. Spróbuj ponownie."
+    },
+    "anchorUnparsed": {
+      "title": "Plik specyfikacji jest nieprawidłowy",
+      "description": "spec/service.json jest w gałęzi domyślnej, ale nie udało się go przetworzyć. Popraw plik w repozytorium."
     }
   },
   "followUp": {
@@ -7269,7 +7290,8 @@
       "checkSourceFailed": "Nie udało się sprawdzić repozytorium",
       "sourceUnlinked": "Repozytorium odłączone",
       "unlinkSourceFailed": "Nie udało się odłączyć repozytorium"
-    }
+    },
+    "loadFailed": "Nie udało się wczytać katalogu usług podstawowych"
   },
   "binaryOutput": {
     "heading": "Wyjścia binarne",
@@ -8208,7 +8230,8 @@
       "done": "Gotowe",
       "save": "Zapisz",
       "revert": "Przywróć"
-    }
+    },
+    "loadFailed": "Nie udało się wczytać biblioteki Claude Skills"
   },
   "merge": {
     "changeClass": {
