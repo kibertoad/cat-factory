@@ -44,7 +44,7 @@ import type {
   PromptFragmentSource,
   ProjectKindSource,
   ProjectRepository,
-  ResearchProjectRepository,
+  ProjectRecordRepository,
   ResolveBinaryArtifactStore,
   WorkspaceMount,
   WorkspaceMountRepository,
@@ -187,8 +187,8 @@ export interface BoardServiceDependencies {
   projectRepository?: ProjectRepository
   /** Where a project's kind is read from when a task is admitted under the project. */
   projectKinds?: ProjectKindSource
-  /** A research project's rows, reclaimed with the project. */
-  researchProjectRepository?: ResearchProjectRepository
+  /** A project's pin, outcomes and policy tier, reclaimed with the project. */
+  projectRecordRepository?: ProjectRecordRepository
   /**
    * The acting workspace's runtime settings, read by two collaborators:
    *  - the opt-in review-debt friction guard on task creation
@@ -360,7 +360,7 @@ export class BoardService {
     promptFragmentSource,
     projectRepository,
     projectKinds,
-    researchProjectRepository,
+    projectRecordRepository,
     workspaceSettings,
     reviewFrictionNotifications,
     resolveRunRepoContext,
@@ -470,7 +470,7 @@ export class BoardService {
       executionRepository,
       serviceRepository,
       projectRepository,
-      researchProjectRepository,
+      projectRecordRepository,
       workspaceMountRepository,
       initiativeRepository,
       documentRepository,

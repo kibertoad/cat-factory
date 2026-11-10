@@ -236,7 +236,7 @@ interface MothershipAppOptions {
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
   projectKindRegistry?: CoreDependencies['projectKindRegistry']
-  researchDefinitionRegistry?: CoreDependencies['researchDefinitionRegistry']
+  projectDefinitionRegistry?: CoreDependencies['projectDefinitionRegistry']
   pipelineRegistry?: CoreDependencies['pipelineRegistry']
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   judgeRegistry?: CoreDependencies['judgeRegistry']
@@ -384,7 +384,7 @@ const AUTH_DISABLED: Pick<ConformanceApp, 'authEnabled' | 'session' | 'machineTo
 }
 
 /**
- * The app-owned registries a suite pre-loaded (a custom preset, task type, project kind, research
+ * The app-owned registries a suite pre-loaded (a custom preset, task type, project kind, project
  * definition, pipeline, judge, agent kind, gate or external executor), injected by reference into
  * the SUT container the way the Worker, Node and local-standalone harnesses wire them. The
  * agent-kind and external-executor registries travel together: the kind registry is what tells
@@ -396,7 +396,7 @@ function injectedRegistries(opts: MothershipAppOptions | undefined) {
     initiativePresetRegistry: opts?.initiativePresetRegistry,
     taskTypeRegistry: opts?.taskTypeRegistry,
     projectKindRegistry: opts?.projectKindRegistry,
-    researchDefinitionRegistry: opts?.researchDefinitionRegistry,
+    projectDefinitionRegistry: opts?.projectDefinitionRegistry,
     pipelineRegistry: opts?.pipelineRegistry,
     judgeRegistry: opts?.judgeRegistry,
     agentKindRegistry: opts?.agentKindRegistry,
@@ -618,7 +618,7 @@ export function makeMothershipConformanceApp(
     agentRunRepository: () => ms.container.agentRunRepository,
     // Direct-store probes read the mothership's authoritative Postgres, like seedService.
     blockRepository: () => mothershipRepos().blockRepository,
-    researchProjectRepository: () => mothershipRepos().researchProjectRepository,
+    projectRecordRepository: () => mothershipRepos().projectRecordRepository,
     workspaceRepository: () => new DrizzleWorkspaceRepository(db),
     workspaceMemberRepository: () => new DrizzleWorkspaceMemberRepository(db),
     initiativeRepository: () => mothershipRepos().initiativeRepository,

@@ -228,12 +228,12 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
         dy,
       }),
     },
-    findingsRevisionRepository: {
-      insert: async () => true,
-      get: async () => null,
-      listByProject: async () => [],
+    projectRecordRepository: {
+      insertOutcome: async () => true,
+      getOutcome: async () => null,
+      listOutcomes: async () => [],
     },
-    findingsStoragePolicyRepository: {
+    outcomeStoragePolicyRepository: {
       get: async () => null,
       set: async () => undefined,
     },

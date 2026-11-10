@@ -44,7 +44,7 @@ export interface FakeAgentOptions {
   dispatchThrowMessage?: string
   /**
    * Agent kinds whose `startJob` refuses with a missing CAPABILITY credential (`VENDOR_TOKEN`,
-   * declared by a research definition), so the suite can assert the engine parks the step on it.
+   * declared by a project definition), so the suite can assert the engine parks the step on it.
    * Only meaningful for {@link asyncKinds}.
    */
   missingCredentialKinds?: AgentKind[]
@@ -950,7 +950,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     if (this.missingCredentialKinds.has(context.agentKind)) {
       throw new CapabilityCredentialMissingError('VENDOR_TOKEN is not stored', {
         key: 'VENDOR_TOKEN',
-        declaredBy: { kind: 'research-definition', id: 'acme:vendor' },
+        declaredBy: { kind: 'project-definition', id: 'research/acme:vendor' },
         label: 'Vendor API token',
         onboarding: { instructions: 'Create a token under Settings, API.' },
       })

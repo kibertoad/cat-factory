@@ -322,8 +322,8 @@ function selectNodeRegistryDeps(bundle: NodeCoreDepsBundle) {
     taskTypeRegistry: options.taskTypeRegistry,
     projectKindRegistry: options.projectKindRegistry,
     projectKindSource: options.projectKindSource,
-    researchDefinitionRegistry: options.researchDefinitionRegistry,
-    registeredResearchDefinitionSource: options.registeredResearchDefinitionSource,
+    projectDefinitionRegistry: options.projectDefinitionRegistry,
+    registeredProjectDefinitionSource: options.registeredProjectDefinitionSource,
     // The app-owned inline use-case registry (the deployment's non-container model operations);
     // createCore threads it into the public use-case service and re-exposes it on Core for the
     // controller + boot-time validation.
@@ -440,10 +440,9 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     serviceRepository: repos.serviceRepository,
     workspaceMountRepository: repos.workspaceMountRepository,
     projectRepository: repos.projectRepository,
-    researchDefinitionRepository: repos.researchDefinitionRepository,
-    researchProjectRepository: repos.researchProjectRepository,
-    findingsRevisionRepository: repos.findingsRevisionRepository,
-    findingsStoragePolicyRepository: repos.findingsStoragePolicyRepository,
+    projectDefinitionRepository: repos.projectDefinitionRepository,
+    projectRecordRepository: repos.projectRecordRepository,
+    outcomeStoragePolicyRepository: repos.outcomeStoragePolicyRepository,
     tokenUsageRepository: repos.tokenUsageRepository,
     ...selectNodeObservabilityDeps({
       config,

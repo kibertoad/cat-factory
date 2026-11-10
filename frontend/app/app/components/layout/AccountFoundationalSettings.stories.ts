@@ -38,7 +38,7 @@ export const Empty: Story = {
   parameters: { api: [...foundationalApi(owner), ...githubProbeApi()] },
 }
 
-/** The catalog read failed, which the manager reads as the feature being off: a note only. */
+/** The deployment has not enabled the catalog (a 503): a note only. */
 export const Unavailable: Story = {
   parameters: { api: [...foundationalApi(owner, { available: false }), ...githubProbeApi()] },
 }

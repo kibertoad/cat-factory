@@ -419,7 +419,10 @@
           "hint": "Most read-only passes this expedition may run. Leave empty for {count}. On a large codebase each angle is fished per territory, and whatever the budget cuts is recorded as unfished.",
           "problem": "Enter a whole number between 1 and {max}, or leave it empty for the default."
         }
-      }
+      },
+      "documentsLoadFailed": "Could not load the documents to attach",
+      "tasksLoadFailed": "Could not load the issues to attach",
+      "fragmentsLoadFailed": "Could not load the best-practice fragments"
     },
     "recurring": {
       "title": "Add a recurring pipeline",
@@ -769,7 +772,7 @@
         "delegated_executor_failed": "The external executor could not start this step. The problem is in the system that runs the work, not in this deployment: check its own logs and try again.",
         "delegated_work_branch_unprepared": "The platform could not prepare the work branch this step's executor is dispatched onto, so nothing was started. Either the repository connection cannot write to it, or the task names a branch that does not exist yet: the details say which.",
         "attached_pr_provider_unreachable": "The repository provider did not answer, so the pull request could not be checked and no task was created. Nothing needs setting up here: try again in a moment.",
-        "research_definitions_unreachable": "This deployment's research definitions could not be read just now, so the request was not completed. Nothing is misconfigured and no change is needed: try again once the connection recovers."
+        "project_definitions_unreachable": "This deployment's project definitions could not be read just now, so the request was not completed. Nothing is misconfigured and no change is needed: try again once the connection recovers."
       }
     },
     "reason": {
@@ -790,16 +793,16 @@
         "project_has_no_writable_repo": "A step of this run needs a repository to write to, and a project has none: its linked services' repositories are read-only context. Pick a pipeline that only reads and reports.",
         "project_service_link_invalid": "One of the linked services no longer exists or belongs to another organization. Reload the board and pick the linked services again.",
         "project_has_unfinished_tasks": "This project still has tasks that have not finished. Finish or delete them first.",
-        "research_pin_required": "This project kind keeps research data, so it needs a research definition to pin. Pick one and try again.",
-        "research_pin_not_accepted": "This project kind keeps no research data, so it cannot pin a research definition. Remove the definition, or pick a research kind.",
-        "research_definition_not_found": "No research definition matches that key and version for this organization. Check the key, or leave the version empty to pin the latest.",
-        "research_inputs_invalid": "The values for the research definition's inputs do not satisfy it. Fill in every required input with an accepted value, then try again.",
-        "task_type_requires_project": "A research task belongs under a research project, not under a service. Add it to a research project instead.",
-        "research_project_not_pinned": "A research task needs a research project that pins a research definition, and this one pins none. Add the task to a research project.",
-        "research_definition_changed": "The research definition this project pinned has changed since, so the run stopped rather than ask questions the project never agreed to. Ask your deployment operator to publish the change as a new version.",
-        "research_task_already_recorded": "This research task already recorded its findings. Create a new research task to follow up.",
-        "research_nothing_to_ask": "This research task's mode leaves no question to ask: nothing new to extend with, or nothing partial or blocked to clarify. Pick another mode or add a question.",
-        "findings_too_large_for_inline": "The findings are too large to store, so the revision was not recorded. Narrow the research and run it again."
+        "project_definition_required": "This project kind pins a definition, so it needs one to start from. Pick one and try again.",
+        "project_definition_not_accepted": "This project kind pins no definition. Remove the definition, or pick a kind that uses one.",
+        "project_definition_not_found": "No definition of this project kind matches that key and version for this organization. Check the key, or leave the version empty to pin the latest.",
+        "project_definition_inputs_invalid": "The values for the definition's inputs do not satisfy it. Fill in every required input with an accepted value, then try again.",
+        "task_type_requires_project": "A task of this type belongs under a project, not under a service. Add it to a project of a kind that offers it.",
+        "project_not_pinned": "A task of this type needs its project to pin a definition, and this one pins none. Add the task to a project that does.",
+        "project_definition_changed": "The definition this project pinned has changed since, so the run stopped rather than work from a definition the project never agreed to. Ask your deployment operator to publish the change as a new version.",
+        "project_task_already_recorded": "This task already recorded its result on the project. Create a new task to follow up.",
+        "outcome_too_large_for_inline": "The result is too large to store, so it was not recorded. Narrow the task and run it again.",
+        "research_nothing_to_ask": "This research task's mode leaves no question to ask: nothing new to extend with, or nothing partial or blocked to clarify. Pick another mode or add a question."
       }
     },
     "action": {
@@ -1240,7 +1243,8 @@
       "savedToast": "Monitoring saved",
       "saveFailed": "Could not save the mapping",
       "clearFailed": "Could not clear the mapping",
-      "configNoun": "the release health configuration"
+      "configNoun": "the release health configuration",
+      "loadFailed": "Could not load the release-health settings"
     },
     "testSecrets": {
       "title": "Test credentials (sensitive)",
@@ -2222,7 +2226,6 @@
     "title": "Platform observability",
     "refresh": "Refresh",
     "close": "Close",
-    "retry": "Retry",
     "window": {
       "oneHour": "Last hour",
       "oneDay": "Last 24 hours",
@@ -2230,6 +2233,7 @@
       "thirtyDays": "Last 30 days",
       "ninetyDays": "Last 90 days"
     },
+    "noAccount": "There is no active account, so there is no data to show.",
     "outcomes": {
       "title": "Run outcomes",
       "total": "Total runs",
@@ -3097,7 +3101,8 @@
       "roster": {
         "title": "Members",
         "empty": "No members yet.",
-        "remove": "Remove member"
+        "remove": "Remove member",
+        "loadFailed": "Could not load this board's members"
       },
       "add": {
         "title": "Add a member",
@@ -3419,7 +3424,8 @@
         "kubeNoun": "the Kubernetes handler",
         "kubeOverrideNoun": "the Kubernetes override",
         "customNoun": "this handler",
-        "cloudflareNoun": "the Cloudflare handler"
+        "cloudflareNoun": "the Cloudflare handler",
+        "loadFailed": "Could not load the environment handlers"
       },
       "cloudflare": {
         "intro": "Stands up a per-pull-request Cloudflare Worker by driving the target repository's own preview workflow. cat-factory never talks to Cloudflare directly: it creates a deployment, reads its status, and posts an inactive status to tear down.",
@@ -3886,7 +3892,8 @@
         "pagerDutyToken": "PagerDuty API token",
         "pagerDutyFromEmail": "PagerDuty From email",
         "incidentIoKey": "incident.io API key",
-        "clear": "Clear"
+        "clear": "Clear",
+        "loadFailed": "Could not load the incident tools"
       },
       "status": {
         "notConnected": "Not connected",
@@ -3904,7 +3911,8 @@
         "disconnectFailed": "Could not disconnect"
       },
       "connectionNoun": "the observability connection",
-      "incidentNoun": "the incident provider"
+      "incidentNoun": "the incident provider",
+      "loadFailed": "Could not load the observability connection"
     },
     "packageRegistries": {
       "tab": "Package registries",
@@ -4876,7 +4884,8 @@
         "loadProjection": "Could not load repositories, pull requests and issues",
         "startInstall": "Could not start the GitHub App install",
         "connect": "Could not connect"
-      }
+      },
+      "listFailed": "Could not list the GitHub App installations"
     },
     "panel": {
       "connectIntro": "Connect a GitHub App installation to back board blocks with repositories, browse pull requests and issues, and let agents push branches and open PRs.",
@@ -4996,7 +5005,8 @@
       "errors": {
         "listDirectory": "Could not list directory"
       },
-      "selectAllFiles": "Select {count} file | Select all {count} files"
+      "selectAllFiles": "Select {count} file | Select all {count} files",
+      "listFailed": "Could not list this folder"
     }
   },
   "slack": {
@@ -6519,6 +6529,7 @@
       "medium": "Medium confidence",
       "low": "Low confidence"
     },
+    "loadFailed": "Could not load the requirements review",
     "findingFloor": {
       "raised": {
         "high": "This pass raised high findings only.",
@@ -6659,7 +6670,8 @@
       "done": "Done",
       "failed": "Failed"
     },
-    "groupTitle": "The consensus group this run escalated to"
+    "groupTitle": "The consensus group this run escalated to",
+    "loadFailed": "Could not load the consensus session"
   },
   "brainstorm": {
     "title": {
@@ -6755,7 +6767,8 @@
       "taskReset": "Task reset: edit it and resubmit",
       "extraRoundGranted": "One more brainstorm round granted",
       "resolveError": "Could not resolve the brainstorm"
-    }
+    },
+    "loadFailed": "Could not load the brainstorm session"
   },
   "spec": {
     "title": "Requirements",
@@ -6821,6 +6834,14 @@
       "@then": {
         "description": "Gherkin keyword that opens an expected-outcome clause. Keep verbatim — it is literal Gherkin syntax, not prose."
       }
+    },
+    "anchorReadFailed": {
+      "title": "Could not read the specification",
+      "description": "The repository read failed, so it is not known if this service has a specification. Try again."
+    },
+    "anchorUnparsed": {
+      "title": "The specification file is not valid",
+      "description": "spec/service.json is on the default branch but could not be parsed. Fix the file in the repository."
     }
   },
   "followUp": {
@@ -7634,7 +7655,8 @@
       "checkSourceFailed": "Could not check the repo",
       "sourceUnlinked": "Repo unlinked",
       "unlinkSourceFailed": "Could not unlink the repo"
-    }
+    },
+    "loadFailed": "Could not load the foundational-services catalog"
   },
   "binaryOutput": {
     "heading": "Binary outputs",
@@ -8527,7 +8549,8 @@
       "done": "Done",
       "save": "Save",
       "revert": "Revert"
-    }
+    },
+    "loadFailed": "Could not load the Claude Skills library"
   },
   "merge": {
     "changeClass": {

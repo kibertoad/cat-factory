@@ -34,7 +34,7 @@ export const MissingCapabilityCredential: Story = {
       subject: 'capability',
       raisedAt: 1,
       key: 'VENDOR_LOGIN',
-      declaredBy: { kind: 'research-definition', id: 'acme:vendor' },
+      declaredBy: { kind: 'project-definition', id: 'research/acme:vendor' },
       label: 'Vendor admin login',
       onboarding: {
         url: 'https://app.vendor.example/settings/users',

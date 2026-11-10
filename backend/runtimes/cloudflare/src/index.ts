@@ -110,7 +110,7 @@ import {
   defaultInlineUseCaseRegistry,
   defaultTaskTypeRegistry,
   defaultProjectKindRegistry,
-  ResearchDefinitionRegistry,
+  ProjectDefinitionRegistry,
   describeError,
 } from '@cat-factory/kernel'
 import { D1WorkspaceRepository } from './infrastructure/repositories/D1WorkspaceRepository'
@@ -206,7 +206,7 @@ export { PipelineRegistry, defaultPipelineRegistry } from '@cat-factory/kernel'
 export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
 export {
   ProjectKindRegistry,
-  ResearchDefinitionRegistry,
+  ProjectDefinitionRegistry,
   defaultProjectKindRegistry,
 } from '@cat-factory/kernel'
 // Installation-level extension point for INLINE USE CASES (the same DI seam again): a deployment
@@ -495,9 +495,9 @@ export function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
     taskTypeRegistry: overrides.taskTypeRegistry ?? defaultTaskTypeRegistry(),
     // Project kinds (empty by default); registered ones are offered on the board.
     projectKindRegistry: overrides.projectKindRegistry ?? defaultProjectKindRegistry(),
-    // Research definitions shipped in code (empty by default); a project pins one at creation.
-    researchDefinitionRegistry:
-      overrides.researchDefinitionRegistry ?? new ResearchDefinitionRegistry(),
+    // project definitions shipped in code (empty by default); a project pins one at creation.
+    projectDefinitionRegistry:
+      overrides.projectDefinitionRegistry ?? new ProjectDefinitionRegistry(),
     // Inline use cases (empty by default); registered ones are published and invocable over
     // `/api/v1/use-cases`, and a malformed registration fails boot rather than a first invocation.
     inlineUseCaseRegistry: overrides.inlineUseCaseRegistry ?? defaultInlineUseCaseRegistry(),

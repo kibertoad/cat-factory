@@ -374,7 +374,10 @@
           "hint": "Número máximo de pasadas de solo lectura de esta expedición. Déjalo vacío para {count}. En una base de código grande cada ángulo se pesca por territorio, y lo que el presupuesto recorte queda registrado como no pescado.",
           "problem": "Introduce un número entero entre 1 y {max}, o déjalo vacío para el valor predeterminado."
         }
-      }
+      },
+      "documentsLoadFailed": "No se pudieron cargar los documentos para adjuntar",
+      "tasksLoadFailed": "No se pudieron cargar las incidencias para adjuntar",
+      "fragmentsLoadFailed": "No se pudieron cargar los fragmentos de buenas prácticas"
     },
     "recurring": {
       "title": "Añadir una pipeline recurrente",
@@ -694,7 +697,7 @@
         "delegated_executor_failed": "El ejecutor externo no pudo iniciar este paso. El problema está en el sistema que realiza el trabajo, no en esta instalación: revisa sus propios registros e inténtalo de nuevo.",
         "delegated_work_branch_unprepared": "La plataforma no pudo preparar la rama de trabajo a la que se envía el ejecutor de este paso, así que no se inició nada. O la conexión al repositorio no puede escribir en ella, o la tarea indica una rama que aún no existe: los detalles dicen cuál de las dos.",
         "attached_pr_provider_unreachable": "El proveedor del repositorio no respondió, así que no se pudo comprobar la pull request y no se creó ninguna tarea. No hay nada que configurar aquí: vuelve a intentarlo en un momento.",
-        "research_definitions_unreachable": "No se han podido leer las definiciones de investigación de esta instalación en este momento, así que no se ha completado la solicitud. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión."
+        "project_definitions_unreachable": "No se han podido leer las definiciones de proyecto de esta instalación en este momento, así que no se ha completado la solicitud. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión."
       }
     },
     "reason": {
@@ -715,16 +718,16 @@
         "project_has_no_writable_repo": "Un paso de esta ejecución necesita un repositorio en el que escribir, y un proyecto no tiene ninguno: los repositorios de sus servicios vinculados son contexto de solo lectura. Elige un pipeline que solo lea e informe.",
         "project_service_link_invalid": "Uno de los servicios vinculados ya no existe o pertenece a otra organización. Recarga el tablero y vuelve a elegir los servicios vinculados.",
         "project_has_unfinished_tasks": "Este proyecto aún tiene tareas sin terminar. Termínalas o elimínalas primero.",
-        "research_pin_required": "Este tipo de proyecto guarda datos de investigación, así que necesita una definición de investigación que fijar. Elige una e inténtalo de nuevo.",
-        "research_pin_not_accepted": "Este tipo de proyecto no guarda datos de investigación, así que no puede fijar una definición de investigación. Quita la definición o elige un tipo de investigación.",
-        "research_definition_not_found": "Ninguna definición de investigación de esta organización coincide con esa clave y versión. Revisa la clave o deja la versión vacía para fijar la más reciente.",
-        "research_inputs_invalid": "Los valores de las entradas de la definición de investigación no la cumplen. Rellena cada entrada obligatoria con un valor aceptado e inténtalo de nuevo.",
-        "task_type_requires_project": "Una tarea de investigación pertenece a un proyecto de investigación, no a un servicio. Añádela a un proyecto de investigación.",
-        "research_project_not_pinned": "Una tarea de investigación necesita un proyecto de investigación que fije una definición de investigación, y este no fija ninguna. Añade la tarea a un proyecto de investigación.",
-        "research_definition_changed": "La definición de investigación que fijó este proyecto ha cambiado desde entonces, así que la ejecución se detuvo en lugar de hacer preguntas que el proyecto nunca aceptó. Pide al operador del despliegue que publique el cambio como una nueva versión.",
-        "research_task_already_recorded": "Esta tarea de investigación ya registró sus hallazgos. Crea una nueva tarea de investigación para dar seguimiento.",
-        "research_nothing_to_ask": "El modo de esta tarea de investigación no deja ninguna pregunta por hacer: nada nuevo con lo que ampliar, o nada parcial o bloqueado que aclarar. Elige otro modo o añade una pregunta.",
-        "findings_too_large_for_inline": "Los hallazgos son demasiado grandes para guardarlos, así que la revisión no se registró. Acota la investigación y vuelve a ejecutarla."
+        "project_definition_required": "Este tipo de proyecto fija una definición, así que necesita una. Elige una e inténtalo de nuevo.",
+        "project_definition_not_accepted": "Este tipo de proyecto no fija ninguna definición. Quita la definición o elige un tipo que use una.",
+        "project_definition_not_found": "Ninguna definición de este tipo de proyecto en esta organización coincide con esa clave y versión. Revisa la clave o deja la versión vacía para fijar la más reciente.",
+        "project_definition_inputs_invalid": "Los valores de las entradas de la definición no la cumplen. Rellena cada entrada obligatoria con un valor aceptado e inténtalo de nuevo.",
+        "task_type_requires_project": "Una tarea de este tipo va en un proyecto, no en un servicio. Añádela a un proyecto de un tipo que la ofrezca.",
+        "project_not_pinned": "Una tarea de este tipo necesita que su proyecto fije una definición, y este no fija ninguna. Añade la tarea a un proyecto que la fije.",
+        "project_definition_changed": "La definición que fijó este proyecto ha cambiado desde entonces, así que la ejecución se detuvo en lugar de trabajar con una definición que el proyecto nunca aceptó. Pide al operador del despliegue que publique el cambio como una versión nueva.",
+        "project_task_already_recorded": "Esta tarea ya registró su resultado en el proyecto. Crea una tarea nueva para continuar.",
+        "outcome_too_large_for_inline": "El resultado es demasiado grande para guardarlo, así que no se registró. Acota la tarea y vuelve a ejecutarla.",
+        "research_nothing_to_ask": "El modo de esta tarea de investigación no deja ninguna pregunta por hacer: nada nuevo con lo que ampliar, o nada parcial o bloqueado que aclarar. Elige otro modo o añade una pregunta."
       }
     },
     "action": {
@@ -1141,7 +1144,8 @@
       "savedToast": "Monitoreo guardado",
       "saveFailed": "No se pudo guardar la asignación",
       "clearFailed": "No se pudo limpiar la asignación",
-      "configNoun": "la configuración de salud de la versión"
+      "configNoun": "la configuración de salud de la versión",
+      "loadFailed": "No se pudo cargar la configuración de salud de la versión"
     },
     "testSecrets": {
       "title": "Credenciales de prueba (sensibles)",
@@ -2091,7 +2095,6 @@
     "title": "Observabilidad de la plataforma",
     "refresh": "Actualizar",
     "close": "Cerrar",
-    "retry": "Reintentar",
     "window": {
       "oneHour": "Última hora",
       "oneDay": "Últimas 24 horas",
@@ -2099,6 +2102,7 @@
       "thirtyDays": "Últimos 30 días",
       "ninetyDays": "Últimos 90 días"
     },
+    "noAccount": "No hay ninguna cuenta activa, así que no hay datos que mostrar.",
     "outcomes": {
       "title": "Resultados de las ejecuciones",
       "total": "Ejecuciones totales",
@@ -2939,7 +2943,8 @@
       "roster": {
         "title": "Miembros",
         "empty": "Aún no hay miembros.",
-        "remove": "Quitar miembro"
+        "remove": "Quitar miembro",
+        "loadFailed": "No se pudieron cargar los miembros de este tablero"
       },
       "add": {
         "title": "Añadir un miembro",
@@ -3575,7 +3580,8 @@
         "pagerDutyToken": "Token de API de PagerDuty",
         "pagerDutyFromEmail": "Correo remitente de PagerDuty",
         "incidentIoKey": "Clave de API de incident.io",
-        "clear": "Borrar"
+        "clear": "Borrar",
+        "loadFailed": "No se pudieron cargar las herramientas de incidentes"
       },
       "status": {
         "notConnected": "Sin conectar",
@@ -3593,7 +3599,8 @@
         "disconnectFailed": "No se pudo desconectar"
       },
       "connectionNoun": "la conexión de observabilidad",
-      "incidentNoun": "el proveedor de incidencias"
+      "incidentNoun": "el proveedor de incidencias",
+      "loadFailed": "No se pudo cargar la conexión de observabilidad"
     },
     "packageRegistries": {
       "tab": "Registros de paquetes",
@@ -4270,7 +4277,8 @@
         "kubeNoun": "el controlador de Kubernetes",
         "kubeOverrideNoun": "la anulación de Kubernetes",
         "customNoun": "este controlador",
-        "cloudflareNoun": "el controlador de Cloudflare"
+        "cloudflareNoun": "el controlador de Cloudflare",
+        "loadFailed": "No se pudieron cargar los controladores de entorno"
       },
       "cloudflare": {
         "intro": "Levanta un Worker de Cloudflare por cada pull request activando el flujo de trabajo de vista previa del repositorio de destino. cat-factory nunca habla directamente con Cloudflare: crea un despliegue, lee su estado y publica un estado inactive para desmontarlo.",
@@ -4697,7 +4705,8 @@
         "loadProjection": "No se pudieron cargar los repositorios, las pull requests y las issues",
         "startInstall": "No se pudo iniciar la instalación de la GitHub App",
         "connect": "No se pudo conectar"
-      }
+      },
+      "listFailed": "No se pudieron listar las instalaciones de la GitHub App"
     },
     "panel": {
       "connectIntro": "Conecta una instalación de la GitHub App para respaldar los bloques del tablero con repositorios, explorar solicitudes de incorporación de cambios e incidencias, y permitir que los agentes envíen ramas y abran PR.",
@@ -4808,7 +4817,8 @@
       "errors": {
         "listDirectory": "No se pudo listar el directorio"
       },
-      "selectAllFiles": "Seleccionar {count} archivo | Seleccionar los {count} archivos"
+      "selectAllFiles": "Seleccionar {count} archivo | Seleccionar los {count} archivos",
+      "listFailed": "No se pudo listar esta carpeta"
     }
   },
   "slack": {
@@ -6224,6 +6234,7 @@
       "medium": "Confianza media",
       "low": "Confianza baja"
     },
+    "loadFailed": "No se pudo cargar la revisión de requisitos",
     "findingFloor": {
       "raised": {
         "high": "Esta pasada planteó solo hallazgos altos.",
@@ -6349,7 +6360,8 @@
       "done": "Completado",
       "failed": "Fallido"
     },
-    "groupTitle": "El grupo de consenso al que escaló esta ejecución"
+    "groupTitle": "El grupo de consenso al que escaló esta ejecución",
+    "loadFailed": "No se pudo cargar la sesión de consenso"
   },
   "brainstorm": {
     "title": {
@@ -6442,7 +6454,8 @@
       "taskReset": "Tarea reiniciada: edítala y reenvíala",
       "extraRoundGranted": "Se concedió una ronda más de lluvia de ideas",
       "resolveError": "No se pudo resolver la lluvia de ideas"
-    }
+    },
+    "loadFailed": "No se pudo cargar la sesión de lluvia de ideas"
   },
   "spec": {
     "title": "Requisitos",
@@ -6493,6 +6506,14 @@
       "given": "Given",
       "when": "When",
       "then": "Then"
+    },
+    "anchorReadFailed": {
+      "title": "No se pudo leer la especificación",
+      "description": "Falló la lectura del repositorio, así que no se sabe si este servicio tiene una especificación. Inténtalo de nuevo."
+    },
+    "anchorUnparsed": {
+      "title": "El archivo de especificación no es válido",
+      "description": "spec/service.json está en la rama predeterminada, pero no se pudo analizar. Corrige el archivo en el repositorio."
     }
   },
   "followUp": {
@@ -7293,7 +7314,8 @@
       "checkSourceFailed": "No se pudo comprobar el repositorio",
       "sourceUnlinked": "Repositorio desvinculado",
       "unlinkSourceFailed": "No se pudo desvincular el repositorio"
-    }
+    },
+    "loadFailed": "No se pudo cargar el catálogo de servicios fundamentales"
   },
   "binaryOutput": {
     "heading": "Salidas binarias",
@@ -8232,7 +8254,8 @@
       "done": "Listo",
       "save": "Guardar",
       "revert": "Descartar"
-    }
+    },
+    "loadFailed": "No se pudo cargar la biblioteca de Claude Skills"
   },
   "merge": {
     "changeClass": {

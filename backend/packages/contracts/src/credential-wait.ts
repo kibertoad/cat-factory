@@ -7,7 +7,7 @@ import * as v from 'valibot'
 //    individual-usage model (Claude / Codex / a subscriber's GLM) carries a per-run activation of
 //    the initiator's credential with a fixed lifetime; every dispatch leases it, and a step whose
 //    lease is refused parks here. The initiator resumes it by entering their personal password.
-//  - `capability`: a capability credential the step declared (a research definition's vendor
+//  - `capability`: a capability credential the step declared (a project definition's vendor
 //    login, say) does not resolve for the run's workspace. A person who can manage the
 //    workspace's secrets stores it, and any member resumes the step once it resolves.
 //
@@ -26,7 +26,7 @@ const capabilityCredentialWaitSchema = v.object({
   raisedAt: v.number(),
   /** The capability-credential lookup key the step needs. */
   key: v.string(),
-  /** What declared it (`research-definition` and the definition key, say), for the re-check. */
+  /** What declared it (`project-definition` and `research/acme:vendor`, say), for the re-check. */
   declaredBy: v.object({ kind: v.string(), id: v.string() }),
   /** What the declarer calls it, for the person storing it. */
   label: v.optional(v.string()),

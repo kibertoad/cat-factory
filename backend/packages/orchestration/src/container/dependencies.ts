@@ -184,13 +184,12 @@ import type {
   WorkspaceMountRepository,
   ProjectRepository,
   ProjectKindRegistry,
-  FindingsRevisionRepository,
-  FindingsStoragePolicyRepository,
-  ResearchDefinitionRepository,
-  ResearchProjectRepository,
+  OutcomeStoragePolicyRepository,
+  ProjectDefinitionRepository,
+  ProjectRecordRepository,
   ProjectKindSource,
-  RegisteredResearchDefinitionSource,
-  ResearchDefinitionRegistry,
+  RegisteredProjectDefinitionSource,
+  ProjectDefinitionRegistry,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
@@ -335,11 +334,13 @@ export interface CoreDependencies extends ContentLibraryDependencies {
   workspaceMountRepository?: WorkspaceMountRepository
   /** Account-owned projects, mounted through the same mounts. Optional like the two above. */
   projectRepository?: ProjectRepository
-  /** Research persistence: published definitions, research projects, findings and policy tiers. */
-  researchDefinitionRepository?: ResearchDefinitionRepository
-  researchProjectRepository?: ResearchProjectRepository
-  findingsRevisionRepository?: FindingsRevisionRepository
-  findingsStoragePolicyRepository?: FindingsStoragePolicyRepository
+  /**
+   * What projects of any kind keep: published definitions, each project's pin and outcome
+   * revisions, and the outcome-storage policy tiers. Optional like the project repository.
+   */
+  projectDefinitionRepository?: ProjectDefinitionRepository
+  projectRecordRepository?: ProjectRecordRepository
+  outcomeStoragePolicyRepository?: OutcomeStoragePolicyRepository
   idGenerator: IdGenerator
   clock: Clock
   /**
@@ -463,15 +464,15 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    */
   projectKindSource?: ProjectKindSource
   /**
-   * The app-owned research-definition registry: the definitions a deployment ships in code.
+   * The app-owned project-definition registry: the definitions a deployment ships in code.
    * Defaulted to an EMPTY registry. A facade injects the SAME instance a deployment registers on.
    */
-  researchDefinitionRegistry?: ResearchDefinitionRegistry
+  projectDefinitionRegistry?: ProjectDefinitionRegistry
   /**
-   * Where REGISTERED research definitions are read from: the registry above unless a
+   * Where REGISTERED project definitions are read from: the registry above unless a
    * mothership-mode node injects the remote source.
    */
-  registeredResearchDefinitionSource?: RegisteredResearchDefinitionSource
+  registeredProjectDefinitionSource?: RegisteredProjectDefinitionSource
   /**
    * The app-owned INLINE USE-CASE registry (the deployment's non-container model operations, which
    * `/api/v1/use-cases` publishes and invokes). Optional + defaulted to

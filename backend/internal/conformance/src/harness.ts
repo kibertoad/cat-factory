@@ -49,8 +49,8 @@ import type {
   TaskSourceProvider,
   TaskTypeRegistry,
   ProjectKindRegistry,
-  ResearchDefinitionRegistry,
-  ResearchProjectRepository,
+  ProjectDefinitionRegistry,
+  ProjectRecordRepository,
   InlineUseCaseRegistry,
   InlineUseCaseGenerator,
   WorkspaceMemberRepository,
@@ -319,8 +319,8 @@ export interface ConformanceApp {
    * on D1 and Postgres.
    */
   blockRepository(): BlockRepository
-  /** The facade's research-project repository, so the projects suite can read what a create pinned. */
-  researchProjectRepository(): ResearchProjectRepository
+  /** The facade's project-record repository, so the projects suite can read what a create pinned. */
+  projectRecordRepository(): ProjectRecordRepository
   /**
    * The facade's workspace repository over its real store, so the workspace-RBAC suite can
    * assert the `accessRowOf` / `setAccessMode` access-mode round-trip identically on D1 and
@@ -857,8 +857,8 @@ export interface ConformanceAppOptions {
    * default (empty) registry.
    */
   projectKindRegistry?: ProjectKindRegistry
-  /** Inject the research-definition registry, so a suite can pin a registered definition. */
-  researchDefinitionRegistry?: ResearchDefinitionRegistry
+  /** Inject the project-definition registry, so a suite can pin a registered definition. */
+  projectDefinitionRegistry?: ProjectDefinitionRegistry
   /**
    * Inject the app-owned INLINE USE-CASE registry, pre-loaded with a deployment's use case, so the
    * suite can assert the public `/api/v1/use-cases` surface resolves identically on EVERY runtime
