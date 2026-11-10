@@ -17,7 +17,6 @@ import {
   type ProjectDefinitionSource,
   type ProjectKindModule,
   type ProjectKindModuleRegistry,
-  type ProjectOutcomeRow,
   type ProjectRecordRepository,
   type ProjectRepository,
   type ProjectRunContext,
