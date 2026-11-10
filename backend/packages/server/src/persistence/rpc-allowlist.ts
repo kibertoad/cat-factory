@@ -332,6 +332,26 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listBySubjectIds: { scope: { kind: 'subjectList', arg: 0 } },
     removeBySubjects: { scope: { kind: 'subjectList', arg: 0 } },
   },
+  // What projects of any kind keep. Definitions are account-owned; a pin or an outcome is written
+  // under one project and binds through it; the storage-policy tiers bind through their owner.
+  projectDefinitionRepository: {
+    get: { scope: { kind: 'account', arg: 0 } },
+    listByAccount: { scope: { kind: 'account', arg: 0 } },
+    insert: { scope: { kind: 'accountField', arg: 0 } },
+  },
+  projectRecordRepository: {
+    getPin: { scope: { kind: 'project', arg: 0 } },
+    insertPin: { scope: { kind: 'projectField', arg: 0 } },
+    reserveSeq: { scope: { kind: 'project', arg: 0 } },
+    insertOutcome: { scope: { kind: 'projectField', arg: 0 } },
+    getOutcome: { scope: { kind: 'project', arg: 0 } },
+    listOutcomes: { scope: { kind: 'project', arg: 0 } },
+    deleteByProjects: { scope: { kind: 'projectList', arg: 0 } },
+  },
+  outcomeStoragePolicyRepository: {
+    get: { scope: { kind: 'owner', kindArg: 0, idArg: 1, projectTier: true } },
+    set: { scope: { kind: 'owner', kindArg: 0, idArg: 1, projectTier: true } },
+  },
   // Account-owned projects, the peers of services. Every read and write binds the project's own
   // account; an insert or a link change also binds every linked service to that same account,
   // since a linked service's repos become read-only context for the project's tasks.

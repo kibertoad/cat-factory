@@ -51,6 +51,7 @@ import {
 import {
   agentRuns,
   blocks,
+  outcomeStoragePolicies,
   projectServiceLinks,
   projects,
   services,
@@ -59,6 +60,7 @@ import {
   workspaceMounts,
   workspaces,
 } from '../../db/schema.js'
+import { deleteProjectRecords } from './project-outcomes.js'
 
 export class DrizzleWorkspaceRepository implements WorkspaceRepository {
   constructor(private readonly db: DrizzleDb) {}
@@ -291,6 +293,8 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
         await tx
           .delete(projectServiceLinks)
           .where(inArray(projectServiceLinks.project_id, projectIds))
+        // A homed project's outcomes, sequence, pin and policy tier.
+        await deleteProjectRecords(tx, projectIds)
         await tx.delete(projects).where(inArray(projects.id, projectIds))
       }
       if (serviceIds.length) {
@@ -298,6 +302,15 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
           .delete(projectServiceLinks)
           .where(inArray(projectServiceLinks.service_id, serviceIds))
       }
+      // This board's own outcome-storage policy tier.
+      await tx
+        .delete(outcomeStoragePolicies)
+        .where(
+          and(
+            eq(outcomeStoragePolicies.owner_kind, 'workspace'),
+            eq(outcomeStoragePolicies.owner_id, id),
+          ),
+        )
       // This workspace's OWN mounts of subjects homed elsewhere (shared services and projects).
       await tx.delete(workspaceMounts).where(eq(workspaceMounts.workspace_id, id))
       // Bulk reclaim of every plain workspace-scoped table (incl. blocks/agent_runs/pipelines/

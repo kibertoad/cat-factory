@@ -32,6 +32,8 @@ export * from './tables/foundational-services.js'
 // same size-budget reason. The board's OWN policies stay below, beside the merge track record they
 // are judged against.
 export * from './tables/risk-policies.js'
+// What projects of any kind keep: definitions, pins, outcome revisions and outcome-storage policies.
+export * from './tables/project-outcomes.js'
 
 // The SETTINGS tables (the local-mode singleton, the per-user budget, the per-workspace
 // runtime policy row + its custom metadata bag, and the per-agent-kind generation knob) live

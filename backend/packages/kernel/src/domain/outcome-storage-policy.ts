@@ -1,10 +1,7 @@
-import {
-  DEFAULT_FINDINGS_INLINE_MAX_BYTES,
-  type FindingsStoragePolicy,
-} from '@cat-factory/contracts'
+import { DEFAULT_OUTCOME_INLINE_MAX_BYTES, type OutcomeStoragePolicy } from '@cat-factory/contracts'
 
-/** A findings-storage policy with every field decided. */
-export interface EffectiveFindingsStoragePolicy {
+/** An outcome-storage policy with every field decided. */
+export interface EffectiveOutcomeStoragePolicy {
   /** Never above `facadeInlineCeilingBytes`. */
   inlineMaxBytes: number
   offload: 'enabled' | 'disabled'
@@ -17,16 +14,16 @@ export interface EffectiveFindingsStoragePolicy {
  * wins, an absent field inherits. `facadeInlineCeilingBytes` is the runtime's own row cap, which
  * no tier can raise.
  */
-export function resolveFindingsStoragePolicy(input: {
-  account?: FindingsStoragePolicy | null
-  workspace?: FindingsStoragePolicy | null
-  project?: FindingsStoragePolicy | null
+export function resolveOutcomeStoragePolicy(input: {
+  account?: OutcomeStoragePolicy | null
+  workspace?: OutcomeStoragePolicy | null
+  project?: OutcomeStoragePolicy | null
   facadeInlineCeilingBytes: number
-}): EffectiveFindingsStoragePolicy {
+}): EffectiveOutcomeStoragePolicy {
   const tiers = [input.project, input.workspace, input.account]
-  const pick = <K extends keyof FindingsStoragePolicy>(field: K) =>
+  const pick = <K extends keyof OutcomeStoragePolicy>(field: K) =>
     tiers.find((tier) => tier?.[field] !== undefined)?.[field]
-  const inlineMaxBytes = pick('inlineMaxBytes') ?? DEFAULT_FINDINGS_INLINE_MAX_BYTES
+  const inlineMaxBytes = pick('inlineMaxBytes') ?? DEFAULT_OUTCOME_INLINE_MAX_BYTES
   return {
     inlineMaxBytes: Math.min(inlineMaxBytes, input.facadeInlineCeilingBytes),
     offload: pick('offload') ?? 'enabled',
@@ -34,10 +31,10 @@ export function resolveFindingsStoragePolicy(input: {
   }
 }
 
-export type FindingsPlacement =
+export type OutcomePlacement =
   | { placement: 'inline' }
   | { placement: 'offload' }
-  | { placement: 'refused'; reason: 'findings_too_large_for_inline' }
+  | { placement: 'refused'; reason: 'outcome_too_large_for_inline' }
 
 /**
  * Where a revision body of `bytes` is stored. Over the threshold it is offloaded to the
@@ -45,14 +42,14 @@ export type FindingsPlacement =
  * fits under the facade's own ceiling stays inline, and one that does not is refused loudly
  * rather than truncated.
  */
-export function placeFindingsBody(input: {
+export function placeOutcomeBody(input: {
   bytes: number
-  policy: EffectiveFindingsStoragePolicy
+  policy: EffectiveOutcomeStoragePolicy
   blobStoreAvailable: boolean
-}): FindingsPlacement {
+}): OutcomePlacement {
   if (input.bytes <= input.policy.inlineMaxBytes) return { placement: 'inline' }
   if (input.policy.offload === 'enabled' && input.blobStoreAvailable)
     return { placement: 'offload' }
   if (input.bytes <= input.policy.facadeInlineCeilingBytes) return { placement: 'inline' }
-  return { placement: 'refused', reason: 'findings_too_large_for_inline' }
+  return { placement: 'refused', reason: 'outcome_too_large_for_inline' }
 }

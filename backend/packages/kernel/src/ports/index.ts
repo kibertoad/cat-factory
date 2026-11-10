@@ -55,6 +55,14 @@ export type {
   WorkspaceMountRepository,
 } from './service-repositories.js'
 export type { ProjectRepository } from './project-repositories.js'
+export type {
+  OutcomeStoragePolicyRepository,
+  ProjectDefinitionRepository,
+  ProjectOutcomeBodyRef,
+  ProjectOutcomeRow,
+  ProjectRecordRepository,
+  StoredProjectDefinition,
+} from './project-outcome-repositories.js'
 export { type ProjectKindSource, registryProjectKindSource } from './project-kinds.js'
 export type { Clock, IdGenerator } from './runtime.js'
 export {

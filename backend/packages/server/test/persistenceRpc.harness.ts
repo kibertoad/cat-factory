@@ -228,6 +228,15 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
         dy,
       }),
     },
+    projectRecordRepository: {
+      insertOutcome: async () => true,
+      getOutcome: async () => null,
+      listOutcomes: async () => [],
+    },
+    outcomeStoragePolicyRepository: {
+      get: async () => null,
+      set: async () => undefined,
+    },
     projectRepository: {
       listByIds: async (ids: string[]) => ids.map((id) => fx.projects.get(id)).filter(Boolean),
       get: async (id: string) => fx.projects.get(id) ?? null,

@@ -313,6 +313,30 @@ describe('shared-service mount management surface', () => {
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 
+  it('binds a project outcome to the project it is written under', async () => {
+    await expect(
+      remoteRegistry().projectRecordRepository!.insertOutcome!({
+        id: 'rev_1',
+        projectId: 'prj_in',
+      }),
+    ).resolves.toBe(true)
+    await expect(
+      remoteRegistry().projectRecordRepository!.insertOutcome!({
+        id: 'rev_2',
+        projectId: 'prj_out',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it("binds a project-tier storage policy through the project's account", async () => {
+    await expect(
+      remoteRegistry().outcomeStoragePolicyRepository!.get!('project', 'prj_in'),
+    ).resolves.toBeNull()
+    await expect(
+      remoteRegistry().outcomeStoragePolicyRepository!.set!('project', 'prj_out', null),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
   it('binds owner lists through services and projects alike', async () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.listBySubjectIds!(['svc_in', 'prj_in']),

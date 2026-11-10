@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_FINDINGS_INLINE_MAX_BYTES } from '@cat-factory/contracts'
-import { placeFindingsBody, resolveFindingsStoragePolicy } from './findings-storage-policy.js'
+import { DEFAULT_OUTCOME_INLINE_MAX_BYTES } from '@cat-factory/contracts'
+import { placeOutcomeBody, resolveOutcomeStoragePolicy } from './outcome-storage-policy.js'
 
 const CEILING = 2_000_000
 
-describe('resolveFindingsStoragePolicy', () => {
+describe('resolveOutcomeStoragePolicy', () => {
   it('defaults when no tier sets anything', () => {
-    expect(resolveFindingsStoragePolicy({ facadeInlineCeilingBytes: CEILING })).toEqual({
-      inlineMaxBytes: DEFAULT_FINDINGS_INLINE_MAX_BYTES,
+    expect(resolveOutcomeStoragePolicy({ facadeInlineCeilingBytes: CEILING })).toEqual({
+      inlineMaxBytes: DEFAULT_OUTCOME_INLINE_MAX_BYTES,
       offload: 'enabled',
       facadeInlineCeilingBytes: CEILING,
     })
@@ -15,7 +15,7 @@ describe('resolveFindingsStoragePolicy', () => {
 
   it('lets the narrowest tier that sets a field win, field by field', () => {
     expect(
-      resolveFindingsStoragePolicy({
+      resolveOutcomeStoragePolicy({
         account: { inlineMaxBytes: 1000, offload: 'disabled' },
         workspace: { inlineMaxBytes: 2000 },
         project: { offload: 'enabled' },
@@ -26,7 +26,7 @@ describe('resolveFindingsStoragePolicy', () => {
 
   it('never raises the threshold past the facade ceiling', () => {
     expect(
-      resolveFindingsStoragePolicy({
+      resolveOutcomeStoragePolicy({
         account: { inlineMaxBytes: 1_500_000 },
         facadeInlineCeilingBytes: 1_000_000,
       }).inlineMaxBytes,
@@ -34,15 +34,15 @@ describe('resolveFindingsStoragePolicy', () => {
   })
 })
 
-describe('placeFindingsBody', () => {
-  const policy = resolveFindingsStoragePolicy({
+describe('placeOutcomeBody', () => {
+  const policy = resolveOutcomeStoragePolicy({
     account: { inlineMaxBytes: 100 },
     facadeInlineCeilingBytes: 1000,
   })
 
   it('keeps a body at or under the threshold inline', () => {
     expect(
-      placeFindingsBody({
+      placeOutcomeBody({
         bytes: 100,
         policy,
         blobStoreAvailable: true,
@@ -52,7 +52,7 @@ describe('placeFindingsBody', () => {
 
   it('offloads above the threshold when a store is available', () => {
     expect(
-      placeFindingsBody({
+      placeOutcomeBody({
         bytes: 101,
         policy,
         blobStoreAvailable: true,
@@ -62,14 +62,14 @@ describe('placeFindingsBody', () => {
 
   it('keeps an over-threshold body inline when it cannot offload but fits the ceiling', () => {
     expect(
-      placeFindingsBody({
+      placeOutcomeBody({
         bytes: 500,
         policy,
         blobStoreAvailable: false,
       }),
     ).toEqual({ placement: 'inline' })
     expect(
-      placeFindingsBody({
+      placeOutcomeBody({
         bytes: 500,
         policy: { ...policy, offload: 'disabled' },
         blobStoreAvailable: true,
@@ -79,11 +79,11 @@ describe('placeFindingsBody', () => {
 
   it('refuses a body over the ceiling that cannot be offloaded, rather than truncating it', () => {
     expect(
-      placeFindingsBody({
+      placeOutcomeBody({
         bytes: 1001,
         policy,
         blobStoreAvailable: false,
       }),
-    ).toEqual({ placement: 'refused', reason: 'findings_too_large_for_inline' })
+    ).toEqual({ placement: 'refused', reason: 'outcome_too_large_for_inline' })
   })
 })

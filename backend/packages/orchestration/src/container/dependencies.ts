@@ -184,6 +184,9 @@ import type {
   WorkspaceMountRepository,
   ProjectRepository,
   ProjectKindRegistry,
+  OutcomeStoragePolicyRepository,
+  ProjectDefinitionRepository,
+  ProjectRecordRepository,
   ProjectKindSource,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
@@ -329,6 +332,13 @@ export interface CoreDependencies extends ContentLibraryDependencies {
   workspaceMountRepository?: WorkspaceMountRepository
   /** Account-owned projects, mounted through the same mounts. Optional like the two above. */
   projectRepository?: ProjectRepository
+  /**
+   * What projects of any kind keep: published definitions, each project's pin and outcome
+   * revisions, and the outcome-storage policy tiers. Optional like the project repository.
+   */
+  projectDefinitionRepository?: ProjectDefinitionRepository
+  projectRecordRepository?: ProjectRecordRepository
+  outcomeStoragePolicyRepository?: OutcomeStoragePolicyRepository
   idGenerator: IdGenerator
   clock: Clock
   /**
