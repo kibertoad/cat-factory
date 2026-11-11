@@ -61,5 +61,11 @@ export const useWorkspaceSettingsStore = defineStore('workspaceSettings', () => 
     return updated
   }
 
-  return { settings, hydrate, update }
+  /** Re-read the settings after a write that changed them as a side effect on the server. */
+  async function reload() {
+    const ws = useWorkspaceStore()
+    settings.value = await api.getWorkspaceSettings(ws.requireId())
+  }
+
+  return { settings, hydrate, update, reload }
 })

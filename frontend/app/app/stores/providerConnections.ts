@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, reactive, ref } from 'vue'
 import type { BackendKindOption } from '@cat-factory/contracts'
 import type {
+  AccountRunnerPoolSummary,
   ProviderConnection,
   ProviderConnectionKind,
   ProviderDescriptor,
@@ -9,6 +10,7 @@ import type {
   TestProviderInput,
 } from '~/types/providerConnections'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { useWorkspaceSettingsStore } from '~/stores/workspaceSettings'
 
 const KINDS: ProviderConnectionKind[] = ['environment', 'runner-pool']
 
@@ -33,10 +35,15 @@ interface ProviderState {
   available: boolean | null
   descriptor: ProviderDescriptor | null
   connection: ProviderConnection | null
+  /**
+   * Runner pool only: the account's pool, whether or not the board uses it. Null for the
+   * environment provider, a board with no account, or an account with no pool.
+   */
+  accountPool: AccountRunnerPoolSummary | null
 }
 
 function emptyState(): ProviderState {
-  return { available: null, descriptor: null, connection: null }
+  return { available: null, descriptor: null, connection: null, accountPool: null }
 }
 
 /**
@@ -82,18 +89,20 @@ export const useProviderConnectionsStore = defineStore('providerConnections', ()
     const ws = useWorkspaceStore()
     const s = state[kind]
     try {
-      const [descriptor, { connection }] = await Promise.all([
+      const [descriptor, view] = await Promise.all([
         api.describeProvider(ws.requireId(), kind, backendKind),
         api.getProviderConnection(ws.requireId(), kind),
       ])
       s.descriptor = descriptor
-      s.connection = connection
+      s.connection = view.connection
+      s.accountPool = 'accountPool' in view ? view.accountPool : null
       s.available = true
     } catch {
       // 503 (integration disabled) or any error → hide this provider's UI entry points.
       s.available = false
       s.descriptor = null
       s.connection = null
+      s.accountPool = null
     }
   }
 
@@ -148,6 +157,9 @@ export const useProviderConnectionsStore = defineStore('providerConnections', ()
   function connectionFor(kind: ProviderConnectionKind): ProviderConnection | null {
     return state[kind].connection
   }
+  function accountPoolFor(kind: ProviderConnectionKind): AccountRunnerPoolSummary | null {
+    return state[kind].accountPool
+  }
   function isAvailable(kind: ProviderConnectionKind): boolean {
     return state[kind].available === true
   }
@@ -182,11 +194,29 @@ export const useProviderConnectionsStore = defineStore('providerConnections', ()
     return api.testProviderConnection(ws.requireId(), kind, input)
   }
 
-  async function remove(kind: ProviderConnectionKind) {
+  /**
+   * Remove the board's own connection. For the runner pool the backend also decides whether the
+   * board keeps inheriting its account's pool (`fallBackToAccount`), and records that in the
+   * board's `inheritAccountRunnerPool` setting, so the settings are re-read with the connection.
+   */
+  async function remove(
+    kind: ProviderConnectionKind,
+    options: { fallBackToAccount?: boolean } = {},
+  ) {
     const ws = useWorkspaceStore()
-    await api.deleteProviderConnection(ws.requireId(), kind)
+    await api.deleteProviderConnection(ws.requireId(), kind, options)
     state[kind].connection = null
+    if (kind === 'runner-pool') await useWorkspaceSettingsStore().reload()
     await loadKind(kind)
+  }
+
+  /**
+   * Whether a board with no runner pool of its own uses its account's pool. A settings write, then
+   * a re-read of the connection, which the change moves between the account's pool and none.
+   */
+  async function setInheritAccountRunnerPool(inherit: boolean) {
+    await useWorkspaceSettingsStore().update({ inheritAccountRunnerPool: inherit })
+    await loadKind('runner-pool')
   }
 
   return {
@@ -200,6 +230,7 @@ export const useProviderConnectionsStore = defineStore('providerConnections', ()
     descriptorFor,
     connectionFor,
     isAvailable,
+    accountPoolFor,
     needingConfig,
     backendKindsFor,
     registerBackendKinds,
@@ -207,5 +238,6 @@ export const useProviderConnectionsStore = defineStore('providerConnections', ()
     updateSecrets,
     test,
     remove,
+    setInheritAccountRunnerPool,
   }
 })
