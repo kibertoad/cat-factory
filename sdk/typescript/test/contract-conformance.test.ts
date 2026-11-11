@@ -114,6 +114,25 @@ expectMutuallyAssignable<
   sdk.AcknowledgeKaizenEntry,
   v.InferOutput<typeof contracts.acknowledgeKaizenEntrySchema>
 >()
+// Projects of every kind: a kind's spec, outcome body and view are opaque (`unknown`) on both sides.
+expectMutuallyAssignable<sdk.PublicProjectKind, v.InferOutput<typeof contracts.publicProjectKindSchema>>()
+expectMutuallyAssignable<sdk.PublicProjectKindList, v.InferOutput<typeof contracts.publicProjectKindListSchema>>()
+expectMutuallyAssignable<sdk.PublicProjectKindDetail, v.InferOutput<typeof contracts.publicProjectKindDetailSchema>>()
+expectMutuallyAssignable<sdk.PublicProjectDefinition, v.InferOutput<typeof contracts.publicProjectDefinitionSchema>>()
+expectMutuallyAssignable<sdk.PublicProjectDefinitionList, v.InferOutput<typeof contracts.publicProjectDefinitionListSchema>>()
+expectMutuallyAssignable<sdk.PublishProjectDefinition, v.InferOutput<typeof contracts.publishProjectDefinitionSchema>>()
+expectMutuallyAssignable<sdk.PublicProjectPin, v.InferOutput<typeof contracts.publicProjectPinSchema>>()
+expectMutuallyAssignable<sdk.PublicProject, v.InferOutput<typeof contracts.publicProjectSchema>>()
+expectMutuallyAssignable<sdk.PublicProjectList, v.InferOutput<typeof contracts.publicProjectListSchema>>()
+expectMutuallyAssignable<sdk.CreatePublicProject, v.InferOutput<typeof contracts.createPublicProjectSchema>>()
+expectMutuallyAssignable<sdk.PublicProjectServices, v.InferOutput<typeof contracts.publicProjectServicesSchema>>()
+expectMutuallyAssignable<sdk.PublicProjectTask, v.InferOutput<typeof contracts.publicProjectTaskSchema>>()
+expectMutuallyAssignable<sdk.PublicProjectTaskList, v.InferOutput<typeof contracts.publicProjectTaskListSchema>>()
+expectMutuallyAssignable<sdk.CreatePublicProjectTask, v.InferOutput<typeof contracts.createPublicProjectTaskSchema>>()
+expectMutuallyAssignable<sdk.PublicProjectOutcome, v.InferOutput<typeof contracts.publicProjectOutcomeSchema>>()
+expectMutuallyAssignable<sdk.PublicProjectOutcomeList, v.InferOutput<typeof contracts.publicProjectOutcomeListSchema>>()
+expectMutuallyAssignable<sdk.PublicProjectView, v.InferOutput<typeof contracts.publicProjectViewSchema>>()
+expectMutuallyAssignable<sdk.PublicCredentialResume, v.InferOutput<typeof contracts.publicCredentialResumeSchema>>()
 // Guided PR review: the session view and everything it nests, plus the request bodies.
 expectMutuallyAssignable<
   sdk.GuidedReviewSessionView,
@@ -723,6 +742,24 @@ const ASSERTED_COMPONENTS = [
   'PublicKaizenEntryCombo',
   'PublicKaizenEntryList',
   'AcknowledgeKaizenEntry',
+  'PublicProjectKind',
+  'PublicProjectKindList',
+  'PublicProjectKindDetail',
+  'PublicProjectDefinition',
+  'PublicProjectDefinitionList',
+  'PublishProjectDefinition',
+  'PublicProjectPin',
+  'PublicProject',
+  'PublicProjectList',
+  'CreatePublicProject',
+  'PublicProjectServices',
+  'PublicProjectTask',
+  'PublicProjectTaskList',
+  'CreatePublicProjectTask',
+  'PublicProjectOutcome',
+  'PublicProjectOutcomeList',
+  'PublicProjectView',
+  'PublicCredentialResume',
   'GuidedReviewSessionView',
   'GuidedReviewThreadView',
   'GuidedReviewExchange',
