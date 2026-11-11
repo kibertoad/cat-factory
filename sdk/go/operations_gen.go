@@ -594,6 +594,23 @@ func (q *KaizenListEntriesQuery) values() map[string]string {
 	return out
 }
 
+// ProjectsListOutcomesQuery holds the query parameters for ProjectsService.ListOutcomes.
+type ProjectsListOutcomesQuery struct {
+	// Stream zero value means "not sent".
+	Stream *string
+}
+
+func (q *ProjectsListOutcomesQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Stream != nil {
+		out["stream"] = fmt.Sprintf("%v", *q.Stream)
+	}
+	return out
+}
+
 // PromptFragmentsListQuery holds the query parameters for PromptFragmentsService.List.
 type PromptFragmentsListQuery struct {
 	// Limit zero value means "not sent".
@@ -4106,66 +4123,105 @@ func (s *KaizenService) ListEntriesAll(ctx context.Context, query *KaizenListEnt
 	}
 }
 
-// ResearchDefinitionsService the research definitions a research project can pin: the ones the deployment ships in code and
-// the ones the account published, each version immutable. A definition says what to find out,
-// which credentials the research needs by name, and the vendor origins a credential may be sent
-// to. Reading takes a `read` key; publishing a version takes an `admin` key.
-type ResearchDefinitionsService struct {
+// ProjectKindsService the project kinds the deployment offers, each with the JSON Schemas of its own shapes, and the
+// definitions a project of a kind can pin: the ones the deployment ships in code and the ones the
+// account published, each version immutable. A definition names the credentials its runs need and
+// the origins a credential may be sent to; its `spec` is the kind's. Reading takes a `read` key;
+// publishing a version takes an `admin` key.
+type ProjectKindsService struct {
 	client *Client
 }
 
-// Get get every version of one research definition
-// Every version of one definition key the account can pin, ascending. An unknown key is `404`
-// with `details.reason: "research_definition_not_found"`.
-// GET /api/v1/research-definitions/{key} (operation getPublicResearchDefinition).
-func (s *ResearchDefinitionsService) Get(ctx context.Context, key string) (*PublicResearchDefinitionList, error) {
+// Get get a project kind with its schemas
+// One kind with the JSON Schemas of the shapes the rest of this surface leaves opaque: a
+// definition's `spec`, an outcome's `body` (in the schema version the deployment writes) and a
+// project's `view`. Each is null for a kind that declares none. A schema states the shape; a kind
+// can enforce more when it parses (unique ids, say). An unknown kind is `404`.
+// GET /api/v1/project-kinds/{kind} (operation getPublicProjectKind).
+func (s *ProjectKindsService) Get(ctx context.Context, kind string) (*PublicProjectKindDetail, error) {
 	req := requestSpec{
 		Method: "GET",
-		Path:   fmt.Sprintf("/api/v1/research-definitions/%s", pathEscape(key)),
+		Path:   fmt.Sprintf("/api/v1/project-kinds/%s", pathEscape(kind)),
 	}
-	var out PublicResearchDefinitionList
+	var out PublicProjectKindDetail
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
-// List list the research definitions the account can pin
-// Every research definition a research project of the key's account can pin: the ones the
-// deployment ships in code (`origin: registered`) and the ones the account published (`origin:
-// stored`), each with its content hash. A definition says what to find out (topics and
-// questions), which credentials the research needs by name, and the vendor origins a credential
-// may be sent to.
-// GET /api/v1/research-definitions (operation listPublicResearchDefinitions).
-func (s *ResearchDefinitionsService) List(ctx context.Context) (*PublicResearchDefinitionList, error) {
+// GetDefinition get every version of one definition
+// Every version of one definition key of the kind the account can pin, ascending. An unknown key
+// is `404` with `details.reason: "project_definition_not_found"`.
+// GET /api/v1/project-kinds/{kind}/definitions/{key} (operation getPublicProjectDefinition).
+func (s *ProjectKindsService) GetDefinition(ctx context.Context, kind string, key string) (*PublicProjectDefinitionList, error) {
 	req := requestSpec{
 		Method: "GET",
-		Path:   "/api/v1/research-definitions",
+		Path:   fmt.Sprintf("/api/v1/project-kinds/%s/definitions/%s", pathEscape(kind), pathEscape(key)),
 	}
-	var out PublicResearchDefinitionList
+	var out PublicProjectDefinitionList
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
-// Publish publish a research definition version
-// Publish one immutable version of an account-owned research definition; the key and version are
-// the path's. A version already published is `409` with `details.reason:
-// "research_definition_version_exists"`, so a project pinned to it never changes meaning. A key
-// in a namespace the deployment's own definitions use is `409` with
-// `research_definition_key_registered`. A credential key the deployment reserves for its own
-// configuration is refused `400` by the body schema. Requires an `admin` key: a definition names
-// the credentials a run sends and the origins it may send them to.
-// PUT /api/v1/research-definitions/{key}/versions/{version} (operation
-// publishPublicResearchDefinition).
-func (s *ResearchDefinitionsService) Publish(ctx context.Context, key string, version string, body PublishResearchDefinition) (*PublicResearchDefinition, error) {
+// List list the project kinds the deployment offers
+// Each kind with the task types its projects take and whether a project of it pins a definition
+// (`definition`: `required` or `optional`; absent for a kind that pins none). The built-in kind
+// is `research`; a deployment registers its own.
+// GET /api/v1/project-kinds (operation listPublicProjectKinds).
+func (s *ProjectKindsService) List(ctx context.Context) (*PublicProjectKindList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/project-kinds",
+	}
+	var out PublicProjectKindList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListDefinitions list the definitions of one kind the account can pin
+// Every definition of the kind a project of the key's account can pin: the ones the deployment
+// ships in code (`origin: registered`) and the ones the account published (`origin: stored`),
+// each with its content hash. A definition's envelope names the credentials its runs need, the
+// origins a credential may be sent to and the inputs a project fills; its `spec` says what the
+// work is. The platform never reads it: the project kind owns its shape and serves its JSON
+// Schema from `GET /api/v1/project-kinds/{kind}`.
+// GET /api/v1/project-kinds/{kind}/definitions (operation listPublicProjectDefinitions).
+func (s *ProjectKindsService) ListDefinitions(ctx context.Context, kind string) (*PublicProjectDefinitionList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/project-kinds/%s/definitions", pathEscape(kind)),
+	}
+	var out PublicProjectDefinitionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// PublishDefinition publish a definition version
+// Publish one immutable version of an account-owned definition; the kind, key and version are the
+// path's. The envelope is checked by this schema and the `spec` by the kind, against the schema
+// the kind serves; a spec the kind refuses, or a kind this deployment cannot validate, is `422`
+// with `details.reason: "project_definition_invalid"` and `details.problems` listing each issue.
+// A version already published is `409` with `project_definition_version_exists`, so a project
+// pinned to it never changes meaning. A key in a namespace the deployment's own definitions of
+// the kind use is `409` with `project_definition_key_registered`. A credential key the deployment
+// reserves for its own configuration is refused `400` by the body schema. Requires an `admin`
+// key: a definition names the credentials a run sends and the origins it may send them to.
+// PUT /api/v1/project-kinds/{kind}/definitions/{key}/versions/{version} (operation
+// publishPublicProjectDefinition).
+func (s *ProjectKindsService) PublishDefinition(ctx context.Context, kind string, key string, version string, body PublishProjectDefinition) (*PublicProjectDefinition, error) {
 	req := requestSpec{
 		Method: "PUT",
-		Path:   fmt.Sprintf("/api/v1/research-definitions/%s/versions/%s", pathEscape(key), pathEscape(version)),
+		Path:   fmt.Sprintf("/api/v1/project-kinds/%s/definitions/%s/versions/%s", pathEscape(kind), pathEscape(key), pathEscape(version)),
 		Body:   body,
 	}
-	var out PublicResearchDefinition
+	var out PublicProjectDefinition
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
@@ -4173,20 +4229,20 @@ func (s *ResearchDefinitionsService) Publish(ctx context.Context, key string, ve
 }
 
 // ProjectsService projects, the account-owned peers of services: list the ones the key's workspace mounts, create
-// one (a research project pins a research definition), link and unlink services, mount one,
-// create and run the tasks under it on the board that homes it, and read a research project's
-// findings and their revisions.
+// one (pinning a definition when its kind takes one), link and unlink services, mount one, create
+// and run the tasks under it on the board that homes it, and read its outcomes and the view its
+// kind computes from them.
 type ProjectsService struct {
 	client *Client
 }
 
 // Create create a project
-// Create a project homed on the key's workspace. A kind keeping research data (the built-in
-// `research` kind) takes `research` naming the definition key, an optional version (the highest
-// by default) and the values for its `inputs`; the project pins that version and its content
-// hash. Refusals are `422` with `details.reason`: `project_kind_unregistered`,
-// `research_pin_required`, `research_pin_not_accepted`, `research_definition_not_found`,
-// `research_inputs_invalid`, `project_service_link_invalid`.
+// Create a project homed on the key's workspace. A kind that pins a definition takes `definition`
+// naming its key, an optional version (the highest by default) and the values for its `inputs`;
+// the project pins that version and its content hash. Refusals are `422` with `details.reason`:
+// `project_kind_unregistered`, `project_definition_required`, `project_definition_not_accepted`,
+// `project_definition_not_found`, `project_definition_inputs_invalid`,
+// `project_service_link_invalid`.
 // POST /api/v1/projects (operation createPublicProject).
 func (s *ProjectsService) Create(ctx context.Context, body CreatePublicProject) (*PublicProject, error) {
 	req := requestSpec{
@@ -4203,10 +4259,11 @@ func (s *ProjectsService) Create(ctx context.Context, body CreatePublicProject) 
 
 // CreateTask create a task under a project
 // A project task has its own resource, `PublicProjectTask`, carrying `projectId` where a service
-// task carries `serviceId`. `taskType` defaults to the first type the project's kind offers. A
-// `research` task takes its mode (`initial`, `extend`, `clarify`, `refresh`) and ad-hoc questions
-// through `fields`. A project's tasks are created and run on the board that homes it; any other
-// board is refused with `409` and `details.reason: "project_homed_elsewhere"`.
+// task carries `serviceId`. `taskType` defaults to the first type the project's kind offers, and
+// what a task of that type asks for goes in `fields`, described by `GET /api/v1/task-types` (a
+// `research` task takes its mode and ad-hoc questions there). A project's tasks are created and
+// run on the board that homes it; any other board is refused with `409` and `details.reason:
+// "project_homed_elsewhere"`.
 // POST /api/v1/projects/{projectId}/tasks (operation createPublicProjectTask).
 func (s *ProjectsService) CreateTask(ctx context.Context, projectID string, body CreatePublicProjectTask) (*PublicProjectTask, error) {
 	req := requestSpec{
@@ -4235,37 +4292,18 @@ func (s *ProjectsService) Get(ctx context.Context, projectID string) (*PublicPro
 	return &out, nil
 }
 
-// GetFindings get a research project's findings
-// The project's current findings: every revision folded by question id in the order the tasks
-// started. A newer answered or partial answer replaces an older one; a newer unanswered or
-// blocked attempt is kept beside it as a note and never erases it. Coverage is computed by the
-// platform from the agent's per-question judgements. A project pinning no definition is `422`
-// with `research_project_not_pinned`.
-// GET /api/v1/projects/{projectId}/findings (operation getPublicProjectFindings).
-func (s *ProjectsService) GetFindings(ctx context.Context, projectID string) (*PublicProjectFindings, error) {
+// GetOutcome get one outcome with its body
+// One outcome with the body its task recorded, wherever it is stored. The platform never reads
+// it: the project kind owns its shape and serves its JSON Schema from `GET
+// /api/v1/project-kinds/{kind}`. An offloaded body that cannot be read is `503` with
+// `details.reason: "outcome_body_unavailable"` rather than an empty one.
+// GET /api/v1/projects/{projectId}/outcomes/{outcomeId} (operation getPublicProjectOutcome).
+func (s *ProjectsService) GetOutcome(ctx context.Context, projectID string, outcomeID string) (*PublicProjectOutcome, error) {
 	req := requestSpec{
 		Method: "GET",
-		Path:   fmt.Sprintf("/api/v1/projects/%s/findings", pathEscape(projectID)),
+		Path:   fmt.Sprintf("/api/v1/projects/%s/outcomes/%s", pathEscape(projectID), pathEscape(outcomeID)),
 	}
-	var out PublicProjectFindings
-	if err := s.client.request(ctx, req, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
-}
-
-// GetFindingsRevision get one findings revision
-// One revision with the body its task recorded, wherever it is stored. An offloaded body that
-// cannot be read is `503` with `details.reason: "findings_body_unavailable"` rather than an empty
-// revision.
-// GET /api/v1/projects/{projectId}/findings/revisions/{revisionId} (operation
-// getPublicFindingsRevision).
-func (s *ProjectsService) GetFindingsRevision(ctx context.Context, projectID string, revisionID string) (*PublicFindingsRevision, error) {
-	req := requestSpec{
-		Method: "GET",
-		Path:   fmt.Sprintf("/api/v1/projects/%s/findings/revisions/%s", pathEscape(projectID), pathEscape(revisionID)),
-	}
-	var out PublicFindingsRevision
+	var out PublicProjectOutcome
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
@@ -4280,6 +4318,25 @@ func (s *ProjectsService) GetTask(ctx context.Context, projectID string, taskID 
 		Path:   fmt.Sprintf("/api/v1/projects/%s/tasks/%s", pathEscape(projectID), pathEscape(taskID)),
 	}
 	var out PublicProjectTask
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetView get a project's current view
+// The project's current state as its kind reads every outcome (for `research`: the findings
+// folded by question, with coverage of the pinned definition). The platform never reads it: the
+// project kind owns its shape and serves its JSON Schema from `GET /api/v1/project-kinds/{kind}`.
+// `view` is null for a kind that computes none; read its outcomes instead. A body that cannot be
+// read is `503` with `outcome_body_unavailable`.
+// GET /api/v1/projects/{projectId}/view (operation getPublicProjectView).
+func (s *ProjectsService) GetView(ctx context.Context, projectID string) (*PublicProjectView, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/view", pathEscape(projectID)),
+	}
+	var out PublicProjectView
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
@@ -4306,7 +4363,7 @@ func (s *ProjectsService) LinkServices(ctx context.Context, projectID string, bo
 // List list the projects the key's workspace mounts
 // Projects are account-owned peers of services, mounted onto boards. Each entry carries its
 // linked services, whether the key's workspace is the board that homes it (`homedHere`, the board
-// that creates and runs its tasks) and, for a research project, the definition version it pinned.
+// that creates and runs its tasks) and, for a kind that pins a definition, the version it pinned.
 // GET /api/v1/projects (operation listPublicProjects).
 func (s *ProjectsService) List(ctx context.Context) (*PublicProjectList, error) {
 	req := requestSpec{
@@ -4314,6 +4371,24 @@ func (s *ProjectsService) List(ctx context.Context) (*PublicProjectList, error) 
 		Path:   "/api/v1/projects",
 	}
 	var out PublicProjectList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListOutcomes list a project's outcomes
+// Every outcome the project's tasks recorded, without bodies, ordered by `seq`: the order the
+// tasks were STARTED, across every stream. `stream` narrows to one stream. An outcome is
+// immutable once written.
+// GET /api/v1/projects/{projectId}/outcomes (operation listPublicProjectOutcomes).
+func (s *ProjectsService) ListOutcomes(ctx context.Context, projectID string, query *ProjectsListOutcomesQuery) (*PublicProjectOutcomeList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/outcomes", pathEscape(projectID)),
+		Query:  query.values(),
+	}
+	var out PublicProjectOutcomeList
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}

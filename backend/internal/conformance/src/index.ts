@@ -91,9 +91,9 @@ export {
   type FoundationalServiceRepos,
 } from './foundational-services-suite.js'
 export {
-  defineResearchPersistenceSuite,
-  type ResearchPersistenceRepos,
-} from './research-persistence-suite.js'
+  defineProjectOutcomePersistenceSuite,
+  type ProjectOutcomePersistenceRepos,
+} from './project-outcome-persistence-suite.js'
 export { defineBrainstormSuite } from './brainstorm-suite.js'
 export { defineInitiativeSuite } from './initiative-suite.js'
 export { defineSharedStackSuite } from './shared-stack-suite.js'

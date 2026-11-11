@@ -1077,6 +1077,9 @@ importers:
       '@toad-contracts/valibot':
         specifier: 1.0.0
         version: 1.0.0(valibot@1.5.0(typescript@7.0.2))
+      '@valibot/to-json-schema':
+        specifier: ^1.8.0
+        version: 1.8.0(valibot@1.5.0(typescript@7.0.2))
       hono:
         specifier: ^4.13.13
         version: 4.13.13

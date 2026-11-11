@@ -62,16 +62,4 @@ describe('research store', () => {
     expect(started).toBe(false)
     expect(start).not.toHaveBeenCalled()
   })
-
-  it('keeps each project view under its own id', async () => {
-    vi.stubGlobal('useApi', () => ({
-      getResearchProjectView: (_ws: string, projectId: string) =>
-        Promise.resolve({ projectId, revisions: [] }),
-    }))
-    const store = useResearchStore()
-    await store.load('prj_a')
-    await store.load('prj_b')
-    expect(Object.keys(store.views).sort()).toEqual(['prj_a', 'prj_b'])
-    expect(store.loading.prj_a).toBe(false)
-  })
 })

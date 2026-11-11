@@ -12,7 +12,7 @@ const capability: StepCredentialWait = {
   subject: 'capability',
   raisedAt: 1,
   key: 'VENDOR_TOKEN',
-  declaredBy: { kind: 'research-definition', id: 'acme:vendor' },
+  declaredBy: { kind: 'project-definition', id: 'research/acme:vendor' },
 }
 
 describe('isCredentialWaitParked', () => {

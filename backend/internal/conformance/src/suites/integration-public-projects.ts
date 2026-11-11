@@ -1,37 +1,46 @@
 import type {
   PublicProject,
-  PublicProjectFindings,
+  PublicProjectDefinitionList,
+  PublicProjectKindDetail,
+  PublicProjectOutcome,
+  PublicProjectOutcomeList,
   PublicProjectTask,
-  PublicResearchDefinitionList,
+  PublicProjectView,
+  ResearchProjectView,
 } from '@cat-factory/contracts'
-import { ResearchDefinitionRegistry } from '@cat-factory/kernel'
+import { defaultProjectDefinitionRegistry } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { FakeAgentOptions } from '../FakeAgentExecutor.js'
 import type { ConformanceHarness } from '../harness.js'
 import { mintPublicApiKey } from './shared.js'
 
-// Cross-runtime conformance for the public PROJECTS surface: research definitions published
-// through the API, projects and their links, the tasks under a project, a research project's
-// findings, and the credential resume. Facade-run because only a facade shows that each route is
-// MOUNTED and that its writes land in its own store.
+// Cross-runtime conformance for the public PROJECTS surface: project kinds and the JSON Schemas
+// they serve, definitions published through the API for one kind, projects and their links, the
+// tasks under a project, a project's outcomes and its kind's view, and the credential resume. The
+// research kind drives it because it is the one the platform ships; the routes never name it.
+// Facade-run because only a facade shows that each route is MOUNTED and that its writes land in its
+// own store.
 
-function definitions(): ResearchDefinitionRegistry {
-  const registry = new ResearchDefinitionRegistry()
+function definitions() {
+  const registry = defaultProjectDefinitionRegistry()
   registry.register({
+    kind: 'research',
     key: 'platform:vendor',
     version: 1,
     title: 'Vendor',
-    brief: 'Learn how the vendor integrates.',
-    topics: [
-      {
-        id: 'auth',
-        title: 'Auth',
-        questions: [
-          { id: 'scheme', question: 'Which auth scheme?' },
-          { id: 'scopes', question: 'Which scopes exist?' },
-        ],
-      },
-    ],
+    spec: {
+      brief: 'Learn how the vendor integrates.',
+      topics: [
+        {
+          id: 'auth',
+          title: 'Auth',
+          questions: [
+            { id: 'scheme', question: 'Which auth scheme?' },
+            { id: 'scopes', question: 'Which scopes exist?' },
+          ],
+        },
+      ],
+    },
     credentials: [
       {
         key: 'VENDOR_LOGIN',
@@ -51,19 +60,23 @@ function reasonOf(body: unknown): unknown {
 
 const publishedBody = {
   title: 'CRM',
-  brief: 'Learn how the CRM exposes contacts.',
-  topics: [
-    { id: 'api', title: 'API', questions: [{ id: 'paging', question: 'How does it page?' }] },
-  ],
+  spec: {
+    brief: 'Learn how the CRM exposes contacts.',
+    topics: [
+      { id: 'api', title: 'API', questions: [{ id: 'paging', question: 'How does it page?' }] },
+    ],
+  },
   targets: [{ baseUrl: 'https://crm.example', surface: 'api' }],
 }
+
+const definitionsPath = '/api/v1/project-kinds/research/definitions'
 
 export function definePublicProjectsConformance(harness: ConformanceHarness): void {
   describe('public API: projects', () => {
     async function setup(agentOptions: FakeAgentOptions = {}) {
       const app = harness.makeApp(
         { asyncKinds: ['project-researcher'], ...agentOptions },
-        { researchDefinitionRegistry: definitions() },
+        { projectDefinitionRegistry: definitions() },
       )
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const accountId = (await app.workspaceRepository().accountOf(workspace.id))!
@@ -82,7 +95,7 @@ export function definePublicProjectsConformance(harness: ConformanceHarness): vo
         {
           kind: 'research',
           title: 'Vendor research',
-          research: { definitionKey: 'platform:vendor' },
+          definition: { key: 'platform:vendor' },
         },
         key,
       )
@@ -90,26 +103,62 @@ export function definePublicProjectsConformance(harness: ConformanceHarness): vo
       return created.body
     }
 
+    it('serves each kind with the JSON Schemas of its spec, outcome and view', async () => {
+      const { app, write } = await setup()
+      const kinds = await app.call<{ kinds: Array<{ id: string }> }>(
+        'GET',
+        '/api/v1/project-kinds',
+        undefined,
+        write,
+      )
+      expect(kinds.status).toBe(200)
+      expect(kinds.body.kinds.map((k) => k.id)).toContain('research')
+      const research = await app.call<PublicProjectKindDetail>(
+        'GET',
+        '/api/v1/project-kinds/research',
+        undefined,
+        write,
+      )
+      expect(research.status).toBe(200)
+      expect(research.body.definition).toBe('required')
+      expect(research.body.schemas.spec).toMatchObject({
+        properties: { topics: { type: 'array' } },
+      })
+      expect(research.body.schemas.outcome).toMatchObject({ properties: { findings: {} } })
+      expect(research.body.schemas.view).toMatchObject({ properties: { coverage: {} } })
+      const unknown = await app.call('GET', '/api/v1/project-kinds/nonesuch', undefined, write)
+      expect(unknown.status).toBe(404)
+    })
+
     it('publishes an immutable definition version and lists it beside the registered ones', async () => {
       const { app, wsId } = await setup()
       const admin = await mintPublicApiKey(app, wsId, 'admin', 'definitions')
-      const path = '/api/v1/research-definitions/acme:crm/versions/1'
+      const path = `${definitionsPath}/acme:crm/versions/1`
       const published = await app.call('PUT', path, publishedBody, admin)
       expect(published.status).toBe(201)
       const again = await app.call('PUT', path, publishedBody, admin)
       expect(again.status).toBe(409)
-      expect(reasonOf(again.body)).toBe('research_definition_version_exists')
+      expect(reasonOf(again.body)).toBe('project_definition_version_exists')
       const squatting = await app.call(
         'PUT',
-        '/api/v1/research-definitions/platform:crm/versions/1',
+        `${definitionsPath}/platform:crm/versions/1`,
         publishedBody,
         admin,
       )
       expect(squatting.status).toBe(409)
-      expect(reasonOf(squatting.body)).toBe('research_definition_key_registered')
+      expect(reasonOf(squatting.body)).toBe('project_definition_key_registered')
+      // The kind's module validates the spec the envelope leaves opaque.
+      const malformed = await app.call(
+        'PUT',
+        `${definitionsPath}/acme:crm/versions/3`,
+        { ...publishedBody, spec: { brief: 'No topics' } },
+        admin,
+      )
+      expect(malformed.status).toBe(422)
+      expect(reasonOf(malformed.body)).toBe('project_definition_invalid')
       const reserved = await app.call(
         'PUT',
-        '/api/v1/research-definitions/acme:crm/versions/2',
+        `${definitionsPath}/acme:crm/versions/2`,
         {
           ...publishedBody,
           credentials: [
@@ -119,11 +168,11 @@ export function definePublicProjectsConformance(harness: ConformanceHarness): vo
         admin,
       )
       // A reserved key never reaches the store: the credential key schema refuses it.
-      expect(reserved.status).toBe(400)
+      expect(reserved.status, JSON.stringify(reserved.body)).toBe(400)
 
-      const listed = await app.call<PublicResearchDefinitionList>(
+      const listed = await app.call<PublicProjectDefinitionList>(
         'GET',
-        '/api/v1/research-definitions',
+        definitionsPath,
         undefined,
         admin,
       )
@@ -132,6 +181,7 @@ export function definePublicProjectsConformance(harness: ConformanceHarness): vo
           (d) => `${d.origin}:${d.definition.key}@${d.definition.version}`,
         ),
       ).toEqual(['registered:platform:vendor@1', 'stored:acme:crm@1'])
+      expect(listed.body.definitions[1]!.definition.spec).toEqual(publishedBody.spec)
     })
 
     it('creates a research project, links services and serves it on a board that mounts it', async () => {
@@ -141,7 +191,7 @@ export function definePublicProjectsConformance(harness: ConformanceHarness): vo
         kind: 'research',
         title: 'Vendor research',
         homedHere: true,
-        research: { definitionKey: 'platform:vendor', definitionVersion: 1 },
+        pin: { definitionKey: 'platform:vendor', definitionVersion: 1 },
       })
       const services = await app.call<{ services: { serviceId: string }[] }>(
         'GET',
@@ -195,7 +245,7 @@ export function definePublicProjectsConformance(harness: ConformanceHarness): vo
       expect(reasonOf(refused.body)).toBe('project_homed_elsewhere')
     })
 
-    it('runs a research task and serves its findings, refusing it on the service task surface', async () => {
+    it("runs a project task and serves its outcomes and its kind's view, refusing it on the service task surface", async () => {
       const { app, wsId, write, decide } = await setup()
       const project = await createResearchProject(app, write)
       const task = await app.call<PublicProjectTask>(
@@ -231,24 +281,46 @@ export function definePublicProjectsConformance(harness: ConformanceHarness): vo
       )
       expect(run.status).toBe(200)
 
-      const findings = await app.call<PublicProjectFindings>(
+      const base = `/api/v1/projects/${project.projectId}`
+      const outcomes = await app.call<PublicProjectOutcomeList>(
         'GET',
-        `/api/v1/projects/${project.projectId}/findings`,
+        `${base}/outcomes`,
         undefined,
         write,
       )
-      expect(findings.status).toBe(200)
-      expect(findings.body.revisions).toHaveLength(1)
-      expect(findings.body.coverage.total.answered).toBe(2)
-      const revisionId = findings.body.revisions[0]!.id
-      const revision = await app.call<{ findings: unknown[] }>(
+      expect(outcomes.status).toBe(200)
+      expect(outcomes.body.outcomes).toHaveLength(1)
+      expect(outcomes.body.outcomes[0]).toMatchObject({
+        stream: 'main',
+        seq: 1,
+        taskId: task.body.taskId,
+        definitionKey: 'platform:vendor',
+      })
+      const otherStream = await app.call<PublicProjectOutcomeList>(
         'GET',
-        `/api/v1/projects/${project.projectId}/findings/revisions/${revisionId}`,
+        `${base}/outcomes?stream=elsewhere`,
         undefined,
         write,
       )
-      expect(revision.status).toBe(200)
-      expect(revision.body.findings).toHaveLength(2)
+      expect(otherStream.body.outcomes).toEqual([])
+      const outcomeId = outcomes.body.outcomes[0]!.id
+      const outcome = await app.call<PublicProjectOutcome>(
+        'GET',
+        `${base}/outcomes/${outcomeId}`,
+        undefined,
+        write,
+      )
+      expect(outcome.status).toBe(200)
+      expect((outcome.body.body as { findings: unknown[] }).findings).toHaveLength(2)
+      const missing = await app.call('GET', `${base}/outcomes/nonesuch`, undefined, write)
+      expect(missing.status).toBe(404)
+
+      const view = await app.call<PublicProjectView>('GET', `${base}/view`, undefined, write)
+      expect(view.status).toBe(200)
+      expect(view.body.kind).toBe('research')
+      const research = view.body.view as ResearchProjectView
+      expect(research.latestRevisionId).toBe(outcomeId)
+      expect(research.coverage.total.answered).toBe(2)
     })
 
     it('resumes a run parked on a missing credential once it is stored', async () => {

@@ -36,9 +36,9 @@ import type {
   ApiErrorCode,
   BootstrapReferenceReason,
   CredentialWaitReason,
-  ProjectReason,
   GateConfigRefusalReason,
   PipelineApprovalsRefusalReason,
+  ProjectReason,
   ToolServerOAuthReason,
   UnavailableReason,
 } from '@cat-factory/contracts'
@@ -134,9 +134,9 @@ const GENERIC_DESCRIPTION_KEYS: Record<Exclude<ApiErrorCode, 'conflict'>, string
  * `CredentialWaitReason` joins it because its 403 is not a missing permission: it names the one
  * person (the run's initiator) whose password can resume the run.
  *
- * `ProjectReason` joins it because each of its 422s names what to change about a project or a
- * research task (pick a definition, a mode, a project instead of a service), which the generic
- * validation wording does not say.
+ * `ProjectReason` joins it because each of its 422s names a rule of projects (what a kind offers,
+ * that a project has no repository to write to) rather than a malformed request, and one of them
+ * surfaces from a run's dispatch, far from the form that could explain it.
  */
 const REASON_DESCRIPTION_KEYS: Record<
   | UnavailableReason
@@ -153,18 +153,18 @@ const REASON_DESCRIPTION_KEYS: Record<
   project_has_no_writable_repo: 'errors.reason.description.project_has_no_writable_repo',
   project_service_link_invalid: 'errors.reason.description.project_service_link_invalid',
   project_has_unfinished_tasks: 'errors.reason.description.project_has_unfinished_tasks',
-  research_pin_required: 'errors.reason.description.research_pin_required',
-  research_pin_not_accepted: 'errors.reason.description.research_pin_not_accepted',
-  research_definition_not_found: 'errors.reason.description.research_definition_not_found',
-  research_inputs_invalid: 'errors.reason.description.research_inputs_invalid',
+  project_definition_required: 'errors.reason.description.project_definition_required',
+  project_definition_not_accepted: 'errors.reason.description.project_definition_not_accepted',
+  project_definition_not_found: 'errors.reason.description.project_definition_not_found',
+  project_definition_inputs_invalid: 'errors.reason.description.project_definition_inputs_invalid',
   task_type_requires_project: 'errors.reason.description.task_type_requires_project',
-  research_project_not_pinned: 'errors.reason.description.research_project_not_pinned',
-  research_definition_changed: 'errors.reason.description.research_definition_changed',
-  research_task_already_recorded: 'errors.reason.description.research_task_already_recorded',
+  project_not_pinned: 'errors.reason.description.project_not_pinned',
+  project_definition_changed: 'errors.reason.description.project_definition_changed',
+  project_task_already_recorded: 'errors.reason.description.project_task_already_recorded',
   research_nothing_to_ask: 'errors.reason.description.research_nothing_to_ask',
-  findings_too_large_for_inline: 'errors.reason.description.findings_too_large_for_inline',
+  outcome_too_large_for_inline: 'errors.reason.description.outcome_too_large_for_inline',
   task_owned_by_project: 'errors.reason.description.task_owned_by_project',
-  research_definition_invalid: 'errors.reason.description.research_definition_invalid',
+  project_definition_invalid: 'errors.reason.description.project_definition_invalid',
   credential_wait_not_initiator: 'errors.reason.description.credential_wait_not_initiator',
   gate_config_fields_invalid: 'errors.reason.description.gate_config_fields_invalid',
   approvals_chain_stale: 'errors.reason.description.approvals_chain_stale',
@@ -179,8 +179,7 @@ const REASON_DESCRIPTION_KEYS: Record<
   tool_server_without_oauth: 'errors.reason.description.tool_server_without_oauth',
   binary_generators_unreachable: 'errors.unavailable.description.binary_generators_unreachable',
   project_kinds_unreachable: 'errors.unavailable.description.project_kinds_unreachable',
-  research_definitions_unreachable:
-    'errors.unavailable.description.research_definitions_unreachable',
+  project_definitions_unreachable: 'errors.unavailable.description.project_definitions_unreachable',
   foundational_builtins_unreachable:
     'errors.unavailable.description.foundational_builtins_unreachable',
   connection_credentials_unreadable:
@@ -198,7 +197,7 @@ const REASON_DESCRIPTION_KEYS: Record<
     'errors.unavailable.description.delegated_work_branch_unprepared',
   attached_pr_provider_unreachable:
     'errors.unavailable.description.attached_pr_provider_unreachable',
-  findings_body_unavailable: 'errors.unavailable.description.findings_body_unavailable',
+  outcome_body_unavailable: 'errors.unavailable.description.outcome_body_unavailable',
 }
 
 /**

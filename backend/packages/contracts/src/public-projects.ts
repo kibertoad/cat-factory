@@ -2,23 +2,32 @@ import * as v from 'valibot'
 import { descriptorFieldValuesSchema } from './form-fields.js'
 import { publicTaskStatusSchema } from './public-api.js'
 import { createTaskTypeSchema, taskTypeSchema } from './primitives.js'
-import { projectKindIdSchema } from './projects.js'
 import {
-  findingsRevisionMetaSchema,
-  questionFindingSchema,
-  questionStatusSchema,
-  researchCredentialSchema,
-  researchDefinitionSchema,
-  researchLearningSchema,
-  researchTargetSchema,
-  researchTopicSchema,
-} from './research.js'
+  PROJECT_DEFINITION_PROSE_MAX,
+  projectCredentialSchema,
+  projectDefinitionEntries,
+  projectDefinitionKeySchema,
+  projectDefinitionSchema,
+  projectDefinitionVersionSchema,
+  projectTargetSchema,
+} from './project-definitions.js'
 import { taskTypeFieldDescriptorSchema } from './task-types.js'
+import { outcomeStreamSchema, projectOutcomeMetaSchema } from './project-outcomes.js'
+import {
+  projectKindDescriptorSchema,
+  projectKindIdSchema,
+  projectPinInputSchema,
+} from './projects.js'
 
 // ---------------------------------------------------------------------------
-// The public PROJECTS surface (`/api/v1/projects`, `/api/v1/research-definitions`): research
-// definitions an account publishes, projects and their service links, the tasks under a project,
-// and a research project's findings. Design: `docs/initiatives/research-projects.md`.
+// The public PROJECTS surface (`/api/v1/projects`, `/api/v1/project-kinds`): the project kinds a
+// deployment offers, the definitions an account publishes for them, projects and their service
+// links, the tasks under a project, and a project's outcomes. Design:
+// `docs/initiatives/research-projects.md`.
+//
+// Nothing here knows a kind. A definition's `spec`, an outcome's `body` and a project's `view`
+// are opaque, and each kind serves their JSON Schemas from `GET /api/v1/project-kinds/{kind}`, so
+// a new kind needs no SDK release and the SDKs carry no kind's classes.
 //
 // A project task has its own resource, `PublicProjectTask`, because `PublicTask.serviceId` is a
 // required string and a project task has no service to put there. Retyping that field would break
@@ -26,43 +35,77 @@ import { taskTypeFieldDescriptorSchema } from './task-types.js'
 // refuse a project task with `task_owned_by_project` instead.
 // ---------------------------------------------------------------------------
 
-const definitionVersionSchema = v.pipe(v.number(), v.integer(), v.minValue(1))
+/** A JSON Schema document. */
+const jsonSchemaSchema = v.record(v.string(), v.unknown())
 
-/** A research definition the account can pin, with where it comes from and its content hash. */
-export const publicResearchDefinitionSchema = v.object({
+/** A project kind the deployment offers. */
+export const publicProjectKindSchema = projectKindDescriptorSchema
+export type PublicProjectKind = v.InferOutput<typeof publicProjectKindSchema>
+
+export const publicProjectKindListSchema = v.object({ kinds: v.array(publicProjectKindSchema) })
+export type PublicProjectKindList = v.InferOutput<typeof publicProjectKindListSchema>
+
+/** A project kind with the JSON Schemas of its own shapes; null where the kind declares none. */
+export const publicProjectKindDetailSchema = v.object({
+  ...projectKindDescriptorSchema.entries,
+  schemas: v.object({
+    /** A definition's `spec`. */
+    spec: v.nullable(jsonSchemaSchema),
+    /** An outcome's `body`, in the schema version the deployment writes. */
+    outcome: v.nullable(jsonSchemaSchema),
+    /** A project's `view`. */
+    view: v.nullable(jsonSchemaSchema),
+  }),
+})
+export type PublicProjectKindDetail = v.InferOutput<typeof publicProjectKindDetailSchema>
+
+/** A definition the account can pin, with where it comes from and its content hash. */
+export const publicProjectDefinitionSchema = v.object({
   /** `registered`: the deployment ships it in code. `stored`: the account published it. */
   origin: v.picklist(['registered', 'stored']),
   contentHash: v.string(),
-  definition: researchDefinitionSchema,
+  definition: projectDefinitionSchema,
 })
-export type PublicResearchDefinition = v.InferOutput<typeof publicResearchDefinitionSchema>
+export type PublicProjectDefinition = v.InferOutput<typeof publicProjectDefinitionSchema>
 
-export const publicResearchDefinitionListSchema = v.object({
-  definitions: v.array(publicResearchDefinitionSchema),
+export const publicProjectDefinitionListSchema = v.object({
+  definitions: v.array(publicProjectDefinitionSchema),
 })
-export type PublicResearchDefinitionList = v.InferOutput<typeof publicResearchDefinitionListSchema>
+export type PublicProjectDefinitionList = v.InferOutput<typeof publicProjectDefinitionListSchema>
 
-/** The body of a published version. Its key and version are the path's. */
-export const publishResearchDefinitionSchema = v.object({
-  title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
-  brief: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(20_000)),
-  topics: v.pipe(v.array(researchTopicSchema), v.minLength(1)),
-  credentials: v.optional(v.array(researchCredentialSchema)),
-  targets: v.pipe(v.array(researchTargetSchema), v.minLength(1)),
+/**
+ * The body of a published version. Its kind, key and version are the path's; its `spec` is
+ * validated by the kind, against the schema `GET /api/v1/project-kinds/{kind}` serves.
+ */
+export const publishProjectDefinitionSchema = v.object({
+  title: projectDefinitionEntries.title,
+  credentials: v.optional(v.array(projectCredentialSchema)),
+  targets: v.optional(v.array(projectTargetSchema)),
   inputs: v.optional(v.array(taskTypeFieldDescriptorSchema)),
-  promptAdditions: v.optional(v.record(v.string(), v.pipe(v.string(), v.maxLength(20_000)))),
+  promptAdditions: v.optional(
+    v.record(v.string(), v.pipe(v.string(), v.maxLength(PROJECT_DEFINITION_PROSE_MAX))),
+  ),
+  spec: v.unknown(),
 })
-export type PublishResearchDefinitionInput = v.InferOutput<typeof publishResearchDefinitionSchema>
+export type PublishProjectDefinitionInput = v.InferOutput<typeof publishProjectDefinitionSchema>
 
-export const researchDefinitionVersionParamsSchema = v.object({
+export const projectKindParamsSchema = v.object({ kind: projectKindIdSchema })
+
+export const projectDefinitionKeyParamsSchema = v.object({
+  kind: projectKindIdSchema,
+  key: v.string(),
+})
+
+export const projectDefinitionVersionParamsSchema = v.object({
+  kind: projectKindIdSchema,
   key: v.string(),
   version: v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,8}$/, 'must be a positive integer')),
 })
 
-/** What a research project pins: one definition version, its content hash and its inputs. */
-export const publicResearchPinSchema = v.object({
-  definitionKey: v.string(),
-  definitionVersion: definitionVersionSchema,
+/** What a project pins: one definition version, its content hash and its inputs. */
+export const publicProjectPinSchema = v.object({
+  definitionKey: projectDefinitionKeySchema,
+  definitionVersion: projectDefinitionVersionSchema,
   definitionHash: v.string(),
   inputs: descriptorFieldValuesSchema,
 })
@@ -81,8 +124,8 @@ export const publicProjectSchema = v.object({
   serviceIds: v.array(v.string()),
   /** Whether the key's workspace is the board that homes the project. Only that board runs its tasks. */
   homedHere: v.boolean(),
-  /** The pinned research definition of a research project; null for a kind keeping none. */
-  research: v.nullable(publicResearchPinSchema),
+  /** The definition the project pinned; null for a project of a kind that pins none. */
+  pin: v.nullable(publicProjectPinSchema),
   createdAt: v.number(),
 })
 export type PublicProject = v.InferOutput<typeof publicProjectSchema>
@@ -97,13 +140,13 @@ export const createPublicProjectSchema = v.object({
   /** Absent: no linked services. */
   serviceIds: v.optional(v.pipe(v.array(v.pipe(v.string(), v.minLength(1))), v.maxLength(50))),
   /**
-   * Required by, and only accepted for, a kind that keeps research data. No `definitionVersion`
-   * pins the highest version; no `inputs` fills none.
+   * Required by a kind whose `definition` is `required`, refused by a kind that pins none. No
+   * `version` pins the highest one; no `inputs` fills none.
    */
-  research: v.optional(
+  definition: v.optional(
     v.object({
-      definitionKey: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
-      definitionVersion: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
+      key: projectPinInputSchema.entries.key,
+      version: projectPinInputSchema.entries.version,
       inputs: v.optional(descriptorFieldValuesSchema),
     }),
   ),
@@ -138,8 +181,7 @@ export type PublicProjectTaskList = v.InferOutput<typeof publicProjectTaskListSc
 
 /**
  * Create a task under a project. `taskType` defaults to the first one the project's kind offers.
- * A `research` task takes its mode and ad-hoc questions through `fields`
- * (`researchMode`, `researchQuestions`, `researchQuestionIds`), described by `GET /api/v1/task-types`.
+ * What a task of that type asks for goes in `fields`, described by `GET /api/v1/task-types`.
  */
 export const createPublicProjectTaskSchema = v.object({
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
@@ -149,48 +191,34 @@ export const createPublicProjectTaskSchema = v.object({
 })
 export type CreatePublicProjectTaskInput = v.InferOutput<typeof createPublicProjectTaskSchema>
 
-const coverageCountsSchema = v.object({
-  answered: v.number(),
-  partial: v.number(),
-  unanswered: v.number(),
-  blocked: v.number(),
+/** A project's outcomes without their bodies, `seq` ascending. */
+export const publicProjectOutcomeListSchema = v.object({
+  outcomes: v.array(projectOutcomeMetaSchema),
+})
+export type PublicProjectOutcomeList = v.InferOutput<typeof publicProjectOutcomeListSchema>
+
+export const publicProjectOutcomeListQuerySchema = v.object({
+  /** Only this stream's outcomes. */
+  stream: v.optional(outcomeStreamSchema),
 })
 
-/** One question's current answer, the revision it came from, and attempts that did not replace it. */
-export const publicFoldedFindingSchema = v.object({
-  finding: questionFindingSchema,
-  revisionId: v.string(),
-  seq: v.number(),
-  notes: v.array(
-    v.object({
-      revisionId: v.string(),
-      seq: v.number(),
-      status: questionStatusSchema,
-      answer: v.string(),
-      blockedOn: v.optional(v.object({ credentialKey: v.string() })),
-    }),
-  ),
+/** One outcome with its body, in the schema its kind serves. */
+export const publicProjectOutcomeSchema = v.object({
+  ...projectOutcomeMetaSchema.entries,
+  body: v.unknown(),
 })
+export type PublicProjectOutcome = v.InferOutput<typeof publicProjectOutcomeSchema>
 
-/** A research project's current findings: its revisions folded by question id, and coverage. */
-export const publicProjectFindingsSchema = v.object({
+/**
+ * The project's current state as its kind reads every outcome, in the `view` schema the kind
+ * serves. Null for a kind that computes no view, whose outcomes are read one by one instead.
+ */
+export const publicProjectViewSchema = v.object({
   projectId: v.string(),
-  definitionKey: v.string(),
-  definitionVersion: definitionVersionSchema,
-  summary: v.string(),
-  latestRevisionId: v.nullable(v.string()),
-  findings: v.array(publicFoldedFindingSchema),
-  learnings: v.array(v.object({ ...researchLearningSchema.entries, revisionId: v.string() })),
-  coverage: v.object({
-    total: coverageCountsSchema,
-    byTopic: v.array(v.object({ topicId: v.string(), counts: coverageCountsSchema })),
-    adhoc: coverageCountsSchema,
-    retiredQuestionIds: v.array(v.string()),
-  }),
-  /** Every revision, `seq` ascending, without bodies. */
-  revisions: v.array(findingsRevisionMetaSchema),
+  kind: projectKindIdSchema,
+  view: v.unknown(),
 })
-export type PublicProjectFindings = v.InferOutput<typeof publicProjectFindingsSchema>
+export type PublicProjectView = v.InferOutput<typeof publicProjectViewSchema>
 
 /** A run whose credential wait was resumed: the step re-dispatches. */
 export const publicCredentialResumeSchema = v.object({
@@ -199,12 +227,3 @@ export const publicCredentialResumeSchema = v.object({
   status: v.string(),
 })
 export type PublicCredentialResume = v.InferOutput<typeof publicCredentialResumeSchema>
-
-/** One findings revision with the body its task recorded. */
-export const publicFindingsRevisionSchema = v.object({
-  ...findingsRevisionMetaSchema.entries,
-  summary: v.string(),
-  findings: v.array(questionFindingSchema),
-  learnings: v.array(researchLearningSchema),
-})
-export type PublicFindingsRevision = v.InferOutput<typeof publicFindingsRevisionSchema>

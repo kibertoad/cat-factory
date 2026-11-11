@@ -1,21 +1,21 @@
 import {
   createProjectContract,
-  getFindingsStoragePolicyContract,
-  getResearchProjectViewContract,
-  getResearchRevisionContract,
-  listPinnableResearchDefinitionsContract,
+  getOutcomeStoragePolicyContract,
+  getProjectBoardViewContract,
+  getProjectOutcomeContract,
+  listPinnableProjectDefinitionsContract,
   listProjectCatalogContract,
   mountProjectContract,
   setProjectServicesContract,
-  setFindingsStoragePolicyContract,
+  setOutcomeStoragePolicyContract,
   unmountProjectContract,
 } from '@cat-factory/contracts'
 import type { SendParams } from './client'
 import type { ApiContext, Position } from './context'
 
 type CreateProjectBody = NonNullable<SendParams<typeof createProjectContract>['body']>
-type SetFindingsStoragePolicyBody = NonNullable<
-  SendParams<typeof setFindingsStoragePolicyContract>['body']
+type SetOutcomeStoragePolicyBody = NonNullable<
+  SendParams<typeof setOutcomeStoragePolicyContract>['body']
 >
 
 /** Projects: account-owned peers of services, mounted onto boards. */
@@ -24,8 +24,11 @@ export function projectsApi({ send, ws }: ApiContext) {
     listProjectCatalog: (workspaceId: string) =>
       send(listProjectCatalogContract, { pathPrefix: ws(workspaceId) }),
 
-    listPinnableResearchDefinitions: (workspaceId: string) =>
-      send(listPinnableResearchDefinitionsContract, { pathPrefix: ws(workspaceId) }),
+    listPinnableProjectDefinitions: (workspaceId: string, kind: string) =>
+      send(listPinnableProjectDefinitionsContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { kind },
+      }),
 
     createProject: (workspaceId: string, body: CreateProjectBody) =>
       send(createProjectContract, { pathPrefix: ws(workspaceId), body }),
@@ -43,25 +46,25 @@ export function projectsApi({ send, ws }: ApiContext) {
     unmountProject: (workspaceId: string, projectId: string) =>
       send(unmountProjectContract, { pathPrefix: ws(workspaceId), pathParams: { projectId } }),
 
-    getResearchProjectView: (workspaceId: string, projectId: string) =>
-      send(getResearchProjectViewContract, {
+    getProjectBoardView: (workspaceId: string, projectId: string) =>
+      send(getProjectBoardViewContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { projectId },
       }),
 
-    getResearchRevision: (workspaceId: string, projectId: string, revisionId: string) =>
-      send(getResearchRevisionContract, {
+    getProjectOutcome: (workspaceId: string, projectId: string, outcomeId: string) =>
+      send(getProjectOutcomeContract, {
         pathPrefix: ws(workspaceId),
-        pathParams: { projectId, revisionId },
+        pathParams: { projectId, outcomeId },
       }),
 
-    getFindingsStoragePolicy: (workspaceId: string, projectId?: string) =>
-      send(getFindingsStoragePolicyContract, {
+    getOutcomeStoragePolicy: (workspaceId: string, projectId?: string) =>
+      send(getOutcomeStoragePolicyContract, {
         pathPrefix: ws(workspaceId),
         queryParams: projectId ? { projectId } : {},
       }),
 
-    setFindingsStoragePolicy: (workspaceId: string, body: SetFindingsStoragePolicyBody) =>
-      send(setFindingsStoragePolicyContract, { pathPrefix: ws(workspaceId), body }),
+    setOutcomeStoragePolicy: (workspaceId: string, body: SetOutcomeStoragePolicyBody) =>
+      send(setOutcomeStoragePolicyContract, { pathPrefix: ws(workspaceId), body }),
   }
 }

@@ -24,6 +24,7 @@ import {
 import type { BadgeColor } from '~/utils/badge'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 
 const { t } = useI18n()
 const board = useBoardStore()
@@ -61,6 +62,9 @@ const errored = computed(() => (blockId.value ? serviceSpec.isErrored(blockId.va
 const spec = computed(() => view.value?.spec ?? null)
 const modules = computed<SpecModule[]>(() => spec.value?.modules ?? [])
 const present = computed(() => !!view.value?.present && !!spec.value)
+// How the presence anchor resolved. With no spec in hand, `read_failed` (a provider fault, worth a
+// retry) and `unparsed` (a corrupt anchor someone must fix in the repo) are not "no spec yet".
+const anchor = computed(() => view.value?.diagnostics?.anchor)
 const hasGherkin = computed(() => (view.value?.features.length ?? 0) > 0)
 
 // Auto-select the first non-empty group once a present spec is shown, so the main pane isn't
@@ -254,6 +258,24 @@ function kindLabel(item: RequirementItem): string {
         {{ t('common.retry') }}
       </UButton>
     </div>
+
+    <!-- the anchor could not be read, so whether a spec exists is unknown -->
+    <LoadFailedState
+      v-else-if="!present && anchor === 'read_failed'"
+      class="flex-1"
+      :title="t('spec.anchorReadFailed.title')"
+      :description="t('spec.anchorReadFailed.description')"
+      :retrying="loading"
+      @retry="retry"
+    />
+
+    <!-- the anchor exists but does not parse: a retry reads the same file -->
+    <LoadFailedState
+      v-else-if="!present && anchor === 'unparsed'"
+      class="flex-1"
+      :title="t('spec.anchorUnparsed.title')"
+      :description="t('spec.anchorUnparsed.description')"
+    />
 
     <!-- empty: no spec on the repo's default branch yet -->
     <EmptyState

@@ -173,25 +173,8 @@
       },
       "CreatePublicProject": {
         "properties": {
-          "description": {
-            "maxLength": 2000,
-            "type": "string"
-          },
-          "kind": {
-            "pattern": "^[a-z][a-z0-9-]{0,39}$",
-            "type": "string"
-          },
-          "research": {
+          "definition": {
             "properties": {
-              "definitionKey": {
-                "maxLength": 120,
-                "minLength": 1,
-                "type": "string"
-              },
-              "definitionVersion": {
-                "minimum": 1,
-                "type": "integer"
-              },
               "inputs": {
                 "additionalProperties": {
                   "anyOf": [
@@ -221,12 +204,29 @@
                   "type": "string"
                 },
                 "type": "object"
+              },
+              "key": {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
               }
             },
             "required": [
-              "definitionKey"
+              "key"
             ],
             "type": "object"
+          },
+          "description": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "kind": {
+            "pattern": "^[a-z][a-z0-9-]{0,39}$",
+            "type": "string"
           },
           "serviceIds": {
             "items": {
@@ -6027,420 +6027,6 @@
         ],
         "type": "object"
       },
-      "PublicFindingsRevision": {
-        "properties": {
-          "createdAt": {
-            "type": "number"
-          },
-          "definitionKey": {
-            "pattern": "^[a-z0-9][a-z0-9-]{0,39}:[a-z0-9][a-z0-9-]{0,79}$",
-            "type": "string"
-          },
-          "definitionVersion": {
-            "minimum": 1,
-            "type": "integer"
-          },
-          "findings": {
-            "items": {
-              "properties": {
-                "answer": {
-                  "default": "",
-                  "maxLength": 20000,
-                  "type": "string"
-                },
-                "blockedOn": {
-                  "properties": {
-                    "credentialKey": {
-                      "maxLength": 128,
-                      "minLength": 1,
-                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "credentialKey"
-                  ],
-                  "type": "object"
-                },
-                "caveats": {
-                  "default": [],
-                  "items": {
-                    "maxLength": 2000,
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                "confidence": {
-                  "enum": [
-                    "high",
-                    "medium",
-                    "low"
-                  ],
-                  "type": "string"
-                },
-                "evidence": {
-                  "default": [],
-                  "items": {
-                    "oneOf": [
-                      {
-                        "properties": {
-                          "kind": {
-                            "const": "http-exchange"
-                          },
-                          "ref": {
-                            "minLength": 1,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "kind",
-                          "ref"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "properties": {
-                          "artifactId": {
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "kind": {
-                            "const": "screenshot"
-                          }
-                        },
-                        "required": [
-                          "kind",
-                          "artifactId"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "properties": {
-                          "kind": {
-                            "const": "url"
-                          },
-                          "url": {
-                            "format": "uri",
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "kind",
-                          "url"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "properties": {
-                          "kind": {
-                            "const": "repo-path"
-                          },
-                          "path": {
-                            "maxLength": 1000,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "repoId": {
-                            "minLength": 1,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "kind",
-                          "repoId",
-                          "path"
-                        ],
-                        "type": "object"
-                      }
-                    ]
-                  },
-                  "maxItems": 50,
-                  "type": "array"
-                },
-                "questionId": {
-                  "maxLength": 200,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "status": {
-                  "enum": [
-                    "answered",
-                    "partial",
-                    "unanswered",
-                    "blocked"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "questionId",
-                "status",
-                "confidence"
-              ],
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "id": {
-            "type": "string"
-          },
-          "learnings": {
-            "items": {
-              "properties": {
-                "detail": {
-                  "default": "",
-                  "maxLength": 20000,
-                  "type": "string"
-                },
-                "title": {
-                  "maxLength": 200,
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "title"
-              ],
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "mode": {
-            "enum": [
-              "initial",
-              "extend",
-              "clarify",
-              "refresh"
-            ],
-            "type": "string"
-          },
-          "projectId": {
-            "type": "string"
-          },
-          "seq": {
-            "minimum": 1,
-            "type": "integer"
-          },
-          "summary": {
-            "type": "string"
-          },
-          "taskId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "projectId",
-          "taskId",
-          "seq",
-          "mode",
-          "definitionKey",
-          "definitionVersion",
-          "createdAt",
-          "summary",
-          "findings",
-          "learnings"
-        ],
-        "type": "object"
-      },
-      "PublicFoldedFinding": {
-        "properties": {
-          "finding": {
-            "properties": {
-              "answer": {
-                "default": "",
-                "maxLength": 20000,
-                "type": "string"
-              },
-              "blockedOn": {
-                "properties": {
-                  "credentialKey": {
-                    "maxLength": 128,
-                    "minLength": 1,
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "credentialKey"
-                ],
-                "type": "object"
-              },
-              "caveats": {
-                "default": [],
-                "items": {
-                  "maxLength": 2000,
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              "confidence": {
-                "enum": [
-                  "high",
-                  "medium",
-                  "low"
-                ],
-                "type": "string"
-              },
-              "evidence": {
-                "default": [],
-                "items": {
-                  "oneOf": [
-                    {
-                      "properties": {
-                        "kind": {
-                          "const": "http-exchange"
-                        },
-                        "ref": {
-                          "minLength": 1,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "ref"
-                      ],
-                      "type": "object"
-                    },
-                    {
-                      "properties": {
-                        "artifactId": {
-                          "minLength": 1,
-                          "type": "string"
-                        },
-                        "kind": {
-                          "const": "screenshot"
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "artifactId"
-                      ],
-                      "type": "object"
-                    },
-                    {
-                      "properties": {
-                        "kind": {
-                          "const": "url"
-                        },
-                        "url": {
-                          "format": "uri",
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "url"
-                      ],
-                      "type": "object"
-                    },
-                    {
-                      "properties": {
-                        "kind": {
-                          "const": "repo-path"
-                        },
-                        "path": {
-                          "maxLength": 1000,
-                          "minLength": 1,
-                          "type": "string"
-                        },
-                        "repoId": {
-                          "minLength": 1,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "repoId",
-                        "path"
-                      ],
-                      "type": "object"
-                    }
-                  ]
-                },
-                "maxItems": 50,
-                "type": "array"
-              },
-              "questionId": {
-                "maxLength": 200,
-                "minLength": 1,
-                "type": "string"
-              },
-              "status": {
-                "enum": [
-                  "answered",
-                  "partial",
-                  "unanswered",
-                  "blocked"
-                ],
-                "type": "string"
-              }
-            },
-            "required": [
-              "questionId",
-              "status",
-              "confidence"
-            ],
-            "type": "object"
-          },
-          "notes": {
-            "items": {
-              "properties": {
-                "answer": {
-                  "type": "string"
-                },
-                "blockedOn": {
-                  "properties": {
-                    "credentialKey": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "credentialKey"
-                  ],
-                  "type": "object"
-                },
-                "revisionId": {
-                  "type": "string"
-                },
-                "seq": {
-                  "type": "number"
-                },
-                "status": {
-                  "enum": [
-                    "answered",
-                    "partial",
-                    "unanswered",
-                    "blocked"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "revisionId",
-                "seq",
-                "status",
-                "answer"
-              ],
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "revisionId": {
-            "type": "string"
-          },
-          "seq": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "finding",
-          "revisionId",
-          "seq",
-          "notes"
-        ],
-        "type": "object"
-      },
       "PublicFollowUpItem": {
         "properties": {
           "answer": {
@@ -8030,18 +7616,18 @@
             "pattern": "^[a-z][a-z0-9-]{0,39}$",
             "type": "string"
           },
-          "projectId": {
-            "type": "string"
-          },
-          "research": {
+          "pin": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/PublicResearchPin"
+                "$ref": "#/components/schemas/PublicProjectPin"
               },
               {
                 "type": "null"
               }
             ]
+          },
+          "projectId": {
+            "type": "string"
           },
           "serviceIds": {
             "items": {
@@ -8060,230 +7646,511 @@
           "description",
           "serviceIds",
           "homedHere",
-          "research",
+          "pin",
           "createdAt"
         ],
         "type": "object"
       },
-      "PublicProjectFindings": {
+      "PublicProjectDefinition": {
         "properties": {
-          "coverage": {
+          "contentHash": {
+            "type": "string"
+          },
+          "definition": {
             "properties": {
-              "adhoc": {
-                "properties": {
-                  "answered": {
-                    "type": "number"
-                  },
-                  "blocked": {
-                    "type": "number"
-                  },
-                  "partial": {
-                    "type": "number"
-                  },
-                  "unanswered": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "answered",
-                  "partial",
-                  "unanswered",
-                  "blocked"
-                ],
-                "type": "object"
-              },
-              "byTopic": {
+              "credentials": {
+                "default": [],
                 "items": {
                   "properties": {
-                    "counts": {
+                    "key": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "login",
+                        "api-token",
+                        "oauth-client",
+                        "secret"
+                      ],
+                      "type": "string"
+                    },
+                    "label": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "onboarding": {
                       "properties": {
-                        "answered": {
-                          "type": "number"
+                        "instructions": {
+                          "maxLength": 2000,
+                          "minLength": 1,
+                          "type": "string"
                         },
-                        "blocked": {
-                          "type": "number"
-                        },
-                        "partial": {
-                          "type": "number"
-                        },
-                        "unanswered": {
-                          "type": "number"
+                        "url": {
+                          "format": "uri",
+                          "pattern": "^https?:\\/\\/",
+                          "type": "string"
                         }
                       },
                       "required": [
-                        "answered",
-                        "partial",
-                        "unanswered",
-                        "blocked"
+                        "instructions"
                       ],
                       "type": "object"
                     },
-                    "topicId": {
-                      "type": "string"
+                    "requiredAtStart": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
-                    "topicId",
-                    "counts"
+                    "key",
+                    "kind",
+                    "label",
+                    "requiredAtStart"
                   ],
                   "type": "object"
                 },
                 "type": "array"
               },
-              "retiredQuestionIds": {
+              "inputs": {
+                "default": [],
                 "items": {
-                  "type": "string"
+                  "properties": {
+                    "default": {
+                      "maxLength": 2000,
+                      "type": "string"
+                    },
+                    "defaultValues": {
+                      "items": {
+                        "maxLength": 2000,
+                        "type": "string"
+                      },
+                      "maxItems": 50,
+                      "type": "array"
+                    },
+                    "help": {
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    "integer": {
+                      "type": "boolean"
+                    },
+                    "key": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "label": {
+                      "maxLength": 120,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "max": {
+                      "type": "number"
+                    },
+                    "maxLength": {
+                      "maximum": 2000,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "min": {
+                      "type": "number"
+                    },
+                    "options": {
+                      "items": {
+                        "properties": {
+                          "label": {
+                            "maxLength": 120,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 120,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "label"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "placeholder": {
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "section": {
+                      "maxLength": 120,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "showWhen": {
+                      "properties": {
+                        "equals": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
+                        "includes": {
+                          "type": "string"
+                        },
+                        "key": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "key"
+                      ],
+                      "type": "object"
+                    },
+                    "type": {
+                      "enum": [
+                        "text",
+                        "textarea",
+                        "number",
+                        "select",
+                        "checkbox",
+                        "checkbox-group",
+                        "path"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "label"
+                  ],
+                  "type": "object"
                 },
                 "type": "array"
               },
-              "total": {
-                "properties": {
-                  "answered": {
-                    "type": "number"
-                  },
-                  "blocked": {
-                    "type": "number"
-                  },
-                  "partial": {
-                    "type": "number"
-                  },
-                  "unanswered": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "answered",
-                  "partial",
-                  "unanswered",
-                  "blocked"
-                ],
-                "type": "object"
-              }
-            },
-            "required": [
-              "total",
-              "byTopic",
-              "adhoc",
-              "retiredQuestionIds"
-            ],
-            "type": "object"
-          },
-          "definitionKey": {
-            "type": "string"
-          },
-          "definitionVersion": {
-            "minimum": 1,
-            "type": "integer"
-          },
-          "findings": {
-            "items": {
-              "$ref": "#/components/schemas/PublicFoldedFinding"
-            },
-            "type": "array"
-          },
-          "latestRevisionId": {
-            "anyOf": [
-              {
+              "key": {
+                "pattern": "^[a-z0-9][a-z0-9-]{0,39}:[a-z0-9][a-z0-9-]{0,79}$",
                 "type": "string"
               },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "learnings": {
-            "items": {
-              "properties": {
-                "detail": {
-                  "default": "",
+              "kind": {
+                "pattern": "^[a-z][a-z0-9-]{0,39}$",
+                "type": "string"
+              },
+              "promptAdditions": {
+                "additionalProperties": {
                   "maxLength": 20000,
                   "type": "string"
                 },
-                "revisionId": {
+                "default": {},
+                "propertyNames": {
                   "type": "string"
                 },
-                "title": {
-                  "maxLength": 200,
-                  "minLength": 1,
-                  "type": "string"
-                }
+                "type": "object"
               },
-              "required": [
-                "title",
-                "revisionId"
-              ],
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "projectId": {
-            "type": "string"
-          },
-          "revisions": {
-            "items": {
-              "properties": {
-                "createdAt": {
-                  "type": "number"
-                },
-                "definitionKey": {
-                  "pattern": "^[a-z0-9][a-z0-9-]{0,39}:[a-z0-9][a-z0-9-]{0,79}$",
-                  "type": "string"
-                },
-                "definitionVersion": {
-                  "minimum": 1,
-                  "type": "integer"
-                },
-                "id": {
-                  "type": "string"
-                },
-                "mode": {
-                  "enum": [
-                    "initial",
-                    "extend",
-                    "clarify",
-                    "refresh"
+              "spec": {},
+              "targets": {
+                "default": [],
+                "items": {
+                  "properties": {
+                    "baseUrl": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "surface": {
+                      "enum": [
+                        "ui",
+                        "api"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "baseUrl",
+                    "surface"
                   ],
-                  "type": "string"
+                  "type": "object"
                 },
-                "projectId": {
-                  "type": "string"
-                },
-                "seq": {
-                  "minimum": 1,
-                  "type": "integer"
-                },
-                "taskId": {
-                  "type": "string"
-                }
+                "type": "array"
               },
-              "required": [
-                "id",
-                "projectId",
-                "taskId",
-                "seq",
-                "mode",
-                "definitionKey",
-                "definitionVersion",
-                "createdAt"
-              ],
-              "type": "object"
+              "title": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              }
             },
-            "type": "array"
+            "required": [
+              "kind",
+              "key",
+              "version",
+              "title",
+              "spec"
+            ],
+            "type": "object"
           },
-          "summary": {
+          "origin": {
+            "enum": [
+              "registered",
+              "stored"
+            ],
             "type": "string"
           }
         },
         "required": [
-          "projectId",
-          "definitionKey",
-          "definitionVersion",
-          "summary",
-          "latestRevisionId",
-          "findings",
-          "learnings",
-          "coverage",
-          "revisions"
+          "origin",
+          "contentHash",
+          "definition"
+        ],
+        "type": "object"
+      },
+      "PublicProjectDefinitionList": {
+        "properties": {
+          "definitions": {
+            "items": {
+              "$ref": "#/components/schemas/PublicProjectDefinition"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "definitions"
+        ],
+        "type": "object"
+      },
+      "PublicProjectKind": {
+        "properties": {
+          "definition": {
+            "enum": [
+              "required",
+              "optional"
+            ],
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[a-z][a-z0-9-]{0,39}$",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "taskTypes": {
+            "items": {
+              "properties": {
+                "defaultPipelineId": {
+                  "type": "string"
+                },
+                "repoAccess": {
+                  "enum": [
+                    "none",
+                    "linked-read-only"
+                  ],
+                  "type": "string"
+                },
+                "taskType": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "feature",
+                        "bug",
+                        "bug-fishing",
+                        "document",
+                        "spike",
+                        "review",
+                        "resolve-conflicts",
+                        "ralph",
+                        "media",
+                        "research",
+                        "recurring"
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "taskType",
+                "repoAccess"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "taskTypes"
+        ],
+        "type": "object"
+      },
+      "PublicProjectKindDetail": {
+        "properties": {
+          "definition": {
+            "enum": [
+              "required",
+              "optional"
+            ],
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[a-z][a-z0-9-]{0,39}$",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "schemas": {
+            "properties": {
+              "outcome": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {},
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "spec": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {},
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "view": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {},
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "spec",
+              "outcome",
+              "view"
+            ],
+            "type": "object"
+          },
+          "taskTypes": {
+            "items": {
+              "properties": {
+                "defaultPipelineId": {
+                  "type": "string"
+                },
+                "repoAccess": {
+                  "enum": [
+                    "none",
+                    "linked-read-only"
+                  ],
+                  "type": "string"
+                },
+                "taskType": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "feature",
+                        "bug",
+                        "bug-fishing",
+                        "document",
+                        "spike",
+                        "review",
+                        "resolve-conflicts",
+                        "ralph",
+                        "media",
+                        "research",
+                        "recurring"
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "taskType",
+                "repoAccess"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "taskTypes",
+          "schemas"
+        ],
+        "type": "object"
+      },
+      "PublicProjectKindList": {
+        "properties": {
+          "kinds": {
+            "items": {
+              "$ref": "#/components/schemas/PublicProjectKind"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kinds"
         ],
         "type": "object"
       },
@@ -8298,6 +8165,235 @@
         },
         "required": [
           "projects"
+        ],
+        "type": "object"
+      },
+      "PublicProjectOutcome": {
+        "properties": {
+          "artifactRefs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "type": "array"
+          },
+          "body": {},
+          "createdAt": {
+            "type": "number"
+          },
+          "definitionKey": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9-]{0,39}:[a-z0-9][a-z0-9-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "definitionVersion": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "intent": {
+            "pattern": "^[a-z][a-z0-9-]{0,39}$",
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "schemaVersion": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "stream": {
+            "pattern": "^[a-z][a-z0-9-]{0,39}$",
+            "type": "string"
+          },
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "stream",
+          "seq",
+          "intent",
+          "schemaVersion",
+          "taskId",
+          "definitionKey",
+          "definitionVersion",
+          "artifactRefs",
+          "createdAt",
+          "body"
+        ],
+        "type": "object"
+      },
+      "PublicProjectOutcomeList": {
+        "properties": {
+          "outcomes": {
+            "items": {
+              "properties": {
+                "artifactRefs": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 500,
+                  "type": "array"
+                },
+                "createdAt": {
+                  "type": "number"
+                },
+                "definitionKey": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,39}:[a-z0-9][a-z0-9-]{0,79}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "definitionVersion": {
+                  "anyOf": [
+                    {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "intent": {
+                  "pattern": "^[a-z][a-z0-9-]{0,39}$",
+                  "type": "string"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "schemaVersion": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "seq": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "stream": {
+                  "pattern": "^[a-z][a-z0-9-]{0,39}$",
+                  "type": "string"
+                },
+                "taskId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "projectId",
+                "stream",
+                "seq",
+                "intent",
+                "schemaVersion",
+                "taskId",
+                "definitionKey",
+                "definitionVersion",
+                "artifactRefs",
+                "createdAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "outcomes"
+        ],
+        "type": "object"
+      },
+      "PublicProjectPin": {
+        "properties": {
+          "definitionHash": {
+            "type": "string"
+          },
+          "definitionKey": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}:[a-z0-9][a-z0-9-]{0,79}$",
+            "type": "string"
+          },
+          "definitionVersion": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "type": "array"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "propertyNames": {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "definitionKey",
+          "definitionVersion",
+          "definitionHash",
+          "inputs"
         ],
         "type": "object"
       },
@@ -8404,6 +8500,24 @@
         },
         "required": [
           "tasks"
+        ],
+        "type": "object"
+      },
+      "PublicProjectView": {
+        "properties": {
+          "kind": {
+            "pattern": "^[a-z][a-z0-9-]{0,39}$",
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "view": {}
+        },
+        "required": [
+          "projectId",
+          "kind",
+          "view"
         ],
         "type": "object"
       },
@@ -8670,390 +8784,6 @@
           "score",
           "suppressed",
           "followUpSuppressed"
-        ],
-        "type": "object"
-      },
-      "PublicResearchDefinition": {
-        "properties": {
-          "contentHash": {
-            "type": "string"
-          },
-          "definition": {
-            "properties": {
-              "brief": {
-                "maxLength": 20000,
-                "minLength": 1,
-                "type": "string"
-              },
-              "credentials": {
-                "default": [],
-                "items": {
-                  "properties": {
-                    "key": {
-                      "maxLength": 128,
-                      "minLength": 1,
-                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-                      "type": "string"
-                    },
-                    "kind": {
-                      "enum": [
-                        "login",
-                        "api-token",
-                        "oauth-client",
-                        "secret"
-                      ],
-                      "type": "string"
-                    },
-                    "label": {
-                      "maxLength": 200,
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "onboarding": {
-                      "properties": {
-                        "instructions": {
-                          "maxLength": 2000,
-                          "minLength": 1,
-                          "type": "string"
-                        },
-                        "url": {
-                          "format": "uri",
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "instructions"
-                      ],
-                      "type": "object"
-                    },
-                    "requiredAtStart": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "key",
-                    "kind",
-                    "label",
-                    "requiredAtStart"
-                  ],
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "inputs": {
-                "default": [],
-                "items": {
-                  "properties": {
-                    "default": {
-                      "maxLength": 2000,
-                      "type": "string"
-                    },
-                    "defaultValues": {
-                      "items": {
-                        "maxLength": 2000,
-                        "type": "string"
-                      },
-                      "maxItems": 50,
-                      "type": "array"
-                    },
-                    "help": {
-                      "maxLength": 300,
-                      "type": "string"
-                    },
-                    "integer": {
-                      "type": "boolean"
-                    },
-                    "key": {
-                      "maxLength": 80,
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "label": {
-                      "maxLength": 120,
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "max": {
-                      "type": "number"
-                    },
-                    "maxLength": {
-                      "maximum": 2000,
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    "min": {
-                      "type": "number"
-                    },
-                    "options": {
-                      "items": {
-                        "properties": {
-                          "label": {
-                            "maxLength": 120,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "value": {
-                            "maxLength": 120,
-                            "minLength": 1,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "value",
-                          "label"
-                        ],
-                        "type": "object"
-                      },
-                      "type": "array"
-                    },
-                    "placeholder": {
-                      "maxLength": 200,
-                      "type": "string"
-                    },
-                    "required": {
-                      "type": "boolean"
-                    },
-                    "section": {
-                      "maxLength": 120,
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "showWhen": {
-                      "properties": {
-                        "equals": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "number"
-                            }
-                          ]
-                        },
-                        "includes": {
-                          "type": "string"
-                        },
-                        "key": {
-                          "minLength": 1,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "key"
-                      ],
-                      "type": "object"
-                    },
-                    "type": {
-                      "enum": [
-                        "text",
-                        "textarea",
-                        "number",
-                        "select",
-                        "checkbox",
-                        "checkbox-group",
-                        "path"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "key",
-                    "label"
-                  ],
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "key": {
-                "pattern": "^[a-z0-9][a-z0-9-]{0,39}:[a-z0-9][a-z0-9-]{0,79}$",
-                "type": "string"
-              },
-              "promptAdditions": {
-                "additionalProperties": {
-                  "maxLength": 20000,
-                  "type": "string"
-                },
-                "default": {},
-                "propertyNames": {
-                  "type": "string"
-                },
-                "type": "object"
-              },
-              "targets": {
-                "items": {
-                  "properties": {
-                    "baseUrl": {
-                      "format": "uri",
-                      "type": "string"
-                    },
-                    "surface": {
-                      "enum": [
-                        "ui",
-                        "api"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "baseUrl",
-                    "surface"
-                  ],
-                  "type": "object"
-                },
-                "minItems": 1,
-                "type": "array"
-              },
-              "title": {
-                "maxLength": 200,
-                "minLength": 1,
-                "type": "string"
-              },
-              "topics": {
-                "items": {
-                  "properties": {
-                    "id": {
-                      "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
-                      "type": "string"
-                    },
-                    "questions": {
-                      "items": {
-                        "properties": {
-                          "answerHint": {
-                            "maxLength": 2000,
-                            "type": "string"
-                          },
-                          "id": {
-                            "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
-                            "type": "string"
-                          },
-                          "question": {
-                            "maxLength": 2000,
-                            "minLength": 1,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "question"
-                        ],
-                        "type": "object"
-                      },
-                      "maxItems": 100,
-                      "minItems": 1,
-                      "type": "array"
-                    },
-                    "title": {
-                      "maxLength": 200,
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "title",
-                    "questions"
-                  ],
-                  "type": "object"
-                },
-                "maxItems": 50,
-                "minItems": 1,
-                "type": "array"
-              },
-              "version": {
-                "minimum": 1,
-                "type": "integer"
-              }
-            },
-            "required": [
-              "key",
-              "version",
-              "title",
-              "brief",
-              "topics",
-              "targets"
-            ],
-            "type": "object"
-          },
-          "origin": {
-            "enum": [
-              "registered",
-              "stored"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "origin",
-          "contentHash",
-          "definition"
-        ],
-        "type": "object"
-      },
-      "PublicResearchDefinitionList": {
-        "properties": {
-          "definitions": {
-            "items": {
-              "$ref": "#/components/schemas/PublicResearchDefinition"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "definitions"
-        ],
-        "type": "object"
-      },
-      "PublicResearchPin": {
-        "properties": {
-          "definitionHash": {
-            "type": "string"
-          },
-          "definitionKey": {
-            "type": "string"
-          },
-          "definitionVersion": {
-            "minimum": 1,
-            "type": "integer"
-          },
-          "inputs": {
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "maxLength": 2000,
-                  "type": "string"
-                },
-                {
-                  "items": {
-                    "maxLength": 2000,
-                    "type": "string"
-                  },
-                  "maxItems": 50,
-                  "type": "array"
-                },
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "number"
-                }
-              ]
-            },
-            "propertyNames": {
-              "maxLength": 80,
-              "minLength": 1,
-              "type": "string"
-            },
-            "type": "object"
-          }
-        },
-        "required": [
-          "definitionKey",
-          "definitionVersion",
-          "definitionHash",
-          "inputs"
         ],
         "type": "object"
       },
@@ -10452,13 +10182,8 @@
         ],
         "type": "object"
       },
-      "PublishResearchDefinition": {
+      "PublishProjectDefinition": {
         "properties": {
-          "brief": {
-            "maxLength": 20000,
-            "minLength": 1,
-            "type": "string"
-          },
           "credentials": {
             "items": {
               "properties": {
@@ -10491,6 +10216,7 @@
                     },
                     "url": {
                       "format": "uri",
+                      "pattern": "^https?:\\/\\/",
                       "type": "string"
                     }
                   },
@@ -10649,6 +10375,7 @@
             },
             "type": "object"
           },
+          "spec": {},
           "targets": {
             "items": {
               "properties": {
@@ -10670,70 +10397,17 @@
               ],
               "type": "object"
             },
-            "minItems": 1,
             "type": "array"
           },
           "title": {
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
-          },
-          "topics": {
-            "items": {
-              "properties": {
-                "id": {
-                  "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
-                  "type": "string"
-                },
-                "questions": {
-                  "items": {
-                    "properties": {
-                      "answerHint": {
-                        "maxLength": 2000,
-                        "type": "string"
-                      },
-                      "id": {
-                        "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
-                        "type": "string"
-                      },
-                      "question": {
-                        "maxLength": 2000,
-                        "minLength": 1,
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "question"
-                    ],
-                    "type": "object"
-                  },
-                  "maxItems": 100,
-                  "minItems": 1,
-                  "type": "array"
-                },
-                "title": {
-                  "maxLength": 200,
-                  "minLength": 1,
-                  "type": "string"
-                }
-              },
-              "required": [
-                "id",
-                "title",
-                "questions"
-              ],
-              "type": "object"
-            },
-            "minItems": 1,
-            "type": "array"
           }
         },
         "required": [
           "title",
-          "brief",
-          "topics",
-          "targets"
+          "spec"
         ],
         "type": "object"
       },
@@ -20109,9 +19783,298 @@
         "x-min-scope": "write"
       }
     },
+    "/api/v1/project-kinds": {
+      "get": {
+        "description": "Each kind with the task types its projects take and whether a project of it pins a definition (`definition`: `required` or `optional`; absent for a kind that pins none). The built-in kind is `research`; a deployment registers its own.",
+        "operationId": "listPublicProjectKinds",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProjectKindList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the project kinds the deployment offers",
+        "tags": [
+          "Projects"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/project-kinds/{kind}": {
+      "get": {
+        "description": "One kind with the JSON Schemas of the shapes the rest of this surface leaves opaque: a definition's `spec`, an outcome's `body` (in the schema version the deployment writes) and a project's `view`. Each is null for a kind that declares none. A schema states the shape; a kind can enforce more when it parses (unique ids, say). An unknown kind is `404`.",
+        "operationId": "getPublicProjectKind",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProjectKindDetail"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get a project kind with its schemas",
+        "tags": [
+          "Projects"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/project-kinds/{kind}/definitions": {
+      "get": {
+        "description": "Every definition of the kind a project of the key's account can pin: the ones the deployment ships in code (`origin: registered`) and the ones the account published (`origin: stored`), each with its content hash. A definition's envelope names the credentials its runs need, the origins a credential may be sent to and the inputs a project fills; its `spec` says what the work is. The platform never reads it: the project kind owns its shape and serves its JSON Schema from `GET /api/v1/project-kinds/{kind}`.",
+        "operationId": "listPublicProjectDefinitions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProjectDefinitionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the definitions of one kind the account can pin",
+        "tags": [
+          "Projects"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/project-kinds/{kind}/definitions/{key}": {
+      "get": {
+        "description": "Every version of one definition key of the kind the account can pin, ascending. An unknown key is `404` with `details.reason: \"project_definition_not_found\"`.",
+        "operationId": "getPublicProjectDefinition",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProjectDefinitionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get every version of one definition",
+        "tags": [
+          "Projects"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/project-kinds/{kind}/definitions/{key}/versions/{version}": {
+      "put": {
+        "description": "Publish one immutable version of an account-owned definition; the kind, key and version are the path's. The envelope is checked by this schema and the `spec` by the kind, against the schema the kind serves; a spec the kind refuses, or a kind this deployment cannot validate, is `422` with `details.reason: \"project_definition_invalid\"` and `details.problems` listing each issue. A version already published is `409` with `project_definition_version_exists`, so a project pinned to it never changes meaning. A key in a namespace the deployment's own definitions of the kind use is `409` with `project_definition_key_registered`. A credential key the deployment reserves for its own configuration is refused `400` by the body schema. Requires an `admin` key: a definition names the credentials a run sends and the origins it may send them to.",
+        "operationId": "publishPublicProjectDefinition",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishProjectDefinition"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProjectDefinition"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Publish a definition version",
+        "tags": [
+          "Projects"
+        ],
+        "x-min-scope": "admin"
+      }
+    },
     "/api/v1/projects": {
       "get": {
-        "description": "Projects are account-owned peers of services, mounted onto boards. Each entry carries its linked services, whether the key's workspace is the board that homes it (`homedHere`, the board that creates and runs its tasks) and, for a research project, the definition version it pinned.",
+        "description": "Projects are account-owned peers of services, mounted onto boards. Each entry carries its linked services, whether the key's workspace is the board that homes it (`homedHere`, the board that creates and runs its tasks) and, for a kind that pins a definition, the version it pinned.",
         "operationId": "listPublicProjects",
         "responses": {
           "200": {
@@ -20152,7 +20115,7 @@
         "x-min-scope": "read"
       },
       "post": {
-        "description": "Create a project homed on the key's workspace. A kind keeping research data (the built-in `research` kind) takes `research` naming the definition key, an optional version (the highest by default) and the values for its `inputs`; the project pins that version and its content hash. Refusals are `422` with `details.reason`: `project_kind_unregistered`, `research_pin_required`, `research_pin_not_accepted`, `research_definition_not_found`, `research_inputs_invalid`, `project_service_link_invalid`.",
+        "description": "Create a project homed on the key's workspace. A kind that pins a definition takes `definition` naming its key, an optional version (the highest by default) and the values for its `inputs`; the project pins that version and its content hash. Refusals are `422` with `details.reason`: `project_kind_unregistered`, `project_definition_required`, `project_definition_not_accepted`, `project_definition_not_found`, `project_definition_inputs_invalid`, `project_service_link_invalid`.",
         "operationId": "createPublicProject",
         "requestBody": {
           "content": {
@@ -20255,120 +20218,6 @@
         "x-min-scope": "read"
       }
     },
-    "/api/v1/projects/{projectId}/findings": {
-      "get": {
-        "description": "The project's current findings: every revision folded by question id in the order the tasks started. A newer answered or partial answer replaces an older one; a newer unanswered or blocked attempt is kept beside it as a note and never erases it. Coverage is computed by the platform from the agent's per-question judgements. A project pinning no definition is `422` with `research_project_not_pinned`.",
-        "operationId": "getPublicProjectFindings",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PublicProjectFindings"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Server error"
-          }
-        },
-        "summary": "Get a research project's findings",
-        "tags": [
-          "Projects"
-        ],
-        "x-min-scope": "read"
-      }
-    },
-    "/api/v1/projects/{projectId}/findings/revisions/{revisionId}": {
-      "get": {
-        "description": "One revision with the body its task recorded, wherever it is stored. An offloaded body that cannot be read is `503` with `details.reason: \"findings_body_unavailable\"` rather than an empty revision.",
-        "operationId": "getPublicFindingsRevision",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "revisionId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PublicFindingsRevision"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Server error"
-          }
-        },
-        "summary": "Get one findings revision",
-        "tags": [
-          "Projects"
-        ],
-        "x-min-scope": "read"
-      }
-    },
     "/api/v1/projects/{projectId}/mount": {
       "post": {
         "description": "Mount a project of the key's account onto the key's workspace, so its reads are served there. Idempotent.",
@@ -20420,6 +20269,129 @@
           "Projects"
         ],
         "x-min-scope": "write"
+      }
+    },
+    "/api/v1/projects/{projectId}/outcomes": {
+      "get": {
+        "description": "Every outcome the project's tasks recorded, without bodies, ordered by `seq`: the order the tasks were STARTED, across every stream. `stream` narrows to one stream. An outcome is immutable once written.",
+        "operationId": "listPublicProjectOutcomes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stream",
+            "required": false,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9-]{0,39}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProjectOutcomeList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List a project's outcomes",
+        "tags": [
+          "Projects"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/projects/{projectId}/outcomes/{outcomeId}": {
+      "get": {
+        "description": "One outcome with the body its task recorded, wherever it is stored. The platform never reads it: the project kind owns its shape and serves its JSON Schema from `GET /api/v1/project-kinds/{kind}`. An offloaded body that cannot be read is `503` with `details.reason: \"outcome_body_unavailable\"` rather than an empty one.",
+        "operationId": "getPublicProjectOutcome",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "outcomeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProjectOutcome"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get one outcome with its body",
+        "tags": [
+          "Projects"
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/projects/{projectId}/services": {
@@ -20600,7 +20572,7 @@
         "x-min-scope": "read"
       },
       "post": {
-        "description": "A project task has its own resource, `PublicProjectTask`, carrying `projectId` where a service task carries `serviceId`. `taskType` defaults to the first type the project's kind offers. A `research` task takes its mode (`initial`, `extend`, `clarify`, `refresh`) and ad-hoc questions through `fields`. A project's tasks are created and run on the board that homes it; any other board is refused with `409` and `details.reason: \"project_homed_elsewhere\"`.",
+        "description": "A project task has its own resource, `PublicProjectTask`, carrying `projectId` where a service task carries `serviceId`. `taskType` defaults to the first type the project's kind offers, and what a task of that type asks for goes in `fields`, described by `GET /api/v1/task-types` (a `research` task takes its mode and ad-hoc questions there). A project's tasks are created and run on the board that homes it; any other board is refused with `409` and `details.reason: \"project_homed_elsewhere\"`.",
         "operationId": "createPublicProjectTask",
         "parameters": [
           {
@@ -20928,6 +20900,59 @@
           "Projects"
         ],
         "x-min-scope": "write"
+      }
+    },
+    "/api/v1/projects/{projectId}/view": {
+      "get": {
+        "description": "The project's current state as its kind reads every outcome (for `research`: the findings folded by question, with coverage of the pinned definition). The platform never reads it: the project kind owns its shape and serves its JSON Schema from `GET /api/v1/project-kinds/{kind}`. `view` is null for a kind that computes none; read its outcomes instead. A body that cannot be read is `503` with `outcome_body_unavailable`.",
+        "operationId": "getPublicProjectView",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProjectView"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get a project's current view",
+        "tags": [
+          "Projects"
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/prompt-fragments": {
@@ -21983,173 +22008,6 @@
         "summary": "Read one file out of a linked repository",
         "tags": [
           "Repos"
-        ],
-        "x-min-scope": "admin"
-      }
-    },
-    "/api/v1/research-definitions": {
-      "get": {
-        "description": "Every research definition a research project of the key's account can pin: the ones the deployment ships in code (`origin: registered`) and the ones the account published (`origin: stored`), each with its content hash. A definition says what to find out (topics and questions), which credentials the research needs by name, and the vendor origins a credential may be sent to.",
-        "operationId": "listPublicResearchDefinitions",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PublicResearchDefinitionList"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Server error"
-          }
-        },
-        "summary": "List the research definitions the account can pin",
-        "tags": [
-          "Projects"
-        ],
-        "x-min-scope": "read"
-      }
-    },
-    "/api/v1/research-definitions/{key}": {
-      "get": {
-        "description": "Every version of one definition key the account can pin, ascending. An unknown key is `404` with `details.reason: \"research_definition_not_found\"`.",
-        "operationId": "getPublicResearchDefinition",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "key",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PublicResearchDefinitionList"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Server error"
-          }
-        },
-        "summary": "Get every version of one research definition",
-        "tags": [
-          "Projects"
-        ],
-        "x-min-scope": "read"
-      }
-    },
-    "/api/v1/research-definitions/{key}/versions/{version}": {
-      "put": {
-        "description": "Publish one immutable version of an account-owned research definition; the key and version are the path's. A version already published is `409` with `details.reason: \"research_definition_version_exists\"`, so a project pinned to it never changes meaning. A key in a namespace the deployment's own definitions use is `409` with `research_definition_key_registered`. A credential key the deployment reserves for its own configuration is refused `400` by the body schema. Requires an `admin` key: a definition names the credentials a run sends and the origins it may send them to.",
-        "operationId": "publishPublicResearchDefinition",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "key",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "version",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PublishResearchDefinition"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PublicResearchDefinition"
-                }
-              }
-            },
-            "description": "Created"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Server error"
-          }
-        },
-        "summary": "Publish a research definition version",
-        "tags": [
-          "Projects"
         ],
         "x-min-scope": "admin"
       }

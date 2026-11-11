@@ -20,6 +20,7 @@
 // folder the caller is standing in and the emitted value is that folder plus the new name.
 import type { RepoTreeEntry } from '~/types/domain'
 import EmptyState from '~/components/common/EmptyState.vue'
+import LoadFailedState from '~/components/common/LoadFailedState.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -66,6 +67,9 @@ const { present } = usePipelineErrorToast()
 const currentPath = ref(props.startPath)
 const treeEntries = ref<RepoTreeEntry[]>([])
 const loading = ref(false)
+// The current folder's listing failed, which the listing states rather than show an empty folder.
+// Picking it is off too: its contents (and so a name clash) are unknown, and the path may not exist.
+const listFailed = ref(false)
 
 const selectedSet = computed(() => new Set(props.selectedPaths.map(normalizeRepoPath)))
 const addedSet = computed(() => new Set(props.addedPaths.map(normalizeRepoPath)))
@@ -139,8 +143,10 @@ async function browseTo(path: string) {
   try {
     currentPath.value = path
     treeEntries.value = await github.loadRepoTree(props.repoGithubId, path)
+    listFailed.value = false
   } catch (e) {
     treeEntries.value = []
+    listFailed.value = true
     present(e, 'github.repoTree.errors.listDirectory')
   } finally {
     loading.value = false
@@ -198,6 +204,12 @@ watch(
       <div v-if="loading" class="space-y-1 p-2">
         <USkeleton v-for="i in 4" :key="i" class="h-7 w-full" />
       </div>
+      <LoadFailedState
+        v-else-if="listFailed"
+        compact
+        :title="t('github.repoTree.listFailed')"
+        @retry="browseTo(currentPath)"
+      />
       <EmptyState
         v-else-if="isEmpty"
         compact
@@ -337,7 +349,7 @@ watch(
         size="xs"
         variant="soft"
         :color="isPicked(currentPath) ? 'primary' : 'neutral'"
-        :disabled="loading || nameTakenHere"
+        :disabled="loading || listFailed || nameTakenHere"
         data-testid="repo-tree-create-here"
         @click="pick(currentPath)"
       >
@@ -356,6 +368,7 @@ watch(
         size="xs"
         variant="soft"
         :color="isPicked(currentPath) ? 'primary' : 'neutral'"
+        :disabled="loading || listFailed"
         @click="pick(currentPath)"
       >
         {{

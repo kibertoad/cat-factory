@@ -1186,29 +1186,46 @@ export {
 
 export { type TaskContextView, renderTaskContext } from './shared/tasks-prompt.logic.js'
 
-// Research definitions a deployment registers in code, and the content hash a project pins.
+// Project definitions a deployment registers in code, and the content hash a project pins.
 export {
-  ResearchDefinitionRegistry,
-  researchDefinitionContentHash,
-} from './domain/research-definition-registry.js'
+  ProjectDefinitionRegistry,
+  projectDefinitionContentHash,
+  validateProjectDefinition,
+} from './domain/project-definition-registry.js'
 
-// The account, workspace and project tiers of the findings-storage policy, and where a revision
+// The account, workspace and project tiers of the outcome-storage policy, and where an outcome
 // body is placed under it.
 export {
-  type EffectiveFindingsStoragePolicy,
-  type FindingsPlacement,
-  placeFindingsBody,
-  resolveFindingsStoragePolicy,
-} from './domain/findings-storage-policy.js'
+  type EffectiveOutcomeStoragePolicy,
+  type OutcomePlacement,
+  placeOutcomeBody,
+  resolveOutcomeStoragePolicy,
+} from './domain/outcome-storage-policy.js'
 
 // Project kinds a deployment registers in code, and the mount-subject reads that resolve a
 // mounted service or project to its root block.
 export {
   ProjectKindRegistry,
-  RESEARCH_PROJECT_KIND,
+  defaultProjectDefinitionRegistry,
+  defaultProjectKindModuleRegistry,
   defaultProjectKindRegistry,
   projectKindTaskType,
 } from './domain/project-kind-registry.js'
+// The code half of a project kind, and the research kind the platform ships.
+export {
+  type ProjectKindModule,
+  ProjectKindModuleRegistry,
+  type ProjectTaskInput,
+  type ProjectTaskPlan,
+  type ProjectViewInput,
+} from './domain/project-kind-module.js'
+export {
+  PROJECT_RESEARCHER_AGENT_KIND,
+  RESEARCH_PROJECT_KIND,
+  mergeFindingsBodies,
+  researchKindModule,
+  selectQuestionIds,
+} from './domain/research-kind.js'
 export {
   type MountSubjectReaders,
   type MountSubjectRoot,

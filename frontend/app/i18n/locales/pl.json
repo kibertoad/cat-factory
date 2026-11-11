@@ -374,7 +374,10 @@
           "hint": "Najwyższa liczba przejść tylko do odczytu w tej wyprawie. Zostaw puste, aby użyć {count}. W dużej bazie kodu każdy kąt przeszukiwany jest osobno dla każdego terytorium, a to, co utnie budżet, zapisujemy jako nieprzeszukane.",
           "problem": "Podaj liczbę całkowitą od 1 do {max} albo pozostaw pole puste, aby użyć wartości domyślnej."
         }
-      }
+      },
+      "documentsLoadFailed": "Nie udało się wczytać dokumentów do dołączenia",
+      "tasksLoadFailed": "Nie udało się wczytać zgłoszeń do dołączenia",
+      "fragmentsLoadFailed": "Nie udało się wczytać fragmentów dobrych praktyk"
     },
     "recurring": {
       "title": "Dodaj cykliczny pipeline",
@@ -694,8 +697,8 @@
         "delegated_executor_failed": "Zewnętrzny executor nie zdołał uruchomić tego kroku. Problem leży w systemie wykonującym pracę, a nie w tej instalacji: sprawdź jego własne logi i spróbuj ponownie.",
         "delegated_work_branch_unprepared": "Platforma nie mogła przygotować gałęzi roboczej, na którą wysyłany jest executor tego kroku, więc nic nie zostało uruchomione. Albo połączenie z repozytorium nie ma prawa zapisu, albo zadanie wskazuje gałąź, która jeszcze nie istnieje: szczegóły mówią, co z tego.",
         "attached_pr_provider_unreachable": "Dostawca repozytorium nie odpowiedział, więc nie udało się sprawdzić pull requesta i nie utworzono zadania. Nie trzeba tu niczego konfigurować: spróbuj ponownie za chwilę.",
-        "research_definitions_unreachable": "Nie udało się teraz odczytać definicji badań tego wdrożenia, więc żądanie nie zostało wykonane. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
-        "findings_body_unavailable": "Te ustalenia są przechowywane w magazynie treści, który nie może ich teraz udostępnić. Z żądaniem wszystko w porządku: spróbuj ponownie, gdy magazyn będzie dostępny."
+        "project_definitions_unreachable": "Nie udało się teraz odczytać definicji projektów tego wdrożenia, więc żądanie nie zostało wykonane. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
+        "outcome_body_unavailable": "Ten wynik projektu jest przechowywany w magazynie treści, który nie może go teraz udostępnić. Z żądaniem wszystko w porządku: spróbuj ponownie, gdy magazyn będzie dostępny."
       }
     },
     "reason": {
@@ -711,23 +714,23 @@
         "gate_config_fields_invalid": "Ustawienia bramki kroku są niekompletne lub zawierają wartość, której bramka nie akceptuje, zwykle wymagane ustawienie bez wartości. Uzupełnij ustawienia bramki kroku w pipeline'ie i spróbuj ponownie.",
         "approvals_chain_stale": "Ten pipeline zmienił się po otwarciu jego punktów zatwierdzania, więc nie pasują już do jego kroków. Wczytaj pipeline ponownie i ustaw je jeszcze raz.",
         "approvals_builtin_checkpoint_locked": "Wbudowany pipeline zachowuje punkty zatwierdzania, które zawiera jego definicja z katalogu. Sklonuj pipeline, aby usunąć któryś z nich.",
-        "project_kind_unregistered": "To wdrożenie nie oferuje już tego rodzaju projektu. Zapytaj administratora, jakie rodzaje projektów są dostępne.",
-        "task_type_not_offered_by_project": "Ten projekt nie oferuje tego typu zadania. Wybierz jeden z typów zadań, które oferuje projekt.",
-        "project_has_no_writable_repo": "Krok w potoku tego zadania potrzebuje repozytorium do zapisu, a projekt go nie ma. Wybierz potok, który tylko czyta repozytoria powiązanych usług.",
-        "project_service_link_invalid": "Powiązana usługa nie istnieje lub należy do innej organizacji. Wybierz usługi tej organizacji.",
-        "project_has_unfinished_tasks": "Ten projekt ma jeszcze niezakończone zadania. Zakończ je lub usuń, a potem usuń projekt.",
-        "research_pin_required": "Projekt badawczy potrzebuje definicji badania. Wybierz ją przed utworzeniem projektu.",
-        "research_pin_not_accepted": "Ten rodzaj projektu nie używa definicji badania. Utwórz go bez niej.",
-        "research_definition_not_found": "Ta definicja badania lub wersja nie istnieje w tej organizacji. Wybierz jedną z listy.",
-        "research_inputs_invalid": "Wartości wpisane dla definicji badania są nieprawidłowe. Sprawdź wyróżnione pola.",
-        "task_type_requires_project": "Zadanie badawcze należy do projektu badawczego, a nie do usługi. Dodaj je do projektu.",
-        "research_project_not_pinned": "Projekt tego zadania nie ma przypiętej definicji badania, więc nie może prowadzić badania.",
-        "research_definition_changed": "Definicja badania zmieniła się, odkąd ten projekt ją przypiął. Utwórz nowy projekt, aby użyć nowej wersji.",
-        "research_task_already_recorded": "To zadanie badawcze zapisało już swoje ustalenia. Rozpocznij zadanie uzupełniające, aby badać dalej.",
-        "research_nothing_to_ask": "W wybranym trybie to zadanie uzupełniające nie ma już pytań do zadania. Wybierz inny tryb lub dodaj pytania.",
-        "findings_too_large_for_inline": "Ustalenia są zbyt duże, aby je zapisać, a przeniesienie ich do magazynu treści jest niedostępne. Włącz magazyn treści lub zezwól na przenoszenie i spróbuj ponownie.",
+        "project_kind_unregistered": "To wdrożenie nie oferuje już rodzaju tego projektu, więc nie może on przyjmować nowej pracy. Poproś operatora wdrożenia o ponowne zarejestrowanie rodzaju.",
+        "task_type_not_offered_by_project": "Rodzaj tego projektu nie przyjmuje zadań tego typu. Wybierz jeden z typów, które formularz dla niego oferuje.",
+        "project_has_no_writable_repo": "Krok tego uruchomienia potrzebuje repozytorium do zapisu, a projekt go nie ma: repozytoria powiązanych usług są kontekstem tylko do odczytu. Wybierz pipeline, który tylko czyta i raportuje.",
+        "project_service_link_invalid": "Jedna z powiązanych usług już nie istnieje lub należy do innej organizacji. Odśwież tablicę i wybierz powiązane usługi ponownie.",
+        "project_has_unfinished_tasks": "Ten projekt ma jeszcze niezakończone zadania. Najpierw je zakończ lub usuń.",
+        "project_definition_required": "Ten rodzaj projektu przypina definicję, więc jej wymaga. Wybierz ją i spróbuj ponownie.",
+        "project_definition_not_accepted": "Ten rodzaj projektu nie przypina żadnej definicji. Usuń definicję lub wybierz rodzaj, który jej używa.",
+        "project_definition_not_found": "Żadna definicja tego rodzaju projektu w tej organizacji nie pasuje do tego klucza i wersji. Sprawdź klucz albo zostaw wersję pustą, aby przypiąć najnowszą.",
+        "project_definition_inputs_invalid": "Wartości wejść definicji jej nie spełniają. Wypełnij każde wymagane wejście dozwoloną wartością i spróbuj ponownie.",
+        "task_type_requires_project": "Zadanie tego typu należy do projektu, nie do usługi. Dodaj je do projektu rodzaju, który je oferuje.",
+        "project_not_pinned": "Zadanie tego typu wymaga, by jego projekt przypinał definicję, a ten nie przypina żadnej. Dodaj zadanie do projektu, który ją przypina.",
+        "project_definition_changed": "Definicja przypięta przez ten projekt zmieniła się od tego czasu, więc przebieg zatrzymał się, zamiast pracować na definicji, na którą projekt nigdy się nie zgodził. Poproś operatora wdrożenia o opublikowanie zmiany jako nowej wersji.",
+        "project_task_already_recorded": "To zadanie już zapisało swój wynik w projekcie. Utwórz nowe zadanie, aby kontynuować.",
+        "outcome_too_large_for_inline": "Wynik jest zbyt duży, by go zapisać, więc nie został zapisany. Zawęź zadanie i uruchom je ponownie.",
+        "research_nothing_to_ask": "Tryb tego zadania badawczego nie pozostawia żadnego pytania: nie ma nic nowego do rozszerzenia ani nic częściowego lub zablokowanego do wyjaśnienia. Wybierz inny tryb lub dodaj pytanie.",
         "task_owned_by_project": "To zadanie należy do projektu, który nie ma usługi. Zamiast tego użyj adresu zadań projektu.",
-        "research_definition_invalid": "Definicja badania łamie regułę: sprawdź, czy identyfikatory jej tematów, pytań, poświadczeń i danych wejściowych są unikalne."
+        "project_definition_invalid": "Definicję odrzuca jej struktura lub jej rodzaj projektu. Odpowiedź wymienia każdy problem; popraw je i opublikuj ponownie."
       }
     },
     "action": {
@@ -819,8 +822,8 @@
         "no_linked_issues": "Brak powiązanego zgłoszenia",
         "capability_credential_still_missing": "Nadal brakuje poświadczenia",
         "credential_wait_unrecorded": "Nie można wznowić tego oczekiwania",
-        "research_definition_version_exists": "Wersja już opublikowana",
-        "research_definition_key_registered": "Przestrzeń nazw zajęta",
+        "project_definition_version_exists": "Wersja już opublikowana",
+        "project_definition_key_registered": "Przestrzeń nazw zajęta",
         "project_homed_elsewhere": "Projekt jest na innej tablicy",
         "credential_wait_personal_in_app": "Odnów w aplikacji"
       },
@@ -889,8 +892,8 @@
         "no_linked_issues": "To zadanie nie ma powiązanego zgłoszenia w trackerze. Powiąż zgłoszenie, z którego pochodzi, a potem zaktualizuj ponownie.",
         "capability_credential_still_missing": "Poświadczenie, którego potrzebuje ten krok, nadal nie jest zapisane dla tej przestrzeni roboczej. Zapisz je w ustawieniach poświadczeń możliwości, a potem wznów uruchomienie.",
         "credential_wait_unrecorded": "To oczekiwanie zostało zapisane, zanim platforma zaczęła zapisywać, na co czeka każde oczekiwanie, więc nie można go wznowić. Zamiast tego uruchom je od nowa.",
-        "research_definition_version_exists": "Ta wersja definicji badania jest już opublikowana i nie może się zmienić. Zamiast tego opublikuj nową wersję.",
-        "research_definition_key_registered": "Ta przestrzeń nazw należy do definicji badań dostarczanych z wdrożeniem. Publikuj we własnej przestrzeni nazw swojej organizacji.",
+        "project_definition_version_exists": "Ta wersja definicji jest już opublikowana i nie może się zmienić. Zamiast tego opublikuj nową wersję.",
+        "project_definition_key_registered": "Ta przestrzeń nazw należy do definicji dostarczanych z wdrożeniem. Publikuj we własnej przestrzeni nazw swojej organizacji.",
         "project_homed_elsewhere": "Zadania projektu tworzy się i uruchamia na tablicy, na której projekt się znajduje. Otwórz tę tablicę, aby nad nimi pracować.",
         "credential_wait_personal_in_app": "Wygasłe osobiste poświadczenie odnawia w aplikacji osoba, która uruchomiła przebieg, podając swoje hasło."
       },
@@ -1152,7 +1155,8 @@
       "savedToast": "Monitorowanie zapisane",
       "saveFailed": "Nie udało się zapisać mapowania",
       "clearFailed": "Nie udało się wyczyścić mapowania",
-      "configNoun": "konfigurację kondycji wydania"
+      "configNoun": "konfigurację kondycji wydania",
+      "loadFailed": "Nie udało się wczytać ustawień kondycji wydania"
     },
     "testSecrets": {
       "title": "Poświadczenia testowe (wrażliwe)",
@@ -2102,7 +2106,6 @@
     "title": "Obserwowalność platformy",
     "refresh": "Odśwież",
     "close": "Zamknij",
-    "retry": "Ponów",
     "window": {
       "oneHour": "Ostatnia godzina",
       "oneDay": "Ostatnie 24 godziny",
@@ -2110,6 +2113,7 @@
       "thirtyDays": "Ostatnie 30 dni",
       "ninetyDays": "Ostatnie 90 dni"
     },
+    "noAccount": "Brak aktywnego konta, więc nie ma danych do pokazania.",
     "outcomes": {
       "title": "Wyniki uruchomień",
       "total": "Łącznie uruchomień",
@@ -2950,7 +2954,8 @@
       "roster": {
         "title": "Członkowie",
         "empty": "Brak członków.",
-        "remove": "Usuń członka"
+        "remove": "Usuń członka",
+        "loadFailed": "Nie udało się wczytać członków tej tablicy"
       },
       "add": {
         "title": "Dodaj członka",
@@ -3586,7 +3591,8 @@
         "pagerDutyToken": "Token API PagerDuty",
         "pagerDutyFromEmail": "E-mail nadawcy PagerDuty",
         "incidentIoKey": "Klucz API incident.io",
-        "clear": "Wyczyść"
+        "clear": "Wyczyść",
+        "loadFailed": "Nie udało się wczytać narzędzi do incydentów"
       },
       "status": {
         "notConnected": "Nie połączono",
@@ -3604,7 +3610,8 @@
         "disconnectFailed": "Nie można rozłączyć"
       },
       "connectionNoun": "połączenie obserwowalności",
-      "incidentNoun": "dostawcę incydentów"
+      "incidentNoun": "dostawcę incydentów",
+      "loadFailed": "Nie udało się wczytać połączenia obserwowalności"
     },
     "packageRegistries": {
       "tab": "Rejestry pakietów",
@@ -4281,7 +4288,8 @@
         "kubeNoun": "obsługę Kubernetes",
         "kubeOverrideNoun": "nadpisanie Kubernetes",
         "customNoun": "tę obsługę",
-        "cloudflareNoun": "obsługę Cloudflare"
+        "cloudflareNoun": "obsługę Cloudflare",
+        "loadFailed": "Nie udało się wczytać obsługi środowisk"
       },
       "cloudflare": {
         "intro": "Uruchamia Worker Cloudflare dla każdego pull requesta, wyzwalając workflow podglądu w docelowym repozytorium. cat-factory nigdy nie komunikuje się bezpośrednio z Cloudflare: tworzy wdrożenie, odczytuje jego status i publikuje status inactive, aby je usunąć.",
@@ -4708,7 +4716,8 @@
         "loadProjection": "Nie udało się wczytać repozytoriów, pull requestów i zgłoszeń",
         "startInstall": "Nie udało się rozpocząć instalacji aplikacji GitHub",
         "connect": "Nie udało się połączyć"
-      }
+      },
+      "listFailed": "Nie udało się wyświetlić instalacji GitHub App"
     },
     "panel": {
       "connectIntro": "Połącz instalację aplikacji GitHub, aby powiązać bloki tablicy z repozytoriami, przeglądać pull requesty i zgłoszenia oraz pozwolić agentom wypychać gałęzie i otwierać PR.",
@@ -4819,7 +4828,8 @@
       "errors": {
         "listDirectory": "Nie udało się wyświetlić katalogu"
       },
-      "selectAllFiles": "Zaznacz {count} plik | Zaznacz wszystkie {count} pliki | Zaznacz wszystkie {count} plików"
+      "selectAllFiles": "Zaznacz {count} plik | Zaznacz wszystkie {count} pliki | Zaznacz wszystkie {count} plików",
+      "listFailed": "Nie udało się wyświetlić zawartości tego folderu"
     }
   },
   "slack": {
@@ -6235,6 +6245,7 @@
       "medium": "Średnia pewność",
       "low": "Niska pewność"
     },
+    "loadFailed": "Nie udało się wczytać przeglądu wymagań",
     "findingFloor": {
       "raised": {
         "high": "Ten przebieg zgłosił tylko uwagi o wysokiej wadze.",
@@ -6360,7 +6371,8 @@
       "done": "Gotowe",
       "failed": "Niepowodzenie"
     },
-    "groupTitle": "Grupa konsensusu, do której eskalowało to uruchomienie"
+    "groupTitle": "Grupa konsensusu, do której eskalowało to uruchomienie",
+    "loadFailed": "Nie udało się wczytać sesji konsensusu"
   },
   "brainstorm": {
     "title": {
@@ -6453,7 +6465,8 @@
       "taskReset": "Zadanie zresetowane: edytuj je i prześlij ponownie",
       "extraRoundGranted": "Przyznano jeszcze jedną rundę burzy mózgów",
       "resolveError": "Nie udało się rozwiązać burzy mózgów"
-    }
+    },
+    "loadFailed": "Nie udało się wczytać sesji burzy mózgów"
   },
   "spec": {
     "title": "Wymagania",
@@ -6504,6 +6517,14 @@
       "given": "Given",
       "when": "When",
       "then": "Then"
+    },
+    "anchorReadFailed": {
+      "title": "Nie udało się odczytać specyfikacji",
+      "description": "Odczyt repozytorium nie powiódł się, więc nie wiadomo, czy ta usługa ma specyfikację. Spróbuj ponownie."
+    },
+    "anchorUnparsed": {
+      "title": "Plik specyfikacji jest nieprawidłowy",
+      "description": "spec/service.json jest w gałęzi domyślnej, ale nie udało się go przetworzyć. Popraw plik w repozytorium."
     }
   },
   "followUp": {
@@ -7304,7 +7325,8 @@
       "checkSourceFailed": "Nie udało się sprawdzić repozytorium",
       "sourceUnlinked": "Repozytorium odłączone",
       "unlinkSourceFailed": "Nie udało się odłączyć repozytorium"
-    }
+    },
+    "loadFailed": "Nie udało się wczytać katalogu usług podstawowych"
   },
   "binaryOutput": {
     "heading": "Wyjścia binarne",
@@ -8243,7 +8265,8 @@
       "done": "Gotowe",
       "save": "Zapisz",
       "revert": "Przywróć"
-    }
+    },
+    "loadFailed": "Nie udało się wczytać biblioteki Claude Skills"
   },
   "merge": {
     "changeClass": {
@@ -9265,19 +9288,78 @@
     "mount": {
       "added": "Dodano projekt {title} do tej tablicy",
       "failed": "Nie udało się dodać projektu"
+    },
+    "view": {
+      "open": "Otwórz projekt",
+      "title": "Projekt: {title}",
+      "pin": "{title}, wersja {version}",
+      "refresh": "Odśwież",
+      "loading": "Wczytywanie projektu",
+      "unavailable": "Nie udało się wczytać projektu",
+      "loadFailed": "Nie udało się wczytać projektu",
+      "definitionChanged": "Zarejestrowana definicja nie odpowiada już wersji przypiętej przez ten projekt, więc nowe uruchomienia są odrzucane, dopóki nie zostanie opublikowana jako nowa wersja.",
+      "definitionMissing": "Definicja ustalona dla tego projektu nie jest już dostępna dla tej organizacji.",
+      "unreadableOutcomes": "Niektóre wyniki są przechowywane w magazynie treści, który nie może ich teraz udostępnić. Są pomijane, dopóki nie będzie mógł.",
+      "tabs": {
+        "latest": "Najnowsze",
+        "outcomes": "Historia",
+        "credentials": "Poświadczenia",
+        "storage": "Przechowywanie"
+      },
+      "outcomes": {
+        "empty": "Żadne zadanie nie zapisało jeszcze wyniku",
+        "seq": "Rewizja {seq}",
+        "task": "Zapisana przez {task}, wersja definicji {version}",
+        "taskOnly": "Zapisane przez {task}",
+        "show": "Pokaż",
+        "hide": "Ukryj",
+        "openFailed": "Nie udało się otworzyć rewizji",
+        "storage": {
+          "inline": "Zapisana bezpośrednio, {size}",
+          "offloaded": "W magazynie treści, {size}",
+          "unavailable": "Niedostępna, {size}"
+        }
+      },
+      "credentials": {
+        "none": "Ustalona definicja nie deklaruje poświadczeń",
+        "requiredAtStart": "Uruchomienie potrzebuje go przed startem.",
+        "askedWhenNeeded": "Agent prosi o nie, gdy dotrze do miejsca, które go wymaga.",
+        "store": "Zarządzaj poświadczeniami możliwości",
+        "status": {
+          "stored": "Zapisane",
+          "missing": "Brak",
+          "reserved": "Zarezerwowana nazwa, nigdy nie jest wysyłana"
+        }
+      },
+      "storage": {
+        "effective": "Nowe rewizje są zapisywane bezpośrednio do {size}; powyżej przenoszenie jest {offload}.",
+        "accountHint": "Ustawiane przez organizację.",
+        "inherit": "Dziedzicz",
+        "inherits": "Dziedziczy z szerszego poziomu",
+        "inlineUpTo": "bezpośrednio do {size}",
+        "inlineKb": "Limit zapisu bezpośredniego (KB)",
+        "offloadLabel": "Przenoszenie",
+        "save": "Zapisz",
+        "loadFailed": "Nie udało się wczytać ustawień przechowywania wyników",
+        "saveFailed": "Nie udało się zapisać ustawień przechowywania wyników",
+        "tier": {
+          "account": "Organizacja",
+          "workspace": "Ta tablica",
+          "project": "Ten projekt"
+        },
+        "offload": {
+          "enabled": "włączone",
+          "disabled": "wyłączone"
+        }
+      },
+      "fallback": {
+        "empty": "Ten projekt nie ma jeszcze żadnego wyniku",
+        "stream": "Najnowsze w {stream}"
+      }
     }
   },
   "research": {
-    "open": "Wyniki badania",
-    "title": "Wyniki: {title}",
-    "pin": "{title}, wersja {version}",
-    "refresh": "Odśwież",
-    "loading": "Wczytywanie wyników",
     "unavailable": "Nie udało się wczytać wyników",
-    "loadFailed": "Nie udało się wczytać wyników",
-    "definitionChanged": "Zarejestrowana definicja nie zgadza się już z wersją ustaloną dla tego projektu, więc nowe badania są odrzucane, dopóki nie zostanie opublikowana jako nowa wersja.",
-    "definitionMissing": "Definicja ustalona dla tego projektu nie jest już dostępna dla tej organizacji.",
-    "unreadableRevisions": "Niektóre rewizje są w magazynie treści, który nie może ich teraz udostępnić. Ich odpowiedzi są pominięte, dopóki nie będzie mógł.",
     "adhoc": "Pytania dodane przez zadania",
     "retired": "Odpowiedzi na pytania, których ta wersja już nie zadaje",
     "learnings": "Wnioski",
@@ -9285,10 +9367,7 @@
     "blockedOn": "Czeka na poświadczenie {key}",
     "notes": "Późniejsze próby zachowane obok tej odpowiedzi: {count}",
     "tabs": {
-      "findings": "Wyniki",
-      "revisions": "Historia",
-      "credentials": "Poświadczenia",
-      "storage": "Przechowywanie"
+      "findings": "Wyniki"
     },
     "status": {
       "answered": "Z odpowiedzią",
@@ -9323,52 +9402,6 @@
       "extend": "Odpowiedzieć na pytania wcześniej niezadane, w tym te, które dodasz poniżej.",
       "clarify": "Ponownie sprawdzić odpowiedzi częściowe lub zablokowane.",
       "refresh": "Sprawdzić każdą istniejącą odpowiedź u dostawcy w obecnym stanie."
-    },
-    "revisions": {
-      "empty": "Żadne zadanie badawcze nie zapisało jeszcze wyników",
-      "seq": "Rewizja {seq}",
-      "task": "Zapisana przez {task}, wersja definicji {version}",
-      "show": "Pokaż",
-      "hide": "Ukryj",
-      "answers": "Odpowiedzi w tej rewizji: {count}",
-      "openFailed": "Nie udało się otworzyć rewizji",
-      "storage": {
-        "inline": "Zapisana bezpośrednio, {size}",
-        "offloaded": "W magazynie treści, {size}",
-        "unavailable": "Niedostępna, {size}"
-      }
-    },
-    "credentials": {
-      "none": "Ustalona definicja nie deklaruje poświadczeń",
-      "requiredAtStart": "Badanie potrzebuje go przed rozpoczęciem.",
-      "askedWhenNeeded": "Agent prosi o nie, gdy dotrze do miejsca, które go wymaga.",
-      "store": "Zarządzaj poświadczeniami możliwości",
-      "status": {
-        "stored": "Zapisane",
-        "missing": "Brak",
-        "reserved": "Zarezerwowana nazwa, nigdy nie jest wysyłana"
-      }
-    },
-    "storage": {
-      "effective": "Nowe rewizje są zapisywane bezpośrednio do {size}; powyżej przenoszenie jest {offload}.",
-      "accountHint": "Ustawiane przez organizację.",
-      "inherit": "Dziedzicz",
-      "inherits": "Dziedziczy z szerszego poziomu",
-      "inlineUpTo": "bezpośrednio do {size}",
-      "inlineKb": "Limit zapisu bezpośredniego (KB)",
-      "offloadLabel": "Przenoszenie",
-      "save": "Zapisz",
-      "loadFailed": "Nie udało się wczytać ustawień przechowywania wyników",
-      "saveFailed": "Nie udało się zapisać ustawień przechowywania wyników",
-      "tier": {
-        "account": "Organizacja",
-        "workspace": "Ta tablica",
-        "project": "Ten projekt"
-      },
-      "offload": {
-        "enabled": "włączone",
-        "disabled": "wyłączone"
-      }
     },
     "followUp": {
       "open": "Rozpocznij kontynuację",

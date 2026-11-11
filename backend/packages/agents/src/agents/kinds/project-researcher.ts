@@ -1,4 +1,5 @@
-import type { AgentRunContext, ResearchRunContext } from '@cat-factory/kernel'
+import { RESEARCH_KIND, type ResearchBrief, type ResearchMode } from '@cat-factory/contracts'
+import type { AgentRunContext } from '@cat-factory/kernel'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 
 // ---------------------------------------------------------------------------
@@ -6,7 +7,7 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 //
 // It answers the questions of the project's pinned research definition against the vendor the
 // definition describes, through a browser (Playwright MCP over the job's own Chromium) and the
-// harness's research tool server (`fill_secret`, `http_request`, `request_credential`). It has no
+// harness's access tool server (`fill_secret`, `http_request`, `request_credential`). It has no
 // checkout: the linked services' repos arrive read-only as reference repos. Its reply is the
 // findings revision body, which the engine validates and records on the project. Design:
 // `docs/initiatives/research-projects.md`.
@@ -49,7 +50,7 @@ const PROJECT_RESEARCHER_SYSTEM_PROMPT = [
   `Reply with ONLY a JSON object of this shape: ${FINDINGS_SHAPE_HINT}`,
 ].join('\n')
 
-const MODE_GUIDANCE: Record<ResearchRunContext['mode'], string> = {
+const MODE_GUIDANCE: Record<ResearchMode, string> = {
   initial: 'Answer every question below.',
   extend: 'Answer the questions below; they were added since the last run.',
   clarify:
@@ -62,15 +63,17 @@ const MODE_GUIDANCE: Record<ResearchRunContext['mode'], string> = {
 
 /** The user prompt: the definition's brief, the targets, the questions and what is known. */
 export function projectResearcherUserPrompt(context: AgentRunContext): string {
-  const research = context.research
-  if (!research) return context.block.description
-  const { definition } = research
+  const project = context.project
+  if (project?.kind !== RESEARCH_KIND || !project.definition) return context.block.description
+  // The research kind's module built this brief for this agent kind: the two are one kind's halves.
+  const research = project.brief as ResearchBrief
+  const { definition } = project
   const prior = new Map(research.priorFindings.map((f) => [f.questionId, f]))
   const checkpoint = new Map((research.checkpoint?.findings ?? []).map((f) => [f.questionId, f]))
   const lines: string[] = [
     `# ${definition.title}`,
     '',
-    definition.brief,
+    research.brief,
     '',
     MODE_GUIDANCE[research.mode],
     '',
@@ -86,7 +89,7 @@ export function projectResearcherUserPrompt(context: AgentRunContext): string {
       ),
     )
   }
-  const inputs = Object.entries(research.inputs)
+  const inputs = Object.entries(project.inputs)
   if (inputs.length > 0) {
     lines.push('', '## Project inputs', ...inputs.map(([k, val]) => `- ${k}: ${String(val)}`))
   }
@@ -114,9 +117,12 @@ export const PROJECT_RESEARCHER_AGENT_KINDS: AgentKindDefinition[] = [
     kind: PROJECT_RESEARCHER_KIND,
     systemPrompt: PROJECT_RESEARCHER_SYSTEM_PROMPT,
     userPrompt: (context) => projectResearcherUserPrompt(context),
+    // A task's best-practice fragments say how code is written or prose reads, and this kind
+    // writes neither: its product is findings about a vendor, steered by its definition.
+    standardsDelivery: 'none',
     // Our container on the `ui` image (Chromium and Playwright MCP are there), with no checkout.
     agent: {
-      surface: 'container-research',
+      surface: 'container-project',
       image: 'ui',
       output: { kind: 'structured', shapeHint: FINDINGS_SHAPE_HINT },
     },

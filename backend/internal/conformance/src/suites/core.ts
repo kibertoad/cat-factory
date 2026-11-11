@@ -8,7 +8,7 @@ import { defineCoreWorkspacesConformance } from './core-workspaces.js'
 import { defineCoreRiskPolicyTiersConformance } from './core-risk-policy-tiers.js'
 import { defineCoreProjectsConformance } from './core-projects.js'
 import { defineCoreResearchRunsConformance } from './core-research-runs.js'
-import { defineCoreResearchViewsConformance } from './core-research-views.js'
+import { defineCoreProjectViewsConformance } from './core-project-views.js'
 
 // The core backend conformance (workspaces, run persistence, planning, and the remaining
 // workspace feature surfaces), split into cohesive sibling files so no single suite file grows
@@ -24,6 +24,6 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
     defineCoreRiskPolicyTiersConformance(harness)
     defineCoreProjectsConformance(harness)
     defineCoreResearchRunsConformance(harness)
-    defineCoreResearchViewsConformance(harness)
+    defineCoreProjectViewsConformance(harness)
   })
 }

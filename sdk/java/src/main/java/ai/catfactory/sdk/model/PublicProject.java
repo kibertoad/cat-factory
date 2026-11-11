@@ -14,8 +14,8 @@ import org.jspecify.annotations.Nullable;
  * @param description the {@code description} field.
  * @param homedHere the {@code homedHere} field.
  * @param kind the {@code kind} field.
+ * @param pin Always present; {@code null} when the server has no value for it.
  * @param projectId the {@code projectId} field.
- * @param research Always present; {@code null} when the server has no value for it.
  * @param serviceIds the {@code serviceIds} field.
  * @param title the {@code title} field.
  */
@@ -29,10 +29,10 @@ public record PublicProject(
 
     @JsonProperty("kind") String kind,
 
-    @JsonProperty("projectId") String projectId,
-
     /** Always present; {@code null} when the server has no value for it. */
-    @JsonProperty("research") @Nullable PublicResearchPin research,
+    @JsonProperty("pin") @Nullable PublicProjectPin pin,
+
+    @JsonProperty("projectId") String projectId,
 
     @JsonProperty("serviceIds") List<String> serviceIds,
 
@@ -55,8 +55,8 @@ public record PublicProject(
         private @Nullable String description;
         private @Nullable Boolean homedHere;
         private @Nullable String kind;
+        private @Nullable PublicProjectPin pin;
         private @Nullable String projectId;
-        private @Nullable PublicResearchPin research;
         private @Nullable List<String> serviceIds;
         private @Nullable String title;
 
@@ -84,15 +84,15 @@ public record PublicProject(
             return this;
         }
 
-        /** Set {@code projectId}. */
-        public Builder projectId(@Nullable String projectId) {
-            this.projectId = projectId;
+        /** Set {@code pin}. */
+        public Builder pin(@Nullable PublicProjectPin pin) {
+            this.pin = pin;
             return this;
         }
 
-        /** Set {@code research}. */
-        public Builder research(@Nullable PublicResearchPin research) {
-            this.research = research;
+        /** Set {@code projectId}. */
+        public Builder projectId(@Nullable String projectId) {
+            this.projectId = projectId;
             return this;
         }
 
@@ -110,7 +110,7 @@ public record PublicProject(
 
         /** Build the {@link PublicProject}. */
         public PublicProject build() {
-            return new PublicProject(createdAt, description, homedHere, kind, projectId, research, serviceIds, title);
+            return new PublicProject(createdAt, description, homedHere, kind, pin, projectId, serviceIds, title);
         }
     }
 }

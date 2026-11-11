@@ -37,7 +37,7 @@ import type {
   PromptFragmentSource,
   ProjectKindSource,
   ProjectRepository,
-  ResearchProjectRepository,
+  ProjectRecordRepository,
   ResolveBinaryArtifactStore,
   WorkspaceMount,
   WorkspaceMountRepository,
@@ -49,14 +49,7 @@ import { createBlockRemoval } from './blockRemoval.js'
 import { createBoardLayoutWrites } from './layoutWrites.js'
 import { createBoardReparentWrite } from './reparentWrite.js'
 import { createMountProjection } from './mountProjection.js'
-import {
-  canReparent,
-  gridSlot,
-  rootOf,
-  serviceOf,
-  tasksOf,
-  wouldCreateCycle,
-} from './board.logic.js'
+import { canReparent, gridSlot, rootOf, tasksOf, wouldCreateCycle } from './board.logic.js'
 import { createProjectTaskAdmission } from './projectTaskAdmission.js'
 import { createBlockHomes } from './blockHomes.js'
 import type { ReviewFrictionNotificationReader } from './reviewFrictionGuard.js'
@@ -187,8 +180,8 @@ export interface BoardServiceDependencies {
   projectRepository?: ProjectRepository
   /** Where a project's kind is read from when a task is admitted under the project. */
   projectKinds?: ProjectKindSource
-  /** A research project's rows, reclaimed with the project. */
-  researchProjectRepository?: ResearchProjectRepository
+  /** A project's pin, outcomes and policy tier, reclaimed with the project. */
+  projectRecordRepository?: ProjectRecordRepository
   /**
    * The acting workspace's runtime settings, read by two collaborators:
    *  - the opt-in review-debt friction guard on task creation
@@ -360,7 +353,7 @@ export class BoardService {
     promptFragmentSource,
     projectRepository,
     projectKinds,
-    researchProjectRepository,
+    projectRecordRepository,
     workspaceSettings,
     reviewFrictionNotifications,
     resolveRunRepoContext,
@@ -470,7 +463,7 @@ export class BoardService {
       executionRepository,
       serviceRepository,
       projectRepository,
-      researchProjectRepository,
+      projectRecordRepository,
       workspaceMountRepository,
       initiativeRepository,
       documentRepository,
@@ -818,7 +811,7 @@ export class BoardService {
       throw new ValidationError('A document repository only accepts document or spike tasks')
     }
     if (frame && taskTypeRequiresProject(taskType)) {
-      throw new ValidationError(`A '${taskType}' task belongs under a research project`, {
+      throw new ValidationError(`A '${taskType}' task belongs under a project`, {
         reason: 'task_type_requires_project',
         taskType,
       })
@@ -884,16 +877,14 @@ export class BoardService {
       input.acknowledgeReviewDebt === true,
     )
     const siblings = tasksOf(blocks, containerId).length
-    const service = serviceOf(blocks, container)
+    const root = rootOf(blocks, container)
+    const service = root?.level === 'frame' ? root : undefined
     const taskType = input.taskType ?? 'feature'
     this.assertTaskTypeAllowed(service, taskType)
     // A task under a project is admitted by the project's kind, which also names its default
     // pipeline. Before any side effect, and before the repo-reading reference checks below.
-    const projectRoot = rootOf(blocks, container)
     const projectTask =
-      projectRoot?.level === 'project'
-        ? await this.projectTasks.admit(projectRoot, taskType)
-        : undefined
+      root?.level === 'project' ? await this.projectTasks.admit(root, taskType) : undefined
     // A reusable operation a workspace admin HID is refused here, not only kept out of the picker:
     // the internal API, the public API, an initiative spawn and a tracker import all reach this
     // method without ever seeing one. Runs in the ACTING workspace's context, like the friction
@@ -998,7 +989,7 @@ export class BoardService {
     await this.blockRepository.insert(
       homeWorkspaceId,
       block,
-      await this.ownerForContainer(blocks, container),
+      projectTask ? projectTask.project.id : await this.ownerForContainer(blocks, container),
     )
     // Origin = the block's HOME (the mounted service's home when added to a shared board), so
     // the fan-out reaches every workspace mounting the service, not just the acting one. A new

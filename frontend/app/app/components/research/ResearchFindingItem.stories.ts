@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import { researchView } from '~/stories/research.stories.mocks'
-import { readerTopics } from '~/utils/research'
+import { researchBoardView } from '~/stories/research.stories.mocks'
+import { readerTopics, researchReadingOf } from '~/utils/research'
 import ResearchFindingItem from './ResearchFindingItem.vue'
 
 // One research question with its current answer: status, confidence, the answer, its evidence
 // and caveats. A blocked answer names the credential it waited for.
-const topics = readerTopics(researchView).topics
+const topics = readerTopics(researchReadingOf(researchBoardView)!).topics
 
 const meta = {
   title: 'Board/Components/ResearchFindingItem',

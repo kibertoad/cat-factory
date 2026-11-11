@@ -201,7 +201,8 @@ type ConformanceAppOpts = {
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
   projectKindRegistry?: CoreDependencies['projectKindRegistry']
-  researchDefinitionRegistry?: CoreDependencies['researchDefinitionRegistry']
+  projectDefinitionRegistry?: CoreDependencies['projectDefinitionRegistry']
+  projectKindModuleRegistry?: CoreDependencies['projectKindModuleRegistry']
   inlineUseCaseRegistry?: CoreDependencies['inlineUseCaseRegistry']
   pipelineRegistry?: CoreDependencies['pipelineRegistry']
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
@@ -349,7 +350,8 @@ function buildContainerRegistryOptions(opts: ConformanceAppOpts | undefined) {
     initiativePresetRegistry: o.initiativePresetRegistry,
     taskTypeRegistry: o.taskTypeRegistry,
     projectKindRegistry: o.projectKindRegistry,
-    researchDefinitionRegistry: o.researchDefinitionRegistry,
+    projectDefinitionRegistry: o.projectDefinitionRegistry,
+    projectKindModuleRegistry: o.projectKindModuleRegistry,
     inlineUseCaseRegistry: o.inlineUseCaseRegistry,
     pipelineRegistry: o.pipelineRegistry,
   })
@@ -597,10 +599,10 @@ export function makeConformanceApp(
       createDrizzleRepositories(db, SEED_CLOCK).requirementReviewRepository,
     agentRunRepository: () => container.agentRunRepository,
     blockRepository: () => createDrizzleRepositories(db, SEED_CLOCK).blockRepository,
-    researchProjectRepository: () =>
-      createDrizzleRepositories(db, SEED_CLOCK).researchProjectRepository,
-    findingsStoragePolicyRepository: () =>
-      createDrizzleRepositories(db, SEED_CLOCK).findingsStoragePolicyRepository,
+    projectRecordRepository: () =>
+      createDrizzleRepositories(db, SEED_CLOCK).projectRecordRepository,
+    outcomeStoragePolicyRepository: () =>
+      createDrizzleRepositories(db, SEED_CLOCK).outcomeStoragePolicyRepository,
     workspaceRepository: () => new DrizzleWorkspaceRepository(db),
     workspaceMemberRepository: () => new DrizzleWorkspaceMemberRepository(db),
     initiativeRepository: () => createDrizzleRepositories(db, SEED_CLOCK).initiativeRepository,

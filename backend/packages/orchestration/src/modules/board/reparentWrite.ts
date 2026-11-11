@@ -13,7 +13,7 @@ import type {
 } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import type { BoardChangeReason } from './board.logic.js'
-import { canReparent, descendantIds, rootOf, serviceOf } from './board.logic.js'
+import { canReparent, descendantIds, rootOf } from './board.logic.js'
 import { pruneDanglingEdges } from './removal-cascade.js'
 import { moveBlockArtifacts } from './blockArtifacts.js'
 import type { RiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
@@ -92,8 +92,8 @@ export function createBoardReparentWrite(deps: BoardReparentDeps) {
     // the moved task's inherited `type`, which is behavioural for the frame repo roles. Load
     // the parent's workspace blocks once here; the branches below reuse this list.
     const destBlocks = await deps.blockRepository.listByWorkspace(parentHome)
-    const destFrame = serviceOf(destBlocks, parent)
     const destRoot = rootOf(destBlocks, parent)
+    const destFrame = destRoot?.level === 'frame' ? destRoot : undefined
     if (block.level === 'task') {
       deps.assertTaskTypeAllowed(destFrame, block.taskType)
       if (destRoot?.level === 'project') {
@@ -114,7 +114,7 @@ export function createBoardReparentWrite(deps: BoardReparentDeps) {
       block.level === 'task' ? moduleNameInContainer(parent) : (block.moduleName ?? '')
 
     // Same physical home (the common case, incl. two of the workspace's own services): move in
-    // place and re-stamp `service_id`, the physical scope key that decides which boards render
+    // place and re-stamp `owner_id`, the physical scope key that decides which boards render
     // the subtree and where its events fan out. No-op re-stamp when sharing isn't wired or the
     // destination frame isn't a registered service. No preset guard here: the home decides which
     // library a `riskPolicyId` resolves against, so a move that keeps it re-decides nothing.
