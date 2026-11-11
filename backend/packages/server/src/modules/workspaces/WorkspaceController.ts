@@ -748,7 +748,6 @@ async function loadSnapshotSlices(
   }
 }
 
-/** Board (workspace) lifecycle and full-snapshot retrieval. */
 /**
  * Boards visible to the signed-in user (see WorkspaceVisibility): unrestricted boards in accounts
  * they belong to, ANY board in accounts they admin (escape hatch), boards they hold an explicit
@@ -787,6 +786,7 @@ async function visibleBoards<E extends AppEnv>(c: Context<E>) {
   return annotated
 }
 
+/** Board (workspace) lifecycle and full-snapshot retrieval. */
 export function workspaceController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 

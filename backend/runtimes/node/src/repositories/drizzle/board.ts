@@ -51,11 +51,8 @@ import {
 import {
   agentRuns,
   blocks,
-  findingsRevisions,
-  findingsStoragePolicies,
+  outcomeStoragePolicies,
   projectServiceLinks,
-  researchProjects,
-  researchTaskSeqs,
   taskProjectLinks,
   projects,
   services,
@@ -64,6 +61,7 @@ import {
   workspaceMounts,
   workspaces,
 } from '../../db/schema.js'
+import { deleteProjectRecords } from './project-outcomes.js'
 
 export class DrizzleWorkspaceRepository implements WorkspaceRepository {
   constructor(private readonly db: DrizzleDb) {}
@@ -300,18 +298,8 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
           .where(inArray(projectServiceLinks.project_id, projectIds))
         // Every task's link to a homed project, on any board.
         await tx.delete(taskProjectLinks).where(inArray(taskProjectLinks.project_id, projectIds))
-        // A homed research project's findings, pinned definition and policy tier.
-        await tx.delete(findingsRevisions).where(inArray(findingsRevisions.project_id, projectIds))
-        await tx.delete(researchTaskSeqs).where(inArray(researchTaskSeqs.project_id, projectIds))
-        await tx
-          .delete(findingsStoragePolicies)
-          .where(
-            and(
-              eq(findingsStoragePolicies.owner_kind, 'project'),
-              inArray(findingsStoragePolicies.owner_id, projectIds),
-            ),
-          )
-        await tx.delete(researchProjects).where(inArray(researchProjects.project_id, projectIds))
+        // A homed project's outcomes, sequence, pin and policy tier.
+        await deleteProjectRecords(tx, projectIds)
         await tx.delete(projects).where(inArray(projects.id, projectIds))
       }
       if (serviceIds.length) {
@@ -319,13 +307,13 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
           .delete(projectServiceLinks)
           .where(inArray(projectServiceLinks.service_id, serviceIds))
       }
-      // This board's own findings-storage policy tier.
+      // This board's own outcome-storage policy tier.
       await tx
-        .delete(findingsStoragePolicies)
+        .delete(outcomeStoragePolicies)
         .where(
           and(
-            eq(findingsStoragePolicies.owner_kind, 'workspace'),
-            eq(findingsStoragePolicies.owner_id, id),
+            eq(outcomeStoragePolicies.owner_kind, 'workspace'),
+            eq(outcomeStoragePolicies.owner_id, id),
           ),
         )
       // This workspace's OWN mounts of subjects homed elsewhere (shared services and projects).

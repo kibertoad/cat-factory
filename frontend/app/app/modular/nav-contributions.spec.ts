@@ -72,6 +72,7 @@ const slots = (): AppSlots => ({
   tutorialTours: [],
   externalTools: [],
   workspaceMetadataFields: [],
+  projectViews: [],
 })
 const ids = (s: unknown) => (s as AppSlots).nav.map((i) => i.id)
 

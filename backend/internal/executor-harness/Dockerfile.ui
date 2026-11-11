@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 #
 # Browser image: the executor-harness image for the kinds that drive a browser, the `tester-ui`
-# agent kind and the research run.
+# agent kind and project runs that drive a target's UI.
 #
 # It layers Playwright and a Chromium browser, Playwright MCP, and the self-contained frontend
 # UI-test tooling (pnpm/yarn, the `serve` static server, a headless JRE and WireMock standalone)
@@ -68,9 +68,9 @@ RUN npm install -g playwright@1.63.0 \
 RUN npm install -g pnpm@12.5.1 @yarnpkg/cli-dist@4.18.0
 RUN npm install -g serve@14.2.6
 
-# Playwright MCP, the browser tool server a research run drives a vendor's UI through. It never
+# Playwright MCP, the browser tool server a project run drives a target's UI through. It never
 # launches a browser of its own: the run starts one Chromium (installed above) with remote
-# debugging and points this at it with `--cdp-endpoint`, so the research tool server's
+# debugging and points this at it with `--cdp-endpoint`, so the access tool server's
 # `fill_secret` types a login into the SAME session the agent navigates.
 RUN npm install -g @playwright/mcp@0.0.84
 ARG WIREMOCK_VERSION=3.13.1

@@ -24,7 +24,7 @@ test.describe('research findings', () => {
       data: {
         kind: 'research',
         title: 'Vendor research',
-        research: { definitionKey: 'e2e:vendor' },
+        definition: { key: 'e2e:vendor' },
         position: { x: 1200, y: 80 },
       },
     })
@@ -35,11 +35,11 @@ test.describe('research findings', () => {
 
     const frame = taskCard(page, project.rootBlockId)
     await expect(frame).toBeVisible({ timeout: LIVE_TIMEOUT })
-    await frame.getByTestId('project-open-findings').click()
+    await frame.getByTestId('project-open-view').click()
 
-    const reader = page.getByTestId('research-findings')
+    const reader = page.getByTestId('project-view')
     await expect(reader).toBeVisible()
-    await expect(reader.getByTestId('research-pin')).toContainText('version 1')
+    await expect(reader.getByTestId('project-view-pin')).toContainText('version 1')
     // Nothing answered yet, and the definition's credential is not stored on this board.
     await expect(reader.getByTestId('research-finding')).toHaveCount(2)
     await expect(reader.getByTestId('research-finding-status').first()).toHaveText('Unanswered')
@@ -51,7 +51,7 @@ test.describe('research findings', () => {
     await expect(form).toBeHidden({ timeout: LIVE_TIMEOUT })
 
     // The run settles and the reader re-reads the project: both questions answered, and the
-    // revision the task wrote is in the history with where its body lives.
+    // outcome the task wrote is in the history with where its body lives.
     await expect(reader.getByTestId('research-finding-status')).toHaveText(
       ['Answered', 'Answered'],
       {
@@ -59,10 +59,10 @@ test.describe('research findings', () => {
       },
     )
     await reader.getByRole('tab', { name: 'History' }).click()
-    await expect(reader.getByTestId('research-revision')).toHaveCount(1)
-    await expect(reader.getByTestId('research-revision-storage')).toContainText('Stored inline')
+    await expect(reader.getByTestId('project-outcome')).toHaveCount(1)
+    await expect(reader.getByTestId('project-outcome-storage')).toContainText('Stored inline')
 
     await reader.getByRole('tab', { name: /Credentials/ }).click()
-    await expect(reader.getByTestId('research-credential-status')).toHaveText('Missing')
+    await expect(reader.getByTestId('project-credential-status')).toHaveText('Missing')
   })
 })

@@ -40,7 +40,7 @@ public abstract class Resources {
     private final MergeRecordsClient mergeRecords;
     private final DirectoryClient directory;
     private final KaizenClient kaizen;
-    private final ResearchDefinitionsClient researchDefinitions;
+    private final ProjectKindsClient projectKinds;
     private final ProjectsClient projects;
     private final GuidedReviewsClient guidedReviews;
     private final PrAssessmentsClient prAssessments;
@@ -73,7 +73,7 @@ public abstract class Resources {
         this.mergeRecords = new MergeRecordsClient(transport);
         this.directory = new DirectoryClient(transport);
         this.kaizen = new KaizenClient(transport);
-        this.researchDefinitions = new ResearchDefinitionsClient(transport);
+        this.projectKinds = new ProjectKindsClient(transport);
         this.projects = new ProjectsClient(transport);
         this.guidedReviews = new GuidedReviewsClient(transport);
         this.prAssessments = new PrAssessmentsClient(transport);
@@ -210,12 +210,12 @@ public abstract class Resources {
         return kaizen;
     }
 
-    /** The research definitions a research project can pin: the ones the deployment ships in code and the ones the account published, each version immutable. A definition says what to find out, which credentials the research needs by name, and the vendor origins a credential may be sent to. Reading takes a `read` key; publishing a version takes an `admin` key. */
-    public ResearchDefinitionsClient researchDefinitions() {
-        return researchDefinitions;
+    /** The project kinds the deployment offers, each with the JSON Schemas of its own shapes, and the definitions a project of a kind can pin: the ones the deployment ships in code and the ones the account published, each version immutable. A definition names the credentials its runs need and the origins a credential may be sent to; its `spec` is the kind's. Reading takes a `read` key; publishing a version takes an `admin` key. */
+    public ProjectKindsClient projectKinds() {
+        return projectKinds;
     }
 
-    /** Projects, the account-owned peers of services: list the ones the key's workspace mounts, create one (a research project pins a research definition), link and unlink services, mount one, create and run the tasks under it on the board that homes it, and read a research project's findings and their revisions. */
+    /** Projects, the account-owned peers of services: list the ones the key's workspace mounts, create one (pinning a definition when its kind takes one), link and unlink services, mount one, create and run the tasks under it on the board that homes it, and read its outcomes and the view its kind computes from them. */
     public ProjectsClient projects() {
         return projects;
     }

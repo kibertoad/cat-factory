@@ -18,7 +18,7 @@ const titleOf = (projectId: string) => {
 
 const options = computed(() =>
   projects.catalog
-    .filter((p) => !staged.value.includes(p.id) && projects.kindOf(p)?.data !== undefined)
+    .filter((p) => !staged.value.includes(p.id))
     .map((p) => ({ label: titleOf(p.id), value: p.id })),
 )
 

@@ -235,14 +235,21 @@ await step('error: connection refused', async () => {
   }
 })
 
-// A research project pins a definition the deployment registers in code (the test server ships
-// `e2e:vendor`). The pin is a nullable object on the project and the findings carry a nullable
-// latest revision, both null-versus-absent cases the four clients must decode alike.
+// A project of the built-in research kind pins a definition the deployment registers in code
+// (the test server ships `e2e:vendor`). The kind serves nullable JSON Schemas, the project a
+// nullable pin, and the view an opaque value: the null-versus-absent and opaque cases the four
+// clients must decode alike.
 let projectId = ''
 
-await step('researchDefinitions.list', async () => {
-  const result = await client.researchDefinitions.list()
-  observations.researchDefinitionListed = result.definitions.some(
+await step('projectKinds.get', async () => {
+  const kind = await client.projectKinds.get('research')
+  observations.projectKindPinsDefinition = kind.definition === 'required'
+  observations.projectKindServesViewSchema = kind.schemas.view !== null
+})
+
+await step('projectKinds.listDefinitions', async () => {
+  const result = await client.projectKinds.listDefinitions('research')
+  observations.projectDefinitionListed = result.definitions.some(
     (d) => d.definition.key === 'e2e:vendor' && d.origin === 'registered',
   )
 })
@@ -251,27 +258,30 @@ await step('projects.create', async () => {
   const project = await client.projects.create({
     kind: 'research',
     title: 'SDK smoketest research',
-    research: { definitionKey: 'e2e:vendor' },
+    definition: { key: 'e2e:vendor' },
   })
   projectId = project.projectId
   observations.projectKind = project.kind
   observations.projectHomedHere = project.homedHere
-  observations.projectPinnedVersion = project.research?.definitionVersion ?? null
+  observations.projectPinnedVersion = project.pin?.definitionVersion ?? null
   observations.projectServiceCount = project.serviceIds.length
 })
 
 await step('projects.get', async () => {
   const project = await client.projects.get(projectId)
   observations.projectFetchedTitle = project.title
-  observations.projectFetchedPinKey = project.research?.definitionKey ?? null
+  observations.projectFetchedPinKey = project.pin?.definitionKey ?? null
 })
 
-await step('projects.getFindings', async () => {
-  const findings = await client.projects.getFindings(projectId)
-  observations.findingsRevisionCount = findings.revisions.length
-  observations.findingsLatestRevisionIsNull = findings.latestRevisionId === null
-  observations.findingsTopicCount = findings.coverage.byTopic.length
-  observations.findingsUnansweredTotal = findings.coverage.total.unanswered
+await step('projects.listOutcomes', async () => {
+  const result = await client.projects.listOutcomes(projectId)
+  observations.projectOutcomeCount = result.outcomes.length
+})
+
+await step('projects.getView', async () => {
+  const view = await client.projects.getView(projectId)
+  observations.projectViewKind = view.kind
+  observations.projectViewIsPresent = view.view !== null && view.view !== undefined
 })
 
 await step('error: project not found', async () => {

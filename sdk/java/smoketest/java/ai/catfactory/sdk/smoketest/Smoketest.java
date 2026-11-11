@@ -28,7 +28,7 @@ import ai.catfactory.sdk.EventStream;
 import ai.catfactory.sdk.StreamEvent;
 import ai.catfactory.sdk.Transport;
 import ai.catfactory.sdk.model.CreatePublicProject;
-import ai.catfactory.sdk.model.CreatePublicProjectResearch;
+import ai.catfactory.sdk.model.CreatePublicProjectDefinition;
 import ai.catfactory.sdk.model.CreatePublicTask;
 import ai.catfactory.sdk.model.ListPublicTaskTypesResponseTaskTypeField;
 import ai.catfactory.sdk.model.NotificationWebhook;
@@ -38,7 +38,6 @@ import ai.catfactory.sdk.model.PublicNotificationWebhook;
 import ai.catfactory.sdk.model.PutNotificationWebhook;
 import ai.catfactory.sdk.model.PublicPipeline;
 import ai.catfactory.sdk.model.PublicProject;
-import ai.catfactory.sdk.model.PublicProjectFindings;
 import ai.catfactory.sdk.model.PublicRun;
 import ai.catfactory.sdk.model.PublicTask;
 import ai.catfactory.sdk.model.PublicUsage;
@@ -336,15 +335,24 @@ public final class Smoketest {
             }
         });
 
-        // A research project pins a definition the deployment registers in code (the test server
-        // ships `e2e:vendor`). The pin is a nullable object on the project and the findings carry a
-        // nullable latest revision, both null-versus-absent cases the four clients must decode alike.
+        // A project of the built-in research kind pins a definition the deployment registers in
+        // code (the test server ships `e2e:vendor`). The kind serves nullable JSON Schemas, the
+        // project a nullable pin, and the view an opaque value: the null-versus-absent and opaque
+        // cases the four clients must decode alike.
         String[] projectId = {""};
 
-        step("researchDefinitions.list", () -> {
-            var result = client.researchDefinitions().list();
+        step("projectKinds.get", () -> {
+            var kind = client.projectKinds().get("research");
             observations.put(
-                    "researchDefinitionListed",
+                    "projectKindPinsDefinition",
+                    kind.definition() != null && "required".equals(kind.definition().wireValue()));
+            observations.put("projectKindServesViewSchema", kind.schemas().view() != null);
+        });
+
+        step("projectKinds.listDefinitions", () -> {
+            var result = client.projectKinds().listDefinitions("research");
+            observations.put(
+                    "projectDefinitionListed",
                     result.definitions().stream()
                             .anyMatch(
                                     d -> "e2e:vendor".equals(d.definition().key())
@@ -358,9 +366,9 @@ public final class Smoketest {
                                     CreatePublicProject.builder()
                                             .kind("research")
                                             .title("SDK smoketest research")
-                                            .research(
-                                                    CreatePublicProjectResearch.builder()
-                                                            .definitionKey("e2e:vendor")
+                                            .definition(
+                                                    CreatePublicProjectDefinition.builder()
+                                                            .key("e2e:vendor")
                                                             .build())
                                             .build());
             projectId[0] = project.projectId();
@@ -368,7 +376,7 @@ public final class Smoketest {
             observations.put("projectHomedHere", project.homedHere());
             observations.put(
                     "projectPinnedVersion",
-                    project.research() != null ? project.research().definitionVersion() : null);
+                    project.pin() != null ? project.pin().definitionVersion() : null);
             observations.put("projectServiceCount", project.serviceIds().size());
         });
 
@@ -377,15 +385,18 @@ public final class Smoketest {
             observations.put("projectFetchedTitle", project.title());
             observations.put(
                     "projectFetchedPinKey",
-                    project.research() != null ? project.research().definitionKey() : null);
+                    project.pin() != null ? project.pin().definitionKey() : null);
         });
 
-        step("projects.getFindings", () -> {
-            PublicProjectFindings findings = client.projects().getFindings(projectId[0]);
-            observations.put("findingsRevisionCount", findings.revisions().size());
-            observations.put("findingsLatestRevisionIsNull", findings.latestRevisionId() == null);
-            observations.put("findingsTopicCount", findings.coverage().byTopic().size());
-            observations.put("findingsUnansweredTotal", findings.coverage().total().unanswered());
+        step("projects.listOutcomes", () -> {
+            var result = client.projects().listOutcomes(projectId[0]);
+            observations.put("projectOutcomeCount", result.outcomes().size());
+        });
+
+        step("projects.getView", () -> {
+            var view = client.projects().getView(projectId[0]);
+            observations.put("projectViewKind", view.kind());
+            observations.put("projectViewIsPresent", view.view() != null);
         });
 
         step("error: project not found", () -> {

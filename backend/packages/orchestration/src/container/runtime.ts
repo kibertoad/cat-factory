@@ -18,9 +18,10 @@ import {
   registryBuiltinSource,
   registryPromptFragmentSource,
   registryProjectKindSource,
-  ResearchDefinitionRegistry,
-  composeResearchDefinitionSource,
-  registryResearchDefinitionSource,
+  ProjectDefinitionRegistry,
+  defaultProjectKindModuleRegistry,
+  composeProjectDefinitionSource,
+  registryProjectDefinitionSource,
   defaultProjectKindRegistry,
 } from '@cat-factory/kernel'
 import { createAppCaches } from '@cat-factory/caching'
@@ -37,11 +38,15 @@ import type { CoreDependencies } from '../container.js'
  */
 export function resolveCoreRuntime(dependencies: CoreDependencies) {
   const projectKindRegistry = dependencies.projectKindRegistry ?? defaultProjectKindRegistry()
-  const researchDefinitionRegistry =
-    dependencies.researchDefinitionRegistry ?? new ResearchDefinitionRegistry()
-  const registeredResearchDefinitions =
-    dependencies.registeredResearchDefinitionSource ??
-    registryResearchDefinitionSource(researchDefinitionRegistry)
+  const projectKindModuleRegistry =
+    dependencies.projectKindModuleRegistry ?? defaultProjectKindModuleRegistry()
+  // Defaulted to validate exactly the kinds this process has modules for.
+  const projectDefinitionRegistry =
+    dependencies.projectDefinitionRegistry ??
+    new ProjectDefinitionRegistry(projectKindModuleRegistry.all())
+  const registeredProjectDefinitions =
+    dependencies.registeredProjectDefinitionSource ??
+    registryProjectDefinitionSource(projectDefinitionRegistry)
   // Resolved ONCE and shared by the two entries below: the registry itself (which the boot
   // validation and the snapshot read) and the default `builtin`-tier source that wraps it. A
   // second `defaultFoundationalServiceRegistry()` call would hand the catalog a different
@@ -76,13 +81,14 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     // Where project kinds are READ from: this process's registry, unless a mothership-mode node
     // injected the remote source (the prompt-fragment registry/source pair's shape).
     projectKinds: dependencies.projectKindSource ?? registryProjectKindSource(projectKindRegistry),
-    researchDefinitionRegistry,
-    // The one read of research definitions: the registered ones (this process's registry, or a
+    projectKindModuleRegistry,
+    projectDefinitionRegistry,
+    // The one read of project definitions: the registered ones (this process's registry, or a
     // mothership node's remote source) composed with the account's stored ones.
-    registeredResearchDefinitions,
-    researchDefinitions: composeResearchDefinitionSource({
-      registered: registeredResearchDefinitions,
-      stored: dependencies.researchDefinitionRepository,
+    registeredProjectDefinitions,
+    projectDefinitions: composeProjectDefinitionSource({
+      registered: registeredProjectDefinitions,
+      stored: dependencies.projectDefinitionRepository,
     }),
     // The deployment's non-container model operations. Empty by default for the same reason the
     // task-type registry is: what a wrapper over `/api/v1` may generate is the deployment's own

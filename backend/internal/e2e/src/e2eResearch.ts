@@ -1,4 +1,7 @@
-import { ResearchDefinitionRegistry } from '@cat-factory/kernel'
+import {
+  type ProjectDefinitionRegistry,
+  defaultProjectDefinitionRegistry,
+} from '@cat-factory/kernel'
 
 /** The research definition key the e2e research specs pin. */
 export const E2E_RESEARCH_DEFINITION_KEY = 'e2e:vendor'
@@ -9,23 +12,26 @@ export const E2E_RESEARCH_DEFINITION_KEY = 'e2e:vendor'
  * project, run a task and read the findings back. The fake agent answers every question it is
  * handed.
  */
-export function e2eResearchDefinitions(): ResearchDefinitionRegistry {
-  const registry = new ResearchDefinitionRegistry()
+export function e2eResearchDefinitions(): ProjectDefinitionRegistry {
+  const registry = defaultProjectDefinitionRegistry()
   registry.register({
+    kind: 'research',
     key: E2E_RESEARCH_DEFINITION_KEY,
     version: 1,
     title: 'Vendor integration',
-    brief: 'Learn how the vendor authenticates and what its API exposes.',
-    topics: [
-      {
-        id: 'auth',
-        title: 'Authentication',
-        questions: [
-          { id: 'scheme', question: 'Which authentication scheme does the API use?' },
-          { id: 'scopes', question: 'Which scopes does an integration need?' },
-        ],
-      },
-    ],
+    spec: {
+      brief: 'Learn how the vendor authenticates and what its API exposes.',
+      topics: [
+        {
+          id: 'auth',
+          title: 'Authentication',
+          questions: [
+            { id: 'scheme', question: 'Which authentication scheme does the API use?' },
+            { id: 'scopes', question: 'Which scopes does an integration need?' },
+          ],
+        },
+      ],
+    },
     credentials: [
       {
         key: 'E2E_VENDOR_LOGIN',

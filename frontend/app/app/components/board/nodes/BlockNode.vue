@@ -50,19 +50,18 @@ const block = computed<Block | undefined>(() => board.getBlock(props.id))
 const isProject = computed(() => block.value?.level === 'project')
 const project = computed(() => (isProject.value ? projects.byRootBlock[props.id] : undefined))
 const projectKind = computed(() => projects.kindOf(project.value))
-const linkedServiceTitles = computed(() =>
+const linkedServices = computed(() =>
   (project.value?.serviceIds ?? []).map((id) => {
     const service = services.catalog.find((s) => s.id === id)
-    return (service && board.getBlock(service.frameBlockId)?.title) ?? id
+    return { id, title: (service && board.getBlock(service.frameBlockId)?.title) ?? id }
   }),
 )
 const servicesModalOpen = ref(false)
-// A project whose kind keeps research data opens its findings reader from the frame.
-const keepsResearch = computed(() => projects.kindOf(project.value)?.data === 'research')
-const findingsOpen = ref(false)
-// Code-split: the reader opens on a deliberate click, and most boards hold no research project.
-const ResearchFindingsTakeover = defineAsyncView(
-  () => import('~/components/research/ResearchFindingsTakeover.vue'),
+// A project opens its takeover from the frame, with the reader its kind contributes.
+const projectViewOpen = ref(false)
+// Code-split: the takeover opens on a deliberate click, and most boards hold no project.
+const ProjectViewTakeover = defineAsyncView(
+  () => import('~/components/projects/view/ProjectViewTakeover.vue'),
 )
 const isShared = computed(() =>
   isProject.value ? projects.isSharedRoot(props.id) : services.isSharedFrame(props.id),
@@ -548,15 +547,15 @@ const ITEM_ICON: Record<string, string | undefined> = {
                   @click.stop="servicesModalOpen = true"
                 />
                 <IconButton
-                  v-if="keepsResearch"
+                  v-if="project"
                   class="nodrag"
-                  data-testid="project-open-findings"
+                  data-testid="project-open-view"
                   :size="isTouch ? 'sm' : 'xs'"
                   variant="ghost"
                   color="neutral"
-                  icon="i-lucide-telescope"
-                  :label="t('research.open')"
-                  @click.stop="findingsOpen = true"
+                  icon="i-lucide-panel-top-open"
+                  :label="t('projects.view.open')"
+                  @click.stop="projectViewOpen = true"
                 />
                 <IconButton
                   v-if="tasks.anyOffered && uiRole.fullSurface && !isProject"
@@ -581,19 +580,19 @@ const ITEM_ICON: Record<string, string | undefined> = {
                stays is what the canvas can't show at a glance. -->
           <!-- A project's linked services: read-only context for its tasks. -->
           <div
-            v-if="isProject && linkedServiceTitles.length"
+            v-if="isProject && linkedServices.length"
             class="flex flex-wrap items-center gap-1"
             data-testid="project-linked-services"
           >
             <UBadge
-              v-for="title in linkedServiceTitles"
-              :key="title"
+              v-for="service in linkedServices"
+              :key="service.id"
               color="neutral"
               variant="subtle"
               size="sm"
               icon="i-lucide-box"
             >
-              {{ title }}
+              {{ service.title }}
             </UBadge>
           </div>
           <div
@@ -654,9 +653,9 @@ const ITEM_ICON: Record<string, string | undefined> = {
     <!-- Teleported by UModal, so it renders outside the canvas transform; kept inside the node's
          single root element so the board node stays a one-root component. -->
     <ProjectServicesModal v-if="project" v-model:open="servicesModalOpen" :project="project" />
-    <ResearchFindingsTakeover
-      v-if="project && keepsResearch && findingsOpen"
-      v-model:open="findingsOpen"
+    <ProjectViewTakeover
+      v-if="project && projectViewOpen"
+      v-model:open="projectViewOpen"
       :project="project"
       :title="block?.title ?? ''"
     />

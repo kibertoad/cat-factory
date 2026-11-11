@@ -7,6 +7,7 @@ import type {
   ResolveBrainstormExceededChoice,
 } from '~/types/brainstorm'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { isModuleOffRefusal } from '~/composables/api/errors'
 
 /**
  * Brainstorm (structured-dialogue) state. On the pipeline path a brainstorm runs as an opt-in
@@ -18,7 +19,8 @@ import { useWorkspaceStore } from '~/stores/workspace'
  *
  * A block may have one live session per STAGE (`requirements` / `architecture`), so the cache is
  * keyed by `${blockId}:${stage}`. `available` mirrors the backend's opt-in gate (a 503 hides the
- * UI). Per-workspace; nothing is persisted client-side.
+ * UI); any other failed load is recorded per key on `loadFailed`. Per-workspace; nothing is
+ * persisted client-side.
  */
 export const useBrainstormStore = defineStore('brainstorm', () => {
   const api = useApi()
@@ -36,6 +38,8 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   const incorporating = ref<Set<string>>(new Set())
   /** `${blockId}:${stage}` keys whose current session is being fetched (the initial `load`). */
   const loadingByKey = ref<Set<string>>(new Set())
+  /** Keys whose last `load` failed with anything but the feature-off 503. */
+  const failedByKey = ref<Set<string>>(new Set())
   const inFlight = new Map<string, Promise<void>>()
 
   function sessionFor(blockId: string, stage: BrainstormStage): BrainstormSession | null {
@@ -54,6 +58,9 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   }
   function isLoading(blockId: string, stage: BrainstormStage): boolean {
     return loadingByKey.value.has(key(blockId, stage))
+  }
+  function loadFailed(blockId: string, stage: BrainstormStage): boolean {
+    return failedByKey.value.has(key(blockId, stage))
   }
   function isIncorporating(sessionId: string): boolean {
     return incorporating.value.has(sessionId)
@@ -106,6 +113,7 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
     running.value = new Set()
     incorporating.value = new Set()
     loadingByKey.value = new Set()
+    failedByKey.value = new Set()
     inFlight.clear()
   }
 
@@ -127,11 +135,15 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
       try {
         const session = await api.getBrainstorm(workspace.requireId(), blockId, stage)
         available.value = true
+        withFlag(failedByKey, k, false)
         // By key like `store()`, and directly because a load resolving to "none exists" caches a
         // null the getter reads as "fetched, absent".
         sessions.value[k] = session
-      } catch {
-        available.value = false
+      } catch (error) {
+        // Only a 503 means the feature is off. Any other failure is a read that did not answer,
+        // which the window states instead of showing "no session yet".
+        if (isModuleOffRefusal(error)) available.value = false
+        else withFlag(failedByKey, k, true)
       } finally {
         withFlag(loadingByKey, k, false)
         inFlight.delete(k)
@@ -218,6 +230,7 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
     backgroundStage,
     isRunning,
     isLoading,
+    loadFailed,
     isIncorporating,
     openCount,
     answeredCount,

@@ -42,15 +42,15 @@ const serviceIdsSchema = v.pipe(
 )
 
 /**
- * The research definition a research project pins at creation, and the values for its `inputs`.
- * No version pins the highest one the account can see.
+ * The definition a project pins at creation, of the project's own kind, and the values for its
+ * `inputs`. No version pins the highest one the account can see.
  */
-export const researchPinInputSchema = v.object({
-  definitionKey: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
-  definitionVersion: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
+export const projectPinInputSchema = v.object({
+  key: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+  version: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
   inputs: v.optional(descriptorFieldValuesSchema, {}),
 })
-export type ResearchPinInput = v.InferOutput<typeof researchPinInputSchema>
+export type ProjectPinInput = v.InferOutput<typeof projectPinInputSchema>
 
 export const createProjectInputSchema = v.object({
   kind: projectKindIdSchema,
@@ -59,8 +59,8 @@ export const createProjectInputSchema = v.object({
   serviceIds: v.optional(serviceIdsSchema, []),
   /** Where to drop the root on the creating board; laid out on the board's grid when absent. */
   position: v.optional(positionSchema),
-  /** Required by, and only accepted for, a kind that keeps `research` data. */
-  research: v.optional(researchPinInputSchema),
+  /** Required by a kind whose `definition` is `required`, refused by a kind that pins none. */
+  definition: v.optional(projectPinInputSchema),
 })
 export type CreateProjectInput = v.InferOutput<typeof createProjectInputSchema>
 
@@ -96,15 +96,20 @@ export type SetProjectServicesInput = v.InferOutput<typeof setProjectServicesInp
 
 /**
  * What a project task does with repositories: `none` never touches one, `linked-read-only`
- * reads the linked services' repos as context. A project has no repository to write to, so no
- * kind can offer a task type that needs one.
+ * reads the linked services' repos as context. A project has no repository to write to, so there
+ * is no writing access to declare; a run step that needs a checkout to push to is refused when it
+ * dispatches (`project_has_no_writable_repo`).
  */
 export const projectRepoAccessSchema = v.picklist(['none', 'linked-read-only'])
 export type ProjectRepoAccess = v.InferOutput<typeof projectRepoAccessSchema>
 
-/** The project-level data a kind keeps, a closed vocabulary the platform implements. */
-export const projectKindDataSchema = v.picklist(['research'])
-export type ProjectKindData = v.InferOutput<typeof projectKindDataSchema>
+/**
+ * Whether a kind's projects pin a definition: `required` at creation, or `optional`. Absent means
+ * the kind has no definitions. What a definition holds is the kind's own; the platform resolves
+ * and pins it the same way for every kind.
+ */
+export const projectKindDefinitionUseSchema = v.picklist(['required', 'optional'])
+export type ProjectKindDefinitionUse = v.InferOutput<typeof projectKindDefinitionUseSchema>
 
 /** One task type a project kind offers. */
 export const projectKindTaskTypeSchema = v.object({
@@ -122,11 +127,8 @@ export const projectKindDescriptorSchema = v.object({
   description: v.optional(v.pipe(v.string(), v.maxLength(PROJECT_DESCRIPTION_MAX))),
   /** At least one, so a project of this kind can hold work. */
   taskTypes: v.pipe(v.array(projectKindTaskTypeSchema), v.minLength(1)),
-  /**
-   * The project-level data the kind keeps. `research` pins a research definition at creation;
-   * absent means the project keeps nothing beyond its tasks.
-   */
-  data: v.optional(projectKindDataSchema),
+  /** Whether its projects pin a definition of this kind at creation. */
+  definition: v.optional(projectKindDefinitionUseSchema),
 })
 export type ProjectKindDescriptor = v.InferOutput<typeof projectKindDescriptorSchema>
 

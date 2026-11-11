@@ -374,7 +374,10 @@
           "hint": "この遠征が実行できる読み取り専用パスの上限です。空欄なら {count} 回。大規模なコードベースでは各観点を領域ごとに探索し、予算で削られた分は未探索として記録されます。",
           "problem": "1 から {max} までの整数を入力してください。空欄のままにすると既定値が使われます。"
         }
-      }
+      },
+      "documentsLoadFailed": "添付するドキュメントを読み込めませんでした",
+      "tasksLoadFailed": "添付する課題を読み込めませんでした",
+      "fragmentsLoadFailed": "ベストプラクティスのフラグメントを読み込めませんでした"
     },
     "recurring": {
       "title": "繰り返しパイプラインを追加",
@@ -694,8 +697,8 @@
         "delegated_executor_failed": "外部エグゼキューターがこのステップを開始できませんでした。原因はこのデプロイではなく処理を実行するシステム側にあります。そのシステムのログを確認してから再試行してください。",
         "delegated_work_branch_unprepared": "このステップのエグゼキューターが送られる作業ブランチを用意できなかったため、何も開始されていません。リポジトリ接続に書き込み権限がないか、タスクが指定したブランチがまだ存在しないかのどちらかです。詳細にどちらかが示されています。",
         "attached_pr_provider_unreachable": "リポジトリプロバイダーが応答しなかったため、プルリクエストを確認できず、タスクは作成されていません。ここで設定することはありません。しばらくしてからもう一度お試しください。",
-        "research_definitions_unreachable": "このデプロイメントのリサーチ定義を現在読み取れなかったため、リクエストは完了しませんでした。設定に誤りはなく、変更も不要です。接続が回復してからもう一度お試しください。",
-        "findings_body_unavailable": "この調査結果はコンテンツストレージに保存されていますが、現在は提供できません。リクエストに問題はありません。ストレージが利用可能になってからもう一度お試しください。"
+        "project_definitions_unreachable": "このデプロイメントのプロジェクト定義を現在読み取れなかったため、リクエストは完了しませんでした。設定に誤りはなく、変更も不要です。接続が回復してからもう一度お試しください。",
+        "outcome_body_unavailable": "このプロジェクトの結果はコンテンツストレージに保存されていますが、現在は提供できません。リクエストに問題はありません。ストレージが利用可能になってからもう一度お試しください。"
       }
     },
     "reason": {
@@ -711,25 +714,25 @@
         "gate_config_fields_invalid": "ステップのゲートの設定が不足しているか、ゲートが受け付けない値が含まれています。多くの場合、値のない必須の設定です。パイプラインでステップのゲートの設定を入力してから、もう一度お試しください。",
         "approvals_chain_stale": "承認チェックポイントを開いた後にこのパイプラインが変更されたため、チェックポイントがステップと一致しなくなりました。パイプラインを再読み込みして、もう一度設定してください。",
         "approvals_builtin_checkpoint_locked": "組み込みパイプラインは、カタログ定義に含まれる承認チェックポイントを保持します。削除するにはパイプラインを複製してください。",
-        "project_kind_unregistered": "このプロジェクト種別は、このデプロイメントではもう提供されていません。利用できるプロジェクト種別を管理者に確認してください。",
-        "task_type_not_offered_by_project": "このプロジェクトはそのタスク種別を提供していません。プロジェクトが提供するタスク種別から選んでください。",
-        "project_has_no_writable_repo": "このタスクのパイプラインには書き込み先のリポジトリが必要なステップがありますが、プロジェクトにはリポジトリがありません。リンクしたサービスのリポジトリを読むだけのパイプラインを選んでください。",
-        "project_service_link_invalid": "リンクしたサービスが存在しないか、別の組織に属しています。この組織のサービスを選んでください。",
-        "project_has_unfinished_tasks": "このプロジェクトには未完了のタスクがあります。完了させるか削除してから、プロジェクトを削除してください。",
-        "research_pin_required": "リサーチプロジェクトにはリサーチ定義が必要です。プロジェクトを作成する前に選んでください。",
-        "research_pin_not_accepted": "この種別のプロジェクトはリサーチ定義を使いません。定義なしで作成してください。",
-        "research_definition_not_found": "そのリサーチ定義またはバージョンはこの組織にはありません。一覧から選んでください。",
-        "research_inputs_invalid": "リサーチ定義に入力した値が正しくありません。強調表示されたフィールドを確認してください。",
-        "task_type_requires_project": "リサーチタスクはサービスではなくリサーチプロジェクトに属します。プロジェクトに追加してください。",
-        "research_project_not_pinned": "このタスクのプロジェクトにはリサーチ定義が固定されていないため、リサーチを実行できません。",
-        "research_definition_changed": "このプロジェクトが固定してから、リサーチ定義が変更されました。新しいバージョンを使うには新しいプロジェクトを作成してください。",
-        "research_task_already_recorded": "このリサーチタスクはすでに調査結果を記録しています。さらに調べるにはフォローアップタスクを開始してください。",
-        "research_nothing_to_ask": "このフォローアップには、選んだモードで尋ねる質問が残っていません。別のモードを選ぶか、質問を追加してください。",
-        "findings_too_large_for_inline": "調査結果が大きすぎて保存できず、コンテンツストレージへの退避も利用できません。コンテンツストレージを有効にするか退避を許可してから、もう一度お試しください。",
+        "project_kind_unregistered": "このプロジェクトの種類はこのデプロイメントで提供されなくなったため、新しい作業を受け付けられません。デプロイメントの運用者に種類の再登録を依頼してください。",
+        "task_type_not_offered_by_project": "このプロジェクトの種類はこのタイプのタスクを受け付けません。フォームに表示されるタイプから選んでください。",
+        "project_has_no_writable_repo": "この実行のステップには書き込み先のリポジトリが必要ですが、プロジェクトにはリポジトリがありません。リンクされたサービスのリポジトリは読み取り専用のコンテキストです。読み取りと報告だけを行うパイプラインを選んでください。",
+        "project_service_link_invalid": "リンクされたサービスのいずれかが存在しないか、別の組織に属しています。ボードを再読み込みして、リンクするサービスを選び直してください。",
+        "project_has_unfinished_tasks": "このプロジェクトにはまだ完了していないタスクがあります。先に完了させるか削除してください。",
+        "project_definition_required": "このプロジェクトの種類は定義を固定するため、定義が必要です。定義を選んでからもう一度お試しください。",
+        "project_definition_not_accepted": "このプロジェクトの種類は定義を固定しません。定義を外すか、定義を使う種類を選んでください。",
+        "project_definition_not_found": "この組織には、そのキーとバージョンに一致するこの種類のプロジェクト定義がありません。キーを確認するか、バージョンを空にして最新のものを固定してください。",
+        "project_definition_inputs_invalid": "定義の入力に指定した値が定義を満たしていません。必須の入力すべてに受け付けられる値を入れてから、もう一度お試しください。",
+        "task_type_requires_project": "この種類のタスクはサービスではなくプロジェクトに属します。このタスクを提供する種類のプロジェクトに追加してください。",
+        "project_not_pinned": "この種類のタスクには、定義を固定したプロジェクトが必要ですが、このプロジェクトは定義を固定していません。定義を固定したプロジェクトにタスクを追加してください。",
+        "project_definition_changed": "このプロジェクトが固定した定義はその後変更されたため、プロジェクトが同意していない定義で作業する代わりに実行を停止しました。デプロイメントの運用担当者に、変更を新しいバージョンとして公開するよう依頼してください。",
+        "project_task_already_recorded": "このタスクはすでにプロジェクトに結果を記録しています。続きを行うには新しいタスクを作成してください。",
+        "outcome_too_large_for_inline": "結果が大きすぎて保存できないため、記録されませんでした。タスクの範囲を絞ってからもう一度実行してください。",
+        "research_nothing_to_ask": "このリサーチタスクのモードでは、尋ねる質問が残っていません。拡張する新しい質問がないか、明確にすべき部分的またはブロックされた回答がありません。別のモードを選ぶか、質問を追加してください。",
         "task_owned_by_project": "このタスクはサービスを持たないプロジェクトに属しています。代わりにプロジェクトのタスクのアドレスを使ってください。",
-        "research_definition_invalid": "リサーチ定義がルールに違反しています。トピック、質問、認証情報、入力の ID が一意か確認してください。",
+        "project_definition_invalid": "この定義は、その構造またはプロジェクトの種類によって拒否されました。レスポンスに各問題が記載されています。修正してから再度公開してください。",
         "project_link_invalid": "そのプロジェクトは存在しないか、別の組織に属しています。この組織のプロジェクトをリンクしてください。",
-        "project_has_no_result": "そのプロジェクトにはまだ読み取れる結果がありません。先にリサーチタスクを実行してから、リンクしてください。"
+        "project_has_no_result": "そのプロジェクトにはまだ読める結果がありません。先にその中でタスクを実行してから、リンクしてください。"
       }
     },
     "action": {
@@ -821,8 +824,8 @@
         "no_linked_issues": "リンクされたトラッカーイシューがありません",
         "capability_credential_still_missing": "認証情報がまだありません",
         "credential_wait_unrecorded": "この待機は再開できません",
-        "research_definition_version_exists": "バージョンは公開済みです",
-        "research_definition_key_registered": "名前空間は使用されています",
+        "project_definition_version_exists": "バージョンは公開済みです",
+        "project_definition_key_registered": "名前空間は使用されています",
         "project_homed_elsewhere": "プロジェクトは別のボードにあります",
         "credential_wait_personal_in_app": "アプリで更新してください"
       },
@@ -891,8 +894,8 @@
         "no_linked_issues": "このタスクにはトラッカーイシューがリンクされていません。元のイシューをリンクしてから、もう一度更新してください。",
         "capability_credential_still_missing": "このステップに必要な認証情報が、このワークスペースにまだ保存されていません。ケイパビリティ認証情報の設定で保存してから、実行を再開してください。",
         "credential_wait_unrecorded": "この待機は、プラットフォームが待機の対象を記録するようになる前に記録されたため、再開できません。代わりに実行をやり直してください。",
-        "research_definition_version_exists": "このリサーチ定義のバージョンは公開済みで、変更できません。代わりに新しいバージョンを公開してください。",
-        "research_definition_key_registered": "この名前空間は、デプロイメントに含まれるリサーチ定義のものです。組織自身の名前空間で公開してください。",
+        "project_definition_version_exists": "この定義のバージョンは公開済みで、変更できません。代わりに新しいバージョンを公開してください。",
+        "project_definition_key_registered": "この名前空間は、デプロイメントに含まれる定義のものです。組織自身の名前空間で公開してください。",
         "project_homed_elsewhere": "プロジェクトのタスクは、そのプロジェクトがあるボードで作成・実行されます。作業するにはそのボードを開いてください。",
         "credential_wait_personal_in_app": "期限切れの個人用認証情報は、実行を開始した人がアプリで自分のパスワードを使って更新します。"
       },
@@ -1154,7 +1157,8 @@
       "savedToast": "監視を保存しました",
       "saveFailed": "マッピングを保存できませんでした",
       "clearFailed": "マッピングをクリアできませんでした",
-      "configNoun": "リリースヘルス設定"
+      "configNoun": "リリースヘルス設定",
+      "loadFailed": "リリースヘルスの設定を読み込めませんでした"
     },
     "testSecrets": {
       "title": "テスト用認証情報（機密）",
@@ -2104,7 +2108,6 @@
     "title": "プラットフォームの可観測性",
     "refresh": "更新",
     "close": "閉じる",
-    "retry": "再試行",
     "window": {
       "oneHour": "過去1時間",
       "oneDay": "過去24時間",
@@ -2112,6 +2115,7 @@
       "thirtyDays": "過去30日",
       "ninetyDays": "過去90日"
     },
+    "noAccount": "有効なアカウントがないため、表示するデータがありません。",
     "outcomes": {
       "title": "実行結果",
       "total": "実行数の合計",
@@ -2952,7 +2956,8 @@
       "roster": {
         "title": "メンバー",
         "empty": "まだメンバーがいません。",
-        "remove": "メンバーを削除"
+        "remove": "メンバーを削除",
+        "loadFailed": "このボードのメンバーを読み込めませんでした"
       },
       "add": {
         "title": "メンバーを追加",
@@ -3274,7 +3279,8 @@
         "kubeNoun": "Kubernetes ハンドラー",
         "kubeOverrideNoun": "Kubernetes のオーバーライド",
         "customNoun": "このハンドラー",
-        "cloudflareNoun": "Cloudflare ハンドラー"
+        "cloudflareNoun": "Cloudflare ハンドラー",
+        "loadFailed": "環境ハンドラーを読み込めませんでした"
       },
       "cloudflare": {
         "intro": "対象リポジトリのプレビュー用ワークフローを起動して、プルリクエストごとに Cloudflare Worker を立ち上げます。cat-factory が Cloudflare と直接やり取りすることはありません。デプロイメントを作成し、その状態を読み取り、破棄時には inactive 状態を書き込みます。",
@@ -3729,7 +3735,8 @@
         "pagerDutyToken": "PagerDuty API トークン",
         "pagerDutyFromEmail": "PagerDuty From メール",
         "incidentIoKey": "incident.io API キー",
-        "clear": "クリア"
+        "clear": "クリア",
+        "loadFailed": "インシデントツールを読み込めませんでした"
       },
       "status": {
         "notConnected": "未接続",
@@ -3747,7 +3754,8 @@
         "disconnectFailed": "切断できませんでした"
       },
       "connectionNoun": "オブザーバビリティ接続",
-      "incidentNoun": "インシデントプロバイダー"
+      "incidentNoun": "インシデントプロバイダー",
+      "loadFailed": "オブザーバビリティの接続を読み込めませんでした"
     },
     "packageRegistries": {
       "tab": "パッケージレジストリ",
@@ -4710,7 +4718,8 @@
         "loadProjection": "リポジトリ、プルリクエスト、イシューを読み込めませんでした",
         "startInstall": "GitHub App のインストールを開始できませんでした",
         "connect": "接続できませんでした"
-      }
+      },
+      "listFailed": "GitHub App のインストールを一覧表示できませんでした"
     },
     "panel": {
       "connectIntro": "GitHub App のインストールを接続すると、ボードのブロックにリポジトリを紐付け、プルリクエストやイシューを閲覧し、エージェントがブランチをプッシュして PR を開けるようになります。",
@@ -4821,7 +4830,8 @@
       "errors": {
         "listDirectory": "ディレクトリを一覧表示できませんでした"
       },
-      "selectAllFiles": "{count} 件のファイルを選択 | {count} 件のファイルをすべて選択"
+      "selectAllFiles": "{count} 件のファイルを選択 | {count} 件のファイルをすべて選択",
+      "listFailed": "このフォルダーを一覧表示できませんでした"
     }
   },
   "slack": {
@@ -6237,6 +6247,7 @@
       "medium": "確信度: 中",
       "low": "確信度: 低"
     },
+    "loadFailed": "要件レビューを読み込めませんでした",
     "findingFloor": {
       "raised": {
         "high": "このパスでは重大度「高」の指摘のみを挙げました。",
@@ -6362,7 +6373,8 @@
       "done": "完了",
       "failed": "失敗"
     },
-    "groupTitle": "この実行が引き上げられたコンセンサスグループ"
+    "groupTitle": "この実行が引き上げられたコンセンサスグループ",
+    "loadFailed": "合意セッションを読み込めませんでした"
   },
   "brainstorm": {
     "title": {
@@ -6455,7 +6467,8 @@
       "taskReset": "タスクをリセットしました。編集してから再送信してください",
       "extraRoundGranted": "ブレインストームをもう1ラウンド許可しました",
       "resolveError": "ブレインストームを解決できませんでした"
-    }
+    },
+    "loadFailed": "ブレインストーミングのセッションを読み込めませんでした"
   },
   "spec": {
     "title": "要件",
@@ -6506,6 +6519,14 @@
       "given": "Given",
       "when": "When",
       "then": "Then"
+    },
+    "anchorReadFailed": {
+      "title": "仕様を読み取れませんでした",
+      "description": "リポジトリの読み取りに失敗したため、このサービスに仕様があるかどうかは不明です。もう一度お試しください。"
+    },
+    "anchorUnparsed": {
+      "title": "仕様ファイルが無効です",
+      "description": "spec/service.json はデフォルトブランチにありますが、解析できませんでした。リポジトリでファイルを修正してください。"
     }
   },
   "followUp": {
@@ -7306,7 +7327,8 @@
       "checkSourceFailed": "リポジトリを確認できませんでした",
       "sourceUnlinked": "リポジトリの連携を解除しました",
       "unlinkSourceFailed": "リポジトリの連携を解除できませんでした"
-    }
+    },
+    "loadFailed": "基盤サービスのカタログを読み込めませんでした"
   },
   "binaryOutput": {
     "heading": "バイナリ成果物",
@@ -8245,7 +8267,8 @@
       "done": "完了",
       "save": "保存",
       "revert": "元に戻す"
-    }
+    },
+    "loadFailed": "Claude Skills ライブラリを読み込めませんでした"
   },
   "merge": {
     "changeClass": {
@@ -9280,19 +9303,78 @@
       "linkFailed": "プロジェクトをリンクできませんでした",
       "unlinkFailed": "プロジェクトのリンクを解除できませんでした",
       "stageHint": "タスクの作成後にリンクされます。まだ結果のないプロジェクトはその時点で拒否されます。"
+    },
+    "view": {
+      "open": "プロジェクトを開く",
+      "title": "プロジェクト: {title}",
+      "pin": "{title}、バージョン {version}",
+      "refresh": "更新",
+      "loading": "プロジェクトを読み込み中",
+      "unavailable": "プロジェクトを読み込めませんでした",
+      "loadFailed": "プロジェクトを読み込めませんでした",
+      "definitionChanged": "登録された定義が、このプロジェクトが固定したバージョンと一致しなくなりました。新しいバージョンとして公開されるまで、新しい実行は拒否されます。",
+      "definitionMissing": "このプロジェクトが固定した定義は、この組織ではもう利用できません。",
+      "unreadableOutcomes": "一部の結果は、現在提供できないコンテンツストレージに保存されています。提供できるようになるまで除外されます。",
+      "tabs": {
+        "latest": "最新",
+        "outcomes": "履歴",
+        "credentials": "認証情報",
+        "storage": "ストレージ"
+      },
+      "outcomes": {
+        "empty": "まだ結果を記録したタスクはありません",
+        "seq": "リビジョン {seq}",
+        "task": "{task} が作成、定義バージョン {version}",
+        "taskOnly": "{task} が作成",
+        "show": "表示",
+        "hide": "非表示",
+        "openFailed": "リビジョンを開けませんでした",
+        "storage": {
+          "inline": "インラインで保存、{size}",
+          "offloaded": "コンテンツストレージに保存、{size}",
+          "unavailable": "利用不可、{size}"
+        }
+      },
+      "credentials": {
+        "none": "固定した定義は認証情報を宣言していません",
+        "requiredAtStart": "実行の開始前に必要です。",
+        "askedWhenNeeded": "エージェントは必要な段階に来たときに要求します。",
+        "store": "ケイパビリティ認証情報を管理",
+        "status": {
+          "stored": "保存済み",
+          "missing": "未保存",
+          "reserved": "予約済みの名前、送信されません"
+        }
+      },
+      "storage": {
+        "effective": "新しいリビジョンは {size} までインラインで保存され、それを超えるとオフロードは{offload}です。",
+        "accountHint": "組織が設定します。",
+        "inherit": "継承",
+        "inherits": "上位の階層から継承",
+        "inlineUpTo": "{size} までインライン",
+        "inlineKb": "インラインの上限 (KB)",
+        "offloadLabel": "オフロード",
+        "save": "保存",
+        "loadFailed": "結果ストレージの設定を読み込めませんでした",
+        "saveFailed": "結果ストレージの設定を保存できませんでした",
+        "tier": {
+          "account": "組織",
+          "workspace": "このボード",
+          "project": "このプロジェクト"
+        },
+        "offload": {
+          "enabled": "有効",
+          "disabled": "無効"
+        }
+      },
+      "fallback": {
+        "empty": "このプロジェクトにはまだ結果がありません",
+        "stream": "{stream} の最新"
+      }
     }
   },
   "research": {
-    "open": "リサーチの調査結果",
-    "title": "調査結果: {title}",
-    "pin": "{title}、バージョン {version}",
-    "refresh": "更新",
-    "loading": "調査結果を読み込んでいます",
     "unavailable": "調査結果を読み込めませんでした",
-    "loadFailed": "調査結果を読み込めませんでした",
-    "definitionChanged": "登録された定義が、このプロジェクトが固定したバージョンと一致しなくなりました。新しいバージョンとして公開されるまで、新しいリサーチの実行は拒否されます。",
-    "definitionMissing": "このプロジェクトが固定した定義は、この組織ではもう利用できません。",
-    "unreadableRevisions": "一部のリビジョンは、現在取り出せないコンテンツストレージに保存されています。取り出せるようになるまで、その回答は表示されません。",
     "adhoc": "タスクが追加した質問",
     "retired": "このバージョンではもう尋ねない質問への回答",
     "learnings": "得られた知見",
@@ -9300,10 +9382,7 @@
     "blockedOn": "認証情報 {key} を待っています",
     "notes": "この回答と並べて残した後の試行: {count}",
     "tabs": {
-      "findings": "調査結果",
-      "revisions": "履歴",
-      "credentials": "認証情報",
-      "storage": "ストレージ"
+      "findings": "調査結果"
     },
     "status": {
       "answered": "回答済み",
@@ -9338,52 +9417,6 @@
       "extend": "下で追加する質問を含め、まだ尋ねていない質問に回答します。",
       "clarify": "部分的またはブロック中の回答を見直します。",
       "refresh": "既存のすべての回答を、現在のベンダーの状態と照らし合わせて確認します。"
-    },
-    "revisions": {
-      "empty": "まだ調査結果を記録したリサーチタスクはありません",
-      "seq": "リビジョン {seq}",
-      "task": "{task} が作成、定義バージョン {version}",
-      "show": "表示",
-      "hide": "非表示",
-      "answers": "このリビジョンの回答: {count}",
-      "openFailed": "リビジョンを開けませんでした",
-      "storage": {
-        "inline": "インラインで保存、{size}",
-        "offloaded": "コンテンツストレージに保存、{size}",
-        "unavailable": "利用不可、{size}"
-      }
-    },
-    "credentials": {
-      "none": "固定した定義は認証情報を宣言していません",
-      "requiredAtStart": "リサーチの実行は開始前にこれを必要とします。",
-      "askedWhenNeeded": "エージェントは必要な段階に来たときに要求します。",
-      "store": "ケイパビリティ認証情報を管理",
-      "status": {
-        "stored": "保存済み",
-        "missing": "未保存",
-        "reserved": "予約済みの名前、送信されません"
-      }
-    },
-    "storage": {
-      "effective": "新しいリビジョンは {size} までインラインで保存され、それを超えるとオフロードは{offload}です。",
-      "accountHint": "組織が設定します。",
-      "inherit": "継承",
-      "inherits": "上位の階層から継承",
-      "inlineUpTo": "{size} までインライン",
-      "inlineKb": "インラインの上限 (KB)",
-      "offloadLabel": "オフロード",
-      "save": "保存",
-      "loadFailed": "調査結果のストレージ設定を読み込めませんでした",
-      "saveFailed": "調査結果のストレージ設定を保存できませんでした",
-      "tier": {
-        "account": "組織",
-        "workspace": "このボード",
-        "project": "このプロジェクト"
-      },
-      "offload": {
-        "enabled": "有効",
-        "disabled": "無効"
-      }
     },
     "followUp": {
       "open": "フォローアップを開始",

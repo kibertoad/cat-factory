@@ -14,9 +14,9 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Projects, the account-owned peers of services: list the ones the key's workspace mounts, create
- * one (a research project pins a research definition), link and unlink services, mount one, create
- * and run the tasks under it on the board that homes it, and read a research project's findings
- * and their revisions.
+ * one (pinning a definition when its kind takes one), link and unlink services, mount one, create
+ * and run the tasks under it on the board that homes it, and read its outcomes and the view its
+ * kind computes from them.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class ProjectsClient {
@@ -28,12 +28,12 @@ public final class ProjectsClient {
 
     /**
      * Create a project
-     * Create a project homed on the key's workspace. A kind keeping research data (the built-in
-     * `research` kind) takes `research` naming the definition key, an optional version (the
-     * highest by default) and the values for its `inputs`; the project pins that version and its
-     * content hash. Refusals are `422` with `details.reason`: `project_kind_unregistered`,
-     * `research_pin_required`, `research_pin_not_accepted`, `research_definition_not_found`,
-     * `research_inputs_invalid`, `project_service_link_invalid`.
+     * Create a project homed on the key's workspace. A kind that pins a definition takes
+     * `definition` naming its key, an optional version (the highest by default) and the values for
+     * its `inputs`; the project pins that version and its content hash. Refusals are `422` with
+     * `details.reason`: `project_kind_unregistered`, `project_definition_required`,
+     * `project_definition_not_accepted`, `project_definition_not_found`,
+     * `project_definition_inputs_invalid`, `project_service_link_invalid`.
      * {@code POST /api/v1/projects} (operation {@code createPublicProject}).
      */
     public PublicProject create(CreatePublicProject body) {
@@ -44,10 +44,10 @@ public final class ProjectsClient {
      * Create a task under a project
      * A project task has its own resource, `PublicProjectTask`, carrying `projectId` where a
      * service task carries `serviceId`. `taskType` defaults to the first type the project's kind
-     * offers. A `research` task takes its mode (`initial`, `extend`, `clarify`, `refresh`) and
-     * ad-hoc questions through `fields`. A project's tasks are created and run on the board that
-     * homes it; any other board is refused with `409` and `details.reason:
-     * "project_homed_elsewhere"`.
+     * offers, and what a task of that type asks for goes in `fields`, described by `GET
+     * /api/v1/task-types` (a `research` task takes its mode and ad-hoc questions there). A
+     * project's tasks are created and run on the board that homes it; any other board is refused
+     * with `409` and `details.reason: "project_homed_elsewhere"`.
      * {@code POST /api/v1/projects/{projectId}/tasks} (operation {@code createPublicProjectTask}).
      */
     public PublicProjectTask createTask(String projectId, CreatePublicProjectTask body) {
@@ -63,29 +63,16 @@ public final class ProjectsClient {
     }
 
     /**
-     * Get a research project's findings
-     * The project's current findings: every revision folded by question id in the order the tasks
-     * started. A newer answered or partial answer replaces an older one; a newer unanswered or
-     * blocked attempt is kept beside it as a note and never erases it. Coverage is computed by the
-     * platform from the agent's per-question judgements. A project pinning no definition is `422`
-     * with `research_project_not_pinned`.
-     * {@code GET /api/v1/projects/{projectId}/findings} (operation {@code
-     * getPublicProjectFindings}).
+     * Get one outcome with its body
+     * One outcome with the body its task recorded, wherever it is stored. The platform never reads
+     * it: the project kind owns its shape and serves its JSON Schema from `GET
+     * /api/v1/project-kinds/{kind}`. An offloaded body that cannot be read is `503` with
+     * `details.reason: "outcome_body_unavailable"` rather than an empty one.
+     * {@code GET /api/v1/projects/{projectId}/outcomes/{outcomeId}} (operation {@code
+     * getPublicProjectOutcome}).
      */
-    public PublicProjectFindings getFindings(String projectId) {
-        return transport.request("GET", "/api/v1/projects/" + Transport.pathSegment(projectId) + "/findings", null, Map.of(), new TypeReference<PublicProjectFindings>() {});
-    }
-
-    /**
-     * Get one findings revision
-     * One revision with the body its task recorded, wherever it is stored. An offloaded body that
-     * cannot be read is `503` with `details.reason: "findings_body_unavailable"` rather than an
-     * empty revision.
-     * {@code GET /api/v1/projects/{projectId}/findings/revisions/{revisionId}} (operation {@code
-     * getPublicFindingsRevision}).
-     */
-    public PublicFindingsRevision getFindingsRevision(String projectId, String revisionId) {
-        return transport.request("GET", "/api/v1/projects/" + Transport.pathSegment(projectId) + "/findings/revisions/" + Transport.pathSegment(revisionId), null, Map.of(), new TypeReference<PublicFindingsRevision>() {});
+    public PublicProjectOutcome getOutcome(String projectId, String outcomeId) {
+        return transport.request("GET", "/api/v1/projects/" + Transport.pathSegment(projectId) + "/outcomes/" + Transport.pathSegment(outcomeId), null, Map.of(), new TypeReference<PublicProjectOutcome>() {});
     }
 
     /**
@@ -95,6 +82,19 @@ public final class ProjectsClient {
      */
     public PublicProjectTask getTask(String projectId, String taskId) {
         return transport.request("GET", "/api/v1/projects/" + Transport.pathSegment(projectId) + "/tasks/" + Transport.pathSegment(taskId), null, Map.of(), new TypeReference<PublicProjectTask>() {});
+    }
+
+    /**
+     * Get a project's current view
+     * The project's current state as its kind reads every outcome (for `research`: the findings
+     * folded by question, with coverage of the pinned definition). The platform never reads it:
+     * the project kind owns its shape and serves its JSON Schema from `GET
+     * /api/v1/project-kinds/{kind}`. `view` is null for a kind that computes none; read its
+     * outcomes instead. A body that cannot be read is `503` with `outcome_body_unavailable`.
+     * {@code GET /api/v1/projects/{projectId}/view} (operation {@code getPublicProjectView}).
+     */
+    public PublicProjectView getView(String projectId) {
+        return transport.request("GET", "/api/v1/projects/" + Transport.pathSegment(projectId) + "/view", null, Map.of(), new TypeReference<PublicProjectView>() {});
     }
 
     /**
@@ -112,12 +112,31 @@ public final class ProjectsClient {
      * List the projects the key's workspace mounts
      * Projects are account-owned peers of services, mounted onto boards. Each entry carries its
      * linked services, whether the key's workspace is the board that homes it (`homedHere`, the
-     * board that creates and runs its tasks) and, for a research project, the definition version
+     * board that creates and runs its tasks) and, for a kind that pins a definition, the version
      * it pinned.
      * {@code GET /api/v1/projects} (operation {@code listPublicProjects}).
      */
     public PublicProjectList list() {
         return transport.request("GET", "/api/v1/projects", null, Map.of(), new TypeReference<PublicProjectList>() {});
+    }
+
+    /**
+     * List a project's outcomes (no query parameters).
+     */
+    public PublicProjectOutcomeList listOutcomes(String projectId) {
+        return listOutcomes(projectId, ProjectsListOutcomesQuery.none());
+    }
+
+    /**
+     * List a project's outcomes
+     * Every outcome the project's tasks recorded, without bodies, ordered by `seq`: the order the
+     * tasks were STARTED, across every stream. `stream` narrows to one stream. An outcome is
+     * immutable once written.
+     * {@code GET /api/v1/projects/{projectId}/outcomes} (operation {@code
+     * listPublicProjectOutcomes}).
+     */
+    public PublicProjectOutcomeList listOutcomes(String projectId, ProjectsListOutcomesQuery query) {
+        return transport.request("GET", "/api/v1/projects/" + Transport.pathSegment(projectId) + "/outcomes", null, query.toQuery(), new TypeReference<PublicProjectOutcomeList>() {});
     }
 
     /**

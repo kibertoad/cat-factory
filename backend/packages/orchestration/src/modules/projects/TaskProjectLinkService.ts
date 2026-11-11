@@ -1,24 +1,22 @@
-import type { Project, ProjectKindData, TaskLinkedProject } from '@cat-factory/contracts'
+import type { Project, TaskLinkedProject } from '@cat-factory/contracts'
 import {
   type AgentRunContext,
   type BlockRepository,
   type Clock,
-  type ProjectKindSource,
   type ProjectRepository,
   type TaskProjectLinkRepository,
   type WorkspaceRepository,
   NotFoundError,
   ValidationError,
 } from '@cat-factory/kernel'
-import type { ProjectContextContributors } from './projectContext.js'
+import type { ProjectContextContributor } from './projectContext.js'
 
 export interface TaskProjectLinkServiceDeps {
   links: TaskProjectLinkRepository
   projectRepository: Pick<ProjectRepository, 'listByIds' | 'listByAccount'>
   blockRepository: Pick<BlockRepository, 'get' | 'findByIds'>
   workspaceRepository: Pick<WorkspaceRepository, 'accountOf'>
-  projectKinds: ProjectKindSource
-  contributors: ProjectContextContributors
+  context: ProjectContextContributor
   clock: Clock
 }
 
@@ -27,7 +25,7 @@ export type ContextProject = NonNullable<AgentRunContext['block']['contextProjec
 /**
  * Projects linked to tasks as read-only context. A link is admitted only for a project of the
  * task's own account that has a result to read, and at dispatch every linked project's current
- * result is rendered by its kind. A linked project with no readable result breaks the run rather
+ * result is rendered by its kind's module, or generically for a kind that renders none. A linked project with no readable result breaks the run rather
  * than reaching the agent as nothing.
  */
 export class TaskProjectLinkService {
@@ -97,7 +95,7 @@ export class TaskProjectLinkService {
         projectIds: invalid,
       })
     }
-    const withResult = await this.withResult([...projects.values()])
+    const withResult = await this.deps.context.withResult([...projects.values()])
     const empty = projectIds.filter((id) => !withResult.has(id))
     if (empty.length) {
       throw new ValidationError('A linked project has no result to read yet', {
@@ -120,12 +118,10 @@ export class TaskProjectLinkService {
       const project = projects.get(l.projectId)
       return project ? [project] : []
     })
-    const [byData, titles] = await Promise.all([this.groupByData(ordered), this.titlesOf(ordered)])
-    const rendered = new Map<string, Omit<ContextProject, 'projectId' | 'title' | 'kind'>>()
-    for (const [data, group] of byData) {
-      for (const [id, entry] of await this.deps.contributors[data].render(group))
-        rendered.set(id, entry)
-    }
+    const [rendered, titles] = await Promise.all([
+      this.deps.context.render(ordered),
+      this.titlesOf(ordered),
+    ])
     const missing = links.map((l) => l.projectId).filter((id) => !rendered.has(id))
     if (missing.length) {
       throw new ValidationError('A linked project has no result to read', {
@@ -139,27 +135,6 @@ export class TaskProjectLinkService {
       kind: project.kind,
       ...rendered.get(project.id)!,
     }))
-  }
-
-  private async withResult(projects: readonly Project[]): Promise<Set<string>> {
-    const found = new Set<string>()
-    for (const [data, group] of await this.groupByData(projects)) {
-      for (const id of await this.deps.contributors[data].withResult(group)) found.add(id)
-    }
-    return found
-  }
-
-  /** The projects grouped by the data their kind keeps; a kind keeping none contributes nothing. */
-  private async groupByData(
-    projects: readonly Project[],
-  ): Promise<Map<ProjectKindData, Project[]>> {
-    const kinds = new Map((await this.deps.projectKinds.all()).map((k) => [k.id, k] as const))
-    const groups = new Map<ProjectKindData, Project[]>()
-    for (const project of projects) {
-      const data = kinds.get(project.kind)?.data
-      if (data) groups.set(data, [...(groups.get(data) ?? []), project])
-    }
-    return groups
   }
 
   private async projectsById(ids: string[]): Promise<Map<string, Project>> {

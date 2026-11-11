@@ -70,7 +70,7 @@ function hooks(renewPersonal: () => Promise<void>, capabilityResolves = vi.fn(as
 const missing = () =>
   new CapabilityCredentialMissingError('VENDOR_TOKEN is not stored', {
     key: 'VENDOR_TOKEN',
-    declaredBy: { kind: 'research-definition', id: 'acme:vendor' },
+    declaredBy: { kind: 'project-definition', id: 'research/acme:vendor' },
     label: 'Vendor API token',
     onboarding: { instructions: 'Create one under Settings, API.' },
   })
@@ -237,7 +237,7 @@ describe('CredentialWaitController with a capability credential', () => {
       subject: 'capability',
       raisedAt: NOW,
       key: 'VENDOR_TOKEN',
-      declaredBy: { kind: 'research-definition', id: 'acme:vendor' },
+      declaredBy: { kind: 'project-definition', id: 'research/acme:vendor' },
       label: 'Vendor API token',
       onboarding: { instructions: 'Create one under Settings, API.' },
     })

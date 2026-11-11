@@ -599,7 +599,7 @@ Additive. A consumer built against 1.93.0 keeps parsing; before this, the same r
 
 ## 1.95.0
 
-`PublicUnanswerableWait.reason` gains `capability_credential_missing`: a step needs a capability credential (a vendor login a research definition declared, say) that is not stored for the workspace. A person who can manage the workspace's secrets stores it, then any member resumes the run in the app. It also gains `credential_wait_unrecorded`, a credential wait recorded before waits named what they wait on, which cannot be resumed; the run is restarted. The error vocabulary gains the `capability_credential_still_missing` and `credential_wait_unrecorded` conflict reasons, answered by the app's resume route.
+`PublicUnanswerableWait.reason` gains `capability_credential_missing`: a step needs a capability credential (a vendor login a project definition declared, say) that is not stored for the workspace. A person who can manage the workspace's secrets stores it, then any member resumes the run in the app. It also gains `credential_wait_unrecorded`, a credential wait recorded before waits named what they wait on, which cannot be resumed; the run is restarted. The error vocabulary gains the `capability_credential_still_missing` and `credential_wait_unrecorded` conflict reasons, answered by the app's resume route.
 
 Additive. A consumer built against 1.94.0 keeps parsing.
 
@@ -611,20 +611,21 @@ Additive. A consumer built against 1.95.0 keeps parsing.
 
 ## 1.97.0
 
-Projects and research reach the public API. New operations:
+Projects reach the public API, for every project kind. New operations:
 
-- research definitions: list, get every version of one key, and `PUT /api/v1/research-definitions/{key}/versions/{version}` to publish an immutable account-owned version (`admin`);
-- projects: list the projects the key's workspace mounts, create, get, link and unlink services, mount;
+- project kinds: list them, and get one with the JSON Schemas of its definition `spec`, outcome `body` and project `view`;
+- definitions of one kind under `/api/v1/project-kinds/{kind}/definitions`: list, get every version of one key, and `PUT .../{key}/versions/{version}` to publish an immutable account-owned version (`admin`), its `spec` validated by the kind;
+- projects: list the projects the key's workspace mounts, create (with the definition a kind pins), get, link and unlink services, mount;
 - project tasks under `/api/v1/projects/{projectId}/tasks`: create, list, get, start, stop, retry, answering a new `PublicProjectTask` that carries `projectId`;
-- a research project's current findings and one revision by id;
+- a project's outcomes (a list without bodies, optionally one stream's), one outcome with its body, and the view its kind computes from them;
 - `POST /api/v1/runs/{runId}/credential/resume` (`decide`), which resumes a run parked on a missing capability credential once it is stored.
 
-A project task has no service, so the `/api/v1/tasks/{taskId}` operations that answer a `PublicTask` refuse it with `422`, reason `task_owned_by_project`, rather than invent a `serviceId`. That refusal can only be met by a task created after projects existed, under a project; every task a 1.96.0 consumer could address is a service task and answers as before. `GET /api/v1/tasks/{taskId}/run` and the task event stream answer for both. The error vocabulary gains `task_owned_by_project`, `research_definition_invalid`, and the conflict reasons `research_definition_version_exists`, `research_definition_key_registered`, `project_homed_elsewhere` and `credential_wait_personal_in_app`.
+A definition's `spec`, an outcome's `body` and a project's `view` are opaque in the spec, so a new project kind needs no SDK release. A project task has no service, so the `/api/v1/tasks/{taskId}` operations that answer a `PublicTask` refuse it with `422`, reason `task_owned_by_project`, rather than invent a `serviceId`. That refusal can only be met by a task created after projects existed, under a project; every task a 1.96.0 consumer could address is a service task and answers as before. `GET /api/v1/tasks/{taskId}/run` and the task event stream answer for both. The error vocabulary gains `task_owned_by_project`, `project_definition_invalid`, and the conflict reasons `project_definition_version_exists`, `project_definition_key_registered`, `project_homed_elsewhere` and `credential_wait_personal_in_app`.
 
 Additive. A consumer built against 1.96.0 keeps parsing.
 
 ## 1.98.0
 
-A task can link projects as read-only context: `GET`/`POST /api/v1/tasks/{taskId}/projects` lists and links one, `POST .../projects/detach` unlinks it, and `POST /api/v1/services/{serviceId}/tasks` takes an optional `projects` list. A linked project's current result reaches the task's agents at every dispatch. A link is refused with `422`, reason `project_link_invalid` (another organization's project, or none) or `project_has_no_result` (a research project with no findings revision yet). The three routes answer a task under a service and a task under a project alike.
+A task can link projects as read-only context: `GET`/`POST /api/v1/tasks/{taskId}/projects` lists and links one, `POST .../projects/detach` unlinks it, and `POST /api/v1/services/{serviceId}/tasks` takes an optional `projects` list. A linked project's current result reaches the task's agents at every dispatch. A link is refused with `422`, reason `project_link_invalid` (another organization's project, or none) or `project_has_no_result` (a project no task has recorded an outcome in yet). The three routes answer a task under a service and a task under a project alike.
 
 Additive. A consumer built against 1.97.0 keeps parsing.

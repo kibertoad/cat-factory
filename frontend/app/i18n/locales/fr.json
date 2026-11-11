@@ -374,7 +374,10 @@
           "hint": "Nombre maximal de passes en lecture seule de cette expédition. Laisser vide pour {count}. Sur un gros code, chaque angle est pêché par territoire, et ce que le budget coupe est consigné comme non pêché.",
           "problem": "Saisissez un nombre entier compris entre 1 et {max}, ou laissez le champ vide pour la valeur par défaut."
         }
-      }
+      },
+      "documentsLoadFailed": "Impossible de charger les documents à joindre",
+      "tasksLoadFailed": "Impossible de charger les tickets à joindre",
+      "fragmentsLoadFailed": "Impossible de charger les fragments de bonnes pratiques"
     },
     "recurring": {
       "title": "Ajouter une pipeline récurrente",
@@ -694,8 +697,8 @@
         "delegated_executor_failed": "L’exécuteur externe n’a pas pu démarrer cette étape. Le problème vient du système qui effectue le travail, pas de ce déploiement : consultez ses propres journaux, puis réessayez.",
         "delegated_work_branch_unprepared": "La plateforme n'a pas pu préparer la branche de travail vers laquelle l'exécuteur de cette étape est envoyé, donc rien n'a démarré. Soit la connexion au dépôt ne peut pas y écrire, soit la tâche nomme une branche qui n'existe pas encore : les détails indiquent laquelle des deux.",
         "attached_pr_provider_unreachable": "Le fournisseur du dépôt n'a pas répondu, la pull request n'a donc pas pu être vérifiée et aucune tâche n'a été créée. Il n'y a rien à configurer ici : réessayez dans un instant.",
-        "research_definitions_unreachable": "Les définitions de recherche de ce déploiement n'ont pas pu être lues pour l'instant, la demande n'a donc pas abouti. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
-        "findings_body_unavailable": "Ces résultats sont conservés dans le stockage de contenu, qui ne peut pas les fournir pour l'instant. La demande est correcte : réessayez une fois le stockage disponible."
+        "project_definitions_unreachable": "Les définitions de projet de ce déploiement n'ont pas pu être lues pour l'instant, la demande n'a donc pas abouti. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
+        "outcome_body_unavailable": "Ce résultat du projet est conservé dans le stockage de contenu, qui ne peut pas le fournir pour l'instant. La demande est correcte : réessayez une fois le stockage disponible."
       }
     },
     "reason": {
@@ -711,25 +714,25 @@
         "gate_config_fields_invalid": "Les paramètres du contrôle d'une étape sont incomplets ou contiennent une valeur que le contrôle n'accepte pas, le plus souvent un paramètre obligatoire sans valeur. Renseignez les paramètres du contrôle de l'étape dans le pipeline, puis réessayez.",
         "approvals_chain_stale": "Ce pipeline a changé après l’ouverture de ses points d’approbation, qui ne correspondent donc plus à ses étapes. Rechargez le pipeline et définissez-les à nouveau.",
         "approvals_builtin_checkpoint_locked": "Un pipeline intégré conserve les points d’approbation fournis par sa définition du catalogue. Clonez le pipeline pour en retirer un.",
-        "project_kind_unregistered": "Ce type de projet n'est plus proposé par ce déploiement. Demandez à un administrateur quels types de projet sont disponibles.",
-        "task_type_not_offered_by_project": "Ce projet ne propose pas ce type de tâche. Choisissez l'un des types de tâche que propose le projet.",
-        "project_has_no_writable_repo": "Une étape du pipeline de cette tâche a besoin d'un dépôt où écrire, et un projet n'en a pas. Choisissez un pipeline qui se contente de lire les dépôts des services liés.",
-        "project_service_link_invalid": "Un service lié n'existe pas ou appartient à une autre organisation. Choisissez des services de cette organisation.",
-        "project_has_unfinished_tasks": "Ce projet a encore des tâches non terminées. Terminez-les ou supprimez-les, puis supprimez le projet.",
-        "research_pin_required": "Un projet de recherche a besoin d'une définition de recherche. Choisissez-en une avant de créer le projet.",
-        "research_pin_not_accepted": "Ce type de projet n'utilise pas de définition de recherche. Créez-le sans.",
-        "research_definition_not_found": "Cette définition de recherche ou cette version n'existe pas pour cette organisation. Choisissez-en une dans la liste.",
-        "research_inputs_invalid": "Les valeurs saisies pour la définition de recherche ne sont pas valides. Vérifiez les champs signalés.",
-        "task_type_requires_project": "Une tâche de recherche appartient à un projet de recherche, pas à un service. Ajoutez-la plutôt à un projet.",
-        "research_project_not_pinned": "Le projet de cette tâche n'a aucune définition de recherche fixée, elle ne peut donc pas lancer de recherche.",
-        "research_definition_changed": "La définition de recherche a changé depuis que ce projet l'a fixée. Créez un nouveau projet pour utiliser la nouvelle version.",
-        "research_task_already_recorded": "Cette tâche de recherche a déjà enregistré ses résultats. Lancez une tâche de suivi pour poursuivre la recherche.",
-        "research_nothing_to_ask": "Ce suivi n'a plus aucune question à poser dans le mode choisi. Choisissez un autre mode ou ajoutez des questions.",
-        "findings_too_large_for_inline": "Les résultats sont trop volumineux pour être stockés, et leur déport vers le stockage de contenu n'est pas disponible. Activez le stockage de contenu ou autorisez le déport, puis réessayez.",
+        "project_kind_unregistered": "Ce déploiement ne propose plus le type de ce projet, qui ne peut donc plus recevoir de nouveau travail. Demandez à l'opérateur de votre déploiement d'enregistrer de nouveau ce type.",
+        "task_type_not_offered_by_project": "Le type de ce projet n'accepte pas les tâches de ce type. Choisissez l'un des types que le formulaire propose pour lui.",
+        "project_has_no_writable_repo": "Une étape de cette exécution a besoin d'un dépôt dans lequel écrire, et un projet n'en a aucun : les dépôts de ses services liés sont un contexte en lecture seule. Choisissez un pipeline qui se contente de lire et de rendre compte.",
+        "project_service_link_invalid": "L'un des services liés n'existe plus ou appartient à une autre organisation. Rechargez le tableau et choisissez de nouveau les services liés.",
+        "project_has_unfinished_tasks": "Ce projet a encore des tâches non terminées. Terminez-les ou supprimez-les d'abord.",
+        "project_definition_required": "Ce type de projet épingle une définition : il lui en faut une. Choisissez-en une et réessayez.",
+        "project_definition_not_accepted": "Ce type de projet n'épingle aucune définition. Retirez la définition ou choisissez un type qui en utilise une.",
+        "project_definition_not_found": "Aucune définition de ce type de projet dans cette organisation ne correspond à cette clé et à cette version. Vérifiez la clé, ou laissez la version vide pour épingler la plus récente.",
+        "project_definition_inputs_invalid": "Les valeurs des entrées de la définition ne la satisfont pas. Renseignez chaque entrée obligatoire avec une valeur acceptée, puis réessayez.",
+        "task_type_requires_project": "Une tâche de ce type appartient à un projet, pas à un service. Ajoutez-la à un projet d'un type qui la propose.",
+        "project_not_pinned": "Une tâche de ce type a besoin que son projet épingle une définition, et celui-ci n'en épingle aucune. Ajoutez la tâche à un projet qui en épingle une.",
+        "project_definition_changed": "La définition épinglée par ce projet a changé depuis : l'exécution s'est arrêtée plutôt que de travailler à partir d'une définition que le projet n'a jamais acceptée. Demandez à l'opérateur du déploiement de publier la modification comme nouvelle version.",
+        "project_task_already_recorded": "Cette tâche a déjà enregistré son résultat sur le projet. Créez une nouvelle tâche pour faire un suivi.",
+        "outcome_too_large_for_inline": "Le résultat est trop volumineux pour être stocké, il n'a donc pas été enregistré. Restreignez la tâche et relancez-la.",
+        "research_nothing_to_ask": "Le mode de cette tâche de recherche ne laisse aucune question à poser : rien de nouveau à ajouter, ou rien de partiel ou de bloqué à clarifier. Choisissez un autre mode ou ajoutez une question.",
         "task_owned_by_project": "Cette tâche appartient à un projet, qui n'a pas de service. Utilisez plutôt l'adresse des tâches du projet.",
-        "research_definition_invalid": "La définition de recherche enfreint une règle : vérifiez que les identifiants de ses thèmes, questions, identifiants d'accès et entrées sont uniques.",
+        "project_definition_invalid": "La définition est refusée par son enveloppe ou par son type de projet. La réponse liste chaque problème ; corrigez-les et publiez à nouveau.",
         "project_link_invalid": "Ce projet n'existe pas ou appartient à une autre organisation. Liez un projet de cette organisation.",
-        "project_has_no_result": "Ce projet n'a pas encore de résultat à lire. Exécutez d'abord une tâche de recherche dans ce projet, puis liez-le."
+        "project_has_no_result": "Ce projet n'a pas encore de résultat à lire. Exécutez d'abord une tâche dedans, puis liez-le."
       }
     },
     "action": {
@@ -821,8 +824,8 @@
         "no_linked_issues": "Aucun ticket lié",
         "capability_credential_still_missing": "Identifiant toujours manquant",
         "credential_wait_unrecorded": "Impossible de reprendre cette attente",
-        "research_definition_version_exists": "Version déjà publiée",
-        "research_definition_key_registered": "Espace de noms déjà pris",
+        "project_definition_version_exists": "Version déjà publiée",
+        "project_definition_key_registered": "Espace de noms déjà pris",
         "project_homed_elsewhere": "Projet hébergé sur un autre tableau",
         "credential_wait_personal_in_app": "À renouveler dans l'application"
       },
@@ -891,8 +894,8 @@
         "no_linked_issues": "Aucun ticket n’est lié à cette tâche. Liez le ticket dont elle provient, puis mettez à jour à nouveau.",
         "capability_credential_still_missing": "L'identifiant dont cette étape a besoin n'est toujours pas enregistré pour cet espace de travail. Enregistrez-le dans les paramètres des identifiants de capacités, puis reprenez l'exécution.",
         "credential_wait_unrecorded": "Cette attente a été enregistrée avant que la plateforme ne note ce qu'une attente attend, elle ne peut donc pas être reprise. Relancez plutôt l'exécution.",
-        "research_definition_version_exists": "Cette version de la définition de recherche est déjà publiée et ne peut plus changer. Publiez plutôt une nouvelle version.",
-        "research_definition_key_registered": "Cet espace de noms appartient à des définitions de recherche fournies par le déploiement. Publiez dans l'espace de noms propre à votre organisation.",
+        "project_definition_version_exists": "Cette version de la définition est déjà publiée et ne peut plus changer. Publiez plutôt une nouvelle version.",
+        "project_definition_key_registered": "Cet espace de noms appartient à des définitions fournies par le déploiement. Publiez dans l'espace de noms propre à votre organisation.",
         "project_homed_elsewhere": "Les tâches d'un projet sont créées et exécutées sur le tableau qui l'héberge. Ouvrez ce tableau pour y travailler.",
         "credential_wait_personal_in_app": "Un identifiant personnel expiré est renouvelé par la personne qui a lancé l'exécution, avec son mot de passe, dans l'application."
       },
@@ -1154,7 +1157,8 @@
       "savedToast": "Surveillance enregistrée",
       "saveFailed": "Impossible d'enregistrer le mappage",
       "clearFailed": "Impossible d'effacer le mappage",
-      "configNoun": "la configuration de santé de la version"
+      "configNoun": "la configuration de santé de la version",
+      "loadFailed": "Impossible de charger les paramètres de santé des releases"
     },
     "testSecrets": {
       "title": "Identifiants de test (sensibles)",
@@ -2104,7 +2108,6 @@
     "title": "Observabilité de la plateforme",
     "refresh": "Actualiser",
     "close": "Fermer",
-    "retry": "Réessayer",
     "window": {
       "oneHour": "Dernière heure",
       "oneDay": "Dernières 24 heures",
@@ -2112,6 +2115,7 @@
       "thirtyDays": "30 derniers jours",
       "ninetyDays": "90 derniers jours"
     },
+    "noAccount": "Aucun compte n'est actif, il n'y a donc aucune donnée à afficher.",
     "outcomes": {
       "title": "Résultats des exécutions",
       "total": "Exécutions totales",
@@ -2952,7 +2956,8 @@
       "roster": {
         "title": "Membres",
         "empty": "Aucun membre pour l'instant.",
-        "remove": "Retirer le membre"
+        "remove": "Retirer le membre",
+        "loadFailed": "Impossible de charger les membres de ce tableau"
       },
       "add": {
         "title": "Ajouter un membre",
@@ -3588,7 +3593,8 @@
         "pagerDutyToken": "Jeton d'API PagerDuty",
         "pagerDutyFromEmail": "E-mail expéditeur PagerDuty",
         "incidentIoKey": "Clé d'API incident.io",
-        "clear": "Effacer"
+        "clear": "Effacer",
+        "loadFailed": "Impossible de charger les outils d'incident"
       },
       "status": {
         "notConnected": "Non connecté",
@@ -3606,7 +3612,8 @@
         "disconnectFailed": "Impossible de déconnecter"
       },
       "connectionNoun": "la connexion d’observabilité",
-      "incidentNoun": "le fournisseur d’incidents"
+      "incidentNoun": "le fournisseur d’incidents",
+      "loadFailed": "Impossible de charger la connexion d'observabilité"
     },
     "packageRegistries": {
       "tab": "Registres de paquets",
@@ -4283,7 +4290,8 @@
         "kubeNoun": "le gestionnaire Kubernetes",
         "kubeOverrideNoun": "le remplacement Kubernetes",
         "customNoun": "ce gestionnaire",
-        "cloudflareNoun": "le gestionnaire Cloudflare"
+        "cloudflareNoun": "le gestionnaire Cloudflare",
+        "loadFailed": "Impossible de charger les gestionnaires d'environnement"
       },
       "cloudflare": {
         "intro": "Déploie un Worker Cloudflare par pull request en déclenchant le workflow d’aperçu du dépôt cible. cat-factory ne parle jamais directement à Cloudflare : il crée un déploiement, lit son statut et publie un statut inactive pour le démonter.",
@@ -4710,7 +4718,8 @@
         "loadProjection": "Impossible de charger les dépôts, les pull requests et les issues",
         "startInstall": "Impossible de démarrer l'installation de la GitHub App",
         "connect": "Connexion impossible"
-      }
+      },
+      "listFailed": "Impossible de lister les installations de la GitHub App"
     },
     "panel": {
       "connectIntro": "Connectez une installation de la GitHub App pour adosser les blocs du tableau à des dépôts, parcourir les pull requests et les tickets, et laisser les agents pousser des branches et ouvrir des PR.",
@@ -4821,7 +4830,8 @@
       "errors": {
         "listDirectory": "Impossible de lister le répertoire"
       },
-      "selectAllFiles": "Sélectionner {count} fichier | Sélectionner les {count} fichiers"
+      "selectAllFiles": "Sélectionner {count} fichier | Sélectionner les {count} fichiers",
+      "listFailed": "Impossible de lister ce dossier"
     }
   },
   "slack": {
@@ -6237,6 +6247,7 @@
       "medium": "Confiance moyenne",
       "low": "Confiance faible"
     },
+    "loadFailed": "Impossible de charger la revue des exigences",
     "findingFloor": {
       "raised": {
         "high": "Ce passage n’a soulevé que des constats élevés.",
@@ -6362,7 +6373,8 @@
       "done": "Terminé",
       "failed": "Échoué"
     },
-    "groupTitle": "Le groupe de consensus vers lequel cette exécution est montée"
+    "groupTitle": "Le groupe de consensus vers lequel cette exécution est montée",
+    "loadFailed": "Impossible de charger la session de consensus"
   },
   "brainstorm": {
     "title": {
@@ -6455,7 +6467,8 @@
       "taskReset": "Tâche réinitialisée : modifiez-la et resoumettez-la",
       "extraRoundGranted": "Une ronde de brainstorming supplémentaire accordée",
       "resolveError": "Impossible de résoudre le brainstorming"
-    }
+    },
+    "loadFailed": "Impossible de charger la session de brainstorming"
   },
   "spec": {
     "title": "Exigences",
@@ -6506,6 +6519,14 @@
       "given": "Given",
       "when": "When",
       "then": "Then"
+    },
+    "anchorReadFailed": {
+      "title": "Impossible de lire la spécification",
+      "description": "La lecture du dépôt a échoué : on ne sait donc pas si ce service a une spécification. Réessayez."
+    },
+    "anchorUnparsed": {
+      "title": "Le fichier de spécification n'est pas valide",
+      "description": "spec/service.json est sur la branche par défaut mais n'a pas pu être analysé. Corrigez le fichier dans le dépôt."
     }
   },
   "followUp": {
@@ -7306,7 +7327,8 @@
       "checkSourceFailed": "Impossible de vérifier le dépôt",
       "sourceUnlinked": "Dépôt délié",
       "unlinkSourceFailed": "Impossible de délier le dépôt"
-    }
+    },
+    "loadFailed": "Impossible de charger le catalogue des services fondamentaux"
   },
   "binaryOutput": {
     "heading": "Sorties binaires",
@@ -8245,7 +8267,8 @@
       "done": "Terminé",
       "save": "Enregistrer",
       "revert": "Rétablir"
-    }
+    },
+    "loadFailed": "Impossible de charger la bibliothèque Claude Skills"
   },
   "merge": {
     "changeClass": {
@@ -9280,19 +9303,78 @@
       "linkFailed": "Impossible de lier le projet",
       "unlinkFailed": "Impossible de délier le projet",
       "stageHint": "Lié une fois la tâche créée. Un projet sans résultat est alors refusé."
+    },
+    "view": {
+      "open": "Ouvrir le projet",
+      "title": "Projet : {title}",
+      "pin": "{title}, version {version}",
+      "refresh": "Actualiser",
+      "loading": "Chargement du projet",
+      "unavailable": "Le projet n'a pas pu être chargé",
+      "loadFailed": "Impossible de charger le projet",
+      "definitionChanged": "La définition enregistrée ne correspond plus à la version que ce projet a fixée : les nouvelles exécutions sont refusées jusqu'à ce qu'elle soit publiée comme nouvelle version.",
+      "definitionMissing": "La définition fixée par ce projet n'est plus disponible pour cette organisation.",
+      "unreadableOutcomes": "Certains résultats sont conservés dans un stockage de contenu qui ne peut pas les fournir pour l'instant. Ils sont laissés de côté jusqu'à ce qu'il le puisse.",
+      "tabs": {
+        "latest": "Dernier",
+        "outcomes": "Historique",
+        "credentials": "Identifiants",
+        "storage": "Stockage"
+      },
+      "outcomes": {
+        "empty": "Aucune tâche n'a encore enregistré de résultat",
+        "seq": "Révision {seq}",
+        "task": "Écrite par {task}, version de la définition {version}",
+        "taskOnly": "Écrit par {task}",
+        "show": "Afficher",
+        "hide": "Masquer",
+        "openFailed": "Impossible d'ouvrir la révision",
+        "storage": {
+          "inline": "Stockée en ligne, {size}",
+          "offloaded": "Dans le stockage de contenu, {size}",
+          "unavailable": "Indisponible, {size}"
+        }
+      },
+      "credentials": {
+        "none": "La définition fixée ne déclare aucun identifiant",
+        "requiredAtStart": "Une exécution en a besoin avant de démarrer.",
+        "askedWhenNeeded": "L'agent le demande quand il atteint l'étape qui en a besoin.",
+        "store": "Gérer les identifiants de capacités",
+        "status": {
+          "stored": "Enregistré",
+          "missing": "Manquant",
+          "reserved": "Nom réservé, jamais envoyé"
+        }
+      },
+      "storage": {
+        "effective": "Les nouvelles révisions sont stockées en ligne jusqu'à {size} ; au-delà, le déport est {offload}.",
+        "accountHint": "Défini par l'organisation.",
+        "inherit": "Hériter",
+        "inherits": "Hérite du niveau supérieur",
+        "inlineUpTo": "en ligne jusqu'à {size}",
+        "inlineKb": "Limite en ligne (Ko)",
+        "offloadLabel": "Déport",
+        "save": "Enregistrer",
+        "loadFailed": "Impossible de charger les réglages de stockage des résultats",
+        "saveFailed": "Impossible d'enregistrer les réglages de stockage des résultats",
+        "tier": {
+          "account": "Organisation",
+          "workspace": "Ce tableau",
+          "project": "Ce projet"
+        },
+        "offload": {
+          "enabled": "activé",
+          "disabled": "désactivé"
+        }
+      },
+      "fallback": {
+        "empty": "Ce projet n'a encore aucun résultat",
+        "stream": "Dernier dans {stream}"
+      }
     }
   },
   "research": {
-    "open": "Résultats de la recherche",
-    "title": "Résultats : {title}",
-    "pin": "{title}, version {version}",
-    "refresh": "Actualiser",
-    "loading": "Chargement des résultats",
     "unavailable": "Les résultats n'ont pas pu être chargés",
-    "loadFailed": "Impossible de charger les résultats",
-    "definitionChanged": "La définition enregistrée ne correspond plus à la version que ce projet a fixée, les nouvelles recherches sont donc refusées jusqu'à sa publication en tant que nouvelle version.",
-    "definitionMissing": "La définition fixée par ce projet n'est plus disponible pour cette organisation.",
-    "unreadableRevisions": "Certaines révisions sont dans un stockage de contenu qui ne peut pas les fournir pour l'instant. Leurs réponses sont omises jusqu'à ce qu'il le puisse.",
     "adhoc": "Questions ajoutées par des tâches",
     "retired": "Réponses à des questions que cette version ne pose plus",
     "learnings": "Enseignements",
@@ -9300,10 +9382,7 @@
     "blockedOn": "En attente de l'identifiant {key}",
     "notes": "Tentatives ultérieures conservées à côté de cette réponse : {count}",
     "tabs": {
-      "findings": "Résultats",
-      "revisions": "Historique",
-      "credentials": "Identifiants",
-      "storage": "Stockage"
+      "findings": "Résultats"
     },
     "status": {
       "answered": "Répondue",
@@ -9338,52 +9417,6 @@
       "extend": "Répondre aux questions jamais posées, y compris celles que vous ajoutez ci-dessous.",
       "clarify": "Réexaminer les réponses partielles ou bloquées.",
       "refresh": "Vérifier chaque réponse existante auprès du fournisseur tel qu'il est aujourd'hui."
-    },
-    "revisions": {
-      "empty": "Aucune tâche de recherche n'a encore enregistré de résultats",
-      "seq": "Révision {seq}",
-      "task": "Écrite par {task}, version de la définition {version}",
-      "show": "Afficher",
-      "hide": "Masquer",
-      "answers": "Réponses dans cette révision : {count}",
-      "openFailed": "Impossible d'ouvrir la révision",
-      "storage": {
-        "inline": "Stockée en ligne, {size}",
-        "offloaded": "Dans le stockage de contenu, {size}",
-        "unavailable": "Indisponible, {size}"
-      }
-    },
-    "credentials": {
-      "none": "La définition fixée ne déclare aucun identifiant",
-      "requiredAtStart": "Une recherche en a besoin avant de démarrer.",
-      "askedWhenNeeded": "L'agent le demande quand il atteint l'étape qui en a besoin.",
-      "store": "Gérer les identifiants de capacités",
-      "status": {
-        "stored": "Enregistré",
-        "missing": "Manquant",
-        "reserved": "Nom réservé, jamais envoyé"
-      }
-    },
-    "storage": {
-      "effective": "Les nouvelles révisions sont stockées en ligne jusqu'à {size} ; au-delà, le déport est {offload}.",
-      "accountHint": "Défini par l'organisation.",
-      "inherit": "Hériter",
-      "inherits": "Hérite du niveau supérieur",
-      "inlineUpTo": "en ligne jusqu'à {size}",
-      "inlineKb": "Limite en ligne (Ko)",
-      "offloadLabel": "Déport",
-      "save": "Enregistrer",
-      "loadFailed": "Impossible de charger les paramètres de stockage des résultats",
-      "saveFailed": "Impossible d'enregistrer les paramètres de stockage des résultats",
-      "tier": {
-        "account": "Organisation",
-        "workspace": "Ce tableau",
-        "project": "Ce projet"
-      },
-      "offload": {
-        "enabled": "activé",
-        "disabled": "désactivé"
-      }
     },
     "followUp": {
       "open": "Lancer un suivi",

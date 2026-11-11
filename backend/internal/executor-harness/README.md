@@ -356,22 +356,33 @@ The claude-code, Codex and Pi config files carry this job's resolved credentials
 written to a per-job directory (mode `0600`) and never into the checkout or a HOME-global path: see
 the next section.
 
-### Research runs
+### Project runs
 
-A `research` job (its own job kind, `research/`) runs an agent against a vendor with no checkout of
-its own: the workspace holds only read-only clones of the linked services' repos. On the browser
-image the harness starts one headless Chromium with a per-job profile and remote debugging, and
+A `project` job (its own job kind, `project/`) runs an agent for a project task with no checkout of
+its own: the workspace holds only read-only clones of the linked services' repos. What the agent
+does comes from the job's prompt, which the project kind writes; the harness knows only the targets
+it may reach and the credentials it holds for them. On the browser image the harness starts one headless Chromium with a per-job profile and remote debugging, and
 wires two stdio tool servers beside the job's own: Playwright MCP (`--cdp-endpoint`) for browsing,
-and the harness's research tool server (`research/research-tools-server.ts`).
+and the harness's access tool server (`project/access-tools-server.ts`).
 
-The research tool server holds the run's credential VALUES so the model never does. `fill_secret`
+The access tool server holds the run's credential VALUES so the model never does. `fill_secret`
 types a stored login into a field, `http_request` sends a request with a credential attached, and
 `request_credential` records a credential the run needs and has not been given. A credential only
-ever reaches one of the definition's target origins: `fill_secret` fills only a page on a UI
-target, and `http_request` refuses any other origin. Every response is scrubbed (the run's known
-values, the platform's redaction, then a token-shape pass) before the model sees it, and each HTTP
-exchange is recorded as evidence the result carries back. The tool server's config, the browser
-profile and the evidence live in a private directory outside the workspace, removed with the job.
+ever reaches one of the project definition's target origins: `fill_secret` fills only a page on a UI
+target, and `http_request` refuses any other origin and hands redirects back instead of following
+them. Every response is scrubbed (the run's known values, the platform's redaction, then a
+token-shape pass, with `set-cookie` values masked) before the model sees it, and each HTTP exchange
+is recorded as evidence the result carries back.
+
+The server runs inside the harness process and keeps the values in memory. The agent has a shell,
+so anything on disk or in a process the agent CLI spawns is readable by the model: the CLI spawns
+only `project/access-tools-proxy.ts`, a stdio bridge holding the server's loopback URL and a
+per-job token, which grant the tools and no value. The browser profile lives in a private
+directory outside the workspace, removed with the job.
+
+A value typed into a page is in that page from then on. The agent shares the browser, so it can
+read a filled field back (Playwright MCP's `browser_evaluate`, or CDP from its shell): what
+`fill_secret` withholds from the model is the stored value, not a page the model can script.
 
 ## Per-job state: never a process- or HOME-global
 

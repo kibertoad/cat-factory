@@ -1,17 +1,23 @@
 import { computed, watch, type Ref } from 'vue'
+import { taskTypeRequiresProject, type ProjectKindTaskType } from '@cat-factory/contracts'
 import type { Block, CreateTaskType } from '~/types/domain'
-import { taskTypeRequiresProject } from '@cat-factory/contracts'
 
 /** A task type the add-task picker offers; `recurring` is created through the schedule flow. */
 export type TaskTypeChoice = CreateTaskType | 'recurring'
+
+const DOC_REPO_TYPES: ReadonlySet<string> = new Set(['document', 'spike'])
 
 /**
  * Which task types a container takes, as the add-task picker offers them, with the selection
  * kept valid as the container changes. Each rule mirrors a server-side refusal:
  *
  *  - a document repository only authors documents and spikes;
- *  - under a project root, the project's kind decides which task types it takes;
+ *  - under a project root, the project's kind decides which task types it takes, and never
+ *    `recurring`: a schedule attaches to a service frame, which a project is not;
  *  - a research task belongs under a project, so a service never offers one.
+ *
+ * `defaultTaskType` is the type a fresh form opens on, and `projectEntry` the project kind's entry
+ * for a type, whose `defaultPipelineId` is the pipeline the server starts such a task with.
  */
 export function useTaskTypeOffer(container: Ref<Block | undefined>, taskType: Ref<TaskTypeChoice>) {
   const { t } = useI18n()
@@ -27,11 +33,19 @@ export function useTaskTypeOffer(container: Ref<Block | undefined>, taskType: Re
   })
   const isDocRepo = computed(() => frame.value?.type === 'document')
 
-  const projectOffered = computed<Set<string> | undefined>(() => {
+  /** The project kind's entries, in the kind's order, when the container is a project root. */
+  const projectEntries = computed<ProjectKindTaskType[] | undefined>(() => {
     const c = container.value
     if (c?.level !== 'project') return undefined
     const kind = projects.kindOf(projects.byRootBlock[c.id])
-    return new Set(kind?.taskTypes.map((entry) => entry.taskType) ?? [])
+    return (kind?.taskTypes ?? []).filter((entry) => entry.taskType !== 'recurring')
+  })
+
+  /** The task types this container restricts the picker to; undefined offers every one. */
+  const offered = computed<ReadonlySet<string> | undefined>(() => {
+    const entries = projectEntries.value
+    if (entries) return new Set(entries.map((entry) => entry.taskType))
+    return isDocRepo.value ? DOC_REPO_TYPES : undefined
   })
 
   const taskTypeChoices = computed<{ value: TaskTypeChoice; label: string; icon: string }[]>(() => {
@@ -47,41 +61,55 @@ export function useTaskTypeOffer(container: Ref<Block | undefined>, taskType: Re
       { value: 'research', label: t('board.addTask.types.research'), icon: 'i-lucide-telescope' },
       { value: 'recurring', label: t('board.addTask.types.recurring'), icon: 'i-lucide-repeat' },
     ]
-    const offered = projectOffered.value
-    if (offered) return all.filter((k) => offered.has(k.value))
-    // A research task belongs under a project, so a service never offers one.
-    const underService = all.filter((k) => !taskTypeRequiresProject(k.value))
-    return isDocRepo.value
-      ? underService.filter((k) => k.value === 'document' || k.value === 'spike')
-      : underService
+    const set = offered.value
+    if (set) return all.filter((k) => set.has(k.value))
+    return all.filter((k) => !taskTypeRequiresProject(k.value))
   })
 
   /** Deployment-registered task types, filtered by the same rules as the built-ins. */
   const customTaskTypes = computed(() => {
-    if (isDocRepo.value) return []
-    const offered = projectOffered.value
-    return offered
-      ? taskTypesStore.customTaskTypes.filter((tt) => offered.has(tt.taskType))
+    const set = offered.value
+    return set
+      ? taskTypesStore.customTaskTypes.filter((tt) => set.has(tt.taskType))
       : taskTypesStore.customTaskTypes
   })
 
+  /**
+   * The type a fresh form opens on: `feature` where everything is offered, `document` in a
+   * document repository, and under a project the first of its kind's types the picker can show.
+   */
+  const defaultTaskType = computed<TaskTypeChoice>(() => {
+    const entries = projectEntries.value
+    if (entries) {
+      const shown = new Set<string>([
+        ...taskTypeChoices.value.map((choice) => choice.value),
+        ...customTaskTypes.value.map((tt) => tt.taskType),
+      ])
+      const first = entries.find((entry) => shown.has(entry.taskType))
+      return (first?.taskType as TaskTypeChoice | undefined) ?? 'feature'
+    }
+    return isDocRepo.value ? 'document' : 'feature'
+  })
+
+  function projectEntry(type: TaskTypeChoice): ProjectKindTaskType | undefined {
+    return projectEntries.value?.find((entry) => entry.taskType === type)
+  }
+
   watch(
-    isDocRepo,
-    (doc) => {
-      if (doc && taskType.value !== 'document' && taskType.value !== 'spike') {
-        taskType.value = 'document'
-      }
-    },
-    { immediate: true },
-  )
-  watch(
-    projectOffered,
-    (offered) => {
-      const first = offered && [...offered][0]
-      if (first && !offered.has(taskType.value)) taskType.value = first as TaskTypeChoice
+    offered,
+    (set) => {
+      if (set && !set.has(taskType.value)) taskType.value = defaultTaskType.value
     },
     { immediate: true },
   )
 
-  return { frame, isDocRepo, taskTypeChoices, customTaskTypes }
+  return {
+    frame,
+    isDocRepo,
+    isProject: computed(() => projectEntries.value !== undefined),
+    taskTypeChoices,
+    customTaskTypes,
+    defaultTaskType,
+    projectEntry,
+  }
 }

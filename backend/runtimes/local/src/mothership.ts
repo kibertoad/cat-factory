@@ -11,7 +11,7 @@ import {
   HttpAgentKindSource,
   HttpPromptFragmentSource,
   HttpProjectKindSource,
-  HttpRegisteredResearchDefinitionSource,
+  HttpRegisteredProjectDefinitionSource,
   HttpPersistenceRpcClient,
   HttpSecretDelegate,
   type LocalFirstPersistenceRepository,
@@ -147,8 +147,8 @@ export interface MothershipComposition {
    * which this node's build can only hold a second copy of.
    */
   projectKinds: HttpProjectKindSource
-  /** The research definitions the deployment registers in code, read for the same reason. */
-  researchDefinitions: HttpRegisteredResearchDefinitionSource
+  /** The project definitions the deployment registers in code, read for the same reason. */
+  projectDefinitions: HttpRegisteredProjectDefinitionSource
   /**
    * The deployment's AGENT-KIND CAPABILITY layer (the skills and tool servers it assigns to kinds,
    * built-in ones included), read from the MOTHERSHIP over `GET /internal/agent-kinds`. The fourth
@@ -308,7 +308,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   const promptFragments = new HttpPromptFragmentSource({ baseUrl, token: machineToken })
   // …and the project kinds, on the same base URL + per-request token, for the same reason.
   const projectKinds = new HttpProjectKindSource({ baseUrl, token: machineToken })
-  const researchDefinitions = new HttpRegisteredResearchDefinitionSource({
+  const projectDefinitions = new HttpRegisteredProjectDefinitionSource({
     baseUrl,
     token: machineToken,
   })
@@ -378,7 +378,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     binaryGenerators,
     promptFragments,
     projectKinds,
-    researchDefinitions,
+    projectDefinitions,
     agentKinds,
     deploymentDocuments,
     realtimeAdapter,
@@ -774,7 +774,7 @@ export function mothershipRegistrySources(mothership: MothershipComposition) {
     // `startLocal` warns at boot if this node registered fragments anyway.
     promptFragmentSource: mothership.promptFragments,
     projectKindSource: mothership.projectKinds,
-    registeredResearchDefinitionSource: mothership.researchDefinitions,
+    registeredProjectDefinitionSource: mothership.projectDefinitions,
     // …and the capability layer the deployment assigns to agent KINDS. The fourth of the
     // family and the only one that MERGES: this node's build owns each kind's executable
     // half (prompts, hooks, output parsers), which is why the catalog stays local and a

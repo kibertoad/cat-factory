@@ -33,7 +33,7 @@ import { taskWebhookController } from './modules/tasks/TaskWebhookController.js'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 import { mergeTrackRecordController } from './modules/merge/MergeTrackRecordController.js'
 import { riskPolicyController } from './modules/merge/RiskPolicyController.js'
-import { findingsStoragePolicyController } from './modules/research/FindingsStoragePolicyController.js'
+import { outcomeStoragePolicyController } from './modules/projects/OutcomeStoragePolicyController.js'
 import { sharedStackController } from './modules/sharedStack/SharedStackController.js'
 import { preflightController } from './modules/preflight/PreflightController.js'
 import { sandboxController } from './modules/sandbox/SandboxController.js'
@@ -119,7 +119,7 @@ import { foundationalBuiltinsController } from './modules/foundationalServices/F
 import { binaryGeneratorsController } from './modules/binaryGenerators/BinaryGeneratorsController.js'
 import { promptFragmentsInternalController } from './modules/promptFragments/PromptFragmentsInternalController.js'
 import { projectKindsInternalController } from './modules/projects/ProjectKindsInternalController.js'
-import { researchDefinitionsInternalController } from './modules/research/ResearchDefinitionsInternalController.js'
+import { projectDefinitionsInternalController } from './modules/projects/ProjectDefinitionsInternalController.js'
 import { agentKindsController } from './modules/agentKinds/AgentKindsController.js'
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicTaskProjectController } from './modules/publicApi/PublicTaskProjectController.js'
@@ -339,9 +339,9 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // Mothership-mode PROJECT KINDS (`GET /internal/project-kinds`), read by a node's
   // `HttpProjectKindSource` when it creates a project or admits a task under one.
   app.route('/', projectKindsInternalController())
-  // Mothership-mode RESEARCH DEFINITIONS registered in code (`GET /internal/research-definitions`),
-  // read by a node when it pins a research project or dispatches a research run.
-  app.route('/', researchDefinitionsInternalController())
+  // Mothership-mode PROJECT DEFINITIONS registered in code (`GET /internal/project-definitions`),
+  // read by a node when it pins a project or dispatches a project run.
+  app.route('/', projectDefinitionsInternalController())
   // Mothership-mode AGENT-KIND CAPABILITIES (`GET /internal/agent-kinds`): the fourth of the same
   // family, and the one that serves a SLICE of its registry rather than all of it. A kind's
   // executable half (prompts as functions, `preOps`/`postOps`, its output parser) cannot cross a
@@ -563,11 +563,11 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   { name: 'serviceMount', mount: WORKSPACE_MOUNT, build: () => serviceMountController() },
   { name: 'project', mount: WORKSPACE_MOUNT, build: () => projectController() },
   { name: 'task-project-link', mount: WORKSPACE_MOUNT, build: () => taskProjectLinkController() },
-  // The board's findings-storage tiers (its own and its projects'): `settings.manage`.
+  // The board's outcome-storage tiers (its own and its projects'): `settings.manage`.
   {
-    name: 'findingsStoragePolicy',
+    name: 'outcomeStoragePolicy',
     mount: WORKSPACE_MOUNT,
-    build: () => findingsStoragePolicyController('workspace'),
+    build: () => outcomeStoragePolicyController('workspace'),
   },
   { name: 'serviceSpec', mount: WORKSPACE_MOUNT, build: () => serviceSpecController() },
   {
@@ -599,9 +599,9 @@ export const ACCOUNT_CONTROLLERS: readonly ControllerEntry[] = [
   },
   { name: 'riskPolicy', mount: ACCOUNT_MOUNT, build: () => riskPolicyController('account') },
   {
-    name: 'findingsStoragePolicy',
+    name: 'outcomeStoragePolicy',
     mount: ACCOUNT_MOUNT,
-    build: () => findingsStoragePolicyController('account'),
+    build: () => outcomeStoragePolicyController('account'),
   },
   { name: 'skillLibrary', mount: ACCOUNT_MOUNT, build: () => skillLibraryController() },
   {

@@ -1,8 +1,8 @@
 import {
   createProjectContract,
-  getResearchProjectViewContract,
-  getResearchRevisionContract,
-  listPinnableResearchDefinitionsContract,
+  getProjectBoardViewContract,
+  getProjectOutcomeContract,
+  listPinnableProjectDefinitionsContract,
   listProjectCatalogContract,
   mountProjectContract,
   setProjectServicesContract,
@@ -16,19 +16,11 @@ import type { ProjectsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
-import { researchCredentialReadiness } from '../research/researchCredentialReadiness.js'
+import { projectCredentialReadiness } from './projectCredentialReadiness.js'
 
 /** Resolve the projects module, or refuse with a 503 naming what isn't wired. */
 function requireProjects<E extends AppEnv>(c: Context<E>): ProjectsModule {
   return requireCapability(c.get('container').projects, 'Projects are not configured')
-}
-
-/** The research project reader, a capability behind the projects module. */
-function requireResearchViews<E extends AppEnv>(c: Context<E>) {
-  return requireCapability(
-    requireProjects(c).research.views,
-    'Research findings are not configured',
-  )
 }
 
 /**
@@ -47,16 +39,21 @@ export function projectController(): Hono<AppEnv> {
     return c.json(await projects.service.listForAccount(accountId), 200)
   })
 
-  buildHonoRoute(app, listPinnableResearchDefinitionsContract, async (c) => {
+  buildHonoRoute(app, listPinnableProjectDefinitionsContract, async (c) => {
     const container = c.get('container')
+    const kind = c.req.valid('param').kind
+    const module = container.projectKindModuleRegistry.get(kind)
+    // A kind with no module here has no definitions this build can validate or pin.
+    if (!module) return c.json([], 200)
     const accountId = await container.workspaceService.accountOf(param(c, 'workspaceId'))
-    const resolved = await container.researchDefinitions.list(accountId ?? '')
+    const resolved = await container.projectDefinitions.list(accountId ?? '', kind)
     return c.json(
       resolved.map(({ definition, origin }) => ({
+        kind: definition.kind,
         key: definition.key,
         version: definition.version,
         title: definition.title,
-        brief: definition.brief,
+        summary: module.definitionSummary(definition),
         inputs: definition.inputs,
         origin,
       })),
@@ -64,22 +61,24 @@ export function projectController(): Hono<AppEnv> {
     )
   })
 
-  buildHonoRoute(app, getResearchProjectViewContract, async (c) => {
-    const views = requireResearchViews(c)
+  buildHonoRoute(app, getProjectBoardViewContract, async (c) => {
     const workspaceId = param(c, 'workspaceId')
     const resolver = c.get('container').toolSecretResolver
-    const view = await views.read(workspaceId, c.req.valid('param').projectId, (definition) =>
-      researchCredentialReadiness(definition, workspaceId, resolver),
+    const view = await requireProjects(c).views.read(
+      workspaceId,
+      c.req.valid('param').projectId,
+      (project, definition) =>
+        projectCredentialReadiness(project, definition, workspaceId, resolver),
     )
     return c.json(view, 200)
   })
 
-  buildHonoRoute(app, getResearchRevisionContract, async (c) => {
-    const { projectId, revisionId } = c.req.valid('param')
-    const detail = await requireResearchViews(c).revision(
+  buildHonoRoute(app, getProjectOutcomeContract, async (c) => {
+    const { projectId, outcomeId } = c.req.valid('param')
+    const detail = await requireProjects(c).views.outcome(
       param(c, 'workspaceId'),
       projectId,
-      revisionId,
+      outcomeId,
     )
     return c.json(detail, 200)
   })

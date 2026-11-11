@@ -382,13 +382,25 @@ func main() {
 		return nil
 	})
 
-	// A research project pins a definition the deployment registers in code (the test server
-	// ships `e2e:vendor`). The pin is a nullable object on the project and the findings carry a
-	// nullable latest revision, both null-versus-absent cases the four clients must decode alike.
+	// A project of the built-in research kind pins a definition the deployment registers in code
+	// (the test server ships `e2e:vendor`). The kind serves nullable JSON Schemas, the project a
+	// nullable pin, and the view an opaque value: the null-versus-absent and opaque cases the four
+	// clients must decode alike.
 	projectID := ""
 
-	step("researchDefinitions.list", func() error {
-		result, err := client.ResearchDefinitions.List(ctx)
+	step("projectKinds.get", func() error {
+		kind, err := client.ProjectKinds.Get(ctx, "research")
+		if err != nil {
+			return err
+		}
+		observations["projectKindPinsDefinition"] = kind.Definition != nil &&
+			*kind.Definition == catfactory.PublicProjectKindDefinitionRequired
+		observations["projectKindServesViewSchema"] = kind.Schemas.View != nil
+		return nil
+	})
+
+	step("projectKinds.listDefinitions", func() error {
+		result, err := client.ProjectKinds.ListDefinitions(ctx, "research")
 		if err != nil {
 			return err
 		}
@@ -398,15 +410,15 @@ func main() {
 				listed = true
 			}
 		}
-		observations["researchDefinitionListed"] = listed
+		observations["projectDefinitionListed"] = listed
 		return nil
 	})
 
 	step("projects.create", func() error {
 		project, err := client.Projects.Create(ctx, catfactory.CreatePublicProject{
-			Kind:     "research",
-			Title:    "SDK smoketest research",
-			Research: &catfactory.CreatePublicProjectResearch{DefinitionKey: "e2e:vendor"},
+			Kind:       "research",
+			Title:      "SDK smoketest research",
+			Definition: &catfactory.CreatePublicProjectDefinition{Key: "e2e:vendor"},
 		})
 		if err != nil {
 			return err
@@ -414,8 +426,8 @@ func main() {
 		projectID = project.ProjectID
 		observations["projectKind"] = project.Kind
 		observations["projectHomedHere"] = project.HomedHere
-		if project.Research != nil {
-			observations["projectPinnedVersion"] = project.Research.DefinitionVersion
+		if project.Pin != nil {
+			observations["projectPinnedVersion"] = project.Pin.DefinitionVersion
 		} else {
 			observations["projectPinnedVersion"] = nil
 		}
@@ -429,23 +441,30 @@ func main() {
 			return err
 		}
 		observations["projectFetchedTitle"] = project.Title
-		if project.Research != nil {
-			observations["projectFetchedPinKey"] = project.Research.DefinitionKey
+		if project.Pin != nil {
+			observations["projectFetchedPinKey"] = project.Pin.DefinitionKey
 		} else {
 			observations["projectFetchedPinKey"] = nil
 		}
 		return nil
 	})
 
-	step("projects.getFindings", func() error {
-		findings, err := client.Projects.GetFindings(ctx, projectID)
+	step("projects.listOutcomes", func() error {
+		result, err := client.Projects.ListOutcomes(ctx, projectID, nil)
 		if err != nil {
 			return err
 		}
-		observations["findingsRevisionCount"] = len(findings.Revisions)
-		observations["findingsLatestRevisionIsNull"] = findings.LatestRevisionID == nil
-		observations["findingsTopicCount"] = len(findings.Coverage.ByTopic)
-		observations["findingsUnansweredTotal"] = findings.Coverage.Total.Unanswered
+		observations["projectOutcomeCount"] = len(result.Outcomes)
+		return nil
+	})
+
+	step("projects.getView", func() error {
+		view, err := client.Projects.GetView(ctx, projectID)
+		if err != nil {
+			return err
+		}
+		observations["projectViewKind"] = view.Kind
+		observations["projectViewIsPresent"] = view.View != nil
 		return nil
 	})
 

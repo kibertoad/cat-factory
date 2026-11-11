@@ -33,7 +33,7 @@ from cat_factory import (  # noqa: E402
 )
 from cat_factory.models import (  # noqa: E402
     CreatePublicProject,
-    CreatePublicProjectResearch,
+    CreatePublicProjectDefinition,
     CreatePublicTask,
     NotificationWebhookAlertEvent,
     NotificationWebhookRunEvent,
@@ -218,12 +218,19 @@ def expect_not_found() -> None:
         observations["notFoundHasRequestId"] = isinstance(exc.request_id, str)
 
 
-# A research project pins a definition the deployment registers in code (the test server ships
-# `e2e:vendor`). The pin is a nullable object on the project and the findings carry a nullable
-# latest revision, both null-versus-absent cases the four clients must decode alike.
-def list_research_definitions() -> None:
-    result = client.research_definitions.list()
-    observations["researchDefinitionListed"] = any(
+# A project of the built-in research kind pins a definition the deployment registers in code (the
+# test server ships `e2e:vendor`). The kind serves nullable JSON Schemas, the project a nullable
+# pin, and the view an opaque value: the null-versus-absent and opaque cases the four clients must
+# decode alike.
+def get_project_kind() -> None:
+    kind = client.project_kinds.get("research")
+    observations["projectKindPinsDefinition"] = str(kind.definition) == "required"
+    observations["projectKindServesViewSchema"] = kind.schemas.view is not None
+
+
+def list_project_definitions() -> None:
+    result = client.project_kinds.list_definitions("research")
+    observations["projectDefinitionListed"] = any(
         d.definition.key == "e2e:vendor" and str(d.origin) == "registered" for d in result.definitions
     )
 
@@ -233,28 +240,31 @@ def create_project() -> None:
         CreatePublicProject(
             kind="research",
             title="SDK smoketest research",
-            research=CreatePublicProjectResearch(definition_key="e2e:vendor"),
+            definition=CreatePublicProjectDefinition(key="e2e:vendor"),
         )
     )
     state["project_id"] = project.project_id
     observations["projectKind"] = project.kind
     observations["projectHomedHere"] = project.homed_here
-    observations["projectPinnedVersion"] = project.research.definition_version if project.research else None
+    observations["projectPinnedVersion"] = project.pin.definition_version if project.pin else None
     observations["projectServiceCount"] = len(project.service_ids)
 
 
 def get_project() -> None:
     project = client.projects.get(state["project_id"])
     observations["projectFetchedTitle"] = project.title
-    observations["projectFetchedPinKey"] = project.research.definition_key if project.research else None
+    observations["projectFetchedPinKey"] = project.pin.definition_key if project.pin else None
 
 
-def get_project_findings() -> None:
-    findings = client.projects.get_findings(state["project_id"])
-    observations["findingsRevisionCount"] = len(findings.revisions)
-    observations["findingsLatestRevisionIsNull"] = findings.latest_revision_id is None
-    observations["findingsTopicCount"] = len(findings.coverage.by_topic)
-    observations["findingsUnansweredTotal"] = findings.coverage.total.unanswered
+def list_project_outcomes() -> None:
+    result = client.projects.list_outcomes(state["project_id"])
+    observations["projectOutcomeCount"] = len(result.outcomes)
+
+
+def get_project_view() -> None:
+    view = client.projects.get_view(state["project_id"])
+    observations["projectViewKind"] = view.kind
+    observations["projectViewIsPresent"] = view.view is not None
 
 
 def expect_project_not_found() -> None:
@@ -364,10 +374,12 @@ step("error: not found", expect_not_found)
 step("error: unauthorized", expect_unauthorized)
 step("error: insufficient scope", expect_insufficient_scope)
 step("error: connection refused", expect_connection_refused)
-step("researchDefinitions.list", list_research_definitions)
+step("projectKinds.get", get_project_kind)
+step("projectKinds.listDefinitions", list_project_definitions)
 step("projects.create", create_project)
 step("projects.get", get_project)
-step("projects.getFindings", get_project_findings)
+step("projects.listOutcomes", list_project_outcomes)
+step("projects.getView", get_project_view)
 step("error: project not found", expect_project_not_found)
 step("tasks.start", start_task)
 step("tasks.stream (SSE)", stream_task)

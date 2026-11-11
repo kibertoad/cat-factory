@@ -13,6 +13,7 @@ import {
 } from './built-in-container.js'
 import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
 import { MEDIA_GENERATOR_AGENT_KIND } from './media.js'
+import { PROJECT_RESEARCHER_KIND } from './project-researcher.js'
 import { TASK_REASSESSOR_AGENT_KIND } from '../prompts/roles.js'
 
 // Only `code-aware` and `doc-aware` actually FOLD the task's selected fragments into the agent's
@@ -79,6 +80,11 @@ const FRAGMENT_FOLD_OPT_OUT = new Set<string>([
   // that it commits no binaries. The same distinction `merger` is exempt on: this kind's output is
   // not a text the standards could describe.
   MEDIA_GENERATOR_AGENT_KIND,
+  // Researches a vendor through a browser and its API and replies with findings. It clones no
+  // working tree (linked repos arrive read-only, as reference), writes no code and authors no
+  // repository prose, so no fold applies; its research definition is what steers it. It declares
+  // `standardsDelivery: 'none'` for the same reason.
+  PROJECT_RESEARCHER_KIND,
 ])
 
 describe('registered container kinds fold the task fragments', () => {

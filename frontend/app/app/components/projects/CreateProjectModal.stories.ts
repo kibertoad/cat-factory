@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
-import type { PinnableResearchDefinition, ProjectKindDescriptor } from '@cat-factory/contracts'
-import { listPinnableResearchDefinitionsContract } from '@cat-factory/contracts'
+import type { PinnableProjectDefinition, ProjectKindDescriptor } from '@cat-factory/contracts'
+import { listPinnableProjectDefinitionsContract } from '@cat-factory/contracts'
 import { apiResponse } from '~/stories/api'
 import { storyWorkspacePrefix } from '~/stories/workspace'
 import { boardBlocks } from '~/stories/board.stories.mocks'
@@ -9,7 +9,7 @@ import { useProjectsStore } from '~/stores/projects'
 import CreateProjectModal from './CreateProjectModal.vue'
 
 // The form that creates a project on the board: a kind, a title, the linked services, and for a
-// kind that keeps research data the research definition it pins with that definition's inputs.
+// kind that pins a definition the one it pins with that definition's inputs.
 // Create sends a request no story answers.
 const meta = {
   title: 'Board/Components/CreateProjectModal',
@@ -31,15 +31,16 @@ const researchKind: ProjectKindDescriptor = {
   id: 'research',
   label: 'Research',
   description: 'Find out how a vendor or system works, and keep what was learned.',
-  data: 'research',
+  definition: 'required',
   taskTypes: [{ taskType: 'research', repoAccess: 'linked-read-only' }],
 }
 
-const vendorDefinition: PinnableResearchDefinition = {
+const vendorDefinition: PinnableProjectDefinition = {
+  kind: 'research',
   key: 'acme:content-integration',
   version: 2,
   title: 'Content platform integration',
-  brief: 'How the content platform authenticates, what its API exposes, and its rate limits.',
+  summary: 'How the content platform authenticates, what its API exposes, and its rate limits.',
   inputs: [
     {
       key: 'region',
@@ -65,18 +66,19 @@ function withKinds(kinds: ProjectKindDescriptor[]) {
   })
 }
 
-function definitionsResponse(body: PinnableResearchDefinition[]) {
+function definitionsResponse(body: PinnableProjectDefinition[]) {
   return {
     api: [
-      apiResponse(listPinnableResearchDefinitionsContract, {
+      apiResponse(listPinnableProjectDefinitionsContract, {
         pathPrefix: storyWorkspacePrefix,
+        pathParams: { kind: 'research' },
         body,
       }),
     ],
   }
 }
 
-/** A kind that keeps no data: a title, a description and the linked services. */
+/** A kind that pins no definition: a title, a description and the linked services. */
 export const Default: Story = {
   decorators: [withKinds([planningKind])],
 }

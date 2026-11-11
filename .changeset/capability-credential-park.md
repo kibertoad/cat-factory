@@ -19,7 +19,7 @@ A step whose capability credential is missing now parks instead of failing.
 - `PipelineStep.credentialWait` is now a union on `subject` (`personal`, `capability`). A wait
   persisted before this release decodes as `unrecorded` rather than being read as personal: it
   cannot be resumed (`credential_wait_unrecorded`), and its run must be restarted. Internal break.
-- A new `research-definition` capability-credential subject resolves from the credential store
+- A new `project-definition` capability-credential subject resolves from the credential store
   only, never from the deployment's environment.
 - Public API: `capability_credential_missing` and `credential_wait_unrecorded` join the
   unanswerable-wait reasons (OpenAPI 1.95.0, SDKs regenerated).

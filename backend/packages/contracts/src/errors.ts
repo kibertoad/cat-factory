@@ -252,11 +252,11 @@ export const CONFLICT_REASONS = [
   // A wait persisted before waits recorded what they wait on. It cannot be resumed against a
   // guess; the run is restarted.
   'credential_wait_unrecorded',
-  // A research definition version is immutable: this key and version are already published.
-  'research_definition_version_exists',
+  // A project definition version is immutable: this kind, key and version are already published.
+  'project_definition_version_exists',
   // A stored definition may not take a namespace the deployment's registered definitions use, so
   // the two key spaces never meet. `details.namespace` names it.
-  'research_definition_key_registered',
+  'project_definition_key_registered',
   // A project's tasks are created and run on the board that homes it; this key's board only
   // mounts it.
   'project_homed_elsewhere',
@@ -445,9 +445,9 @@ export const UNAVAILABLE_REASONS = [
   // A mothership-mode node could not read the project kinds from the mothership, so a project
   // write or a task under a project was refused rather than judged against no kinds at all.
   'project_kinds_unreachable',
-  // The same for the research definitions a deployment registers in code: a research project
-  // was not pinned, or a research run not dispatched, rather than judged against none.
-  'research_definitions_unreachable',
+  // The same for the project definitions a deployment registers in code: a project was not
+  // pinned, or a project run not dispatched, rather than judged against none.
+  'project_definitions_unreachable',
   'foundational_builtins_unreachable',
   'connection_credentials_unreadable',
   'vcs_capability_unsupported',
@@ -474,10 +474,10 @@ export const UNAVAILABLE_REASONS = [
   // repository provider failed to answer (an outage, a rate limit, a revoked token). Its own
   // reason because nothing is unconfigured: the same request succeeds once the provider answers.
   'attached_pr_provider_unreachable',
-  // A research project's findings revision body is offloaded to the account's blob store, and the
-  // store cannot serve it now (storage switched off, or the blob gone). `details.revisionId` names
-  // it. Nothing about the request is wrong; the findings cannot be read until storage answers.
-  'findings_body_unavailable',
+  // A project's outcome body is offloaded to the account's blob store, and the store cannot serve
+  // it now (storage switched off, or the blob gone). `details.outcomeId` names it. Nothing about
+  // the request is wrong; the outcome cannot be read until storage answers.
+  'outcome_body_unavailable',
 ] as const
 
 export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]
@@ -614,39 +614,40 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *                                       account.
  *  - `project_has_unfinished_tasks`     deleting the project would discard tasks that have not
  *                                       finished; finish or delete them first.
- *  - `research_pin_required`            the kind keeps research data and the create named no
- *                                       research definition to pin.
- *  - `research_pin_not_accepted`        the create named a research definition for a kind that
- *                                       keeps no research data.
- *  - `research_definition_not_found`    the definition key and version name nothing the account
- *                                       can pin. `details` names both.
- *  - `research_inputs_invalid`          the values for the definition's `inputs` do not satisfy
- *                                       them. `details.problems` lists why.
- *  - `task_type_requires_project`       a `research` task was created under a service; it
- *                                       belongs under a research project.
- *  - `research_project_not_pinned`      a research task's project pins no research definition.
- *  - `research_definition_changed`      a registered definition no longer hashes to what the
- *                                       project pinned, so the run refuses rather than asking a
- *                                       question list the project never agreed to.
- *  - `research_task_already_recorded`   the task already wrote its findings revision; a
- *                                       follow-up is a new task.
- *  - `research_nothing_to_ask`          the task's mode selects no question: an `extend` with no
- *                                       new question, or a `clarify` with nothing partial or
- *                                       blocked.
- *  - `findings_too_large_for_inline`    the findings body is over the runtime's own row ceiling
+ *  - `project_definition_required`      the kind requires a definition and the create named none.
+ *  - `project_definition_not_accepted`  the create named a definition for a kind that pins none.
+ *  - `project_definition_not_found`     the key and version name no definition of the kind the
+ *                                       account can pin. `details` names the kind, key and version.
+ *  - `project_definition_inputs_invalid` the values for the definition's `inputs` do not
+ *                                       satisfy them. `details.problems` lists why.
+ *  - `task_type_requires_project`       a task of a type that belongs under a project was created
+ *                                       under a service.
+ *  - `project_not_pinned`               the task's kind needs its project to pin a definition, and
+ *                                       it pins none.
+ *  - `project_definition_changed`       a registered definition no longer hashes to what the
+ *                                       project pinned, so the run refuses rather than work from a
+ *                                       definition the project never agreed to.
+ *  - `project_task_already_recorded`    the task already wrote its outcome; a follow-up is a new
+ *                                       task.
+ *  - `research_nothing_to_ask`          the research kind's own: the task's mode selects no
+ *                                       question (an `extend` with no new question, or a `clarify`
+ *                                       with nothing partial or blocked).
+ *  - `outcome_too_large_for_inline`     the outcome body is over the runtime's own row ceiling
  *                                       and cannot be offloaded: offload is disabled by the
  *                                       storage policy, or the account stores no content.
  *  - `task_owned_by_project`            a public `/api/v1/tasks/{taskId}` operation answering a
  *                                       `PublicTask` named a project task, which has no service;
  *                                       it lives under `/api/v1/projects/{projectId}/tasks`.
- *  - `research_definition_invalid`      a published definition breaks a rule its schema alone
- *                                       cannot state (a duplicate question id, say).
+ *  - `project_definition_invalid`       a published definition is refused by its envelope or by
+ *                                       its kind's module (a duplicate question id, say).
  *                                       `details.problems` lists them.
  *  - `project_link_invalid`             a project linked to a task as context does not exist or
  *                                       belongs to another account. `details.projectIds` names them.
  *  - `project_has_no_result`            a project linked to a task as context has no result to
- *                                       read yet (a research project with no findings revision).
+ *                                       read yet (no task under it has recorded an outcome).
  *                                       `details.projectIds` names them.
+ *
+ * The SPA keys an exhaustive `Record<ProjectReason, …>` of message keys off this.
  */
 export const PROJECT_REASONS = [
   'project_kind_unregistered',
@@ -654,18 +655,18 @@ export const PROJECT_REASONS = [
   'project_has_no_writable_repo',
   'project_service_link_invalid',
   'project_has_unfinished_tasks',
-  'research_pin_required',
-  'research_pin_not_accepted',
-  'research_definition_not_found',
-  'research_inputs_invalid',
+  'project_definition_required',
+  'project_definition_not_accepted',
+  'project_definition_not_found',
+  'project_definition_inputs_invalid',
   'task_type_requires_project',
-  'research_project_not_pinned',
-  'research_definition_changed',
-  'research_task_already_recorded',
+  'project_not_pinned',
+  'project_definition_changed',
+  'project_task_already_recorded',
   'research_nothing_to_ask',
-  'findings_too_large_for_inline',
+  'outcome_too_large_for_inline',
   'task_owned_by_project',
-  'research_definition_invalid',
+  'project_definition_invalid',
   'project_link_invalid',
   'project_has_no_result',
 ] as const
