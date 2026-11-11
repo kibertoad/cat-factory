@@ -1,19 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import {
-  RESEARCH_MODES,
-  type Project,
-  type ResearchMode,
-  type ResearchProjectView,
-} from '@cat-factory/contracts'
+import { RESEARCH_MODES, type Project, type ResearchMode } from '@cat-factory/contracts'
 import AppModal from '~/components/common/AppModal.vue'
-import { parseAdhocQuestions, revisitableQuestions } from '~/utils/research'
+import { type ResearchReading, parseAdhocQuestions, revisitableQuestions } from '~/utils/research'
 
 // Start a follow-up research task in the project: a mode, questions it adds, and for `clarify`
 // or `refresh` the questions to revisit (none named means every one the mode covers). It becomes
 // a `research` task under the project, started on the research pipeline.
 
-const props = defineProps<{ project: Project; view: ResearchProjectView }>()
+const props = defineProps<{ project: Project; reading: ResearchReading; answered: boolean }>()
 const open = defineModel<boolean>('open', { required: true })
 const { t } = useI18n()
 const research = useResearchStore()
@@ -26,8 +21,7 @@ const questionIds = ref<string[]>([])
 const submitting = ref(false)
 
 onModalOpen(open, () => {
-  const answered = props.view.revisions.length > 0
-  mode.value = answered ? 'extend' : 'initial'
+  mode.value = props.answered ? 'extend' : 'initial'
   title.value = ''
   questionsText.value = ''
   questionIds.value = []
@@ -37,7 +31,7 @@ const modeItems = computed(() =>
   RESEARCH_MODES.map((value) => ({ label: t(`research.mode.${value}`), value })),
 )
 const revisitable = computed(() =>
-  revisitableQuestions(props.view, mode.value).map((q) => ({ label: q.question, value: q.id })),
+  revisitableQuestions(props.reading, mode.value).map((q) => ({ label: q.question, value: q.id })),
 )
 const questions = computed(() => parseAdhocQuestions(questionsText.value))
 

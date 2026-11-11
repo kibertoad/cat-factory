@@ -374,7 +374,10 @@
           "hint": "Bu seferin yapabileceği en fazla salt okunur geçiş sayısı. {count} için boş bırakın. Büyük bir kod tabanında her açı her bölge için ayrı taranır ve bütçenin kestikleri taranmamış olarak kaydedilir.",
           "problem": "1 ile {max} arasında bir tam sayı girin veya varsayılan değer için boş bırakın."
         }
-      }
+      },
+      "documentsLoadFailed": "Eklenecek belgeler yüklenemedi",
+      "tasksLoadFailed": "Eklenecek sorunlar yüklenemedi",
+      "fragmentsLoadFailed": "En iyi uygulama parçaları yüklenemedi"
     },
     "recurring": {
       "title": "Yinelenen bir işlem hattı ekle",
@@ -694,8 +697,8 @@
         "delegated_executor_failed": "Dış yürütücü bu adımı başlatamadı. Sorun bu kurulumda değil, işi yapan sistemde: onun kendi günlüklerine bakıp yeniden deneyin.",
         "delegated_work_branch_unprepared": "Platform, bu adımın yürütücüsünün gönderildiği çalışma dalını hazırlayamadı, bu yüzden hiçbir şey başlatılmadı. Ya depo bağlantısının bu dala yazma izni yok ya da görev henüz var olmayan bir dalı belirtiyor: ayrıntılar hangisi olduğunu söylüyor.",
         "attached_pr_provider_unreachable": "Depo sağlayıcısı yanıt vermedi, bu yüzden pull request denetlenemedi ve görev oluşturulmadı. Burada ayarlanacak bir şey yok: birazdan yeniden deneyin.",
-        "research_definitions_unreachable": "Bu dağıtımın araştırma tanımları şu anda okunamadı, bu yüzden istek tamamlanmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
-        "findings_body_unavailable": "Bu bulgular içerik depolamasında tutuluyor ve depolama şu anda bunları sunamıyor. İstekte bir sorun yok: depolama kullanılabilir olduğunda yeniden deneyin."
+        "project_definitions_unreachable": "Bu dağıtımın proje tanımları şu anda okunamadı, bu yüzden istek tamamlanmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
+        "outcome_body_unavailable": "Bu projenin sonucu içerik depolamasında tutuluyor ve depolama şu anda bunu sunamıyor. İstekte bir sorun yok: depolama kullanılabilir olduğunda yeniden deneyin."
       }
     },
     "reason": {
@@ -711,25 +714,25 @@
         "gate_config_fields_invalid": "Bir adımın kapı ayarları eksik ya da kapının kabul etmediği bir değer içeriyor, genellikle değeri olmayan zorunlu bir ayar. Pipeline'da adımın kapı ayarlarını doldurup yeniden deneyin.",
         "approvals_chain_stale": "Bu pipeline, onay kontrol noktalarını açtıktan sonra değişti, bu yüzden kontrol noktaları artık adımlarıyla eşleşmiyor. Pipeline'ı yeniden yükleyin ve onları tekrar ayarlayın.",
         "approvals_builtin_checkpoint_locked": "Yerleşik bir pipeline, katalog tanımının içerdiği onay kontrol noktalarını korur. Birini kaldırmak için pipeline'ı klonlayın.",
-        "project_kind_unregistered": "Bu proje türü artık bu dağıtımda sunulmuyor. Hangi proje türlerinin kullanılabildiğini bir yöneticiye sorun.",
-        "task_type_not_offered_by_project": "Bu proje o görev türünü sunmuyor. Projenin sunduğu görev türlerinden birini seçin.",
-        "project_has_no_writable_repo": "Bu görevin işlem hattındaki bir adım yazabileceği bir depoya ihtiyaç duyuyor, ancak projenin deposu yok. Yalnızca bağlı hizmetlerin depolarını okuyan bir işlem hattı seçin.",
-        "project_service_link_invalid": "Bağlı bir hizmet yok ya da başka bir kuruluşa ait. Bu kuruluşun hizmetlerini seçin.",
-        "project_has_unfinished_tasks": "Bu projede henüz bitmemiş görevler var. Onları bitirin ya da silin, ardından projeyi silin.",
-        "research_pin_required": "Bir araştırma projesinin bir araştırma tanımına ihtiyacı var. Projeyi oluşturmadan önce bir tane seçin.",
-        "research_pin_not_accepted": "Bu proje türü araştırma tanımı kullanmıyor. Tanım olmadan oluşturun.",
-        "research_definition_not_found": "Bu araştırma tanımı ya da sürümü bu kuruluşta yok. Listeden birini seçin.",
-        "research_inputs_invalid": "Araştırma tanımı için girilen değerler geçersiz. İşaretli alanları kontrol edin.",
-        "task_type_requires_project": "Bir araştırma görevi bir hizmete değil, bir araştırma projesine aittir. Bunun yerine bir projeye ekleyin.",
-        "research_project_not_pinned": "Bu görevin projesine sabitlenmiş bir araştırma tanımı yok, bu yüzden araştırma yapamıyor.",
-        "research_definition_changed": "Araştırma tanımı, bu proje onu sabitlediğinden beri değişti. Yeni sürümü kullanmak için yeni bir proje oluşturun.",
-        "research_task_already_recorded": "Bu araştırma görevi bulgularını zaten kaydetti. Araştırmaya devam etmek için bir takip görevi başlatın.",
-        "research_nothing_to_ask": "Bu takip görevinde seçilen modda sorulacak soru kalmadı. Başka bir mod seçin ya da soru ekleyin.",
-        "findings_too_large_for_inline": "Bulgular kaydedilemeyecek kadar büyük ve içerik depolamasına aktarılmaları kullanılamıyor. İçerik depolamasını etkinleştirin ya da aktarmaya izin verin, sonra yeniden deneyin.",
+        "project_kind_unregistered": "Bu projenin türü artık bu kurulumda sunulmuyor, bu yüzden yeni iş alamaz. Kurulum operatörünüzden türü yeniden kaydetmesini isteyin.",
+        "task_type_not_offered_by_project": "Bu projenin türü bu tipte görev almıyor. Formun onun için sunduğu tiplerden birini seçin.",
+        "project_has_no_writable_repo": "Bu çalıştırmanın bir adımı yazabileceği bir depoya ihtiyaç duyuyor ve projenin deposu yok: bağlı servislerin depoları salt okunur bağlamdır. Yalnızca okuyan ve raporlayan bir pipeline seçin.",
+        "project_service_link_invalid": "Bağlı servislerden biri artık yok ya da başka bir kuruluşa ait. Panoyu yeniden yükleyip bağlı servisleri tekrar seçin.",
+        "project_has_unfinished_tasks": "Bu projenin hâlâ bitmemiş görevleri var. Önce onları bitirin ya da silin.",
+        "project_definition_required": "Bu proje türü bir tanım sabitler, bu yüzden bir tanıma ihtiyaç duyar. Bir tanım seçip yeniden deneyin.",
+        "project_definition_not_accepted": "Bu proje türü tanım sabitlemez. Tanımı kaldırın veya tanım kullanan bir tür seçin.",
+        "project_definition_not_found": "Bu kuruluşta o anahtar ve sürümle eşleşen bu türde bir proje tanımı yok. Anahtarı kontrol edin ya da en yenisini sabitlemek için sürümü boş bırakın.",
+        "project_definition_inputs_invalid": "Tanımın girdileri için verilen değerler tanımı karşılamıyor. Her zorunlu girdiyi kabul edilen bir değerle doldurup yeniden deneyin.",
+        "task_type_requires_project": "Bu türden bir görev bir servise değil, bir projeye aittir. Onu sunan türde bir projeye ekleyin.",
+        "project_not_pinned": "Bu türden bir görev, projesinin bir tanım sabitlemesini gerektirir ve bu proje hiçbir tanım sabitlemiyor. Görevi tanım sabitleyen bir projeye ekleyin.",
+        "project_definition_changed": "Bu projenin sabitlediği tanım o zamandan beri değişti, bu yüzden çalışma, projenin hiç kabul etmediği bir tanımla çalışmak yerine durdu. Dağıtım operatörünüzden değişikliği yeni bir sürüm olarak yayımlamasını isteyin.",
+        "project_task_already_recorded": "Bu görev sonucunu projeye zaten kaydetti. Devam etmek için yeni bir görev oluşturun.",
+        "outcome_too_large_for_inline": "Sonuç saklanamayacak kadar büyük, bu yüzden kaydedilmedi. Görevi daraltıp yeniden çalıştırın.",
+        "research_nothing_to_ask": "Bu araştırma görevinin modu sorulacak bir soru bırakmıyor: genişletecek yeni bir şey ya da netleştirilecek kısmi veya engellenmiş bir şey yok. Başka bir mod seçin veya bir soru ekleyin.",
         "task_owned_by_project": "Bu görev, hizmeti olmayan bir projeye ait. Bunun yerine projenin görev adresini kullanın.",
-        "research_definition_invalid": "Araştırma tanımı bir kuralı ihlal ediyor: konu, soru, kimlik bilgisi ve girdi kimliklerinin benzersiz olduğunu kontrol edin.",
+        "project_definition_invalid": "Tanım, yapısı ya da proje türü tarafından reddedildi. Yanıt her sorunu listeler; bunları düzeltip yeniden yayımlayın.",
         "project_link_invalid": "Bu proje yok veya başka bir kuruluşa ait. Bu kuruluşun bir projesini bağlayın.",
-        "project_has_no_result": "Bu projenin henüz okunacak bir sonucu yok. Önce projede bir araştırma görevi çalıştırın, ardından bağlayın."
+        "project_has_no_result": "Bu projenin henüz okunacak bir sonucu yok. Önce içinde bir görev çalıştırın, sonra bağlayın."
       }
     },
     "action": {
@@ -821,8 +824,8 @@
         "no_linked_issues": "Bağlı takip kaydı yok",
         "capability_credential_still_missing": "Kimlik bilgisi hâlâ eksik",
         "credential_wait_unrecorded": "Bu bekleme sürdürülemiyor",
-        "research_definition_version_exists": "Sürüm zaten yayımlandı",
-        "research_definition_key_registered": "Ad alanı kullanımda",
+        "project_definition_version_exists": "Sürüm zaten yayımlandı",
+        "project_definition_key_registered": "Ad alanı kullanımda",
         "project_homed_elsewhere": "Proje başka bir panoda",
         "credential_wait_personal_in_app": "Uygulamada yenileyin"
       },
@@ -891,8 +894,8 @@
         "no_linked_issues": "Bu göreve bağlı bir takip kaydı yok. Görevin geldiği kaydı bağlayın, ardından tekrar güncelleyin.",
         "capability_credential_still_missing": "Bu adımın ihtiyaç duyduğu kimlik bilgisi bu çalışma alanı için hâlâ kaydedilmedi. Yetenek kimlik bilgileri ayarlarına kaydedin, ardından çalıştırmayı sürdürün.",
         "credential_wait_unrecorded": "Bu bekleme, platform bir beklemenin neyi beklediğini kaydetmeye başlamadan önce kaydedildi, bu yüzden sürdürülemez. Bunun yerine çalıştırmayı yeniden başlatın.",
-        "research_definition_version_exists": "Araştırma tanımının bu sürümü zaten yayımlandı ve değiştirilemez. Bunun yerine yeni bir sürüm yayımlayın.",
-        "research_definition_key_registered": "Bu ad alanı, dağıtımla gelen araştırma tanımlarına ait. Kuruluşunuzun kendi ad alanında yayımlayın.",
+        "project_definition_version_exists": "Tanımın bu sürümü zaten yayımlandı ve değiştirilemez. Bunun yerine yeni bir sürüm yayımlayın.",
+        "project_definition_key_registered": "Bu ad alanı, dağıtımla gelen tanımlara ait. Kuruluşunuzun kendi ad alanında yayımlayın.",
         "project_homed_elsewhere": "Bir projenin görevleri, projenin bulunduğu panoda oluşturulur ve çalıştırılır. Üzerinde çalışmak için o panoyu açın.",
         "credential_wait_personal_in_app": "Süresi dolan kişisel kimlik bilgisini, çalıştırmayı başlatan kişi kendi parolasıyla uygulamada yeniler."
       },
@@ -1154,7 +1157,8 @@
       "savedToast": "İzleme kaydedildi",
       "saveFailed": "Eşleme kaydedilemedi",
       "clearFailed": "Eşleme temizlenemedi",
-      "configNoun": "sürüm sağlığı yapılandırması"
+      "configNoun": "sürüm sağlığı yapılandırması",
+      "loadFailed": "Sürüm sağlığı ayarları yüklenemedi"
     },
     "testSecrets": {
       "title": "Test kimlik bilgileri (hassas)",
@@ -2104,7 +2108,6 @@
     "title": "Platform gözlemlenebilirliği",
     "refresh": "Yenile",
     "close": "Kapat",
-    "retry": "Yeniden dene",
     "window": {
       "oneHour": "Son bir saat",
       "oneDay": "Son 24 saat",
@@ -2112,6 +2115,7 @@
       "thirtyDays": "Son 30 gün",
       "ninetyDays": "Son 90 gün"
     },
+    "noAccount": "Etkin hesap yok, bu nedenle gösterilecek veri yok.",
     "outcomes": {
       "title": "Çalıştırma sonuçları",
       "total": "Toplam çalıştırma",
@@ -2952,7 +2956,8 @@
       "roster": {
         "title": "Üyeler",
         "empty": "Henüz üye yok.",
-        "remove": "Üyeyi kaldır"
+        "remove": "Üyeyi kaldır",
+        "loadFailed": "Bu panonun üyeleri yüklenemedi"
       },
       "add": {
         "title": "Üye ekle",
@@ -3274,7 +3279,8 @@
         "kubeNoun": "Kubernetes işleyicisi",
         "kubeOverrideNoun": "Kubernetes geçersiz kılması",
         "customNoun": "bu işleyici",
-        "cloudflareNoun": "Cloudflare işleyicisini"
+        "cloudflareNoun": "Cloudflare işleyicisini",
+        "loadFailed": "Ortam işleyicileri yüklenemedi"
       },
       "cloudflare": {
         "intro": "Hedef deponun kendi önizleme iş akışını tetikleyerek her pull request için bir Cloudflare Worker ayağa kaldırır. cat-factory Cloudflare ile hiçbir zaman doğrudan konuşmaz: bir dağıtım oluşturur, durumunu okur ve kaldırmak için inactive durumu yazar.",
@@ -3729,7 +3735,8 @@
         "pagerDutyToken": "PagerDuty API jetonu",
         "pagerDutyFromEmail": "PagerDuty Gönderen e-postası",
         "incidentIoKey": "incident.io API anahtarı",
-        "clear": "Temizle"
+        "clear": "Temizle",
+        "loadFailed": "Olay araçları yüklenemedi"
       },
       "status": {
         "notConnected": "Bağlı değil",
@@ -3747,7 +3754,8 @@
         "disconnectFailed": "Bağlantı kesilemedi"
       },
       "connectionNoun": "gözlemlenebilirlik bağlantısı",
-      "incidentNoun": "olay sağlayıcısı"
+      "incidentNoun": "olay sağlayıcısı",
+      "loadFailed": "Gözlemlenebilirlik bağlantısı yüklenemedi"
     },
     "packageRegistries": {
       "tab": "Paket kayıt defterleri",
@@ -4710,7 +4718,8 @@
         "loadProjection": "Depolar, çekme istekleri ve sorunlar yüklenemedi",
         "startInstall": "GitHub App yüklemesi başlatılamadı",
         "connect": "Bağlanamadı"
-      }
+      },
+      "listFailed": "GitHub App kurulumları listelenemedi"
     },
     "panel": {
       "connectIntro": "Pano bloklarını depolarla desteklemek, pull request'lere ve sorunlara göz atmak ve agent'ların dal göndermesine ve PR açmasına izin vermek için bir GitHub App yüklemesi bağlayın.",
@@ -4821,7 +4830,8 @@
       "errors": {
         "listDirectory": "Dizin listelenemedi"
       },
-      "selectAllFiles": "{count} dosyayı seç | Tüm {count} dosyayı seç"
+      "selectAllFiles": "{count} dosyayı seç | Tüm {count} dosyayı seç",
+      "listFailed": "Bu klasör listelenemedi"
     }
   },
   "slack": {
@@ -6237,6 +6247,7 @@
       "medium": "Orta güven",
       "low": "Düşük güven"
     },
+    "loadFailed": "Gereksinim incelemesi yüklenemedi",
     "findingFloor": {
       "raised": {
         "high": "Bu geçiş yalnızca yüksek bulguları dile getirdi.",
@@ -6362,7 +6373,8 @@
       "done": "Tamamlandı",
       "failed": "Başarısız"
     },
-    "groupTitle": "Bu çalışmanın yükseldiği uzlaşı grubu"
+    "groupTitle": "Bu çalışmanın yükseldiği uzlaşı grubu",
+    "loadFailed": "Uzlaşı oturumu yüklenemedi"
   },
   "brainstorm": {
     "title": {
@@ -6455,7 +6467,8 @@
       "taskReset": "Görev sıfırlandı: düzenleyip yeniden gönderin",
       "extraRoundGranted": "Bir beyin fırtınası turu daha verildi",
       "resolveError": "Beyin fırtınası çözülemedi"
-    }
+    },
+    "loadFailed": "Beyin fırtınası oturumu yüklenemedi"
   },
   "spec": {
     "title": "Gereksinimler",
@@ -6506,6 +6519,14 @@
       "given": "Given",
       "when": "When",
       "then": "Then"
+    },
+    "anchorReadFailed": {
+      "title": "Belirtim okunamadı",
+      "description": "Depo okunamadı, bu nedenle bu hizmetin bir belirtimi olup olmadığı bilinmiyor. Yeniden deneyin."
+    },
+    "anchorUnparsed": {
+      "title": "Belirtim dosyası geçerli değil",
+      "description": "spec/service.json varsayılan dalda var ancak ayrıştırılamadı. Dosyayı depoda düzeltin."
     }
   },
   "followUp": {
@@ -7306,7 +7327,8 @@
       "checkSourceFailed": "Depo denetlenemedi",
       "sourceUnlinked": "Deponun bağlantısı kaldırıldı",
       "unlinkSourceFailed": "Deponun bağlantısı kaldırılamadı"
-    }
+    },
+    "loadFailed": "Temel hizmetler kataloğu yüklenemedi"
   },
   "binaryOutput": {
     "heading": "İkili çıktılar",
@@ -8245,7 +8267,8 @@
       "done": "Tamam",
       "save": "Kaydet",
       "revert": "Geri al"
-    }
+    },
+    "loadFailed": "Claude Skills kitaplığı yüklenemedi"
   },
   "merge": {
     "changeClass": {
@@ -9279,19 +9302,78 @@
       "loadFailed": "Bağlı projeler yüklenemedi",
       "linkFailed": "Proje bağlanamadı",
       "unlinkFailed": "Proje bağlantısı kaldırılamadı"
+    },
+    "view": {
+      "open": "Projeyi aç",
+      "title": "Proje: {title}",
+      "pin": "{title}, sürüm {version}",
+      "refresh": "Yenile",
+      "loading": "Proje yükleniyor",
+      "unavailable": "Proje yüklenemedi",
+      "loadFailed": "Proje yüklenemedi",
+      "definitionChanged": "Kayıtlı tanım, bu projenin sabitlediği sürümle artık eşleşmiyor; bu yüzden yeni bir sürüm olarak yayımlanana kadar yeni çalıştırmalar reddedilir.",
+      "definitionMissing": "Bu projenin sabitlediği tanım artık bu kuruluş için kullanılamıyor.",
+      "unreadableOutcomes": "Bazı sonuçlar şu anda onları sunamayan içerik depolamasında tutuluyor. Sunabilene kadar dışarıda bırakılırlar.",
+      "tabs": {
+        "latest": "En son",
+        "outcomes": "Geçmiş",
+        "credentials": "Kimlik bilgileri",
+        "storage": "Depolama"
+      },
+      "outcomes": {
+        "empty": "Henüz hiçbir görev bir sonuç kaydetmedi",
+        "seq": "Revizyon {seq}",
+        "task": "{task} tarafından yazıldı, tanım sürümü {version}",
+        "taskOnly": "{task} tarafından yazıldı",
+        "show": "Göster",
+        "hide": "Gizle",
+        "openFailed": "Revizyon açılamadı",
+        "storage": {
+          "inline": "Satır içi saklandı, {size}",
+          "offloaded": "İçerik deposunda, {size}",
+          "unavailable": "Kullanılamıyor, {size}"
+        }
+      },
+      "credentials": {
+        "none": "Sabitlenen tanım hiçbir kimlik bilgisi bildirmiyor",
+        "requiredAtStart": "Bir çalıştırma başlamadan önce buna ihtiyaç duyar.",
+        "askedWhenNeeded": "Ajan, buna ihtiyaç duyan noktaya geldiğinde ister.",
+        "store": "Yetenek kimlik bilgilerini yönet",
+        "status": {
+          "stored": "Kayıtlı",
+          "missing": "Eksik",
+          "reserved": "Ayrılmış ad, asla gönderilmez"
+        }
+      },
+      "storage": {
+        "effective": "Yeni revizyonlar {size} boyutuna kadar satır içi saklanır; üstünde aktarma {offload}.",
+        "accountHint": "Kuruluş tarafından belirlenir.",
+        "inherit": "Devral",
+        "inherits": "Daha geniş katmandan devralır",
+        "inlineUpTo": "{size} boyutuna kadar satır içi",
+        "inlineKb": "Satır içi sınır (KB)",
+        "offloadLabel": "Aktarma",
+        "save": "Kaydet",
+        "loadFailed": "Sonuç depolama ayarları yüklenemedi",
+        "saveFailed": "Sonuç depolama ayarları kaydedilemedi",
+        "tier": {
+          "account": "Kuruluş",
+          "workspace": "Bu pano",
+          "project": "Bu proje"
+        },
+        "offload": {
+          "enabled": "açık",
+          "disabled": "kapalı"
+        }
+      },
+      "fallback": {
+        "empty": "Bu projenin henüz bir sonucu yok",
+        "stream": "{stream} içinde en son"
+      }
     }
   },
   "research": {
-    "open": "Araştırma bulguları",
-    "title": "Bulgular: {title}",
-    "pin": "{title}, sürüm {version}",
-    "refresh": "Yenile",
-    "loading": "Bulgular yükleniyor",
     "unavailable": "Bulgular yüklenemedi",
-    "loadFailed": "Bulgular yüklenemedi",
-    "definitionChanged": "Kayıtlı tanım, bu projenin sabitlediği sürümle artık eşleşmiyor, bu yüzden yeni bir sürüm olarak yayımlanana kadar yeni araştırma çalıştırmaları reddedilir.",
-    "definitionMissing": "Bu projenin sabitlediği tanım artık bu kuruluş için kullanılamıyor.",
-    "unreadableRevisions": "Bazı revizyonlar şu anda onları sunamayan bir içerik deposunda duruyor. Sunabilene kadar yanıtları dışarıda bırakılır.",
     "adhoc": "Görevlerin eklediği sorular",
     "retired": "Bu sürümün artık sormadığı sorulara verilen yanıtlar",
     "learnings": "Öğrenilenler",
@@ -9299,10 +9381,7 @@
     "blockedOn": "{key} kimlik bilgisi bekleniyor",
     "notes": "Bu yanıtın yanında tutulan sonraki denemeler: {count}",
     "tabs": {
-      "findings": "Bulgular",
-      "revisions": "Geçmiş",
-      "credentials": "Kimlik bilgileri",
-      "storage": "Depolama"
+      "findings": "Bulgular"
     },
     "status": {
       "answered": "Yanıtlandı",
@@ -9337,52 +9416,6 @@
       "extend": "Aşağıda ekledikleriniz dahil, daha önce sorulmamış soruları yanıtlar.",
       "clarify": "Kısmi ya da engellenmiş yanıtlara yeniden bakar.",
       "refresh": "Var olan her yanıtı sağlayıcının şimdiki hâline göre doğrular."
-    },
-    "revisions": {
-      "empty": "Henüz hiçbir araştırma görevi bulgu kaydetmedi",
-      "seq": "Revizyon {seq}",
-      "task": "{task} tarafından yazıldı, tanım sürümü {version}",
-      "show": "Göster",
-      "hide": "Gizle",
-      "answers": "Bu revizyondaki yanıtlar: {count}",
-      "openFailed": "Revizyon açılamadı",
-      "storage": {
-        "inline": "Satır içi saklandı, {size}",
-        "offloaded": "İçerik deposunda, {size}",
-        "unavailable": "Kullanılamıyor, {size}"
-      }
-    },
-    "credentials": {
-      "none": "Sabitlenen tanım hiçbir kimlik bilgisi bildirmiyor",
-      "requiredAtStart": "Bir araştırma çalıştırması başlamadan önce buna ihtiyaç duyar.",
-      "askedWhenNeeded": "Ajan, buna ihtiyaç duyan noktaya geldiğinde ister.",
-      "store": "Yetenek kimlik bilgilerini yönet",
-      "status": {
-        "stored": "Kayıtlı",
-        "missing": "Eksik",
-        "reserved": "Ayrılmış ad, asla gönderilmez"
-      }
-    },
-    "storage": {
-      "effective": "Yeni revizyonlar {size} boyutuna kadar satır içi saklanır; üstünde aktarma {offload}.",
-      "accountHint": "Kuruluş tarafından belirlenir.",
-      "inherit": "Devral",
-      "inherits": "Daha geniş katmandan devralır",
-      "inlineUpTo": "{size} boyutuna kadar satır içi",
-      "inlineKb": "Satır içi sınır (KB)",
-      "offloadLabel": "Aktarma",
-      "save": "Kaydet",
-      "loadFailed": "Bulgu depolama ayarları yüklenemedi",
-      "saveFailed": "Bulgu depolama ayarları kaydedilemedi",
-      "tier": {
-        "account": "Kuruluş",
-        "workspace": "Bu pano",
-        "project": "Bu proje"
-      },
-      "offload": {
-        "enabled": "açık",
-        "disabled": "kapalı"
-      }
     },
     "followUp": {
       "open": "Devam araştırması başlat",

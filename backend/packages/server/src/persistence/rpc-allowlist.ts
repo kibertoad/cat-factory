@@ -332,26 +332,25 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listBySubjectIds: { scope: { kind: 'subjectList', arg: 0 } },
     removeBySubjects: { scope: { kind: 'subjectList', arg: 0 } },
   },
-  // Research persistence. Definitions are account-owned; every research row is written under one
-  // project and binds through it; the storage-policy tiers bind through their (kind, id) owner.
-  researchDefinitionRepository: {
+  // What projects of any kind keep. Definitions are account-owned; a pin or an outcome is written
+  // under one project and binds through it; the storage-policy tiers bind through their owner.
+  projectDefinitionRepository: {
     get: { scope: { kind: 'account', arg: 0 } },
     listByAccount: { scope: { kind: 'account', arg: 0 } },
     insert: { scope: { kind: 'accountField', arg: 0 } },
   },
-  researchProjectRepository: {
-    get: { scope: { kind: 'project', arg: 0 } },
-    listByProjectIds: { scope: { kind: 'projectList', arg: 0 } },
-    insert: { scope: { kind: 'projectField', arg: 0 } },
+  projectRecordRepository: {
+    getPin: { scope: { kind: 'project', arg: 0 } },
+    listPins: { scope: { kind: 'projectList', arg: 0 } },
+    listOutcomesOfProjects: { scope: { kind: 'projectList', arg: 0 } },
+    projectsWithOutcomes: { scope: { kind: 'projectList', arg: 0 } },
+    insertPin: { scope: { kind: 'projectField', arg: 0 } },
+    reserveSeq: { scope: { kind: 'project', arg: 0 } },
     reserveTaskSeq: { scope: { kind: 'project', arg: 0 } },
-    deleteMany: { scope: { kind: 'projectList', arg: 0 } },
-  },
-  findingsRevisionRepository: {
-    insert: { scope: { kind: 'projectField', arg: 0 } },
-    get: { scope: { kind: 'project', arg: 0 } },
-    listByProject: { scope: { kind: 'project', arg: 0 } },
-    listByProjects: { scope: { kind: 'projectList', arg: 0 } },
-    projectsWithRevisions: { scope: { kind: 'projectList', arg: 0 } },
+    insertOutcome: { scope: { kind: 'projectField', arg: 0 } },
+    getOutcome: { scope: { kind: 'project', arg: 0 } },
+    listOutcomes: { scope: { kind: 'project', arg: 0 } },
+    deleteByProjects: { scope: { kind: 'projectList', arg: 0 } },
   },
   // Projects linked to tasks as context. A link binds the task's board AND every project it names,
   // so a node can never link another account's project; an unlink or a block cascade binds the
@@ -363,9 +362,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     deleteByBlocks: { scope: { kind: 'workspace', arg: 0 } },
     deleteByProjects: { scope: { kind: 'projectList', arg: 0 } },
   },
-  findingsStoragePolicyRepository: {
-    get: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    set: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+  outcomeStoragePolicyRepository: {
+    get: { scope: { kind: 'owner', kindArg: 0, idArg: 1, projectTier: true } },
+    set: { scope: { kind: 'owner', kindArg: 0, idArg: 1, projectTier: true } },
   },
   // Account-owned projects, the peers of services. Every read and write binds the project's own
   // account; an insert or a link change also binds every linked service to that same account,

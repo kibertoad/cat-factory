@@ -5,7 +5,7 @@ import {
   type EnvironmentHandlerView,
 } from '@cat-factory/contracts'
 import { screen, userEvent, within } from 'storybook/test'
-import { apiPending, apiResponse } from '~/stories/api'
+import { apiFailure, apiPending, apiResponse } from '~/stories/api'
 import { STORY_WORKSPACE_ID, storyWorkspacePrefix } from '~/stories/workspace'
 import {
   kubernetesHandler,
@@ -91,6 +91,14 @@ export const Empty: Story = {
 /** The handlers still loading: placeholder sections. */
 export const Loading: Story = {
   parameters: { api: [apiPending(listEnvironmentHandlersContract, { pathPrefix })] },
+}
+
+/** The handlers read failed: the configurator says so with a retry, not a skeleton for good. */
+export const Failed: Story = {
+  parameters: { api: [apiFailure(listEnvironmentHandlersContract, { pathPrefix })] },
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
 }
 
 /**

@@ -10,6 +10,7 @@ import type { D1Database } from '@cloudflare/workers-types'
 import { appendDirectoryChanges, workspaceSource, workspaceTreeSource } from './directoryFeed'
 import { type WorkspaceRow, rowToWorkspace } from './mappers'
 import { chunkForIn } from './chunk'
+import { projectRecordDeletes } from './D1ProjectOutcomeRepositories'
 
 // Cloudflare-only workspace-scoped tables that have no Node/Drizzle analogue (Durable-Object
 // tracking), appended to the shared cascade list for this facade. Kept here — not in the
@@ -251,26 +252,12 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
         .prepare(`DELETE FROM task_project_links WHERE project_id IN (${HOMED_PROJECTS})`)
         .bind(id, id),
       this.db.prepare(`DELETE FROM task_project_links WHERE workspace_id = ?`).bind(id),
-      // A homed research project's findings, pinned definition and policy tier.
-      this.db
-        .prepare(`DELETE FROM findings_revisions WHERE project_id IN (${HOMED_PROJECTS})`)
-        .bind(id, id),
-      this.db
-        .prepare(`DELETE FROM research_task_seqs WHERE project_id IN (${HOMED_PROJECTS})`)
-        .bind(id, id),
+      // A homed project's outcomes, sequence, pin and policy tier.
+      ...projectRecordDeletes(this.db, HOMED_PROJECTS, [id, id]),
+      // This board's own outcome-storage policy tier.
       this.db
         .prepare(
-          `DELETE FROM findings_storage_policies
-           WHERE owner_kind = 'project' AND owner_id IN (${HOMED_PROJECTS})`,
-        )
-        .bind(id, id),
-      this.db
-        .prepare(`DELETE FROM research_projects WHERE project_id IN (${HOMED_PROJECTS})`)
-        .bind(id, id),
-      // This board's own findings-storage policy tier.
-      this.db
-        .prepare(
-          `DELETE FROM findings_storage_policies WHERE owner_kind = 'workspace' AND owner_id = ?`,
+          `DELETE FROM outcome_storage_policies WHERE owner_kind = 'workspace' AND owner_id = ?`,
         )
         .bind(id),
       this.db.prepare(`DELETE FROM projects WHERE id IN (${HOMED_PROJECTS})`).bind(id, id),

@@ -4,7 +4,7 @@ import type {
   DocumentRepository,
   InitiativeRepository,
   ProjectRepository,
-  ResearchProjectRepository,
+  ProjectRecordRepository,
   TaskProjectLinkRepository,
   ServiceConnection,
   ServiceRepository,
@@ -30,7 +30,7 @@ import type {
 export interface RemovalCascadeDeps {
   serviceRepository?: ServiceRepository
   projectRepository?: ProjectRepository
-  researchProjectRepository?: ResearchProjectRepository
+  projectRecordRepository?: ProjectRecordRepository
   taskProjectLinkRepository?: TaskProjectLinkRepository
   workspaceMountRepository?: WorkspaceMountRepository
   initiativeRepository?: InitiativeRepository
@@ -97,14 +97,16 @@ async function reclaimProjects(
   const rootIds = new Set(
     blocks.filter((b) => doomed.has(b.id) && b.level === 'project').map((b) => b.id),
   )
-  rootIds.add(deletedId)
+  // The deleted id is looked up directly only when it is dangling (already gone from `blocks`).
+  if (!blocks.some((b) => b.id === deletedId)) rootIds.add(deletedId)
+  if (rootIds.size === 0) return
   const ids = (await projectRepository.listByRootBlocks([...rootIds])).map((p) => p.id)
   if (ids.length === 0) return
   await workspaceMountRepository.removeBySubjects(ids)
   // Every task on any board that linked a reclaimed project as context drops the link.
   await deps.taskProjectLinkRepository?.deleteByProjects(ids)
-  // A research project's pinned definition, findings and policy tier go with it.
-  await deps.researchProjectRepository?.deleteMany(ids)
+  // A project's pin, outcomes and policy tier go with it.
+  await deps.projectRecordRepository?.deleteByProjects(ids)
   await projectRepository.deleteMany(ids)
 }
 

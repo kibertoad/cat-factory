@@ -1,5 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
+import { screen } from 'storybook/test'
+import { listAccountSkillsContract } from '@cat-factory/contracts'
 import { orgAccount } from '~/stories/accounts.stories.mocks'
+import { apiFailure } from '~/stories/api'
 import { githubProbeApi } from '~/stories/githubApi'
 import { skillLibraryApi } from '~/stories/skillsApi'
 import { accountSkills, skillSource } from '~/stories/skills.stories.mocks'
@@ -40,9 +43,22 @@ export const Empty: Story = {
   parameters: { api: [...skillLibraryApi(), ...githubProbeApi()] },
 }
 
-/** The catalog read failed, which the manager reads as the library being off: a note only. */
+/** The deployment has not enabled the library (a 503): a note only. */
 export const Unavailable: Story = {
   parameters: { api: [...skillLibraryApi({ available: false }), ...githubProbeApi()] },
+}
+
+/** The catalog read failed: the manager says so with a retry, not the "not enabled" note. */
+export const Failed: Story = {
+  play: async () => {
+    await screen.findByTestId('load-failed-state')
+  },
+  parameters: {
+    api: [
+      apiFailure(listAccountSkillsContract, { pathPrefix: `/accounts/${orgAccount.id}` }),
+      ...githubProbeApi(),
+    ],
+  },
 }
 
 /** The sources read failed: the catalog shows, and a note replaces the link form. */

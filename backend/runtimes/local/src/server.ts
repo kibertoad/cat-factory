@@ -9,7 +9,8 @@ import {
   type InlineUseCaseRegistry,
   type TaskTypeRegistry,
   type ProjectKindRegistry,
-  type ResearchDefinitionRegistry,
+  type ProjectDefinitionRegistry,
+  type ProjectKindModuleRegistry,
   DEFAULT_APP_CACHES_PROFILE,
   NodeRealtimeHub,
   backfillDeclaredSeeds,
@@ -111,11 +112,17 @@ export interface StartLocalOptions {
    */
   projectKindRegistry?: ProjectKindRegistry
   /**
-   * App-owned DI seam for research definitions shipped in code: a deployment news a
-   * `ResearchDefinitionRegistry`, registers its definitions on it, and passes it here. Absent
+   * App-owned DI seam for project definitions shipped in code: a deployment news a
+   * `ProjectDefinitionRegistry`, registers its definitions on it, and passes it here. Absent
    * means none. On the mothership path the node reads the mothership's instead.
    */
-  researchDefinitionRegistry?: ResearchDefinitionRegistry
+  projectDefinitionRegistry?: ProjectDefinitionRegistry
+  /**
+   * App-owned DI seam for project kind MODULES, each kind's code half: a deployment adding a
+   * project kind registers its module on a `defaultProjectKindModuleRegistry()` and passes it
+   * here. Local on the mothership path too, because a module is code this build runs.
+   */
+  projectKindModuleRegistry?: ProjectKindModuleRegistry
   /**
    * App-owned DI seam for INLINE USE CASES: a deployment news a `defaultInlineUseCaseRegistry()`,
    * registers its non-container model operations on it, and passes it here. Threaded through to
@@ -438,7 +445,8 @@ async function bootLocal(
     initiativePresetRegistry: options.initiativePresetRegistry,
     taskTypeRegistry: options.taskTypeRegistry,
     projectKindRegistry: options.projectKindRegistry,
-    researchDefinitionRegistry: options.researchDefinitionRegistry,
+    projectDefinitionRegistry: options.projectDefinitionRegistry,
+    projectKindModuleRegistry: options.projectKindModuleRegistry,
     inlineUseCaseRegistry: options.inlineUseCaseRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
@@ -579,7 +587,8 @@ async function startLocalMothership(
     defaultModelPresetId,
     taskTypeRegistry,
     projectKindRegistry,
-    researchDefinitionRegistry,
+    projectDefinitionRegistry,
+    projectKindModuleRegistry,
     inlineUseCaseRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
@@ -617,7 +626,8 @@ async function startLocalMothership(
     defaultModelPresetId,
     taskTypeRegistry,
     projectKindRegistry,
-    researchDefinitionRegistry,
+    projectDefinitionRegistry,
+    projectKindModuleRegistry,
     inlineUseCaseRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,

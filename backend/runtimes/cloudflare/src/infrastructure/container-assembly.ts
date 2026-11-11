@@ -119,6 +119,7 @@ import { D1SealedSecretInventory } from './repositories/D1SealedSecretInventory'
 import { D1ServiceRepository } from './repositories/D1ServiceRepository'
 import { D1SubscriptionActivationRepository } from './repositories/D1PersonalSubscriptionRepository'
 import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
+import { D1CapabilityCredentialRepository } from './repositories/D1CapabilityCredentialRepository'
 import { D1ValidationConfigRepository } from './repositories/D1ValidationConfigRepository'
 import { D1WritebackPostRepository } from './repositories/D1WritebackPostRepository'
 import { D1ReportsRepository } from './repositories/D1ReportsRepository'
@@ -132,11 +133,10 @@ import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepos
 import { D1ProjectRepository } from './repositories/D1ProjectRepository'
 import { D1TaskProjectLinkRepository } from './repositories/D1TaskProjectLinkRepository'
 import {
-  D1FindingsRevisionRepository,
-  D1FindingsStoragePolicyRepository,
-  D1ResearchDefinitionRepository,
-  D1ResearchProjectRepository,
-} from './repositories/D1ResearchRepositories'
+  D1OutcomeStoragePolicyRepository,
+  D1ProjectDefinitionRepository,
+  D1ProjectRecordRepository,
+} from './repositories/D1ProjectOutcomeRepositories'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import { buildDelegatedAgentExecutor, resolveUrlSafetyPolicy } from '@cat-factory/server'
 import {
@@ -478,11 +478,10 @@ function selectWorkerCorePersistence(
   | 'serviceRepository'
   | 'workspaceMountRepository'
   | 'projectRepository'
-  | 'researchDefinitionRepository'
-  | 'researchProjectRepository'
+  | 'projectDefinitionRepository'
+  | 'projectRecordRepository'
+  | 'outcomeStoragePolicyRepository'
   | 'taskProjectLinkRepository'
-  | 'findingsRevisionRepository'
-  | 'findingsStoragePolicyRepository'
   | 'tokenUsageRepository'
 > {
   const { db, clock } = deps
@@ -502,11 +501,10 @@ function selectWorkerCorePersistence(
     serviceRepository: new D1ServiceRepository({ db }),
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
     projectRepository: new D1ProjectRepository({ db }),
-    researchDefinitionRepository: new D1ResearchDefinitionRepository({ db }),
-    researchProjectRepository: new D1ResearchProjectRepository({ db }),
+    projectDefinitionRepository: new D1ProjectDefinitionRepository({ db }),
+    projectRecordRepository: new D1ProjectRecordRepository({ db }),
+    outcomeStoragePolicyRepository: new D1OutcomeStoragePolicyRepository({ db }),
     taskProjectLinkRepository: new D1TaskProjectLinkRepository({ db }),
-    findingsRevisionRepository: new D1FindingsRevisionRepository({ db }),
-    findingsStoragePolicyRepository: new D1FindingsStoragePolicyRepository({ db }),
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
   }
 }
@@ -1006,6 +1004,10 @@ function buildWorkerPersistenceRegistry(
     // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
     // connections.
     testSecretsRepository: new D1TestSecretsRepository({ db }),
+    // The per-workspace capability credentials, sealed the same way and read through a service
+    // rather than the Core. Allow-listed for a mothership-mode node, whose settings CRUD and
+    // dispatch-time resolve otherwise come back `... is not wired`.
+    capabilityCredentialRepository: new D1CapabilityCredentialRepository({ db }),
     // Same reasoning for the per-service PRE-PR VALIDATION CHECKS: the engine reads them via
     // the `resolveValidationChecks` FUNCTION, and the inspector CRUD goes through the service,
     // so the repo isn't in `CoreDependencies` — reflect it explicitly or a mothership-mode

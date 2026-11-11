@@ -184,14 +184,14 @@ import type {
   WorkspaceMountRepository,
   ProjectRepository,
   ProjectKindRegistry,
-  FindingsRevisionRepository,
-  FindingsStoragePolicyRepository,
-  ResearchDefinitionRepository,
-  ResearchProjectRepository,
+  OutcomeStoragePolicyRepository,
+  ProjectDefinitionRepository,
+  ProjectRecordRepository,
   TaskProjectLinkRepository,
   ProjectKindSource,
-  RegisteredResearchDefinitionSource,
-  ResearchDefinitionRegistry,
+  RegisteredProjectDefinitionSource,
+  ProjectDefinitionRegistry,
+  ProjectKindModuleRegistry,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
@@ -336,13 +336,15 @@ export interface CoreDependencies extends ContentLibraryDependencies {
   workspaceMountRepository?: WorkspaceMountRepository
   /** Account-owned projects, mounted through the same mounts. Optional like the two above. */
   projectRepository?: ProjectRepository
-  /** Research persistence: published definitions, research projects, findings and policy tiers. */
-  researchDefinitionRepository?: ResearchDefinitionRepository
-  researchProjectRepository?: ResearchProjectRepository
+  /**
+   * What projects of any kind keep: published definitions, each project's pin and outcome
+   * revisions, and the outcome-storage policy tiers. Optional like the project repository.
+   */
+  projectDefinitionRepository?: ProjectDefinitionRepository
+  projectRecordRepository?: ProjectRecordRepository
+  outcomeStoragePolicyRepository?: OutcomeStoragePolicyRepository
   /** Projects linked to tasks as read-only context. */
   taskProjectLinkRepository?: TaskProjectLinkRepository
-  findingsRevisionRepository?: FindingsRevisionRepository
-  findingsStoragePolicyRepository?: FindingsStoragePolicyRepository
   idGenerator: IdGenerator
   clock: Clock
   /**
@@ -466,15 +468,23 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    */
   projectKindSource?: ProjectKindSource
   /**
-   * The app-owned research-definition registry: the definitions a deployment ships in code.
-   * Defaulted to an EMPTY registry. A facade injects the SAME instance a deployment registers on.
+   * The app-owned project-kind MODULE registry: the code half of each kind (how its definitions
+   * validate, how its tasks are planned and briefed, how its outcomes fold). Defaulted to the
+   * built-in kinds' modules. A facade injects the SAME instance a deployment registers on. Local
+   * on a mothership node too, because a module is code its own build runs.
    */
-  researchDefinitionRegistry?: ResearchDefinitionRegistry
+  projectKindModuleRegistry?: ProjectKindModuleRegistry
   /**
-   * Where REGISTERED research definitions are read from: the registry above unless a
+   * The app-owned project-definition registry: the definitions a deployment ships in code.
+   * Defaulted to an EMPTY registry that validates the kinds `projectKindModuleRegistry` holds.
+   * A facade injects the SAME instance a deployment registers on.
+   */
+  projectDefinitionRegistry?: ProjectDefinitionRegistry
+  /**
+   * Where REGISTERED project definitions are read from: the registry above unless a
    * mothership-mode node injects the remote source.
    */
-  registeredResearchDefinitionSource?: RegisteredResearchDefinitionSource
+  registeredProjectDefinitionSource?: RegisteredProjectDefinitionSource
   /**
    * The app-owned INLINE USE-CASE registry (the deployment's non-container model operations, which
    * `/api/v1/use-cases` publishes and invokes). Optional + defaulted to

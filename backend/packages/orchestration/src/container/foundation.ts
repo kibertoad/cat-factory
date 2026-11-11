@@ -58,8 +58,9 @@ export interface CoreFoundationParams {
   /** The RESOLVED prompt-fragment pool source (own registry, or the mothership's). */
   promptFragments: CoreRuntime['promptFragments']
   projectKinds: CoreRuntime['projectKinds']
-  researchDefinitions: CoreRuntime['researchDefinitions']
-  registeredResearchDefinitions: CoreRuntime['registeredResearchDefinitions']
+  projectDefinitions: CoreRuntime['projectDefinitions']
+  registeredProjectDefinitions: CoreRuntime['registeredProjectDefinitions']
+  projectKindModules: CoreRuntime['projectKindModuleRegistry']
   /** Late-bound spend-service accessor (built after the foundation) for the account-budget cache. */
   getSpendService: () => SpendService | undefined
   /**
@@ -103,8 +104,9 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     pipelineRegistry,
     promptFragments,
     projectKinds,
-    researchDefinitions,
-    registeredResearchDefinitions,
+    projectDefinitions,
+    registeredProjectDefinitions,
+    projectKindModules,
     getSpendService,
     getEnvironmentHandlerSeeder,
     getSharedStackSeeder,
@@ -121,7 +123,7 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
   modules.build('projects', () =>
     createProjectsModule(
       dependencies,
-      { projectKinds, researchDefinitions, registeredResearchDefinitions },
+      { projectKinds, projectDefinitions, registeredProjectDefinitions, projectKindModules },
       executionEventPublisher,
     ),
   )

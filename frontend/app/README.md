@@ -321,6 +321,20 @@ spacing, because `UEmpty` pads `p-4 sm:p-6 lg:p-8` for a page body; and plain te
 because `UEmpty` renders it as an `<h2>`, which would put a heading into every picker. An inline
 value placeholder ("None", a dash in a table cell) is not an empty state.
 
+**A read that failed renders `common/LoadFailedState.vue`, never `EmptyState` and never the
+feature's "not enabled" notice.** Classify the refusal with one of the two helpers in
+`composables/api/errors.ts`. `isModuleOffRefusal` is a 503 with the unreasoned
+`{ code: 'unavailable' }` envelope `requireCapability` sends, the deployment saying it did not wire
+the module; a reasoned 503 or a bare proxy 503 is an outage and reads as a failure. Use it for a
+read behind the auth gate, where a 401 means the session expired. `isAbsentFeatureRefusal` (a 401
+or that same 503) is for a user-scoped read that a signed-out caller or an auth-disabled deployment
+answers with 401 by design. A store records any other failure apart
+from its data (a `loadFailed` flag), so the surface can tell "nothing here", "switched off" and
+"could not ask" apart. A `@retry` listener adds the retry button, and a `failure` (from
+`describeFailure`) adds its translated description with the raw detail and request id behind
+"Show details". While a retry runs, the surface either shows its loading skeleton again, as on
+the first load, or keeps the state and passes `retrying`.
+
 `scripts/check-frontend-feedback.mjs` (CI's `repo-guards` job) bans `useToast(` and `toast.add(`
 outside the two funnels and `animate-spin` outside `Spinner.vue`. Its `PENDING` list names files another open
 change is rewriting, and fails once one of them is clean so the entry cannot outlive the reason.

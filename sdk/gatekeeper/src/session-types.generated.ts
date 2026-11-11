@@ -740,19 +740,29 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
     signature: '  kaizen_list_entries(args?: { limit?: string | number | boolean; cursor?: string | number | boolean; acknowledged?: string | number | boolean; settled?: string | number | boolean; status?: string | number | boolean; agentKind?: string | number | boolean; since?: string | number | boolean }): Promise<unknown>\n',
   },
   {
-    name: 'research_definitions_get',
-    doc: '  /**\n   * Get every version of one research definition\n   *\n   * `GET /api/v1/research-definitions/{key}`, scope floor `read`.\n   */\n',
-    signature: '  research_definitions_get(args: { key: string }): Promise<unknown>\n',
+    name: 'project_kinds_get',
+    doc: '  /**\n   * Get a project kind with its schemas\n   *\n   * `GET /api/v1/project-kinds/{kind}`, scope floor `read`.\n   */\n',
+    signature: '  project_kinds_get(args: { kind: string }): Promise<unknown>\n',
   },
   {
-    name: 'research_definitions_list',
-    doc: '  /**\n   * List the research definitions the account can pin\n   *\n   * `GET /api/v1/research-definitions`, scope floor `read`.\n   */\n',
-    signature: '  research_definitions_list(): Promise<unknown>\n',
+    name: 'project_kinds_get_definition',
+    doc: '  /**\n   * Get every version of one definition\n   *\n   * `GET /api/v1/project-kinds/{kind}/definitions/{key}`, scope floor `read`.\n   */\n',
+    signature: '  project_kinds_get_definition(args: { kind: string; key: string }): Promise<unknown>\n',
   },
   {
-    name: 'research_definitions_publish',
-    doc: '  /**\n   * Publish a research definition version\n   *\n   * `PUT /api/v1/research-definitions/{key}/versions/{version}`, scope floor `admin`.\n   */\n',
-    signature: '  research_definitions_publish(args: { key: string; version: string; body: unknown }): Promise<unknown>\n',
+    name: 'project_kinds_list',
+    doc: '  /**\n   * List the project kinds the deployment offers\n   *\n   * `GET /api/v1/project-kinds`, scope floor `read`.\n   */\n',
+    signature: '  project_kinds_list(): Promise<unknown>\n',
+  },
+  {
+    name: 'project_kinds_list_definitions',
+    doc: '  /**\n   * List the definitions of one kind the account can pin\n   *\n   * `GET /api/v1/project-kinds/{kind}/definitions`, scope floor `read`.\n   */\n',
+    signature: '  project_kinds_list_definitions(args: { kind: string }): Promise<unknown>\n',
+  },
+  {
+    name: 'project_kinds_publish_definition',
+    doc: '  /**\n   * Publish a definition version\n   *\n   * `PUT /api/v1/project-kinds/{kind}/definitions/{key}/versions/{version}`, scope floor `admin`.\n   */\n',
+    signature: '  project_kinds_publish_definition(args: { kind: string; key: string; version: string; body: unknown }): Promise<unknown>\n',
   },
   {
     name: 'projects_create',
@@ -770,19 +780,19 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
     signature: '  projects_get(args: { projectId: string }): Promise<unknown>\n',
   },
   {
-    name: 'projects_get_findings',
-    doc: '  /**\n   * Get a research project\'s findings\n   *\n   * `GET /api/v1/projects/{projectId}/findings`, scope floor `read`.\n   */\n',
-    signature: '  projects_get_findings(args: { projectId: string }): Promise<unknown>\n',
-  },
-  {
-    name: 'projects_get_findings_revision',
-    doc: '  /**\n   * Get one findings revision\n   *\n   * `GET /api/v1/projects/{projectId}/findings/revisions/{revisionId}`, scope floor `read`.\n   */\n',
-    signature: '  projects_get_findings_revision(args: { projectId: string; revisionId: string }): Promise<unknown>\n',
+    name: 'projects_get_outcome',
+    doc: '  /**\n   * Get one outcome with its body\n   *\n   * `GET /api/v1/projects/{projectId}/outcomes/{outcomeId}`, scope floor `read`.\n   */\n',
+    signature: '  projects_get_outcome(args: { projectId: string; outcomeId: string }): Promise<unknown>\n',
   },
   {
     name: 'projects_get_task',
     doc: '  /**\n   * Get a project task\n   *\n   * `GET /api/v1/projects/{projectId}/tasks/{taskId}`, scope floor `read`.\n   */\n',
     signature: '  projects_get_task(args: { projectId: string; taskId: string }): Promise<unknown>\n',
+  },
+  {
+    name: 'projects_get_view',
+    doc: '  /**\n   * Get a project\'s current view\n   *\n   * `GET /api/v1/projects/{projectId}/view`, scope floor `read`.\n   */\n',
+    signature: '  projects_get_view(args: { projectId: string }): Promise<unknown>\n',
   },
   {
     name: 'projects_link_services',
@@ -793,6 +803,11 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
     name: 'projects_list',
     doc: '  /**\n   * List the projects the key\'s workspace mounts\n   *\n   * `GET /api/v1/projects`, scope floor `read`.\n   */\n',
     signature: '  projects_list(): Promise<unknown>\n',
+  },
+  {
+    name: 'projects_list_outcomes',
+    doc: '  /**\n   * List a project\'s outcomes\n   *\n   * `GET /api/v1/projects/{projectId}/outcomes`, scope floor `read`.\n   */\n',
+    signature: '  projects_list_outcomes(args: { projectId: string; stream?: string | number | boolean }): Promise<unknown>\n',
   },
   {
     name: 'projects_list_tasks',

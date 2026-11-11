@@ -23,7 +23,7 @@ type Story = StoryObj<typeof meta>
 const researchKind: ProjectKindDescriptor = {
   id: 'research',
   label: 'Research',
-  data: 'research',
+  definition: 'required',
   taskTypes: [{ taskType: 'research', repoAccess: 'linked-read-only' }],
 }
 

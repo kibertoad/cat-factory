@@ -1,8 +1,8 @@
 import { defineApiContract, noBodyResponse, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { blockSchema } from '../entities.js'
-import { pinnableResearchDefinitionSchema } from '../research.js'
-import { researchProjectViewSchema, researchRevisionDetailSchema } from '../research-view.js'
+import { pinnableProjectDefinitionSchema } from '../project-definitions.js'
+import { projectBoardViewSchema, projectOutcomeDetailSchema } from '../project-view.js'
 import {
   createProjectInputSchema,
   linkTaskProjectsInputSchema,
@@ -37,29 +37,29 @@ export const listProjectCatalogContract = defineApiContract({
   responsesByStatusCode: { 200: v.array(projectSchema), ...errorResponses },
 })
 
-/** The research definition versions the board's account can pin on a new research project. */
-export const listPinnableResearchDefinitionsContract = defineApiContract({
+/** The definition versions of one project kind the board's account can pin on a new project. */
+export const listPinnableProjectDefinitionsContract = defineApiContract({
   method: 'get',
-  pathResolver: () => '/research-definitions',
-  responsesByStatusCode: { 200: v.array(pinnableResearchDefinitionSchema), ...errorResponses },
+  requestPathParamsSchema: singleStringParam('kind'),
+  pathResolver: ({ kind }) => `/project-kinds/${kind}/definitions`,
+  responsesByStatusCode: { 200: v.array(pinnableProjectDefinitionSchema), ...errorResponses },
 })
 
-/** A research project's pin, current findings, revisions and credential readiness. */
-export const getResearchProjectViewContract = defineApiContract({
+/** One project as the board reads it: its pin, outcomes, credential readiness and its kind's view. */
+export const getProjectBoardViewContract = defineApiContract({
   method: 'get',
   requestPathParamsSchema: projectIdParams,
-  pathResolver: ({ projectId }) => `/projects/${projectId}/research`,
-  responsesByStatusCode: { 200: researchProjectViewSchema, ...errorResponses },
+  pathResolver: ({ projectId }) => `/projects/${projectId}/view`,
+  responsesByStatusCode: { 200: projectBoardViewSchema, ...errorResponses },
 })
 
-export const getResearchRevisionContract = defineApiContract({
+export const getProjectOutcomeContract = defineApiContract({
   method: 'get',
   requestPathParamsSchema: withObjectKeys(
-    v.object({ projectId: v.string(), revisionId: v.string() }),
+    v.object({ projectId: v.string(), outcomeId: v.string() }),
   ),
-  pathResolver: ({ projectId, revisionId }) =>
-    `/projects/${projectId}/research/revisions/${revisionId}`,
-  responsesByStatusCode: { 200: researchRevisionDetailSchema, ...errorResponses },
+  pathResolver: ({ projectId, outcomeId }) => `/projects/${projectId}/outcomes/${outcomeId}`,
+  responsesByStatusCode: { 200: projectOutcomeDetailSchema, ...errorResponses },
 })
 
 export const createProjectContract = defineApiContract({

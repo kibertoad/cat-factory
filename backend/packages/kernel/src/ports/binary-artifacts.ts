@@ -61,10 +61,10 @@ export type BinaryArtifactStorageKind = BuiltinBinaryArtifactStorageKind | (stri
  * it joins no visual-confirmation pairing. It is part of the task's definition rather than run
  * debris, so it is retained like an asset and reclaimed with its block.
  *
- * `findings` is a research project's findings revision body that was too large to store in its
- * revision row. It is anchored on the project's root block, retained, and reclaimed with it.
+ * `outcome` is a project's outcome body, of any project kind, that was too large to store in its
+ * outcome row. It is anchored on the project's root block, retained, and reclaimed with it.
  */
-export type BinaryArtifactKind = 'screenshot' | 'reference' | 'asset' | 'context' | 'findings'
+export type BinaryArtifactKind = 'screenshot' | 'reference' | 'asset' | 'context' | 'outcome'
 
 /**
  * The artifact kinds the age-based retention sweep may reclaim, as the ONE statement both
@@ -78,7 +78,7 @@ export type BinaryArtifactKind = 'screenshot' | 'reference' | 'asset' | 'context
 export const RETAINED_BINARY_ARTIFACT_KINDS: readonly BinaryArtifactKind[] = [
   'asset',
   'context',
-  'findings',
+  'outcome',
 ]
 
 /**
@@ -91,7 +91,7 @@ export const RETAINED_BINARY_ARTIFACT_KINDS: readonly BinaryArtifactKind[] = [
  */
 export const BLOCK_ANCHORED_BINARY_ARTIFACT_KINDS: readonly BinaryArtifactKind[] = [
   'context',
-  'findings',
+  'outcome',
 ]
 
 /**

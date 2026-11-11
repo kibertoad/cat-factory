@@ -130,7 +130,7 @@ export async function checkServiceUpdateScope(
 
 /**
  * The `serviceMount` record-based mount `upsert`. Bind on the mount's `workspaceId` FIELD (must be
- * in scope) AND enforce the cross-org mount invariant server-side: the mounted `serviceId` must be
+ * in scope) AND enforce the cross-org mount invariant server-side: the mounted `subjectId` must be
  * owned by the SAME account as the target workspace, so a raw upsert can never plant a cross-org
  * mount — even for a token that spans several accounts (both would be in scope, so a workspace-only
  * check would let one org's service be mounted onto another's board). A non-object arg, a
@@ -212,7 +212,9 @@ export async function checkUsageRecordScope(
  * Resolve a tenant-library owner PAIR (ownerKind, ownerId) to an account and enforce token scope,
  * shared by the `owner` (positional) and `ownerField` (record-field) kinds. Returns `denied` when
  * the pair is malformed or out of scope, else `undefined`. A `workspace` owner resolves through the
- * workspace's owning account; an `account` owner IS the account; any other kind fails closed.
+ * workspace's owning account; an `account` owner IS the account. A `project` owner resolves through
+ * the project's account, but only when the rule opts in with `projectTier`: the content libraries
+ * have no project tier, so for them that kind fails closed like any other.
  */
 export async function checkOwnerPairScope(
   ownerKind: unknown,
@@ -220,14 +222,14 @@ export async function checkOwnerPairScope(
   opts: DispatchOptions,
   inScope: (accountId: string | null | undefined) => boolean,
   denied: DispatchResult,
+  tiers: { projectTier?: boolean } = {},
 ): Promise<DispatchResult | undefined> {
   if (typeof ownerId !== 'string') return denied
   if (ownerKind === 'workspace') {
     if (!inScope(await opts.resolveAccountId(ownerId))) return denied
   } else if (ownerKind === 'account') {
     if (!inScope(ownerId)) return denied
-  } else if (ownerKind === 'project') {
-    // The findings-storage policy's narrowest tier: bound through the project's own account.
+  } else if (ownerKind === 'project' && tiers.projectTier) {
     if (!opts.resolveProjectAccountIds) return denied
     if (!inScope((await opts.resolveProjectAccountIds([ownerId])).get(ownerId))) return denied
   } else {

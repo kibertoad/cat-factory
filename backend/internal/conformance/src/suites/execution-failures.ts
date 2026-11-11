@@ -37,7 +37,7 @@ function registerAgentFailureTests(harness: ConformanceHarness): void {
     expect(exec.steps[exec.currentStep]?.credentialWait).toMatchObject({
       subject: 'capability',
       key: 'VENDOR_TOKEN',
-      declaredBy: { kind: 'research-definition', id: 'acme:vendor' },
+      declaredBy: { kind: 'project-definition', id: 'research/acme:vendor' },
       onboarding: { instructions: 'Create a token under Settings, API.' },
     })
     const resumed = await app.call(
@@ -48,6 +48,23 @@ function registerAgentFailureTests(harness: ConformanceHarness): void {
     expect(
       (resumed.body as { error?: { details?: { reason?: string } } }).error?.details?.reason,
     ).toBe('capability_credential_still_missing')
+
+    // Once the key is stored, the same resume is admitted: the route asks the store about the
+    // subject that declared it, and a project definition's key resolves from the store alone.
+    const stored = await app.call(
+      'PUT',
+      `/workspaces/${wsId}/capability-credentials/VENDOR_TOKEN`,
+      {
+        value: 'vendor-token',
+      },
+    )
+    expect(stored.status).toBe(200)
+    const admitted = await app.call<ExecutionInstance>(
+      'POST',
+      `/workspaces/${wsId}/executions/${exec.id}/credential/resume`,
+    )
+    expect(admitted.status).toBe(200)
+    expect(admitted.body.steps[exec.currentStep]?.credentialWait).toBeNull()
   })
 
   it('classifies a container-start (dispatch) failure as `dispatch`, not a generic run failure', async () => {

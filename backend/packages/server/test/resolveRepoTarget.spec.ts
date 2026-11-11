@@ -6,7 +6,11 @@ import type {
   Service,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import { buildResolveRepoTarget, buildResolveRepoTargets } from '../src/agents/resolveRepoTarget.js'
+import {
+  buildListWorkspaceRunRepos,
+  buildResolveRepoTarget,
+  buildResolveRepoTargets,
+} from '../src/agents/resolveRepoTarget.js'
 
 // Minimal fakes for the narrow ports `buildResolveRepoTarget` reads. Each test
 // wires a tiny in-memory world (one installation, some repos, a block tree, and —
@@ -372,5 +376,44 @@ describe('buildResolveRepoTarget — repoProjection cache (slice 3)', () => {
     // No invalidateGroup → the warmed entry stands.
     expect((await resolve('ws', 'task'))?.name).toBe('old')
     expect(state.listCalls).toBe(1)
+  })
+})
+
+describe('buildListWorkspaceRunRepos', () => {
+  it('reads repo links for the mounted services only, never a mounted project', async () => {
+    const asked: string[][] = []
+    const list = buildListWorkspaceRunRepos({
+      workspaceMountRepository: {
+        listByWorkspace: async () => [
+          {
+            workspaceId: 'ws',
+            subjectKind: 'service',
+            subjectId: 'svc_1',
+            position: { x: 0, y: 0 },
+            size: null,
+            createdAt: 0,
+          },
+          {
+            workspaceId: 'ws',
+            subjectKind: 'project',
+            subjectId: 'prj_1',
+            position: { x: 0, y: 0 },
+            size: null,
+            createdAt: 0,
+          },
+        ],
+      },
+      serviceRepository: {
+        listByIds: async (ids) => {
+          asked.push(ids)
+          return [{ ...service('frame', 1, null), id: 'svc_1' }]
+        },
+      },
+      repoProjectionRepository: {
+        list: async () => [repo({ githubId: 1, owner: 'acme', name: 'api' })],
+      },
+    })
+    expect(await list('ws')).toEqual([{ owner: 'acme', name: 'api', provider: 'github' }])
+    expect(asked).toEqual([['svc_1']])
   })
 })

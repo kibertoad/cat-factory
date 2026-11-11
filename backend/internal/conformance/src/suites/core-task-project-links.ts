@@ -1,23 +1,30 @@
 import type { Project, TaskLinkedProject } from '@cat-factory/contracts'
 import type { Block, WorkspaceSnapshot } from '@cat-factory/kernel'
-import { RESEARCH_PIPELINE_ID, ResearchDefinitionRegistry } from '@cat-factory/kernel'
+import { RESEARCH_PIPELINE_ID, defaultProjectDefinitionRegistry } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 
 // Projects linked to tasks as read-only context: a link is admitted only for a project of the
 // task's own account that has a result, the link survives the round trip through both stores, and
-// a dispatch of the linked task records which findings revision it read.
+// a dispatch of the linked task records which outcome it read. The research kind drives it.
 
-function definitions(): ResearchDefinitionRegistry {
-  const registry = new ResearchDefinitionRegistry()
+function definitions() {
+  const registry = defaultProjectDefinitionRegistry()
   registry.register({
+    kind: 'research',
     key: 'acme:vendor',
     version: 1,
     title: 'Vendor',
-    brief: 'Learn how the vendor integrates.',
-    topics: [
-      { id: 'auth', title: 'Auth', questions: [{ id: 'scheme', question: 'Which auth scheme?' }] },
-    ],
+    spec: {
+      brief: 'Learn how the vendor integrates.',
+      topics: [
+        {
+          id: 'auth',
+          title: 'Auth',
+          questions: [{ id: 'scheme', question: 'Which auth scheme?' }],
+        },
+      ],
+    },
     targets: [{ baseUrl: 'https://vendor.example', surface: 'api' }],
   })
   return registry
@@ -32,14 +39,14 @@ export function defineCoreTaskProjectLinksConformance(harness: ConformanceHarnes
     async function setup() {
       const app = harness.makeApp(
         { asyncKinds: ['project-researcher'] },
-        { researchDefinitionRegistry: definitions() },
+        { projectDefinitionRegistry: definitions() },
       )
       const home = await app.createOrgWorkspace({ seed: true })
       const wsId = home.workspace.id
       const created = await app.call<{ project: Project }>('POST', `/workspaces/${wsId}/projects`, {
         kind: 'research',
         title: 'Vendor research',
-        research: { definitionKey: 'acme:vendor' },
+        definition: { key: 'acme:vendor' },
       })
       expect(created.status).toBe(201)
       const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body

@@ -2,38 +2,42 @@
 
 - **Status:** Accepted (implemented)
 - **Date:** 2026-11-07
-- **Context layer:** `@cat-factory/contracts` (`projects.ts`, `research.ts`, `research-view.ts`,
-  `credential-wait.ts`, the public projects and board route contracts), `@cat-factory/kernel`
-  (`ProjectKindRegistry`, `ResearchDefinitionRegistry`, the project, research and task-project-link
-  ports, `resolveFindingsStoragePolicy`), `@cat-factory/orchestration` (`modules/projects/`,
-  `modules/research/`, `CredentialWaitController`, `linked-context.ts`), `@cat-factory/server`
-  (the project, research and public controllers, `researchJobBody.ts`, the `/internal/*` reads),
-  the executor harness's `research` job kind, both runtime facades, and `frontend/app`
-  (`components/projects/`, `components/research/`). Product page: the catfactory.ai guide to
-  research projects.
+- **Context layer:** `@cat-factory/contracts` (`projects.ts`, `project-definitions.ts`,
+  `project-outcomes.ts`, `project-view.ts`, `public-projects.ts`, and the research kind's
+  `research.ts` and `research-view.ts`), `@cat-factory/kernel` (`ProjectKindRegistry`,
+  `ProjectDefinitionRegistry`, `ProjectKindModule` and its registry, the research kind's module,
+  the project definition, record and task-project-link ports, `resolveOutcomeStoragePolicy`),
+  `@cat-factory/orchestration` (`modules/projects/`, `CredentialWaitController`,
+  `linked-context.ts`), `@cat-factory/server` (the project, outcome-storage and public
+  controllers, `projectJobBody.ts`, the `/internal/*` reads), the executor harness's `project` job
+  kind, both runtime facades, and `frontend/app` (`components/projects/`, the `projectViews` slot,
+  `components/research/`). Product page: the catfactory.ai guide to research projects.
 
 ## Context
 
 A team about to build a complex third-party integration does not yet know how the vendor works.
 Finding out takes hands-on work in two places: preparing test data and configuration in the
 vendor's UI, and calling the vendor's API to see what it returns. The work spans several services
-or none, runs many times against one evolving body of findings, needs vendor credentials a person
+or none, runs many times against one evolving body of results, needs vendor credentials a person
 has to create, and produces a durable result that later work must be able to read.
+
+Research is the first of a family. Architectural design, requirements drafting and other
+solutioning have the same shape: a body of tasks that belongs together, produces a durable result
+other work consumes, and is owned by no service. They differ in what the result holds and how
+successive results combine, and in nothing the platform has to understand to store, order, size,
+reclaim, serve or link them.
 
 Before this decision none of that had a home:
 
 - Every task belonged to a service, and repo resolution walked a task's ancestry to that service's
   repository. Work spanning several services, or none, had nowhere to live.
 - A spike is a single task that clones a repo, answers one question and delivers a Markdown file
-  through a pull request. It has the wrong shape for repeated, repo-less, credentialed research.
+  through a pull request. It has the wrong shape for repeated, repo-less, credentialed work.
 - No container run worked without a repository: the executor refused, and the harness job parse
   required a repo, branch and token.
 - A capability credential a step needed but could not resolve was dropped silently: the tool
   server was withheld and the variable left unset.
 - Nothing a run produced could be linked to a later task as context.
-
-Research is the first of a family. Requirements definition has the same shape: a body of tasks
-that belongs together, produces a durable result other work consumes, and is owned by no service.
 
 ## Decision
 
@@ -50,149 +54,187 @@ A project links to zero or more services as read-only context. `resolveRepoTarge
 project root and refuses with `project_has_no_writable_repo`; a project's tasks read the linked
 services' repositories as reference checkouts and never write to one.
 
-A project's kind is registered on the app-owned `ProjectKindRegistry`, injected by reference on
-`start()`, `startLocal()` and the Worker. A kind declares the task types its project offers (each
-with a default pipeline and a `repoAccess` of `none` or `linked-read-only`) and the project-level
-data it keeps (`data: 'research'`, a closed vocabulary the platform implements). In mothership
-mode a node reads the kinds over `GET /internal/project-kinds`, and a failed read refuses with
-`project_kinds_unreachable`. The platform registers one kind, `research`.
+### A kind is a descriptor and a module; the platform knows neither's content
 
-### A research definition says what to find out
+A project's kind has two halves, both injected by reference on `start()`, `startLocal()` and the
+Worker:
 
-A research definition is versioned, org-authored and immutable per version: a key, a brief, topics
-of questions with stable ids, the vendor credentials it needs (declared by name, never valued, each
-with onboarding instructions and whether it is needed at start), the vendor's `targets`, optional
-per-project `inputs` in the descriptor form vocabulary, and per-agent-kind `promptAdditions`.
+- its **descriptor**, on the `ProjectKindRegistry`: the task types its projects offer (each with a
+  default pipeline and a `repoAccess` of `none` or `linked-read-only`) and whether a project pins a
+  definition (`definition: 'required' | 'optional'`, absent for a kind that pins none). In
+  mothership mode a node reads the descriptors over `GET /internal/project-kinds`, and a failed
+  read refuses with `project_kinds_unreachable`;
+- its **module**, on the `ProjectKindModuleRegistry`: the code that understands the kind's content.
+  It validates a definition's `spec`, decodes an outcome body, plans a task and writes its agent's
+  brief, finishes a task into an outcome body, names the artifacts a body references, summarizes a
+  definition for a picker, and optionally computes the project's `view`, renders it as linked
+  context (`renderContext`) and declares the schemas of its spec, body and view.
 
-Definitions come from two producers and are read through one port, `ResearchDefinitionSource`:
+The engine owns everything else about a project task's run: the pin and its hash check, the task's
+sequence claim, the state fixed on the step, the outcome write and its storage placement, and the
+credential park. It calls a module only where content matters. The platform registers one kind,
+`research`, and a deployment registers its own the same way.
 
-- code, on a `ResearchDefinitionRegistry` a deployment registers on (an entry-point option, and
-  `GET /internal/research-definitions` for a mothership node);
-- data, through `PUT /api/v1/research-definitions/{key}/versions/{version}`, account-scoped. A
-  published version is immutable (`research_definition_version_exists`), and a stored key in a
-  namespace the registered definitions use is refused (`research_definition_key_registered`).
+### Definitions are an envelope with an opaque spec
 
-A research project pins one definition version with its content hash and its input values at
-creation. A dispatch whose registered definition no longer hashes to the pin refuses
-(`research_definition_changed`) rather than asking a question list the project never agreed to.
+A project definition is versioned and immutable per version. Its envelope is the platform's: the
+kind, a key, a version, a title, the credentials its runs need (declared by name, never valued,
+each with onboarding instructions and whether it is needed at start), the `targets` a credential
+may be sent to, optional per-project `inputs` in the descriptor form vocabulary, and per-agent-kind
+`promptAdditions`. Its `spec` is the kind's, validated by the kind's module.
 
-### A research task is one run of the `project-researcher` kind
+Definitions come from two producers and are read through one port, `ProjectDefinitionSource`, keyed
+by kind:
 
-Each research run is a task of the built-in `research` task type, offered only under a project
-(`task_type_requires_project` under a service), on the `pl_research` pipeline of the
-`project-research` purpose. Its mode selects the questions: `initial` (every question), `extend`
-(questions added since the last run, including the task's own ad-hoc questions), `clarify`
-(partial or blocked answers, or named ones) and `refresh` (re-verify everything). A follow-up is a
-new task in the same project, so the project's task list is its research history. Ad-hoc question
-ids are namespaced to their task, and their text is stored on the revision that answers them, so
-later `extend`, `clarify` and `refresh` tasks can ask them again.
+- code, on a `ProjectDefinitionRegistry` a deployment registers on, which validates each definition
+  with its kind's module at registration (an entry-point option, and
+  `GET /internal/project-definitions` for a mothership node);
+- data, through `PUT /api/v1/project-kinds/{kind}/definitions/{key}/versions/{version}`,
+  account-scoped. The same validation applies (`project_definition_invalid` with each problem), a
+  published version is immutable (`project_definition_version_exists`), and a stored key in a
+  namespace the registered definitions of that kind use is refused
+  (`project_definition_key_registered`).
 
-The `project-researcher` kind runs on the `container-research` surface and the `ui` image, as a
-repo-less harness job of kind `research`. One headless Chromium per job serves both the Playwright
-MCP server and the harness's own research tool server over CDP. The research tool server keeps
-secrets out of the model: `fill_secret` types a stored credential into a page field and
-`http_request` attaches one to a request, both harness-side, and both refuse an origin outside the
-definition's `targets`. `request_credential` ends the step asking for a credential that does not
-resolve. Every response and page value is scrubbed with `redactSecrets` before it reaches the model
-or the findings. Egress is not restricted, matching every other container kind; `targets` bound
-where a credential may be sent, not where the container may connect.
+A project of a kind that pins a definition pins one version with its content hash and its input
+values at creation. A dispatch whose registered definition no longer hashes to the pin refuses
+(`project_definition_changed`) rather than running a definition the project never agreed to.
 
-### Findings are immutable revisions folded by question id
+### Outcomes are immutable revisions in streams
 
-Each research task writes one findings revision on its project: per question a status
-(`answered`, `partial`, `unanswered`, `blocked`), an answer, a confidence, evidence and caveats,
-plus run-level learnings and a summary. Revisions are ordered by a sequence number each task claims
+Each project task writes one outcome on its project: an envelope (stream, sequence number, intent
+in the kind's vocabulary, the body's schema version, the task, the pinned definition, the artifacts
+it references) and a body the kind owns. Outcomes are ordered by a sequence number each task claims
 the first time it starts (`reserveTaskSeq`, read back unchanged on a replay or retry), so two
-follow-ups fold in the order they were asked, whatever order they finish in. The current findings
-are the fold: a newer answer with content replaces an older one, and a newer `unanswered` or
-`blocked` is kept beside an answer with content as a note rather than erasing it. The fold and the
-coverage count live in `@cat-factory/contracts`, because the SPA and the backend must agree on
-them. A revision is written once and never upserted.
+follow-ups fold in the order they were asked, whatever order they finish in. An outcome is written
+once and never upserted. A kind that needs two kinds of result writes two streams rather than one
+body with two jobs, and `schemaVersion` lets a kind change its body shape and still read what it
+wrote before.
 
-A revision body is stored inline while it is at or under the effective threshold and offloaded to
-the account's blob store above it, as a `findings` artifact anchored on the project's root block in
-its home workspace, exempt from the age-based sweep and reclaimed with the project. The threshold
-policy cascades account, then workspace (the board that started the run), then project, narrowest
-set value winning. A body over the runtime's own row ceiling that cannot be offloaded is refused
-with `findings_too_large_for_inline`, and an offloaded body the store cannot serve is refused with
-`findings_body_unavailable`, never shown as empty.
+How outcomes combine is the main way kinds differ, so the current state is the kind's `view`.
+Research folds answers per question id: a newer answer with content replaces an older one, and a
+newer `unanswered` or `blocked` is kept beside it as a note rather than erasing it. A design or a
+requirements draft would more naturally take the newest outcome as the document.
+
+`ProjectOutcomeStore` is the one reader and writer of outcome bodies, for every kind, holding a body
+as opaque JSON. A body is stored inline while it is at or under the effective threshold and
+offloaded to the account's blob store above it, as an `outcome` artifact anchored on the project's
+root block in its home workspace, exempt from the age-based sweep, reclaimed with the project and
+carried with it when its home board is deleted. The threshold policy cascades account, then
+workspace (the board that started the run), then project, narrowest set value winning. A body over
+the runtime's own row ceiling that cannot be offloaded is refused with
+`outcome_too_large_for_inline`, and an offloaded body the store cannot serve is refused with
+`outcome_body_unavailable` on a run's read and listed as unreadable on a reader's.
+
+### Research is the built-in kind
+
+A research definition's spec is a brief and topics of questions with stable ids. Each research run
+is a task of the built-in `research` task type, offered only under a project
+(`task_type_requires_project` under a service), on the `pl_research` pipeline. Its mode selects the
+questions: `initial` (every question), `extend` (questions not asked before, including the task's
+own ad-hoc questions), `clarify` (partial or blocked answers, or named ones) and `refresh`
+(re-verify everything); a mode that selects nothing refuses with `research_nothing_to_ask`. A
+follow-up is a new task in the same project, so the project's task list is its research history.
+Ad-hoc question ids are namespaced to their task, and their text is stored on the outcome that
+answers them. The research outcome body records, per question, a status (`answered`, `partial`,
+`unanswered`, `blocked`), an answer, a confidence, evidence and caveats, plus run-level learnings
+and a summary.
+
+The `project-researcher` kind runs on the `container-project` surface and the `ui` image, as a
+repo-less harness job of kind `project`. One headless Chromium per job serves both the Playwright
+MCP server and the harness's access tool server over CDP. The access tool server keeps secrets out
+of the model: `fill_secret` types a stored credential into a page field and `http_request` attaches
+one to a request, both harness-side, and both refuse an origin outside the definition's `targets`.
+`request_credential` ends the step asking for a credential that does not resolve. Every response
+and page value is scrubbed with `redactSecrets` before it reaches the model or the outcome. Egress
+is not restricted, matching every other container kind; `targets` bound where a credential may be
+sent, not where the container may connect. None of the job kind, the tool server or the surface
+is research-specific.
 
 ### A missing capability credential parks the step
 
-Research credentials ride the existing capability credential store, resolved through
-`ToolSecretResolver` for the workspace that started the run. A definition is a credential
-producer: the `research-definition` subject resolves from the store only (never from the
+A definition's credentials ride the existing capability credential store, resolved through
+`ToolSecretResolver` for the workspace that started the run. A definition is a credential producer:
+the `project-definition` subject (`<kind>/<key>`) resolves from the store only (never from the
 deployment's environment), and reserved environment keys are refused.
 
 A `requiredAtStart` credential that does not resolve parks the step before any container starts; a
-mid-run `request_credential` checkpoints the partial findings on the step and parks it with the
-same `CapabilityCredentialMissingError`. `CredentialWaitController` records the wait as a union on
-`subject`: `personal` (the existing subscription lease), `capability` (key, declaring subject,
-label, onboarding, reason, observed) and `unrecorded` (a wait persisted before waits named their
-subject, which cannot be resumed). A capability wait admits any member to resume once the key is
-stored, and the resume re-checks the key through the same resolver a dispatch reads, refusing a
-premature one with `capability_credential_still_missing`. The park is not research-specific: any
-kind declaring a required capability credential can use it.
+mid-run `request_credential` checkpoints the partial result on the step (merged later by the
+kind's module) and parks it with the same `CapabilityCredentialMissingError`.
+`CredentialWaitController` records the wait as a union on `subject`: `personal` (the existing
+subscription lease), `capability` (key, declaring subject, label, onboarding, reason, observed) and
+`unrecorded` (a wait persisted before waits named their subject, which cannot be resumed). A
+capability wait admits any member to resume once the key is stored, and the resume re-checks the
+key through the same resolver a dispatch reads, refusing a premature one with
+`capability_credential_still_missing`.
 
 ### A task links projects as read-only context
 
 A task links projects through `POST /workspaces/:ws/blocks/:blockId/projects`, the public
 `/api/v1/tasks/{taskId}/projects` routes, the create-time `projects` field and an initiative item's
 `spawn.projects`. A link is admitted only for a project of the task's account
-(`project_link_invalid`) that has a result to read (`project_has_no_result`), checked by one
-service for every door.
+(`project_link_invalid`) that has a result to read, meaning at least one outcome
+(`project_has_no_result`), checked by one service for every door.
 
-At dispatch, `resolveLinkedContext` renders each linked project's current result through a
-contributor keyed by its kind's data (`ProjectContextContributors`, a `Record` over the data
-vocabulary, so the next kind plugs in there rather than in the resolver). A research project
-contributes its folded findings: a summary and coverage line in the prompt's linked-context index,
-and the full findings as a `project-<name>.md` file in `.cat-context/`. The step records which
-revision each linked project contributed (`contextProjects`). A linked project that cannot be read
-breaks the run naming it.
+At dispatch, every linked project's current result is rendered by its kind's module
+(`renderContext`) from its decoded outcomes and pinned definition; a kind without one contributes
+the newest outcome of each stream as recorded. Each contributes a summary and a coverage line to
+the prompt's linked-context index and the full result as a `project-<name>.md` file in
+`.cat-context/`, scrubbed of secrets. Research contributes its folded findings with coverage of the
+pinned definition. The step records which outcome each linked project contributed
+(`contextProjects`). A linked project that cannot be read breaks the run naming it.
 
 ### Surfaces
 
-- The board shows project roots beside service frames, a create form with a definition picker and
-  the definition's inputs, a findings reader on a research project (coverage per topic, answers
-  with evidence, revision history with where each body lives, credential readiness per key), a
-  follow-up form, the findings-storage tiers in advanced mode, and a task inspector panel for
-  linked projects. Projects and research are `basic` tier; the storage overrides are `advanced`.
-- The public API serves research definitions, projects, project tasks under
-  `/api/v1/projects/{projectId}/tasks` (returning `PublicProjectTask` with a `projectId`),
-  findings, the credential resume, and task project links. The `/api/v1/tasks/{taskId}` operations
-  that answer a `PublicTask` refuse a project task with `task_owned_by_project`, because
-  `PublicTask.serviceId` is required and retyping it in place would break the surface; the
-  operations that answer no `PublicTask` serve both owners.
+- The board shows project roots beside service frames and a create form that lists the picked
+  kind's definitions with the summary its module writes. Any project opens into one takeover: the
+  pin, the reader its kind contributes to the `projectViews` slot (a generic one showing the newest
+  outcome per stream when it contributes none), the outcome history with where each body lives,
+  credential readiness per key, and the outcome-storage tiers in advanced mode. The research reader
+  shows coverage per topic, answers with evidence and learnings, and starts follow-ups. A task
+  inspector panel holds linked projects. Projects are `basic` tier; the storage overrides are
+  `advanced`.
+- The public API serves the project kinds with the JSON Schemas of each kind's spec, outcome body
+  and view; definitions per kind; projects with their pin; project tasks under
+  `/api/v1/projects/{projectId}/tasks` (returning `PublicProjectTask` with a `projectId`); outcomes
+  and the kind's view; the credential resume; and task project links. A spec, a body and a view are
+  opaque in the spec, so a new kind needs no SDK release and the SDKs carry no kind's types. The
+  `/api/v1/tasks/{taskId}` operations that answer a `PublicTask` refuse a project task with
+  `task_owned_by_project`, because `PublicTask.serviceId` is required and retyping it in place would
+  break the surface; the operations that answer no `PublicTask` serve both owners.
 
 ## Rationale
 
 - **A peer of services, not a block-less run.** Owning a root block keeps every block-keyed
-  mechanism working without a parallel path, and being account-owned and mounted lets one research
-  project serve every team that needs it rather than each team re-researching the same vendor.
+  mechanism working without a parallel path, and being account-owned and mounted lets one project
+  serve every team that needs it rather than each team redoing the same work.
 - **A new block level, not a `frame`.** Many backend checks read a frame as "a service" (the public
   services listing, environments, test secrets, validation). A new level keeps a project out of all
   of them by default, and the exhaustive `Record<BlockLevel, …>` tables force each remaining site
   to classify it.
+- **The kind knows its content; the platform does not.** Storage, ordering, placement, retention,
+  credentials, the public API and linking are the same for every kind, so they are written once
+  against an envelope and an opaque body. What differs (validating a spec, folding outcomes,
+  briefing an agent, rendering context) is a module method, so a second kind adds a module and a
+  reader component rather than a branch on a kind id in the engine, the stores, the SDKs or the
+  SPA.
 - **Not an initiative.** An initiative ([ADR 0013](./0013-initiatives-feature.md)) is a
   plan-then-execute machine anchored in one service frame, stored as one rev-guarded blob and
-  mirrored into the service's repository. A research project is repo-less, has no plan or phases,
-  and stores immutable revisions. The two connect through linking: an initiative consumes a
-  research project's findings through `spawn.projects`.
-- **Immutable, sequence-ordered revisions.** A replayed write can never recompute against a moved
+  mirrored into the service's repository. A project is repo-less, has no plan or phases, and stores
+  immutable outcomes. The two connect through linking: an initiative consumes a project's result
+  through `spawn.projects`.
+- **Immutable, sequence-ordered outcomes.** A replayed write can never recompute against a moved
   fold, and ordering by when a task started rather than when it finished keeps concurrent
   follow-ups deterministic. A per-task claim rather than a per-call increment is what keeps a
   replayed start from taking a second number.
-- **The model judges; the platform computes.** The agent states a status per question, and
+- **The model judges; the platform computes.** Research's agent states a status per question, and
   coverage is derived in code from those statuses.
 - **Secrets stay harness-side.** Playwright MCP's own typing tool takes literal text, which would
   put a password in the model context and the telemetry store, and its `--secrets` substitution
   binds a secret to no origin. An origin-bound tool of our own is the narrowest surface that still
   lets the agent log in.
-- **Park, never degrade.** A research run that silently lost a credential would record `blocked`
-  answers no human knew to unblock. Parking states what is missing, names who can supply it, and
-  resumes the same run.
-- **A project contributes by kind.** The resolver asks a contributor keyed by the kind's data, so a
-  requirements project adds a member and an implementation instead of a branch on a kind id.
+- **Park, never degrade.** A run that silently lost a credential would record `blocked` answers no
+  human knew to unblock. Parking states what is missing, names who can supply it, and resumes the
+  same run.
 
 ## Consequences
 
@@ -200,16 +242,20 @@ breaks the run naming it.
   with `project_has_no_writable_repo` at dispatch.
 - Capability credentials are workspace-scoped and projects account-scoped, so "configured" is
   stated per board, for the board that will start the run.
-- The `ui` runner image carries the research toolchain (Playwright MCP) beside the UI tester's.
-  The local native transport ignores the image variant, so an ambient-auth research job runs
+- A kind with no module in a process lists no pinnable definitions there and cannot be published
+  to, because its definitions cannot be validated; its outcomes are still served as stored.
+- The JSON Schemas a kind serves state its shapes, not every rule: a refinement such as unique
+  question ids has no JSON Schema form, and the kind still enforces it when it parses.
+- The `ui` runner image carries the browser toolchain (Playwright MCP) beside the UI tester's.
+  The local native transport ignores the image variant, so an ambient-auth project job runs
   without a browser and the agent is told so.
 - The harness writes every context file flat into `.cat-context/`, so a linked project's file is
   named `project-<name>.md` rather than living under a subdirectory, which would need a runner
   image change.
-- `PipelineStep.research.checkpoint` is stored untyped and parsed on read: typed through the
-  findings schema it made the workspace snapshot type too deep for the compiler.
+- `PipelineStep.project.plan` and `.checkpoint` are stored untyped and parsed by the kind's module
+  on read: typing them per kind made the workspace snapshot type too deep for the compiler.
 - The Postgres blob backend refuses bodies over 16 MiB and D1 has no blob backend, so a Cloudflare
-  account with content storage off holds only inline findings, under the D1 row cap.
+  account with content storage off holds only inline outcomes, under the D1 row cap.
 - A project hosting a cross-service initiative is possible (an initiative block under a project
   root spawns there) but unsupported: `resolveRepoTarget` would need a rule naming which linked
   service an item writes to.

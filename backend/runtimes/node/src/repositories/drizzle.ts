@@ -69,10 +69,9 @@ import type {
   WorkspaceMemberRepository,
   WorkspaceMountRepository,
   ProjectRepository,
-  FindingsRevisionRepository,
-  FindingsStoragePolicyRepository,
-  ResearchDefinitionRepository,
-  ResearchProjectRepository,
+  OutcomeStoragePolicyRepository,
+  ProjectDefinitionRepository,
+  ProjectRecordRepository,
   TaskProjectLinkRepository,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
@@ -94,11 +93,10 @@ import {
 import { DrizzleProjectRepository } from './drizzle/projects.js'
 import { DrizzleTaskProjectLinkRepository } from './drizzle/taskProjectLinks.js'
 import {
-  DrizzleFindingsRevisionRepository,
-  DrizzleFindingsStoragePolicyRepository,
-  DrizzleResearchDefinitionRepository,
-  DrizzleResearchProjectRepository,
-} from './drizzle/research.js'
+  DrizzleOutcomeStoragePolicyRepository,
+  DrizzleProjectDefinitionRepository,
+  DrizzleProjectRecordRepository,
+} from './drizzle/project-outcomes.js'
 
 import {
   DrizzleAgentRunRepository,
@@ -226,11 +224,10 @@ export interface CoreRepositories {
   serviceRepository: ServiceRepository
   workspaceMountRepository: WorkspaceMountRepository
   projectRepository: ProjectRepository
-  researchDefinitionRepository: ResearchDefinitionRepository
-  researchProjectRepository: ResearchProjectRepository
+  projectDefinitionRepository: ProjectDefinitionRepository
+  projectRecordRepository: ProjectRecordRepository
+  outcomeStoragePolicyRepository: OutcomeStoragePolicyRepository
   taskProjectLinkRepository: TaskProjectLinkRepository
-  findingsRevisionRepository: FindingsRevisionRepository
-  findingsStoragePolicyRepository: FindingsStoragePolicyRepository
   requirementReviewRepository: RequirementReviewRepository
   docInterviewRepository: DocInterviewRepository
   guidedReviewRepository: GuidedReviewRepository
@@ -303,11 +300,10 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     serviceRepository: new DrizzleServiceRepository(db),
     workspaceMountRepository: new DrizzleWorkspaceMountRepository(db),
     projectRepository: new DrizzleProjectRepository(db),
-    researchDefinitionRepository: new DrizzleResearchDefinitionRepository(db),
-    researchProjectRepository: new DrizzleResearchProjectRepository(db),
+    projectDefinitionRepository: new DrizzleProjectDefinitionRepository(db),
+    projectRecordRepository: new DrizzleProjectRecordRepository(db),
+    outcomeStoragePolicyRepository: new DrizzleOutcomeStoragePolicyRepository(db),
     taskProjectLinkRepository: new DrizzleTaskProjectLinkRepository(db),
-    findingsRevisionRepository: new DrizzleFindingsRevisionRepository(db),
-    findingsStoragePolicyRepository: new DrizzleFindingsStoragePolicyRepository(db),
     requirementReviewRepository: new DrizzleRequirementReviewRepository(db),
     docInterviewRepository: new DrizzleDocInterviewRepository(db),
     guidedReviewRepository: new DrizzleGuidedReviewRepository(db),

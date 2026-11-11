@@ -476,7 +476,7 @@ export class WorkspaceService {
     const visibleBlocks = localBlocks.filter((b) => !localHidden.has(b.id))
     const composed = await this.composeBoard(visibleBlocks, mounts)
     // Pass 2 (composed): a FOREIGN service archived on its home board reaches this board only via
-    // its mount, so `composeBoard` re-fetches its (archived) subtree via `listByServices`. Seed the
+    // its mount, so `composeBoard` re-fetches its (archived) subtree via `listByOwners`. Seed the
     // final hide-set with pass 1's ids and grow it over the composed board so that frame + subtree
     // are dropped here too. A local frame re-pulled as "foreign" is already in `localHidden`, so it
     // is not double-counted as a fresh foreign archive.
@@ -582,6 +582,14 @@ export class WorkspaceService {
     }
   }
 
+  /** The service and project reads that resolve a mounted subject to its root block. */
+  private subjectReaders(): MountSubjectReaders {
+    return {
+      ...(this.serviceRepository ? { serviceRepository: this.serviceRepository } : {}),
+      ...(this.projectRepository ? { projectRepository: this.projectRepository } : {}),
+    }
+  }
+
   /**
    * Compose a workspace's board from the services it mounts: its own (locally created)
    * blocks plus the full subtree of any service mounted from another workspace in the
@@ -592,14 +600,6 @@ export class WorkspaceService {
    * carried on the mount (that is what `moveBlock` writes). When the service repositories
    * aren't wired (or nothing is mounted) this is a no-op and the local blocks stand.
    */
-  /** The service and project reads that resolve a mounted subject to its root block. */
-  private subjectReaders(): MountSubjectReaders {
-    return {
-      ...(this.serviceRepository ? { serviceRepository: this.serviceRepository } : {}),
-      ...(this.projectRepository ? { projectRepository: this.projectRepository } : {}),
-    }
-  }
-
   private async composeBoard(localBlocks: Block[], mounts: WorkspaceMount[]): Promise<Block[]> {
     if (!this.serviceRepository || mounts.length === 0) return localBlocks
 
@@ -650,6 +650,11 @@ export class WorkspaceService {
 
   async delete(id: string): Promise<void> {
     await this.require(id)
+    // Re-home the SHARED subjects this board homes: a service or project another board still
+    // mounts must NOT be destroyed just because its home board is deleted. Planned before the
+    // purge, so the artifacts anchored on a re-homed subject's blocks (a project's offloaded
+    // findings, a task's attached images) move with it instead of being purged with the board.
+    const rehome = await this.planSharedServiceRehome(id)
     // Reclaim the board's binary artifacts (screenshots + reference images) — BOTH the metadata
     // rows AND the heavy blob bytes — BEFORE the row cascade. The retention sweeps only ever see
     // LIVE workspaces (`listVisible`), so a deleted board's artifacts would otherwise leak their
@@ -660,13 +665,9 @@ export class WorkspaceService {
     // rows survive rather than orphaning the bytes). But because a deleted board never reappears
     // in `listVisible`, no retention sweep will revisit those rows — reclaim is then out-of-band,
     // so the failure is LOGGED (not silent) rather than promising an auto-retry that can't happen.
-    // Re-home the SHARED subjects this board homes: a service or project another board still
-    // mounts must NOT be destroyed just because its home board is deleted. Planned before the
-    // purge, so the artifacts anchored on a re-homed subject's blocks (a project's offloaded
-    // findings, a task's attached images) move with it instead of being purged with the board.
-    const rehome = await this.planSharedServiceRehome(id)
-    await this.carryRehomedArtifacts(id, rehome)
-    await this.purgeBinaryArtifacts(id)
+    // A carry that failed skips the purge: purging then would destroy the re-homed subjects'
+    // artifacts along with the board's own, so they are kept for the same out-of-band reclaim.
+    if (await this.carryRehomedArtifacts(id, rehome)) await this.purgeBinaryArtifacts(id)
     // Freeze the board's remaining spend into the durable cost rollup while the rows it is
     // folded from are still here. `spend_days` deliberately survives a board delete, but the
     // sweep that fills it only reaches boards that still exist, so without this the board's
@@ -685,14 +686,17 @@ export class WorkspaceService {
 
   /**
    * Move the artifacts anchored on each re-homed subject's blocks to the board it moves to.
-   * Best-effort like the purge after it: a row left behind is purged with the board.
+   * Best-effort like the purge, and false when the carry failed.
    */
-  private async carryRehomedArtifacts(id: string, rehome: readonly MountRehome[]): Promise<void> {
-    if (!this.resolveBinaryArtifactStore || rehome.length === 0) return
+  private async carryRehomedArtifacts(
+    id: string,
+    rehome: readonly MountRehome[],
+  ): Promise<boolean> {
+    if (!this.resolveBinaryArtifactStore || rehome.length === 0) return true
     const resolve = this.resolveBinaryArtifactStore
     const blocks = await this.blockRepository.listByOwners(rehome.map((r) => r.subjectId))
     const roots = await subjectsOwningRoots(
-      blocks.filter((b) => b.parentId === null).map((b) => b.id),
+      blocks.filter((b) => b.parentId === null),
       this.subjectReaders(),
     )
     // Root ids repeat across boards, so only the subjects being re-homed name a root here.
@@ -714,19 +718,21 @@ export class WorkspaceService {
       if (!owner) continue
       blockIdsByOwner.set(owner, [...(blockIdsByOwner.get(owner) ?? []), block.id])
     }
-    await runBestEffort(
+    const carried = await runBestEffort(
       this.logger ?? noopLogger,
       'workspace delete: carry re-homed artifacts',
       async () => {
         const store = await resolve(id)
-        if (!store) return
+        if (!store) return true
         for (const { subjectId, toWorkspaceId } of rehome) {
           const blockIds = blockIdsByOwner.get(subjectId) ?? []
           if (blockIds.length) await store.moveBlocks([id, toWorkspaceId], blockIds)
         }
+        return true
       },
       { workspaceId: id, subjects: rehome.length },
     )
+    return carried === true
   }
 
   /** Purge every binary artifact (rows + blob bytes) of a board being deleted. No-op when the
@@ -888,19 +894,19 @@ export class WorkspaceService {
   private async planSharedServiceRehome(id: string): Promise<MountRehome[]> {
     if (!this.serviceRepository || !this.workspaceMountRepository) return []
     const blocks = await this.blockRepository.listByWorkspace(id)
-    const rootIds = blocks
-      .filter((b) => (b.level === 'frame' || b.level === 'project') && b.parentId === null)
-      .map((b) => b.id)
-    if (rootIds.length === 0) return []
-    // Root block ids are not unique across boards (every seeded board carries `blk_auth`), so a
-    // subject owning a matching id on ANOTHER board is not homed here, and re-homing it would move
-    // that board's blocks. A subject's home board always mounts it, and in its own account.
-    const accountId = (await this.workspaceRepository.accountOf(id)) ?? null
-    const mountedHere = new Set(
-      (await this.workspaceMountRepository.listByWorkspace(id)).map((m) => m.subjectId),
+    const roots = blocks.filter(
+      (b) => (b.level === 'frame' || b.level === 'project') && b.parentId === null,
     )
-    const homed = (await subjectsOwningRoots(rootIds, this.subjectReaders()))
-      .filter((s) => s.accountId === accountId && mountedHere.has(s.subjectId))
+    if (roots.length === 0) return []
+    // Root block ids are not unique across boards (every seeded board carries `blk_auth`), so a
+    // subject is homed here only when THIS board's root row carries its owner stamp. That stamp is
+    // also what the re-home moves, and it holds whether or not this board still mounts the subject.
+    const homedHere = new Set<string>()
+    for (const row of await this.blockRepository.findByIds(roots.map((b) => b.id))) {
+      if (row.workspaceId === id && row.ownerId) homedHere.add(row.ownerId)
+    }
+    const homed = (await subjectsOwningRoots(roots, this.subjectReaders()))
+      .filter((s) => homedHere.has(s.subjectId))
       .map((s) => ({ id: s.subjectId }))
     if (homed.length === 0) return []
     // One batched mount read for every homed subject (not one per subject).

@@ -528,8 +528,8 @@ export {
 } from './container.js'
 export type { MountedProject } from './modules/projects/ProjectService.js'
 export { TaskProjectLinkService } from './modules/projects/TaskProjectLinkService.js'
-export type {
-  ProjectContextContributor,
-  ProjectContextContributors,
-  ProjectContextEntry,
+export {
+  type ProjectContextContributor,
+  type ProjectContextEntry,
+  projectContextContributor,
 } from './modules/projects/projectContext.js'

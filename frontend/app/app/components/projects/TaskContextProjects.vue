@@ -7,8 +7,8 @@ import EmptyState from '~/components/common/EmptyState.vue'
 import IconButton from '~/components/common/IconButton.vue'
 
 // Projects linked to a task as read-only context: every dispatch of the task reads each linked
-// project's current result (a research project's findings). Offered from the account's projects
-// whose kind keeps a result; the server refuses one with nothing to read yet, and says so.
+// project's current result as its kind renders it (a research project's findings, say). Offered
+// from every project of the account; the server refuses one with nothing to read yet, and says so.
 const props = defineProps<{ block: Block }>()
 
 const { t } = useI18n()
@@ -29,7 +29,7 @@ const titleOf = (projectId: string, fallback: string | null) => {
 const options = computed(() => {
   const taken = new Set(linked.value.map((l) => l.projectId))
   return projects.catalog
-    .filter((p) => !taken.has(p.id) && projects.kindOf(p)?.data !== undefined)
+    .filter((p) => !taken.has(p.id))
     .map((p) => ({ label: titleOf(p.id, null), value: p.id }))
 })
 

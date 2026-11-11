@@ -55,7 +55,7 @@ import {
   settledRunResult,
 } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
-import { buildResearchJobBody } from './researchJobBody.js'
+import { buildProjectJobBody } from './projectJobBody.js'
 import { resolveTestCredentials, type ResolvedTestCredentials } from './testCredentials.js'
 import { buildDispatchPromptContext } from './dispatchPromptContext.js'
 import { buildDispatchOptions } from './dispatchOptions.js'
@@ -392,10 +392,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
     const { workspaceId, executionId } = this.requireIds(context)
-    // A research kind's job carries no checkout, so its body is the repo-less research one.
+    // A project kind's job carries no checkout, so its body is the repo-less project one.
     const built =
-      this.agentKindRegistry.agentStep(context.agentKind)?.surface === 'container-research'
-        ? await this.buildResearchBody(context)
+      this.agentKindRegistry.agentStep(context.agentKind)?.surface === 'container-project'
+        ? await this.buildProjectBody(context)
         : await this.buildJobBody(context)
     const { body, model, provider, kind, subscriptionTokenId, subscriptionVendor } = built
     const { search, repoSummary, toolServers } = built
@@ -515,7 +515,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     }
     // Completed: a structured `error` (e.g. "no file changes") is still a failure. The harness
     // carries the cause on the view even for these clean-exit failures, so forward it too.
-    // A research job that stopped to ask for a credential is a park, not a failure, even when its
+    // A project job that stopped to ask for a credential is a park, not a failure, even when its
     // reply was unreadable: the engine checkpoints what came back and waits for the credential.
     if (result.error && !result.needsCredential) {
       jobLog.settled('failed', { failureCause: view.failureCause, cleanExit: true })
@@ -659,12 +659,12 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       : false
   }
 
-  /** The repo-less research job body, through the same model, auth and tool-server resolution. */
-  private async buildResearchBody(context: AgentRunContext) {
+  /** The repo-less project job body, through the same model, auth and tool-server resolution. */
+  private async buildProjectBody(context: AgentRunContext) {
     const { workspaceId, executionId, blockId } = this.requireIds(context)
     const jobId = stepJobId(executionId, context.agentKind, context.dispatchEpoch)
     const routed = this.modelRouter.resolveDispatchRef(context, workspaceId)
-    const built = await buildResearchJobBody(
+    const built = await buildProjectJobBody(
       context,
       { workspaceId, executionId, jobId },
       {

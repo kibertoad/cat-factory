@@ -536,7 +536,7 @@ if (!env.DATABASE_URL) {
 const backend = await start({
   env,
   // One code-registered research definition, so the research specs can pin a research project.
-  researchDefinitionRegistry: e2eResearchDefinitions(),
+  projectDefinitionRegistry: e2eResearchDefinitions(),
   // The composition root: the stock Node container, but with the agent executor + repo
   // bootstrapper swapped for the deterministic fakes. `start()` supplies `db`, the started
   // pg-boss `boss` (so the REAL durable runner drives runs — NOT the Noop runner) and the
