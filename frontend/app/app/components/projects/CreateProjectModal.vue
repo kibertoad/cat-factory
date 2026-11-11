@@ -42,9 +42,7 @@ const serviceOptions = computed(() =>
     value: s.id,
   })),
 )
-const definitionUse = computed(
-  () => projects.kinds.find((k) => k.id === kind.value)?.definition,
-)
+const definitionUse = computed(() => projects.kinds.find((k) => k.id === kind.value)?.definition)
 const pinsDefinition = computed(() => definitionUse.value !== undefined)
 const definitionKeyOf = (d: PinnableProjectDefinition) => `${d.key}@${d.version}`
 const definitionOptions = computed(() =>
@@ -64,9 +62,7 @@ const canSubmit = computed(
   () =>
     !!kind.value &&
     !!title.value.trim() &&
-    (definition.value
-      ? inputProblems.value.length === 0
-      : definitionUse.value !== 'required'),
+    (definition.value ? inputProblems.value.length === 0 : definitionUse.value !== 'required'),
 )
 
 onModalOpen(open, () => {

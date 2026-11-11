@@ -154,21 +154,21 @@ function harness(opts: {
     list: async () => [resolved],
   }
   const records: ProjectRecordRepository = {
-      getPin: async () => pin,
-      insertPin: async () => {},
-      reserveSeq: async () => seqs.size + 1 + rows.length,
-      reserveTaskSeq: async (_projectId: string, taskId: string) => {
-        if (!seqs.has(taskId)) seqs.set(taskId, seqs.size + 1 + rows.length)
-        return seqs.get(taskId)!
-      },
-      insertOutcome: async (row: ProjectOutcomeRow) => {
-        if (rows.some((r) => r.id === row.id)) return false
-        rows.push(row)
-        return true
-      },
-      getOutcome: async (_projectId: string, id: string) => rows.find((r) => r.id === id) ?? null,
-      listOutcomes: async () => rows,
-      deleteByProjects: async () => {},
+    getPin: async () => pin,
+    insertPin: async () => {},
+    reserveSeq: async () => seqs.size + 1 + rows.length,
+    reserveTaskSeq: async (_projectId: string, taskId: string) => {
+      if (!seqs.has(taskId)) seqs.set(taskId, seqs.size + 1 + rows.length)
+      return seqs.get(taskId)!
+    },
+    insertOutcome: async (row: ProjectOutcomeRow) => {
+      if (rows.some((r) => r.id === row.id)) return false
+      rows.push(row)
+      return true
+    },
+    getOutcome: async (_projectId: string, id: string) => rows.find((r) => r.id === id) ?? null,
+    listOutcomes: async () => rows,
+    deleteByProjects: async () => {},
   }
   const ctrl = new ProjectStepController({
     blockRepository,
