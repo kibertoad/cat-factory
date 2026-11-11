@@ -2,7 +2,9 @@ import {
   getPublicRunOutcomeContract,
   getPublicRunReportContract,
   listPublicRunArtifactsContract,
+  type PublicArtifactKind,
   type PublicArtifactScope,
+  isPublicArtifactKind,
   type PublicRunArtifact,
 } from '@cat-factory/contracts'
 import type { BinaryArtifactRecord, BinaryArtifactStore } from '@cat-factory/kernel'
@@ -65,7 +67,7 @@ import { authorize, authorizeOrThrow, refuse } from './publicApiAuth.js'
 
 /** Project a stored artifact row onto the wire, dropping the storage vocabulary. */
 function artifactToWire(
-  record: BinaryArtifactRecord,
+  record: BinaryArtifactRecord & { kind: PublicArtifactKind },
   scope: PublicArtifactScope,
 ): PublicRunArtifact {
   return {
@@ -139,11 +141,18 @@ async function listRunArtifacts(
   ])
   const seen = new Set(captured.map((record) => record.id))
   return [
-    ...captured.map((record) => artifactToWire(record, 'run')),
+    ...captured.filter(isPublicArtifact).map((record) => artifactToWire(record, 'run')),
     ...onTask
       .filter((record) => !seen.has(record.id))
+      .filter(isPublicArtifact)
       .map((record) => artifactToWire(record, 'task')),
   ]
+}
+
+function isPublicArtifact(
+  record: BinaryArtifactRecord,
+): record is BinaryArtifactRecord & { kind: PublicArtifactKind } {
+  return isPublicArtifactKind(record.kind)
 }
 
 export function publicEvidenceController(): Hono<AppEnv> {
@@ -209,7 +218,9 @@ export function publicEvidenceController(): Hono<AppEnv> {
     const store = await requireArtifactStore(c, auth.workspaceId)
     const artifactId = param(c, 'artifactId')
     const got = await store.getBlobWithMetadata(auth.workspaceId, artifactId)
-    if (!got) throw new NotFoundError('Artifact', artifactId, { reason: 'artifact_not_found' })
+    if (!got || !isPublicArtifactKind(got.record.kind)) {
+      throw new NotFoundError('Artifact', artifactId, { reason: 'artifact_not_found' })
+    }
     // A row whose bytes are gone from the backend is its own 404 and not an empty 200: a
     // zero-byte image would read as a screenshot of nothing. Its own REASON, too: "the id is not
     // yours" is a caller's mistake to stop repeating, where a metadata row that outlived its

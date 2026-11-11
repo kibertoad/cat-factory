@@ -1,5 +1,4 @@
 import {
-  OUTCOME_INLINE_MAX_BYTES_CEILING,
   projectDefinitionSubjectId,
   type Project,
   type ProjectDefinition,
@@ -9,26 +8,22 @@ import {
 import {
   CapabilityCredentialMissingError,
   ValidationError,
-  placeOutcomeBody,
   redactSecrets,
-  resolveOutcomeStoragePolicy,
   type AgentRunResult,
   type Block,
   type BlockRepository,
   type Clock,
-  type OutcomeStoragePolicyRepository,
   type PipelineStep,
   type ProjectDefinitionSource,
   type ProjectKindModule,
   type ProjectKindModuleRegistry,
-  type ProjectOutcomeRow,
   type ProjectRecordRepository,
   type ProjectRepository,
   type ProjectRunContext,
   type ProjectTaskInput,
   type ServiceRepository,
-  type WorkspaceRepository,
 } from '@cat-factory/kernel'
+import type { ProjectOutcomeStore, StoredOutcome } from './ProjectOutcomeStore.js'
 
 // ---------------------------------------------------------------------------
 // The engine half of a project task's run, for every project kind: what its step is asked when it
@@ -42,10 +37,10 @@ export interface ProjectStepControllerDeps {
   blockRepository: Pick<BlockRepository, 'findById'>
   projectRepository: Pick<ProjectRepository, 'get'>
   serviceRepository?: Pick<ServiceRepository, 'listByIds'>
-  workspaceRepository: Pick<WorkspaceRepository, 'accountOf'>
   definitions: ProjectDefinitionSource
   records: ProjectRecordRepository
-  policies?: OutcomeStoragePolicyRepository
+  /** Where outcome bodies live, inline or offloaded to the account's blob store. */
+  outcomes: ProjectOutcomeStore
   modules: ProjectKindModuleRegistry
   clock: Clock
 }
@@ -183,33 +178,33 @@ export class ProjectStepController {
       reply,
       ...(checkpoint !== undefined ? { checkpoint } : {}),
     })
-    const json = JSON.stringify(finished.body)
-    const bytes = new globalThis.TextEncoder().encode(json).byteLength
-    await this.assertFitsInline(workspaceId, state.projectId, bytes)
-    const row: ProjectOutcomeRow = {
-      id: outcomeIdFor(taskId),
-      projectId: state.projectId,
-      stream: state.stream,
-      seq: state.seq,
-      intent: state.intent,
-      schemaVersion: module.outcomeSchemaVersion,
-      taskId,
-      definitionKey: state.definitionKey,
-      definitionVersion: state.definitionVersion,
-      artifactRefs: module.artifactRefs(finished.body),
-      createdAt: this.deps.clock.now(),
-      body: { kind: 'inline', json },
-      bodyBytes: bytes,
-    }
-    step.project = { ...state, outcomeId: row.id }
-    if (await this.deps.records.insertOutcome(row)) {
-      return { output: finished.output, outputIsRendered: true }
-    }
+    const project = await this.deps.projectRepository.get(state.projectId)
+    if (!project) throw new Error(`Project '${state.projectId}' no longer exists`)
+    const id = outcomeIdFor(taskId)
+    const recorded = await this.deps.outcomes.write({
+      runWorkspaceId: workspaceId,
+      project,
+      row: {
+        id,
+        projectId: state.projectId,
+        stream: state.stream,
+        seq: state.seq,
+        intent: state.intent,
+        schemaVersion: module.outcomeSchemaVersion,
+        taskId,
+        definitionKey: state.definitionKey,
+        definitionVersion: state.definitionVersion,
+        artifactRefs: module.artifactRefs(finished.body),
+        createdAt: this.deps.clock.now(),
+      },
+      json: JSON.stringify(finished.body),
+    })
+    step.project = { ...state, outcomeId: id }
+    if (recorded.written) return { output: finished.output, outputIsRendered: true }
     // A replayed completion lost to the write that landed first: describe the outcome on record,
     // not the replay's reply, which may differ from it.
-    const stored = await this.deps.records.getOutcome(state.projectId, row.id)
-    const body = stored ? this.decode(module, stored).body : undefined
-    if (body === undefined) throw new Error(`Outcome '${row.id}' was refused but is not on record`)
+    const body = module.parseOutcome(module.outcomeSchemaVersion, JSON.parse(recorded.json))
+    if (body === undefined) throw new Error(`Outcome '${id}' holds an unreadable body`)
     return {
       output: module.describe({ plan: state.plan, seq: state.seq, body }),
       outputIsRendered: true,
@@ -236,13 +231,13 @@ export class ProjectStepController {
     }
     const pin = await this.deps.records.getPin(project.id)
     const definition = pin ? await this.pinnedDefinition(project, pin) : null
-    const rows = await this.deps.records.listOutcomes(project.id)
+    const stored = await this.deps.outcomes.list(project)
     return {
       project,
       module,
       definition,
       inputs: pin?.inputs ?? {},
-      outcomes: rows.map((row) => this.decode(module, row)),
+      outcomes: stored.map((outcome) => this.decode(module, outcome)),
     }
   }
 
@@ -299,43 +294,11 @@ export class ProjectStepController {
     return module.parseOutcome(module.outcomeSchemaVersion, value)
   }
 
-  private decode(module: ProjectKindModule<unknown>, row: ProjectOutcomeRow): ProjectOutcome {
-    const ref = row.body
-    if (ref.kind !== 'inline') {
-      throw new Error(`Outcome '${row.id}' is offloaded, which this build cannot read yet`)
-    }
-    const body = module.parseOutcome(row.schemaVersion, JSON.parse(ref.json))
+  private decode(module: ProjectKindModule<unknown>, { row, json }: StoredOutcome): ProjectOutcome {
+    const body = module.parseOutcome(row.schemaVersion, JSON.parse(json))
     if (body === undefined) throw new Error(`Outcome '${row.id}' holds an unreadable body`)
     const { body: _ref, bodyBytes: _bytes, ...meta } = row
     return { ...meta, body }
-  }
-
-  /**
-   * Where the body is stored under the account, workspace and project policy tiers. Only inline
-   * storage is implemented, so a body over the runtime's own row ceiling is refused loudly rather
-   * than truncated; one over the policy threshold but under the ceiling stays inline.
-   */
-  private async assertFitsInline(workspaceId: string, projectId: string, bytes: number) {
-    const policies = this.deps.policies
-    const accountId = (await this.deps.workspaceRepository.accountOf(workspaceId)) ?? null
-    const [account, workspace, project] = await Promise.all([
-      accountId && policies ? policies.get('account', accountId) : null,
-      policies ? policies.get('workspace', workspaceId) : null,
-      policies ? policies.get('project', projectId) : null,
-    ])
-    const policy = resolveOutcomeStoragePolicy({
-      account,
-      workspace,
-      project,
-      facadeInlineCeilingBytes: OUTCOME_INLINE_MAX_BYTES_CEILING,
-    })
-    const placement = placeOutcomeBody({ bytes, policy, blobStoreAvailable: false })
-    if (placement.placement === 'refused') {
-      throw new ValidationError('The outcome is too large to store inline', {
-        reason: placement.reason,
-        bytes,
-      })
-    }
   }
 }
 

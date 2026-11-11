@@ -70,7 +70,7 @@ function revision(
   return {
     id,
     seq,
-    body: { summary, findings, learnings: [] },
+    body: { summary, findings, learnings: [], adhocQuestions: [] },
   }
 }
 

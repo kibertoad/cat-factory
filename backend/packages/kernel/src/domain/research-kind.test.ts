@@ -21,6 +21,7 @@ function body(statuses: Record<string, 'answered' | 'partial' | 'blocked'>): Fin
   return {
     summary: '',
     learnings: [],
+    adhocQuestions: [],
     findings: Object.entries(statuses).map(([questionId, status]) => ({
       questionId,
       status,

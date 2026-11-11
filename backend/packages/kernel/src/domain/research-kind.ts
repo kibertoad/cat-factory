@@ -1,4 +1,5 @@
 import {
+  type AdhocQuestion,
   type FindingsRevisionBody,
   type FoldedFindings,
   type ProjectKindDescriptor,
@@ -63,21 +64,24 @@ function fold(input: ProjectTaskInput<FindingsRevisionBody>): FoldedFindings {
 }
 
 /**
- * The definition questions a task of `mode` asks: every one (`initial`), the ones no revision
- * has touched (`extend`), the partial or blocked ones (`clarify`), or the answered ones
- * (`refresh`). `named` narrows `clarify` and `refresh` to the questions a person picked.
+ * The questions a task of `mode` asks: every definition question (`initial`), the ones no
+ * revision has touched (`extend`), the partial or blocked ones (`clarify`), or the answered ones
+ * (`refresh`). Past `initial`, the ad-hoc questions earlier tasks added are candidates beside the
+ * definition's. `named` narrows `clarify` and `refresh` to the questions a person picked.
  */
 export function selectQuestionIds(
   spec: ResearchSpec,
   mode: ResearchMode,
   folded: FoldedFindings,
   named?: readonly string[],
+  earlierAdhoc: readonly string[] = [],
 ): string[] {
-  const all = spec.topics.flatMap((topic) => topic.questions.map((q) => q.id))
+  const fromDefinition = spec.topics.flatMap((topic) => topic.questions.map((q) => q.id))
+  const all = [...fromDefinition, ...earlierAdhoc]
   const status = (id: string) => folded.byQuestion[id]?.finding.status
   switch (mode) {
     case 'initial':
-      return all
+      return fromDefinition
     case 'extend':
       return all.filter((id) => status(id) === undefined)
     case 'clarify':
@@ -109,7 +113,19 @@ export function mergeFindingsBodies(
     summary: later.summary || earlier.summary,
     findings: [...byId.values()],
     learnings: [...earlier.learnings.filter((l) => !titles.has(l.title)), ...later.learnings],
+    adhocQuestions: later.adhocQuestions,
   }
+}
+
+/** The ad-hoc questions earlier revisions answered, the latest text for each id winning. */
+function earlierAdhocQuestions(
+  outcomes: ProjectTaskInput<FindingsRevisionBody>['outcomes'],
+): AdhocQuestion[] {
+  const byId = new Map<string, AdhocQuestion>()
+  for (const outcome of [...outcomes].sort((a, b) => a.seq - b.seq)) {
+    for (const question of outcome.body.adhocQuestions) byId.set(question.id, question)
+  }
+  return [...byId.values()]
 }
 
 /** The step's readable output: the coverage a revision recorded, and what it dropped. */
@@ -150,14 +166,20 @@ export const researchKindModule: ProjectKindModule<FindingsRevisionBody> = {
     const folded = fold(input)
     const fields = input.task.taskTypeFields
     const mode = fields?.researchMode ?? (input.outcomes.length ? 'extend' : 'initial')
-    const adhocQuestions = (fields?.researchQuestions ?? []).map((question, i) => ({
+    const own = (fields?.researchQuestions ?? []).map((question, i) => ({
       id: adhocQuestionId(input.task.id, i + 1),
       question,
     }))
-    const questionIds = [
-      ...selectQuestionIds(spec, mode, folded, fields?.researchQuestionIds),
-      ...adhocQuestions.map((q) => q.id),
-    ]
+    const earlier = earlierAdhocQuestions(input.outcomes)
+    const selected = selectQuestionIds(
+      spec,
+      mode,
+      folded,
+      fields?.researchQuestionIds,
+      earlier.map((q) => q.id),
+    )
+    const adhocQuestions = [...earlier.filter((q) => selected.includes(q.id)), ...own]
+    const questionIds = [...selected, ...own.map((q) => q.id)]
     if (questionIds.length === 0) {
       throw new ValidationError(`A '${mode}' research task has no question left to ask`, {
         reason: 'research_nothing_to_ask',
@@ -218,6 +240,7 @@ export const researchKindModule: ProjectKindModule<FindingsRevisionBody> = {
     const body: FindingsRevisionBody = {
       ...merged,
       findings: merged.findings.filter((f) => asked.has(f.questionId)),
+      adhocQuestions: plan.adhocQuestions ?? [],
     }
     return { body, output: renderRevision(body, plan, seq, dropped) }
   },
@@ -225,4 +248,9 @@ export const researchKindModule: ProjectKindModule<FindingsRevisionBody> = {
   describe: ({ plan, seq, body }) => renderRevision(body, planOf(plan), seq, []),
 
   artifactRefs: findingsArtifactRefs,
+
+  definitionSummary: (definition) => {
+    const parsed = parseResearchDefinition(definition)
+    return parsed.ok ? parsed.value.spec.brief : definition.title
+  },
 }

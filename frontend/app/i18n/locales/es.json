@@ -697,7 +697,8 @@
         "delegated_executor_failed": "El ejecutor externo no pudo iniciar este paso. El problema está en el sistema que realiza el trabajo, no en esta instalación: revisa sus propios registros e inténtalo de nuevo.",
         "delegated_work_branch_unprepared": "La plataforma no pudo preparar la rama de trabajo a la que se envía el ejecutor de este paso, así que no se inició nada. O la conexión al repositorio no puede escribir en ella, o la tarea indica una rama que aún no existe: los detalles dicen cuál de las dos.",
         "attached_pr_provider_unreachable": "El proveedor del repositorio no respondió, así que no se pudo comprobar la pull request y no se creó ninguna tarea. No hay nada que configurar aquí: vuelve a intentarlo en un momento.",
-        "project_definitions_unreachable": "No se han podido leer las definiciones de proyecto de esta instalación en este momento, así que no se ha completado la solicitud. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión."
+        "project_definitions_unreachable": "No se han podido leer las definiciones de proyecto de esta instalación en este momento, así que no se ha completado la solicitud. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión.",
+        "outcome_body_unavailable": "Este resultado del proyecto está en el almacenamiento de contenido, que ahora no puede servirlo. La solicitud es correcta: inténtalo de nuevo cuando el almacenamiento esté disponible."
       }
     },
     "reason": {
@@ -9259,7 +9260,12 @@
       "servicesHelp": "Sus tareas pueden leer los repositorios de estos servicios como contexto.",
       "submit": "Crear proyecto",
       "created": "Proyecto {title} creado",
-      "failed": "No se ha podido crear el proyecto"
+      "failed": "No se ha podido crear el proyecto",
+      "definitionLabel": "Definición de investigación",
+      "definitionHelp": "Lo que la investigación quiere averiguar. Su versión queda fijada para este proyecto.",
+      "definitionOption": "{title} (versión {version})",
+      "noDefinitions": "Esta organización todavía no tiene ninguna definición de investigación. Primero debe publicarla una persona administradora.",
+      "definitionsFailed": "No se han podido cargar las definiciones de investigación"
     },
     "linkServices": {
       "title": "Servicios vinculados",

@@ -209,3 +209,19 @@ export type ProjectPin = v.InferOutput<typeof projectPinSchema>
 export function projectDefinitionSubjectId(kind: string, key: string): string {
   return `${kind}/${key}`
 }
+
+/**
+ * A definition version an account can pin, as the create-project form lists it: its key, a
+ * one-line summary its kind writes, and the inputs a project fills, without the kind's spec.
+ * `origin` says whether the deployment ships it in code or the account published it.
+ */
+export const pinnableProjectDefinitionSchema = v.object({
+  kind: projectKindIdSchema,
+  key: projectDefinitionKeySchema,
+  version: projectDefinitionVersionSchema,
+  title: v.string(),
+  summary: v.string(),
+  inputs: v.array(taskTypeFieldDescriptorSchema),
+  origin: v.picklist(['registered', 'stored']),
+})
+export type PinnableProjectDefinition = v.InferOutput<typeof pinnableProjectDefinitionSchema>

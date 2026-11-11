@@ -565,6 +565,8 @@ export function makeConformanceApp(
     blockRepository: () => createDrizzleRepositories(db, { now: () => Date.now() }).blockRepository,
     projectRecordRepository: () =>
       createDrizzleRepositories(db, { now: () => Date.now() }).projectRecordRepository,
+    outcomeStoragePolicyRepository: () =>
+      createDrizzleRepositories(db, { now: () => Date.now() }).outcomeStoragePolicyRepository,
     workspaceRepository: () => new DrizzleWorkspaceRepository(db),
     workspaceMemberRepository: () => new DrizzleWorkspaceMemberRepository(db),
     publicApiKeyRepository: () => new DrizzlePublicApiKeyRepository(db),

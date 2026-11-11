@@ -697,7 +697,8 @@
         "delegated_executor_failed": "L’exécuteur externe n’a pas pu démarrer cette étape. Le problème vient du système qui effectue le travail, pas de ce déploiement : consultez ses propres journaux, puis réessayez.",
         "delegated_work_branch_unprepared": "La plateforme n'a pas pu préparer la branche de travail vers laquelle l'exécuteur de cette étape est envoyé, donc rien n'a démarré. Soit la connexion au dépôt ne peut pas y écrire, soit la tâche nomme une branche qui n'existe pas encore : les détails indiquent laquelle des deux.",
         "attached_pr_provider_unreachable": "Le fournisseur du dépôt n'a pas répondu, la pull request n'a donc pas pu être vérifiée et aucune tâche n'a été créée. Il n'y a rien à configurer ici : réessayez dans un instant.",
-        "project_definitions_unreachable": "Les définitions de projet de ce déploiement n'ont pas pu être lues pour l'instant, la demande n'a donc pas abouti. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie."
+        "project_definitions_unreachable": "Les définitions de projet de ce déploiement n'ont pas pu être lues pour l'instant, la demande n'a donc pas abouti. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
+        "outcome_body_unavailable": "Ce résultat du projet est conservé dans le stockage de contenu, qui ne peut pas le fournir pour l'instant. La demande est correcte : réessayez une fois le stockage disponible."
       }
     },
     "reason": {
@@ -9259,7 +9260,12 @@
       "servicesHelp": "Ses tâches peuvent lire les dépôts de ces services comme contexte.",
       "submit": "Créer le projet",
       "created": "Projet {title} créé",
-      "failed": "Impossible de créer le projet"
+      "failed": "Impossible de créer le projet",
+      "definitionLabel": "Définition de recherche",
+      "definitionHelp": "Ce que la recherche cherche à établir. Sa version est fixée pour ce projet.",
+      "definitionOption": "{title} (version {version})",
+      "noDefinitions": "Aucune définition de recherche n'est encore disponible pour cette organisation. Un administrateur doit d'abord en publier une.",
+      "definitionsFailed": "Impossible de charger les définitions de recherche"
     },
     "linkServices": {
       "title": "Services liés",

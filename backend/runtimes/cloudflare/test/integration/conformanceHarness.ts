@@ -32,7 +32,10 @@ import { D1GitHubInstallationRepository } from '../../src/infrastructure/reposit
 import { D1RepoProjectionRepository } from '../../src/infrastructure/repositories/D1RepoProjectionRepository'
 import { D1PipelineRepository } from '../../src/infrastructure/repositories/D1PipelineRepository'
 import { D1BlockRepository } from '../../src/infrastructure/repositories/D1BlockRepository'
-import { D1ProjectRecordRepository } from '../../src/infrastructure/repositories/D1ProjectOutcomeRepositories'
+import {
+  D1OutcomeStoragePolicyRepository,
+  D1ProjectRecordRepository,
+} from '../../src/infrastructure/repositories/D1ProjectOutcomeRepositories'
 import { D1WorkspaceRepository } from '../../src/infrastructure/repositories/D1WorkspaceRepository'
 import { D1WorkspaceMemberRepository } from '../../src/infrastructure/repositories/D1WorkspaceMemberRepository'
 import { D1PublicApiKeyRepository } from '../../src/infrastructure/repositories/D1PublicApiKeyRepository'
@@ -341,6 +344,7 @@ const harness: ConformanceHarness = {
         buildTestContainer({ agentExecutor: new FakeAgentExecutor() }).agentRunRepository,
       blockRepository: () => new D1BlockRepository({ db: env.DB }),
       projectRecordRepository: () => new D1ProjectRecordRepository({ db: env.DB }),
+      outcomeStoragePolicyRepository: () => new D1OutcomeStoragePolicyRepository({ db: env.DB }),
       workspaceRepository: () => new D1WorkspaceRepository({ db: env.DB }),
       workspaceMemberRepository: () => new D1WorkspaceMemberRepository({ db: env.DB }),
       publicApiKeyRepository: () => new D1PublicApiKeyRepository({ db: env.DB }),

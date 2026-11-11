@@ -403,9 +403,13 @@ outcomes (and their reclaim), and an `OutcomeStoragePolicyRepository`.
 
 An outcome's body is stored inline in `project_outcomes` while it is at or under the effective
 threshold, and in the account's blob store above it, the row then holding the
-`BinaryArtifactStore` id. The offloaded body is a new `outcome` artifact kind, exempt from the
-age-based retention sweep. The project reclaim deletes it together with every id in the row's
-`artifactRefs`; both arrive with the offload write in slice 5, since nothing offloads before it.
+`BinaryArtifactStore` id. The offloaded body is an `outcome` artifact, exempt from the age-based
+retention sweep and anchored on the project's root block in the root's home workspace, so the
+row needs only the artifact id: a reader resolves the home workspace from the root, the body is
+reclaimed with the root, and deleting the home board carries it to the board the project is
+re-homed to. `ProjectOutcomeStore` is the one reader and writer, for every kind: it handles the
+body as opaque JSON and the kind's module decodes it. The row's `artifactRefs` names the other
+blobs a body references, so a cascade can find them without reading the body.
 
 The policy cascades account → workspace → project, narrowest set value winning, with absence (never
 a stored null) meaning inherit:
@@ -541,7 +545,7 @@ Still open:
 | 4   | Harness: the `project` job kind with no checkout (linked repos as `referenceRepos`), the access tool server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                                                                                         | in review | #2508        |
 | 5a  | Engine groundwork: the `ProjectDefinitionSource` read port keyed by kind (registry plus store, `/internal/project-definitions` for a mothership node), the `ProjectDefinitionRegistry` option on every entry point, the kind's `definition` declaration and the pin at project creation, the per-task outcome sequence.                                                   | in review | #2510        |
 | 5b  | Engine: the `ProjectKindModule` registration (outcome schema, fold, summary, context renderer, artifact refs), the research kind's module, the `project-researcher` kind, the `research` task type and pipeline, repo-less dispatch, outcome write, follow-up modes.                                                                                                      | in review | #2511        |
-| 5c  | Outcome offload with the `outcome` artifact kind and its project reclaim; picking a definition on the board.                                                                                                                                                                                                                                                              | todo      | #2512        |
+| 5c  | Outcome offload through `ProjectOutcomeStore` (the `outcome` artifact kind, anchored on the project root and carried on a re-home); picking a definition of the project's own kind on the board, listed with its kind's summary.                                                                                                                                          | in review | #2512        |
 | 6   | Credential hand-off: the `project-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                                                   | in review | #2509        |
 | 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                                                                                             | todo      |              |
 | 8   | SPA: the kind-keyed outcome view seam with its generic fallback, the research findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                                | todo      |              |
