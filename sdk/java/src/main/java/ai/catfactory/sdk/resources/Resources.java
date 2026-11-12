@@ -40,6 +40,8 @@ public abstract class Resources {
     private final MergeRecordsClient mergeRecords;
     private final DirectoryClient directory;
     private final KaizenClient kaizen;
+    private final ProjectKindsClient projectKinds;
+    private final ProjectsClient projects;
     private final GuidedReviewsClient guidedReviews;
     private final PrAssessmentsClient prAssessments;
     private final KeysClient keys;
@@ -71,6 +73,8 @@ public abstract class Resources {
         this.mergeRecords = new MergeRecordsClient(transport);
         this.directory = new DirectoryClient(transport);
         this.kaizen = new KaizenClient(transport);
+        this.projectKinds = new ProjectKindsClient(transport);
+        this.projects = new ProjectsClient(transport);
         this.guidedReviews = new GuidedReviewsClient(transport);
         this.prAssessments = new PrAssessmentsClient(transport);
         this.keys = new KeysClient(transport);
@@ -204,6 +208,16 @@ public abstract class Resources {
     /** The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything. */
     public KaizenClient kaizen() {
         return kaizen;
+    }
+
+    /** The project kinds the deployment offers, each with the JSON Schemas of its own shapes, and the definitions a project of a kind can pin: the ones the deployment ships in code and the ones the account published, each version immutable. A definition names the credentials its runs need and the origins a credential may be sent to; its `spec` is the kind's. Reading takes a `read` key; publishing a version takes an `admin` key. */
+    public ProjectKindsClient projectKinds() {
+        return projectKinds;
+    }
+
+    /** Projects, the account-owned peers of services: list the ones the key's workspace mounts, create one (pinning a definition when its kind takes one), link and unlink services, mount one, create and run the tasks under it on the board that homes it, and read its outcomes and the view its kind computes from them. */
+    public ProjectsClient projects() {
+        return projects;
     }
 
     /** Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking, drafting and posting drafts take a `write` key. Posting publishes plain comments on the pull request and never approves or requests changes. */

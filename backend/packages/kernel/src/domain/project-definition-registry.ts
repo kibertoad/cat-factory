@@ -1,4 +1,5 @@
 import {
+  type DefinitionParseResult,
   parseProjectDefinition,
   type ProjectDefinition,
   type ProjectDefinitionSpecValidator,
@@ -30,6 +31,34 @@ function canonicalJson(value: unknown): string {
         .map((key) => [key, record[key]]),
     )
   })
+}
+
+/**
+ * Validate a definition: its envelope, then its `spec` by its kind's validator. Answers the
+ * definition with the spec as the kind normalized it, which is what is stored and hashed. A kind
+ * with no validator is refused, because its definitions cannot be checked.
+ */
+export function validateProjectDefinition(
+  input: unknown,
+  validatorFor: (kind: string) => ProjectDefinitionSpecValidator | undefined,
+): DefinitionParseResult<ProjectDefinition> {
+  const envelope = parseProjectDefinition(input)
+  if (!envelope.ok) return envelope
+  const { kind, key } = envelope.value
+  const validator = validatorFor(kind)
+  if (!validator) {
+    return {
+      ok: false,
+      issues: [
+        `no spec validator is registered for project kind '${kind}', so its definitions cannot be checked`,
+      ],
+    }
+  }
+  const spec = validator.parseSpec(envelope.value)
+  if (!spec.ok) {
+    return { ok: false, issues: spec.issues.map((issue) => `${kind} definition ${key}: ${issue}`) }
+  }
+  return { ok: true, value: { ...envelope.value, spec: spec.value } }
 }
 
 const versionKey = (kind: string, key: string) => `${kind}\u0000${key}`
@@ -94,22 +123,8 @@ export class ProjectDefinitionRegistry {
   }
 
   private parse(input: unknown): ProjectDefinition {
-    const envelope = parseProjectDefinition(input)
-    if (!envelope.ok) {
-      throw new Error(`invalid project definition: ${envelope.issues.join('; ')}`)
-    }
-    const validator = this.validators.get(envelope.value.kind)
-    if (!validator) {
-      throw new Error(
-        `no spec validator is registered for project kind '${envelope.value.kind}', so its definitions cannot be checked`,
-      )
-    }
-    const spec = validator.parseSpec(envelope.value)
-    if (!spec.ok) {
-      throw new Error(
-        `invalid ${envelope.value.kind} definition ${envelope.value.key}: ${spec.issues.join('; ')}`,
-      )
-    }
-    return { ...envelope.value, spec: spec.value }
+    const parsed = validateProjectDefinition(input, (kind) => this.validators.get(kind))
+    if (!parsed.ok) throw new Error(`invalid project definition: ${parsed.issues.join('; ')}`)
+    return parsed.value
   }
 }

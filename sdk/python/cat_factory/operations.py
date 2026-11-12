@@ -29,6 +29,8 @@ from .models import (
     ConnectPublicEnvironmentResponse,
     CreateHeadlessPublicApiKey,
     CreatePublicJob,
+    CreatePublicProject,
+    CreatePublicProjectTask,
     CreatePublicServiceRequest,
     CreatePublicTask,
     CreatedPublicApiKey,
@@ -101,6 +103,7 @@ from .models import (
     PublicApproveStep,
     PublicChallengePrReviewFinding,
     PublicChooseFork,
+    PublicCredentialResume,
     PublicDecisionList,
     PublicDeployment,
     PublicGuidedReviewList,
@@ -117,6 +120,18 @@ from .models import (
     PublicNotificationWebhookList,
     PublicPipelineList,
     PublicPrAssessment,
+    PublicProject,
+    PublicProjectDefinition,
+    PublicProjectDefinitionList,
+    PublicProjectKindDetail,
+    PublicProjectKindList,
+    PublicProjectList,
+    PublicProjectOutcome,
+    PublicProjectOutcomeList,
+    PublicProjectServices,
+    PublicProjectTask,
+    PublicProjectTaskList,
+    PublicProjectView,
     PublicPromptFragmentList,
     PublicRejectStep,
     PublicReplyFinding,
@@ -140,6 +155,7 @@ from .models import (
     PublicTask,
     PublicTaskList,
     PublicUsage,
+    PublishProjectDefinition,
     PutDirectoryWebhook,
     PutNotificationWebhook,
     RequestGuidedReviewDrafts,
@@ -2242,6 +2258,25 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
+    def resume_credential(self, run_id: str, *, timeout: float | None = None) -> PublicCredentialResume:
+        """Resume a run parked on a missing credential
+        Resume a run parked because a step needs a capability credential (a vendor login,
+        say) that was not stored. Store it first through the capability-credentials
+        settings; a resume while the key still does not resolve is `409` with
+        `details.reason: "capability_credential_still_missing"`. A wait on a lapsed personal
+        credential is `409` with `credential_wait_personal_in_app`: only the run's initiator
+        renews it, in the app. Requires a `decide` key.
+        `POST /api/v1/runs/{runId}/credential/resume` (operation
+        `resumePublicRunCredential`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/credential/resume",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicCredentialResume.from_dict(raw)
+
     def resume_pr_review(self, run_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Resume a stalled PR deep review
         Re-dispatch the reviewer for only the slices that never reported, re-aggregating the
@@ -3142,6 +3177,352 @@ class KaizenResource:
             page_cursor = page.next_cursor
 
 
+class ProjectKindsResource:
+    """The project kinds the deployment offers, each with the JSON Schemas of its own shapes,
+    and the definitions a project of a kind can pin: the ones the deployment ships in code
+    and the ones the account published, each version immutable. A definition names the
+    credentials its runs need and the origins a credential may be sent to; its `spec` is the
+    kind's. Reading takes a `read` key; publishing a version takes an `admin` key.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def get(self, kind: str, *, timeout: float | None = None) -> PublicProjectKindDetail:
+        """Get a project kind with its schemas
+        One kind with the JSON Schemas of the shapes the rest of this surface leaves opaque:
+        a definition's `spec`, an outcome's `body` (in the schema version the deployment
+        writes) and a project's `view`. Each is null for a kind that declares none. A schema
+        states the shape; a kind can enforce more when it parses (unique ids, say). An
+        unknown kind is `404`.
+        `GET /api/v1/project-kinds/{kind}` (operation `getPublicProjectKind`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/project-kinds/{_quote(kind)}",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectKindDetail.from_dict(raw)
+
+    def get_definition(self, kind: str, key: str, *, timeout: float | None = None) -> PublicProjectDefinitionList:
+        """Get every version of one definition
+        Every version of one definition key of the kind the account can pin, ascending. An
+        unknown key is `404` with `details.reason: "project_definition_not_found"`.
+        `GET /api/v1/project-kinds/{kind}/definitions/{key}` (operation
+        `getPublicProjectDefinition`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/project-kinds/{_quote(kind)}/definitions/{_quote(key)}",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectDefinitionList.from_dict(raw)
+
+    def list(self, *, timeout: float | None = None) -> PublicProjectKindList:
+        """List the project kinds the deployment offers
+        Each kind with the task types its projects take and whether a project of it pins a
+        definition (`definition`: `required` or `optional`; absent for a kind that pins
+        none). The built-in kind is `research`; a deployment registers its own.
+        `GET /api/v1/project-kinds` (operation `listPublicProjectKinds`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/project-kinds",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectKindList.from_dict(raw)
+
+    def list_definitions(self, kind: str, *, timeout: float | None = None) -> PublicProjectDefinitionList:
+        """List the definitions of one kind the account can pin
+        Every definition of the kind a project of the key's account can pin: the ones the
+        deployment ships in code (`origin: registered`) and the ones the account published
+        (`origin: stored`), each with its content hash. A definition's envelope names the
+        credentials its runs need, the origins a credential may be sent to and the inputs a
+        project fills; its `spec` says what the work is. The platform never reads it: the
+        project kind owns its shape and serves its JSON Schema from `GET
+        /api/v1/project-kinds/{kind}`.
+        `GET /api/v1/project-kinds/{kind}/definitions` (operation
+        `listPublicProjectDefinitions`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/project-kinds/{_quote(kind)}/definitions",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectDefinitionList.from_dict(raw)
+
+    def publish_definition(self, kind: str, key: str, version: str, body: PublishProjectDefinition, *, timeout: float | None = None) -> PublicProjectDefinition:
+        """Publish a definition version
+        Publish one immutable version of an account-owned definition; the kind, key and
+        version are the path's. The envelope is checked by this schema and the `spec` by the
+        kind, against the schema the kind serves; a spec the kind refuses, or a kind this
+        deployment cannot validate, is `422` with `details.reason:
+        "project_definition_invalid"` and `details.problems` listing each issue. A version
+        already published is `409` with `project_definition_version_exists`, so a project
+        pinned to it never changes meaning. A key in a namespace the deployment's own
+        definitions of the kind use is `409` with `project_definition_key_registered`. A
+        credential key the deployment reserves for its own configuration is refused `400` by
+        the body schema. Requires an `admin` key: a definition names the credentials a run
+        sends and the origins it may send them to.
+        `PUT /api/v1/project-kinds/{kind}/definitions/{key}/versions/{version}` (operation
+        `publishPublicProjectDefinition`).
+        """
+        raw = self._transport.request(
+            "PUT",
+            f"/api/v1/project-kinds/{_quote(kind)}/definitions/{_quote(key)}/versions/{_quote(version)}",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectDefinition.from_dict(raw)
+
+
+class ProjectsResource:
+    """Projects, the account-owned peers of services: list the ones the key's workspace mounts,
+    create one (pinning a definition when its kind takes one), link and unlink services,
+    mount one, create and run the tasks under it on the board that homes it, and read its
+    outcomes and the view its kind computes from them.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def create(self, body: CreatePublicProject, *, timeout: float | None = None) -> PublicProject:
+        """Create a project
+        Create a project homed on the key's workspace. A kind that pins a definition takes
+        `definition` naming its key, an optional version (the highest by default) and the
+        values for its `inputs`; the project pins that version and its content hash.
+        Refusals are `422` with `details.reason`: `project_kind_unregistered`,
+        `project_definition_required`, `project_definition_not_accepted`,
+        `project_definition_not_found`, `project_definition_inputs_invalid`,
+        `project_service_link_invalid`.
+        `POST /api/v1/projects` (operation `createPublicProject`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/projects",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProject.from_dict(raw)
+
+    def create_task(self, project_id: str, body: CreatePublicProjectTask, *, timeout: float | None = None) -> PublicProjectTask:
+        """Create a task under a project
+        A project task has its own resource, `PublicProjectTask`, carrying `projectId` where
+        a service task carries `serviceId`. `taskType` defaults to the first type the
+        project's kind offers, and what a task of that type asks for goes in `fields`,
+        described by `GET /api/v1/task-types` (a `research` task takes its mode and ad-hoc
+        questions there). A project's tasks are created and run on the board that homes it;
+        any other board is refused with `409` and `details.reason:
+        "project_homed_elsewhere"`.
+        `POST /api/v1/projects/{projectId}/tasks` (operation `createPublicProjectTask`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/projects/{_quote(project_id)}/tasks",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectTask.from_dict(raw)
+
+    def get(self, project_id: str, *, timeout: float | None = None) -> PublicProject:
+        """Get a project
+        `GET /api/v1/projects/{projectId}` (operation `getPublicProject`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/projects/{_quote(project_id)}",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProject.from_dict(raw)
+
+    def get_outcome(self, project_id: str, outcome_id: str, *, timeout: float | None = None) -> PublicProjectOutcome:
+        """Get one outcome with its body
+        One outcome with the body its task recorded, wherever it is stored. The platform
+        never reads it: the project kind owns its shape and serves its JSON Schema from `GET
+        /api/v1/project-kinds/{kind}`. An offloaded body that cannot be read is `503` with
+        `details.reason: "outcome_body_unavailable"` rather than an empty one.
+        `GET /api/v1/projects/{projectId}/outcomes/{outcomeId}` (operation
+        `getPublicProjectOutcome`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/projects/{_quote(project_id)}/outcomes/{_quote(outcome_id)}",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectOutcome.from_dict(raw)
+
+    def get_task(self, project_id: str, task_id: str, *, timeout: float | None = None) -> PublicProjectTask:
+        """Get a project task
+        `GET /api/v1/projects/{projectId}/tasks/{taskId}` (operation
+        `getPublicProjectTask`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/projects/{_quote(project_id)}/tasks/{_quote(task_id)}",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectTask.from_dict(raw)
+
+    def get_view(self, project_id: str, *, timeout: float | None = None) -> PublicProjectView:
+        """Get a project's current view
+        The project's current state as its kind reads every outcome (for `research`: the
+        findings folded by question, with coverage of the pinned definition). The platform
+        never reads it: the project kind owns its shape and serves its JSON Schema from `GET
+        /api/v1/project-kinds/{kind}`. `view` is null for a kind that computes none; read
+        its outcomes instead. A body that cannot be read is `503` with
+        `outcome_body_unavailable`.
+        `GET /api/v1/projects/{projectId}/view` (operation `getPublicProjectView`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/projects/{_quote(project_id)}/view",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectView.from_dict(raw)
+
+    def link_services(self, project_id: str, body: PublicProjectServices, *, timeout: float | None = None) -> PublicProject:
+        """Link services to a project
+        Link services of the project's own account as read-only context for its tasks.
+        Services already linked stay linked.
+        `POST /api/v1/projects/{projectId}/services` (operation
+        `linkPublicProjectServices`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/projects/{_quote(project_id)}/services",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProject.from_dict(raw)
+
+    def list(self, *, timeout: float | None = None) -> PublicProjectList:
+        """List the projects the key's workspace mounts
+        Projects are account-owned peers of services, mounted onto boards. Each entry
+        carries its linked services, whether the key's workspace is the board that homes it
+        (`homedHere`, the board that creates and runs its tasks) and, for a kind that pins a
+        definition, the version it pinned.
+        `GET /api/v1/projects` (operation `listPublicProjects`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/projects",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectList.from_dict(raw)
+
+    def list_outcomes(self, project_id: str, *, stream: str | None = None, timeout: float | None = None) -> PublicProjectOutcomeList:
+        """List a project's outcomes
+        Every outcome the project's tasks recorded, without bodies, ordered by `seq`: the
+        order the tasks were STARTED, across every stream. `stream` narrows to one stream.
+        An outcome is immutable once written.
+        `GET /api/v1/projects/{projectId}/outcomes` (operation `listPublicProjectOutcomes`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/projects/{_quote(project_id)}/outcomes",
+            query={"stream": stream},
+            timeout=timeout,
+        )
+        return PublicProjectOutcomeList.from_dict(raw)
+
+    def list_tasks(self, project_id: str, *, timeout: float | None = None) -> PublicProjectTaskList:
+        """List a project's tasks
+        `GET /api/v1/projects/{projectId}/tasks` (operation `listPublicProjectTasks`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/projects/{_quote(project_id)}/tasks",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectTaskList.from_dict(raw)
+
+    def mount(self, project_id: str, *, timeout: float | None = None) -> PublicProject:
+        """Mount a project on the key's workspace
+        Mount a project of the key's account onto the key's workspace, so its reads are
+        served there. Idempotent.
+        `POST /api/v1/projects/{projectId}/mount` (operation `mountPublicProject`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/projects/{_quote(project_id)}/mount",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProject.from_dict(raw)
+
+    def retry_task(self, project_id: str, task_id: str, *, timeout: float | None = None) -> PublicProjectTask:
+        """Retry a project task
+        `POST /api/v1/projects/{projectId}/tasks/{taskId}/retry` (operation
+        `retryPublicProjectTask`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/projects/{_quote(project_id)}/tasks/{_quote(task_id)}/retry",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectTask.from_dict(raw)
+
+    def start_task(self, project_id: str, task_id: str, body: StartPublicTask | None = None, *, timeout: float | None = None) -> PublicProjectTask:
+        """Start a project task
+        Start the task's run under the same admission as `POST
+        /api/v1/tasks/{taskId}/start`: a pipeline that can park on a person needs a `decide`
+        key, and an individual-usage model needs the personal-unlock headers.
+        `POST /api/v1/projects/{projectId}/tasks/{taskId}/start` (operation
+        `startPublicProjectTask`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/projects/{_quote(project_id)}/tasks/{_quote(task_id)}/start",
+            body={} if body is None else _encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectTask.from_dict(raw)
+
+    def stop_task(self, project_id: str, task_id: str, *, timeout: float | None = None) -> PublicProjectTask:
+        """Stop a project task
+        `POST /api/v1/projects/{projectId}/tasks/{taskId}/stop` (operation
+        `stopPublicProjectTask`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/projects/{_quote(project_id)}/tasks/{_quote(task_id)}/stop",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectTask.from_dict(raw)
+
+    def unlink_services(self, project_id: str, body: PublicProjectServices, *, timeout: float | None = None) -> PublicProject:
+        """Unlink services from a project
+        A service the project does not link is ignored.
+        `POST /api/v1/projects/{projectId}/services/unlink` (operation
+        `unlinkPublicProjectServices`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/projects/{_quote(project_id)}/services/unlink",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProject.from_dict(raw)
+
+
 class GuidedReviewsResource:
     """Guided pull request review: a structured explanation of a PR (what it does, meaningful
     changes, consequences, risks, where to focus, suggested questions), independent question
@@ -3541,6 +3922,8 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "merge_records": MergeRecordsResource(transport),
         "directory": DirectoryResource(transport),
         "kaizen": KaizenResource(transport),
+        "project_kinds": ProjectKindsResource(transport),
+        "projects": ProjectsResource(transport),
         "guided_reviews": GuidedReviewsResource(transport),
         "pr_assessments": PrAssessmentsResource(transport),
         "keys": KeysResource(transport),

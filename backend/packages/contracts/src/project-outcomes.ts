@@ -55,6 +55,16 @@ export interface ProjectOutcome<Body = unknown> extends ProjectOutcomeMeta {
   body: Body
 }
 
+/**
+ * The schemas of a kind's own shapes: its definition `spec`, its outcome `body` and its `view`.
+ * The platform never parses with them; the public API serves them as JSON Schema.
+ */
+export interface ProjectKindSchemas {
+  spec?: v.GenericSchema
+  outcome?: v.GenericSchema
+  view?: v.GenericSchema
+}
+
 /** The largest inline threshold any tier may set; a facade's own row cap may be lower. */
 export const OUTCOME_INLINE_MAX_BYTES_CEILING = 2_000_000
 export const DEFAULT_OUTCOME_INLINE_MAX_BYTES = 256 * 1024

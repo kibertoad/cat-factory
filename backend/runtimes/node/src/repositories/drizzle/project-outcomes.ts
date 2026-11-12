@@ -141,6 +141,16 @@ export async function deleteProjectRecords(
     )
 }
 
+function rowToPin(row: typeof projectPins.$inferSelect): ProjectPin {
+  return {
+    projectId: row.project_id,
+    definitionKey: row.definition_key,
+    definitionVersion: row.definition_version,
+    definitionHash: row.definition_hash,
+    inputs: JSON.parse(row.inputs) as Record<string, unknown>,
+  }
+}
+
 /** A project's pin, outcome sequence and outcome revisions. */
 export class DrizzleProjectRecordRepository implements ProjectRecordRepository {
   constructor(private readonly db: DrizzleDb) {}
@@ -150,14 +160,19 @@ export class DrizzleProjectRecordRepository implements ProjectRecordRepository {
       .select()
       .from(projectPins)
       .where(eq(projectPins.project_id, projectId))
-    if (!row) return null
-    return {
-      projectId: row.project_id,
-      definitionKey: row.definition_key,
-      definitionVersion: row.definition_version,
-      definitionHash: row.definition_hash,
-      inputs: JSON.parse(row.inputs) as Record<string, unknown>,
+    return row ? rowToPin(row) : null
+  }
+
+  async listPins(projectIds: string[]): Promise<ProjectPin[]> {
+    const pins: ProjectPin[] = []
+    for (let i = 0; i < projectIds.length; i += CHUNK) {
+      const rows = await this.db
+        .select()
+        .from(projectPins)
+        .where(inArray(projectPins.project_id, projectIds.slice(i, i + CHUNK)))
+      pins.push(...rows.map(rowToPin))
     }
+    return pins
   }
 
   async insertPin(pin: ProjectPin): Promise<void> {

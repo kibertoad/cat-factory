@@ -6618,7 +6618,9 @@
         "project_definition_changed": "Die Definition, die dieses Projekt festgelegt hat, hat sich seitdem geändert. Der Lauf wurde deshalb angehalten, statt mit einer Definition zu arbeiten, der das Projekt nie zugestimmt hat. Bitte deinen Betreiber, die Änderung als neue Version zu veröffentlichen.",
         "project_task_already_recorded": "Diese Aufgabe hat ihr Ergebnis bereits im Projekt festgehalten. Lege für eine Nachfolge eine neue Aufgabe an.",
         "outcome_too_large_for_inline": "Das Ergebnis ist zu groß zum Speichern und wurde daher nicht festgehalten. Grenze die Aufgabe ein und starte sie erneut.",
-        "research_nothing_to_ask": "Der Modus dieser Rechercheaufgabe lässt keine Frage übrig: nichts Neues zum Erweitern oder nichts Unvollständiges oder Blockiertes zum Klären. Wähle einen anderen Modus oder füge eine Frage hinzu."
+        "research_nothing_to_ask": "Der Modus dieser Rechercheaufgabe lässt keine Frage übrig: nichts Neues zum Erweitern oder nichts Unvollständiges oder Blockiertes zum Klären. Wähle einen anderen Modus oder füge eine Frage hinzu.",
+        "task_owned_by_project": "Diese Aufgabe gehört zu einem Projekt, das keinen Service hat. Verwenden Sie stattdessen die Aufgabenadresse des Projekts.",
+        "project_definition_invalid": "Die Definition wird von ihrem Rahmen oder von ihrer Projektart abgelehnt. Die Antwort nennt jedes Problem; beheben Sie sie und veröffentlichen Sie erneut."
       }
     },
     "action": {
@@ -6709,7 +6711,11 @@
         "refined_requirements_unavailable": "Noch keine überarbeiteten Anforderungen",
         "no_linked_issues": "Kein verknüpftes Tracker-Issue",
         "capability_credential_still_missing": "Zugangsdaten fehlen noch",
-        "credential_wait_unrecorded": "Diese Wartestellung lässt sich nicht fortsetzen"
+        "credential_wait_unrecorded": "Diese Wartestellung lässt sich nicht fortsetzen",
+        "project_definition_version_exists": "Version bereits veröffentlicht",
+        "project_definition_key_registered": "Namensraum belegt",
+        "project_homed_elsewhere": "Projekt liegt auf einem anderen Board",
+        "credential_wait_personal_in_app": "In der App erneuern"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -6775,7 +6781,11 @@
         "refined_requirements_unavailable": "Die Prüfung hat noch kein überarbeitetes Dokument erstellt oder schreibt es gerade neu. Warte, bis die Einarbeitung abgeschlossen ist, und aktualisiere dann erneut.",
         "no_linked_issues": "Mit dieser Aufgabe ist kein Tracker-Issue verknüpft. Verknüpfe das Issue, aus dem sie stammt, und aktualisiere dann erneut.",
         "capability_credential_still_missing": "Die Zugangsdaten, die dieser Schritt braucht, sind für diesen Workspace noch nicht hinterlegt. Hinterlegen Sie sie in den Einstellungen für Capability-Zugangsdaten und setzen Sie den Lauf dann fort.",
-        "credential_wait_unrecorded": "Diese Wartestellung wurde erfasst, bevor die Plattform festhielt, worauf eine Wartestellung wartet, deshalb lässt sie sich nicht fortsetzen. Starten Sie den Lauf stattdessen neu."
+        "credential_wait_unrecorded": "Diese Wartestellung wurde erfasst, bevor die Plattform festhielt, worauf eine Wartestellung wartet, deshalb lässt sie sich nicht fortsetzen. Starten Sie den Lauf stattdessen neu.",
+        "project_definition_version_exists": "Diese Version der Definition ist bereits veröffentlicht und kann sich nicht mehr ändern. Veröffentlichen Sie stattdessen eine neue Version.",
+        "project_definition_key_registered": "Dieser Namensraum gehört zu Definitionen, die die Installation mitbringt. Veröffentlichen Sie im eigenen Namensraum Ihrer Organisation.",
+        "project_homed_elsewhere": "Die Aufgaben eines Projekts werden auf dem Board angelegt und ausgeführt, auf dem es liegt. Öffnen Sie dieses Board, um daran zu arbeiten.",
+        "credential_wait_personal_in_app": "Abgelaufene persönliche Zugangsdaten erneuert die Person, die den Lauf gestartet hat, mit ihrem Passwort in der App."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

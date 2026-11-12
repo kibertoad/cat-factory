@@ -728,7 +728,9 @@
         "project_definition_changed": "このプロジェクトが固定した定義はその後変更されたため、プロジェクトが同意していない定義で作業する代わりに実行を停止しました。デプロイメントの運用担当者に、変更を新しいバージョンとして公開するよう依頼してください。",
         "project_task_already_recorded": "このタスクはすでにプロジェクトに結果を記録しています。続きを行うには新しいタスクを作成してください。",
         "outcome_too_large_for_inline": "結果が大きすぎて保存できないため、記録されませんでした。タスクの範囲を絞ってからもう一度実行してください。",
-        "research_nothing_to_ask": "このリサーチタスクのモードでは、尋ねる質問が残っていません。拡張する新しい質問がないか、明確にすべき部分的またはブロックされた回答がありません。別のモードを選ぶか、質問を追加してください。"
+        "research_nothing_to_ask": "このリサーチタスクのモードでは、尋ねる質問が残っていません。拡張する新しい質問がないか、明確にすべき部分的またはブロックされた回答がありません。別のモードを選ぶか、質問を追加してください。",
+        "task_owned_by_project": "このタスクはサービスを持たないプロジェクトに属しています。代わりにプロジェクトのタスクのアドレスを使ってください。",
+        "project_definition_invalid": "この定義は、その構造またはプロジェクトの種類によって拒否されました。レスポンスに各問題が記載されています。修正してから再度公開してください。"
       }
     },
     "action": {
@@ -819,7 +821,11 @@
         "refined_requirements_unavailable": "まだ改訂された要件がありません",
         "no_linked_issues": "リンクされたトラッカーイシューがありません",
         "capability_credential_still_missing": "認証情報がまだありません",
-        "credential_wait_unrecorded": "この待機は再開できません"
+        "credential_wait_unrecorded": "この待機は再開できません",
+        "project_definition_version_exists": "バージョンは公開済みです",
+        "project_definition_key_registered": "名前空間は使用されています",
+        "project_homed_elsewhere": "プロジェクトは別のボードにあります",
+        "credential_wait_personal_in_app": "アプリで更新してください"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -885,7 +891,11 @@
         "refined_requirements_unavailable": "レビューはまだ改訂版のドキュメントを作成していないか、現在書き直しています。取り込みが終わるのを待ってから、もう一度更新してください。",
         "no_linked_issues": "このタスクにはトラッカーイシューがリンクされていません。元のイシューをリンクしてから、もう一度更新してください。",
         "capability_credential_still_missing": "このステップに必要な認証情報が、このワークスペースにまだ保存されていません。ケイパビリティ認証情報の設定で保存してから、実行を再開してください。",
-        "credential_wait_unrecorded": "この待機は、プラットフォームが待機の対象を記録するようになる前に記録されたため、再開できません。代わりに実行をやり直してください。"
+        "credential_wait_unrecorded": "この待機は、プラットフォームが待機の対象を記録するようになる前に記録されたため、再開できません。代わりに実行をやり直してください。",
+        "project_definition_version_exists": "この定義のバージョンは公開済みで、変更できません。代わりに新しいバージョンを公開してください。",
+        "project_definition_key_registered": "この名前空間は、デプロイメントに含まれる定義のものです。組織自身の名前空間で公開してください。",
+        "project_homed_elsewhere": "プロジェクトのタスクは、そのプロジェクトがあるボードで作成・実行されます。作業するにはそのボードを開いてください。",
+        "credential_wait_personal_in_app": "期限切れの個人用認証情報は、実行を開始した人がアプリで自分のパスワードを使って更新します。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",

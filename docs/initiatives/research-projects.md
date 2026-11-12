@@ -162,20 +162,26 @@ interface ProjectOutcomeMeta {
 What the platform cannot do without understanding content, the kind supplies when it registers:
 
 ```ts
-interface ProjectKindModule<Spec, Body, View> {
+interface ProjectKindModule<Body> {
   kind: string
+  agentKind: string // the step a task of this kind dispatches
   parseSpec(definition: ProjectDefinition): ParseResult<Spec> // at registration and publish
-  parseOutcome(schemaVersion: number, body: unknown): ParseResult<Body> // before every write
-  fold(stream: string, revisions: ProjectOutcome<Body>[]): View // the stream's current state
-  summarize(view: View): { headline: string; progress?: { done: number; total: number } }
-  renderContext(view: View): { index: string; files: Record<string, string> } // concern 5
+  parseOutcome(schemaVersion: number, body: unknown): Body | undefined // before every write and read
+  planTask(input: ProjectTaskInput<Body>): ProjectTaskPlan // intent, stream, plan; fixed at first dispatch
+  brief(input: ProjectTaskInput<Body> & { plan: unknown }): unknown // what the agent is told
+  finish(input: { plan: unknown; seq: number; reply: Body }): { body: Body; output: string }
   artifactRefs(body: Body): string[]
+  definitionSummary(definition: ProjectDefinition): string // one line for a picker
+  view?(input: { definition; inputs; outcomes: ProjectOutcome<Body>[] }): unknown // current state
+  schemas?: { spec?; outcome?; view? } // served as JSON Schema by the public API
+  summarize(view: View): { headline: string; progress?: { done: number; total: number } } // slice 8
+  renderContext(view: View): { index: string; files: Record<string, string> } // concern 5, slice 9
 }
 ```
 
 How revisions combine is the main way kinds differ. Research merges answers per question id. An
 architecture design or a requirements draft is more naturally "the newest revision is the
-document". So `fold` is the kind's, and a kind that wants neither writes its own reducer. Progress
+document". So `view` is the kind's, and a kind that wants neither writes its own reducer. Progress
 is `summarize().progress`, which lets the board, notifications and the context index show
 "34 of 50" without knowing it counts questions. A kind that needs two kinds of output (a draft
 and its open questions) writes two streams rather than one body with two jobs. `schemaVersion`
@@ -468,11 +474,12 @@ A new linked-context kind beside documents and tracker tasks:
   credential park reuses `CredentialWaitNotice`. Tier: projects and research are `basic`, since
   starting research and answering its credential request is everyday work; outcome-storage
   overrides are `advanced`. Every string goes through i18n in all locales.
-- **Public API**: projects (create, list, get, link and unlink services, mount), definitions (above),
-  project tasks (below), outcomes (list, revision by id, and the current folded view per stream),
-  credential resume. An outcome is served as its envelope plus `{ kind, schemaVersion, body }`
-  with the body opaque, and each kind's body and view JSON schemas are served from
-  `GET /api/v1/project-kinds/{kind}`. The SDKs therefore carry no research classes; a typed
+- **Public API**: project kinds, projects (create, list, get, link and unlink services, mount),
+  definitions (above), project tasks (below), outcomes (a list without bodies, optionally one
+  stream's, one outcome by id, and the view the kind's module computes over every outcome),
+  credential resume. An outcome is served as its envelope (`schemaVersion` included) plus an
+  opaque `body`, and each kind's spec, body and view JSON Schemas are served from
+  `GET /api/v1/project-kinds/{kind}`, converted from the schemas its module declares. The SDKs therefore carry no research classes; a typed
   client for one kind is generated from that kind's schema by whoever needs it. Each endpoint gets
   a `scripts/sdk/surface.mjs` entry; all additive, OpenAPI minor bump.
 - **Project tasks get their own public resource.** `PublicTask.serviceId` is a required string,
@@ -547,7 +554,7 @@ Still open:
 | 5b  | Engine: the `ProjectKindModule` registration (outcome schema, fold, summary, context renderer, artifact refs), the research kind's module, the `project-researcher` kind, the `research` task type and pipeline, repo-less dispatch, outcome write, follow-up modes.                                                                                                      | in review | #2511        |
 | 5c  | Outcome offload through `ProjectOutcomeStore` (the `outcome` artifact kind, anchored on the project root and carried on a re-home); picking a definition of the project's own kind on the board, listed with its kind's summary.                                                                                                                                          | in review | #2512        |
 | 6   | Credential hand-off: the `project-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                                                   | in review | #2509        |
-| 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                                                                                             | todo      |              |
+| 7   | Public API + SDK surface + website page: definitions per kind with the spec validated by its module, the project pin, outcomes and the view a kind computes, the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                   | in review | #2513        |
 | 8   | SPA: the kind-keyed outcome view seam with its generic fallback, the research findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                                | todo      |              |
 | 9   | Task linking: the `projects` linked-context kind rendered by each kind's `renderContext`, `.cat-context/projects/`, recorded revision. An optional `projects` field on `InitiativeItemSpawn`, so tasks an initiative spawns carry a project as linked context.                                                                                                            | todo      |              |
 

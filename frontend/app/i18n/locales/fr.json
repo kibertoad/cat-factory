@@ -728,7 +728,9 @@
         "project_definition_changed": "La définition épinglée par ce projet a changé depuis : l'exécution s'est arrêtée plutôt que de travailler à partir d'une définition que le projet n'a jamais acceptée. Demandez à l'opérateur du déploiement de publier la modification comme nouvelle version.",
         "project_task_already_recorded": "Cette tâche a déjà enregistré son résultat sur le projet. Créez une nouvelle tâche pour faire un suivi.",
         "outcome_too_large_for_inline": "Le résultat est trop volumineux pour être stocké, il n'a donc pas été enregistré. Restreignez la tâche et relancez-la.",
-        "research_nothing_to_ask": "Le mode de cette tâche de recherche ne laisse aucune question à poser : rien de nouveau à ajouter, ou rien de partiel ou de bloqué à clarifier. Choisissez un autre mode ou ajoutez une question."
+        "research_nothing_to_ask": "Le mode de cette tâche de recherche ne laisse aucune question à poser : rien de nouveau à ajouter, ou rien de partiel ou de bloqué à clarifier. Choisissez un autre mode ou ajoutez une question.",
+        "task_owned_by_project": "Cette tâche appartient à un projet, qui n'a pas de service. Utilisez plutôt l'adresse des tâches du projet.",
+        "project_definition_invalid": "La définition est refusée par son enveloppe ou par son type de projet. La réponse liste chaque problème ; corrigez-les et publiez à nouveau."
       }
     },
     "action": {
@@ -819,7 +821,11 @@
         "refined_requirements_unavailable": "Pas encore d’exigences affinées",
         "no_linked_issues": "Aucun ticket lié",
         "capability_credential_still_missing": "Identifiant toujours manquant",
-        "credential_wait_unrecorded": "Impossible de reprendre cette attente"
+        "credential_wait_unrecorded": "Impossible de reprendre cette attente",
+        "project_definition_version_exists": "Version déjà publiée",
+        "project_definition_key_registered": "Espace de noms déjà pris",
+        "project_homed_elsewhere": "Projet hébergé sur un autre tableau",
+        "credential_wait_personal_in_app": "À renouveler dans l'application"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -885,7 +891,11 @@
         "refined_requirements_unavailable": "La revue n’a pas encore produit de document révisé, ou le réécrit en ce moment. Attendez la fin de l’intégration, puis mettez à jour à nouveau.",
         "no_linked_issues": "Aucun ticket n’est lié à cette tâche. Liez le ticket dont elle provient, puis mettez à jour à nouveau.",
         "capability_credential_still_missing": "L'identifiant dont cette étape a besoin n'est toujours pas enregistré pour cet espace de travail. Enregistrez-le dans les paramètres des identifiants de capacités, puis reprenez l'exécution.",
-        "credential_wait_unrecorded": "Cette attente a été enregistrée avant que la plateforme ne note ce qu'une attente attend, elle ne peut donc pas être reprise. Relancez plutôt l'exécution."
+        "credential_wait_unrecorded": "Cette attente a été enregistrée avant que la plateforme ne note ce qu'une attente attend, elle ne peut donc pas être reprise. Relancez plutôt l'exécution.",
+        "project_definition_version_exists": "Cette version de la définition est déjà publiée et ne peut plus changer. Publiez plutôt une nouvelle version.",
+        "project_definition_key_registered": "Cet espace de noms appartient à des définitions fournies par le déploiement. Publiez dans l'espace de noms propre à votre organisation.",
+        "project_homed_elsewhere": "Les tâches d'un projet sont créées et exécutées sur le tableau qui l'héberge. Ouvrez ce tableau pour y travailler.",
+        "credential_wait_personal_in_app": "Un identifiant personnel expiré est renouvelé par la personne qui a lancé l'exécution, avec son mot de passe, dans l'application."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",

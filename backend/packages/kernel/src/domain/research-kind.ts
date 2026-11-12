@@ -12,10 +12,14 @@ import {
   DEFAULT_OUTCOME_STREAM,
   adhocQuestionId,
   findingsArtifactRefs,
+  findingsRevisionBodySchema,
   foldFindings,
   parseFindingsRevisionBody,
   parseResearchDefinition,
   parseResearchTaskPlan,
+  researchProjectView,
+  researchProjectViewSchema,
+  researchSpecSchema,
   researchSpecValidator,
 } from '@cat-factory/contracts'
 import { ValidationError } from './errors.js'
@@ -252,5 +256,16 @@ export const researchKindModule: ProjectKindModule<FindingsRevisionBody> = {
   definitionSummary: (definition) => {
     const parsed = parseResearchDefinition(definition)
     return parsed.ok ? parsed.value.spec.brief : definition.title
+  },
+
+  view: ({ definition, outcomes }) => {
+    const parsed = definition ? parseResearchDefinition(definition) : undefined
+    return researchProjectView(parsed?.ok ? parsed.value.spec.topics : [], outcomes)
+  },
+
+  schemas: {
+    spec: researchSpecSchema,
+    outcome: findingsRevisionBodySchema,
+    view: researchProjectViewSchema,
   },
 }

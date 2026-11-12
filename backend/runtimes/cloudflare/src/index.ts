@@ -409,6 +409,7 @@ export {
   INITIATIVE_PIPELINE_ID,
   INITIATIVE_DOCS_PIPELINE_ID,
   BUILD_PIPELINE_ID,
+  RESEARCH_PIPELINE_ID,
   SIMPLE_PIPELINE_ID,
   ADAPTIVE_BUILD_PIPELINE_ID,
   COMPLEX_BUILD_PIPELINE_ID,
@@ -426,7 +427,6 @@ export {
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
   BUG_FISHING_PIPELINE_ID,
-  RESEARCH_PIPELINE_ID,
   MEDIA_PIPELINE_ID,
 } from '@cat-factory/kernel'
 // The pipeline AUTHORING seam, so a deployment writes a registered pipeline the way the built-in

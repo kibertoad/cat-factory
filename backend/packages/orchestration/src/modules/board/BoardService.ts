@@ -10,14 +10,7 @@ import type {
   UpdateBlockInput,
 } from '@cat-factory/contracts'
 import { taskTypeRequiresProject } from '@cat-factory/contracts'
-import type {
-  Block,
-  BlockStatus,
-  BlockType,
-  BoardChange,
-  Position,
-  PreloadedBlocks,
-} from '@cat-factory/kernel'
+import type { Block, BlockType, BoardChange, Position, PreloadedBlocks } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import { BLOCK_TYPE_LABEL } from '@cat-factory/kernel'
 import type {
@@ -1080,20 +1073,18 @@ export class BoardService {
   }
 
   /** Public-API: a board task + its enclosing service frame; null when not externally visible. */
-  getServiceTask(
-    workspaceId: string,
-    taskId: string,
-  ): Promise<{ block: Block; service: Block } | null> {
-    return this.publicReads.getServiceTask(workspaceId, taskId)
+  getServiceTask(...args: Parameters<PublicBoardReads['getServiceTask']>) {
+    return this.publicReads.getServiceTask(...args)
   }
 
-  /** Public-API: one bounded, keyset-paginated page of a service's task subtree. */
-  listServiceTasksPage(
-    workspaceId: string,
-    serviceId: string,
-    opts: { limit: number; afterId?: string; status?: BlockStatus },
-  ): Promise<{ tasks: Block[]; hasMore: boolean } | null> {
-    return this.publicReads.listServiceTasksPage(workspaceId, serviceId, opts)
+  /** Public-API: a board task under a service OR a project; null when not externally visible. */
+  getBoardTask(...args: Parameters<PublicBoardReads['getBoardTask']>) {
+    return this.publicReads.getBoardTask(...args)
+  }
+
+  /** Public-API: one bounded, keyset-paginated page of a service's or project's task subtree. */
+  listServiceTasksPage(...args: Parameters<PublicBoardReads['listServiceTasksPage']>) {
+    return this.publicReads.listServiceTasksPage(...args)
   }
 
   /** Add a module (sub-frame) inside a service. */

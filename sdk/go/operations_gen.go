@@ -594,6 +594,23 @@ func (q *KaizenListEntriesQuery) values() map[string]string {
 	return out
 }
 
+// ProjectsListOutcomesQuery holds the query parameters for ProjectsService.ListOutcomes.
+type ProjectsListOutcomesQuery struct {
+	// Stream zero value means "not sent".
+	Stream *string
+}
+
+func (q *ProjectsListOutcomesQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Stream != nil {
+		out["stream"] = fmt.Sprintf("%v", *q.Stream)
+	}
+	return out
+}
+
 // PromptFragmentsListQuery holds the query parameters for PromptFragmentsService.List.
 type PromptFragmentsListQuery struct {
 	// Limit zero value means "not sent".
@@ -2926,6 +2943,25 @@ func (s *DecisionsService) ResolveStepExceeded(ctx context.Context, runID string
 	return &out, nil
 }
 
+// ResumeCredential resume a run parked on a missing credential
+// Resume a run parked because a step needs a capability credential (a vendor login, say) that was
+// not stored. Store it first through the capability-credentials settings; a resume while the key
+// still does not resolve is `409` with `details.reason: "capability_credential_still_missing"`. A
+// wait on a lapsed personal credential is `409` with `credential_wait_personal_in_app`: only the
+// run's initiator renews it, in the app. Requires a `decide` key.
+// POST /api/v1/runs/{runId}/credential/resume (operation resumePublicRunCredential).
+func (s *DecisionsService) ResumeCredential(ctx context.Context, runID string) (*PublicCredentialResume, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/credential/resume", pathEscape(runID)),
+	}
+	var out PublicCredentialResume
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ResumePrReview resume a stalled PR deep review
 // Re-dispatch the reviewer for only the slices that never reported, re-aggregating the findings
 // from the slice reports already captured, so a review whose final aggregation turn wedged is
@@ -4085,6 +4121,373 @@ func (s *KaizenService) ListEntriesAll(ctx context.Context, query *KaizenListEnt
 			page.Cursor = result.NextCursor
 		}
 	}
+}
+
+// ProjectKindsService the project kinds the deployment offers, each with the JSON Schemas of its own shapes, and the
+// definitions a project of a kind can pin: the ones the deployment ships in code and the ones the
+// account published, each version immutable. A definition names the credentials its runs need and
+// the origins a credential may be sent to; its `spec` is the kind's. Reading takes a `read` key;
+// publishing a version takes an `admin` key.
+type ProjectKindsService struct {
+	client *Client
+}
+
+// Get get a project kind with its schemas
+// One kind with the JSON Schemas of the shapes the rest of this surface leaves opaque: a
+// definition's `spec`, an outcome's `body` (in the schema version the deployment writes) and a
+// project's `view`. Each is null for a kind that declares none. A schema states the shape; a kind
+// can enforce more when it parses (unique ids, say). An unknown kind is `404`.
+// GET /api/v1/project-kinds/{kind} (operation getPublicProjectKind).
+func (s *ProjectKindsService) Get(ctx context.Context, kind string) (*PublicProjectKindDetail, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/project-kinds/%s", pathEscape(kind)),
+	}
+	var out PublicProjectKindDetail
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetDefinition get every version of one definition
+// Every version of one definition key of the kind the account can pin, ascending. An unknown key
+// is `404` with `details.reason: "project_definition_not_found"`.
+// GET /api/v1/project-kinds/{kind}/definitions/{key} (operation getPublicProjectDefinition).
+func (s *ProjectKindsService) GetDefinition(ctx context.Context, kind string, key string) (*PublicProjectDefinitionList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/project-kinds/%s/definitions/%s", pathEscape(kind), pathEscape(key)),
+	}
+	var out PublicProjectDefinitionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// List list the project kinds the deployment offers
+// Each kind with the task types its projects take and whether a project of it pins a definition
+// (`definition`: `required` or `optional`; absent for a kind that pins none). The built-in kind
+// is `research`; a deployment registers its own.
+// GET /api/v1/project-kinds (operation listPublicProjectKinds).
+func (s *ProjectKindsService) List(ctx context.Context) (*PublicProjectKindList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/project-kinds",
+	}
+	var out PublicProjectKindList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListDefinitions list the definitions of one kind the account can pin
+// Every definition of the kind a project of the key's account can pin: the ones the deployment
+// ships in code (`origin: registered`) and the ones the account published (`origin: stored`),
+// each with its content hash. A definition's envelope names the credentials its runs need, the
+// origins a credential may be sent to and the inputs a project fills; its `spec` says what the
+// work is. The platform never reads it: the project kind owns its shape and serves its JSON
+// Schema from `GET /api/v1/project-kinds/{kind}`.
+// GET /api/v1/project-kinds/{kind}/definitions (operation listPublicProjectDefinitions).
+func (s *ProjectKindsService) ListDefinitions(ctx context.Context, kind string) (*PublicProjectDefinitionList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/project-kinds/%s/definitions", pathEscape(kind)),
+	}
+	var out PublicProjectDefinitionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// PublishDefinition publish a definition version
+// Publish one immutable version of an account-owned definition; the kind, key and version are the
+// path's. The envelope is checked by this schema and the `spec` by the kind, against the schema
+// the kind serves; a spec the kind refuses, or a kind this deployment cannot validate, is `422`
+// with `details.reason: "project_definition_invalid"` and `details.problems` listing each issue.
+// A version already published is `409` with `project_definition_version_exists`, so a project
+// pinned to it never changes meaning. A key in a namespace the deployment's own definitions of
+// the kind use is `409` with `project_definition_key_registered`. A credential key the deployment
+// reserves for its own configuration is refused `400` by the body schema. Requires an `admin`
+// key: a definition names the credentials a run sends and the origins it may send them to.
+// PUT /api/v1/project-kinds/{kind}/definitions/{key}/versions/{version} (operation
+// publishPublicProjectDefinition).
+func (s *ProjectKindsService) PublishDefinition(ctx context.Context, kind string, key string, version string, body PublishProjectDefinition) (*PublicProjectDefinition, error) {
+	req := requestSpec{
+		Method: "PUT",
+		Path:   fmt.Sprintf("/api/v1/project-kinds/%s/definitions/%s/versions/%s", pathEscape(kind), pathEscape(key), pathEscape(version)),
+		Body:   body,
+	}
+	var out PublicProjectDefinition
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ProjectsService projects, the account-owned peers of services: list the ones the key's workspace mounts, create
+// one (pinning a definition when its kind takes one), link and unlink services, mount one, create
+// and run the tasks under it on the board that homes it, and read its outcomes and the view its
+// kind computes from them.
+type ProjectsService struct {
+	client *Client
+}
+
+// Create create a project
+// Create a project homed on the key's workspace. A kind that pins a definition takes `definition`
+// naming its key, an optional version (the highest by default) and the values for its `inputs`;
+// the project pins that version and its content hash. Refusals are `422` with `details.reason`:
+// `project_kind_unregistered`, `project_definition_required`, `project_definition_not_accepted`,
+// `project_definition_not_found`, `project_definition_inputs_invalid`,
+// `project_service_link_invalid`.
+// POST /api/v1/projects (operation createPublicProject).
+func (s *ProjectsService) Create(ctx context.Context, body CreatePublicProject) (*PublicProject, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   "/api/v1/projects",
+		Body:   body,
+	}
+	var out PublicProject
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CreateTask create a task under a project
+// A project task has its own resource, `PublicProjectTask`, carrying `projectId` where a service
+// task carries `serviceId`. `taskType` defaults to the first type the project's kind offers, and
+// what a task of that type asks for goes in `fields`, described by `GET /api/v1/task-types` (a
+// `research` task takes its mode and ad-hoc questions there). A project's tasks are created and
+// run on the board that homes it; any other board is refused with `409` and `details.reason:
+// "project_homed_elsewhere"`.
+// POST /api/v1/projects/{projectId}/tasks (operation createPublicProjectTask).
+func (s *ProjectsService) CreateTask(ctx context.Context, projectID string, body CreatePublicProjectTask) (*PublicProjectTask, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/tasks", pathEscape(projectID)),
+		Body:   body,
+	}
+	var out PublicProjectTask
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Get get a project
+// GET /api/v1/projects/{projectId} (operation getPublicProject).
+func (s *ProjectsService) Get(ctx context.Context, projectID string) (*PublicProject, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/projects/%s", pathEscape(projectID)),
+	}
+	var out PublicProject
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetOutcome get one outcome with its body
+// One outcome with the body its task recorded, wherever it is stored. The platform never reads
+// it: the project kind owns its shape and serves its JSON Schema from `GET
+// /api/v1/project-kinds/{kind}`. An offloaded body that cannot be read is `503` with
+// `details.reason: "outcome_body_unavailable"` rather than an empty one.
+// GET /api/v1/projects/{projectId}/outcomes/{outcomeId} (operation getPublicProjectOutcome).
+func (s *ProjectsService) GetOutcome(ctx context.Context, projectID string, outcomeID string) (*PublicProjectOutcome, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/outcomes/%s", pathEscape(projectID), pathEscape(outcomeID)),
+	}
+	var out PublicProjectOutcome
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetTask get a project task
+// GET /api/v1/projects/{projectId}/tasks/{taskId} (operation getPublicProjectTask).
+func (s *ProjectsService) GetTask(ctx context.Context, projectID string, taskID string) (*PublicProjectTask, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/tasks/%s", pathEscape(projectID), pathEscape(taskID)),
+	}
+	var out PublicProjectTask
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetView get a project's current view
+// The project's current state as its kind reads every outcome (for `research`: the findings
+// folded by question, with coverage of the pinned definition). The platform never reads it: the
+// project kind owns its shape and serves its JSON Schema from `GET /api/v1/project-kinds/{kind}`.
+// `view` is null for a kind that computes none; read its outcomes instead. A body that cannot be
+// read is `503` with `outcome_body_unavailable`.
+// GET /api/v1/projects/{projectId}/view (operation getPublicProjectView).
+func (s *ProjectsService) GetView(ctx context.Context, projectID string) (*PublicProjectView, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/view", pathEscape(projectID)),
+	}
+	var out PublicProjectView
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// LinkServices link services to a project
+// Link services of the project's own account as read-only context for its tasks. Services already
+// linked stay linked.
+// POST /api/v1/projects/{projectId}/services (operation linkPublicProjectServices).
+func (s *ProjectsService) LinkServices(ctx context.Context, projectID string, body PublicProjectServices) (*PublicProject, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/services", pathEscape(projectID)),
+		Body:   body,
+	}
+	var out PublicProject
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// List list the projects the key's workspace mounts
+// Projects are account-owned peers of services, mounted onto boards. Each entry carries its
+// linked services, whether the key's workspace is the board that homes it (`homedHere`, the board
+// that creates and runs its tasks) and, for a kind that pins a definition, the version it pinned.
+// GET /api/v1/projects (operation listPublicProjects).
+func (s *ProjectsService) List(ctx context.Context) (*PublicProjectList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/projects",
+	}
+	var out PublicProjectList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListOutcomes list a project's outcomes
+// Every outcome the project's tasks recorded, without bodies, ordered by `seq`: the order the
+// tasks were STARTED, across every stream. `stream` narrows to one stream. An outcome is
+// immutable once written.
+// GET /api/v1/projects/{projectId}/outcomes (operation listPublicProjectOutcomes).
+func (s *ProjectsService) ListOutcomes(ctx context.Context, projectID string, query *ProjectsListOutcomesQuery) (*PublicProjectOutcomeList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/outcomes", pathEscape(projectID)),
+		Query:  query.values(),
+	}
+	var out PublicProjectOutcomeList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListTasks list a project's tasks
+// GET /api/v1/projects/{projectId}/tasks (operation listPublicProjectTasks).
+func (s *ProjectsService) ListTasks(ctx context.Context, projectID string) (*PublicProjectTaskList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/tasks", pathEscape(projectID)),
+	}
+	var out PublicProjectTaskList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Mount mount a project on the key's workspace
+// Mount a project of the key's account onto the key's workspace, so its reads are served there.
+// Idempotent.
+// POST /api/v1/projects/{projectId}/mount (operation mountPublicProject).
+func (s *ProjectsService) Mount(ctx context.Context, projectID string) (*PublicProject, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/mount", pathEscape(projectID)),
+	}
+	var out PublicProject
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RetryTask retry a project task
+// POST /api/v1/projects/{projectId}/tasks/{taskId}/retry (operation retryPublicProjectTask).
+func (s *ProjectsService) RetryTask(ctx context.Context, projectID string, taskID string) (*PublicProjectTask, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/tasks/%s/retry", pathEscape(projectID), pathEscape(taskID)),
+	}
+	var out PublicProjectTask
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// StartTask start a project task
+// Start the task's run under the same admission as `POST /api/v1/tasks/{taskId}/start`: a
+// pipeline that can park on a person needs a `decide` key, and an individual-usage model needs
+// the personal-unlock headers.
+// POST /api/v1/projects/{projectId}/tasks/{taskId}/start (operation startPublicProjectTask).
+func (s *ProjectsService) StartTask(ctx context.Context, projectID string, taskID string, body *StartPublicTask) (*PublicProjectTask, error) {
+	if body == nil {
+		body = &StartPublicTask{}
+	}
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/tasks/%s/start", pathEscape(projectID), pathEscape(taskID)),
+		Body:   body,
+	}
+	var out PublicProjectTask
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// StopTask stop a project task
+// POST /api/v1/projects/{projectId}/tasks/{taskId}/stop (operation stopPublicProjectTask).
+func (s *ProjectsService) StopTask(ctx context.Context, projectID string, taskID string) (*PublicProjectTask, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/tasks/%s/stop", pathEscape(projectID), pathEscape(taskID)),
+	}
+	var out PublicProjectTask
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// UnlinkServices unlink services from a project
+// A service the project does not link is ignored.
+// POST /api/v1/projects/{projectId}/services/unlink (operation unlinkPublicProjectServices).
+func (s *ProjectsService) UnlinkServices(ctx context.Context, projectID string, body PublicProjectServices) (*PublicProject, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/services/unlink", pathEscape(projectID)),
+		Body:   body,
+	}
+	var out PublicProject
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // GuidedReviewsService guided pull request review: a structured explanation of a PR (what it does, meaningful changes,

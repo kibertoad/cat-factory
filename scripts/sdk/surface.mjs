@@ -212,6 +212,29 @@ const SURFACE = {
   tagPublicMergeReviewEffort: { group: 'mergeRecords', method: 'tagEffort' },
 
   // ---- Kaizen entries (`read` to consume the backlog, `write` to acknowledge one) ----------
+  // ---- Projects (`read` to follow, `write` to create and run, `admin` to publish a definition)
+  listPublicProjectKinds: { group: 'projectKinds', method: 'list' },
+  getPublicProjectKind: { group: 'projectKinds', method: 'get' },
+  listPublicProjectDefinitions: { group: 'projectKinds', method: 'listDefinitions' },
+  getPublicProjectDefinition: { group: 'projectKinds', method: 'getDefinition' },
+  publishPublicProjectDefinition: { group: 'projectKinds', method: 'publishDefinition' },
+  listPublicProjects: { group: 'projects', method: 'list' },
+  createPublicProject: { group: 'projects', method: 'create' },
+  getPublicProject: { group: 'projects', method: 'get' },
+  linkPublicProjectServices: { group: 'projects', method: 'linkServices' },
+  unlinkPublicProjectServices: { group: 'projects', method: 'unlinkServices' },
+  mountPublicProject: { group: 'projects', method: 'mount' },
+  listPublicProjectTasks: { group: 'projects', method: 'listTasks' },
+  createPublicProjectTask: { group: 'projects', method: 'createTask' },
+  getPublicProjectTask: { group: 'projects', method: 'getTask' },
+  startPublicProjectTask: { group: 'projects', method: 'startTask' },
+  stopPublicProjectTask: { group: 'projects', method: 'stopTask' },
+  retryPublicProjectTask: { group: 'projects', method: 'retryTask' },
+  listPublicProjectOutcomes: { group: 'projects', method: 'listOutcomes' },
+  getPublicProjectOutcome: { group: 'projects', method: 'getOutcome' },
+  getPublicProjectView: { group: 'projects', method: 'getView' },
+  resumePublicRunCredential: { group: 'decisions', method: 'resumeCredential' },
+
   listPublicKaizenEntries: { group: 'kaizen', method: 'listEntries', paginates: 'entries' },
   // ---- Directory (`read`; account-scoped, for keeping an external copy in sync) ------------
   getDirectoryReach: { group: 'directory', method: 'getReach' },
@@ -432,6 +455,10 @@ export const GROUP_DOCS = {
     "The account's directory, for keeping an external copy in sync: workspaces, users, account and workspace memberships, and linked repositories as keyset-paged snapshots, plus the ordered change feed that brings a copy up to date. Everything here takes a `read` key; users and account memberships need one that reaches every workspace.",
   kaizen:
     "The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything.",
+  projectKinds:
+    "The project kinds the deployment offers, each with the JSON Schemas of its own shapes, and the definitions a project of a kind can pin: the ones the deployment ships in code and the ones the account published, each version immutable. A definition names the credentials its runs need and the origins a credential may be sent to; its `spec` is the kind's. Reading takes a `read` key; publishing a version takes an `admin` key.",
+  projects:
+    "Projects, the account-owned peers of services: list the ones the key's workspace mounts, create one (pinning a definition when its kind takes one), link and unlink services, mount one, create and run the tasks under it on the board that homes it, and read its outcomes and the view its kind computes from them.",
   guidedReviews:
     'Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking, drafting and posting drafts take a `write` key. Posting publishes plain comments on the pull request and never approves or requests changes.',
   prAssessments:

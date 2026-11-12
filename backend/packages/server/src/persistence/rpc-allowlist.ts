@@ -341,6 +341,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   projectRecordRepository: {
     getPin: { scope: { kind: 'project', arg: 0 } },
+    listPins: { scope: { kind: 'projectList', arg: 0 } },
     insertPin: { scope: { kind: 'projectField', arg: 0 } },
     reserveSeq: { scope: { kind: 'project', arg: 0 } },
     reserveTaskSeq: { scope: { kind: 'project', arg: 0 } },
