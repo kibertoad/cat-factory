@@ -1,6 +1,7 @@
 import type { Project, TaskLinkedProject } from '@cat-factory/contracts'
 import {
   type AgentRunContext,
+  type Block,
   type BlockRepository,
   type Clock,
   type ProjectRepository,
@@ -14,7 +15,12 @@ import type { ProjectContextContributor } from './projectContext.js'
 export interface TaskProjectLinkServiceDeps {
   links: TaskProjectLinkRepository
   projectRepository: Pick<ProjectRepository, 'listByIds' | 'listByAccount'>
-  blockRepository: Pick<BlockRepository, 'get' | 'findByIds'>
+  blockRepository: Pick<BlockRepository, 'findByIds'>
+  /** The block and the board that homes it: a task under a mounted service is homed elsewhere. */
+  resolveBlock: (
+    workspaceId: string,
+    blockId: string,
+  ) => Promise<{ homeWorkspaceId: string; block: Block }>
   workspaceRepository: Pick<WorkspaceRepository, 'accountOf'>
   context: ProjectContextContributor
   clock: Clock
@@ -32,8 +38,8 @@ export class TaskProjectLinkService {
   constructor(private readonly deps: TaskProjectLinkServiceDeps) {}
 
   async list(workspaceId: string, blockId: string): Promise<TaskLinkedProject[]> {
-    await this.requireTask(workspaceId, blockId)
-    const links = await this.deps.links.listByBlock(workspaceId, blockId)
+    const home = await this.requireTask(workspaceId, blockId)
+    const links = await this.deps.links.listByBlock(home, blockId)
     const projects = await this.projectsById(links.map((l) => l.projectId))
     const titles = await this.titlesOf([...projects.values()])
     return links.flatMap((link) => {
@@ -55,16 +61,16 @@ export class TaskProjectLinkService {
     blockId: string,
     projectIds: string[],
   ): Promise<TaskLinkedProject[]> {
-    await this.requireTask(workspaceId, blockId)
+    const home = await this.requireTask(workspaceId, blockId)
     await this.assertLinkable(workspaceId, projectIds)
-    await this.deps.links.link(workspaceId, blockId, projectIds, this.deps.clock.now())
+    await this.deps.links.link(home, blockId, projectIds, this.deps.clock.now())
     return this.list(workspaceId, blockId)
   }
 
   /** Unlink one project. Idempotent; the project itself is untouched. */
   async unlink(workspaceId: string, blockId: string, projectId: string): Promise<void> {
-    await this.requireTask(workspaceId, blockId)
-    await this.deps.links.unlink(workspaceId, blockId, projectId)
+    const home = await this.requireTask(workspaceId, blockId)
+    await this.deps.links.unlink(home, blockId, projectId)
   }
 
   /** Drop every link a task holds, when the task is rolled back before it ever ran. */
@@ -156,8 +162,13 @@ export class TaskProjectLinkService {
     )
   }
 
-  private async requireTask(workspaceId: string, blockId: string): Promise<void> {
-    const block = await this.deps.blockRepository.get(workspaceId, blockId)
-    if (!block || block.level !== 'task' || block.internal) throw new NotFoundError('Task', blockId)
+  /**
+   * The board that homes the task, which is where its links are keyed: a task under a service this
+   * board mounts lives on the service's home board, as its runs do.
+   */
+  private async requireTask(workspaceId: string, blockId: string): Promise<string> {
+    const { homeWorkspaceId, block } = await this.deps.resolveBlock(workspaceId, blockId)
+    if (block.level !== 'task' || block.internal) throw new NotFoundError('Task', blockId)
+    return homeWorkspaceId
   }
 }

@@ -13,6 +13,7 @@ import { ProjectOutcomeReader } from '../modules/projects/ProjectOutcomeReader.j
 import { ProjectService } from '../modules/projects/ProjectService.js'
 import { TaskProjectLinkService } from '../modules/projects/TaskProjectLinkService.js'
 import { projectContextContributor } from '../modules/projects/projectContext.js'
+import { createBlockHomes } from '../modules/board/blockHomes.js'
 import { createProjectOutcomeStore } from '../modules/projects/createProjectStepController.js'
 import type { CoreDependencies } from './dependencies.js'
 
@@ -95,6 +96,12 @@ export function createProjectsModule(
             links: taskProjectLinkRepository,
             projectRepository,
             blockRepository: deps.blockRepository,
+            resolveBlock: createBlockHomes({
+              blockRepository: deps.blockRepository,
+              ...(deps.workspaceMountRepository
+                ? { workspaceMountRepository: deps.workspaceMountRepository }
+                : {}),
+            }).resolveBlock,
             workspaceRepository: deps.workspaceRepository,
             context: projectContextContributor({
               records: projectRecordRepository,

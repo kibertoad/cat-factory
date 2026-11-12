@@ -152,6 +152,10 @@ export type WorkspaceScopedTable = (typeof WORKSPACE_SCOPED_TABLES)[number]
  * fold (`SpendRollupRepository.rollupWorkspaceSpendDays`) BEFORE this cascade runs, so what the
  * table keeps of a deleted board ends where the board did.
  *
+ * `task_project_links` is reclaimed by bespoke handling, like the mounts: a link is keyed by the
+ * board of the task that holds it, but a link to a project this board homes can sit on ANY board,
+ * so the delete drops this board's own links AND every link to the projects it homes.
+ *
  * `directory_changes` is KEPT too, and for a stricter reason: the board's deletion is itself a
  * change the feed must publish. The delete appends the board's own change and one per member and
  * repo row it is about to remove, so an external mirror learns they are gone; reclaiming those rows
@@ -162,4 +166,5 @@ export const WORKSPACE_CASCADE_SPECIAL_TABLES = [
   'binary_artifacts',
   'spend_days',
   'directory_changes',
+  'task_project_links',
 ] as const
