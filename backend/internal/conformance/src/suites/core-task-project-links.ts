@@ -149,9 +149,9 @@ export function defineCoreTaskProjectLinksConformance(harness: ConformanceHarnes
       const serviceId = snap.serviceCatalog!.find((s) => s.frameBlockId === frame.id)!.id
       const other = (await app.createWorkspaceInAccount(accountId, null, { name: 'Other board' }))
         .workspace.id
-      expect((await app.call('POST', `/workspaces/${other}/services/${serviceId}`, {})).status).toBe(
-        201,
-      )
+      expect(
+        (await app.call('POST', `/workspaces/${other}/services/${serviceId}`, {})).status,
+      ).toBe(201)
       const fromOther = `/workspaces/${other}/blocks/${task.id}/projects`
       const linked = await app.call<{ projects: TaskLinkedProject[] }>('POST', fromOther, {
         projectIds: [project.id],
