@@ -69,6 +69,7 @@ export {
 } from './suite.js'
 export { deriveWorkerDatabase, adminDatabaseUrl, type WorkerDatabase } from './test-db.js'
 export { defineLlmMetricsSuite } from './llm-metrics-suite.js'
+export { defineProjectsSuite } from './projects-suite.js'
 export { defineSubscriptionQuotaSuite } from './subscription-quota-suite.js'
 export { defineMcpOAuthGrantSuite } from './mcp-oauth-grant-suite.js'
 export { defineBinaryArtifactsSuite, MemoryBinaryBlobBackend } from './binary-artifacts-suite.js'

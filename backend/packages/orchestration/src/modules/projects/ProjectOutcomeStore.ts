@@ -187,27 +187,31 @@ export class ProjectOutcomeStore {
     const existing = await this.deps.records.getOutcome(project.id, meta.id)
     if (existing) return { written: false, json: await this.jsonOf(project, existing) }
     const bytes = new globalThis.TextEncoder().encode(json)
-    const home = await this.homeStore(project)
-    const placement = placeOutcomeBody({
-      bytes: bytes.byteLength,
-      policy: await this.policyFor(input.runWorkspaceId, project.id),
-      blobStoreAvailable: home.store !== null,
-    })
-    if (placement.placement === 'refused') {
-      throw new ValidationError('The outcome is too large to store inline', {
-        reason: placement.reason,
-        bytes: bytes.byteLength,
-      })
-    }
+    const policy = await this.policyFor(input.runWorkspaceId, project.id)
+    const place = (blobStoreAvailable: boolean) =>
+      placeOutcomeBody({ bytes: bytes.byteLength, policy, blobStoreAvailable })
     const row = { ...meta, bodyBytes: bytes.byteLength }
     const written: RecordedOutcome = { written: true, json }
-    if (placement.placement === 'inline' || !home.store) {
+    const insertInline = async () => {
       const inserted = await this.deps.records.insertOutcome({
         ...row,
         body: { kind: 'inline', json },
       })
       return inserted ? written : this.onRecord(project, meta.id)
     }
+    // The blob store is resolved only for a body that leaves the row: resolving it reads the
+    // account's storage settings, which an inline body never needs (and a mothership-mode node
+    // cannot read).
+    if (place(true).placement === 'inline') return insertInline()
+    const home = await this.homeStore(project)
+    const placement = place(home.store !== null)
+    if (placement.placement === 'refused') {
+      throw new ValidationError('The outcome is too large to store inline', {
+        reason: placement.reason,
+        bytes: bytes.byteLength,
+      })
+    }
+    if (placement.placement === 'inline' || !home.store) return insertInline()
     const artifact = await home.store.store({
       meta: {
         workspaceId: home.workspaceId,

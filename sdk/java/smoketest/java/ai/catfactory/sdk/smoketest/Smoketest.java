@@ -27,6 +27,8 @@ import ai.catfactory.sdk.CatFactoryUnauthorizedException;
 import ai.catfactory.sdk.EventStream;
 import ai.catfactory.sdk.StreamEvent;
 import ai.catfactory.sdk.Transport;
+import ai.catfactory.sdk.model.CreatePublicProject;
+import ai.catfactory.sdk.model.CreatePublicProjectDefinition;
 import ai.catfactory.sdk.model.CreatePublicTask;
 import ai.catfactory.sdk.model.ListPublicTaskTypesResponseTaskTypeField;
 import ai.catfactory.sdk.model.NotificationWebhook;
@@ -35,6 +37,7 @@ import ai.catfactory.sdk.model.NotificationWebhookRunEvent;
 import ai.catfactory.sdk.model.PublicNotificationWebhook;
 import ai.catfactory.sdk.model.PutNotificationWebhook;
 import ai.catfactory.sdk.model.PublicPipeline;
+import ai.catfactory.sdk.model.PublicProject;
 import ai.catfactory.sdk.model.PublicRun;
 import ai.catfactory.sdk.model.PublicTask;
 import ai.catfactory.sdk.model.PublicUsage;
@@ -329,6 +332,79 @@ public final class Smoketest {
                 String message = exc.getMessage() == null ? "" : exc.getMessage();
                 observations.put("connectionFailureNamesTheCause", message.contains("nothing is listening"));
                 observations.put("connectionFailureStatesHistory", message.contains("has not completed a call"));
+            }
+        });
+
+        // A project of the built-in research kind pins a definition the deployment registers in
+        // code (the test server ships `e2e:vendor`). The kind serves nullable JSON Schemas, the
+        // project a nullable pin, and the view an opaque value: the null-versus-absent and opaque
+        // cases the four clients must decode alike.
+        String[] projectId = {""};
+
+        step("projectKinds.get", () -> {
+            var kind = client.projectKinds().get("research");
+            observations.put(
+                    "projectKindPinsDefinition",
+                    kind.definition() != null && "required".equals(kind.definition().wireValue()));
+            observations.put("projectKindServesViewSchema", kind.schemas().view() != null);
+        });
+
+        step("projectKinds.listDefinitions", () -> {
+            var result = client.projectKinds().listDefinitions("research");
+            observations.put(
+                    "projectDefinitionListed",
+                    result.definitions().stream()
+                            .anyMatch(
+                                    d -> "e2e:vendor".equals(d.definition().key())
+                                            && "registered".equals(d.origin().wireValue())));
+        });
+
+        step("projects.create", () -> {
+            PublicProject project =
+                    client.projects()
+                            .create(
+                                    CreatePublicProject.builder()
+                                            .kind("research")
+                                            .title("SDK smoketest research")
+                                            .definition(
+                                                    CreatePublicProjectDefinition.builder()
+                                                            .key("e2e:vendor")
+                                                            .build())
+                                            .build());
+            projectId[0] = project.projectId();
+            observations.put("projectKind", project.kind());
+            observations.put("projectHomedHere", project.homedHere());
+            observations.put(
+                    "projectPinnedVersion",
+                    project.pin() != null ? project.pin().definitionVersion() : null);
+            observations.put("projectServiceCount", project.serviceIds().size());
+        });
+
+        step("projects.get", () -> {
+            PublicProject project = client.projects().get(projectId[0]);
+            observations.put("projectFetchedTitle", project.title());
+            observations.put(
+                    "projectFetchedPinKey",
+                    project.pin() != null ? project.pin().definitionKey() : null);
+        });
+
+        step("projects.listOutcomes", () -> {
+            var result = client.projects().listOutcomes(projectId[0]);
+            observations.put("projectOutcomeCount", result.outcomes().size());
+        });
+
+        step("projects.getView", () -> {
+            var view = client.projects().getView(projectId[0]);
+            observations.put("projectViewKind", view.kind());
+            observations.put("projectViewIsPresent", view.view() != null);
+        });
+
+        step("error: project not found", () -> {
+            try {
+                client.projects().get("prj_definitely_not_a_real_project");
+                failures.add("error: project not found: expected a 404, got a success");
+            } catch (CatFactoryNotFoundException exc) {
+                observations.put("projectNotFoundIsTypedClass", true);
             }
         });
 

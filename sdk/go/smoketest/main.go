@@ -382,6 +382,101 @@ func main() {
 		return nil
 	})
 
+	// A project of the built-in research kind pins a definition the deployment registers in code
+	// (the test server ships `e2e:vendor`). The kind serves nullable JSON Schemas, the project a
+	// nullable pin, and the view an opaque value: the null-versus-absent and opaque cases the four
+	// clients must decode alike.
+	projectID := ""
+
+	step("projectKinds.get", func() error {
+		kind, err := client.ProjectKinds.Get(ctx, "research")
+		if err != nil {
+			return err
+		}
+		observations["projectKindPinsDefinition"] = kind.Definition != nil &&
+			*kind.Definition == catfactory.PublicProjectKindDefinitionRequired
+		observations["projectKindServesViewSchema"] = kind.Schemas.View != nil
+		return nil
+	})
+
+	step("projectKinds.listDefinitions", func() error {
+		result, err := client.ProjectKinds.ListDefinitions(ctx, "research")
+		if err != nil {
+			return err
+		}
+		listed := false
+		for _, d := range result.Definitions {
+			if d.Definition.Key == "e2e:vendor" && string(d.Origin) == "registered" {
+				listed = true
+			}
+		}
+		observations["projectDefinitionListed"] = listed
+		return nil
+	})
+
+	step("projects.create", func() error {
+		project, err := client.Projects.Create(ctx, catfactory.CreatePublicProject{
+			Kind:       "research",
+			Title:      "SDK smoketest research",
+			Definition: &catfactory.CreatePublicProjectDefinition{Key: "e2e:vendor"},
+		})
+		if err != nil {
+			return err
+		}
+		projectID = project.ProjectID
+		observations["projectKind"] = project.Kind
+		observations["projectHomedHere"] = project.HomedHere
+		if project.Pin != nil {
+			observations["projectPinnedVersion"] = project.Pin.DefinitionVersion
+		} else {
+			observations["projectPinnedVersion"] = nil
+		}
+		observations["projectServiceCount"] = len(project.ServiceIds)
+		return nil
+	})
+
+	step("projects.get", func() error {
+		project, err := client.Projects.Get(ctx, projectID)
+		if err != nil {
+			return err
+		}
+		observations["projectFetchedTitle"] = project.Title
+		if project.Pin != nil {
+			observations["projectFetchedPinKey"] = project.Pin.DefinitionKey
+		} else {
+			observations["projectFetchedPinKey"] = nil
+		}
+		return nil
+	})
+
+	step("projects.listOutcomes", func() error {
+		result, err := client.Projects.ListOutcomes(ctx, projectID, nil)
+		if err != nil {
+			return err
+		}
+		observations["projectOutcomeCount"] = len(result.Outcomes)
+		return nil
+	})
+
+	step("projects.getView", func() error {
+		view, err := client.Projects.GetView(ctx, projectID)
+		if err != nil {
+			return err
+		}
+		observations["projectViewKind"] = view.Kind
+		observations["projectViewIsPresent"] = view.View != nil
+		return nil
+	})
+
+	step("error: project not found", func() error {
+		_, err := client.Projects.Get(ctx, "prj_definitely_not_a_real_project")
+		if err == nil {
+			return fmt.Errorf("expected a 404, got a success")
+		}
+		observations["projectNotFoundIsTypedClass"] = catfactory.IsNotFound(err)
+		return nil
+	})
+
 	step("tasks.start", func() error {
 		body := catfactory.StartPublicTask{}
 		if pipelineID != "" {

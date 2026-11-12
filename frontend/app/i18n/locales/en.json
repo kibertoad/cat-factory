@@ -9635,7 +9635,8 @@
       "linked": "Project linked",
       "loadFailed": "Could not load the linked projects",
       "linkFailed": "Could not link the project",
-      "unlinkFailed": "Could not unlink the project"
+      "unlinkFailed": "Could not unlink the project",
+      "stageHint": "Linked once the task is created. A project with no result yet is refused then."
     },
     "view": {
       "open": "Open project",
