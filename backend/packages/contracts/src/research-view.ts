@@ -1,5 +1,7 @@
 import * as v from 'valibot'
 import {
+  adhocQuestionSchema,
+  type AdhocQuestion,
   type FoldableFindingsRevision,
   isAdhocQuestionId,
   foldFindings,
@@ -43,6 +45,8 @@ export const researchProjectViewSchema = v.object({
   latestRevisionId: v.nullable(v.string()),
   findings: v.array(foldedFindingSchema),
   learnings: v.array(v.object({ ...researchLearningSchema.entries, revisionId: v.string() })),
+  /** The text of every ad-hoc question a revision answered, by its `adhoc:` id. */
+  adhocQuestions: v.array(adhocQuestionSchema),
   coverage: v.object({
     total: coverageCountsSchema,
     byTopic: v.array(v.object({ topicId: v.string(), counts: coverageCountsSchema })),
@@ -58,12 +62,28 @@ export function researchProjectView(
   revisions: readonly FoldableFindingsRevision[],
 ): ResearchProjectView {
   const folded = foldFindings(revisions)
-  const adhocIds = Object.keys(folded.byQuestion).filter((id) => isAdhocQuestionId(id))
+  const adhocQuestions = adhocQuestionsOf(revisions)
+  const adhocIds = [
+    ...new Set([
+      ...adhocQuestions.map((q) => q.id),
+      ...Object.keys(folded.byQuestion).filter((id) => isAdhocQuestionId(id)),
+    ]),
+  ]
   return {
     summary: folded.summary,
     latestRevisionId: folded.latestRevisionId,
     findings: Object.values(folded.byQuestion),
     learnings: folded.learnings,
+    adhocQuestions,
     coverage: researchCoverage(topics, adhocIds, folded),
   }
+}
+
+/** The text of every ad-hoc question the revisions answered, the newest wording winning. */
+function adhocQuestionsOf(revisions: readonly FoldableFindingsRevision[]): AdhocQuestion[] {
+  const byId = new Map<string, AdhocQuestion>()
+  for (const revision of [...revisions].sort((a, b) => a.seq - b.seq)) {
+    for (const question of revision.body.adhocQuestions) byId.set(question.id, question)
+  }
+  return [...byId.values()]
 }

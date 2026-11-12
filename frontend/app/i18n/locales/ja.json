@@ -9288,6 +9288,138 @@
     "mount": {
       "added": "プロジェクト {title} をこのボードに追加しました",
       "failed": "プロジェクトを追加できませんでした"
+    },
+    "view": {
+      "open": "プロジェクトを開く",
+      "title": "プロジェクト: {title}",
+      "pin": "{title}、バージョン {version}",
+      "refresh": "更新",
+      "loading": "プロジェクトを読み込み中",
+      "unavailable": "プロジェクトを読み込めませんでした",
+      "loadFailed": "プロジェクトを読み込めませんでした",
+      "definitionChanged": "登録された定義が、このプロジェクトが固定したバージョンと一致しなくなりました。新しいバージョンとして公開されるまで、新しい実行は拒否されます。",
+      "definitionMissing": "このプロジェクトが固定した定義は、この組織ではもう利用できません。",
+      "unreadableOutcomes": "一部の結果は、現在提供できないコンテンツストレージに保存されています。提供できるようになるまで除外されます。",
+      "tabs": {
+        "latest": "最新",
+        "outcomes": "履歴",
+        "credentials": "認証情報",
+        "storage": "ストレージ"
+      },
+      "outcomes": {
+        "empty": "まだ結果を記録したタスクはありません",
+        "seq": "リビジョン {seq}",
+        "task": "{task} が作成、定義バージョン {version}",
+        "taskOnly": "{task} が作成",
+        "show": "表示",
+        "hide": "非表示",
+        "openFailed": "リビジョンを開けませんでした",
+        "storage": {
+          "inline": "インラインで保存、{size}",
+          "offloaded": "コンテンツストレージに保存、{size}",
+          "unavailable": "利用不可、{size}"
+        }
+      },
+      "credentials": {
+        "none": "固定した定義は認証情報を宣言していません",
+        "requiredAtStart": "実行の開始前に必要です。",
+        "askedWhenNeeded": "エージェントは必要な段階に来たときに要求します。",
+        "store": "ケイパビリティ認証情報を管理",
+        "status": {
+          "stored": "保存済み",
+          "missing": "未保存",
+          "reserved": "予約済みの名前、送信されません"
+        }
+      },
+      "storage": {
+        "effective": "新しいリビジョンは {size} までインラインで保存され、それを超えるとオフロードは{offload}です。",
+        "accountHint": "組織が設定します。",
+        "inherit": "継承",
+        "inherits": "上位の階層から継承",
+        "inlineUpTo": "{size} までインライン",
+        "inlineKb": "インラインの上限 (KB)",
+        "offloadLabel": "オフロード",
+        "save": "保存",
+        "loadFailed": "結果ストレージの設定を読み込めませんでした",
+        "saveFailed": "結果ストレージの設定を保存できませんでした",
+        "tier": {
+          "account": "組織",
+          "workspace": "このボード",
+          "project": "このプロジェクト"
+        },
+        "offload": {
+          "enabled": "有効",
+          "disabled": "無効"
+        }
+      },
+      "fallback": {
+        "empty": "このプロジェクトにはまだ結果がありません",
+        "stream": "{stream} の最新"
+      }
+    }
+  },
+  "research": {
+    "unavailable": "調査結果を読み込めませんでした",
+    "adhoc": "タスクが追加した質問",
+    "retired": "このバージョンではもう尋ねない質問への回答",
+    "learnings": "得られた知見",
+    "topicCoverage": "{total} 件中 {answered} 件回答済み",
+    "blockedOn": "認証情報 {key} を待っています",
+    "notes": "この回答と並べて残した後の試行: {count}",
+    "tabs": {
+      "findings": "調査結果"
+    },
+    "status": {
+      "answered": "回答済み",
+      "partial": "部分的",
+      "unanswered": "未回答",
+      "blocked": "ブロック中"
+    },
+    "coverage": {
+      "answered": "回答済み: {count}",
+      "partial": "部分的: {count}",
+      "unanswered": "未回答: {count}",
+      "blocked": "ブロック中: {count}"
+    },
+    "confidence": {
+      "high": "確度: 高",
+      "medium": "確度: 中",
+      "low": "確度: 低"
+    },
+    "evidence": {
+      "httpExchange": "記録されたリクエスト {ref}",
+      "screenshot": "スクリーンショット {id}",
+      "repoPath": "リポジトリのファイル {path}"
+    },
+    "mode": {
+      "initial": "初回",
+      "extend": "拡張",
+      "clarify": "明確化",
+      "refresh": "再確認"
+    },
+    "modeHelp": {
+      "initial": "固定した定義のすべての質問に回答します。",
+      "extend": "下で追加する質問を含め、まだ尋ねていない質問に回答します。",
+      "clarify": "部分的またはブロック中の回答を見直します。",
+      "refresh": "既存のすべての回答を、現在のベンダーの状態と照らし合わせて確認します。"
+    },
+    "followUp": {
+      "open": "フォローアップを開始",
+      "title": "フォローアップを開始",
+      "modeLabel": "モード",
+      "titleLabel": "タスクのタイトル",
+      "questionsLabel": "追加する質問",
+      "questionsHelp": "1 行に 1 つの質問。それぞれに回答し、プロジェクトの調査結果と一緒に保存します。",
+      "revisitLabel": "見直す質問",
+      "revisitHelp": "空のままにすると、このモードが対象とするすべての質問を見直します。",
+      "submit": "リサーチを開始",
+      "failed": "フォローアップを開始できませんでした",
+      "defaultTitle": {
+        "initial": "ベンダーを調査する",
+        "extend": "リサーチを拡張する",
+        "clarify": "未解決の回答を明確にする",
+        "refresh": "調査結果を再確認する"
+      }
     }
   }
 }

@@ -15,6 +15,7 @@ import {
   resolveOutcomeStoragePolicy,
   runBestEffort,
 } from '@cat-factory/kernel'
+import { readOutcomeStorageTiers } from './OutcomeStoragePolicyService.js'
 
 export interface ProjectOutcomeStoreDeps {
   blockRepository: Pick<BlockRepository, 'findById'>
@@ -32,6 +33,12 @@ export type OutcomeProject = Pick<Project, 'id' | 'rootBlockId'>
 export interface StoredOutcome {
   row: ProjectOutcomeRow
   json: string
+}
+
+/** A stored outcome whose body may be unreadable just now (`json: null`). */
+export interface ReadOutcome {
+  row: ProjectOutcomeRow
+  json: string | null
 }
 
 /** An outcome body as {@link ProjectOutcomeStore.write} left it on record. */
@@ -67,6 +74,42 @@ export class ProjectOutcomeStore {
     const home = await this.homeStore(project)
     // Object storage has no batched GET, so each offloaded body is one read of its own.
     return Promise.all(rows.map(async (row) => ({ row, json: await readJson(row, home) })))
+  }
+
+  /**
+   * Every outcome with its body's JSON, `seq` ascending, for a reader that states what is missing
+   * beside what it can show: an offloaded body that cannot be read now comes back as `json: null`
+   * rather than failing the read. A run never reads through this; it reads {@link list}, which
+   * refuses.
+   */
+  async readAll(project: OutcomeProject): Promise<ReadOutcome[]> {
+    const rows = await this.deps.records.listOutcomes(project.id)
+    const home = rows.some((row) => row.body.kind === 'offloaded')
+      ? await this.homeStore(project)
+      : null
+    return Promise.all(rows.map((row) => this.readTolerantly(row, home)))
+  }
+
+  /** One outcome read as {@link readAll} reads it, or null when the project has none by `id`. */
+  async readOne(project: OutcomeProject, id: string): Promise<ReadOutcome | null> {
+    const row = await this.deps.records.getOutcome(project.id, id)
+    if (!row) return null
+    const home = row.body.kind === 'offloaded' ? await this.homeStore(project) : null
+    return this.readTolerantly(row, home)
+  }
+
+  private async readTolerantly(
+    row: ProjectOutcomeRow,
+    home: { workspaceId: string; store: BinaryArtifactStore | null } | null,
+  ): Promise<ReadOutcome> {
+    const ref = row.body
+    if (ref.kind === 'inline') return { row, json: ref.json }
+    const store = home?.store
+    if (!home || !store) return { row, json: null }
+    const bytes = await runBestEffort(this.log, 'outcome read: offloaded body', () =>
+      store.getBlob(home.workspaceId, ref.artifactId),
+    )
+    return { row, json: bytes ? new globalThis.TextDecoder().decode(bytes) : null }
   }
 
   /** One outcome of the project with its body's JSON, or null when the project has none by `id`. */
@@ -171,19 +214,16 @@ export class ProjectOutcomeStore {
 
   /** The account, run-workspace and project tiers folded into one policy. */
   private async policyFor(workspaceId: string, projectId: string) {
-    const policies = this.deps.policies
-    const accountId = (await this.deps.workspaceRepository.accountOf(workspaceId)) ?? null
-    const [account, workspace, project] = policies
-      ? await Promise.all([
-          accountId ? policies.get('account', accountId) : null,
-          policies.get('workspace', workspaceId),
-          policies.get('project', projectId),
-        ])
-      : [null, null, null]
+    const tiers = await readOutcomeStorageTiers(
+      {
+        ...(this.deps.policies ? { outcomeStoragePolicyRepository: this.deps.policies } : {}),
+        workspaceRepository: this.deps.workspaceRepository,
+      },
+      workspaceId,
+      projectId,
+    )
     return resolveOutcomeStoragePolicy({
-      account,
-      workspace,
-      project,
+      ...tiers,
       facadeInlineCeilingBytes: OUTCOME_INLINE_MAX_BYTES_CEILING,
     })
   }

@@ -405,6 +405,8 @@ function registerRbacMemberManagementTests(
       // board configuration on the same footing as the prompt overrides above.
       { perm: 'settings.manage', method: 'DELETE', path: w('/task-type-suppressions/none%3Aop') },
       { perm: 'settings.manage', method: 'DELETE', path: w('/risk-policies/none') },
+      // The board's outcome-storage tiers decide where project outcomes are stored.
+      { perm: 'settings.manage', method: 'PUT', path: w('/outcome-storage-policy') },
       { perm: 'settings.manage', method: 'DELETE', path: w('/observability/connection') },
       { perm: 'settings.manage', method: 'DELETE', path: w('/incident-enrichment') },
       { perm: 'settings.manage', method: 'DELETE', path: w('/prompt-fragments/none') }, // fragment library (workspace scope)

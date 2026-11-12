@@ -9288,6 +9288,138 @@
     "mount": {
       "added": "Projet {title} ajouté à ce tableau",
       "failed": "Impossible d'ajouter le projet"
+    },
+    "view": {
+      "open": "Ouvrir le projet",
+      "title": "Projet : {title}",
+      "pin": "{title}, version {version}",
+      "refresh": "Actualiser",
+      "loading": "Chargement du projet",
+      "unavailable": "Le projet n'a pas pu être chargé",
+      "loadFailed": "Impossible de charger le projet",
+      "definitionChanged": "La définition enregistrée ne correspond plus à la version que ce projet a fixée : les nouvelles exécutions sont refusées jusqu'à ce qu'elle soit publiée comme nouvelle version.",
+      "definitionMissing": "La définition fixée par ce projet n'est plus disponible pour cette organisation.",
+      "unreadableOutcomes": "Certains résultats sont conservés dans un stockage de contenu qui ne peut pas les fournir pour l'instant. Ils sont laissés de côté jusqu'à ce qu'il le puisse.",
+      "tabs": {
+        "latest": "Dernier",
+        "outcomes": "Historique",
+        "credentials": "Identifiants",
+        "storage": "Stockage"
+      },
+      "outcomes": {
+        "empty": "Aucune tâche n'a encore enregistré de résultat",
+        "seq": "Révision {seq}",
+        "task": "Écrite par {task}, version de la définition {version}",
+        "taskOnly": "Écrit par {task}",
+        "show": "Afficher",
+        "hide": "Masquer",
+        "openFailed": "Impossible d'ouvrir la révision",
+        "storage": {
+          "inline": "Stockée en ligne, {size}",
+          "offloaded": "Dans le stockage de contenu, {size}",
+          "unavailable": "Indisponible, {size}"
+        }
+      },
+      "credentials": {
+        "none": "La définition fixée ne déclare aucun identifiant",
+        "requiredAtStart": "Une exécution en a besoin avant de démarrer.",
+        "askedWhenNeeded": "L'agent le demande quand il atteint l'étape qui en a besoin.",
+        "store": "Gérer les identifiants de capacités",
+        "status": {
+          "stored": "Enregistré",
+          "missing": "Manquant",
+          "reserved": "Nom réservé, jamais envoyé"
+        }
+      },
+      "storage": {
+        "effective": "Les nouvelles révisions sont stockées en ligne jusqu'à {size} ; au-delà, le déport est {offload}.",
+        "accountHint": "Défini par l'organisation.",
+        "inherit": "Hériter",
+        "inherits": "Hérite du niveau supérieur",
+        "inlineUpTo": "en ligne jusqu'à {size}",
+        "inlineKb": "Limite en ligne (Ko)",
+        "offloadLabel": "Déport",
+        "save": "Enregistrer",
+        "loadFailed": "Impossible de charger les réglages de stockage des résultats",
+        "saveFailed": "Impossible d'enregistrer les réglages de stockage des résultats",
+        "tier": {
+          "account": "Organisation",
+          "workspace": "Ce tableau",
+          "project": "Ce projet"
+        },
+        "offload": {
+          "enabled": "activé",
+          "disabled": "désactivé"
+        }
+      },
+      "fallback": {
+        "empty": "Ce projet n'a encore aucun résultat",
+        "stream": "Dernier dans {stream}"
+      }
+    }
+  },
+  "research": {
+    "unavailable": "Les résultats n'ont pas pu être chargés",
+    "adhoc": "Questions ajoutées par des tâches",
+    "retired": "Réponses à des questions que cette version ne pose plus",
+    "learnings": "Enseignements",
+    "topicCoverage": "{answered} sur {total} répondues",
+    "blockedOn": "En attente de l'identifiant {key}",
+    "notes": "Tentatives ultérieures conservées à côté de cette réponse : {count}",
+    "tabs": {
+      "findings": "Résultats"
+    },
+    "status": {
+      "answered": "Répondue",
+      "partial": "Partielle",
+      "unanswered": "Sans réponse",
+      "blocked": "Bloquée"
+    },
+    "coverage": {
+      "answered": "Répondues : {count}",
+      "partial": "Partielles : {count}",
+      "unanswered": "Sans réponse : {count}",
+      "blocked": "Bloquées : {count}"
+    },
+    "confidence": {
+      "high": "Confiance élevée",
+      "medium": "Confiance moyenne",
+      "low": "Confiance faible"
+    },
+    "evidence": {
+      "httpExchange": "Requête enregistrée {ref}",
+      "screenshot": "Capture d'écran {id}",
+      "repoPath": "Fichier du dépôt {path}"
+    },
+    "mode": {
+      "initial": "Initiale",
+      "extend": "Étendre",
+      "clarify": "Clarifier",
+      "refresh": "Rafraîchir"
+    },
+    "modeHelp": {
+      "initial": "Répondre à chaque question de la définition fixée.",
+      "extend": "Répondre aux questions jamais posées, y compris celles que vous ajoutez ci-dessous.",
+      "clarify": "Réexaminer les réponses partielles ou bloquées.",
+      "refresh": "Vérifier chaque réponse existante auprès du fournisseur tel qu'il est aujourd'hui."
+    },
+    "followUp": {
+      "open": "Lancer un suivi",
+      "title": "Lancer un suivi",
+      "modeLabel": "Mode",
+      "titleLabel": "Titre de la tâche",
+      "questionsLabel": "Questions à ajouter",
+      "questionsHelp": "Une question par ligne. Chacune reçoit une réponse conservée avec les résultats du projet.",
+      "revisitLabel": "Questions à réexaminer",
+      "revisitHelp": "Laissez vide pour réexaminer toutes les questions couvertes par ce mode.",
+      "submit": "Lancer la recherche",
+      "failed": "Impossible de lancer le suivi",
+      "defaultTitle": {
+        "initial": "Étudier le fournisseur",
+        "extend": "Étendre la recherche",
+        "clarify": "Clarifier les réponses ouvertes",
+        "refresh": "Rafraîchir les résultats"
+      }
     }
   }
 }

@@ -1,5 +1,7 @@
 import {
   createProjectContract,
+  getProjectBoardViewContract,
+  getProjectOutcomeContract,
   listPinnableProjectDefinitionsContract,
   listProjectCatalogContract,
   mountProjectContract,
@@ -14,6 +16,7 @@ import type { ProjectsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
+import { projectCredentialReadiness } from './projectCredentialReadiness.js'
 
 /** Resolve the projects module, or refuse with a 503 naming what isn't wired. */
 function requireProjects<E extends AppEnv>(c: Context<E>): ProjectsModule {
@@ -56,6 +59,28 @@ export function projectController(): Hono<AppEnv> {
       })),
       200,
     )
+  })
+
+  buildHonoRoute(app, getProjectBoardViewContract, async (c) => {
+    const workspaceId = param(c, 'workspaceId')
+    const resolver = c.get('container').toolSecretResolver
+    const view = await requireProjects(c).views.read(
+      workspaceId,
+      c.req.valid('param').projectId,
+      (project, definition) =>
+        projectCredentialReadiness(project, definition, workspaceId, resolver),
+    )
+    return c.json(view, 200)
+  })
+
+  buildHonoRoute(app, getProjectOutcomeContract, async (c) => {
+    const { projectId, outcomeId } = c.req.valid('param')
+    const detail = await requireProjects(c).views.outcome(
+      param(c, 'workspaceId'),
+      projectId,
+      outcomeId,
+    )
+    return c.json(detail, 200)
   })
 
   buildHonoRoute(app, createProjectContract, async (c) => {

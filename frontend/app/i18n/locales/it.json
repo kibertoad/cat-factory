@@ -9288,6 +9288,138 @@
     "mount": {
       "added": "Progetto {title} aggiunto a questa bacheca",
       "failed": "Non è stato possibile aggiungere il progetto"
+    },
+    "view": {
+      "open": "Apri progetto",
+      "title": "Progetto: {title}",
+      "pin": "{title}, versione {version}",
+      "refresh": "Aggiorna",
+      "loading": "Caricamento del progetto",
+      "unavailable": "Impossibile caricare il progetto",
+      "loadFailed": "Impossibile caricare il progetto",
+      "definitionChanged": "La definizione registrata non corrisponde più alla versione fissata da questo progetto, quindi le nuove esecuzioni sono rifiutate finché non viene pubblicata come nuova versione.",
+      "definitionMissing": "La definizione fissata da questo progetto non è più disponibile per questa organizzazione.",
+      "unreadableOutcomes": "Alcuni risultati sono conservati in un'archiviazione dei contenuti che ora non può fornirli. Restano esclusi finché non potrà.",
+      "tabs": {
+        "latest": "Più recente",
+        "outcomes": "Cronologia",
+        "credentials": "Credenziali",
+        "storage": "Archiviazione"
+      },
+      "outcomes": {
+        "empty": "Nessuna attività ha ancora registrato un risultato",
+        "seq": "Revisione {seq}",
+        "task": "Scritta da {task}, versione della definizione {version}",
+        "taskOnly": "Scritto da {task}",
+        "show": "Mostra",
+        "hide": "Nascondi",
+        "openFailed": "Impossibile aprire la revisione",
+        "storage": {
+          "inline": "Salvata in linea, {size}",
+          "offloaded": "Nell'archivio dei contenuti, {size}",
+          "unavailable": "Non disponibile, {size}"
+        }
+      },
+      "credentials": {
+        "none": "La definizione fissata non dichiara credenziali",
+        "requiredAtStart": "Un'esecuzione ne ha bisogno prima di partire.",
+        "askedWhenNeeded": "L'agente la chiede quando raggiunge il punto che la richiede.",
+        "store": "Gestisci le credenziali delle capacità",
+        "status": {
+          "stored": "Salvata",
+          "missing": "Mancante",
+          "reserved": "Nome riservato, mai inviato"
+        }
+      },
+      "storage": {
+        "effective": "Le nuove revisioni sono salvate in linea fino a {size}; oltre, lo scarico è {offload}.",
+        "accountHint": "Impostato dall'organizzazione.",
+        "inherit": "Eredita",
+        "inherits": "Eredita dal livello superiore",
+        "inlineUpTo": "in linea fino a {size}",
+        "inlineKb": "Limite in linea (KB)",
+        "offloadLabel": "Scarico",
+        "save": "Salva",
+        "loadFailed": "Impossibile caricare le impostazioni di archiviazione dei risultati",
+        "saveFailed": "Impossibile salvare le impostazioni di archiviazione dei risultati",
+        "tier": {
+          "account": "Organizzazione",
+          "workspace": "Questa bacheca",
+          "project": "Questo progetto"
+        },
+        "offload": {
+          "enabled": "attivo",
+          "disabled": "disattivato"
+        }
+      },
+      "fallback": {
+        "empty": "Questo progetto non ha ancora risultati",
+        "stream": "Più recente in {stream}"
+      }
+    }
+  },
+  "research": {
+    "unavailable": "Non è stato possibile caricare i risultati",
+    "adhoc": "Domande aggiunte dalle attività",
+    "retired": "Risposte a domande che questa versione non pone più",
+    "learnings": "Cose apprese",
+    "topicCoverage": "{answered} di {total} con risposta",
+    "blockedOn": "In attesa della credenziale {key}",
+    "notes": "Tentativi successivi conservati accanto a questa risposta: {count}",
+    "tabs": {
+      "findings": "Risultati"
+    },
+    "status": {
+      "answered": "Con risposta",
+      "partial": "Parziale",
+      "unanswered": "Senza risposta",
+      "blocked": "Bloccata"
+    },
+    "coverage": {
+      "answered": "Con risposta: {count}",
+      "partial": "Parziali: {count}",
+      "unanswered": "Senza risposta: {count}",
+      "blocked": "Bloccate: {count}"
+    },
+    "confidence": {
+      "high": "Affidabilità alta",
+      "medium": "Affidabilità media",
+      "low": "Affidabilità bassa"
+    },
+    "evidence": {
+      "httpExchange": "Richiesta registrata {ref}",
+      "screenshot": "Screenshot {id}",
+      "repoPath": "File del repository {path}"
+    },
+    "mode": {
+      "initial": "Iniziale",
+      "extend": "Estendi",
+      "clarify": "Chiarisci",
+      "refresh": "Aggiorna"
+    },
+    "modeHelp": {
+      "initial": "Rispondere a ogni domanda della definizione fissata.",
+      "extend": "Rispondere a domande mai poste prima, comprese quelle che aggiungi qui sotto.",
+      "clarify": "Riesaminare le risposte parziali o bloccate.",
+      "refresh": "Verificare ogni risposta esistente sul fornitore così com'è oggi."
+    },
+    "followUp": {
+      "open": "Avvia un seguito",
+      "title": "Avvia una ricerca di seguito",
+      "modeLabel": "Modalità",
+      "titleLabel": "Titolo dell'attività",
+      "questionsLabel": "Domande da aggiungere",
+      "questionsHelp": "Una domanda per riga. Ognuna riceve una risposta conservata con i risultati del progetto.",
+      "revisitLabel": "Domande da riesaminare",
+      "revisitHelp": "Lascia vuoto per riesaminare ogni domanda coperta da questa modalità.",
+      "submit": "Avvia la ricerca",
+      "failed": "Impossibile avviare il seguito",
+      "defaultTitle": {
+        "initial": "Studiare il fornitore",
+        "extend": "Estendere la ricerca",
+        "clarify": "Chiarire le risposte aperte",
+        "refresh": "Aggiornare i risultati"
+      }
     }
   }
 }

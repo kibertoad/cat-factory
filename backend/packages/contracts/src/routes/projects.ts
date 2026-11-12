@@ -1,7 +1,8 @@
-import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { blockSchema } from '../entities.js'
 import { pinnableProjectDefinitionSchema } from '../project-definitions.js'
+import { projectBoardViewSchema, projectOutcomeDetailSchema } from '../project-view.js'
 import {
   createProjectInputSchema,
   projectSchema,
@@ -40,6 +41,23 @@ export const listPinnableProjectDefinitionsContract = defineApiContract({
   requestPathParamsSchema: singleStringParam('kind'),
   pathResolver: ({ kind }) => `/project-kinds/${kind}/definitions`,
   responsesByStatusCode: { 200: v.array(pinnableProjectDefinitionSchema), ...errorResponses },
+})
+
+/** One project as the board reads it: its pin, outcomes, credential readiness and its kind's view. */
+export const getProjectBoardViewContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: projectIdParams,
+  pathResolver: ({ projectId }) => `/projects/${projectId}/view`,
+  responsesByStatusCode: { 200: projectBoardViewSchema, ...errorResponses },
+})
+
+export const getProjectOutcomeContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: withObjectKeys(
+    v.object({ projectId: v.string(), outcomeId: v.string() }),
+  ),
+  pathResolver: ({ projectId, outcomeId }) => `/projects/${projectId}/outcomes/${outcomeId}`,
+  responsesByStatusCode: { 200: projectOutcomeDetailSchema, ...errorResponses },
 })
 
 export const createProjectContract = defineApiContract({

@@ -9288,6 +9288,138 @@
     "mount": {
       "added": "Projekt {title} zu diesem Board hinzugefügt",
       "failed": "Das Projekt konnte nicht hinzugefügt werden"
+    },
+    "view": {
+      "open": "Projekt öffnen",
+      "title": "Projekt: {title}",
+      "pin": "{title}, Version {version}",
+      "refresh": "Aktualisieren",
+      "loading": "Projekt wird geladen",
+      "unavailable": "Das Projekt konnte nicht geladen werden",
+      "loadFailed": "Projekt konnte nicht geladen werden",
+      "definitionChanged": "Die registrierte Definition entspricht nicht mehr der Version, die dieses Projekt festgelegt hat. Neue Läufe werden daher abgelehnt, bis sie als neue Version veröffentlicht wird.",
+      "definitionMissing": "Die Definition, die dieses Projekt festgelegt hat, steht dieser Organisation nicht mehr zur Verfügung.",
+      "unreadableOutcomes": "Einige Ergebnisse liegen im Inhaltsspeicher, der sie gerade nicht ausliefern kann. Sie werden ausgelassen, bis er es wieder kann.",
+      "tabs": {
+        "latest": "Neueste",
+        "outcomes": "Verlauf",
+        "credentials": "Zugangsdaten",
+        "storage": "Speicherung"
+      },
+      "outcomes": {
+        "empty": "Noch keine Aufgabe hat ein Ergebnis erfasst",
+        "seq": "Revision {seq}",
+        "task": "Geschrieben von {task}, Definitionsversion {version}",
+        "taskOnly": "Geschrieben von {task}",
+        "show": "Anzeigen",
+        "hide": "Ausblenden",
+        "openFailed": "Die Revision konnte nicht geöffnet werden",
+        "storage": {
+          "inline": "Direkt gespeichert, {size}",
+          "offloaded": "Im Inhaltsspeicher, {size}",
+          "unavailable": "Nicht verfügbar, {size}"
+        }
+      },
+      "credentials": {
+        "none": "Die festgelegte Definition benötigt keine Zugangsdaten",
+        "requiredAtStart": "Ein Lauf braucht sie, bevor er startet.",
+        "askedWhenNeeded": "Der Agent fragt danach, sobald er die Stelle erreicht, die sie braucht.",
+        "store": "Capability-Zugangsdaten verwalten",
+        "status": {
+          "stored": "Hinterlegt",
+          "missing": "Fehlt",
+          "reserved": "Reservierter Name, wird nie gesendet"
+        }
+      },
+      "storage": {
+        "effective": "Neue Revisionen werden bis {size} direkt gespeichert; darüber ist die Auslagerung {offload}.",
+        "accountHint": "Von der Organisation festgelegt.",
+        "inherit": "Übernehmen",
+        "inherits": "Übernimmt die Einstellung der übergeordneten Ebene",
+        "inlineUpTo": "direkt bis {size}",
+        "inlineKb": "Grenze für direkte Speicherung (KB)",
+        "offloadLabel": "Auslagerung",
+        "save": "Speichern",
+        "loadFailed": "Die Einstellungen für den Ergebnisspeicher konnten nicht geladen werden",
+        "saveFailed": "Die Einstellungen für den Ergebnisspeicher konnten nicht gespeichert werden",
+        "tier": {
+          "account": "Organisation",
+          "workspace": "Dieses Board",
+          "project": "Dieses Projekt"
+        },
+        "offload": {
+          "enabled": "aktiviert",
+          "disabled": "deaktiviert"
+        }
+      },
+      "fallback": {
+        "empty": "Dieses Projekt hat noch kein Ergebnis",
+        "stream": "Neuestes in {stream}"
+      }
+    }
+  },
+  "research": {
+    "unavailable": "Die Ergebnisse konnten nicht geladen werden",
+    "adhoc": "Von Aufgaben hinzugefügte Fragen",
+    "retired": "Antworten auf Fragen, die diese Version nicht mehr stellt",
+    "learnings": "Erkenntnisse",
+    "topicCoverage": "{answered} von {total} beantwortet",
+    "blockedOn": "Wartet auf die Zugangsdaten {key}",
+    "notes": "Spätere Versuche neben dieser Antwort: {count}",
+    "tabs": {
+      "findings": "Ergebnisse"
+    },
+    "status": {
+      "answered": "Beantwortet",
+      "partial": "Teilweise",
+      "unanswered": "Unbeantwortet",
+      "blocked": "Blockiert"
+    },
+    "coverage": {
+      "answered": "Beantwortet: {count}",
+      "partial": "Teilweise: {count}",
+      "unanswered": "Unbeantwortet: {count}",
+      "blocked": "Blockiert: {count}"
+    },
+    "confidence": {
+      "high": "Hohe Sicherheit",
+      "medium": "Mittlere Sicherheit",
+      "low": "Geringe Sicherheit"
+    },
+    "evidence": {
+      "httpExchange": "Aufgezeichnete Anfrage {ref}",
+      "screenshot": "Screenshot {id}",
+      "repoPath": "Datei im Repository {path}"
+    },
+    "mode": {
+      "initial": "Erstrecherche",
+      "extend": "Erweitern",
+      "clarify": "Klären",
+      "refresh": "Auffrischen"
+    },
+    "modeHelp": {
+      "initial": "Jede Frage der festgelegten Definition beantworten.",
+      "extend": "Bisher nicht gestellte Fragen beantworten, auch die, die Sie unten hinzufügen.",
+      "clarify": "Teilweise oder blockierte Antworten noch einmal prüfen.",
+      "refresh": "Jede vorhandene Antwort am aktuellen Stand des Anbieters überprüfen."
+    },
+    "followUp": {
+      "open": "Folgerecherche starten",
+      "title": "Folgerecherche starten",
+      "modeLabel": "Modus",
+      "titleLabel": "Aufgabentitel",
+      "questionsLabel": "Hinzuzufügende Fragen",
+      "questionsHelp": "Eine Frage pro Zeile. Jede wird beantwortet und mit den Ergebnissen des Projekts gespeichert.",
+      "revisitLabel": "Erneut zu prüfende Fragen",
+      "revisitHelp": "Leer lassen, um jede Frage zu prüfen, die dieser Modus abdeckt.",
+      "submit": "Recherche starten",
+      "failed": "Die Folgerecherche konnte nicht gestartet werden",
+      "defaultTitle": {
+        "initial": "Den Anbieter recherchieren",
+        "extend": "Die Recherche erweitern",
+        "clarify": "Offene Antworten klären",
+        "refresh": "Die Ergebnisse auffrischen"
+      }
     }
   }
 }
